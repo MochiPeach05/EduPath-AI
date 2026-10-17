@@ -250,12 +250,63 @@ export type LevelRow = {
   counts: Record<(typeof LEVEL_COLUMNS)[number], number>;
 };
 /** One row per skill group: how many of its skills sit at each proficiency level. */
+/** A skill counted in its group like the group line: condition-only and not-applicable skills are left out. */
+const countedInGroup = (skill: SkillResult, groupKey: string) => skill.groupKey === groupKey && !skill.conditionOnly && skill.status !== "not_applicable";
+
 export function levelSummary(result: Pick<AssessmentResult, "groups" | "skills">): LevelRow[] {
   return result.groups.map((group) => {
-    const skills = result.skills.filter((skill) => skill.groupKey === group.key && !skill.conditionOnly && skill.status !== "not_applicable");
+    const skills = result.skills.filter((skill) => countedInGroup(skill, group.key));
     const counts = Object.fromEntries(LEVEL_COLUMNS.map((level) => [level, skills.filter((skill) => skill.level === level).length])) as LevelRow["counts"];
     return { key: group.key, name: group.name, score: group.score, level: group.level, levelLabel: group.levelLabel, total: skills.length, counts };
   });
+}
+
+/* ------------------------------------------------- level chart ("Bảng phân tích mức độ thành thạo") */
+
+/** Segment order of each group's bar: the four levels from the top down, then no evidence, then exempt (no score). */
+export const CHART_LEVELS = [...LEVEL_COLUMNS, "exempt"] as const satisfies readonly LevelCode[];
+export type ChartLevel = (typeof CHART_LEVELS)[number];
+export type LevelSegment = {
+  level: ChartLevel; label: string; count: number;
+  /** Part of the group's skills. */
+  share: number;
+  /** Where the segment starts and ends, as fractions of the axis. */
+  start: number; end: number;
+  /** Highest score first. */
+  skills: SkillResult[];
+};
+export type LevelBar = { key: string; name: string; score: number | null; level: LevelCode; levelLabel: string; total: number; segments: LevelSegment[] };
+
+/** A count axis from 0 in steps of 1, 2 or 5 × 10ⁿ, at most five steps, ending on the first tick at or past the largest value. */
+export function countAxis(largest: number): { max: number; ticks: number[] } {
+  const top = Math.max(1, Math.ceil(largest));
+  let step = 1;
+  for (let magnitude = 1; ; magnitude *= 10) {
+    const found = [1, 2, 5].map((base) => base * magnitude).find((candidate) => Math.ceil(top / candidate) <= 5);
+    if (found) { step = found; break; }
+  }
+  const max = Math.ceil(top / step) * step;
+  return { max, ticks: Array.from({ length: max / step + 1 }, (_, index) => index * step) };
+}
+
+/** One stacked bar per group: its skills (counted like the group line) split by level on one shared count axis. */
+export function levelChart(result: Pick<AssessmentResult, "groups" | "skills">): { axis: { max: number; ticks: number[] }; bars: LevelBar[] } {
+  const rows = result.groups.map((group) => ({ group, skills: result.skills.filter((skill) => countedInGroup(skill, group.key)) }));
+  const axis = countAxis(Math.max(0, ...rows.map((row) => row.skills.length)));
+  const label = (level: ChartLevel) => LEVEL_SCALE.find((item) => item.code === level)?.label ?? level;
+  const bars = rows.map(({ group, skills }) => {
+    let offset = 0;
+    const segments = CHART_LEVELS.flatMap((level): LevelSegment[] => {
+      const members = skills.filter((skill) => skill.level === level)
+        .sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || a.name.localeCompare(b.name, "vi"));
+      if (!members.length) return [];
+      const start = offset / axis.max;
+      offset += members.length;
+      return [{ level, label: label(level), count: members.length, share: members.length / skills.length, start, end: offset / axis.max, skills: members }];
+    });
+    return { key: group.key, name: group.name, score: group.score, level: group.level, levelLabel: group.levelLabel, total: skills.length, segments };
+  });
+  return { axis, bars };
 }
 
 /** AI priority tags; worded apart from the career property "Ưu tiên" (preferred). The stored enum stays high/medium/low. */

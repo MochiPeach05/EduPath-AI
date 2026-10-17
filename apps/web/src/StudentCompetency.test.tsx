@@ -100,6 +100,31 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
     expect(html).toContain('aria-label="1 kỹ năng Chưa có minh chứng trong nhóm Kiến thức chuyên môn"');
     expect(html).toContain("Điểm nhóm 79 · Khá");
   });
+  it("draws the proficiency table as one stacked bar per group with a tooltip on every segment", () => {
+    const html = withAi("completed");
+    const section = html.slice(html.indexOf('id="scomp-skills"'), html.indexOf('id="scomp-skill-list"'));
+    // One row per group: name, group level and score, then the bar and its total.
+    expect([...section.matchAll(/<div class="scomp-chart-label"><strong>([^<]+)<\/strong>/g)].map((match) => match[1])).toEqual(["Kiến thức chuyên môn", "Kỹ năng bổ trợ"]);
+    expect(section).toContain("<span>Điểm nhóm 79</span>");
+    expect(section).toContain(">5 kỹ năng</span>");
+    // Segments in scale order, each a button that names the group, the count and the share.
+    expect([...section.matchAll(/class="scomp-chart-seg scomp-chart-(\w+)/g)].map((match) => match[1])).toEqual(["proficient", "good", "basic", "no_evidence", "exempt"]);
+    expect(section).toContain('aria-label="Kiến thức chuyên môn: 2 kỹ năng Thành thạo, 40% số kỹ năng của nhóm. Bấm để xem các kỹ năng này."');
+    expect(section).toContain("left:0%;width:40%");
+    // The tooltip gives the full picture: count, level, group share, the level's range and the skills with their scores.
+    const tip = section.slice(section.indexOf('class="scomp-chart-tip'), section.indexOf("Bấm để xem danh sách"));
+    expect(tip).toContain("<strong>2 kỹ năng</strong><span>Thành thạo</span>");
+    expect(tip).toContain("Kiến thức chuyên môn · 40% số kỹ năng của nhóm");
+    expect(tip).toContain("Điểm kỹ năng từ 85");
+    expect(tip).toContain("<span>Lập trình web</span><b>91</b>");
+    expect(tip).toContain("<span>Lập trình hướng đối tượng</span><b>86</b>");
+    expect(section).toContain("Chưa học học phần nào đo các kỹ năng này — không phải điểm yếu");
+    // Legend for every level present, axis ticks, and the table as a collapsed twin.
+    expect([...section.matchAll(/<li><i class="scomp-chart-key scomp-chart-\w+" aria-hidden="true"><\/i>([^<]+)<\/li>/g)].map((match) => match[1]))
+      .toEqual(["Thành thạo", "Khá", "Cơ bản", "Cần củng cố", "Chưa có minh chứng", "Miễn/công nhận"]);
+    expect([...section.matchAll(/<span style="left:[\d.]+%">(\d+)<\/span>/g)].map((match) => match[1])).toEqual(["0", "1", "2", "3", "4", "5"]);
+    expect(section).toMatch(/<details class="scomp-legend scomp-chart-table"><summary>Xem dạng bảng<\/summary>/);
+  });
   it("follows the competency term by term, grouped by school year (STU-COMP-07)", () => {
     const html = withAi("completed");
     const section = html.slice(html.indexOf('id="scomp-history"'), html.indexOf('id="scomp-skills"'));

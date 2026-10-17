@@ -219,6 +219,54 @@
 .scomp-page .scomp-value { display: grid; gap: 6px; padding: 14px 16px; border: 1px solid #cfdaeb; border-radius: 8px; background: #f7f9fd; }
 .scomp-page .scomp-value ul { display: grid; gap: 4px; margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.6; }
 .scomp-page .scomp-value .sw-text-link { display: inline; min-height: 0; padding: 0; font-size: inherit; }
+/* Level chart: one stacked bar per group on a shared count axis. Colours are the level ramp of the badges
+   (validated as an ordinal ramp), a neutral for "no evidence" and a light neutral for exempt; 2px surface gaps,
+   4px rounded data end, hairline grid. */
+.scomp-page .scomp-chart { --scomp-none: #7f8690; --scomp-exempt: #c3c8cf; --scomp-grid: #e8ebf0; --scomp-axis: #c3cad4; display: grid; gap: 10px; margin: 0; }
+.scomp-page .scomp-chart-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; padding: 0; list-style: none; color: var(--sw-ink, #1d2433); font-size: 13px; }
+.scomp-page .scomp-chart-legend li { display: inline-flex; align-items: center; gap: 7px; }
+.scomp-page .scomp-chart-legend .scomp-chart-key { width: 12px; height: 12px; border-radius: 3px; }
+.scomp-page .scomp-chart-key { display: inline-block; flex: none; background: var(--scomp-chart-color); }
+.scomp-page .scomp-chart-proficient { --scomp-chart-color: var(--scomp-l4); }
+.scomp-page .scomp-chart-good { --scomp-chart-color: var(--scomp-l3); }
+.scomp-page .scomp-chart-basic { --scomp-chart-color: var(--scomp-l2); }
+.scomp-page .scomp-chart-needs_work { --scomp-chart-color: var(--scomp-l1); }
+.scomp-page .scomp-chart-no_evidence { --scomp-chart-color: var(--scomp-none); }
+.scomp-page .scomp-chart-exempt { --scomp-chart-color: var(--scomp-exempt); }
+.scomp-page .scomp-chart-rows { display: grid; gap: 4px; padding-top: 4px; }
+.scomp-page .scomp-chart-row { display: grid; grid-template-columns: minmax(150px, 220px) minmax(0, 1fr); align-items: center; gap: 16px; }
+.scomp-page .scomp-chart-label { display: grid; gap: 4px; min-width: 0; font-size: 14px; line-height: 1.4; }
+.scomp-page .scomp-chart-label > span { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; color: var(--scomp-neutral); font-size: 12px; }
+.scomp-page .scomp-chart-scale { position: relative; height: 44px; margin-right: 88px; }
+.scomp-page .scomp-chart-grid i { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--scomp-grid); }
+.scomp-page .scomp-chart-grid i:first-child { background: var(--scomp-axis); }
+.scomp-page .scomp-chart-seg { position: absolute; top: 0; height: 100%; padding: 0; border: 0; background: transparent; font: inherit; cursor: pointer; }
+.scomp-page .scomp-chart-fill { position: absolute; top: 50%; left: 0; right: 2px; height: 22px; display: grid; place-items: center; background: var(--scomp-chart-color); transform: translateY(-50%); transition: filter .15s; }
+.scomp-page .scomp-chart-seg.is-last .scomp-chart-fill { right: 0; border-radius: 0 4px 4px 0; }
+.scomp-page .scomp-chart-value { color: var(--sw-ink, #1d2433); font-size: 12px; font-weight: 700; line-height: 1; }
+.scomp-page .scomp-chart-proficient .scomp-chart-value, .scomp-page .scomp-chart-good .scomp-chart-value { color: #fff; }
+.scomp-page .scomp-chart-seg:hover, .scomp-page .scomp-chart-seg:focus-visible { z-index: 3; }
+.scomp-page .scomp-chart-seg:hover .scomp-chart-fill, .scomp-page .scomp-chart-seg:focus-visible .scomp-chart-fill { filter: brightness(1.12) saturate(1.1); }
+.scomp-page .scomp-chart-seg:focus-visible { outline: 2px solid var(--scomp-l4); outline-offset: 1px; border-radius: 4px; }
+.scomp-page .scomp-chart-tip { position: absolute; bottom: calc(50% + 17px); display: none; gap: 3px; width: max-content; min-width: 220px; max-width: min(320px, 80vw); padding: 12px 14px; border: 1px solid #d5ddea; border-radius: 8px; background: #fff; box-shadow: 0 8px 24px rgba(20, 33, 61, .16); color: var(--scomp-neutral); font-size: 13px; font-weight: 400; line-height: 1.5; text-align: left; white-space: normal; pointer-events: none; }
+.scomp-page .scomp-chart-seg[data-tip="below"] .scomp-chart-tip { top: calc(50% + 17px); bottom: auto; }
+.scomp-page .scomp-chart-tip-middle { left: 50%; transform: translateX(-50%); }
+.scomp-page .scomp-chart-tip-start { left: 0; }
+.scomp-page .scomp-chart-tip-end { right: 0; }
+.scomp-page .scomp-chart-seg:hover .scomp-chart-tip, .scomp-page .scomp-chart-seg:focus-visible .scomp-chart-tip { display: grid; }
+.scomp-page .scomp-chart-tip-head { display: flex; align-items: center; gap: 7px; color: var(--sw-ink, #1d2433); font-size: 14px; }
+.scomp-page .scomp-chart-tip-head strong { font-size: 16px; }
+.scomp-page .scomp-chart-tip-head .scomp-chart-key { width: 12px; height: 3px; border-radius: 2px; }
+.scomp-page .scomp-chart-tip-skills { display: grid; gap: 1px; margin-top: 4px; padding-top: 6px; border-top: 1px solid #eef1f5; color: var(--sw-ink, #1d2433); }
+.scomp-page .scomp-chart-tip-skills > span { display: flex; justify-content: space-between; gap: 16px; }
+.scomp-page .scomp-chart-tip-skills b { font-weight: 700; }
+.scomp-page .scomp-chart-tip-more { color: var(--scomp-neutral); }
+.scomp-page .scomp-chart-tip-hint { margin-top: 2px; color: var(--scomp-l3); font-weight: 600; }
+.scomp-page .scomp-chart-total { position: absolute; top: 50%; transform: translateY(-50%); color: var(--scomp-neutral); font-size: 12px; white-space: nowrap; }
+.scomp-page .scomp-chart-axis .scomp-chart-scale { height: 18px; }
+.scomp-page .scomp-chart-axis .scomp-chart-scale > span { position: absolute; top: 0; transform: translateX(-50%); color: var(--scomp-neutral); font-size: 12px; white-space: nowrap; }
+.scomp-page .scomp-chart-unit p { margin: 0 88px 0 0; color: var(--scomp-neutral); font-size: 12px; text-align: center; }
+.scomp-page .scomp-chart-table { margin-top: -4px; }
 .scomp-page .scomp-level-table { min-width: 860px; }
 .scomp-page .scomp-level-table td { vertical-align: middle; }
 .scomp-page .scomp-count-button { min-width: 36px; min-height: 28px; padding: 2px 10px; border: 1px solid #c9d6ea; border-radius: 999px; background: #f2f6fc; color: var(--scomp-l4); font: inherit; font-weight: 700; cursor: pointer; }
@@ -305,6 +353,10 @@
   .scomp-page .scomp-gap-table .scomp-num { text-align: left; }
 }
 @container scomp (max-width: 600px) {
+  .scomp-page .scomp-chart-row { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  .scomp-page .scomp-chart-axis > span:first-child, .scomp-page .scomp-chart-unit > span:first-child { display: none; }
+  .scomp-page .scomp-chart-scale { margin-right: 76px; }
+  .scomp-page .scomp-chart-unit p { margin-right: 76px; }
   .scomp-page .scomp-header-actions { justify-content: flex-start; width: 100%; }
   .scomp-page .scomp-groups li { grid-template-columns: minmax(0, 1fr) 72px; }
   .scomp-page .scomp-groups li .scomp-bar { grid-column: 1 / -1; grid-row: 2; }

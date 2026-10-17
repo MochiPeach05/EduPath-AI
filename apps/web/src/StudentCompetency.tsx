@@ -5,10 +5,10 @@ import { competencyPolicyHref, policyVersion } from "./public-information";
 import type { StudentProfile } from "./StudentOverview";
 import { specialtyLabel, type AiStatus, type AssessmentResult, type AssessmentStatusResponse, type CareerRequirementResult, type CourseSuggestion, type LatestAssessmentResponse, type LevelCode, type SkillPlan, type SkillResult, type StoredAssessment, type SupportCourse } from "./competency-assessment-types";
 import {
-  COMPETENCY_API, CONFIDENCE_LABELS, COURSE_STATE_LABELS, EMPTY_SKILL_FILTERS, LEVEL_COLUMNS, LEVEL_SCALE, PRECONDITION_COPY, PRIORITY_LABELS,
+  CHART_LEVELS, COMPETENCY_API, CONFIDENCE_LABELS, COURSE_STATE_LABELS, EMPTY_SKILL_FILTERS, LEVEL_COLUMNS, LEVEL_SCALE, PRECONDITION_COPY, PRIORITY_LABELS,
   aiErrorMessage, aiStateCopy, bucketSkills, canRegenerate, careerSkillKeys, courseStanding, dataUsedLine, eligibilityDisplay, errorMessage, filterSkills, formatDateTime,
-  formatNumber, formatPercent, formatScore, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isPreconditionError, levelSentence, levelStep, levelSummary, mapAiOutput, modelLabel,
-  plansFor, scoreDifference, shouldPoll, skillName, sortRequirements, type MappedAiOutput, type PreconditionError, type SkillFilters, type StatusTone,
+  formatNumber, formatPercent, formatScore, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isPreconditionError, levelChart, levelSentence, levelStep, levelSummary, mapAiOutput, modelLabel,
+  plansFor, scoreDifference, shouldPoll, skillName, sortRequirements, type ChartLevel, type LevelBar, type LevelSegment, type MappedAiOutput, type PreconditionError, type SkillFilters, type StatusTone,
 } from "./student-competency-data";
 import { readGraduation } from "./student-graduation-api";
 import { GRADUATION_API, unresolvedCopy, verdictHeadline } from "./student-graduation-data";
@@ -222,6 +222,83 @@ const LEVEL_COLUMN_LABELS: Record<(typeof LEVEL_COLUMNS)[number], string> = {
   proficient: "Thành thạo", good: "Khá", basic: "Cơ bản", needs_work: "Cần củng cố", no_evidence: "Chưa có minh chứng",
 };
 
+const CHART_TIP_SKILLS = 5;
+const CHART_RANGES: Partial<Record<ChartLevel, string>> = Object.fromEntries(LEVEL_SCALE.map((level) => [level.code, level.range]));
+/** What the tooltip says about the level itself, after the count. */
+function segmentNote(segment: LevelSegment): string {
+  if (segment.level === "no_evidence") return "Chưa học học phần nào đo các kỹ năng này — không phải điểm yếu";
+  if (segment.level === "exempt") return "Học phần được miễn hoặc công nhận nên không có điểm";
+  return `Điểm kỹ năng ${CHART_RANGES[segment.level] ?? ""}`;
+}
+/** The tooltip box opens toward the middle of the plot so it never leaves the card. */
+const tipSide = (segment: LevelSegment) => (segment.start + segment.end) / 2 < 0.35 ? "start" : (segment.start + segment.end) / 2 > 0.65 ? "end" : "middle";
+/** Opens the tooltip below the bar when there is no room above it (under the sticky header) and more room below. */
+function placeTip(button: HTMLElement) {
+  const tip = button.querySelector<HTMLElement>(".scomp-chart-tip");
+  if (!tip) return;
+  const bar = button.getBoundingClientRect(), height = tip.getBoundingClientRect().height;
+  const top = document.querySelector(".sw-topbar")?.getBoundingClientRect().bottom ?? 0;
+  const above = bar.top - top, below = window.innerHeight - bar.bottom;
+  button.dataset.tip = above < height + 12 && below > above ? "below" : "above";
+}
+
+function ChartSegment({ bar, segment, last, scaleWidth, onSelect }: { bar: LevelBar; segment: LevelSegment; last: boolean; scaleWidth: number; onSelect: () => void }) {
+  // The count rides inside the segment only when it fits with padding; otherwise the tooltip and the table carry it.
+  const fits = scaleWidth > 0 && (segment.end - segment.start) * scaleWidth - 2 >= String(segment.count).length * 8 + 12;
+  const rest = segment.count - CHART_TIP_SKILLS;
+  return <button type="button" className={`scomp-chart-seg scomp-chart-${segment.level}${last ? " is-last" : ""}`}
+    style={{ left: `${segment.start * 100}%`, width: `${(segment.end - segment.start) * 100}%` }}
+    aria-label={`${bar.name}: ${segment.count} kỹ năng ${segment.label}, ${formatPercent(segment.share)} số kỹ năng của nhóm. Bấm để xem các kỹ năng này.`} onClick={onSelect}
+    onPointerEnter={(event) => placeTip(event.currentTarget)} onFocus={(event) => placeTip(event.currentTarget)}>
+    <span className="scomp-chart-fill" aria-hidden="true">{fits && <span className="scomp-chart-value">{segment.count.toLocaleString("vi-VN")}</span>}</span>
+    <span className={`scomp-chart-tip scomp-chart-tip-${tipSide(segment)}`} aria-hidden="true">
+      <span className="scomp-chart-tip-head"><i className={`scomp-chart-key scomp-chart-${segment.level}`} /><strong>{segment.count.toLocaleString("vi-VN")} kỹ năng</strong><span>{segment.label}</span></span>
+      <span>{bar.name} · {formatPercent(segment.share)} số kỹ năng của nhóm</span>
+      <span>{segmentNote(segment)}</span>
+      <span className="scomp-chart-tip-skills">{segment.skills.slice(0, CHART_TIP_SKILLS).map((skill) => <span key={skill.key}><span>{skill.name}</span>{skill.score !== null && <b>{formatScore(skill.score)}</b>}</span>)}
+        {rest > 0 && <span className="scomp-chart-tip-more">và {rest.toLocaleString("vi-VN")} kỹ năng khác</span>}</span>
+      <span className="scomp-chart-tip-hint">Bấm để xem danh sách</span>
+    </span>
+  </button>;
+}
+
+/** "Bảng phân tích mức độ thành thạo" as one stacked bar per group on a shared count axis (user, 2026-10-17). */
+function LevelChart({ result, onSelect }: { result: AssessmentResult; onSelect: (group: string, level: ChartLevel) => void }) {
+  const { axis, bars } = useMemo(() => levelChart(result), [result]);
+  const levels = CHART_LEVELS.filter((level) => level !== "exempt" || bars.some((bar) => bar.segments.some((segment) => segment.level === "exempt")));
+  const scaleRef = useRef<HTMLDivElement>(null);
+  const [scaleWidth, setScaleWidth] = useState(0);
+  useLayoutEffect(() => {
+    const element = scaleRef.current;
+    if (!element) return;
+    setScaleWidth(element.clientWidth);
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(([entry]) => { if (entry) setScaleWidth(entry.contentRect.width); });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const grid = <span className="scomp-chart-grid" aria-hidden="true">{axis.ticks.map((tick) => <i key={tick} style={{ left: `${(tick / axis.max) * 100}%` }} />)}</span>;
+  return <figure className="scomp-chart" aria-labelledby="scomp-chart-caption">
+    <figcaption id="scomp-chart-caption" className="scomp-meta">Số kỹ năng ở từng mức trong mỗi nhóm. Di chuột vào một đoạn để xem chi tiết, bấm để xem đúng các kỹ năng đó.</figcaption>
+    <ul className="scomp-chart-legend" aria-label="Chú thích màu">{levels.map((level) => <li key={level}><i className={`scomp-chart-key scomp-chart-${level}`} aria-hidden="true" />{LEVEL_SCALE.find((item) => item.code === level)?.label}</li>)}</ul>
+    <div className="scomp-chart-rows">
+      {bars.map((bar) => <div key={bar.key} className="scomp-chart-row">
+        <div className="scomp-chart-label"><strong>{bar.name}</strong><span><LevelBadge level={bar.level} label={bar.levelLabel} />{bar.score !== null && <span>Điểm nhóm {formatScore(bar.score)}</span>}</span></div>
+        <div className="scomp-chart-scale">
+          {grid}
+          {bar.segments.map((segment, index) => <ChartSegment key={segment.level} bar={bar} segment={segment} last={index === bar.segments.length - 1} scaleWidth={scaleWidth} onSelect={() => onSelect(bar.key, segment.level)} />)}
+          <span className="scomp-chart-total" style={{ left: `calc(${(bar.total / axis.max) * 100}% + 8px)` }}>{bar.total.toLocaleString("vi-VN")} kỹ năng</span>
+        </div>
+      </div>)}
+      <div className="scomp-chart-row scomp-chart-axis" aria-hidden="true">
+        <span />
+        <div className="scomp-chart-scale" ref={scaleRef}>{axis.ticks.map((tick) => <span key={tick} style={{ left: `${(tick / axis.max) * 100}%` }}>{tick.toLocaleString("vi-VN")}</span>)}</div>
+      </div>
+      <div className="scomp-chart-row scomp-chart-unit" aria-hidden="true"><span /><p>Số kỹ năng</p></div>
+    </div>
+  </figure>;
+}
+
 function SkillsSection({ result }: { result: AssessmentResult }) {
   const [filters, setFilters] = useState<SkillFilters>(EMPTY_SKILL_FILTERS);
   const filtered = useMemo(() => filterSkills(result.skills, filters), [result.skills, filters]);
@@ -235,7 +312,7 @@ function SkillsSection({ result }: { result: AssessmentResult }) {
   const groups = useMemo(() => new Map(result.groups.map((group) => [group.key, group])), [result.groups]);
   const set = (patch: Partial<SkillFilters>) => setFilters((current) => ({ ...current, ...patch }));
   const filtering = (Object.keys(EMPTY_SKILL_FILTERS) as (keyof SkillFilters)[]).some((key) => filters[key] !== EMPTY_SKILL_FILTERS[key]);
-  // A count in the summary table filters the list below to exactly those skills.
+  // A segment of the chart (or a count in its table view) filters the list below to exactly those skills.
   const show = (group: string, level: string) => {
     setFilters({ ...EMPTY_SKILL_FILTERS, group, level });
     setExpanded((current) => ({ ...current, [level === "no_evidence" ? "no-evidence" : group]: true }));
@@ -251,7 +328,8 @@ function SkillsSection({ result }: { result: AssessmentResult }) {
         <li><strong>Độ tin cậy:</strong> cho biết kết quả dựa trên bao nhiêu minh chứng; tin cậy thấp nghĩa là mới có ít học phần đo kỹ năng này.</li>
       </ul>
     </div>
-    <div className="scomp-table-scroll" tabIndex={0} role="region" aria-labelledby="scomp-level-caption">
+    <LevelChart result={result} onSelect={show} />
+    <details className="scomp-legend scomp-chart-table"><summary>Xem dạng bảng</summary><div className="scomp-table-scroll" tabIndex={0} role="region" aria-labelledby="scomp-level-caption">
       <table className="scomp-table scomp-level-table">
         <caption id="scomp-level-caption">Số kỹ năng ở từng mức thành thạo trong mỗi nhóm. Chọn một số để xem đúng các kỹ năng đó.</caption>
         <thead><tr><th scope="col">Nhóm năng lực</th><th scope="col" className="scomp-num">Điểm nhóm</th><th scope="col">Mức của nhóm</th>{LEVEL_COLUMNS.map((level) => <th key={level} scope="col" className="scomp-num">{LEVEL_COLUMN_LABELS[level]}</th>)}</tr></thead>
@@ -264,7 +342,7 @@ function SkillsSection({ result }: { result: AssessmentResult }) {
             : <span className="scomp-zero">0</span>}</td>)}
         </tr>)}</tbody>
       </table>
-    </div>
+    </div></details>
     <div className="scomp-filters" id="scomp-skill-list" tabIndex={-1}>
       <label>Nhóm<select value={filters.group} onChange={(event) => set({ group: event.target.value })}><option value="">Tất cả nhóm</option>{result.groups.map((group) => <option key={group.key} value={group.key}>{group.name}</option>)}</select></label>
       <label>Mức<select value={filters.level} onChange={(event) => set({ level: event.target.value })}><option value="">Tất cả mức</option>{LEVEL_SCALE.map((level) => <option key={level.code} value={level.code}>{level.label}</option>)}</select></label>

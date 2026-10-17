@@ -1,11 +1,36 @@
 import { describe, expect, it } from "vitest";
 import {
-  aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, dataUsedLine, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
+  aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, countAxis, dataUsedLine, levelChart, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
   gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isPreconditionError, PRIORITY_LABELS, levelStep, mapAiOutput, modelLabel, plansFor,
   scoreDifference, shouldPoll, sortRequirements, termLabel, EMPTY_SKILL_FILTERS,
 } from "./student-competency-data";
 import { fixtureAiOutput, fixtureAssessment, fixtureResult } from "./student-competency.fixture";
 import type { CareerRequirementResult } from "./competency-assessment-types";
+
+describe("level chart", () => {
+  it("draws a clean count axis of at most five steps", () => {
+    expect(countAxis(49)).toEqual({ max: 50, ticks: [0, 10, 20, 30, 40, 50] });
+    expect(countAxis(7)).toEqual({ max: 8, ticks: [0, 2, 4, 6, 8] });
+    expect(countAxis(5)).toEqual({ max: 5, ticks: [0, 1, 2, 3, 4, 5] });
+    expect(countAxis(81)).toEqual({ max: 100, ticks: [0, 20, 40, 60, 80, 100] });
+    expect(countAxis(0)).toEqual({ max: 1, ticks: [0, 1] });
+  });
+  it("stacks each group's skills by level on one axis, counted like the group line", () => {
+    const { axis, bars } = levelChart(fixtureResult);
+    expect(axis.max).toBe(5);
+    // G1: S01, S02 Thành thạo · S03 Khá · S04 Cơ bản · S07 no evidence; S08 is outside the student's choices.
+    const [g1, g2] = bars;
+    expect(g1!.total).toBe(5);
+    expect(g1!.segments.map((segment) => [segment.level, segment.count, segment.start, segment.end])).toEqual([
+      ["proficient", 2, 0, 0.4], ["good", 1, 0.4, 0.6], ["basic", 1, 0.6, 0.8], ["no_evidence", 1, 0.8, 1],
+    ]);
+    expect(g1!.segments[0]!.skills.map((skill) => skill.name)).toEqual(["Lập trình web", "Lập trình hướng đối tượng"]);
+    expect(g1!.segments[0]!.share).toBe(0.4);
+    // G2: the exempt skill is its own segment, so the bar adds up to the group's skills; the condition-only one is left out.
+    expect(g2!.total).toBe(1);
+    expect(g2!.segments.map((segment) => [segment.level, segment.label, segment.count])).toEqual([["exempt", "Miễn/công nhận", 1]]);
+  });
+});
 
 describe("polling and AI actions", () => {
   it("polls only while the AI comment can still change", () => {
