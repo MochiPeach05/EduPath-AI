@@ -9,6 +9,11 @@
   --scomp-l4: #1c4182;
   --scomp-track: #eef1f5;
   --scomp-neutral: #5f6b7a;
+  /* Charts: "no evidence" and exempt neutrals (checked against --scomp-l1 for colour-blind separation), hairline grid, baseline. */
+  --scomp-none: #7f8690;
+  --scomp-exempt: #c3c8cf;
+  --scomp-grid: #e8ebf0;
+  --scomp-axis: #c3cad4;
   display: grid;
   gap: 20px;
   min-width: 0;
@@ -180,7 +185,25 @@
 .scomp-page .scomp-bucket > summary span { color: var(--sw-muted); font-size: 12px; }
 .scomp-page .scomp-skill-list { margin: 0; padding: 0; list-style: none; }
 .scomp-page .scomp-skill-list > li + li { border-top: 1px solid var(--sw-border); }
-.scomp-page .scomp-skill > summary { display: grid; grid-template-columns: 12px minmax(0, 1fr) 150px 44px 230px; align-items: center; gap: 12px; padding: 10px 14px; cursor: pointer; font-size: 13px; }
+/* Skill rows as bars: name, then the score on a 0–100 track with gridlines at the level thresholds and the score at the tip. */
+.scomp-page .scomp-skill > summary,
+.scomp-page .scomp-skill-axis { display: grid; grid-template-columns: 12px minmax(140px, 280px) minmax(0, 1fr); align-items: center; gap: 12px; padding: 6px 14px; font-size: 13px; }
+.scomp-page .scomp-skill > summary { cursor: pointer; }
+.scomp-page .scomp-skill-axis { padding-block: 10px 0; color: var(--scomp-neutral); font-size: 12px; }
+.scomp-page .scomp-skill-track { position: relative; height: 28px; margin-right: 40px; }
+.scomp-page .scomp-skill-axis .scomp-skill-track { height: 16px; }
+.scomp-page .scomp-skill-axis .scomp-skill-track > span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
+.scomp-page .scomp-skill-grid i { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--scomp-grid); }
+.scomp-page .scomp-skill-grid i:first-child { background: var(--scomp-axis); }
+.scomp-page .scomp-skill-bar { position: absolute; top: 50%; left: 0; height: 14px; border-radius: 0 4px 4px 0; background: var(--scomp-chart-color); transform: translateY(-50%); transition: filter .15s; }
+.scomp-page .scomp-skill > summary:hover .scomp-skill-bar, .scomp-page .scomp-skill > summary:focus-visible .scomp-skill-bar { filter: brightness(1.12) saturate(1.1); }
+.scomp-page .scomp-skill-none { position: absolute; top: 50%; left: 8px; transform: translateY(-50%); color: var(--scomp-neutral); font-size: 12px; font-style: italic; white-space: nowrap; }
+.scomp-page .scomp-tip.scomp-skill-tip { left: 0; bottom: calc(100% + 6px); max-width: min(340px, calc(100cqw - 110px)); min-width: min(220px, calc(100cqw - 110px)); }
+/* Touch screens have no hover: a tap opens the row (or filters the list), and the opened row says the same. */
+@media (hover: none) { .scomp-page .scomp-tip { display: none !important; } }
+.scomp-page .scomp-skill > summary[data-tip="below"] .scomp-skill-tip { top: calc(100% + 6px); bottom: auto; }
+.scomp-page .scomp-skill > summary:hover .scomp-skill-tip, .scomp-page .scomp-skill > summary:focus-visible .scomp-skill-tip { display: grid; }
+.scomp-page .scomp-skill-list > li:hover, .scomp-page .scomp-skill-list > li:focus-within { position: relative; z-index: 3; }
 .scomp-page .scomp-skill > summary,
 .scomp-page .scomp-bucket > summary { list-style: none; }
 .scomp-page .scomp-skill > summary::-webkit-details-marker,
@@ -192,8 +215,7 @@
 .scomp-page .scomp-bucket > summary::before { align-self: center; margin-right: 4px; }
 .scomp-page .scomp-skill-name { font-weight: 600; }
 .scomp-page .scomp-career-tag { display: inline-block; margin-left: 8px; padding: 0 6px; border: 1px solid #c9d6ea; border-radius: 4px; color: var(--scomp-l4); font-size: 11px; font-weight: 700; vertical-align: 1px; }
-.scomp-page .scomp-skill-score { text-align: right; font-size: 15px; font-weight: 700; }
-.scomp-page .scomp-skill-meta { color: var(--sw-muted); font-size: 12px; }
+.scomp-page .scomp-skill-score { position: absolute; top: 50%; transform: translateY(-50%); color: var(--sw-ink, #1d2433); font-size: 13px; font-weight: 700; white-space: nowrap; }
 .scomp-page .scomp-skill-body { display: grid; gap: 10px; padding: 4px 14px 14px 30px; }
 .scomp-page .scomp-evidence { min-width: 820px; }
 
@@ -222,7 +244,7 @@
 /* Level chart: one stacked bar per group on a shared count axis. Colours are the level ramp of the badges
    (validated as an ordinal ramp), a neutral for "no evidence" and a light neutral for exempt; 2px surface gaps,
    4px rounded data end, hairline grid. */
-.scomp-page .scomp-chart { --scomp-none: #7f8690; --scomp-exempt: #c3c8cf; --scomp-grid: #e8ebf0; --scomp-axis: #c3cad4; display: grid; gap: 10px; margin: 0; }
+.scomp-page .scomp-chart { display: grid; gap: 10px; margin: 0; }
 .scomp-page .scomp-chart-legend { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0; padding: 0; list-style: none; color: var(--sw-ink, #1d2433); font-size: 13px; }
 .scomp-page .scomp-chart-legend li { display: inline-flex; align-items: center; gap: 7px; }
 .scomp-page .scomp-chart-legend .scomp-chart-key { width: 12px; height: 12px; border-radius: 3px; }
@@ -248,20 +270,22 @@
 .scomp-page .scomp-chart-seg:hover, .scomp-page .scomp-chart-seg:focus-visible { z-index: 3; }
 .scomp-page .scomp-chart-seg:hover .scomp-chart-fill, .scomp-page .scomp-chart-seg:focus-visible .scomp-chart-fill { filter: brightness(1.12) saturate(1.1); }
 .scomp-page .scomp-chart-seg:focus-visible { outline: 2px solid var(--scomp-l4); outline-offset: 1px; border-radius: 4px; }
-.scomp-page .scomp-chart-tip { position: absolute; bottom: calc(50% + 17px); display: none; gap: 3px; width: max-content; min-width: 220px; max-width: min(320px, 80vw); padding: 12px 14px; border: 1px solid #d5ddea; border-radius: 8px; background: #fff; box-shadow: 0 8px 24px rgba(20, 33, 61, .16); color: var(--scomp-neutral); font-size: 13px; font-weight: 400; line-height: 1.5; text-align: left; white-space: normal; pointer-events: none; }
+/* Tooltip box shared by the level chart and the skill bars; shown on hover and keyboard focus, never the only way to a value. */
+.scomp-page .scomp-tip { position: absolute; display: none; gap: 3px; width: max-content; min-width: 220px; max-width: min(340px, 80vw); padding: 12px 14px; border: 1px solid #d5ddea; border-radius: 8px; background: #fff; box-shadow: 0 8px 24px rgba(20, 33, 61, .16); color: var(--scomp-neutral); font-size: 13px; font-weight: 400; font-style: normal; line-height: 1.5; text-align: left; white-space: normal; pointer-events: none; }
+.scomp-page .scomp-chart-tip { bottom: calc(50% + 17px); }
 .scomp-page .scomp-chart-seg[data-tip="below"] .scomp-chart-tip { top: calc(50% + 17px); bottom: auto; }
 .scomp-page .scomp-chart-tip-middle { left: 50%; transform: translateX(-50%); }
 .scomp-page .scomp-chart-tip-start { left: 0; }
 .scomp-page .scomp-chart-tip-end { right: 0; }
 .scomp-page .scomp-chart-seg:hover .scomp-chart-tip, .scomp-page .scomp-chart-seg:focus-visible .scomp-chart-tip { display: grid; }
-.scomp-page .scomp-chart-tip-head { display: flex; align-items: center; gap: 7px; color: var(--sw-ink, #1d2433); font-size: 14px; }
-.scomp-page .scomp-chart-tip-head strong { font-size: 16px; }
-.scomp-page .scomp-chart-tip-head .scomp-chart-key { width: 12px; height: 3px; border-radius: 2px; }
-.scomp-page .scomp-chart-tip-skills { display: grid; gap: 1px; margin-top: 4px; padding-top: 6px; border-top: 1px solid #eef1f5; color: var(--sw-ink, #1d2433); }
-.scomp-page .scomp-chart-tip-skills > span { display: flex; justify-content: space-between; gap: 16px; }
-.scomp-page .scomp-chart-tip-skills b { font-weight: 700; }
-.scomp-page .scomp-chart-tip-more { color: var(--scomp-neutral); }
-.scomp-page .scomp-chart-tip-hint { margin-top: 2px; color: var(--scomp-l3); font-weight: 600; }
+.scomp-page .scomp-tip-head { display: flex; align-items: center; gap: 7px; color: var(--sw-ink, #1d2433); font-size: 14px; }
+.scomp-page .scomp-tip-head strong { font-size: 16px; }
+.scomp-page .scomp-tip-head .scomp-chart-key { width: 12px; height: 3px; border-radius: 2px; }
+.scomp-page .scomp-tip-list { display: grid; gap: 1px; margin-top: 4px; padding-top: 6px; border-top: 1px solid #eef1f5; color: var(--sw-ink, #1d2433); }
+.scomp-page .scomp-tip-list > span { display: flex; justify-content: space-between; gap: 16px; }
+.scomp-page .scomp-tip-list b { flex: none; font-weight: 700; }
+.scomp-page .scomp-tip-more { color: var(--scomp-neutral); }
+.scomp-page .scomp-tip-hint { margin-top: 2px; color: var(--scomp-l3); font-weight: 600; }
 .scomp-page .scomp-chart-total { position: absolute; top: 50%; transform: translateY(-50%); color: var(--scomp-neutral); font-size: 12px; white-space: nowrap; }
 .scomp-page .scomp-chart-axis .scomp-chart-scale { height: 18px; }
 .scomp-page .scomp-chart-axis .scomp-chart-scale > span { position: absolute; top: 0; transform: translateX(-50%); color: var(--scomp-neutral); font-size: 12px; white-space: nowrap; }
@@ -329,8 +353,6 @@
 @container scomp (max-width: 1080px) {
   .scomp-page .scomp-overview-grid { grid-template-columns: minmax(220px, 1fr) minmax(0, 1.6fr); }
   .scomp-page .scomp-fit-tile { grid-column: 1 / -1; }
-  .scomp-page .scomp-skill > summary { grid-template-columns: 12px minmax(0, 1fr) 150px 44px; }
-  .scomp-page .scomp-skill-meta { grid-column: 2 / -1; }
 }
 @container scomp (max-width: 760px) {
   .scomp-page .scomp-checklist { grid-template-columns: 1fr; }
@@ -362,9 +384,9 @@
   .scomp-page .scomp-groups li .scomp-bar { grid-column: 1 / -1; grid-row: 2; }
   .scomp-page .scomp-axis-row { display: none; }
   .scomp-page .scomp-stats { grid-template-columns: 1fr; }
-  .scomp-page .scomp-skill > summary { grid-template-columns: 12px minmax(0, 1fr) 44px; }
-  .scomp-page .scomp-skill > summary .scomp-level { grid-column: 2 / -1; grid-row: 2; justify-self: start; }
-  .scomp-page .scomp-skill > summary .scomp-skill-score { grid-column: 3; grid-row: 1; }
+  .scomp-page .scomp-skill > summary, .scomp-page .scomp-skill-axis { grid-template-columns: 12px minmax(0, 1fr); row-gap: 2px; }
+  .scomp-page .scomp-skill > summary .scomp-skill-track { grid-column: 2; }
+  .scomp-page .scomp-skill-axis > span:nth-child(2) { display: none; }
   .scomp-page .scomp-skill-body { padding-left: 14px; }
   .scomp-page .scomp-course-list,
   .scomp-page .scomp-selfstudy,

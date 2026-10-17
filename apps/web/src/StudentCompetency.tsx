@@ -232,9 +232,9 @@ function segmentNote(segment: LevelSegment): string {
 }
 /** The tooltip box opens toward the middle of the plot so it never leaves the card. */
 const tipSide = (segment: LevelSegment) => (segment.start + segment.end) / 2 < 0.35 ? "start" : (segment.start + segment.end) / 2 > 0.65 ? "end" : "middle";
-/** Opens the tooltip below the bar when there is no room above it (under the sticky header) and more room below. */
+/** Opens the tooltip below the mark when there is no room above it (under the sticky header) and more room below. */
 function placeTip(button: HTMLElement) {
-  const tip = button.querySelector<HTMLElement>(".scomp-chart-tip");
+  const tip = button.querySelector<HTMLElement>(".scomp-tip");
   if (!tip) return;
   const bar = button.getBoundingClientRect(), height = tip.getBoundingClientRect().height;
   const top = document.querySelector(".sw-topbar")?.getBoundingClientRect().bottom ?? 0;
@@ -251,13 +251,13 @@ function ChartSegment({ bar, segment, last, scaleWidth, onSelect }: { bar: Level
     aria-label={`${bar.name}: ${segment.count} kỹ năng ${segment.label}, ${formatPercent(segment.share)} số kỹ năng của nhóm. Bấm để xem các kỹ năng này.`} onClick={onSelect}
     onPointerEnter={(event) => placeTip(event.currentTarget)} onFocus={(event) => placeTip(event.currentTarget)}>
     <span className="scomp-chart-fill" aria-hidden="true">{fits && <span className="scomp-chart-value">{segment.count.toLocaleString("vi-VN")}</span>}</span>
-    <span className={`scomp-chart-tip scomp-chart-tip-${tipSide(segment)}`} aria-hidden="true">
-      <span className="scomp-chart-tip-head"><i className={`scomp-chart-key scomp-chart-${segment.level}`} /><strong>{segment.count.toLocaleString("vi-VN")} kỹ năng</strong><span>{segment.label}</span></span>
+    <span className={`scomp-tip scomp-chart-tip scomp-chart-tip-${tipSide(segment)}`} aria-hidden="true">
+      <span className="scomp-tip-head"><i className={`scomp-chart-key scomp-chart-${segment.level}`} /><strong>{segment.count.toLocaleString("vi-VN")} kỹ năng</strong><span>{segment.label}</span></span>
       <span>{bar.name} · {formatPercent(segment.share)} số kỹ năng của nhóm</span>
       <span>{segmentNote(segment)}</span>
-      <span className="scomp-chart-tip-skills">{segment.skills.slice(0, CHART_TIP_SKILLS).map((skill) => <span key={skill.key}><span>{skill.name}</span>{skill.score !== null && <b>{formatScore(skill.score)}</b>}</span>)}
-        {rest > 0 && <span className="scomp-chart-tip-more">và {rest.toLocaleString("vi-VN")} kỹ năng khác</span>}</span>
-      <span className="scomp-chart-tip-hint">Bấm để xem danh sách</span>
+      <span className="scomp-tip-list">{segment.skills.slice(0, CHART_TIP_SKILLS).map((skill) => <span key={skill.key}><span>{skill.name}</span>{skill.score !== null && <b>{formatScore(skill.score)}</b>}</span>)}
+        {rest > 0 && <span className="scomp-tip-more">và {rest.toLocaleString("vi-VN")} kỹ năng khác</span>}</span>
+      <span className="scomp-tip-hint">Bấm để xem danh sách</span>
     </span>
   </button>;
 }
@@ -352,9 +352,12 @@ function SkillsSection({ result }: { result: AssessmentResult }) {
       <label className="scomp-toggle"><input type="checkbox" checked={filters.needsWork} onChange={(event) => set({ needsWork: event.target.checked })} />Chỉ cần cải thiện</label>
       <button type="button" className="sr-secondary" onClick={() => setExpanded(Object.fromEntries(buckets.map((bucket) => [bucket.id, !allOpen])))}>{allOpen ? "Thu gọn tất cả" : "Mở rộng tất cả"}</button>
     </div>
+    <p className="scomp-meta">Mỗi thanh là điểm một kỹ năng trên thang 0–100; vạch 50, 70 và 85 là ngưỡng Cơ bản, Khá và Thành thạo. Di chuột vào một dòng để xem chi tiết, bấm để xem học phần minh chứng.</p>
     <p className="scomp-meta" aria-live="polite">{filtered.length.toLocaleString("vi-VN")} kỹ năng phù hợp bộ lọc{filtering && <> · <button type="button" className="scomp-link-button" onClick={() => setFilters(EMPTY_SKILL_FILTERS)}>Xem tất cả kỹ năng</button></>}</p>
     {buckets.map((bucket) => { const group = groups.get(bucket.id); return <details key={bucket.id} className="scomp-bucket" open={isOpen(bucket.id)} onToggle={(event) => { const open = event.currentTarget.open; if (open !== isOpen(bucket.id)) setExpanded((current) => ({ ...current, [bucket.id]: open })); }}>
       <summary><strong>{bucket.title} ({bucket.skills.length.toLocaleString("vi-VN")})</strong>{group && group.score !== null && <span>Điểm nhóm {formatScore(group.score)} · {group.levelLabel}</span>}{bucket.note && <span>{bucket.note}</span>}</summary>
+      {bucket.skills.some((skill) => skill.score !== null) && <div className="scomp-skill-axis" aria-hidden="true"><span /><span>Kỹ năng</span>
+        <span className="scomp-skill-track">{SKILL_TICKS.map((tick) => <span key={tick} style={{ left: `${tick}%` }}>{tick}</span>)}</span></div>}
       <ul className="scomp-skill-list">{bucket.skills.map((skill) => <SkillRow key={skill.key} skill={skill} courses={courses} />)}</ul>
     </details>; })}
     {!buckets.length && <p className="sw-empty">Không có kỹ năng nào phù hợp bộ lọc.</p>}
@@ -362,15 +365,45 @@ function SkillsSection({ result }: { result: AssessmentResult }) {
 }
 
 const ROLE_NOTES: Partial<Record<SkillResult["evidenceCourses"][number]["role"], string>> = { planned: "Chưa học", not_chosen: "Không thuộc lựa chọn tự chọn của bạn", in_progress: "Đang học", exempt: "Miễn/công nhận", studied: "Đã học" };
+/** Gridlines of a skill bar: the ends and the thresholds of Cơ bản, Khá and Thành thạo. */
+const SKILL_TICKS = [0, 50, 70, 85, 100];
+const TIP_COURSES = 3;
+const courseScore = (course: AssessmentResult["courses"][number] | undefined) => course?.score10 === null || course?.score10 === undefined
+  ? (course?.letter ?? "—") : `${formatNumber(course.score10)}${course.letter ? ` · ${course.letter}` : ""}`;
+/** Said in place of a bar when the skill has no score. */
+function noScoreText(skill: SkillResult): string {
+  if (skill.status === "not_applicable") return "Ngoài lựa chọn học phần của bạn";
+  if (skill.level === "exempt") return "Miễn/công nhận, không có điểm";
+  return "Chưa có minh chứng";
+}
+
 function SkillRow({ skill, courses }: { skill: SkillResult; courses: Map<string, AssessmentResult["courses"][number]> }) {
+  const score = skill.score === null ? null : Math.max(0, Math.min(100, skill.score));
+  const facts = `${skill.confidence ? CONFIDENCE_LABELS[skill.confidence] : "Chưa có độ tin cậy"} · độ phủ ${formatPercent(skill.coverage)}`;
+  const moreCourses = skill.evidenceCourses.length - TIP_COURSES;
   return <li><details className="scomp-skill">
-    <summary>
+    <summary onPointerEnter={(event) => placeTip(event.currentTarget)} onFocus={(event) => placeTip(event.currentTarget)}>
       <span className="scomp-skill-name">{skill.name}{skill.careerSkill && <span className="scomp-career-tag">Nghề mục tiêu</span>}</span>
-      <LevelBadge level={skill.level} label={skill.levelLabel} />
-      <span className="scomp-skill-score">{formatScore(skill.score)}</span>
-      <span className="scomp-skill-meta">{skill.confidence ? CONFIDENCE_LABELS[skill.confidence] : "—"} · độ phủ {formatPercent(skill.coverage)}</span>
+      <span className="scomp-skill-track">
+        <span className="scomp-skill-grid" aria-hidden="true">{SKILL_TICKS.map((tick) => <i key={tick} style={{ left: `${tick}%` }} />)}</span>
+        {score !== null ? <>
+          <span className={`scomp-skill-bar scomp-chart-${skill.level}`} style={{ width: `${score}%` }} aria-hidden="true" />
+          <span className="scomp-skill-score" style={{ left: `calc(${score}% + 6px)` }}>{formatScore(skill.score)}</span>
+        </> : <span className="scomp-skill-none">{noScoreText(skill)}</span>}
+        <span className="sr-only">{skill.score !== null ? `${skill.levelLabel} · ` : ""}{facts}</span>
+        <span className="scomp-tip scomp-skill-tip" aria-hidden="true">
+          <span className="scomp-tip-head"><i className={`scomp-chart-key scomp-chart-${skill.level}`} /><strong>{skill.score !== null ? `${formatScore(skill.score)} điểm` : noScoreText(skill)}</strong>{skill.score !== null && <span>{skill.levelLabel}</span>}</span>
+          <span>{skill.name}{skill.careerSkill ? " · kỹ năng của nghề mục tiêu" : ""}</span>
+          <span>{facts}</span>
+          {skill.evidenceCourses.length > 0 && <span className="scomp-tip-list">{skill.evidenceCourses.slice(0, TIP_COURSES).map((row) => { const course = courses.get(row.code); return <span key={row.code}>
+            <span>{course?.name ?? row.code} ({row.code})</span><b>{row.role !== "score" && ROLE_NOTES[row.role] ? ROLE_NOTES[row.role] : courseScore(course)}</b></span>; })}
+            {moreCourses > 0 && <span className="scomp-tip-more">và {moreCourses.toLocaleString("vi-VN")} học phần khác</span>}</span>}
+          <span className="scomp-tip-hint">Bấm để xem học phần minh chứng</span>
+        </span>
+      </span>
     </summary>
     <div className="scomp-skill-body">
+      <p className="scomp-meta">{skill.score !== null ? `${formatScore(skill.score)} điểm · ${skill.levelLabel}` : noScoreText(skill)} · {facts}</p>
       {skill.scope && <p className="scomp-prose"><strong>Phạm vi: </strong>{skill.scope}</p>}
       {skill.status === "not_applicable" && <p className="scomp-meta">{skill.notApplicableReason === "other_specialty" ? "Kỹ năng này chỉ có trong học phần của chuyên ngành khác." : skill.notApplicableReason === "elective_not_chosen" ? "Kỹ năng này nằm trong nhóm tự chọn bạn đã chọn đủ bằng học phần khác — không thuộc lựa chọn tự chọn của bạn." : "Học phần đo kỹ năng này không có tín chỉ."}</p>}
       <div className="scomp-table-scroll" tabIndex={0} role="region" aria-label={`Học phần minh chứng của ${skill.name}`}>

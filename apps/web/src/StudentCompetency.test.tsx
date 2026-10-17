@@ -112,7 +112,7 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
     expect(section).toContain('aria-label="Kiến thức chuyên môn: 2 kỹ năng Thành thạo, 40% số kỹ năng của nhóm. Bấm để xem các kỹ năng này."');
     expect(section).toContain("left:0%;width:40%");
     // The tooltip gives the full picture: count, level, group share, the level's range and the skills with their scores.
-    const tip = section.slice(section.indexOf('class="scomp-chart-tip'), section.indexOf("Bấm để xem danh sách"));
+    const tip = section.slice(section.indexOf("scomp-chart-tip"), section.indexOf("Bấm để xem danh sách"));
     expect(tip).toContain("<strong>2 kỹ năng</strong><span>Thành thạo</span>");
     expect(tip).toContain("Kiến thức chuyên môn · 40% số kỹ năng của nhóm");
     expect(tip).toContain("Điểm kỹ năng từ 85");
@@ -124,6 +124,26 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
       .toEqual(["Thành thạo", "Khá", "Cơ bản", "Cần củng cố", "Chưa có minh chứng", "Miễn/công nhận"]);
     expect([...section.matchAll(/<span style="left:[\d.]+%">(\d+)<\/span>/g)].map((match) => match[1])).toEqual(["0", "1", "2", "3", "4", "5"]);
     expect(section).toMatch(/<details class="scomp-legend scomp-chart-table"><summary>Xem dạng bảng<\/summary>/);
+  });
+  it("draws every skill as a score bar on 0–100 with a tooltip and keeps the evidence behind a click", () => {
+    const html = withAi("completed");
+    const list = html.slice(html.indexOf('id="scomp-skill-list"'));
+    // Lập trình web: 91 → Thành thạo bar at 91%, its score at the tip.
+    const row = list.slice(list.indexOf('scomp-skill-name">Lập trình web'), list.indexOf("Học phần minh chứng của Lập trình web"));
+    expect(row).toContain('class="scomp-skill-bar scomp-chart-proficient" style="width:91%"');
+    expect(row).toContain('<span class="scomp-skill-score" style="left:calc(91% + 6px)">91</span>');
+    expect(row).toContain('<span class="sr-only">Thành thạo · Độ tin cậy trung bình · độ phủ 50%</span>');
+    // The tooltip: score and level first, then the skill, confidence and its evidence courses with their results.
+    expect(row).toContain("<strong>91 điểm</strong><span>Thành thạo</span>");
+    expect(row).toContain("Lập trình web · kỹ năng của nghề mục tiêu");
+    expect(row).toContain("<span>Độ tin cậy trung bình · độ phủ 50%</span>");
+    expect(row).toContain("<span>Lập trình web (TST104)</span><b>9,1 · A+</b>");
+    expect(row).toContain("Bấm để xem học phần minh chứng");
+    // The opened row repeats the facts, so nothing is only in the tooltip.
+    expect(row).toContain('<p class="scomp-meta">91 điểm · Thành thạo · Độ tin cậy trung bình · độ phủ 50%</p>');
+    // A skill without a score has no bar but says why; the axis marks the level thresholds.
+    expect(list).toContain('<span class="scomp-skill-none">Chưa có minh chứng</span>');
+    expect(list).toContain('<span style="left:50%">50</span><span style="left:70%">70</span><span style="left:85%">85</span>');
   });
   it("follows the competency term by term, grouped by school year (STU-COMP-07)", () => {
     const html = withAi("completed");
