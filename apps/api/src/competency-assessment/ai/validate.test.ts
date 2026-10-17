@@ -82,7 +82,8 @@ describe("validateAiOutput", () => {
     expect(reasonOf(improvements([{ courseCode: "TST240", reason: "Chưa học, đủ điều kiện đăng ký." }, { courseCode: "TST130", reason: "Đã đạt, học cải thiện." }]))).toBe("ok");
     expect(reasonOf(improvements([{ courseCode: "TST201", reason: "Học mới." }]))).toBe("foreign_course@improvements.0.courses.0.courseCode");
     expect(reasonOf(improvements([{ courseCode: "XYZ999", reason: "Học thêm." }]))).toBe("foreign_course@improvements.0.courses.0.courseCode");
-    expect(reasonOf(improvements([{ courseCode: "TST130", reason: "A." }, { courseCode: "TST130", reason: "B." }]))).toBe("duplicate@improvements.0.courses.1.courseCode");
+    const repeated = validateAiOutput(improvements([{ courseCode: "TST130", reason: "A." }, { courseCode: "TST130", reason: "B." }]), context);
+    expect(repeated.ok && repeated.output.improvements[0]!.courses).toEqual([{ courseCode: "TST130", reason: "A." }]);
     const three = ["TST240", "TST130", "TST201"].map((courseCode) => ({ courseCode, reason: "Học." }));
     expect(reasonOf(improvements(three))).toBe("schema@improvements.0.courses");
     // Reasons are checked like every other text.
@@ -125,11 +126,17 @@ describe("validateAiOutput", () => {
     expect(check("Học kỳ HK253 và kỹ năng S03 không phải mã học phần.")).toBe("ok");
   });
 
-  it("rejects duplicates", () => {
-    expect(reasonOf({ ...valid(), strengths: [{ skillKey: "S01", comment: "A." }, { skillKey: "S01", comment: "B." }] })).toBe("duplicate@strengths.1");
+  it("keeps the first of repeated entries instead of rejecting the comment (comp-v7)", () => {
+    const strengths = validateAiOutput({ ...valid(), strengths: [{ skillKey: "S01", comment: "A." }, { skillKey: "S01", comment: "B." }] }, context);
+    expect(strengths.ok && strengths.output.strengths).toEqual([{ skillKey: "S01", comment: "A." }]);
     const gaps = valid().gaps;
     gaps[0] = { ...gaps[0]!, courses: [{ courseCode: "TST201", reason: "A." }, { courseCode: "TST201", reason: "B." }] };
-    expect(reasonOf({ ...valid(), gaps })).toBe("duplicate@gaps.0.courses.1.courseCode");
+    const repeated = validateAiOutput({ ...valid(), gaps: [...gaps, gaps[0]!] }, context);
+    // The repeated S03 at the end goes; the repeated course inside the first S03 goes too.
+    expect(repeated.ok && repeated.output.gaps.map((gap) => [gap.skillKey, gap.courses.map((course) => course.reason)]))
+      .toEqual([[gaps[0]!.skillKey, ["A."]], ...gaps.slice(1).map((gap) => [gap.skillKey, gap.courses.map((course) => course.reason)])]);
+    const groups = validateAiOutput({ ...valid(), groupInsights: [...valid().groupInsights, valid().groupInsights[0]!] }, context);
+    expect(groups.ok && groups.output.groupInsights).toEqual(valid().groupInsights);
   });
 
   it("rejects numbers that are not in the data block", () => {

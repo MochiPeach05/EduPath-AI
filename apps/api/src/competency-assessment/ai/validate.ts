@@ -12,7 +12,6 @@ export type AiValidationReason =
   | "unknown_skill_key"
   | "unknown_gap_skill"
   | "foreign_course"
-  | "duplicate"
   | "conflicting_skill"
   | "forbidden_content"
   | "invented_number";
@@ -105,6 +104,11 @@ export function validationContextFromAiInput(input: { schema: unknown; user: unk
 }
 
 const fail = (reason: AiValidationReason, path: string): AiValidationResult => ({ ok: false, error: { code: "invalid_ai_output", reason, path } });
+/** The first entry of each key: a repeated group, skill or course is dropped, not a reason to reject the whole comment. */
+const firstOf = <T>(items: readonly T[], key: (item: T) => string): T[] => {
+  const seen = new Set<string>();
+  return items.filter((item) => !seen.has(key(item)) && Boolean(seen.add(key(item))));
+};
 
 export function validateAiOutput(raw: unknown, context: AiValidationContext): AiValidationResult {
   const parsed = aiOutputSchema.safeParse(raw);
@@ -112,17 +116,20 @@ export function validateAiOutput(raw: unknown, context: AiValidationContext): Ai
     const issue = parsed.error.issues[0];
     return fail("schema", issue ? issue.path.join(".") : "");
   }
+  // comp-v7 (thinking mode): the model sometimes repeats an entry; the repeat is dropped (2026-10-18 trial).
   const output: AiOutput = {
     ...parsed.data,
-    improvements: parsed.data.improvements.map(({ skillKey, priority, courses, comment }) => ({ skillKey, priority, courses: courses ?? [], comment }))
+    groupInsights: firstOf(parsed.data.groupInsights, (item) => item.groupKey),
+    strengths: firstOf(parsed.data.strengths, (item) => item.skillKey),
+    improvements: firstOf(parsed.data.improvements, (item) => item.skillKey)
+      .map(({ skillKey, priority, courses, comment }) => ({ skillKey, priority, courses: firstOf(courses ?? [], (course) => course.courseCode), comment })),
+    gaps: firstOf(parsed.data.gaps, (gap) => gap.skillKey).map((gap) => ({ ...gap, courses: firstOf(gap.courses, (course) => course.courseCode) }))
   };
   const groups = new Set(context.groupKeys);
   const strengthKeys = new Set(context.strengthKeys);
   const improvementKeys = new Set(context.improvementKeys);
   const improvementCourses = new Map(context.improvementSkills.map((skill) => [skill.key, new Set(skill.courseCodes)]));
   const gapCourses = new Map(context.gapSkills.map((gap) => [gap.key, new Set(gap.courseCodes)]));
-
-  const seen = (values: readonly string[]) => values.findIndex((value, index) => values.indexOf(value) !== index);
 
   for (const [index, item] of output.groupInsights.entries()) if (!groups.has(item.groupKey)) return fail("unknown_group_key", `groupInsights.${index}.groupKey`);
   for (const [index, item] of output.strengths.entries()) if (!strengthKeys.has(item.skillKey)) return fail("unknown_skill_key", `strengths.${index}.skillKey`);
@@ -133,8 +140,6 @@ export function validateAiOutput(raw: unknown, context: AiValidationContext): Ai
     for (const [courseIndex, course] of item.courses.entries()) {
       if (!allowed?.has(course.courseCode)) return fail("foreign_course", `improvements.${index}.courses.${courseIndex}.courseCode`);
     }
-    const duplicateCourse = seen(item.courses.map((course) => course.courseCode));
-    if (duplicateCourse >= 0) return fail("duplicate", `improvements.${index}.courses.${duplicateCourse}.courseCode`);
   }
   for (const [index, gap] of output.gaps.entries()) {
     const allowed = gapCourses.get(gap.skillKey);
@@ -142,22 +147,10 @@ export function validateAiOutput(raw: unknown, context: AiValidationContext): Ai
     for (const [courseIndex, course] of gap.courses.entries()) {
       if (!allowed.has(course.courseCode)) return fail("foreign_course", `gaps.${index}.courses.${courseIndex}.courseCode`);
     }
-    const duplicateCourse = seen(gap.courses.map((course) => course.courseCode));
-    if (duplicateCourse >= 0) return fail("duplicate", `gaps.${index}.courses.${duplicateCourse}.courseCode`);
   }
   // A skill named as a strength must not also be one to improve or a gap.
   const weak = new Set([...output.improvements, ...output.gaps].map((item) => item.skillKey));
   for (const [index, item] of output.strengths.entries()) if (weak.has(item.skillKey)) return fail("conflicting_skill", `strengths.${index}.skillKey`);
-  const duplicates: [string, string[]][] = [
-    ["groupInsights", output.groupInsights.map((item) => item.groupKey)],
-    ["strengths", output.strengths.map((item) => item.skillKey)],
-    ["improvements", output.improvements.map((item) => item.skillKey)],
-    ["gaps", output.gaps.map((item) => item.skillKey)]
-  ];
-  for (const [field, keys] of duplicates) {
-    const index = seen(keys);
-    if (index >= 0) return fail("duplicate", `${field}.${index}`);
-  }
 
   const texts: [string, string][] = [
     ["summary", output.summary],

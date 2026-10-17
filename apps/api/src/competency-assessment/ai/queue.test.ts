@@ -40,8 +40,9 @@ describe("createCompetencyAiQueue", () => {
     const params = insert[1] as unknown[];
     expect(params.slice(1, 3)).toEqual([ASSESSMENT, USER]);
     const aiInput = JSON.parse(params[3] as string);
-    expect(Object.keys(aiInput).sort()).toEqual(["options", "promptVersion", "schema", "system", "user"]);
-    expect(aiInput.promptVersion).toBe("comp-v6");
+    expect(Object.keys(aiInput).sort()).toEqual(["options", "promptVersion", "schema", "system", "think", "user"]);
+    expect(aiInput.think).toBe(true);
+    expect(aiInput.promptVersion).toBe("comp-v7");
     const last = query.mock.calls.at(-1)!;
     expect(last[0]).toContain("SET ai_status='queued'");
     expect(last[1]).toEqual([ASSESSMENT, USER]);

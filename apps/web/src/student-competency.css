@@ -316,6 +316,13 @@
 
 /* Competency per term (STU-COMP-07) */
 .scomp-page .scomp-history-table { min-width: 860px; }
+/* STU-GAP-07: career skills by term */
+.scomp-page .scomp-gap-history { min-width: 640px; }
+.scomp-page .scomp-gap-history .scomp-gap-year { text-align: center; }
+.scomp-page .scomp-gap-history thead small { display: block; color: var(--scomp-neutral); font-size: 11px; font-weight: 600; }
+.scomp-page .scomp-gap-history tfoot th, .scomp-page .scomp-gap-history tfoot td { background: #f8f9fb; font-weight: 700; }
+.scomp-page .scomp-gap-history td span { white-space: nowrap; }
+.scomp-page .scomp-gap-change { font-weight: 700; }
 .scomp-page .scomp-history-table td { vertical-align: middle; }
 .scomp-page .scomp-history-table td small { margin-top: 0; }
 .scomp-page .scomp-history-table td:nth-child(3) { min-width: 200px; }

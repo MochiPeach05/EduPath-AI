@@ -24,11 +24,17 @@ import { AI_OUTPUT_LIMITS as L, buildOutputSchema, type JsonSchema, type OutputS
  * comp-v4: improvements pick courses of the skill plan or career gap, course lines in plain words, no graduation section.
  * comp-v5: with a career, improvements are only its skills (below its threshold, or met to deepen) and other skills are context.
  * comp-v6: the skill groups are called "nhóm năng lực", like the pages (terminology of 2026-10-17).
+ * comp-v7: Gemma's thinking mode is on: the model reasons over the data before it writes (user, 2026-10-18).
  */
-export const PROMPT_VERSION = "comp-v6";
+export const PROMPT_VERSION = "comp-v7";
 
-/** Ollama options sent with every job (worker adds think/stream/truncate/keep_alive/model). */
-export const AI_OPTIONS = { num_ctx: 16384, num_predict: 4096, temperature: 0.4, top_p: 0.95, top_k: 64 } as const;
+/** Gemma reasons before it writes the comment; the worker sends it to Ollama as think:true. */
+export const AI_THINK = true;
+/**
+ * Ollama options sent with every job (worker adds stream/truncate/keep_alive/model). num_predict covers
+ * the thinking and the answer; num_ctx stays 16384 like every other kind so the model is never reloaded.
+ */
+export const AI_OPTIONS = { num_ctx: 16384, num_predict: 8192, temperature: 0.4, top_p: 0.95, top_k: 64 } as const;
 export type AiOptions = typeof AI_OPTIONS;
 
 export type AiInput = {
@@ -37,6 +43,8 @@ export type AiInput = {
   schema: JsonSchema;
   options: AiOptions;
   promptVersion: string;
+  /** Sent to the worker: run with Gemma's thinking mode. */
+  think: boolean;
 };
 
 /** The 24 special tokens of the Gemma 4 tokenizer (tokenizer.json added_tokens). */
@@ -584,6 +592,7 @@ export function buildAiInput(result: AssessmentResult): AiInput {
     user: renderDataBlock(result, context),
     schema: buildOutputSchema(context),
     options: { ...AI_OPTIONS },
-    promptVersion: PROMPT_VERSION
+    promptVersion: PROMPT_VERSION,
+    think: AI_THINK
   };
 }

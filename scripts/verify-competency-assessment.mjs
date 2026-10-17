@@ -32,8 +32,10 @@ const migrations = ["007_student_transcripts.sql", "010_transcript_jobs.sql", "0
   "014_career_positions.sql", "015_career_fields.sql", "016_career_requirements.sql", "027_remove_career_requirement_level.sql",
   "019_career_skill_management.sql", "020_career_field_numbers.sql", "021_career_position_codes.sql", "018_data_consents.sql",
   "026_competency_management.sql", "028_student_specialty.sql", "029_student_competency_assessments.sql", "030_competency_consent.sql",
-  // The transcript routes purge graduation advice and the worker router expires it.
-  "031_career_ai_suggestions.sql", "032_graduation_ai_advice.sql"];
+  // The transcript routes purge graduation advice and the worker router expires it; /claim also runs the
+  // course-proposal housekeeping, so the audit schema needs the tables up to 036 like production.
+  "031_career_ai_suggestions.sql", "032_graduation_ai_advice.sql", "033_competency_cloud_ai.sql", "034_competency_ai_suggestions.sql",
+  "035_competency_ai_skills.sql", "036_cancel_competency_ai_skills.sql"];
 const adminPool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 1 });
 // search_path is the audit schema ONLY, so a missing table can never fall through to public.
 const pool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 8, options: `-c search_path=${schema}` });
@@ -128,7 +130,7 @@ const ageAssessments = (user) => pool.query("UPDATE stu_comp_assessments SET cre
 
 try {
   const { revisionId, skills } = await setupSchema();
-  checks.push("migrations 028-032 apply with 007-027 in a throwaway schema");
+  checks.push("migrations 028-036 apply with 007-027 in a throwaway schema");
 
   const app = express();
   app.use("/api/worker/transcripts", createTranscriptWorkerRouter(pool, workerKey));
@@ -339,6 +341,7 @@ async function runOllamaCheck(skills) {
   assert.equal((await studentCall("GET", "/latest/status")).body.workerOnline, true);
   const job = await client.claim();
   assert(job, "the queued job must be claimable");
+  assert.equal(job.think, true, "comp-v7: the comment runs with Gemma's thinking mode");
   const processing = (await studentCall("GET", "/latest/status")).body.aiStatus;
   const outcome = await processJob(job, await deps.ollama.modelInfo(), deps, new AbortController().signal);
   const seconds = (Date.now() - started) / 1000;
@@ -356,5 +359,5 @@ async function runOllamaCheck(skills) {
   console.log(JSON.stringify({ ollama: { seconds, statusWhileRunning: processing, model: row.ai_model, digest: row.ai_model_digest,
     ollamaVersion: row.ollama_version, promptVersion: row.prompt_version, numGpu: runtime.numGpu, metrics: jobRow.metrics,
     events: events.map((item) => item.event), output: ai.output } }, null, 2));
-  checks.push(`with AI enabled, POST queues a job; one real worker iteration on local Ollama completes it in ${seconds.toFixed(1)} s and GET /latest returns a validated output`);
+  checks.push(`with AI enabled, POST queues a job (think:true); one real worker iteration on local Ollama with Gemma's thinking mode completes it in ${seconds.toFixed(1)} s and GET /latest returns a validated output`);
 }

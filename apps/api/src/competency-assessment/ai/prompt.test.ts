@@ -85,8 +85,9 @@ describe("buildAiInput", () => {
   };
 
   it("uses the spec system prompt verbatim plus the output description", () => {
-    expect(PROMPT_VERSION).toBe("comp-v6");
-    expect(input.promptVersion).toBe("comp-v6");
+    expect(PROMPT_VERSION).toBe("comp-v7");
+    expect(input.promptVersion).toBe("comp-v7");
+    expect(input.think).toBe(true);
     expect(input.system).toBe(SYSTEM_PROMPT);
     expect(input.system.startsWith("Bạn là cố vấn học tập của EduPath AI, đồng hành cùng sinh viên ngành Công nghệ Thông tin, Trường Đại học Văn Lang.\n")).toBe(true);
     expect(input.system).toContain("1. Không tự tính, ước lượng hay làm tròn lại bất kỳ con số nào.");
@@ -124,7 +125,7 @@ describe("buildAiInput", () => {
   });
 
   it("sends the fixed Ollama options", () => {
-    expect(input.options).toEqual({ num_ctx: 16384, num_predict: 4096, temperature: 0.4, top_p: 0.95, top_k: 64 });
+    expect(input.options).toEqual({ num_ctx: 16384, num_predict: 8192, temperature: 0.4, top_p: 0.95, top_k: 64 });
     expect(AI_OPTIONS.num_ctx).toBe(16384);
   });
 
@@ -297,12 +298,13 @@ describe("buildAiInput", () => {
     for (const user of [input.user, noCareer.user]) expect(user).not.toMatch(/HK\d{3}/);
   });
 
-  it("never sends the competency history (STU-COMP-07, comp-calc-v8)", () => {
+  it("never sends the competency history (STU-COMP-07, comp-calc-v8) nor its career skills (STU-GAP-07, comp-calc-v9)", () => {
     const result = syntheticResult();
     result.history = [{
       term: "HK253", schoolYear: "2025–2026", semester: 3, gradedCourses: 12,
       overall: { score: 72.25, level: "good", levelLabel: "Khá", skillsWithEvidence: 3, applicableSkills: 4 },
-      groups: result.groups.map(({ key, name, score, level, levelLabel }) => ({ key, name, score, level, levelLabel }))
+      groups: result.groups.map(({ key, name, score, level, levelLabel }) => ({ key, name, score, level, levelLabel })),
+      career: { fitCode: "fit", fitLabel: "Phù hợp", met: 1, total: 1, requirements: [{ requirementId: "00000000-0000-4000-8000-0000000000d1", score: 91, status: "met" }] }
     }];
     expect(buildAiInput(result)).toEqual(input);
   });

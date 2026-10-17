@@ -239,6 +239,51 @@ export function historySentence(history: readonly HistoryPoint[]): string | null
   return `Điểm năng lực tổng ${trend}.${peak}`;
 }
 
+/* ------------------------------------------------- STU-GAP-07: career skills by term */
+
+export type GapHistoryRow = {
+  requirementId: string; name: string; priorityLabel: string; isRequired: boolean; threshold: number;
+  /** One cell per point: the score as the page shows it (rounded down) and the status of that term. */
+  cells: { term: string; score: number | null; status: CareerRequirementResult["status"] | null }[];
+  /** Latest scored cell − first scored cell; null with fewer than two scored cells. */
+  change: number | null;
+};
+export type GapHistory =
+  | { state: "empty" }
+  | { state: "outdated" }
+  | { state: "ready"; points: HistoryPoint[]; rows: GapHistoryRow[]; sentence: string };
+
+/**
+ * "Theo dõi mức độ cải thiện kỹ năng": every career skill at the end of each graded term. Null without a
+ * career; "outdated" for results computed before comp-calc-v9 (no career in the history).
+ */
+export function gapHistory(result: Pick<AssessmentResult, "career" | "history">): GapHistory | null {
+  const career = result.career;
+  if (!career) return null;
+  if (!result.history?.length) return { state: "empty" };
+  const points = result.history.filter((point) => point.career);
+  if (points.length !== result.history.length) return { state: "outdated" };
+  const rows = sortRequirements(career.requirements).map((req): GapHistoryRow => {
+    const cells = points.map((point) => {
+      const cell = point.career!.requirements.find((item) => item.requirementId === req.requirementId);
+      return { term: point.term, score: shown(cell?.score ?? null), status: cell?.status ?? null };
+    });
+    const scored = cells.filter((cell) => cell.score !== null);
+    return {
+      requirementId: req.requirementId, name: req.skillName ?? req.title, priorityLabel: req.priorityLabel, isRequired: req.isRequired, threshold: req.threshold,
+      cells, change: scored.length >= 2 ? scored.at(-1)!.score! - scored[0]!.score! : null,
+    };
+  });
+  const first = points[0]!, last = points.at(-1)!;
+  const from = first.career!.met, to = last.career!.met, total = last.career!.total;
+  const best = rows.reduce<GapHistoryRow | null>((top, row) => row.change !== null && row.change > 0 && (!top || row.change > top.change!) ? row : top, null);
+  const sentence = points.length < 2
+    ? `Mới có ${termInWords(last)} có điểm nên chưa so sánh được; ${to}/${total} kỹ năng nghề đạt ngưỡng.`
+    : `Từ ${termInWords(first)} đến ${termInWords(last)}, số kỹ năng nghề đạt ngưỡng ${to > from ? `tăng từ ${from} lên ${to}` : to < from ? `giảm từ ${from} xuống ${to}` : `giữ ở ${to}`}/${total}.`
+      + (best ? ` Tăng nhiều nhất: ${best.name} (+${best.change} điểm).` : "");
+  return { state: "ready", points, rows, sentence };
+}
+
 /* ---------------------------------------------------- proficiency summary */
 
 /** The level columns of the proficiency table, best first; "Chưa có minh chứng" last (not a weakness). */
@@ -379,13 +424,19 @@ export function aiStateCopy(status: AiStatus, workerOnline: boolean, aiEnabled: 
       : { title: "Nhận xét AI chưa được bật", text: "Kết quả bên dưới do hệ thống tính và đã đầy đủ. Khi máy AI của nhóm phát triển hoạt động, bạn có thể nhận thêm lời nhận xét." };
     case "deferred": return { title: "Hàng đợi AI đang đầy", text: "Kết quả tính toán đã sẵn sàng. Bấm tạo nhận xét sau ít phút để xếp hàng lại." };
     case "queued": return workerOnline
-      ? { title: "Đang xếp hàng tạo nhận xét", text: "Nhận xét thường mất vài phút. Bạn có thể xem kết quả bên dưới trong lúc chờ." }
+      ? { title: "Đang xếp hàng tạo nhận xét", text: "AI suy luận trước khi viết nên nhận xét thường mất 1–3 phút. Bạn có thể xem kết quả bên dưới trong lúc chờ." }
       : { title: "Đang chờ máy AI kết nối", text: "Yêu cầu đã được giữ trong hàng đợi và sẽ được xử lý khi máy AI kết nối lại." };
-    case "processing": return { title: "EduPath AI đang phân tích kết quả", text: "Mô hình đang đọc kết quả đã tính và viết nhận xét cho bạn. Bạn có thể rời trang và quay lại sau." };
+    case "processing": return { title: "EduPath AI đang suy luận và viết nhận xét", text: "Mô hình suy luận trên kết quả đã tính rồi mới viết nhận xét, thường mất 1–3 phút. Bạn có thể rời trang và quay lại sau." };
     case "failed": return { title: "Chưa tạo được nhận xét", text: "Kết quả tính toán không bị ảnh hưởng." };
     case "cancelled": return { title: "Đã hủy tạo nhận xét", text: "Bạn có thể tạo lại nhận xét bất cứ lúc nào." };
     default: return { title: "Nhận xét từ EduPath AI", text: "" };
   }
+}
+
+/** Comments written with Gemma's thinking mode: prompt comp-v7 and later. */
+export function aiReasoned(promptVersion: string | null | undefined): boolean {
+  const match = /^comp-v(\d+)$/.exec(promptVersion ?? "");
+  return Boolean(match && Number(match[1]) >= 7);
 }
 
 /** "gemma4:e4b" → "Gemma 4 E4B". */
@@ -503,8 +554,6 @@ export function dataUsedLine(assessment: Pick<StoredAssessment, "createdAt" | "r
   const parts = [
     `Cập nhật lúc ${formatDateTime(assessment.createdAt)}`,
     `khóa ${meta.cohortCode}`,
-    `CTĐT phiên bản ${meta.curriculum.version}`,
-    `trọng số kỹ năng phiên bản ${meta.weights.version}`,
     `bảng điểm ${transcript.courseCount.toLocaleString("vi-VN")} học phần${transcript.latestTerm ? ` đến ${transcript.latestTerm}` : ""}`,
   ];
   return parts.join(" · ");

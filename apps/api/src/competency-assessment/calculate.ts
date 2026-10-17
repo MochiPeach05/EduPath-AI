@@ -236,6 +236,11 @@ function competencyHistory(inputs: AssessmentInputs, latest: Assessment): Histor
       gradedCourses: t.passed + t.failed + t.exempt + t.gradedUnknown,
       overall: { score: o.score, level: o.level, levelLabel: o.levelLabel, skillsWithEvidence: o.basis.skillsWithEvidence, applicableSkills: o.basis.applicableSkills },
       groups: snapshot.groups.map((group) => ({ key: group.key, name: group.name, score: group.score, level: group.level, levelLabel: group.levelLabel })),
+      // STU-GAP-07: the same career against the transcript of that term.
+      career: snapshot.career ? {
+        fitCode: snapshot.career.fitCode, fitLabel: snapshot.career.fitLabel, met: snapshot.career.counts.met, total: snapshot.career.counts.total,
+        requirements: snapshot.career.requirements.map((req) => ({ requirementId: req.requirementId, score: req.score, status: req.status })),
+      } : null,
     };
   });
 }

@@ -170,7 +170,7 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
     const html = withAi("processing");
     // No aria-busy on the AI section: it would hide the pending state from screen readers for minutes.
     expect(html).not.toMatch(/id="scomp-ai"[^>]*aria-busy/);
-    expect(html).toContain("EduPath AI đang phân tích kết quả");
+    expect(html).toContain("EduPath AI đang suy luận và viết nhận xét");
     expect(html).toContain("Hủy tạo nhận xét");
   });
   it("offers regeneration after a failure and explains the error", () => {
@@ -252,7 +252,7 @@ describe("StudentCompetency — Khoảng trống kỹ năng", () => {
   it("renders the gap sections in order, with no delete button and no graduation check", () => {
     const html = withAi("completed", "gap");
     expect(html).toContain("Kết quả phân tích khoảng trống kỹ năng");
-    const order = sectionOrder(html, ["sgap-summary", "scomp-ai", "scomp-career", "scomp-courses", "scomp-warnings"]);
+    const order = sectionOrder(html, ["sgap-summary", "scomp-ai", "scomp-career", "sgap-history", "scomp-courses", "scomp-warnings"]);
     expect(order.every((index) => index > 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     expect(html).not.toContain('id="scomp-skills"');
@@ -260,6 +260,18 @@ describe("StudentCompetency — Khoảng trống kỹ năng", () => {
     expect(html).not.toContain("Xóa kết quả đánh giá");
     expect(html).toContain("Đánh giá lại");
     expect(html).toContain("Cách tính mức phù hợp và khoảng trống");
+  });
+  it("tracks each career skill term by term (STU-GAP-07)", () => {
+    const html = withAi("completed", "gap");
+    const section = html.slice(html.indexOf('id="sgap-history"'), html.indexOf('id="scomp-courses"'));
+    expect(section).toContain("Theo dõi mức độ cải thiện kỹ năng");
+    expect(section).toContain("số kỹ năng nghề đạt ngưỡng tăng từ 0 lên 1/5. Tăng nhiều nhất: Lập trình web (+19 điểm).");
+    expect(section).toContain('<th scope="colgroup" colSpan="2" class="scomp-gap-year">Năm học 2023–2024</th>');
+    expect(section).toContain('<span class="sg-status-pass" title="Đạt ngưỡng">91 ✓</span>');
+    expect(section).toContain('<span class="sg-status-fail" title="Dưới ngưỡng">75</span>');
+    expect(section).toContain('<span class="scomp-zero" title="Sắp học">—</span>');
+    expect(section).toContain('<span class="scomp-gap-change">+19</span>');
+    expect(section).toContain("<th scope=\"row\">Kỹ năng đạt ngưỡng</th>");
   });
   it("links the data warnings from the header only where the warnings section is", () => {
     const assessment = fixtureAssessment("completed");

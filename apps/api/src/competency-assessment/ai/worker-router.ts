@@ -148,7 +148,8 @@ export function createCompetencyWorkerRouter(pool: DatabasePool | undefined, aiW
 
   /**
    * Only what the worker needs: key maps (career catalog/linked, graduation keys) stay on the server.
-   * `think` is sent only when the job asks for Gemma's thinking mode (course proposals).
+   * `think` is sent only when the job asks for Gemma's thinking mode (course proposals, and the student
+   * comment since comp-v7).
    */
   const workerJob = (kind: AiJobKind, claimed: { id: string; leaseToken: string; aiInput: Record<string, unknown> }) => ({
     kind,
@@ -193,20 +194,8 @@ export function createCompetencyWorkerRouter(pool: DatabasePool | undefined, aiW
         SELECT id,lease_token AS "leaseToken",ai_input AS "aiInput" FROM claimed`,
         [randomUUID(), AI_JOB_MAX_ATTEMPTS, AI_JOB_LEASE_MINUTES]);
       const row = result.rows[0];
-      if (row) {
-        const input = row.aiInput;
-        res.json({ job: {
-          kind: COMPETENCY_ASSESSMENT_KIND,
-          id: row.id,
-          leaseToken: row.leaseToken,
-          promptVersion: input.promptVersion,
-          system: input.system,
-          user: input.user,
-          schema: input.schema,
-          options: input.options
-        } });
-        return;
-      }
+      // Same shape as the other kinds, so a comment that asks for thinking (comp-v7) gets think:true.
+      if (row) { res.json({ job: workerJob(COMPETENCY_ASSESSMENT_KIND, row) }); return; }
     }
     // Course proposals last: a whole-program run queues one job per course, and no student should
     // wait behind it.

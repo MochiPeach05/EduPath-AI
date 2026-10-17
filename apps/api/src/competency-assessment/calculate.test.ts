@@ -601,6 +601,23 @@ describe("competency history by graded term (STU-COMP-07, comp-calc-v8)", () => 
     }
   });
 
+  it("holds the career skills at every point (STU-GAP-07, comp-calc-v9); the last point is result.career", () => {
+    const result = calculateAssessment(syntheticInputs());
+    const last = result.history.at(-1)!;
+    expect(last.career).toEqual({
+      fitCode: result.career!.fitCode, fitLabel: result.career!.fitLabel, met: result.career!.counts.met, total: result.career!.counts.total,
+      requirements: result.career!.requirements.map((req) => ({ requirementId: req.requirementId, score: req.score, status: req.status })),
+    });
+    for (const point of result.history) {
+      const ids = (requirements: { requirementId: string }[]) => requirements.map((req) => req.requirementId).sort();
+      expect(ids(point.career!.requirements)).toEqual(ids(result.career!.requirements));
+      expect(point.career!.total).toBe(result.career!.counts.total);
+    }
+    // Fewer career skills are met at the first term than now.
+    expect(result.history[0]!.career!.met).toBeLessThanOrEqual(last.career!.met);
+    expect(calculateAssessment(syntheticInputs({ career: null })).history.every((point) => point.career === null)).toBe(true);
+  });
+
   it("computes each point from the transcript up to its term: later terms and later attempts are not there yet", () => {
     const terms: TranscriptTerm[] = [
       { rows: [["71ITBS10103", 3, 9, 4, "A"]] }, // "Điểm bảo lưu": in every point

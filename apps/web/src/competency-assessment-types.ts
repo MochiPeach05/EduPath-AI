@@ -317,6 +317,16 @@ export type SkillPlan = {
   selfStudy: boolean;
 };
 
+/** STU-GAP-07 (comp-calc-v9): the target career's skills at the end of one graded term. */
+export type HistoryCareer = {
+  fitCode: FitCode;
+  fitLabel: string;
+  met: number;
+  total: number;
+  /** Same requirementIds as AssessmentResult.career.requirements, sorted by that term's gaps: look up by requirementId. */
+  requirements: { requirementId: string; score: number | null; status: GapStatus }[];
+};
+
 /** STU-COMP-07 (comp-calc-v8): the competency computed from the transcript as it stood at the end of one graded term. */
 export type HistoryPoint = {
   /** HKyyS of that term. */
@@ -330,6 +340,8 @@ export type HistoryPoint = {
   overall: { score: number | null; level: LevelCode; levelLabel: string; skillsWithEvidence: number; applicableSkills: number };
   /** Same keys, names and order as AssessmentResult.groups. */
   groups: { key: string; name: string; score: number | null; level: LevelCode; levelLabel: string }[];
+  /** STU-GAP-07: the career's skills at this term (comp-calc-v9; absent in older results, null without a career). */
+  career?: HistoryCareer | null;
 };
 
 export type PlanCourseRef = { code: string; name: string; credits: number | null; state: CourseState };

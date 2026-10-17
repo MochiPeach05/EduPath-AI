@@ -6,8 +6,8 @@ import type { StudentProfile } from "./StudentOverview";
 import { specialtyLabel, type AiStatus, type AssessmentResult, type AssessmentStatusResponse, type CareerRequirementResult, type CourseSuggestion, type LatestAssessmentResponse, type LevelCode, type SkillPlan, type SkillResult, type StoredAssessment, type SupportCourse } from "./competency-assessment-types";
 import {
   CHART_LEVELS, COMPETENCY_API, CONFIDENCE_LABELS, COURSE_STATE_LABELS, EMPTY_SKILL_FILTERS, LEVEL_COLUMNS, LEVEL_SCALE, PRECONDITION_COPY, PRIORITY_LABELS,
-  aiErrorMessage, aiStateCopy, bucketSkills, canRegenerate, careerSkillKeys, courseStanding, dataUsedLine, eligibilityDisplay, errorMessage, filterSkills, formatDateTime,
-  formatNumber, formatPercent, formatScore, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isPreconditionError, levelChart, levelSentence, levelStep, levelSummary, mapAiOutput, modelLabel,
+  aiErrorMessage, aiReasoned, aiStateCopy, bucketSkills, canRegenerate, careerSkillKeys, courseStanding, dataUsedLine, eligibilityDisplay, errorMessage, filterSkills, formatDateTime,
+  formatNumber, formatPercent, formatScore, gapHistory, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isPreconditionError, levelChart, levelSentence, levelStep, levelSummary, mapAiOutput, modelLabel,
   plansFor, scoreDifference, shouldPoll, skillName, sortRequirements, type ChartLevel, type LevelBar, type LevelSegment, type MappedAiOutput, type PreconditionError, type SkillFilters, type StatusTone,
 } from "./student-competency-data";
 import { readGraduation } from "./student-graduation-api";
@@ -557,6 +557,42 @@ function GapTable({ result }: { result: AssessmentResult }) {
   </Section>;
 }
 
+const GAP_STATUS_WORDS: Record<CareerRequirementResult["status"], string> = { met: "Đạt ngưỡng", below: "Dưới ngưỡng", upcoming: "Sắp học", not_studied: "Chưa học", no_data: "Chưa đủ dữ liệu" };
+
+/** STU-GAP-07: each career skill at the end of every graded term, against its threshold. */
+function GapHistory({ result }: { result: AssessmentResult }) {
+  const history = gapHistory(result);
+  if (!history) return null;
+  return <Section id="sgap-history" title="Theo dõi mức độ cải thiện kỹ năng" description={`Điểm từng kỹ năng của nghề ${result.career!.nameVi} vào cuối mỗi học kỳ đã có điểm. Xanh có dấu ✓ là đạt ngưỡng, đỏ là chưa đạt.`}>
+    {history.state === "empty" ? <p className="scomp-meta">Bảng điểm chưa có học kỳ nào có điểm nên chưa theo dõi được.</p>
+      : history.state === "outdated" ? <p className="scomp-meta">Kết quả này được tính trước khi có phần theo dõi kỹ năng nghề. Bấm “Đánh giá lại” để xem kỹ năng của bạn thay đổi qua từng học kỳ.</p>
+        : <>
+          <p className="scomp-prose">{history.sentence}</p>
+          <div className="scomp-table-scroll" tabIndex={0} role="region" aria-labelledby="sgap-history-caption">
+            <table className="scomp-table scomp-gap-history">
+              <caption id="sgap-history-caption">Điểm từng kỹ năng nghề ở cuối mỗi học kỳ</caption>
+              <thead>
+                <tr><th scope="col" rowSpan={2}>Kỹ năng</th>
+                  {historyYears(history.points).map((year) => <th key={year.schoolYear} scope="colgroup" colSpan={year.rows.length} className="scomp-gap-year">Năm học {year.schoolYear}</th>)}
+                  <th scope="col" rowSpan={2} className="scomp-num">Thay đổi</th></tr>
+                <tr>{history.points.map((point, index) => <th key={point.term} scope="col" className="scomp-num">HK{point.semester}{index === history.points.length - 1 && <small>Hiện tại</small>}</th>)}</tr>
+              </thead>
+              <tbody>{history.rows.map((row) => <tr key={row.requirementId}>
+                <th scope="row"><span className="scomp-cell-title">{row.name}</span><small>{row.priorityLabel} · ngưỡng {formatScore(row.threshold)}</small></th>
+                {row.cells.map((cell) => <td key={cell.term} className="scomp-num">{cell.score === null
+                  ? <span className="scomp-zero" title={cell.status ? GAP_STATUS_WORDS[cell.status] : undefined}>—</span>
+                  : <span className={cell.status === "met" ? "sg-status-pass" : "sg-status-fail"} title={cell.status ? GAP_STATUS_WORDS[cell.status] : undefined}>{cell.score}{cell.status === "met" && " ✓"}</span>}</td>)}
+                <td className="scomp-num">{row.change === null ? <span className="scomp-zero">—</span>
+                  : <span className={row.change ? "scomp-gap-change" : "scomp-zero"}>{row.change > 0 ? `+${row.change}` : row.change < 0 ? `−${Math.abs(row.change)}` : "0"}</span>}</td>
+              </tr>)}</tbody>
+              <tfoot><tr><th scope="row">Kỹ năng đạt ngưỡng</th>{history.points.map((point) => <td key={point.term} className="scomp-num">{point.career!.met}/{point.career!.total}</td>)}<td /></tr></tfoot>
+            </table>
+          </div>
+          <p className="scomp-meta">“—”: học kỳ đó kỹ năng chưa có điểm (chưa học, sắp học hoặc chưa đủ dữ liệu); di chuột lên ô để xem trạng thái. “Thay đổi” là điểm hiện tại trừ điểm đầu tiên. Học lại ở học kỳ sau không làm đổi điểm của học kỳ trước.</p>
+        </>}
+  </Section>;
+}
+
 function GapRow({ req }: { req: CareerRequirementResult }) {
   const status = gapStatusDisplay(req);
   const difference = scoreDifference(req);
@@ -672,7 +708,7 @@ function AiPanel({ assessment, aiEnabled, workerOnline, busy, onRegenerate, onCa
       {canRegenerate(ai.status, aiEnabled) && <button type="button" className="sw-outline" disabled={busy} onClick={onRegenerate}><Icon name="refresh" />{ai.status === "disabled" ? "Tạo nhận xét" : "Tạo lại nhận xét"}</button>}
       {pending && <button type="button" className="sr-secondary" disabled={busy} onClick={onCancel}>Hủy tạo nhận xét</button>}
     </div>}
-    <p className="scomp-ai-footer">{ai.status === "completed" ? `${modelLabel(ai.model)}, chạy cục bộ · tạo lúc ${formatDateTime(ai.completedAt)}. ` : "Mô hình Gemma 4 E4B chạy cục bộ trên máy của nhóm phát triển. "}Nhận xét do AI viết dựa trên kết quả đã tính, có thể chưa chính xác — hãy đối chiếu số liệu và trao đổi với cố vấn học tập.</p>
+    <p className="scomp-ai-footer">{ai.status === "completed" ? `${modelLabel(ai.model)}${aiReasoned(result.meta.promptVersion) ? " có suy luận" : ""}, chạy cục bộ · tạo lúc ${formatDateTime(ai.completedAt)}. ` : "Mô hình Gemma 4 E4B chạy cục bộ trên máy của nhóm phát triển, suy luận trước khi viết. "}Nhận xét do AI viết dựa trên kết quả đã tính, có thể chưa chính xác — hãy đối chiếu số liệu và trao đổi với cố vấn học tập.</p>
   </section>;
 }
 
@@ -890,6 +926,7 @@ export default function StudentCompetency({ profile, view = "competency" }: { pr
       <GapSummary result={result} />
       {aiPanel}
       <GapTable result={result} />
+      <GapHistory result={result} />
       <CoursesSection result={result} ai={mapped} />
       <WarningsSection result={result} />
     </> : <>

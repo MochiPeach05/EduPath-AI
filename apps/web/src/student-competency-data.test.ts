@@ -1,11 +1,34 @@
 import { describe, expect, it } from "vitest";
 import {
-  aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, countAxis, dataUsedLine, levelChart, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
+  aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, countAxis, dataUsedLine, gapHistory, levelChart, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
   gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isPreconditionError, PRIORITY_LABELS, levelStep, mapAiOutput, modelLabel, plansFor,
   scoreDifference, shouldPoll, sortRequirements, termLabel, EMPTY_SKILL_FILTERS,
 } from "./student-competency-data";
 import { fixtureAiOutput, fixtureAssessment, fixtureResult } from "./student-competency.fixture";
 import type { CareerRequirementResult } from "./competency-assessment-types";
+
+describe("career skills by term (STU-GAP-07)", () => {
+  it("lists every career skill per term with the change since its first score and a one-line summary", () => {
+    const history = gapHistory(fixtureResult);
+    expect(history?.state).toBe("ready");
+    if (history?.state !== "ready") return;
+    // Bắt buộc first, then the largest shortfall first, as in the detailed report.
+    expect(history.rows.map((row) => [row.name, row.cells.map((cell) => cell.score), row.change])).toEqual([
+      ["Thiết kế cơ sở dữ liệu", [null, 66, 70, 74, 75], 9],
+      ["Lập trình web", [72, 80, 86, 89, 91], 19],
+      ["Giải thuật", [null, null, 58, 62, 64], 6],
+      ["Kiểm thử tự động", [null, null, null, null, null], null],
+      ["Docker", [null, null, null, null, null], null],
+    ]);
+    expect(history.sentence).toBe("Từ học kỳ 1 năm học 2023–2024 đến học kỳ 2 năm học 2025–2026, số kỹ năng nghề đạt ngưỡng tăng từ 0 lên 1/5. Tăng nhiều nhất: Lập trình web (+19 điểm).");
+  });
+  it("asks for a new assessment when the history predates it, and is absent without a career", () => {
+    const old = { ...fixtureResult, history: fixtureResult.history!.map(({ career: _career, ...point }) => point) };
+    expect(gapHistory(old)).toEqual({ state: "outdated" });
+    expect(gapHistory({ ...fixtureResult, history: [] })).toEqual({ state: "empty" });
+    expect(gapHistory({ ...fixtureResult, career: null })).toBeNull();
+  });
+});
 
 describe("level chart", () => {
   it("draws a clean count axis of at most five steps", () => {
@@ -92,7 +115,8 @@ describe("formatting", () => {
   });
   it("summarises the data used", () => {
     const line = dataUsedLine(fixtureAssessment());
-    expect(line).toContain("CTĐT phiên bản 3");
+    expect(line).not.toContain("phiên bản");
+    expect(line).toContain("khóa K29");
     expect(line).toContain("bảng điểm 8 học phần đến HK252");
   });
 });

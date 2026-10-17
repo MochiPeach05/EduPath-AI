@@ -32,6 +32,17 @@ const seeds: SkillSeed[] = [
   ["S08", "Triển khai dịch vụ đám mây", "G1", null, "no_evidence", [["TST106", 0.6]], { status: "not_applicable", notApplicableReason: "elective_not_chosen", confidence: null, confidenceLabel: null }],
 ];
 const groupNames = { G1: "Kiến thức chuyên môn", G2: "Kỹ năng bổ trợ" } as const;
+type CareerCell = [score: number | null, status: "met" | "below" | "upcoming" | "not_studied" | "no_data"];
+const careerHistory = ([
+  ["insufficient_data", "Chưa đủ dữ liệu", 0, [[72, "below"], [null, "not_studied"], [null, "upcoming"], [null, "upcoming"], [null, "no_data"]]],
+  ["needs_more", "Cần bổ sung", 0, [[80, "below"], [66, "below"], [null, "upcoming"], [null, "upcoming"], [null, "no_data"]]],
+  ["fairly_fit", "Khá phù hợp", 1, [[86, "met"], [70, "below"], [58, "below"], [null, "upcoming"], [null, "no_data"]]],
+  ["fairly_fit", "Khá phù hợp", 1, [[89, "met"], [74, "below"], [62, "below"], [null, "upcoming"], [null, "no_data"]]],
+  ["fairly_fit", "Khá phù hợp", 1, [[91, "met"], [75, "below"], [64.4, "below"], [null, "upcoming"], [null, "no_data"]]],
+] as [string, string, number, CareerCell[]][]).map(([fitCode, fitLabel, met, cells]) => ({
+  fitCode: fitCode as "fit" | "fairly_fit" | "needs_more" | "insufficient_data", fitLabel, met, total: 5,
+  requirements: cells.map(([score, status], index) => ({ requirementId: `q${index + 1}`, score, status })),
+}));
 const skills: SkillResult[] = seeds.map(([key, name, group, score, level, evidence, extra]) => {
   const rows = evidence.map(([code, weight]) => {
     const credits = courses.find((c) => c.code === code)!.credits;
@@ -118,13 +129,15 @@ export const fixtureResult: AssessmentResult = {
     ["HK241", "2024–2025", 1, 5, 75.3, "good", "Khá"],
     ["HK242", "2024–2025", 2, 6, 81, "good", "Khá"],
     ["HK252", "2025–2026", 2, 7, 79.4, "good", "Khá"],
-  ] as const).map(([term, schoolYear, semester, gradedCourses, score, level, levelLabel]) => ({
+  ] as const).map(([term, schoolYear, semester, gradedCourses, score, level, levelLabel], index) => ({
     term, schoolYear, semester, gradedCourses,
     overall: { score, level, levelLabel, skillsWithEvidence: gradedCourses - 1, applicableSkills: 6 },
     groups: [
       { key: "G1", name: groupNames.G1, score, level, levelLabel },
       { key: "G2", name: groupNames.G2, score: null, level: "exempt" as const, levelLabel: "Miễn/công nhận" },
     ],
+    // STU-GAP-07: the career skills of each term; the last point equals career above.
+    career: careerHistory[index]!,
   })),
   progress: {
     currentTerm: "HK252", nextTerm: "HK261",
