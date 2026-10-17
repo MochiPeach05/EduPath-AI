@@ -111,7 +111,6 @@
 .scomp-page .scomp-legend li { display: grid; grid-template-columns: 180px 120px minmax(0, 1fr); gap: 12px; align-items: center; font-size: 13px; }
 .scomp-page .scomp-legend li > span:last-child { color: var(--sw-muted); }
 .scomp-page .scomp-legend-range { color: var(--sw-muted); font-size: 12px; }
-.scomp-page .scomp-method .scomp-prose { display: grid; gap: 10px; margin-top: 12px; }
 
 /* AI panel */
 .scomp-page .scomp-ai { border-color: #cfdaeb; }
@@ -227,9 +226,6 @@
 .scomp-page .scomp-plan-list li { padding: 10px 12px; border: 1px solid var(--sw-border); border-radius: 8px; }
 .scomp-page .sg-verdict { font-size: 15px; }
 .scomp-page .scomp-verdict-reason { margin-top: 4px; }
-.scomp-page .scomp-warnings { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
-.scomp-page .scomp-warnings > li { padding: 12px 14px; border: 1px solid #e9d39b; border-radius: 8px; background: #fff8e8; color: #5c4210; font-size: 13px; line-height: 1.6; }
-.scomp-page .scomp-warnings ul { margin: 6px 0 0; padding-left: 18px; }
 
 /* Status colours inside the page: two classes, so they win over .scomp-page .scomp-meta and the sw-shell text colours. */
 .scomp-page .sg-status-pass { color: #16804a; }

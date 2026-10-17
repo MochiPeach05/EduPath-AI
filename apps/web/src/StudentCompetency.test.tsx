@@ -252,14 +252,16 @@ describe("StudentCompetency — Khoảng trống kỹ năng", () => {
   it("renders the gap sections in order, with no delete button and no graduation check", () => {
     const html = withAi("completed", "gap");
     expect(html).toContain("Kết quả phân tích khoảng trống kỹ năng");
-    const order = sectionOrder(html, ["sgap-summary", "scomp-ai", "scomp-career", "sgap-history", "scomp-courses", "scomp-warnings"]);
+    const order = sectionOrder(html, ["sgap-summary", "scomp-ai", "scomp-career", "sgap-history", "scomp-courses"]);
     expect(order.every((index) => index > 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     expect(html).not.toContain('id="scomp-skills"');
     expect(html).not.toContain('id="scomp-graduation"');
     expect(html).not.toContain("Xóa kết quả đánh giá");
     expect(html).toContain("Đánh giá lại");
-    expect(html).toContain("Cách tính mức phù hợp và khoảng trống");
+    // "Cảnh báo dữ liệu và cách tính mức phù hợp" was removed from this page too (user, 2026-10-18).
+    expect(html).not.toContain('id="scomp-warnings"');
+    expect(html).not.toContain("Cách tính mức phù hợp và khoảng trống");
   });
   it("tracks each career skill term by term (STU-GAP-07)", () => {
     const html = withAi("completed", "gap");
@@ -273,14 +275,14 @@ describe("StudentCompetency — Khoảng trống kỹ năng", () => {
     expect(section).toContain('<span class="scomp-gap-change">+19</span>');
     expect(section).toContain("<th scope=\"row\">Kỹ năng đạt ngưỡng</th>");
   });
-  it("links the data warnings from the header only where the warnings section is", () => {
+  it("shows no data warnings on either page, not even a header link (user, 2026-10-18)", () => {
     const assessment = fixtureAssessment("completed");
     const warned = { ...assessment, result: { ...fixtureResult, warnings: [{ code: "results_inferred" as const, message: "Một số kết quả được suy ra", consequence: "Điểm có thể lệch", details: [] }] } };
     const state = { assessment: warned, aiEnabled: true, workerOnline: true };
-    expect(render(state, { view: "gap" })).toContain("1 cảnh báo dữ liệu →");
-    const competency = render(state);
-    expect(competency).not.toContain("cảnh báo dữ liệu →");
-    expect(competency).not.toContain("Một số kết quả được suy ra");
+    for (const html of [render(state, { view: "gap" }), render(state)]) {
+      expect(html).not.toContain("cảnh báo dữ liệu");
+      expect(html).not.toContain("Một số kết quả được suy ra");
+    }
   });
   it("lists the missing skills with their shortfall", () => {
     const html = withAi("completed", "gap");

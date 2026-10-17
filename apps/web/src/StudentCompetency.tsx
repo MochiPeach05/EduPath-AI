@@ -490,23 +490,6 @@ function GraduationSection() {
   </Section>;
 }
 
-/** Data warnings and how the fit is computed. Only on #skill-gap: #competency dropped it (user, 2026-10-17). */
-function WarningsSection({ result }: { result: AssessmentResult }) {
-  return <Section id="scomp-warnings" title="Cảnh báo dữ liệu và cách tính mức phù hợp">
-    {result.warnings.length ? <ul className="scomp-warnings">{result.warnings.map((warning, index) => <li key={`${warning.code}-${index}`}>
-      <strong>{warning.message}</strong><p>{warning.consequence}</p>{warning.details.length > 0 && <ul>{warning.details.map((detail) => <li key={detail}>{detail}</li>)}</ul>}
-    </li>)}</ul> : <p className="scomp-meta">Không có cảnh báo dữ liệu cho lần đánh giá này.</p>}
-    <details className="scomp-legend scomp-method"><summary>Cách tính mức phù hợp và khoảng trống</summary>
-      <div className="scomp-prose">
-        <p>Điểm từng kỹ năng lấy từ trang Đánh giá năng lực. Với nghề mục tiêu, kỹ năng Ưu tiên cần từ 70 (mức Khá) và kỹ năng Bắt buộc cần từ 85 (mức Thành thạo). Mức thiếu hụt là số điểm còn thiếu so với ngưỡng: đến 5 điểm là Gần ngưỡng, đến 15 điểm là Thiếu vừa, nhiều hơn là Thiếu nhiều.</p>
-        <p>Mức phù hợp tính theo hệ số 2 cho Bắt buộc và 1 cho Ưu tiên: đạt ngưỡng được trọn điểm, dưới ngưỡng được tối đa một nửa, chưa học được 0; kỹ năng sắp học hoặc chưa đủ dữ liệu không tính. Từ 0,80 là Phù hợp, 0,50 đến dưới 0,80 là Khá phù hợp; nếu dưới một nửa hệ số có dữ liệu thì ghi Chưa đủ dữ liệu.</p>
-        <p>Học phần gợi ý là học phần trong chương trình của bạn có đo kỹ năng còn thiếu, xếp theo mức đóng góp (tín chỉ × trọng số). Điều kiện đăng ký được kiểm tra theo học phần tiên quyết và học trước trong chương trình đào tạo.</p>
-        <p>Phiên bản cách tính: {result.meta.calcVersion}.</p>
-      </div>
-    </details>
-  </Section>;
-}
-
 /* ------------------------------------------------- "Khoảng trống kỹ năng" page */
 
 function GapSummary({ result }: { result: AssessmentResult }) {
@@ -887,7 +870,6 @@ export default function StudentCompetency({ profile, view = "competency" }: { pr
 
   const result = assessment?.result ?? null;
   const mapped = useMemo(() => assessment && assessment.ai.status === "completed" ? mapAiOutput(assessment.ai.output, assessment.result) : null, [assessment]);
-  const warningCount = result?.warnings.length ?? 0;
   const hasTranscript = transcript.loading ? null : transcript.error ? null : transcript.data;
   // The result was computed for meta.specialty / meta.career; say so when the profile changed since.
   // profile.specialty is undefined only while an older API is serving: skip that comparison then.
@@ -910,7 +892,7 @@ export default function StudentCompetency({ profile, view = "competency" }: { pr
       </div>
       <Checklist hasTranscript={hasTranscript} transcriptFailed={!transcript.loading && Boolean(transcript.error)} profile={profile} suggestion={result?.specialtySuggestion?.text ?? null} />
       {profileChanged && <p className="scomp-meta">Hồ sơ đã thay đổi sau lần đánh giá này. Bấm “Đánh giá lại” để cập nhật kết quả.</p>}
-      {assessment && <p className="scomp-data-line">{dataUsedLine(assessment)}{view === "gap" && warningCount > 0 && <> · <button type="button" className="scomp-link-button" onClick={() => scrollToSection("scomp-warnings")}>{warningCount.toLocaleString("vi-VN")} cảnh báo dữ liệu →</button></>}</p>}
+      {assessment && <p className="scomp-data-line">{dataUsedLine(assessment)}</p>}
       <p className="scomp-live" role="status" aria-live="polite" aria-atomic="true">{announcement}</p>
       {error && <div className="sr-error" role="alert">{error}</div>}
       {live.error && !data && <div className="sr-error" role="alert">{live.error}<button type="button" onClick={() => setRevision((n) => n + 1)}>Thử lại</button></div>}
@@ -928,7 +910,6 @@ export default function StudentCompetency({ profile, view = "competency" }: { pr
       <GapTable result={result} />
       <GapHistory result={result} />
       <CoursesSection result={result} ai={mapped} />
-      <WarningsSection result={result} />
     </> : <>
       <Overview result={result} />
       {aiPanel}
