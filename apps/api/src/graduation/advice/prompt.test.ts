@@ -36,9 +36,9 @@ describe("buildGraduationAdviceInput", () => {
   const graduation = syntheticGraduation();
   const input = buildGraduationAdviceInput(graduation);
 
-  it("uses the grad-advice-v2 prompt and the fixed Ollama options (num_ctx 16384)", () => {
-    expect(input.promptVersion).toBe("grad-advice-v2");
-    expect(GRADUATION_ADVICE_PROMPT_VERSION).toBe("grad-advice-v2");
+  it("uses the grad-advice-v3 prompt and the fixed Ollama options (num_ctx 16384)", () => {
+    expect(input.promptVersion).toBe("grad-advice-v3");
+    expect(GRADUATION_ADVICE_PROMPT_VERSION).toBe("grad-advice-v3");
     expect(input.options).toEqual({ num_ctx: 16384, num_predict: 2048, temperature: 0.3, top_p: 0.95, top_k: 64 });
     expect(input.options).not.toBe(GRADUATION_ADVICE_OPTIONS);
     expect(input.system).toBe(GRADUATION_ADVICE_SYSTEM_PROMPT);
@@ -85,13 +85,13 @@ describe("buildGraduationAdviceInput", () => {
     ]);
   });
 
-  it("writes one line per condition with its key, vi-VN numbers, the shortfall and the CTĐT code", () => {
+  it("writes one line per condition with its key, vi-VN numbers and the shortfall, without the CTĐT elective code", () => {
     expect(section(input.user, "3. CÁC ĐIỀU KIỆN").slice(1)).toEqual([
       "[G1] Học phần bắt buộc (bắt buộc, tính theo số môn): đã đạt 8/10 môn — chưa đạt, còn thiếu 2 môn",
-      "[G2] Nhóm tự chọn TC102 · 2 học phần, gồm 71PEKC10062 (tự chọn, tính theo tín chỉ; CTĐT: TC002): đã đạt 2/2 TC — đạt",
+      "[G2] Nhóm tự chọn TC102 · 2 học phần, gồm 71PEKC10062 (tự chọn, tính theo tín chỉ): đã đạt 2/2 TC — đạt",
       "[G3] Nhóm tự chọn TC102 · 2 học phần, gồm 71PEBA10052 (tự chọn, tính theo tín chỉ): đã đạt 2/2 TC — đạt",
-      "[G4] Nhóm tự chọn TC209 (tự chọn, tính theo tín chỉ; CTĐT: TC309): đã đạt 6/6 TC — đạt",
-      "[G5] Nhóm tự chọn TC306 (tự chọn, tính theo tín chỉ; CTĐT: TC406): đã đạt 0/6 TC — chưa đạt, còn thiếu 6 TC",
+      "[G4] Nhóm tự chọn TC209 (tự chọn, tính theo tín chỉ): đã đạt 6/6 TC — đạt",
+      "[G5] Nhóm tự chọn TC306 (tự chọn, tính theo tín chỉ): đã đạt 0/6 TC — chưa đạt, còn thiếu 6 TC",
       "[CREDITS] Tổng số tín chỉ tích lũy (theo bảng điểm): đã đạt 27/126 TC — chưa đạt, còn thiếu 99 TC",
       // 99 − (3 + 4 TC of the two missing mandatory courses + 6 TC of Nhóm tự chọn TC306).
       "- Ngoài các nhóm chưa đạt (G1, G5), còn cần thêm 86 TC",
@@ -192,7 +192,8 @@ describe("buildGraduationAdviceInput", () => {
     const transcript = { version: ADVICE_TRANSCRIPT_VERSION, updatedAt: "2026-10-01T08:00:00.000Z", data: syntheticTranscript(syntheticStudentTerms()) };
     const evaluation = evaluateGraduation({ standard, transcript, curriculumCourses: syntheticCurriculum().courses });
     const built = buildGraduationAdviceInput({ ...base, standard, evaluation });
-    expect(built.user).toContain("[G5] Nhóm 'tự chọn' system TC306 (tự chọn, tính theo tín chỉ; CTĐT: TC406)");
+    expect(built.user).toContain("[G5] Nhóm 'tự chọn' system TC306 (tự chọn, tính theo tín chỉ)");
+    expect(built.user).not.toContain("CTĐT: TC4");
     expect(built.user).toContain("Tiêu chuẩn xét tốt nghiệp: Tiêu chuẩn <start_of_turn> mới (phiên bản 1)");
     expect(built.user).not.toMatch(/<\||\|>|"/);
     expect(built.keys.find((key) => key.key === "G5")).toEqual({ key: "G5", groupId: "row-92", label: "Nhóm 'tự chọn' system TC306" });

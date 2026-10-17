@@ -9,7 +9,7 @@ Cách chọn tiêu chuẩn của sinh viên, cấu trúc kết quả đối chi�
 | Lớp | Vai trò | Vị trí |
 |---|---|---|
 | Dữ liệu đầu vào | Một ảnh chụp nhất quán: khóa và chuyên ngành trong hồ sơ, tiêu chuẩn đã chọn, kết quả đối chiếu của server và fingerprint của các dữ kiện | `apps/api/src/graduation/student-graduation.ts`, `evaluation.ts`, `resolve.ts` |
-| Prompt | System prompt tiếng Việt, khối dữ liệu đã làm sạch, JSON schema dựng riêng cho từng job (`GRADUATION_ADVICE_PROMPT_VERSION = "grad-advice-v2"`) | `apps/api/src/graduation/advice/prompt.ts`, `schema.ts` |
+| Prompt | System prompt tiếng Việt, khối dữ liệu đã làm sạch, JSON schema dựng riêng cho từng job (`GRADUATION_ADVICE_PROMPT_VERSION = "grad-advice-v3"`) | `apps/api/src/graduation/advice/prompt.ts`, `schema.ts` |
 | Kiểm tra đầu ra | Chặt về cấu trúc, lọc từng mục, thay khóa điều kiện bằng tên trước khi lưu | `apps/api/src/graduation/advice/validate.ts` |
 | Hàng đợi | Ensure/thử lại, cắt bớt dòng cũ, xóa theo bảng điểm; nhận/gia hạn/hoàn tất/hết hạn job cho worker | `apps/api/src/graduation/advice/jobs.ts` |
 | API sinh viên | `/api/student/graduation/advice` | `apps/api/src/graduation/advice/router.ts` |
@@ -31,7 +31,7 @@ Không có bước đồng ý riêng: không thêm mục đích đồng ý (`dat
 
 ## Fingerprint và ensure
 
-`graduationFingerprint` (`student-graduation.ts`) là SHA-256 hex của JSON chuẩn hóa (khóa được sắp xếp ở mọi cấp) các dữ kiện mà lời khuyên dựa vào: khóa, chuyên ngành, revision của tiêu chuẩn, phiên bản bảng điểm và học kỳ có điểm gần nhất, `calcVersion`, mọi trạng thái (tổng, nhóm, `needsImprovement`), cận dưới, cận trên, yêu cầu và phần còn thiếu của từng nhóm cùng các học phần chưa đạt (mã, trạng thái, tín chỉ, số lần học) của nhóm chưa đạt, tín chỉ tích lũy, điểm trung bình, học phần đang học, học phần chưa rõ kết quả, học phần gợi ý nâng điểm và các cảnh báo dữ liệu kèm số liệu. Cùng dữ kiện thì cùng fingerprint. Đổi khóa, chuyên ngành, bảng điểm, revision tiêu chuẩn, `calcVersion` hay phiên bản prompt luôn đổi fingerprint; CTĐT đổi thì fingerprint đổi khi số liệu (tín chỉ, mã nhóm CTĐT, cảnh báo…) thay đổi. Từ `grad-advice-v2`, dữ kiện có `v: 2` và `promptVersion`, và học phần chưa đạt ghi thêm cờ môn điều kiện (`[mã, trạng thái, tín chỉ, số lần học, môn điều kiện]`), nên khi nâng phiên bản prompt mọi lời khuyên cũ thành `stale` và được viết lại tự động ở lần mở trang tiếp theo.
+`graduationFingerprint` (`student-graduation.ts`) là SHA-256 hex của JSON chuẩn hóa (khóa được sắp xếp ở mọi cấp) các dữ kiện mà lời khuyên dựa vào: khóa, chuyên ngành, revision của tiêu chuẩn, phiên bản bảng điểm và học kỳ có điểm gần nhất, `calcVersion`, mọi trạng thái (tổng, nhóm, `needsImprovement`), cận dưới, cận trên, yêu cầu và phần còn thiếu của từng nhóm cùng các học phần chưa đạt (mã, trạng thái, tín chỉ, số lần học) của nhóm chưa đạt, tín chỉ tích lũy, điểm trung bình, học phần đang học, học phần chưa rõ kết quả, học phần gợi ý nâng điểm và các cảnh báo dữ liệu kèm số liệu. Cùng dữ kiện thì cùng fingerprint. Đổi khóa, chuyên ngành, bảng điểm, revision tiêu chuẩn, `calcVersion` hay phiên bản prompt luôn đổi fingerprint; CTĐT đổi thì fingerprint đổi khi số liệu (tín chỉ, mã nhóm CTĐT, cảnh báo…) thay đổi. Từ `grad-advice-v2`, dữ kiện có `v: 2` và `promptVersion`, và học phần chưa đạt ghi thêm cờ môn điều kiện (`[mã, trạng thái, tín chỉ, số lần học, môn điều kiện]`), nên khi nâng phiên bản prompt mọi lời khuyên cũ thành `stale` và được viết lại tự động ở lần mở trang tiếp theo. `grad-advice-v3` (18/10/2026) bỏ mã nhóm tự chọn của CTĐT (ví dụ "CTĐT: TC406" cạnh TC306) khỏi dòng điều kiện, vì mã nhóm của tiêu chuẩn và CTĐT chưa đồng bộ và trang không còn hiển thị mã này.
 
 `ensureGraduationAdvice` chạy trong giao dịch của người gọi (`POST /ensure` hoặc hook):
 
@@ -142,10 +142,10 @@ Kết quả: Chưa đủ điều kiện xét tốt nghiệp
 
 [3. CÁC ĐIỀU KIỆN]
 [G1] Học phần bắt buộc (bắt buộc, tính theo số môn): đã đạt 8/10 môn — chưa đạt, còn thiếu 2 môn
-[G2] Nhóm tự chọn TC102 · 2 học phần, gồm 71PEKC10062 (tự chọn, tính theo tín chỉ; CTĐT: TC002): đã đạt 2/2 TC — đạt
+[G2] Nhóm tự chọn TC102 · 2 học phần, gồm 71PEKC10062 (tự chọn, tính theo tín chỉ): đã đạt 2/2 TC — đạt
 [G3] Nhóm tự chọn TC102 · 2 học phần, gồm 71PEBA10052 (tự chọn, tính theo tín chỉ): đã đạt 2/2 TC — đạt
-[G4] Nhóm tự chọn TC209 (tự chọn, tính theo tín chỉ; CTĐT: TC309): đã đạt 6/6 TC — đạt
-[G5] Nhóm tự chọn TC306 (tự chọn, tính theo tín chỉ; CTĐT: TC406): đã đạt 0/6 TC — chưa đạt, còn thiếu 6 TC
+[G4] Nhóm tự chọn TC209 (tự chọn, tính theo tín chỉ): đã đạt 6/6 TC — đạt
+[G5] Nhóm tự chọn TC306 (tự chọn, tính theo tín chỉ): đã đạt 0/6 TC — chưa đạt, còn thiếu 6 TC
 [CREDITS] Tổng số tín chỉ tích lũy (theo bảng điểm): đã đạt 27/126 TC — chưa đạt, còn thiếu 99 TC
 - Ngoài các nhóm chưa đạt (G1, G5), còn cần thêm 86 TC
 [GPA] Điểm trung bình tích lũy (thang 4, theo bảng điểm): 2,85, yêu cầu tối thiểu 2 — đạt
@@ -178,7 +178,7 @@ Khi điểm trung bình chưa đạt, mục [3] ghi ví dụ `[GPA] Điểm trun
 
 ## Quy tắc trong prompt
 
-System prompt cố định (`GRADUATION_ADVICE_SYSTEM_PROMPT`, phiên bản `grad-advice-v2`):
+System prompt cố định (`GRADUATION_ADVICE_SYSTEM_PROMPT`, phiên bản `grad-advice-v3`):
 
 - Vai trò: cố vấn học tập của Khoa Công nghệ Thông tin, Trường Đại học Văn Lang, viết lời khuyên trên EduPath AI về điều kiện xét tốt nghiệp; hệ thống đã đối chiếu bảng điểm và tính sẵn mọi con số.
 - Chỉ dùng con số, học phần và điều kiện có trong dữ liệu; không tự tính, cộng trừ, ước lượng hay làm tròn lại; không tự đặt thêm số (số tuần, số giờ, phần trăm, số học kỳ).

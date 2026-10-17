@@ -113,10 +113,12 @@ export function courseStateText(row: Pick<GraduationCourseRow, "state" | "attemp
   return row.state === "failed" && row.attempts > 1 ? `${label} (đã học ${row.attempts} lần)` : label;
 }
 
-/** "Nhóm tự chọn TC306 (CTĐT: TC406)": the label plus the CTĐT elective code when it is not the group's own code. */
-export function groupTitle(group: Pick<GraduationGroupEvaluation, "label" | "code" | "curriculumElectiveCode">): string {
-  const curriculum = group.curriculumElectiveCode?.trim();
-  return curriculum && curriculum.toUpperCase() !== group.code?.toUpperCase() ? `${group.label} (CTĐT: ${curriculum})` : group.label;
+/**
+ * The group as the standard names it ("Nhóm tự chọn TC306"). The CTĐT elective code (TC406) is not
+ * shown: the standard's and the CTĐT's elective codes are not in sync yet (user, 2026-10-18).
+ */
+export function groupTitle(group: Pick<GraduationGroupEvaluation, "label">): string {
+  return group.label;
 }
 
 /** Text continued after a colon or inside a sentence: the first letter in lower case, unless it starts with an acronym ("PDF …", "TC306 …"). */

@@ -131,11 +131,10 @@ describe("formatting", () => {
 });
 
 describe("labels", () => {
-  it("adds the CTĐT elective code to a group name only when it is a different code", () => {
-    expect(groupTitle({ label: "Nhóm tự chọn TC306", code: "TC306", curriculumElectiveCode: "TC406" })).toBe("Nhóm tự chọn TC306 (CTĐT: TC406)");
-    expect(groupTitle({ label: "Nhóm tự chọn TC306", code: "TC306", curriculumElectiveCode: "tc306" })).toBe("Nhóm tự chọn TC306");
-    expect(groupTitle({ label: "Nhóm bắt buộc", code: null, curriculumElectiveCode: null })).toBe("Nhóm bắt buộc");
-    expect(groupInSentence("Nhóm tự chọn TC306 (CTĐT: TC406)")).toBe("nhóm tự chọn TC306 (CTĐT: TC406)");
+  it("names a group as the standard does, never with the CTĐT elective code (the codes are not in sync)", () => {
+    expect(groupTitle({ label: "Nhóm tự chọn TC306" })).toBe("Nhóm tự chọn TC306");
+    expect(groupTitle({ label: "Nhóm bắt buộc" })).toBe("Nhóm bắt buộc");
+    expect(groupInSentence("Nhóm tự chọn TC306")).toBe("nhóm tự chọn TC306");
     expect(groupInSentence("Học phần bắt buộc")).toBe("nhóm học phần bắt buộc");
     expect(lowerFirst("Điểm trung bình chưa rõ. Hãy kiểm tra PDF gốc.")).toBe("điểm trung bình chưa rõ. Hãy kiểm tra PDF gốc.");
     expect(lowerFirst("PDF chưa đọc được")).toBe("PDF chưa đọc được");
@@ -200,7 +199,7 @@ describe("verdict and conditions", () => {
     expect(verdictHeadline(failing())).toEqual({
       tone: "fail", glyph: "✗",
       // The 12 missing credits are covered by the two failing groups (13 + 4 credits), so they are said once, after them.
-      text: "Hiện tại bạn chưa đủ điều kiện xét tốt nghiệp vì còn thiếu 2 môn thuộc nhóm bắt buộc, 4 tín chỉ thuộc nhóm tự chọn TC306 (CTĐT: TC406) và 0,13 điểm trung bình tích lũy. Tổng số tín chỉ tích lũy (126/138) cũng sẽ đủ khi bạn hoàn thành các nhóm trên.",
+      text: "Hiện tại bạn chưa đủ điều kiện xét tốt nghiệp vì còn thiếu 2 môn thuộc nhóm bắt buộc, 4 tín chỉ thuộc nhóm tự chọn TC306 và 0,13 điểm trung bình tích lũy. Tổng số tín chỉ tích lũy (126/138) cũng sẽ đủ khi bạn hoàn thành các nhóm trên.",
     });
   });
   it("passes and says what is undecided", () => {
@@ -222,7 +221,7 @@ describe("verdict and conditions", () => {
     const items = conditionItems(failing());
     expect(items.map((item) => [item.title, item.progress, item.shortfall])).toEqual([
       ["Nhóm bắt buộc", "đã đạt 2/4 môn", "còn thiếu 2 môn"],
-      ["Nhóm tự chọn TC306 (CTĐT: TC406)", "đã đạt 2/6 TC", "còn thiếu 4 TC"],
+      ["Nhóm tự chọn TC306", "đã đạt 2/6 TC", "còn thiếu 4 TC"],
       ["Điểm trung bình tích lũy (hệ 4)", "hiện 1,87, yêu cầu tối thiểu 2,00", "còn thiếu 0,13 điểm"],
       ["Tổng số tín chỉ tích lũy", "đã tích lũy 126/138 TC (ước tính)", "còn thiếu 12 TC"],
     ]);
@@ -241,7 +240,7 @@ describe("suggestions", () => {
     const [mandatory, elective, gpa, credits, inProgress, unknown] = items;
     expect(mandatory!.text).toBe("Hoàn thành 2 môn còn thiếu trong nhóm bắt buộc:");
     expect(mandatory!.courses.map((item) => `${item.code} ${item.state}`)).toEqual(["71ITSE30103 Chưa đạt (đã học 2 lần)", "71ITSE41010 Chưa học"]);
-    expect(elective!.text).toBe("Chọn học thêm ít nhất 4 tín chỉ trong nhóm tự chọn TC306 (CTĐT: TC406).");
+    expect(elective!.text).toBe("Chọn học thêm ít nhất 4 tín chỉ trong nhóm tự chọn TC306.");
     expect(elective!.coursesLabel).toBe("Các học phần bạn chưa đạt trong nhóm:");
     expect(elective!.courses.map((item) => `${item.code} ${item.glyph} ${item.state}`)).toEqual([
       "71ITSE40203 ○ Chưa học", "71ITSE40303 ◐ Đang học", "71ITSE40403 ✗ Chưa đạt",
@@ -335,7 +334,7 @@ describe("competency page summary", () => {
     const rows = criteriaRows(failing());
     expect(rows.map((item) => [item.title, item.actual, item.required, item.status])).toEqual([
       ["Nhóm bắt buộc", "2 môn", "4 môn", "fail"],
-      ["Nhóm tự chọn TC306 (CTĐT: TC406)", "2 TC", "6 TC", "fail"],
+      ["Nhóm tự chọn TC306", "2 TC", "6 TC", "fail"],
       ["Điểm trung bình tích lũy (hệ 4)", "1,87", "2,00", "fail"],
       ["Tổng số tín chỉ tích lũy", "126 TC", "138 TC", "fail"],
     ]);
@@ -369,7 +368,7 @@ describe("course views", () => {
   it("builds groups from the evaluation, with retake marks", () => {
     const groups = groupViews(response({ evaluation: failing() }));
     expect(groups.map((item) => [item.title, item.achieved, item.required])).toEqual([
-      ["Nhóm bắt buộc", "2 môn", "4 môn"], ["Nhóm tự chọn TC306 (CTĐT: TC406)", "2 TC", "6 TC"],
+      ["Nhóm bắt buộc", "2 môn", "4 môn"], ["Nhóm tự chọn TC306", "2 TC", "6 TC"],
     ]);
     expect(groups[0]!.courses[0]).toMatchObject({ code: "71ITBS10103", improvement: "passed", groupTitle: "Nhóm bắt buộc" });
     expect(groups[1]!.courses[3]).toMatchObject({ code: "71ITSE40403", improvement: "failed" });

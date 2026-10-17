@@ -209,7 +209,7 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
   it("shows only the graduation page's verdict and the detail link", () => {
     const html = withAi("completed");
     const section = html.slice(html.indexOf('id="scomp-graduation"'));
-    expect(section).toContain("Hiện tại bạn chưa đủ điều kiện xét tốt nghiệp vì còn thiếu 6 tín chỉ thuộc nhóm tự chọn TC306 (CTĐT: TC406). Tổng số tín chỉ tích lũy (120/126) cũng sẽ đủ khi bạn hoàn thành nhóm tự chọn TC306 (CTĐT: TC406).");
+    expect(section).toContain("Hiện tại bạn chưa đủ điều kiện xét tốt nghiệp vì còn thiếu 6 tín chỉ thuộc nhóm tự chọn TC306. Tổng số tín chỉ tích lũy (120/126) cũng sẽ đủ khi bạn hoàn thành nhóm tự chọn TC306.");
     expect(section).toMatch(/scomp-grad-verdict scomp-grad-fail">.*<a class="sw-outline scomp-grad-detail" href="#graduation">Xem chi tiết/);
     // The standard name, "Nên làm" and the criteria table live on the graduation page only (user, 2026-10-17).
     for (const gone of ["Căn cứ:", "Nên làm", "<table", "Đồ án Tốt nghiệp", "Bảng điểm cập nhật"]) expect(section).not.toContain(gone);

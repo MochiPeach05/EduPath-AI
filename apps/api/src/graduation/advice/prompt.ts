@@ -16,7 +16,7 @@ import { startsReplacementPath, thesisNoun, thesisOption, type ThesisOption } fr
 import { buildGraduationAdviceSchema, GRADUATION_ADVICE_LIMITS as L } from "./schema.js";
 
 /** Part of the advice fingerprint (student-graduation.ts): a new version re-queues every student's advice. */
-export const GRADUATION_ADVICE_PROMPT_VERSION = "grad-advice-v2";
+export const GRADUATION_ADVICE_PROMPT_VERSION = "grad-advice-v3";
 
 /** Ollama options sent with every job (worker adds think/stream/truncate/keep_alive/model). num_ctx must stay 16384. */
 export const GRADUATION_ADVICE_OPTIONS = { num_ctx: 16384, num_predict: 2048, temperature: 0.3, top_p: 0.95, top_k: 64 } as const;
@@ -138,13 +138,13 @@ function progressText(lower: number | null, upper: number | null, required: numb
 function groupCondition(group: GraduationGroupEvaluation, index: number): Condition {
   const key = `G${index + 1}`;
   const label = sanitizeText(group.label);
-  const curriculum = group.curriculumElectiveCode && group.curriculumElectiveCode !== group.code
-    ? `; CTĐT: ${sanitizeText(group.curriculumElectiveCode, 20)}` : "";
+  // v3 (2026-10-18): no CTĐT elective code (TC406 beside TC306): the codes are not in sync, and the
+  // page no longer shows them, so the advice must not either.
   const kind = group.kind === "mandatory" ? "bắt buộc, tính theo số môn" : "tự chọn, tính theo tín chỉ";
   const remaining = group.remaining === null ? null : formatNumber(group.remaining);
   return {
     key, groupId: group.id, label, status: group.status,
-    line: `[${key}] ${label} (${kind}${curriculum}): ${progressText(group.lower, group.upper, group.required, group.unit)} — ` +
+    line: `[${key}] ${label} (${kind}): ${progressText(group.lower, group.upper, group.required, group.unit)} — ` +
       statusText(group.status, remaining, group.unit),
   };
 }
