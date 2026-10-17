@@ -9,7 +9,7 @@ import { CompetencyError, validateWeights, WEIGHT_TOLERANCE } from "./model.js";
 
 type Database = DatabasePool | PoolClient;
 type GroupChange = { name: string; description: string; isActive: boolean };
-type SkillChange = { name: string; description: string; scope: string; groupId: string; isActive: boolean; existingSkillId?: string | undefined };
+type SkillChange = { name: string; description: string; scope: string; groupId: string; isActive: boolean };
 type ConfigurationChange = { status: "draft" | "active"; links: { skillId: string; weight: number }[]; note?: string };
 type Revision = { curriculumId: string; revisionId: string; cohortCode: string; name: string; version: number; isCurrent: boolean; isActive: boolean; data: CurriculumData };
 type Group = { id: string; name: string; description: string; isActive: boolean; version: string; skillCount: number };
@@ -195,19 +195,25 @@ export class CompetencyRepository {
     return Boolean(result.rowCount);
   }
 
+  /**
+   * "Thêm cấu hình năng lực". A name already in the shared Kỹ năng catalog (whitespace, case and
+   * accents ignored) reuses that skill with its name and description (an empty description takes the
+   * one typed here); any other name adds a catalog skill. A skill that already has a profile is
+   * skill_profile_exists: that profile is edited, not added twice. The catalog lock of write() keeps
+   * two admins from adding the same name at once.
+   */
   async createSkill(data: SkillChange, actor: AuthenticatedUser) {
     return this.write(actor, async client => {
       await this.groupFor(client, data.groupId);
       let id: string;
       let restored = false;
-      if (data.existingSkillId) {
-        const canonical = await client.query<{ id: string; name: string; description: string }>(`SELECT id,name,description
- FROM career_skills WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`, [data.existingSkillId]);
+      const match = await this.findCatalogSkill(client, data.name);
+      if (match) {
+        const canonical = await client.query<{ description: string }>("SELECT description FROM career_skills WHERE id=$1 AND deleted_at IS NULL FOR UPDATE", [match.id]);
         if (!canonical.rowCount) throw new CompetencyError("skill_unavailable", 409);
-        const skill = canonical.rows[0]!;
-        if (skill.name !== data.name || skill.description !== data.description)
-          throw new CompetencyError("canonical_skill_mismatch", 409);
-        id = skill.id;
+        id = match.id;
+        if (!canonical.rows[0]!.description && data.description)
+          await client.query("UPDATE career_skills SET description=$2,version=$3,updated_at=now() WHERE id=$1", [id, data.description, randomUUID()]);
         const profile = await client.query<{ deleted_at: string | null }>("SELECT deleted_at FROM ad_comp_skills WHERE skill_id=$1 FOR UPDATE", [id]);
         if (profile.rowCount) {
           if (!profile.rows[0]!.deleted_at) throw new CompetencyError("skill_profile_exists", 409);
@@ -225,7 +231,8 @@ export class CompetencyRepository {
           [id, data.groupId, data.scope, data.isActive]);
       }
       const snapshot = await this.skillSnapshot(client, id);
-      await this.event(client, "skill", id, actor, snapshot, restored ? "Khôi phục cấu hình năng lực" : "Thêm cấu hình năng lực");
+      await this.event(client, "skill", id, actor, snapshot, restored ? "Khôi phục cấu hình năng lực"
+        : match ? "Thêm cấu hình năng lực cho kỹ năng có sẵn trong danh mục" : "Thêm cấu hình năng lực");
       return snapshot;
     });
   }
@@ -443,14 +450,20 @@ export class CompetencyRepository {
     return true;
   }
 
+  /** The live catalog skill whose name matches (whitespace, case and accents ignored), if any. */
+  async findCatalogSkill(client: PoolClient, name: string): Promise<{ id: string; name: string } | null> {
+    const clean = fold(name.replace(/\s+/g, " ").trim());
+    const catalog = await client.query<{ id: string; name: string }>("SELECT id,name FROM career_skills WHERE deleted_at IS NULL ORDER BY id");
+    return catalog.rows.find(row => fold(row.name.replace(/\s+/g, " ").trim()) === clean) ?? null;
+  }
+
   /**
    * The live catalog skill whose name matches (whitespace, case and accents ignored), or a new one.
    * New skills land in the shared catalog, so the Nghề nghiệp pages can use them at once.
    */
   async catalogSkillByName(client: PoolClient, name: string): Promise<{ id: string; name: string; created: boolean }> {
     const clean = name.replace(/\s+/g, " ").trim();
-    const catalog = await client.query<{ id: string; name: string }>("SELECT id,name FROM career_skills WHERE deleted_at IS NULL ORDER BY id");
-    const match = catalog.rows.find(row => fold(row.name.replace(/\s+/g, " ").trim()) === fold(clean));
+    const match = await this.findCatalogSkill(client, clean);
     if (match) return { ...match, created: false };
     const id = randomUUID();
     await client.query("INSERT INTO career_skills(id,name,description) VALUES($1,$2,'')", [id, clean]);

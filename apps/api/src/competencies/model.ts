@@ -7,7 +7,7 @@ export const WEIGHT_TOLERANCE = 0.000001;
 export const groupInput = z.object({ name: z.string().trim().min(1).max(160), description: z.string().trim().max(2000), isActive: z.boolean() }).strict();
 export const skillInput = z.object({
   name: z.string().trim().min(1).max(100), description: z.string().trim().max(2000), scope: z.string().trim().max(4000),
-  groupId: z.uuid(), isActive: z.boolean(), existingSkillId: z.uuid().optional(),
+  groupId: z.uuid(), isActive: z.boolean(),
 }).strict();
 export const allocationSchema = z.object({ skillId: z.uuid(), weight: z.number().min(0).max(1) }).strict();
 export const configurationInput = z.object({ status: z.enum(["draft", "active"]), links: z.array(allocationSchema).max(200), note: z.string().trim().max(500).default("") }).strict();

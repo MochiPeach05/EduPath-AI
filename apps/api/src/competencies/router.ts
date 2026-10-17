@@ -11,7 +11,6 @@ import { createCompetencyAiRouter } from "./ai/router.js";
 const uuid = z.uuid();
 const emptyQuery = z.object({}).strict();
 const confirmed = z.object({ confirmed: z.literal(true) }).strict();
-const skillChange = skillInput.omit({ existingSkillId: true });
 
 /**
  * Admin API of "Năng lực" (AD-COMP). `aiSuggestions` turns on the AI proposals of course links and
@@ -71,7 +70,7 @@ export function createCompetenciesRouter(pool: DatabasePool | undefined, webOrig
   });
   router.patch("/skills/:id", async (req, res) => {
     res.json(await repository!.updateSkill(uuid.parse(req.params.id), uuid.parse(req.get("x-version")),
-      skillChange.parse(req.body), req.session.user!));
+      skillInput.parse(req.body), req.session.user!));
   });
   router.delete("/skills/:id", async (req, res) => {
     const id = uuid.parse(req.params.id), version = uuid.parse(req.get("x-version"));

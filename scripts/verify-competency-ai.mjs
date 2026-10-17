@@ -149,6 +149,25 @@ try {
   assert.equal(refused.body.error, "group_not_empty");
   checks.push(`an empty group is soft-deleted (hidden, 404, name reusable); deleting a group with ${used.skillCount} skills is 409 group_not_empty`);
 
+  // "Thêm cấu hình năng lực" has no "Nguồn kỹ năng" choice: a name already in the Kỹ năng catalog
+  // (case, spaces and accents ignored) reuses that skill; a skill with a profile is edited instead.
+  const activeGroup = (await call("GET", "/groups")).body.items.find((group) => group.isActive);
+  const [catalogKept, catalogFilled] = [randomUUID(), randomUUID()];
+  await pool.query("INSERT INTO career_skills(id,name,description) VALUES($1,$2,$3),($4,$5,'')", [catalogKept, "Kiểm thử dùng lại", "Mô tả trong danh mục", catalogFilled, "Kiểm thử mô tả trống"]);
+  const catalogBefore = await count("career_skills WHERE deleted_at IS NULL");
+  const profile = (name, description) => call("POST", "/skills", { body: { name, description, scope: "Phạm vi kiểm thử", groupId: activeGroup.id, isActive: true } });
+  const reused = await profile("  KIEM THU   dung lai ", "Mô tả khác");
+  assert.equal(reused.status, 201, JSON.stringify(reused.body));
+  assert.deepEqual([reused.body.id, reused.body.name, reused.body.description], [catalogKept, "Kiểm thử dùng lại", "Mô tả trong danh mục"]);
+  const emptyFilled = await profile("Kiểm thử mô tả trống", "Mô tả mới");
+  assert.deepEqual([emptyFilled.body.id, emptyFilled.body.description], [catalogFilled, "Mô tả mới"], "an empty catalog description takes the typed one");
+  assert.equal(await count("career_skills WHERE deleted_at IS NULL"), catalogBefore, "no second catalog skill");
+  assert.equal((await profile("Kiểm thử dùng lại", "")).body.error, "skill_profile_exists");
+  assert.equal((await call("POST", "/skills", { body: { name: "Kỹ năng kiểm thử mới", description: "", scope: "", groupId: activeGroup.id, isActive: true, existingSkillId: catalogKept } })).status, 400, "the reuse choice is gone");
+  assert.equal((await profile("Kỹ năng kiểm thử mới", "Mô tả")).status, 201);
+  assert.equal(await count("career_skills WHERE deleted_at IS NULL"), catalogBefore + 1, "a new name adds one catalog skill");
+  checks.push("adding a cấu hình năng lực with a name already in the Kỹ năng catalog (case, spaces, accents ignored) reuses that skill and keeps its description (an empty one takes the typed text); a second time is 409 skill_profile_exists; a new name adds one catalog skill; existingSkillId is refused");
+
   // Pick an unconfigured revision for the AI flows.
   const revisions = (await call("GET", "/curricula")).body.items;
   const empty = revisions.filter((item) => item.configuredCount === 0 && item.courseCount >= 5).sort((a, b) => b.courseCount - a.courseCount)[0];

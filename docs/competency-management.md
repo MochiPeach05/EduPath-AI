@@ -10,7 +10,7 @@ Nhóm **Quản lý năng lực** trên thanh bên quản trị (mở/đóng như
 | AD-COMP-03 Thêm nhóm kỹ năng đánh giá, cập nhật nhóm | Nút **Thêm nhóm năng lực**; **Chỉnh sửa nhóm năng lực** trong menu Thao tác. |
 | Xóa nhóm kỹ năng đánh giá | **Xóa nhóm năng lực** trong menu Thao tác: chỉ nhóm không còn kỹ năng; xóa mềm (`deleted_at`, `is_active=false`), tên được dùng lại. |
 | AD-COMP-02 Xem danh sách kỹ năng đánh giá, AD-COMP-12 Tìm kiếm, AD-COMP-15 Lọc | Trang **Cấu hình năng lực**: tìm có/không dấu, lọc nhóm năng lực và trạng thái. |
-| AD-COMP-04 Thêm, AD-COMP-05 Cập nhật, Xóa kỹ năng đánh giá | Thêm (tạo kỹ năng chung mới hoặc dùng lại kỹ năng chung đã có), Chỉnh sửa, Xóa (xóa mềm, chặn khi cấu hình đang áp dụng còn dùng). |
+| AD-COMP-04 Thêm, AD-COMP-05 Cập nhật, Xóa kỹ năng đánh giá | Thêm: chỉ nhập tên kỹ năng, không còn ô "Nguồn kỹ năng" (18/10/2026). Tên đã có trong danh mục Kỹ năng (bỏ qua hoa thường, dấu, khoảng trắng) thì dùng lại kỹ năng đó và giữ mô tả hiện có (mô tả trống thì lấy mô tả vừa nhập); kỹ năng đã có cấu hình năng lực thì form báo và khóa nút lưu, cần dùng Chỉnh sửa. Chỉnh sửa, Xóa (xóa mềm, chặn khi cấu hình đang áp dụng còn dùng). |
 | AD-COMP-06 Xem trọng số năng lực | Trang **Cấu hình học phần** (trước là tab "Trọng số học phần"): tổng %, trạng thái, chi tiết và lịch sử từng học phần. |
 | AD-COMP-09 Tạo liên kết kỹ năng với học phần (Thủ công) | **Tạo liên kết kỹ năng (Thủ công)**: chọn kỹ năng; kỹ năng mới vào học phần với trọng số 0%. |
 | Tạo liên kết kỹ năng với học phần (AI) | **Tạo liên kết kỹ năng (AI)**: AI đề xuất kỹ năng, quản trị viên duyệt rồi lưu (xem mục AI). |

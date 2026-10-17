@@ -213,53 +213,43 @@ export function CompetencySkillsTab({ canManage, revision, onSaved }: TabProps) 
   </section>;
 }
 
+/** Same comparison as the server: whitespace, case and accents ignored. */
+const skillKey = (name: string) => searchTerm(name.replace(/\s+/g, " "));
+
 function SkillEditor({ current, revision, groups, close, saved }: EditorProps<Skill> & { revision: number; groups: Group[] }) {
+  // No "Nguồn kỹ năng" choice (user, 2026-10-18): a name already in the Kỹ năng catalog reuses that skill,
+  // and a skill that already has a cấu hình năng lực is edited from the list instead.
   const catalog = useCompetencyData<{ items: CatalogSkill[] }>(`${COMPETENCY_API}/catalog`, revision);
-  const [source, setSource] = useState<"new" | "existing">("new");
-  const [existingSkillId, setExistingSkillId] = useState("");
-  const [catalogQuery, setCatalogQuery] = useState("");
+  const profiles = useCompetencyData<{ items: Skill[] }>(`${COMPETENCY_API}/skills`, revision);
   const [form, setForm] = useState({ name: current?.name ?? "", description: current?.description ?? "", scope: current?.scope ?? "", groupId: current?.groupId ?? "", isActive: current?.isActive ?? true });
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const submitting = useRef(false);
-  const reusing = !current && source === "existing";
-  const candidates = catalog.data?.items.filter(skill => skill.id === existingSkillId || searchTerm(`${skill.name} ${skill.description}`).includes(searchTerm(catalogQuery))) ?? [];
-  const selectedCatalogSkill = catalog.data?.items.find(skill => skill.id === existingSkillId);
-  const canSave = Boolean(form.groupId && (reusing ? selectedCatalogSkill : form.name.trim()));
+  const match = !current && form.name.trim() ? catalog.data?.items.find(skill => skillKey(skill.name) === skillKey(form.name)) : undefined;
+  const profiled = Boolean(match && profiles.data?.items.some(skill => skill.id === match.id));
+  const keepsDescription = Boolean(match?.description);
+  const canSave = Boolean(form.groupId && form.name.trim() && !profiled);
 
   return <Modal title={current ? "Chỉnh sửa cấu hình năng lực" : "Thêm cấu hình năng lực"} onClose={close} busy={busy}>
-    {reusing && <Status {...catalog} />}
     <form className="cm-dialog-body cm-form" onSubmit={async event => {
       event.preventDefault();
       if (submitting.current) return;
-      if (!canSave) { setError("Hãy nhập tên, chọn nhóm và chọn kỹ năng chung nếu dùng lại."); return; }
+      if (!canSave) { setError(profiled ? "Kỹ năng này đã có cấu hình năng lực. Hãy tìm trong danh sách và dùng “Chỉnh sửa cấu hình năng lực”." : "Hãy nhập tên kỹ năng và chọn nhóm năng lực."); return; }
       submitting.current = true; setBusy(true); setError("");
       try {
-        const body = reusing && selectedCatalogSkill ? { ...form, name: selectedCatalogSkill.name, description: selectedCatalogSkill.description, existingSkillId } : form;
         await competencyRequest(current ? `${COMPETENCY_API}/skills/${current.id}` : `${COMPETENCY_API}/skills`, {
           method: current ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json", ...(current ? { "x-version": current.version } : {}) },
-          body: JSON.stringify(body),
+          body: JSON.stringify(form),
         }); saved();
       } catch (failure) { setError((failure as Error).message); }
       finally { submitting.current = false; setBusy(false); }
     }}>
       <fieldset className="cm-fields" disabled={busy}>
-        {!current && <>
-          <label>Nguồn kỹ năng<select value={source} onChange={event => {
-            setSource(event.target.value as "new" | "existing"); setExistingSkillId(""); setCatalogQuery(""); setForm({ ...form, name: "", description: "" }); setError("");
-          }}><option value="new">Tạo kỹ năng chung mới</option><option value="existing">Dùng lại kỹ năng chung đã có</option></select></label>
-          {reusing && <>
-            <label>Tìm kỹ năng chung<input maxLength={200} value={catalogQuery} placeholder="Nhập tên kỹ năng để thu hẹp danh sách…" onChange={event => setCatalogQuery(event.target.value)} /></label>
-            <label><RequiredLabel>Kỹ năng chung</RequiredLabel><select required value={existingSkillId} disabled={catalog.loading || Boolean(catalog.error)} onChange={event => {
-              const skill = catalog.data?.items.find(item => item.id === event.target.value);
-              setExistingSkillId(event.target.value); setForm({ ...form, name: skill?.name ?? "", description: skill?.description ?? "" });
-            }}><option value="">Chọn kỹ năng chung</option>{candidates.map(skill => <option key={skill.id} value={skill.id}>{skill.name}</option>)}</select></label>
-            {catalog.data && !candidates.length && <p className="comp-hint">Không có kỹ năng chung phù hợp.</p>}
-            <p className="comp-hint">Cấu hình năng lực sẽ dùng kỹ năng đã chọn với tên và mô tả hiện có. Kỹ năng đã có cấu hình năng lực sẽ được hệ thống thông báo khi lưu.</p>
-          </>}
-        </>}
-        <label><RequiredLabel>Tên kỹ năng</RequiredLabel><input required maxLength={100} readOnly={reusing} value={reusing ? selectedCatalogSkill?.name ?? "" : form.name} onChange={event => setForm({ ...form, name: event.target.value })} /></label>
-        <label>Mô tả kỹ năng chung<textarea rows={3} maxLength={2000} readOnly={reusing} value={reusing ? selectedCatalogSkill?.description ?? "" : form.description} onChange={event => setForm({ ...form, description: event.target.value })} /></label>
+        <label><RequiredLabel>Tên kỹ năng</RequiredLabel><input required maxLength={100} value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} /></label>
+        {match && (profiled
+          ? <p className="admin-error" role="alert">Kỹ năng “{match.name}” đã có cấu hình năng lực. Hãy tìm trong danh sách và dùng “Chỉnh sửa cấu hình năng lực”.</p>
+          : <p className="comp-hint">“{match.name}” đã có trong danh mục Kỹ năng: cấu hình năng lực sẽ dùng kỹ năng này{keepsDescription ? " và giữ mô tả hiện có" : ""}.</p>)}
+        <label>Mô tả kỹ năng chung<textarea rows={3} maxLength={2000} readOnly={keepsDescription} value={keepsDescription ? match?.description ?? "" : form.description} onChange={event => setForm({ ...form, description: event.target.value })} /></label>
         <label><RequiredLabel>Nhóm năng lực</RequiredLabel><select required value={form.groupId} onChange={event => setForm({ ...form, groupId: event.target.value })}>
           <option value="">Chọn nhóm năng lực</option>{groups.map(group => <option key={group.id} value={group.id}>{group.name}{group.isActive ? "" : " (ngừng sử dụng)"}</option>)}
           {current && !groups.some(group => group.id === current.groupId) && <option value={current.groupId}>{current.groupName}</option>}
