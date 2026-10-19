@@ -24,11 +24,14 @@ const standardData = (specialty: string, classBlock: string) => ({
 type Tables = {
   profile: Record<string, unknown> | null; transcript: boolean; curricula: number; weights: boolean;
   specialty: string | null; plans: { linked: boolean; major: string }[]; career: boolean;
+  /** The career field of the target career and the skills' groups in it. */
+  field: boolean; fieldGroups: { skill_id: string; group_id: string }[];
 };
 
 function fakeDb(overrides: Partial<Tables> = {}) {
   const t: Tables = { profile: { cohort_code: " k29 ", specialty: "CNDL", career_position_id: "p1" }, transcript: true, curricula: 1, weights: true,
-    specialty: "CNDL", plans: [{ linked: false, major: "Công nghệ thông tin" }, { linked: true, major: "Công nghệ thông tin" }], career: true, ...overrides };
+    specialty: "CNDL", plans: [{ linked: false, major: "Công nghệ thông tin" }, { linked: true, major: "Công nghệ thông tin" }], career: true,
+    field: true, fieldGroups: [], ...overrides };
   if (overrides.profile === undefined && overrides.specialty !== undefined) t.profile = { cohort_code: "K29", specialty: overrides.specialty, career_position_id: "p1" };
   const rows = (list: unknown[]) => ({ rowCount: list.length, rows: list });
   const query = vi.fn(async (sql: string, _params?: unknown[]) => {
@@ -45,7 +48,12 @@ function fakeDb(overrides: Partial<Tables> = {}) {
     if (sql.includes("FROM curriculum_relations")) return rows([{ course_code: "71ITBS10103", kind: "prior", raw: "", target_codes: [], unresolved_codes: [], review_required: false }]);
     if (sql.includes("FROM curriculum_revisions r JOIN ad_comp_course_configs")) return rows(t.weights ? [{ id: olderRevision, version: 2, active_count: 5, max_updated: new Date("2026-10-01T00:00:00Z") }] : []);
     if (sql.includes("JOIN ad_comp_course_links")) return rows([{ course_code: "71ITBS10103", skill_id: "k1", weight: "0.5000000000" }]);
-    if (sql.includes("FROM ad_comp_skills")) return rows([{ skill_id: "k1", name: "Lập trình", description: "", scope: "Phạm vi", group_id: "g1" }]);
+    if (sql.includes("FROM ad_comp_skill_field_groups")) return rows(t.fieldGroups);
+    if (sql.includes("FROM career_fields")) return rows(t.field ? [{ id: "f1", name: "Dữ liệu & Trí tuệ nhân tạo" }] : []);
+    if (sql.includes("FROM ad_comp_skills")) return rows([
+      { skill_id: "k1", name: "Lập trình", description: "", scope: "Phạm vi", group_id: "g1" },
+      { skill_id: "k2", name: "Đọc tài liệu", description: "", scope: "", group_id: "g2" },
+    ]);
     if (sql.includes("FROM ad_comp_groups")) return rows([{ id: "g1", name: "Chuyên môn" }]);
     if (sql.includes("FROM graduation_standards")) return rows([
       { id: "std-cnpm", revision_id: "r1", version: 1, data: standardData("Công nghệ phần mềm", "7480201-03") },
@@ -89,6 +97,23 @@ describe("readAssessmentInputs", () => {
     expect(calls.find((sql) => sql.includes("FROM student_profiles"))).not.toMatch(/interests|career_goal|full_name|student_code/);
     const catalog = db.query.mock.calls.find(([sql]) => String(sql).includes("course_catalog"));
     expect(catalog?.[1]).toEqual([["71AV010003"]]);
+  });
+
+  it("puts a skill in its group for the career field of the target career (comp-calc-v10)", async () => {
+    const moved = await readAssessmentInputs(fakeDb({ fieldGroups: [{ skill_id: "k2", group_id: "g1" }] }), userId);
+    expect(moved.weights.skills.map((skill) => [skill.skillId, skill.groupId])).toEqual([["k1", "g1"], ["k2", "g1"]]);
+    expect(moved.weights.fieldGroups).toEqual({ fieldId: "f1", fieldName: "Dữ liệu & Trí tuệ nhân tạo", moved: 1 });
+    // No group of the field: default groups, the field is still recorded.
+    const none = await readAssessmentInputs(fakeDb(), userId);
+    expect(none.weights.skills.map((skill) => skill.groupId)).toEqual(["g1", "g2"]);
+    expect(none.weights.fieldGroups).toEqual({ fieldId: "f1", fieldName: "Dữ liệu & Trí tuệ nhân tạo", moved: 0 });
+    // Without a target career (or with its field deleted) nothing is looked up.
+    const noCareer = fakeDb({ career: false, fieldGroups: [{ skill_id: "k2", group_id: "g1" }] });
+    const plain = await readAssessmentInputs(noCareer, userId);
+    expect(plain.weights.skills.map((skill) => skill.groupId)).toEqual(["g1", "g2"]);
+    expect(plain.weights.fieldGroups).toBeNull();
+    expect(noCareer.sql().some((sql) => sql.includes("career_fields"))).toBe(false);
+    expect((await readAssessmentInputs(fakeDb({ field: false, fieldGroups: [{ skill_id: "k2", group_id: "g1" }] }), userId)).weights.fieldGroups).toBeNull();
   });
 
   it("reports missing data with the API error codes", async () => {

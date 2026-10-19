@@ -840,7 +840,7 @@ function assess(inputs: AssessmentInputs): Assessment {
       curriculum: { id: inputs.curriculum.id, revisionId: inputs.curriculum.revisionId, version: inputs.curriculum.version },
       weights: {
         revisionId: inputs.weights.revisionId, version: inputs.weights.version, activeCount: inputs.weights.activeCount,
-        maxConfigUpdatedAt: inputs.weights.maxConfigUpdatedAt,
+        maxConfigUpdatedAt: inputs.weights.maxConfigUpdatedAt, fieldGroups: inputs.weights.fieldGroups ?? null,
       },
       graduationStandardId: standardMeta?.id ?? null, graduationStandardRevisionId: standardMeta?.revisionId ?? null,
       graduationStandardVersion: standardMeta?.version ?? null,

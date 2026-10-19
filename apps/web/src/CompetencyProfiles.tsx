@@ -1,18 +1,21 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActionMenu, Modal, Pagination, Status } from "./admin-ui";
 import { Icon, RequiredLabel } from "./admin-account-shared";
 import { searchTerm } from "./student-curriculum-types";
 import { useLiveFilters } from "./use-live-filters";
 import {
   COMPETENCY_API, competencyDate, competencyRequest, percentage, statusLabels,
-  useCompetencyData, type CatalogSkill, type EventEntry, type Group, type Skill, type SkillDetail,
+  useCompetencyData, type CatalogSkill, type EventEntry, type FieldGroup, type Group, type Skill, type SkillDetail,
 } from "./competency-types";
+import type { CareerField } from "./career-types";
 import { CheckedForm, DescriptionField } from "./CheckedForm";
 import { DESCRIPTION_MAX_WORDS, LONG_DESCRIPTION_MAX_WORDS } from "./form-checks";
 
 type TabProps = { canManage: boolean; revision: number; onSaved: () => void };
 type EditorProps<T> = { current: T | null; close: () => void; saved: () => void };
-type GroupDetail = Group & { skills?: Skill[]; history?: EventEntry[] };
+type GroupDetail = Group & { skills?: Skill[]; fieldSkills?: { skillId: string; skillName: string; fieldName: string; defaultGroupName: string }[]; history?: EventEntry[] };
+/** Where the career fields come from: the "Lĩnh vực" page of Quản lý nghề nghiệp. */
+const CAREER_FIELDS_API = "/api/admin/careers/fields";
 
 function ProfileState({ active }: { active: boolean }) {
   return <span className={`comp-state${active ? "" : " comp-state-inactive"}`}>{active ? "Đang sử dụng" : "Ngừng sử dụng"}</span>;
@@ -48,7 +51,7 @@ export function CompetencyGroupsTab({ canManage, revision, onSaved }: TabProps) 
             <td className="cm-stt">{(page - 1) * 10 + index + 1}</td>
             <td><button className="am-name-link" onClick={() => { setSelected(group); setMode("detail"); }}>{group.name}</button></td>
             <td className="comp-description">{group.description || "Chưa bổ sung"}</td>
-            <td>{group.skillCount}</td><td><ProfileState active={group.isActive} /></td>
+            <td>{group.skillCount}{group.fieldSkillCount ? <small className="comp-hint comp-field-group-note">+{group.fieldSkillCount} theo lĩnh vực</small> : null}</td><td><ProfileState active={group.isActive} /></td>
             <td><ActionMenu label={`Thao tác với nhóm ${group.name}`} items={[
               { key: "detail", icon: "eye", label: "Xem chi tiết nhóm năng lực", onSelect: () => { setSelected(group); setMode("detail"); } },
               ...(canManage ? [
@@ -105,7 +108,7 @@ function GroupDetails({ current, revision, canManage, close, edit }: { current: 
         <dl className="comp-detail-grid">
           <div><dt>Tên nhóm</dt><dd>{detail.name}</dd></div>
           <div><dt>Mô tả</dt><dd className="comp-description">{detail.description || "Chưa bổ sung mô tả."}</dd></div>
-          <div><dt>Số kỹ năng</dt><dd>{detail.skillCount}</dd></div>
+          <div><dt>Số kỹ năng</dt><dd>{detail.skillCount}{detail.fieldSkillCount ? ` · thêm ${detail.fieldSkillCount} kỹ năng theo lĩnh vực` : ""}</dd></div>
           <div><dt>Trạng thái</dt><dd><ProfileState active={detail.isActive} /></dd></div>
         </dl>
         {detail.skills && <section className="comp-section">
@@ -117,6 +120,13 @@ function GroupDetails({ current, revision, canManage, close, edit }: { current: 
             </table></div>
             <Pagination total={detail.skills.length} page={page} setPage={setPage} />
           </> : <p className="am-empty">Chưa có kỹ năng thuộc nhóm này.</p>}
+        </section>}
+        {detail.fieldSkills && detail.fieldSkills.length > 0 && <section className="comp-section">
+          <h3>Kỹ năng thuộc nhóm theo lĩnh vực</h3>
+          <p className="comp-hint">Các kỹ năng này có nhóm mặc định khác, nhưng thuộc nhóm {detail.name} với sinh viên có nghề mục tiêu ở lĩnh vực ghi bên cạnh.</p>
+          <ul className="comp-field-skill-list">{detail.fieldSkills.map((item) => <li key={`${item.skillId}:${item.fieldName}`}>
+            <strong>{item.skillName}</strong> · lĩnh vực {item.fieldName} <small className="comp-hint">(mặc định: {item.defaultGroupName})</small>
+          </li>)}</ul>
         </section>}
         <ProfileHistory entries={detail.history ?? []} entity="group" />
       </>}
@@ -172,7 +182,7 @@ export function CompetencySkillsTab({ canManage, revision, onSaved }: TabProps) 
 
   return <section className="cm-workspace comp-workspace">
     <div className="cm-toolbar">
-      <p>Mỗi cấu hình năng lực gồm một kỹ năng, nhóm năng lực, phạm vi đánh giá và trạng thái sử dụng.</p>
+      <p>Mỗi cấu hình năng lực gồm một kỹ năng, nhóm năng lực (có thể khác theo lĩnh vực nghề nghiệp), phạm vi đánh giá và trạng thái sử dụng.</p>
       {canManage && <button className="am-primary" onClick={() => { setSelected(null); setMode("edit"); }}><Icon name="plus" /> Thêm cấu hình năng lực</button>}
     </div>
     <section className="cm-panel">
@@ -192,7 +202,8 @@ export function CompetencySkillsTab({ canManage, revision, onSaved }: TabProps) 
           <tbody>{remote.data.items.slice((page - 1) * 10, page * 10).map((skill, index) => <tr key={skill.id}>
             <td className="cm-stt">{(page - 1) * 10 + index + 1}</td>
             <td><button className="am-name-link" onClick={() => { setSelected(skill); setMode("detail"); }}>{skill.name}</button></td>
-            <td>{skill.groupName}{!skill.groupActive && <small className="comp-hint">Nhóm ngừng sử dụng</small>}</td>
+            <td>{skill.groupName}{!skill.groupActive && <small className="comp-hint">Nhóm ngừng sử dụng</small>}
+              {liveFieldGroups(skill).map((row) => <small key={row.fieldId} className="comp-hint comp-field-group-note">{row.groupName} với {row.fieldName}</small>)}</td>
             <td className="comp-description">{skill.scope || "Chưa bổ sung"}</td>
             <td><ProfileState active={skill.isActive} /></td>
             <td>{skill.courseCount} học phần<br />{skill.careerCount} nghề nghiệp</td>
@@ -218,12 +229,68 @@ export function CompetencySkillsTab({ canManage, revision, onSaved }: TabProps) 
 /** Same comparison as the server: whitespace, case and accents ignored. */
 const skillKey = (name: string) => searchTerm(name.replace(/\s+/g, " "));
 
+/** The skill's groups by field that still apply (the field was not deleted). */
+const liveFieldGroups = (skill: Skill | null | undefined): FieldGroup[] => (skill?.fieldGroups ?? []).filter((row) => !row.fieldDeleted);
+
+type FieldGroupRow = { key: string; fieldId: string; groupId: string };
+const SAME_AS_DEFAULT = "Nhóm theo lĩnh vực phải khác nhóm năng lực mặc định.";
+
+/**
+ * "Nhóm năng lực theo lĩnh vực" (user, 2026-10-20): a skill can be a soft skill for most students and a
+ * professional one in a career field ("Đọc tài liệu" in testing). One row per field; students whose
+ * target career is in that field are scored with the row's group, every other student with the default.
+ */
+export function FieldGroupsEditor({ rows, setRows, fields, fieldsError, groups, defaultGroupId }: {
+  rows: FieldGroupRow[]; setRows: (rows: FieldGroupRow[]) => void; fields: CareerField[]; fieldsError: string | null; groups: Group[]; defaultGroupId: string;
+}) {
+  const next = useRef(rows.length);
+  const used = new Set(rows.map((row) => row.fieldId).filter(Boolean));
+  const update = (key: string, patch: Partial<FieldGroupRow>) => setRows(rows.map((row) => row.key === key ? { ...row, ...patch } : row));
+  return <fieldset className="comp-field-groups">
+    <legend>Nhóm năng lực theo lĩnh vực</legend>
+    <p className="comp-hint">Dùng khi kỹ năng thuộc nhóm khác ở một lĩnh vực nghề nghiệp, ví dụ Đọc tài liệu là Kỹ năng mềm nhưng là Chuyên môn ở lĩnh vực Kiểm thử &amp; Chất lượng. Sinh viên có nghề mục tiêu thuộc lĩnh vực đó được tính theo nhóm ở đây; sinh viên khác theo nhóm mặc định.</p>
+    {rows.map((row) => <FieldGroupLine key={row.key} row={row} fields={fields} groups={groups} used={used} defaultGroupId={defaultGroupId}
+      update={(patch) => update(row.key, patch)} remove={() => setRows(rows.filter((item) => item.key !== row.key))} />)}
+    {fieldsError && <p className="admin-error" role="alert">Chưa tải được danh sách lĩnh vực: {fieldsError}</p>}
+    <button type="button" className="am-outline" disabled={!fields.length || used.size >= fields.length}
+      onClick={() => setRows([...rows, { key: `fg-new-${next.current++}`, fieldId: "", groupId: "" }])}><Icon name="plus" /> Thêm nhóm theo lĩnh vực</button>
+  </fieldset>;
+}
+
+function FieldGroupLine({ row, fields, groups, used, defaultGroupId, update, remove }: {
+  row: FieldGroupRow; fields: CareerField[]; groups: Group[]; used: Set<string>; defaultGroupId: string;
+  update: (patch: Partial<FieldGroupRow>) => void; remove: () => void;
+}) {
+  const groupSelect = useRef<HTMLSelectElement>(null);
+  const same = Boolean(row.groupId) && row.groupId === defaultGroupId;
+  // The default group can change after the row was filled: the form then refuses to save and says why.
+  useEffect(() => { groupSelect.current?.setCustomValidity(same ? SAME_AS_DEFAULT : ""); }, [same]);
+  const fieldName = fields.find((field) => field.id === row.fieldId)?.name;
+  return <div className="comp-field-group-row">
+    <label><RequiredLabel>Lĩnh vực</RequiredLabel><select required value={row.fieldId} onChange={(event) => update({ fieldId: event.target.value })}>
+      <option value="">Chọn lĩnh vực</option>
+      {fields.map((field) => <option key={field.id} value={field.id} disabled={field.id !== row.fieldId && used.has(field.id)}>{field.name}</option>)}
+    </select></label>
+    <label><RequiredLabel>Nhóm năng lực</RequiredLabel><select ref={groupSelect} required value={row.groupId} onChange={(event) => {
+      event.target.setCustomValidity(event.target.value && event.target.value === defaultGroupId ? SAME_AS_DEFAULT : "");
+      update({ groupId: event.target.value });
+    }}>
+      <option value="">Chọn nhóm năng lực</option>
+      {groups.map((group) => <option key={group.id} value={group.id} disabled={group.id === defaultGroupId && group.id !== row.groupId}>{group.name}{group.isActive ? "" : " (ngừng sử dụng)"}</option>)}
+    </select></label>
+    <button type="button" className="am-icon-btn am-delete-icon" aria-label={`Bỏ nhóm theo lĩnh vực${fieldName ? ` ${fieldName}` : ""}`} title="Bỏ dòng này" onClick={remove}><Icon name="trash" /></button>
+  </div>;
+}
+
 function SkillEditor({ current, revision, groups, close, saved }: EditorProps<Skill> & { revision: number; groups: Group[] }) {
   // No "Nguồn kỹ năng" choice (user, 2026-10-18): a name already in the Kỹ năng catalog reuses that skill,
   // and a skill that already has a cấu hình năng lực is edited from the list instead.
   const catalog = useCompetencyData<{ items: CatalogSkill[] }>(`${COMPETENCY_API}/catalog`, revision);
   const profiles = useCompetencyData<{ items: Skill[] }>(`${COMPETENCY_API}/skills`, revision);
+  const fields = useCompetencyData<{ items: CareerField[] }>(CAREER_FIELDS_API, revision);
   const [form, setForm] = useState({ name: current?.name ?? "", description: current?.description ?? "", scope: current?.scope ?? "", groupId: current?.groupId ?? "", isActive: current?.isActive ?? true });
+  // Rows of a deleted field are not offered again: saving drops them.
+  const [fieldGroups, setFieldGroups] = useState<FieldGroupRow[]>(() => liveFieldGroups(current).map((row, index) => ({ key: `fg-${index}`, fieldId: row.fieldId, groupId: row.groupId })));
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const submitting = useRef(false);
   const match = !current && form.name.trim() ? catalog.data?.items.find(skill => skillKey(skill.name) === skillKey(form.name)) : undefined;
@@ -241,7 +308,7 @@ function SkillEditor({ current, revision, groups, close, saved }: EditorProps<Sk
         await competencyRequest(current ? `${COMPETENCY_API}/skills/${current.id}` : `${COMPETENCY_API}/skills`, {
           method: current ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json", ...(current ? { "x-version": current.version } : {}) },
-          body: JSON.stringify(form),
+          body: JSON.stringify({ ...form, fieldGroups: fieldGroups.map(({ fieldId, groupId }) => ({ fieldId, groupId })) }),
         }); saved();
       } catch (failure) { setError((failure as Error).message); }
       finally { submitting.current = false; setBusy(false); }
@@ -252,11 +319,12 @@ function SkillEditor({ current, revision, groups, close, saved }: EditorProps<Sk
           ? <p className="admin-error" role="alert">Kỹ năng “{match.name}” đã có cấu hình năng lực. Hãy tìm trong danh sách và dùng “Chỉnh sửa cấu hình năng lực”.</p>
           : <p className="comp-hint">“{match.name}” đã có trong danh mục Kỹ năng: cấu hình năng lực sẽ dùng kỹ năng này{keepsDescription ? " và giữ mô tả hiện có" : ""}.</p>)}
         <DescriptionField label="Mô tả kỹ năng chung" maxWords={DESCRIPTION_MAX_WORDS} rows={3} maxLength={2000} readOnly={keepsDescription} value={keepsDescription ? match?.description ?? "" : form.description} onChange={event => setForm({ ...form, description: event.target.value })} />
-        <label><RequiredLabel>Nhóm năng lực</RequiredLabel><select required value={form.groupId} onChange={event => setForm({ ...form, groupId: event.target.value })}>
+        <label><RequiredLabel>Nhóm năng lực mặc định</RequiredLabel><select required value={form.groupId} onChange={event => setForm({ ...form, groupId: event.target.value })}>
           <option value="">Chọn nhóm năng lực</option>{groups.map(group => <option key={group.id} value={group.id}>{group.name}{group.isActive ? "" : " (ngừng sử dụng)"}</option>)}
           {current && !groups.some(group => group.id === current.groupId) && <option value={current.groupId}>{current.groupName}</option>}
         </select></label>
         {!groups.length && <p className="comp-hint">Chưa tải được nhóm năng lực. Đóng hộp thoại và tải lại danh sách nhóm trước khi lưu.</p>}
+        <FieldGroupsEditor rows={fieldGroups} setRows={setFieldGroups} fields={fields.data?.items ?? []} fieldsError={fields.error} groups={groups} defaultGroupId={form.groupId} />
         <DescriptionField label="Phạm vi đánh giá" maxWords={LONG_DESCRIPTION_MAX_WORDS} rows={5} maxLength={4000} value={form.scope} placeholder="Nội dung và phạm vi đánh giá kỹ năng…" onChange={event => setForm({ ...form, scope: event.target.value })} />
         <label className="cm-check"><input type="checkbox" checked={form.isActive} onChange={event => setForm({ ...form, isActive: event.target.checked })} /> Đang sử dụng trong đánh giá năng lực</label>
         {current && <p className="comp-hint">Tên và mô tả dùng chung với quản lý nghề nghiệp. Việc chỉnh sửa sẽ cập nhật thông tin liên quan. Để ngừng sử dụng kỹ năng, cần điều chỉnh các cấu hình học phần đang áp dụng kỹ năng này.</p>}
@@ -281,7 +349,10 @@ function SkillDetails({ current, revision, canManage, close, edit }: { current: 
       {detail && <>
         <dl className="comp-detail-grid">
           <div><dt>Tên kỹ năng</dt><dd>{detail.name}</dd></div>
-          <div><dt>Nhóm năng lực</dt><dd>{detail.groupName}{!detail.groupActive && <small className="comp-hint">Nhóm ngừng sử dụng</small>}</dd></div>
+          <div><dt>Nhóm năng lực mặc định</dt><dd>{detail.groupName}{!detail.groupActive && <small className="comp-hint">Nhóm ngừng sử dụng</small>}</dd></div>
+          <div><dt>Nhóm năng lực theo lĩnh vực</dt><dd>{(detail.fieldGroups ?? []).length ? <ul className="comp-field-skill-list">{(detail.fieldGroups ?? []).map((row) => <li key={row.fieldId}>
+            {row.fieldName} → <strong>{row.groupName}</strong>{row.fieldDeleted && <small className="comp-hint"> (lĩnh vực đã xóa, không còn dùng)</small>}{!row.groupActive && <small className="comp-hint"> (nhóm ngừng sử dụng, tính theo nhóm mặc định)</small>}
+          </li>)}</ul> : "Không có: mọi lĩnh vực dùng nhóm mặc định."}</dd></div>
           <div><dt>Mô tả kỹ năng chung</dt><dd className="comp-description">{detail.description || "Chưa bổ sung."}</dd></div>
           <div><dt>Phạm vi đánh giá</dt><dd className="comp-description">{detail.scope || "Chưa bổ sung."}</dd></div>
           <div><dt>Trạng thái sử dụng</dt><dd><ProfileState active={detail.isActive} /></dd></div>

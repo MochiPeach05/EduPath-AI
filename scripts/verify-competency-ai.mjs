@@ -28,7 +28,7 @@ const migrations = ["007_student_transcripts.sql", "010_transcript_jobs.sql", "0
   "019_career_skill_management.sql", "020_career_field_numbers.sql", "021_career_position_codes.sql", "018_data_consents.sql",
   "026_competency_management.sql", "028_student_specialty.sql", "029_student_competency_assessments.sql", "030_competency_consent.sql",
   "031_career_ai_suggestions.sql", "032_graduation_ai_advice.sql", "033_competency_cloud_ai.sql", "034_competency_ai_suggestions.sql",
-  "035_competency_ai_skills.sql", "036_cancel_competency_ai_skills.sql"];
+  "035_competency_ai_skills.sql", "036_cancel_competency_ai_skills.sql", "037_competency_field_groups.sql"];
 const adminPool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 1 });
 // search_path is the audit schema ONLY, so a missing table can never fall through to public.
 const pool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 8, options: `-c search_path=${schema}` });
@@ -112,7 +112,7 @@ function candidates(user) {
 try {
   const publicBefore = await publicCounts();
   await setupSchema();
-  checks.push(`migrations 007-036 apply in a throwaway schema; copied ${await count("ad_comp_skills WHERE deleted_at IS NULL")} profiles, ${await count("ad_comp_course_configs")} configurations and ${await count("career_requirements WHERE deleted_at IS NULL")} career links read-only from public`);
+  checks.push(`migrations 007-037 apply in a throwaway schema; copied ${await count("ad_comp_skills WHERE deleted_at IS NULL")} profiles, ${await count("ad_comp_course_configs")} configurations and ${await count("career_requirements WHERE deleted_at IS NULL")} career links read-only from public`);
 
   const app = express();
   app.use("/api/worker/competency-assessments", createCompetencyWorkerRouter(pool, workerKey));
@@ -167,6 +167,43 @@ try {
   assert.equal((await profile("Kỹ năng kiểm thử mới", "Mô tả")).status, 201);
   assert.equal(await count("career_skills WHERE deleted_at IS NULL"), catalogBefore + 1, "a new name adds one catalog skill");
   checks.push("adding a cấu hình năng lực with a name already in the Kỹ năng catalog (case, spaces, accents ignored) reuses that skill and keeps its description (an empty one takes the typed text); a second time is 409 skill_profile_exists; a new name adds one catalog skill; existingSkillId is refused");
+
+  // "Nhóm năng lực theo lĩnh vực" (2026-10-20): a skill can belong to another group in one career field.
+  const liveGroups = (await call("GET", "/groups")).body.items.filter((group) => group.isActive);
+  const fieldGroup = liveGroups.find((group) => group.id !== activeGroup.id);
+  assert(fieldGroup, "two active groups exist");
+  const [testing, otherField] = (await pool.query("SELECT id,name FROM career_fields WHERE deleted_at IS NULL ORDER BY name,id LIMIT 2")).rows;
+  assert(otherField, "two career fields exist");
+  const reading = { name: "Đọc tài liệu kiểm thử", description: "Đọc hiểu tài liệu kỹ thuật", scope: "", groupId: activeGroup.id, isActive: true };
+  const withField = await call("POST", "/skills", { body: { ...reading, fieldGroups: [{ fieldId: testing.id, groupId: fieldGroup.id }, { fieldId: otherField.id, groupId: activeGroup.id }] } });
+  assert.equal(withField.status, 201, JSON.stringify(withField.body));
+  assert.deepEqual(withField.body.fieldGroups.map((row) => [row.fieldId, row.fieldName, row.groupId, row.groupName]),
+    [[testing.id, testing.name, fieldGroup.id, fieldGroup.name]], "a row with the default group is not kept");
+  assert((await call("GET", `/skills?groupId=${fieldGroup.id}`)).body.items.some((skill) => skill.id === withField.body.id), "the group filter finds the skill by its field group");
+  const fieldGroupDetail = (await call("GET", `/groups/${fieldGroup.id}`)).body;
+  assert.deepEqual(fieldGroupDetail.fieldSkills.filter((item) => item.skillId === withField.body.id).map((item) => [item.fieldName, item.defaultGroupName]), [[testing.name, activeGroup.name]]);
+  assert((await call("GET", "/groups")).body.items.find((group) => group.id === fieldGroup.id).fieldSkillCount >= 1);
+  const patchSkill = (skill, extra) => call("PATCH", `/skills/${skill.id}`, { headers: { "x-version": skill.version }, body: { ...reading, ...extra } });
+  assert.equal((await patchSkill(withField.body, { fieldGroups: [{ fieldId: testing.id, groupId: fieldGroup.id }, { fieldId: testing.id, groupId: activeGroup.id }] })).status, 400, "one group per field");
+  const keptGroups = await patchSkill(withField.body, { description: "Đọc hiểu tài liệu kỹ thuật và đặc tả" });
+  assert.equal(keptGroups.status, 200, JSON.stringify(keptGroups.body));
+  assert.equal(keptGroups.body.fieldGroups.length, 1, "a save without fieldGroups keeps them");
+  // A group that is still the field group of a live skill cannot be deleted.
+  const onlyByField = (await call("POST", "/groups", { body: { name: "Nhóm chỉ theo lĩnh vực", description: "", isActive: true } })).body;
+  const movedSkill = await patchSkill(keptGroups.body, { fieldGroups: [{ fieldId: testing.id, groupId: onlyByField.id }] });
+  assert.deepEqual(movedSkill.body.fieldGroups.map((row) => row.groupId), [onlyByField.id]);
+  const groupBefore = (await call("GET", `/groups/${onlyByField.id}`)).body;
+  const refusedByField = await call("DELETE", `/groups/${onlyByField.id}`, { body: { confirmed: true }, headers: { "x-version": groupBefore.version } });
+  assert.equal(refusedByField.status, 409);
+  assert.equal(refusedByField.body.error, "group_not_empty");
+  assert.match(refusedByField.body.details[0], /theo lĩnh vực của 1 kỹ năng/);
+  const clearedGroups = await patchSkill(movedSkill.body, { fieldGroups: [] });
+  assert.deepEqual(clearedGroups.body.fieldGroups, [], "an empty list clears them");
+  assert.deepEqual((await call("DELETE", `/groups/${onlyByField.id}`, { body: { confirmed: true }, headers: { "x-version": groupBefore.version } })).body, { deleted: true });
+  await pool.query("UPDATE career_fields SET deleted_at=now() WHERE id=$1", [otherField.id]);
+  assert.equal((await patchSkill(clearedGroups.body, { fieldGroups: [{ fieldId: otherField.id, groupId: fieldGroup.id }] })).body.error, "field_unavailable");
+  await pool.query("UPDATE career_fields SET deleted_at=NULL WHERE id=$1", [otherField.id]);
+  checks.push("nhóm năng lực theo lĩnh vực: a skill keeps its default group and gets another one per career field (a row with the default group is dropped, one row per field), the group filter and the group detail find it, a save without the list keeps it, an empty list clears it, a group still used by field is not deleted, a deleted field is refused");
 
   // Pick an unconfigured revision for the AI flows.
   const revisions = (await call("GET", "/curricula")).body.items;

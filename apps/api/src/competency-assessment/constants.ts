@@ -20,7 +20,8 @@
 /** v7: with a career, plans only deepen its met skills below Thành thạo; thesis replacement courses are never suggested off that path. */
 /** v8: history gives the overall and group competency as the transcript stood at the end of each graded term (STU-COMP-07). */
 /** v9: every history point also holds the target career's skills (score and status) at that term (STU-GAP-07). */
-export const CALC_VERSION = "comp-calc-v9";
+/** v10: a skill counts in its group for the career field of the target career when it has one (nhóm năng lực theo lĩnh vực). */
+export const CALC_VERSION = "comp-calc-v10";
 
 /** Skill, group and overall levels (0–100 scale), classified on unrounded values. */
 export const LEVEL_THRESHOLDS = { proficient: 85, good: 70, basic: 50 } as const;

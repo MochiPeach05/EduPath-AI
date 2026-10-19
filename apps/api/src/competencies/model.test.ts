@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { validateWeights } from "./model.js";
+import { skillInput, validateWeights } from "./model.js";
 
 const skillId = "11111111-1111-4111-8111-111111111111";
 const secondSkillId = "22222222-2222-4222-8222-222222222222";
@@ -16,5 +16,18 @@ describe("validateWeights", () => {
 
   it("rejects weights outside 0–1", () => {
     for (const weight of [-0.1, 1.5, Number.NaN]) expect(() => validateWeights([{ skillId, weight }], "draft")).toThrow("invalid_weight");
+  });
+});
+
+describe("skill input: nhóm năng lực theo lĩnh vực (2026-10-20)", () => {
+  const base = { name: "Đọc tài liệu", description: "", scope: "", groupId: "00000000-0000-4000-8000-000000000001", isActive: true };
+  const field = (n: number) => `00000000-0000-4000-8000-00000000f00${n}`;
+  const group = "00000000-0000-4000-8000-000000000002";
+  it("is optional (absent keeps the current ones) and takes one group per field", () => {
+    expect(skillInput.parse(base).fieldGroups).toBeUndefined();
+    expect(skillInput.parse({ ...base, fieldGroups: [] }).fieldGroups).toEqual([]);
+    expect(skillInput.parse({ ...base, fieldGroups: [{ fieldId: field(1), groupId: group }, { fieldId: field(2), groupId: group }] }).fieldGroups).toHaveLength(2);
+    expect(skillInput.safeParse({ ...base, fieldGroups: [{ fieldId: field(1), groupId: group }, { fieldId: field(1), groupId: base.groupId }] }).success).toBe(false);
+    expect(skillInput.safeParse({ ...base, fieldGroups: [{ fieldId: field(1), groupId: group, note: "x" }] }).success).toBe(false);
   });
 });

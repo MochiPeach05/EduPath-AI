@@ -3,9 +3,14 @@ import { useLiveData } from "./use-live-data";
 
 export const COMPETENCY_API = "/api/admin/competencies";
 export const WEIGHT_TOLERANCE = 0.000001;
-export type Group = { id: string; name: string; description: string; isActive: boolean; version: string; skillCount: number };
+export type Group = { id: string; name: string; description: string; isActive: boolean; version: string; skillCount: number;
+  /** Skills that belong to the group in a career field instead of their default group. */
+  fieldSkillCount?: number };
+/** "Nhóm năng lực theo lĩnh vực" (2026-10-20): the skill's group for students whose target career is in that field. */
+export type FieldGroup = { fieldId: string; fieldName: string; fieldDeleted: boolean; groupId: string; groupName: string; groupActive: boolean };
 export type CatalogSkill = { id: string; name: string; description: string; version: string };
-export type Skill = CatalogSkill & { scope: string; groupId: string; groupName: string; isActive: boolean; groupActive: boolean; careerCount: number; courseCount: number; legacySkillId: string | null };
+export type Skill = CatalogSkill & { scope: string; groupId: string; groupName: string; isActive: boolean; groupActive: boolean; careerCount: number; courseCount: number; legacySkillId: string | null;
+  fieldGroups?: FieldGroup[] };
 export type EventEntry = { id: string; note: string; createdAt: string; actorName?: string | null; kind?: string; snapshot: unknown };
 export type Contribution = { revisionId: string; cohortCode: string; curriculumName: string; curriculumVersion: number; isCurrent: boolean; courseCode: string; courseName: string; weight: number; status: ConfigurationStatus };
 export type SkillDetail = Skill & { contributions: Contribution[]; history?: EventEntry[]; events?: EventEntry[] };
@@ -92,6 +97,7 @@ const failures: Record<string, string> = {
   course_already_linked: "Học phần đã có liên kết kỹ năng nên không chạy lại cho cả chương trình.",
   no_candidate_skills: NO_MATCHING_SKILL_MESSAGE,
   no_active_groups: "Chưa có nhóm năng lực đang sử dụng. Hãy thêm nhóm năng lực trước.",
+  field_unavailable: "Lĩnh vực đã chọn không còn tồn tại. Hãy tải lại trang và chọn lại lĩnh vực.",
   links_changed: "Liên kết kỹ năng của học phần vừa thay đổi. Hãy tạo lại đề xuất trọng số.",
   skill_already_linked: "Có kỹ năng đã được liên kết với học phần. Hãy kiểm tra lại danh sách.",
   group_required: "Hãy chọn nhóm năng lực cho kỹ năng chưa có cấu hình năng lực.",

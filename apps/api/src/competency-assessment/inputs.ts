@@ -123,6 +123,33 @@ export async function readAssessmentInputs(db: Db, userId: string, options: { pr
     }
   }
 
+  /*
+   * Groups by career field (comp-calc-v10): a skill can belong to another group in the field of the
+   * live target career ("Đọc tài liệu" is Kỹ năng mềm, but Chuyên môn in testing). Inactive or deleted
+   * groups and deleted fields are ignored: the skill keeps its default group.
+   */
+  weights.fieldGroups = null;
+  if (career && !career.deleted) {
+    const field = await db.query<{ id: string; name: string }>(
+      `SELECT f.id,f.name FROM career_fields f JOIN career_positions p ON p.category=f.code
+       WHERE p.id=$1 AND f.deleted_at IS NULL ORDER BY f.id LIMIT 1`, [career.id]);
+    const fieldRow = field.rows[0];
+    if (fieldRow) {
+      const overrides = await db.query<{ skill_id: string; group_id: string }>(
+        `SELECT o.skill_id,o.group_id FROM ad_comp_skill_field_groups o JOIN ad_comp_groups g ON g.id=o.group_id
+         WHERE o.field_id=$1 AND g.is_active AND g.deleted_at IS NULL ORDER BY o.skill_id`, [fieldRow.id]);
+      const groupOf = new Map(overrides.rows.map((row) => [row.skill_id, row.group_id]));
+      let moved = 0;
+      weights.skills = weights.skills.map((skill) => {
+        const groupId = groupOf.get(skill.skillId);
+        if (!groupId || groupId === skill.groupId) return skill;
+        moved += 1;
+        return { ...skill, groupId };
+      });
+      weights.fieldGroups = { fieldId: fieldRow.id, fieldName: fieldRow.name, moved };
+    }
+  }
+
   /* Catalog names for transcript codes outside the curriculum (names never come from the transcript). */
   const curriculumCodes = new Set(curriculumCourses.map((course) => courseKey(course.code)));
   const outside = [...transcriptCourses(transcript.rows[0].data).keys()].filter((code) => !curriculumCodes.has(code)).sort();

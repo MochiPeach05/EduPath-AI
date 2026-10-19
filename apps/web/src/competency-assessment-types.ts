@@ -39,7 +39,9 @@ export type AssessmentMeta = {
   transcriptVersion: string;
   cohortCode: string;
   curriculum: { id: string; revisionId: string; version: number };
-  weights: { revisionId: string; version: number; activeCount: number; maxConfigUpdatedAt: string | null };
+  weights: { revisionId: string; version: number; activeCount: number; maxConfigUpdatedAt: string | null;
+    /** comp-calc-v10: the career field whose "nhóm năng lực theo lĩnh vực" were applied, and how many skills changed group. */
+    fieldGroups?: { fieldId: string; fieldName: string; moved: number } | null };
   graduationStandardId: string | null;
   graduationStandardRevisionId: string | null;
   graduationStandardVersion: number | null;

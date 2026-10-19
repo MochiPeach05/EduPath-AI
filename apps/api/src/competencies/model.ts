@@ -6,9 +6,17 @@ export class CompetencyError extends Error {
 }
 export const WEIGHT_TOLERANCE = 0.000001;
 export const groupInput = z.object({ name: z.string().trim().min(1).max(160), description: limitedText(2000, DESCRIPTION_MAX_WORDS), isActive: z.boolean() }).strict();
+/**
+ * "Nhóm năng lực theo lĩnh vực" (2026-10-20): another group for the students whose target career is
+ * in that career field. One row per field.
+ */
+export const fieldGroupsInput = z.array(z.object({ fieldId: z.uuid(), groupId: z.uuid() }).strict()).max(50)
+  .refine((rows) => new Set(rows.map((row) => row.fieldId)).size === rows.length, { message: "Mỗi lĩnh vực chỉ có một nhóm năng lực." });
 export const skillInput = z.object({
   name: z.string().trim().min(1).max(100), description: limitedText(2000, DESCRIPTION_MAX_WORDS), scope: limitedText(4000, LONG_DESCRIPTION_MAX_WORDS),
   groupId: z.uuid(), isActive: z.boolean(),
+  /** Absent keeps the skill's groups by field; a list replaces them. */
+  fieldGroups: fieldGroupsInput.optional(),
 }).strict();
 export const allocationSchema = z.object({ skillId: z.uuid(), weight: z.number().min(0).max(1) }).strict();
 export const configurationInput = z.object({ status: z.enum(["draft", "active"]), links: z.array(allocationSchema).max(200), note: z.string().trim().max(500).default("") }).strict();
