@@ -21,6 +21,14 @@ export const statusLabels: Record<CourseStatus, string> = { missing: "Chưa cấ
 export const percentage = (weight: number) => `${Number((weight * 100).toFixed(6)).toLocaleString("vi-VN", { maximumFractionDigits: 6 })}%`;
 export const competencyDate = (date: string) => new Date(date).toLocaleString("vi-VN");
 
+/**
+ * A course that no skill of the catalog fits (the AI picked none, or no skill is left to pick):
+ * wording from the function list, 2026-10-19.
+ */
+export const NO_MATCHING_SKILL_MESSAGE = "Danh sách kỹ năng hiện tại trong kho dữ liệu của bạn chưa đủ đáp ứng môn học này. Vui lòng bổ sung thêm kỹ năng.";
+/** Where an admin adds skills (the "Cấu hình năng lực" page). */
+export const ADD_SKILLS_PATH = "/quantri/cau-hinh-nang-luc";
+
 const failures: Record<string, string> = {
   authentication_required: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
   insufficient_role: "Bạn không còn quyền thay đổi dữ liệu đánh giá năng lực.",
@@ -82,7 +90,7 @@ const failures: Record<string, string> = {
   batch_not_found: "Không tìm thấy lần chạy AI này. Hãy tải lại trang.",
   course_has_no_links: "Học phần chưa liên kết kỹ năng nào. Hãy tạo liên kết kỹ năng trước khi thêm trọng số.",
   course_already_linked: "Học phần đã có liên kết kỹ năng nên không chạy lại cho cả chương trình.",
-  no_candidate_skills: "Không còn kỹ năng nào để AI chọn cho học phần này.",
+  no_candidate_skills: NO_MATCHING_SKILL_MESSAGE,
   no_active_groups: "Chưa có nhóm năng lực đang sử dụng. Hãy thêm nhóm năng lực trước.",
   links_changed: "Liên kết kỹ năng của học phần vừa thay đổi. Hãy tạo lại đề xuất trọng số.",
   skill_already_linked: "Có kỹ năng đã được liên kết với học phần. Hãy kiểm tra lại danh sách.",

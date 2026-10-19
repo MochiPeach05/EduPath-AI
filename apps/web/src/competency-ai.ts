@@ -25,6 +25,8 @@ export const POLL_SUGGESTION_MS = 3_000;
 export const POLL_BATCH_MS = 5_000;
 export const POLL_STATUS_MS = 15_000;
 export const SKILL_NAME_MAX = 100;
+/** Shown while the AI works on a run or a proposal (wording from the function list, 2026-10-19). */
+export const AI_COMPUTING_MESSAGE = "AI đang trong quá trình tính toán... Bạn có thể thực hiện các thao tác khác trên hệ thống và quay lại nhận kết quả sau ít phút nữa.";
 
 export type CourseAiMode = "links" | "weights";
 export type CourseAiStatusCode = "queued" | "processing" | "completed" | "failed" | "cancelled";
@@ -71,10 +73,13 @@ export type CourseAiBatch = {
   completed: number;
   failed: number;
   cancelled: number;
+  /** Saved as drafts or applied, with at least one skill. */
   applied: number;
   /** Finished, not yet saved, with at least one proposed skill. */
   ready: number;
-  items: { id: string; courseCode: string; status: CourseAiStatusCode; errorCode: string | null; applied: boolean; itemCount: number }[];
+  /** Finished with no usable skill: no skill of the catalog fits the course (absent before 2026-10-19). */
+  noMatch?: number;
+  items: { id: string; courseCode: string; status: CourseAiStatusCode; errorCode: string | null; applied: boolean; itemCount: number; noMatch?: boolean }[];
 };
 export type BatchApplyResult = { activated: number; drafted: number; empty: number; skipped: { courseCode: string; reason: string }[]; batch: CourseAiBatch };
 
@@ -195,6 +200,20 @@ export function assessWeightRows(rows: WeightRow[]) {
 }
 
 /* ------------------------------------------------------------- whole run */
+
+/**
+ * The courses of a run that the AI found no fitting skill for and that still have no link, with
+ * their names, in course-code order.
+ */
+export function noMatchCourses(batch: CourseAiBatch, courses: readonly { code: string; name: string; skillCount: number }[]) {
+  const byCode = new Map(courses.map((course) => [course.code, course]));
+  return batch.items
+    .filter((item) => item.noMatch ?? (item.status === "completed" && item.itemCount === 0))
+    .flatMap((item) => {
+      const course = byCode.get(item.courseCode);
+      return course && course.skillCount === 0 ? [{ code: course.code, name: course.name }] : [];
+    });
+}
 
 /** Done = finished in any way; the bar counts done out of total. */
 export function batchProgress(batch: CourseAiBatch) {

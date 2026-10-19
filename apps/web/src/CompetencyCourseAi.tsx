@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { Modal, Status } from "./admin-ui";
 import { Icon, RequiredLabel } from "./admin-account-shared";
-import { COMPETENCY_API, percentage, useCompetencyData, type CompetencyCourse, type CurriculumRevision, type Group } from "./competency-types";
 import {
-  COMPETENCY_AI_API, SKILL_NAME_MAX,
+  ADD_SKILLS_PATH, COMPETENCY_API, NO_MATCHING_SKILL_MESSAGE, percentage, useCompetencyData,
+  type CompetencyCourse, type CurriculumRevision, type Group,
+} from "./competency-types";
+import {
+  AI_COMPUTING_MESSAGE, COMPETENCY_AI_API, SKILL_NAME_MAX,
   aiRequest, applyLinkItems, assessWeightRows, failureMessage, jsonPost, linkRows, validateLinkRows, weightRows,
   type CourseAiMode, type CourseAiSuggestion, type LinkRow, type WeightRow,
 } from "./competency-ai";
@@ -51,6 +54,7 @@ export default function CompetencyCourseAi({ curriculum, course, mode, close, sa
           <div>
             <p className="cai-state" role="status" aria-live="polite">{suggestion.status === "queued" ? "Đang chờ máy AI nhận việc…" : mode === "links" ? "AI đang chọn kỹ năng cho học phần…" : "AI đang chia trọng số…"}</p>
             {suggestion.status === "processing" && <p className="cai-muted"><Elapsed since={suggestion.updatedAt} /> · AI suy luận trước khi trả lời nên thường mất 30 giây đến 2 phút.</p>}
+            {(suggestion.status === "processing" || worker.tone === "ok") && <p className="cai-muted">{AI_COMPUTING_MESSAGE}</p>}
             <p className="cai-muted">{course.code} · {course.name}</p>
           </div>
         </div>
@@ -98,8 +102,9 @@ function LinksReview({ suggestion, course, busy, setBusy, createError, canCreate
     finally { setBusy(null); }
   };
   return <>
-    <ReviewHead suggestion={suggestion} heading={suggestion.items.length ? `AI đề xuất ${suggestion.items.length.toLocaleString("vi-VN")} kỹ năng cho ${course.code}` : `AI chưa đề xuất kỹ năng nào cho ${course.code}`}
-      text={suggestion.items.length ? "Bỏ chọn kỹ năng không phù hợp, chọn nhóm năng lực cho kỹ năng chưa có cấu hình năng lực rồi lưu. Kỹ năng được thêm với trọng số 0%." : "AI không tìm thấy kỹ năng phù hợp trong cấu hình năng lực. Bạn có thể tạo lại đề xuất hoặc tạo liên kết thủ công."} />
+    <ReviewHead suggestion={suggestion} heading={suggestion.items.length ? `AI đề xuất ${suggestion.items.length.toLocaleString("vi-VN")} kỹ năng cho ${course.code}` : `Chưa có kỹ năng phù hợp cho ${course.code}`}
+      text={suggestion.items.length ? "Bỏ chọn kỹ năng không phù hợp, chọn nhóm năng lực cho kỹ năng chưa có cấu hình năng lực rồi lưu. Kỹ năng được thêm với trọng số 0%." : NO_MATCHING_SKILL_MESSAGE} />
+    {!suggestion.items.length && <p className="cai-muted">Bổ sung kỹ năng ở Cấu hình năng lực rồi tạo lại đề xuất, hoặc tạo liên kết thủ công.</p>}
     <Status {...groups} />
     {rows.length > 0 && <ul className="cai-rows">{rows.map((row) => {
       const id = `ca-${suggestion.id}-${row.key}`;
@@ -129,6 +134,7 @@ function LinksReview({ suggestion, course, busy, setBusy, createError, canCreate
     <div className="cm-actions cm-dialog-actions">
       <button type="button" className="am-outline" disabled={busy !== null} onClick={close}><Icon name="close" /> Hủy</button>
       <div className="cm-dialog-actions-main">
+        {!suggestion.items.length && <a className="am-outline" href={ADD_SKILLS_PATH}><Icon name="plus" /> Bổ sung kỹ năng</a>}
         <button type="button" className="am-outline" disabled={busy !== null || !canCreate} onClick={regenerate}><Icon name="refresh" /> {busy === "create" ? "Đang gửi…" : "Tạo lại đề xuất"}</button>
         {suggestion.items.length > 0 && <button type="button" className="am-primary" disabled={busy !== null || !check.valid || !groups.data} onClick={() => void apply()}><Icon name="save" /> {busy === "apply" ? "Đang lưu…" : `Lưu ${check.selected.toLocaleString("vi-VN")} liên kết`}</button>}
       </div>

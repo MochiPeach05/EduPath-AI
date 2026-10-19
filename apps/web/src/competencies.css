@@ -65,10 +65,19 @@
 .comp-ai-batch-progress p span { color: var(--cm-muted); font-size: 13px; }
 .comp-ai-bar { height: 10px; border-radius: 999px; background: var(--cm-soft); border: 1px solid var(--cm-line); overflow: hidden; }
 .comp-ai-bar > span { display: block; height: 100%; background: var(--cm-accent); transition: width 300ms ease; }
-.comp-ai-counts { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
+.comp-ai-counts { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
 .comp-ai-counts li { display: grid; gap: 4px; padding: 10px 12px; border: 1px solid var(--cm-line); border-radius: 8px; background: var(--cm-soft); }
 .comp-ai-counts span { color: var(--cm-muted); font-size: 12px; }
 .comp-ai-counts strong { font-size: 18px; }
+.comp-ai-computing { padding: 14px 16px; }
+.comp-ai-computing p { margin: 0; font-size: 14px; line-height: 1.6; }
+/* Courses that no catalog skill fits */
+.comp-ai-nomatch { display: grid; gap: 10px; padding: 14px 16px; border: 1px solid #e9d39b; border-radius: 8px; background: #fff8e8; color: #5c4210; }
+.comp-ai-nomatch h4 { margin: 0; font-size: 14px; }
+.comp-ai-nomatch ul { display: grid; gap: 8px; max-height: 320px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.comp-ai-nomatch li { display: grid; gap: 2px; padding: 8px 10px; border-radius: 6px; background: #fffdf6; font-size: 13px; line-height: 1.55; }
+.comp-ai-nomatch .comp-hint { color: #5c4210; }
+.comp-ai-nomatch .cm-actions { justify-content: flex-start; }
 .comp-ai-result { padding: 12px 16px; border: 1px solid #c7e4d6; border-radius: 8px; background: #eaf5ef; color: #236348; }
 .comp-ai-result p { margin: 0; }
 .comp-ai-result p + p { margin-top: 6px; }

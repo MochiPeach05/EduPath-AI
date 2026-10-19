@@ -267,11 +267,12 @@ try {
   const total = batch.body.queued;
   assert.equal(total, courses.length - 1);
   assert.equal((await ai("POST", "/batches", { body: { revisionId: empty.revisionId } })).body.queued, 0, "a second run queues nothing while the first is pending");
-  let done = 0;
+  let done = 0, emptyAnswers = 0;
   for (;;) {
     const job = await claim();
     if (!job) break;
     assert.equal(job.promptVersion, COURSE_AI_PROMPT_VERSIONS.full);
+    if (done % 5 === 4) emptyAnswers += 1;
     const keys = candidates(job.user);
     // Every 5th course gets an empty answer (a course with no matching skill); the rest two skills 70/30.
     const output = done % 5 === 4 ? { links: [] } : { links: [
@@ -283,18 +284,24 @@ try {
   assert.equal(done, total);
   const progress = (await ai("GET", `/batches/latest?revisionId=${empty.revisionId}`)).body.batch;
   assert.deepEqual([progress.total, progress.completed, progress.queued, progress.failed], [total, total, 0, 0]);
+  // An empty answer = no skill of the catalog fits the course: counted apart, never as ready or saved.
+  assert.equal(progress.noMatch, emptyAnswers);
+  assert.equal(progress.ready, total - emptyAnswers);
+  assert.equal(progress.items.filter((item) => item.noMatch).length, emptyAnswers);
   const drafts = await ai("POST", `/batches/${progress.id}/apply`, { body: { status: "draft" } });
   assert.equal(drafts.status, 200, JSON.stringify(drafts.body));
   assert.equal(drafts.body.drafted + drafts.body.empty, total);
   assert.deepEqual(drafts.body.skipped, []);
-  assert.equal(drafts.body.batch.applied, total);
+  assert.equal(drafts.body.empty, emptyAnswers);
+  assert.equal(drafts.body.batch.applied, drafts.body.drafted, "an empty answer is not counted as saved");
+  assert.equal(drafts.body.batch.noMatch, emptyAnswers);
   const configured = await count("ad_comp_course_configs WHERE revision_id=$1 AND status='draft'", [empty.revisionId]);
   assert.equal(configured, drafts.body.drafted);
   const totals = (await pool.query(`SELECT c.course_code,sum(l.weight)::float8 AS total FROM ad_comp_course_configs c JOIN ad_comp_course_links l ON l.config_id=c.id
     WHERE c.revision_id=$1 AND c.status='draft' GROUP BY c.course_code`, [empty.revisionId])).rows;
   assert(totals.every((row) => Math.abs(row.total - 1) < 1e-9), "every draft adds up to 100%");
   assert.equal((await ai("POST", `/batches/${progress.id}/apply`, { body: { status: "active" } })).body.drafted, 0, "nothing is applied twice");
-  checks.push(`whole program: ${total} courses queued (the configured one skipped, a second run queues nothing), ${drafts.body.drafted} saved as drafts at 100% and ${drafts.body.empty} empty answers recorded, nothing applied twice`);
+  checks.push(`whole program: ${total} courses queued (the configured one skipped, a second run queues nothing), ${drafts.body.drafted} saved as drafts at 100% and ${drafts.body.empty} empty answers counted as "chưa có kỹ năng phù hợp" (never as saved), nothing applied twice`);
 
   // "Áp dụng bản nháp": the drafts of the run become active at once; a draft without links is skipped.
   assert.equal((await call("POST", "/courses/activate", { body: { revisionId: empty.revisionId } })).status, 400, "the confirmation is required");

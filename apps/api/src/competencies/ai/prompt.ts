@@ -11,15 +11,18 @@
 // Since v2 (2026-10-17) every job runs with Gemma's thinking mode: without it gemma4:e4b linked
 // "Nhập môn Công nghệ thông tin" to law and politics. The course type is written out ("BB" was
 // read as general education) and the knowledge block decides which kind of skill may be picked.
+// Since v3 (2026-10-19, test case "không có kỹ năng nào phù hợp với môn đó") an empty list is the
+// right answer when no catalog skill is the course's main content: v2 gave "Tiếng Nhật 1" the soft
+// skill "Giao tiếp" and "Kế toán tài chính 1" math, critical thinking and report writing.
 import { sanitizeText } from "../../competency-assessment/ai/prompt.js";
 import type { JsonSchema } from "../../competency-assessment/ai/schema.js";
 
 export const COURSE_AI_MODES = ["links", "weights", "full"] as const;
 export type CourseAiMode = (typeof COURSE_AI_MODES)[number];
 export const COURSE_AI_PROMPT_VERSIONS: Record<CourseAiMode, string> = {
-  links: "comp-link-v2",
+  links: "comp-link-v3",
   weights: "comp-weight-v2",
-  full: "comp-course-v2"
+  full: "comp-course-v3"
 };
 
 /**
@@ -103,14 +106,17 @@ const INTRO = "Bạn là chuyên gia xây dựng chương trình đào tạo ng�
 
 /** Shared by the links and full modes: what may be picked, by knowledge block (rule 4). */
 const PICK_RULES = `1. Chỉ chọn kỹ năng trong mục [3] bằng khóa của nó (S001, S002…).
-2. Chỉ chọn kỹ năng mà học phần trực tiếp dạy hoặc rèn luyện, căn cứ vào tên, mô tả, khối kiến thức và số giờ của học phần. Học phần chưa có mô tả thì chỉ dựa vào tên và khối kiến thức; không suy đoán nội dung mà tên học phần không thể hiện.
-3. Thường chọn 2 đến 5 kỹ năng, tối đa ${L.links}. Nếu danh mục không đủ kỹ năng phù hợp, chọn ít hơn; không chọn cho đủ số.
-4. Khối kiến thức cho biết loại học phần:
-- Khối "Lý luận chính trị", "Giáo dục thể chất và giáo dục quốc phòng", "Ngoại ngữ" và "Đại cương": chỉ chọn kỹ năng đúng với chính môn học đó (ví dụ Triết học → kiến thức chính trị và xã hội; Pháp luật đại cương → pháp luật; Giáo dục quốc phòng → quốc phòng và an ninh; Bóng chuyền → thể chất; Tiếng Anh → tiếng Anh; Toán cao cấp → toán học). Có thể không chọn kỹ năng nào.
-- Các khối kiến thức cơ sở, cơ sở ngành, chuyên ngành, liên ngành, thực tập, đồ án và khóa luận là học phần chuyên môn Công nghệ Thông tin: không chọn kỹ năng về chính trị và xã hội, pháp luật, quốc phòng và an ninh, thể chất, thể thao, môi trường hay tiếng Anh, trừ khi tên học phần nói rõ nội dung đó.
-5. Ưu tiên kỹ năng chuyên môn mà học phần dạy trực tiếp. Kỹ năng mềm (làm việc nhóm, thuyết trình, giao tiếp…) chỉ chọn khi học phần có đồ án, thực tập, thực hành nhóm hoặc thuyết trình rõ ràng.
-6. Khi nhiều kỹ năng trong danh mục gần giống nhau, chỉ chọn một kỹ năng sát nhất.
-7. groupKey là khóa nhóm (G1, G2…) ở mục [2]. Kỹ năng đã có nhóm thì ghi đúng nhóm của nó; kỹ năng ghi "kỹ năng nghề, chưa có nhóm" thì ghi nhóm phù hợp nhất.`;
+2. Chỉ chọn kỹ năng là nội dung chính mà học phần trực tiếp dạy hoặc rèn luyện, căn cứ vào tên, mô tả, khối kiến thức và số giờ của học phần. Học phần chưa có mô tả thì chỉ dựa vào tên và khối kiến thức; không suy đoán nội dung mà tên học phần không thể hiện.
+3. Không chọn kỹ năng chỉ vì học phần có dùng tới nó: môn nào cũng cần giao tiếp, tư duy, tính toán, viết báo cáo hay tự học. Kỹ năng mềm chỉ chọn theo quy tắc 7.
+4. Thường chọn 2 đến 5 kỹ năng, tối đa ${L.links}. Nếu danh mục không đủ kỹ năng phù hợp, chọn ít hơn; không chọn cho đủ số.
+5. Nếu danh mục không có kỹ năng nào là nội dung chính của học phần (ví dụ học phần của lĩnh vực khác như kế toán, sinh học, hội họa, hoặc một ngoại ngữ mà danh mục chưa có kỹ năng), trả về "links": [] (danh sách rỗng). Danh sách rỗng là câu trả lời đúng và có ích: quản trị viên sẽ biết cần bổ sung kỹ năng. Không chọn kỹ năng gần đúng hay kỹ năng chung chung cho có.
+6. Khối kiến thức cho biết loại học phần:
+- Khối "Lý luận chính trị", "Giáo dục thể chất và giáo dục quốc phòng", "Ngoại ngữ" và "Đại cương": chỉ chọn kỹ năng đúng với chính môn học đó (ví dụ Triết học → kiến thức chính trị và xã hội; Pháp luật đại cương → pháp luật; Giáo dục quốc phòng → quốc phòng và an ninh; Bóng chuyền → thể chất; Tiếng Anh → tiếng Anh; Toán cao cấp → toán học). Ngoại ngữ khác tiếng Anh không nhận kỹ năng tiếng Anh. Danh mục không có kỹ năng của chính môn đó thì trả về rỗng.
+- Các khối kiến thức cơ sở, cơ sở ngành, chuyên ngành, thực tập, đồ án và khóa luận là học phần chuyên môn Công nghệ Thông tin: không chọn kỹ năng về chính trị và xã hội, pháp luật, quốc phòng và an ninh, thể chất, thể thao, môi trường hay tiếng Anh, trừ khi tên học phần nói rõ nội dung đó.
+- Khối liên ngành có thể là học phần của ngành khác (kế toán, quản trị, thiết kế…): chỉ chọn kỹ năng đúng với nội dung chính của học phần đó; không có thì trả về rỗng.
+7. Ưu tiên kỹ năng chuyên môn mà học phần dạy trực tiếp. Kỹ năng mềm (làm việc nhóm, thuyết trình, giao tiếp…) chỉ chọn khi học phần có đồ án, thực tập, thực hành nhóm hoặc thuyết trình rõ ràng.
+8. Khi nhiều kỹ năng trong danh mục gần giống nhau, chỉ chọn một kỹ năng sát nhất.
+9. groupKey là khóa nhóm (G1, G2…) ở mục [2]. Kỹ năng đã có nhóm thì ghi đúng nhóm của nó; kỹ năng ghi "kỹ năng nghề, chưa có nhóm" thì ghi nhóm phù hợp nhất.`;
 
 const TEXT_RULES = (first: number) => `${first}. reason: một câu ngắn, tối đa ${L.promptReason} ký tự, nói học phần rèn hoặc dùng kỹ năng đó như thế nào. Gọi kỹ năng bằng tên; không viết khóa S…, G… hay mã học phần.
 ${first + 1}. Viết tiếng Việt có dấu đầy đủ, tự nhiên; chỉ viết văn bản thuần, không dùng markdown hay emoji.`;
@@ -121,10 +127,10 @@ Việc của bạn: đọc thông tin học phần ở mục [4] và chọn tron
 
 Quy tắc:
 ${PICK_RULES}
-8. newSkills: chỉ dùng khi học phần rèn một kỹ năng chuyên môn quan trọng mà danh mục rõ ràng chưa có, tối đa ${L.newSkills} mục. Tên là cụm danh từ tiếng Việt ngắn, không mở đầu bằng "Kỹ năng", không trùng hay gần nghĩa với kỹ năng ở mục [3] hoặc [5]. Thường để trống.
-${TEXT_RULES(9)}
+10. newSkills: chỉ dùng khi học phần rèn một kỹ năng chuyên môn quan trọng mà danh mục rõ ràng chưa có, tối đa ${L.newSkills} mục. Tên là cụm danh từ tiếng Việt ngắn, không mở đầu bằng "Kỹ năng", không trùng hay gần nghĩa với kỹ năng ở mục [3] hoặc [5]. Thường để trống.
+${TEXT_RULES(11)}
 
-Chỉ trả về một đối tượng JSON gồm "links" (tối đa ${L.links} mục { skillKey, groupKey, reason }) và "newSkills" (tối đa ${L.newSkills} mục { name, groupKey, reason }), không thêm bất kỳ văn bản nào bên ngoài JSON.`,
+Chỉ trả về một đối tượng JSON gồm "links" (tối đa ${L.links} mục { skillKey, groupKey, reason }, có thể rỗng) và "newSkills" (tối đa ${L.newSkills} mục { name, groupKey, reason }), không thêm bất kỳ văn bản nào bên ngoài JSON.`,
 
   weights: `${INTRO}
 Việc của bạn: chia 100% trọng số của học phần ở mục [2] cho các kỹ năng đã liên kết ở mục [3], theo mức học phần rèn luyện và đánh giá từng kỹ năng.
@@ -143,10 +149,10 @@ Việc của bạn: đọc thông tin học phần ở mục [4], chọn trong d
 
 Quy tắc:
 ${PICK_RULES}
-8. percent là số nguyên từ 0 đến 100; tổng percent của các kỹ năng đã chọn bằng đúng 100. Kỹ năng trọng tâm của học phần nhận phần trăm cao nhất.
-${TEXT_RULES(9)}
+10. percent là số nguyên từ 0 đến 100; tổng percent của các kỹ năng đã chọn bằng đúng 100. Kỹ năng trọng tâm của học phần nhận phần trăm cao nhất.
+${TEXT_RULES(11)}
 
-Chỉ trả về một đối tượng JSON gồm "links" (tối đa ${L.links} mục { skillKey, groupKey, percent, reason }), không thêm bất kỳ văn bản nào bên ngoài JSON.`
+Chỉ trả về một đối tượng JSON gồm "links" (tối đa ${L.links} mục { skillKey, groupKey, percent, reason }, có thể rỗng), không thêm bất kỳ văn bản nào bên ngoài JSON.`
 };
 
 /** "S001", "S002", … and "G1", "G2", … in the order given. */
@@ -291,8 +297,9 @@ export function renderCourseDataBlock(source: CourseAiSource, mode: CourseAiMode
     for (const link of source.links) push(`- ${sanitizeText(link.name, 100)}`);
   }
   push("", "=== KẾT THÚC DỮ LIỆU ===", "",
-    mode === "links" ? "Hãy chọn kỹ năng cho học phần ở mục [4] theo đúng cấu trúc JSON đã mô tả."
-      : "Hãy chọn kỹ năng và chia trọng số cho học phần ở mục [4] theo đúng cấu trúc JSON đã mô tả.");
+    (mode === "links" ? "Hãy chọn kỹ năng cho học phần ở mục [4] theo đúng cấu trúc JSON đã mô tả."
+      : "Hãy chọn kỹ năng và chia trọng số cho học phần ở mục [4] theo đúng cấu trúc JSON đã mô tả.")
+      + " Nếu mục [3] không có kỹ năng nào là nội dung chính của học phần, trả về \"links\": [].");
   return lines.join("\n");
 }
 

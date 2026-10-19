@@ -114,13 +114,15 @@ async function readSuggestion(db: Db, id: string) {
 
 /** Progress of a whole-program run. */
 async function readBatch(db: Db, batchId: string) {
-  const rows = await db.query<{ id: string; courseCode: string | null; status: string; errorCode: string | null; appliedAt: Date | null; createdAt: Date; itemCount: number }>(
-    `SELECT id,course_code AS "courseCode",status,error_code AS "errorCode",applied_at AS "appliedAt",created_at AS "createdAt",
-      COALESCE(jsonb_array_length(result->'items'),0)::int AS "itemCount"
+  const rows = await db.query<{ id: string; courseCode: string | null; status: string; errorCode: string | null; appliedAt: Date | null; appliedStatus: string | null; createdAt: Date; itemCount: number }>(
+    `SELECT id,course_code AS "courseCode",status,error_code AS "errorCode",applied_at AS "appliedAt",applied_summary->>'status' AS "appliedStatus",
+      created_at AS "createdAt",COALESCE(jsonb_array_length(result->'items'),0)::int AS "itemCount"
       FROM ad_comp_ai_suggestions WHERE batch_id=$1 ORDER BY course_code,id`, [batchId]);
   if (!rows.rowCount) throw new CompetencyError("batch_not_found", 404);
   const count = (status: string) => rows.rows.filter((row) => row.status === status).length;
   const first = rows.rows.reduce((min, row) => (new Date(row.createdAt) < new Date(min.createdAt) ? row : min), rows.rows[0]!);
+  // No catalog skill fits the course: the AI picked none, or every pick was unusable when it was saved.
+  const noMatch = (row: (typeof rows.rows)[number]) => row.status === "completed" && (row.itemCount === 0 || row.appliedStatus === "empty");
   return {
     id: batchId,
     createdAt: iso(first.createdAt)!,
@@ -130,10 +132,14 @@ async function readBatch(db: Db, batchId: string) {
     completed: count("completed"),
     failed: count("failed"),
     cancelled: count("cancelled"),
-    applied: rows.rows.filter((row) => row.appliedAt).length,
+    /** Saved as drafts or applied, with at least one skill. */
+    applied: rows.rows.filter((row) => row.appliedAt && !noMatch(row)).length,
     /** Finished, not yet saved, with at least one proposed skill. */
     ready: rows.rows.filter((row) => row.status === "completed" && !row.appliedAt && row.itemCount > 0).length,
-    items: rows.rows.map((row) => ({ id: row.id, courseCode: row.courseCode, status: row.status, errorCode: row.errorCode, applied: Boolean(row.appliedAt), itemCount: row.itemCount }))
+    /** Finished with no fitting skill (2026-10-19): the page asks the admin to add skills. */
+    noMatch: rows.rows.filter(noMatch).length,
+    items: rows.rows.map((row) => ({ id: row.id, courseCode: row.courseCode, status: row.status, errorCode: row.errorCode, applied: Boolean(row.appliedAt),
+      itemCount: row.itemCount, noMatch: noMatch(row) }))
   };
 }
 

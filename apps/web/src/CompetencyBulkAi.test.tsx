@@ -16,9 +16,9 @@ const online: CourseAiStatus = { enabled: true, worker: { online: true, supports
 const pendingBatch: CourseAiBatch = { id: "b1", createdAt: "2026-10-17T05:00:00.000Z", total: 1, queued: 1, processing: 0, completed: 0, failed: 0, cancelled: 0,
   applied: 0, ready: 0, items: [] };
 
-function render(batch: CourseAiBatch | null, items: CompetencyCourse[] = [course("A", 4), course("B", 2), course("C", 0)]) {
+function render(batch: CourseAiBatch | null, items: CompetencyCourse[] = [course("A", 4), course("B", 2), course("C", 0)], status: CourseAiStatus = online) {
   liveData.mockImplementation((url: string) => url.includes("/courses?") ? { data: { items }, error: null, loading: false }
-    : url.endsWith("/status") ? { data: online, error: null, loading: false }
+    : url.endsWith("/status") ? { data: status, error: null, loading: false }
       : { data: { batch }, error: null, loading: false });
   return renderToStaticMarkup(createElement(CompetencyBulkAi, { curriculum, canManage: true, revision: 0, onSaved: () => {} }));
 }
@@ -42,6 +42,32 @@ describe("CompetencyBulkAi", () => {
 
   it("hides the clear button while a run is pending", () => {
     expect(render(pendingBatch)).not.toContain("Xóa liên kết của");
+  });
+
+  it("says the AI is computing while a run is pending and the AI machine is on (2026-10-19)", () => {
+    const message = "AI đang trong quá trình tính toán... Bạn có thể thực hiện các thao tác khác trên hệ thống và quay lại nhận kết quả sau ít phút nữa.";
+    expect(render(pendingBatch)).toContain(message);
+    // Nothing is computed while the AI machine is off: the worker line says so instead.
+    const offline = render(pendingBatch, undefined, { enabled: true, worker: { online: false, supportsSuggestions: false, seenAt: null } });
+    expect(offline).not.toContain(message);
+    expect(offline).toContain("Máy AI đang tắt.");
+    expect(render({ ...pendingBatch, queued: 0, completed: 1 })).not.toContain(message);
+  });
+
+  it("lists the courses no catalog skill fits with the function list sentence and a way to add skills", () => {
+    const finished: CourseAiBatch = { ...pendingBatch, total: 3, queued: 0, completed: 3, applied: 1, ready: 1, noMatch: 1, items: [
+      { id: "j1", courseCode: "A", status: "completed", errorCode: null, applied: true, itemCount: 2, noMatch: false },
+      { id: "j2", courseCode: "B", status: "completed", errorCode: null, applied: false, itemCount: 3, noMatch: false },
+      { id: "j3", courseCode: "C", status: "completed", errorCode: null, applied: false, itemCount: 0, noMatch: true },
+    ] };
+    const html = render(finished, [course("A", 2), course("B", 0), { ...course("C", 0), name: "Tiếng Nhật 1" }]);
+    expect(html).toContain("<span>Chưa có kỹ năng phù hợp</span><strong>1</strong>");
+    expect(html).toContain("1 học phần chưa có kỹ năng phù hợp");
+    expect(html).toContain("<strong>C · Tiếng Nhật 1</strong><span>Danh sách kỹ năng hiện tại trong kho dữ liệu của bạn chưa đủ đáp ứng môn học này. Vui lòng bổ sung thêm kỹ năng.</span>");
+    expect(html).toContain('href="/quantri/cau-hinh-nang-luc"');
+    expect(html).not.toContain("B · B</strong>");
+    // A course linked by hand since the run is no longer listed.
+    expect(render(finished, [course("A", 2), course("B", 0), course("C", 3)])).not.toContain("học phần chưa có kỹ năng phù hợp</h4>");
   });
 
   it("asks for the cohort code before clearing", () => {

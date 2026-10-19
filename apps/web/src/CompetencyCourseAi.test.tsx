@@ -41,6 +41,16 @@ describe("CompetencyCourseAi", () => {
     expect(render("links", suggestion({ status: "queued", completedAt: null }))).toContain("Đang chờ máy AI nhận việc…");
     expect(render("weights", suggestion({ status: "processing", completedAt: null }))).toContain("AI đang chia trọng số…");
     expect(render("links", suggestion({ status: "failed", errorCode: "ai_timeout" }))).toContain("Máy AI xử lý quá thời gian cho phép.");
+    expect(render("links", suggestion({ status: "processing", completedAt: null })))
+      .toContain("AI đang trong quá trình tính toán... Bạn có thể thực hiện các thao tác khác trên hệ thống và quay lại nhận kết quả sau ít phút nữa.");
+  });
+
+  it("says the catalog has no fitting skill when the AI picks none (2026-10-19)", () => {
+    const html = render("links", suggestion({ items: [] }));
+    expect(html).toContain("Chưa có kỹ năng phù hợp cho 71ITSE40103");
+    expect(html).toContain("Danh sách kỹ năng hiện tại trong kho dữ liệu của bạn chưa đủ đáp ứng môn học này. Vui lòng bổ sung thêm kỹ năng.");
+    expect(html).toContain('<a class="am-outline" href="/quantri/cau-hinh-nang-luc">');
+    expect(html).not.toContain("liên kết</button>");
   });
 
   it("reviews links: a career skill without a profile needs a group, a new skill starts unticked", () => {

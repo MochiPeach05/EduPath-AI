@@ -2,9 +2,12 @@ import { useEffect, useState } from "react";
 import { Modal, Status } from "./admin-ui";
 import { Icon, RequiredLabel } from "./admin-account-shared";
 import { formatDateTime, workerLine } from "./career-ai-suggestions";
-import { COMPETENCY_API, WEIGHT_TOLERANCE, competencyRequest, useCompetencyData, type CompetencyCourse, type CurriculumRevision } from "./competency-types";
 import {
-  COMPETENCY_AI_API, POLL_BATCH_MS, aiRequest, batchPending, batchProgress, jsonPost, skipReason,
+  ADD_SKILLS_PATH, COMPETENCY_API, NO_MATCHING_SKILL_MESSAGE, WEIGHT_TOLERANCE, competencyRequest, useCompetencyData,
+  type CompetencyCourse, type CurriculumRevision,
+} from "./competency-types";
+import {
+  AI_COMPUTING_MESSAGE, COMPETENCY_AI_API, POLL_BATCH_MS, aiRequest, batchPending, batchProgress, jsonPost, noMatchCourses, skipReason,
   type BatchApplyResult, type CourseAiBatch, type CourseAiStatus,
 } from "./competency-ai";
 
@@ -40,6 +43,8 @@ export function CompetencyBulkAi({ curriculum, canManage, revision, onSaved }: P
   const readyDrafts = drafts.filter((course) => course.skillCount > 0 && Math.abs(course.totalWeight - 1) <= WEIGHT_TOLERANCE).length;
   const showDrafts = canManage && !pending && !(batch && batch.ready > 0) && readyDrafts > 0;
   const worker = workerLine(status.data);
+  // Courses of the run that no catalog skill fits and that still have no link.
+  const noMatch = batch ? noMatchCourses(batch, courses.data?.items ?? []) : [];
 
   useEffect(() => {
     if (!pending || !batch) return;
@@ -105,6 +110,9 @@ export function CompetencyBulkAi({ curriculum, canManage, revision, onSaved }: P
       </div>
     </div>
     <p className={`cai-worker cai-worker-${worker.tone}`}><span aria-hidden="true" />{status.loading && !status.data ? "Đang kiểm tra máy AI…" : worker.text}</p>
+    {pending && status.data?.worker.online && <div className="cai-waiting comp-ai-computing" role="status" aria-live="polite">
+      <span className="cai-spinner" aria-hidden="true" /><p>{AI_COMPUTING_MESSAGE}</p>
+    </div>}
     <Status {...courses} /><Status {...latest} />
     {batch && progress && <div className="comp-ai-batch-progress">
       <p><strong>{progress.done.toLocaleString("vi-VN")}/{batch.total.toLocaleString("vi-VN")} học phần đã xong</strong><span> · lần chạy lúc {formatDateTime(batch.createdAt)}</span></p>
@@ -114,13 +122,20 @@ export function CompetencyBulkAi({ curriculum, canManage, revision, onSaved }: P
         <li><span>Đang xử lý</span><strong>{batch.processing}</strong></li>
         <li><span>Có đề xuất chưa lưu</span><strong>{batch.ready}</strong></li>
         <li><span>Đã lưu</span><strong>{batch.applied}</strong></li>
+        <li><span>Chưa có kỹ năng phù hợp</span><strong>{batch.noMatch ?? 0}</strong></li>
         <li><span>Lỗi</span><strong>{batch.failed}</strong></li>
         <li><span>Đã hủy</span><strong>{batch.cancelled}</strong></li>
       </ul>
     </div>}
+    {noMatch.length > 0 && <div className="comp-ai-nomatch" role="status">
+      <h4>{noMatch.length.toLocaleString("vi-VN")} học phần chưa có kỹ năng phù hợp</h4>
+      <ul>{noMatch.map((course) => <li key={course.code}><strong>{course.code} · {course.name}</strong><span>{NO_MATCHING_SKILL_MESSAGE}</span></li>)}</ul>
+      <p className="comp-hint">Sau khi bổ sung kỹ năng ở Cấu hình năng lực, bấm “Chạy AI cho … học phần chưa có liên kết” để AI đề xuất lại các học phần này.</p>
+      {canManage && <div className="cm-actions"><a className="am-outline" href={ADD_SKILLS_PATH}><Icon name="plus" /> Bổ sung kỹ năng</a></div>}
+    </div>}
     {notice && <p className="comp-hint" role="status">{notice}</p>}
     {result && <div className="comp-ai-result" role="status">
-      <p>Đã lưu {result.drafted.toLocaleString("vi-VN")} bản nháp và áp dụng {result.activated.toLocaleString("vi-VN")} học phần.{result.empty ? ` ${result.empty} học phần AI không đề xuất kỹ năng nào.` : ""}</p>
+      <p>Đã lưu {result.drafted.toLocaleString("vi-VN")} bản nháp và áp dụng {result.activated.toLocaleString("vi-VN")} học phần.{result.empty ? ` ${result.empty.toLocaleString("vi-VN")} học phần chưa có kỹ năng phù hợp.` : ""}</p>
       {result.skipped.length > 0 && <p>Bỏ qua {result.skipped.length} học phần: {result.skipped.slice(0, 8).map((item) => `${item.courseCode} (${skipReason(item.reason)})`).join(", ")}{result.skipped.length > 8 ? "…" : ""}</p>}
     </div>}
     {activation && <div className="comp-ai-result" role="status">

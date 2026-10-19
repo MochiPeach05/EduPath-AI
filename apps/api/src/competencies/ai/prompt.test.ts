@@ -55,6 +55,19 @@ describe("course AI prompt", () => {
     expect(input.system).toContain("tổng percent của tất cả kỹ năng bằng đúng 100");
   });
 
+  it("asks for an empty list when no catalog skill is the course's main content (v3, 2026-10-19)", () => {
+    expect(COURSE_AI_PROMPT_VERSIONS).toEqual({ links: "comp-link-v3", weights: "comp-weight-v2", full: "comp-course-v3" });
+    for (const mode of ["links", "full"] as const) {
+      const input = buildCourseAiInput(courseSource(), mode);
+      expect(input.system).toContain('trả về "links": [] (danh sách rỗng)');
+      expect(input.system).toContain("Không chọn kỹ năng chỉ vì học phần có dùng tới nó");
+      expect(input.system).toContain("Ngoại ngữ khác tiếng Anh không nhận kỹ năng tiếng Anh");
+      expect(input.user.trimEnd().endsWith('trả về "links": [].')).toBe(true);
+      // The grammar allows an empty answer.
+      expect((input.schema as { properties: { links: { minItems?: number } } }).properties.links.minItems).toBeUndefined();
+    }
+  });
+
   it("has no new skills in full mode and keeps student data out", () => {
     const input = buildCourseAiInput(courseSource(), "full");
     const schema = input.schema as Schema;
