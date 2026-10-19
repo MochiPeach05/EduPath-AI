@@ -10,6 +10,7 @@ import type {
 } from "./graduation-types";
 import "./curricula.css";
 import "./graduation.css";
+import { CheckedForm } from "./CheckedForm";
 const endpoint = "/api/admin/graduation";
 const errors: Record<string, string> = {
   invalid_workbook:
@@ -786,7 +787,7 @@ function EditDialog({
       onClose={close}
       busy={busy}
     >
-      <form
+      <CheckedForm
         className="cm-dialog-body cm-form"
         onSubmit={async (e) => {
           e.preventDefault();
@@ -953,7 +954,7 @@ function EditDialog({
             <Icon name="save" /> {busy ? "Đang lưu…" : group ? "Lưu nhóm điều kiện" : course ? "Lưu học phần" : "Lưu thông tin tiêu chuẩn"}
           </button>
         </div>
-      </form>
+      </CheckedForm>
     </Modal>
   );
 }

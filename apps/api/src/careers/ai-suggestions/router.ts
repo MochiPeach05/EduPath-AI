@@ -14,6 +14,7 @@ import { access, CareerError, fold, lockSkillCatalog } from "../shared.js";
 import { createCareerSuggestionExpiry, enqueueCareerSuggestion } from "./jobs.js";
 import { similarSkillNames } from "./similarity.js";
 import type { StoredSuggestionItem, StoredSuggestionResult } from "./validate.js";
+import { LONG_DESCRIPTION_MAX_WORDS, limitedText } from "../../word-limits.js";
 
 /** /latest only returns suggestions created within this many days. */
 export const RECENT_SUGGESTION_DAYS = 7;
@@ -42,7 +43,7 @@ const applyItem = z.object({
   skillId: z.uuid().nullable(),
   skillName: z.string().transform(collapse).pipe(z.string().max(100)),
   title: z.string().trim().min(1).max(160),
-  description: z.string().trim().max(4000),
+  description: limitedText(4000, LONG_DESCRIPTION_MAX_WORDS),
   isRequired: z.boolean(),
   sourceIndex: z.number().int().min(0).max(1000).nullable()
 }).strict().refine((item) => item.skillId !== null || item.skillName.length > 0);

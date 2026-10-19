@@ -74,6 +74,9 @@ describe("CompetencyBulkAi", () => {
     const html = renderToStaticMarkup(createElement(ClearRevision, { curriculum, linked: 2, close: () => {}, cleared: () => {} }));
     expect(html).toContain("Nhập K30 để xác nhận");
     expect(html).toContain("Sinh viên K30 sẽ chưa có điểm năng lực");
-    expect(html).toMatch(/<button class="am-primary am-delete" disabled="">/);
+    // The code is required and checked on save, so a wrong code is explained instead of a disabled button.
+    expect(html).toContain('<form class="cm-dialog-body cm-form" noValidate="">');
+    expect(html).toContain('<input required="" maxLength="40" autoComplete="off" value=""/>');
+    expect(html).toMatch(/<button class="am-primary am-delete">/);
   });
 });

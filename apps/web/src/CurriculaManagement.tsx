@@ -11,6 +11,7 @@ import type {
   CurriculumList,
 } from "./curriculum-types";
 import "./curricula.css";
+import { CheckedForm } from "./CheckedForm";
 
 const endpoint = "/api/admin/curricula";
 const mime =
@@ -187,7 +188,7 @@ export default function CurriculaManagement({
         </p>
       )}
       <div className="cm-panel">
-        <form
+        <CheckedForm
           className="cm-filters"
           onSubmit={(e) => {
             e.preventDefault();
@@ -229,7 +230,7 @@ export default function CurriculaManagement({
           <button type="button" className="am-outline" onClick={reset}>
             <Icon name="refresh" /> Xóa bộ lọc
           </button>
-        </form>
+        </CheckedForm>
         <Status {...remote} />
         {remote.data && (
           <>
@@ -1127,7 +1128,7 @@ function GroupCoursePicker({
       }
       onClose={onClose}
     >
-      <form
+      <CheckedForm
         className="cm-dialog-body cm-form"
         onSubmit={(e) => {
           e.preventDefault();
@@ -1159,7 +1160,7 @@ function GroupCoursePicker({
             <Icon name="chevron" /> Tiếp tục
           </button>
         </div>
-      </form>
+      </CheckedForm>
     </Modal>
   );
 }
@@ -1266,7 +1267,7 @@ function MetadataDialog({
     [error, setError] = useState("");
   return (
     <Modal title="Chỉnh sửa thông tin khung CTĐT" onClose={onClose} busy={busy}>
-      <form
+      <CheckedForm
         className="cm-dialog-body cm-form"
         onSubmit={async (e) => {
           e.preventDefault();
@@ -1345,7 +1346,7 @@ function MetadataDialog({
             <Icon name="save" /> {busy ? "Đang lưu…" : "Lưu thông tin khung"}
           </button>
         </div>
-      </form>
+      </CheckedForm>
     </Modal>
   );
 }
@@ -1492,7 +1493,7 @@ function CourseDialog({
       onClose={onClose}
       busy={busy}
     >
-      <form
+      <CheckedForm
         className="cm-dialog-body cm-form"
         onSubmit={(e) => {
           e.preventDefault();
@@ -1770,7 +1771,7 @@ function CourseDialog({
               ))}
           </div>
         </div>
-      </form>
+      </CheckedForm>
     </Modal>
   );
 }

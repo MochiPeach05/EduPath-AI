@@ -1,6 +1,7 @@
 import type { AppRole } from "./types";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Icon } from "./ui-icon";
+import { CheckedForm } from "./CheckedForm";
 export { Icon } from "./ui-icon";
 const failures: Record<string, string> = {
   student_not_found: "Không tìm thấy sinh viên hoặc tài khoản không còn mang vai trò Sinh viên.",
@@ -59,13 +60,13 @@ export function CreateAccount({ onList, onBusy }: { onList: () => void; onBusy?:
   }
   return <div className="am-create-layout"><section className="am-card am-create-card"><p className="admin-eyebrow">TÀI KHOẢN MICROSOFT · EDUPATH AI</p><h2>Thêm quản trị viên</h2><p>Cấp quyền quản trị theo email Microsoft, kể cả khi người dùng chưa đăng nhập EduPath.</p>
     {created ? <div className="am-success" role="status"><Icon name="shield" /><h3>Đã thêm quản trị viên</h3><p><strong>{created.name}</strong><br />{created.email ?? created.username}</p><p>Người dùng đăng nhập tại <code>/quantri</code> bằng đúng email Microsoft đã được cấp quyền. Nếu đang có phiên đăng nhập, hãy đăng xuất rồi đăng nhập lại để nhận quyền mới.</p><button className="am-outline" onClick={onList}><Icon name="back" /> Trở về danh sách</button></div>
-      : <form className="cm-form" onSubmit={(event) => void submit(event)}>
+      : <CheckedForm className="cm-form" onSubmit={(event) => void submit(event)}>
         {error && <p ref={errorRef} tabIndex={-1} className="admin-error" role="alert">{error}</p>}
         <label htmlFor="new-admin-email"><RequiredLabel>Email Microsoft</RequiredLabel><input id="new-admin-email" type="email" autoComplete="off" required maxLength={320} value={email} onChange={(event) => setEmail(event.target.value)} placeholder="ten@vlu.edu.vn" aria-describedby="new-admin-help" disabled={busy} /><span id="new-admin-help" className="cm-help">Nhập đúng địa chỉ dùng để đăng nhập Microsoft. Có thể thêm trước lần đăng nhập đầu tiên vào EduPath.</span></label>
         <label>Vai trò được cấp<input readOnly value="Quản trị viên" /></label>
         <label className="cm-check"><input type="checkbox" required checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} disabled={busy} /><span>Tôi xác nhận cấp quyền quản trị EduPath AI cho tài khoản trên.</span></label>
         <div className="cm-actions cm-dialog-actions"><button className="am-outline" type="button" onClick={onList} disabled={busy}><Icon name="close" /> Hủy</button><button className="am-primary" type="submit" disabled={busy}><Icon name="plus" /> {busy ? "Đang tạo…" : "Tạo tài khoản quản trị"}</button></div>
-      </form>}
+      </CheckedForm>}
   </section><aside className="am-create-note"><Icon name="shield" /><h3>Cấp đúng quyền.<br />Đúng người dùng.</h3><p>Quản trị viên có thể truy cập khu vực quản trị và thêm quản trị viên khác.</p><hr /><h4>Không cần tạo mật khẩu</h4><p>Người dùng đăng nhập bằng tài khoản Microsoft của mình. Thao tác này không tạo mật khẩu, hộp thư hay tài khoản Microsoft mới.</p><h4>Email chưa có trong EduPath?</h4><p>Hệ thống lưu sẵn quyền quản trị cho email này. Người dùng đăng nhập bằng đúng tài khoản Microsoft đã được thêm để truy cập khu vực quản trị.</p></aside></div>;
 }
 

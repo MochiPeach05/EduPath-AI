@@ -11,11 +11,12 @@ import { access, CareerError, fold, lockSkillCatalog } from "./shared.js";
 import { createCareerRequirementsRouter, syncLegacySkillLinks } from "./requirements.js";
 import { createCareerSkillsRouter } from "./skills.js";
 import { createCareerAiSuggestionsRouter } from "./ai-suggestions/router.js";
+import { DESCRIPTION_MAX_WORDS, LONG_DESCRIPTION_MAX_WORDS, limitedText } from "../word-limits.js";
 export { fold } from "./shared.js";
 const fieldCode = z.string().trim().min(1).max(60).regex(/^[a-z0-9]+(?:[-_][a-z0-9]+)*$/);
 const fieldDetails = z.object({
   name: z.string().trim().min(1).max(160),
-  description: z.string().trim().max(2000),
+  description: limitedText(2000, DESCRIPTION_MAX_WORDS),
 }).strict();
 // Accept legacy clients' code during rollout; the database assigns the actual number.
 const fieldInput = fieldDetails.extend({ code: fieldCode.optional() });
@@ -27,7 +28,7 @@ export const careerInput = z
     nameVi: z.string().trim().min(1).max(160),
     nameEn: z.string().trim().min(1).max(160),
     category: fieldCode,
-    description: z.string().trim().max(4000),
+    description: limitedText(4000, LONG_DESCRIPTION_MAX_WORDS),
     skills: z.array(z.string().trim().min(1).max(100)).max(30).optional(),
   })
   .strict();

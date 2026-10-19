@@ -5,6 +5,8 @@ import { useLiveFilters } from "./use-live-filters";
 import { CareerWeightCell, CareerWeightSelector, useCareerCourseWeights } from "./CareerCourseWeights";
 import { careerFailures, careerRequest, type Career, type CareerRequirement, type CareerSkill } from "./career-types";
 import CareerSkillAiSuggestions from "./CareerSkillAiSuggestions";
+import { CheckedForm, DescriptionField } from "./CheckedForm";
+import { LONG_DESCRIPTION_MAX_WORDS } from "./form-checks";
 
 const endpoint = "/api/admin/careers/requirements";
 const emptyFilters = { q: "", skillId: "", kind: "", priority: "" };
@@ -113,7 +115,7 @@ function RequirementEditor({ current, kind, career, catalog, close, saved }: {
     }));
   };
   return <Modal title={current ? (isSkill ? "Chỉnh sửa liên kết kỹ năng" : "Chỉnh sửa yêu cầu nghề nghiệp") : (isSkill ? "Tạo liên kết kỹ năng với nghề nghiệp" : "Thêm yêu cầu nghề nghiệp")} onClose={close} busy={busy}>
-    <form className="cm-dialog-body cm-form" onSubmit={async event => {
+    <CheckedForm className="cm-dialog-body cm-form" onSubmit={async event => {
       event.preventDefault();
       if (!ready) return;
       if (duplicate) { setError(careerFailures.requirement_exists); return; }
@@ -146,7 +148,7 @@ function RequirementEditor({ current, kind, career, catalog, close, saved }: {
           {duplicate && <p className="admin-error" role="alert">{careerFailures.requirement_exists}</p>}
         </>}
         <label><RequiredLabel>Nội dung yêu cầu</RequiredLabel><input required maxLength={160} value={form.title} onChange={event => setForm({ ...form, title: event.target.value })} /></label>
-        <label>Mô tả<textarea rows={4} maxLength={4000} value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} /></label>
+        <DescriptionField label="Mô tả" maxWords={LONG_DESCRIPTION_MAX_WORDS} rows={4} maxLength={4000} value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} />
         <div className="cm-form-grid">
           <label>Tính chất<select value={form.isRequired ? "required" : "preferred"} onChange={event => setForm({ ...form, isRequired: event.target.value === "required" })}>
             <option value="preferred">Ưu tiên</option><option value="required">Bắt buộc</option>
@@ -158,7 +160,7 @@ function RequirementEditor({ current, kind, career, catalog, close, saved }: {
         <button type="button" className="am-outline" disabled={busy} onClick={close}><Icon name="close" /> Hủy</button>
         <button className="am-primary" disabled={busy || !ready || duplicate}><Icon name="save" /> {busy ? "Đang lưu…" : isSkill ? "Lưu liên kết kỹ năng" : "Lưu yêu cầu nghề nghiệp"}</button>
       </div>
-    </form>
+    </CheckedForm>
   </Modal>;
 }
 

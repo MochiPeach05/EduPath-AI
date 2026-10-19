@@ -5,6 +5,8 @@ import { careerRequest, type ManagedCareerSkill } from "./career-types";
 import { useLiveFilters } from "./use-live-filters";
 import "./curricula.css";
 import "./careers.css";
+import { CheckedForm, DescriptionField } from "./CheckedForm";
+import { DESCRIPTION_MAX_WORDS } from "./form-checks";
 
 const endpoint = "/api/admin/careers/skills";
 
@@ -68,7 +70,7 @@ function SkillEditor({ current, close, saved }: { current: ManagedCareerSkill | 
   const [form, setForm] = useState({ name: current?.name ?? "", description: current?.description ?? "" });
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   return <Modal title={current ? "Chỉnh sửa kỹ năng" : "Thêm kỹ năng"} onClose={close} busy={busy}>
-    <form className="cm-dialog-body cm-form" onSubmit={async event => {
+    <CheckedForm className="cm-dialog-body cm-form" onSubmit={async event => {
       event.preventDefault(); setBusy(true); setError("");
       try {
         await careerRequest(current ? `${endpoint}/${current.id}` : endpoint, {
@@ -80,7 +82,7 @@ function SkillEditor({ current, close, saved }: { current: ManagedCareerSkill | 
     }}>
       <fieldset className="cm-fields" disabled={busy}>
         <label><RequiredLabel>Tên kỹ năng</RequiredLabel><input required maxLength={100} value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} placeholder="Ví dụ: SQL, Docker, Phân tích dữ liệu" /></label>
-        <label>Mô tả<textarea rows={4} maxLength={2000} value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} /></label>
+        <DescriptionField label="Mô tả" maxWords={DESCRIPTION_MAX_WORDS} rows={4} maxLength={2000} value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} />
         {current && <p>Đổi tên kỹ năng sẽ cập nhật tên trong mục Nghề nghiệp và mục Quản lý năng lực; các liên kết giữ nguyên ID.</p>}
       </fieldset>
       {error && <p className="admin-error" role="alert">{error}</p>}
@@ -88,7 +90,7 @@ function SkillEditor({ current, close, saved }: { current: ManagedCareerSkill | 
         <button type="button" className="am-outline" disabled={busy} onClick={close}><Icon name="close" /> Hủy</button>
         <button className="am-primary" disabled={busy}><Icon name="save" /> {busy ? "Đang lưu…" : "Lưu kỹ năng"}</button>
       </div>
-    </form>
+    </CheckedForm>
   </Modal>;
 }
 

@@ -5,6 +5,7 @@ import { useLiveFilters } from "./use-live-filters";
 import type { PlanData, PlanDetail, PlanItem, PlanList } from "./plan-types";
 import "./curricula.css";
 import "./plans.css";
+import { CheckedForm } from "./CheckedForm";
 
 const endpoint = "/api/admin/plans";
 const mime =
@@ -179,7 +180,7 @@ export default function PlansManagement({ canManage }: { canManage: boolean }) {
         </p>
       )}
       <div className="cm-panel">
-        <form
+        <CheckedForm
           className="cm-filters"
           onSubmit={(e) => {
             e.preventDefault();
@@ -221,7 +222,7 @@ export default function PlansManagement({ canManage }: { canManage: boolean }) {
           <button type="button" className="am-outline" onClick={reset}>
             <Icon name="refresh" /> Xóa bộ lọc
           </button>
-        </form>
+        </CheckedForm>
         <Status {...remote} />
         {remote.data && (
           <>
@@ -835,7 +836,7 @@ function MetadataEditor({
     [error, setError] = useState("");
   return (
     <Modal title="Chỉnh sửa thông tin kế hoạch" busy={busy} onClose={onClose}>
-      <form
+      <CheckedForm
         className="cm-dialog-body cm-form"
         onSubmit={async (e) => {
           e.preventDefault();
@@ -907,7 +908,7 @@ function MetadataEditor({
             <Icon name="save" /> {busy ? "Đang lưu…" : "Lưu thông tin kế hoạch"}
           </button>
         </div>
-      </form>
+      </CheckedForm>
     </Modal>
   );
 }
@@ -1012,7 +1013,7 @@ function ItemEditor({
       onClose={onClose}
       busy={busy}
     >
-      <form
+      <CheckedForm
         className="cm-dialog-body cm-form"
         onSubmit={async (e) => {
           e.preventDefault();
@@ -1251,7 +1252,7 @@ function ItemEditor({
             </button>
           ))}
         </div>
-      </form>
+      </CheckedForm>
     </Modal>
   );
 }

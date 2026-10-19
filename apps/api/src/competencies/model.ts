@@ -1,12 +1,13 @@
 import { z } from "zod";
+import { DESCRIPTION_MAX_WORDS, LONG_DESCRIPTION_MAX_WORDS, limitedText } from "../word-limits.js";
 
 export class CompetencyError extends Error {
   constructor(public readonly code: string, public readonly status = 422, public readonly details: string[] = []) { super(code); }
 }
 export const WEIGHT_TOLERANCE = 0.000001;
-export const groupInput = z.object({ name: z.string().trim().min(1).max(160), description: z.string().trim().max(2000), isActive: z.boolean() }).strict();
+export const groupInput = z.object({ name: z.string().trim().min(1).max(160), description: limitedText(2000, DESCRIPTION_MAX_WORDS), isActive: z.boolean() }).strict();
 export const skillInput = z.object({
-  name: z.string().trim().min(1).max(100), description: z.string().trim().max(2000), scope: z.string().trim().max(4000),
+  name: z.string().trim().min(1).max(100), description: limitedText(2000, DESCRIPTION_MAX_WORDS), scope: limitedText(4000, LONG_DESCRIPTION_MAX_WORDS),
   groupId: z.uuid(), isActive: z.boolean(),
 }).strict();
 export const allocationSchema = z.object({ skillId: z.uuid(), weight: z.number().min(0).max(1) }).strict();

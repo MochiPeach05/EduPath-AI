@@ -2,6 +2,7 @@ import { useLiveFilters } from "./use-live-filters";
 import { useEffect, useRef, useState } from "react";
 import { useData, Status, Pagination, Modal, ActionMenu, type MenuEntry } from "./admin-ui";
 import { CreateAccount, Icon, readResponse, roleLabels, type Account, type AccountPage } from "./admin-account-shared";
+import { CheckedForm } from "./CheckedForm";
 
 type Detail = Account & { createdAt: string; firstLoginAt: string | null; updatedAt: string };
 type LoginEvent = { id: string; name: string; email: string | null; occurredAt: string; outcome: "success" | "denied"; reason: string; portal: string };
@@ -20,7 +21,7 @@ function History({ userId }: { userId?: string }) {
   if (filters.to) params.set("to", new Date(Date.parse(`${filters.to}T00:00:00+07:00`) + 86400000).toISOString());
   const state = useData<HistoryPage>(`/api/admin/accounts/history?${params}`);
   return <section aria-label="Lịch sử đăng nhập"><p className="am-table-note"></p>
-    <form className="am-filters" onSubmit={(event) => { event.preventDefault(); flush(); }}>
+    <CheckedForm className="am-filters" onSubmit={(event) => { event.preventDefault(); flush(); }}>
       <label>Nhập từ khóa tìm kiếm<input placeholder="Tên, email, mã kết quả…" maxLength={120} value={draft.q} onChange={(e) => setDraft({ ...draft, q: e.target.value })} /></label>
       <label>Kết quả<select value={draft.outcome} onChange={(e) => setDraft({ ...draft, outcome: e.target.value })}><option value="">Tất cả kết quả</option><option value="success">Thành công</option><option value="denied">Bị từ chối</option></select></label>
       <label>Cổng đăng nhập<select value={draft.portal} onChange={(e) => setDraft({ ...draft, portal: e.target.value })}><option value="">Tất cả cổng</option><option value="admin">Quản trị</option><option value="student">Sinh viên</option></select></label>
@@ -28,7 +29,7 @@ function History({ userId }: { userId?: string }) {
       <label>Đến ngày<input type="date" value={draft.to} min={draft.from} max="9999-12-30" onChange={(e) => setDraft({ ...draft, to: e.target.value })} /></label>
       <button className="am-quiet" type="button" onClick={reset}>Xóa bộ lọc</button>
       {!datesValid && <p className="admin-error" role="alert">Chọn ngày hợp lệ; ngày bắt đầu không được sau ngày kết thúc.</p>}
-    </form>
+    </CheckedForm>
     <Status {...state} />{state.data && <><div className="am-table-scroll" tabIndex={0} role="region" aria-label="Bảng lịch sử đăng nhập"><table className="am-table"><thead><tr><th>Thời gian</th><th>Người dùng</th><th>Cổng</th><th>Kết quả</th><th>Thông tin</th></tr></thead><tbody>{state.data.items.map((item) => <tr key={item.id}><td>{date(item.occurredAt)}</td><td><strong>{item.name}</strong><br />{item.email}</td><td>{item.portal === "admin" ? "Quản trị" : "Sinh viên"}</td><td><span className={`am-state ${item.outcome === "denied" ? "am-state-locked" : ""}`}>{item.outcome === "success" ? "Thành công" : "Bị từ chối"}</span></td><td>{({ signed_in: "Đăng nhập thành công", admin_required: "Chưa được cấp quyền quản trị", admin_portal_only: "Tài khoản quản trị không dùng cổng sinh viên", staff_portal_only: "Email nội bộ không dùng cổng sinh viên", callback_failed: "Không hoàn tất xác thực / tài khoản bị khóa" } as Record<string, string>)[item.reason] ?? item.reason}</td></tr>)}</tbody></table></div>{!state.data.items.length && <p className="am-empty">Không có lịch sử đăng nhập phù hợp.</p>}<Pagination total={state.data.total} page={page} setPage={setPage} /></>}
   </section>;
 }
@@ -44,7 +45,7 @@ function ChangeAccount({ account, mode, onClose, onSaved }: { account: Account; 
   const errorRef = useRef<HTMLParagraphElement>(null);
   useEffect(() => { if (error) errorRef.current?.focus(); }, [error]);
   const title = mode === "role" ? "Phân quyền theo vai trò" : account.isActive ? "Khóa tài khoản" : "Mở khóa tài khoản";
-  return <Modal title={title} onClose={onClose} busy={busy}><form className="cm-dialog-body cm-form" onSubmit={(event) => {
+  return <Modal title={title} onClose={onClose} busy={busy}><CheckedForm className="cm-dialog-body cm-form" onSubmit={(event) => {
     event.preventDefault(); if (busy) return; setBusy(true); setError(null);
     void fetch(`/api/admin/accounts/${account.id}`, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...(mode === "role" ? { role } : { isActive: !account.isActive }), confirmed }) }).then(readResponse).then(onSaved).catch((err) => setError(err.message)).finally(() => setBusy(false));
   }}><p><strong>{account.name}</strong><br />{account.email ?? account.username}</p>{error && <p className="admin-error" role="alert" ref={errorRef} tabIndex={-1}>{error}</p>}
@@ -52,7 +53,7 @@ function ChangeAccount({ account, mode, onClose, onSaved }: { account: Account; 
     <p>Thao tác chỉ áp dụng trong EduPath, không thay đổi tài khoản Microsoft. Các phiên EduPath hiện tại của người dùng sẽ bị thu hồi; người dùng cần đăng nhập lại.</p>
     <label className="cm-check"><input type="checkbox" required checked={confirmed} disabled={busy} onChange={(e) => setConfirmed(e.target.checked)} /><span>Tôi xác nhận {title.toLowerCase()} cho tài khoản này.</span></label>
     <div className="cm-actions cm-dialog-actions"><button className="am-outline" type="button" onClick={onClose} disabled={busy}><Icon name="close" /> Hủy</button><button className="am-primary" disabled={busy || (mode === "role" && role === account.role)}><Icon name={mode === "role" ? "save" : account.isActive ? "lock" : "unlock"} /> {busy ? "Đang lưu…" : mode === "role" ? "Lưu vai trò" : account.isActive ? "Xác nhận khóa" : "Xác nhận mở khóa"}</button></div>
-  </form></Modal>;
+  </CheckedForm></Modal>;
 }
 type MenuAction = "detail" | "history" | "role" | "lock";
 function RowMenu({ account, self, canManage, canAssignRoles, onPick }: { account: Account; self: boolean; canManage: boolean; canAssignRoles: boolean; onPick: (mode: MenuAction) => void }) {
@@ -81,12 +82,12 @@ export default function AccountsManagement({ actorId, canManage = false, canAssi
   return <><section className="am-card"><div className="am-card-heading"><div><h2>Tài khoản người dùng {state.data && <span className="am-count">{state.data.total}</span>}</h2><p>Tài khoản, phân quyền và lịch sử đăng nhập trong cùng một nơi.</p></div>{canAssignRoles && <button className="am-primary" onClick={() => setCreating(true)}><Icon name="add" />Tạo tài khoản quản trị</button>}</div>
     <div className="am-view-switch" role="group" aria-label="Chế độ xem"><button aria-pressed={tab === "accounts"} onClick={() => setTab("accounts")}>Tài khoản</button>{canManage && <button aria-pressed={tab === "history"} onClick={() => setTab("history")}>Lịch sử đăng nhập</button>}</div>
     {notice && <p className="am-notice" role="status">{notice}</p>}
-    {tab === "history" ? <History /> : <><form className="am-filters" onSubmit={(event) => { event.preventDefault(); flush(); }}>
+    {tab === "history" ? <History /> : <><CheckedForm className="am-filters" onSubmit={(event) => { event.preventDefault(); flush(); }}>
       <label>Nhập từ khóa tìm kiếm<input placeholder="Họ tên hoặc email…" maxLength={120} value={draft.q} onChange={(e) => setDraft({ ...draft, q: e.target.value })} /></label>
       <label>Vai trò<select value={draft.role} onChange={(e) => setDraft({ ...draft, role: e.target.value })}><option value="">Tất cả vai trò</option>{Object.entries(roleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
       <label>Trạng thái<select value={draft.active} onChange={(e) => setDraft({ ...draft, active: e.target.value })}><option value="">Tất cả trạng thái</option><option value="true">Đang hoạt động</option><option value="false">Đã khóa</option></select></label>
       <button className="am-quiet" type="button" onClick={reset}>Xóa bộ lọc</button>
-    </form><Status {...state} />{state.data && <><div className="am-table-scroll" tabIndex={0} role="region" aria-label="Bảng tài khoản người dùng"><table className="am-table"><thead><tr><th>STT</th><th>Người dùng</th><th>Vai trò</th><th>Trạng thái</th><th>Đăng nhập gần nhất</th><th>Thao tác</th></tr></thead><tbody>{state.data.items.map((account, index) => <tr key={account.id}><td>{(page - 1) * 10 + index + 1}</td><td><div className="am-person"><span className="am-avatar" aria-hidden="true">{account.name.slice(0, 1)}</span><div><button className="am-name-link" onClick={() => setModal({ mode: "detail", account })}>{account.name}</button><small>{account.email ?? account.username}</small></div></div></td><td><span className={`am-badge ${account.role === "admin" ? "am-badge-admin" : ""}`}>{roleName(account.role)}</span></td><td><span className={`am-state ${account.isActive ? "" : "am-state-locked"}`}>{account.isActive ? "Đang hoạt động" : "Đã khóa"}</span></td><td>{loginDate(account.lastLoginAt)}</td><td><RowMenu account={account} self={account.id === actorId} canManage={canManage} canAssignRoles={canAssignRoles} onPick={(mode) => setModal({ mode, account })} /></td></tr>)}</tbody></table></div>{!state.data.items.length && <p className="am-empty">Không tìm thấy tài khoản phù hợp.</p>}<Pagination total={state.data.total} page={page} setPage={setPage} /></>}
+    </CheckedForm><Status {...state} />{state.data && <><div className="am-table-scroll" tabIndex={0} role="region" aria-label="Bảng tài khoản người dùng"><table className="am-table"><thead><tr><th>STT</th><th>Người dùng</th><th>Vai trò</th><th>Trạng thái</th><th>Đăng nhập gần nhất</th><th>Thao tác</th></tr></thead><tbody>{state.data.items.map((account, index) => <tr key={account.id}><td>{(page - 1) * 10 + index + 1}</td><td><div className="am-person"><span className="am-avatar" aria-hidden="true">{account.name.slice(0, 1)}</span><div><button className="am-name-link" onClick={() => setModal({ mode: "detail", account })}>{account.name}</button><small>{account.email ?? account.username}</small></div></div></td><td><span className={`am-badge ${account.role === "admin" ? "am-badge-admin" : ""}`}>{roleName(account.role)}</span></td><td><span className={`am-state ${account.isActive ? "" : "am-state-locked"}`}>{account.isActive ? "Đang hoạt động" : "Đã khóa"}</span></td><td>{loginDate(account.lastLoginAt)}</td><td><RowMenu account={account} self={account.id === actorId} canManage={canManage} canAssignRoles={canAssignRoles} onPick={(mode) => setModal({ mode, account })} /></td></tr>)}</tbody></table></div>{!state.data.items.length && <p className="am-empty">Không tìm thấy tài khoản phù hợp.</p>}<Pagination total={state.data.total} page={page} setPage={setPage} /></>}
       <p className="am-table-note"></p></>}
   </section>
     {canAssignRoles && creating && <Modal title="Tạo tài khoản quản trị" busy={creatingBusy} onClose={() => { setCreating(false); refreshed(); }}><CreateAccount onBusy={setCreatingBusy} onList={() => { setCreating(false); refreshed(); }} /></Modal>}

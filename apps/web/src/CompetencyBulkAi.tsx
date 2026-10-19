@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Modal, Status } from "./admin-ui";
 import { Icon, RequiredLabel } from "./admin-account-shared";
 import { formatDateTime, workerLine } from "./career-ai-suggestions";
@@ -10,6 +10,7 @@ import {
   AI_COMPUTING_MESSAGE, COMPETENCY_AI_API, POLL_BATCH_MS, aiRequest, batchPending, batchProgress, jsonPost, noMatchCourses, skipReason,
   type BatchApplyResult, type CourseAiBatch, type CourseAiStatus,
 } from "./competency-ai";
+import { CheckedForm } from "./CheckedForm";
 
 type Busy = "run" | "cancel" | "draft" | "active" | "activate" | null;
 type Activation = { activated: number; skipped: { courseCode: string; reason: string }[] };
@@ -181,10 +182,14 @@ export function CompetencyBulkAi({ curriculum, canManage, revision, onSaved }: P
  */
 export function ClearRevision({ curriculum, linked, close, cleared }: { curriculum: CurriculumRevision; linked: number; close: () => void; cleared: (count: number) => void }) {
   const [code, setCode] = useState("");
+  const input = useRef<HTMLInputElement>(null);
+  // A wrong code is explained on save (the form shows it under the field) instead of a disabled button.
+  const mismatchOf = (value: string) => value.trim() && value.trim().toLowerCase() !== curriculum.cohortCode.toLowerCase() ? `Mã khóa chưa đúng: hãy nhập ${curriculum.cohortCode}.` : "";
+  useEffect(() => { input.current?.setCustomValidity(mismatchOf(code)); });
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const matches = code.trim().toLowerCase() === curriculum.cohortCode.toLowerCase();
   return <Modal title="Xóa liên kết của cả chương trình" onClose={close} busy={busy} size="sm">
-    <form className="cm-dialog-body cm-form" onSubmit={async (event) => {
+    <CheckedForm className="cm-dialog-body cm-form" onSubmit={async (event) => {
       event.preventDefault();
       if (!matches || busy) return;
       setBusy(true); setError("");
@@ -198,12 +203,12 @@ export function ClearRevision({ curriculum, linked, close, cleared }: { curricul
       <p>Toàn bộ liên kết kỹ năng và trọng số của <strong>{linked.toLocaleString("vi-VN")} học phần</strong> thuộc {curriculum.cohortCode} · phiên bản {curriculum.version} sẽ bị xóa; các học phần về bản nháp trống.</p>
       <p className="cm-warning">Sinh viên {curriculum.cohortCode} sẽ chưa có điểm năng lực cho tới khi bạn lưu và áp dụng lại liên kết, trọng số. Lịch sử thay đổi của từng học phần vẫn được giữ.</p>
       <p className="comp-hint">Sau khi xóa, bấm "Chạy AI cho … học phần chưa có liên kết" để AI đề xuất lại cho cả chương trình.</p>
-      <label><RequiredLabel>Nhập {curriculum.cohortCode} để xác nhận</RequiredLabel><input value={code} maxLength={40} autoComplete="off" disabled={busy} onChange={(event) => setCode(event.target.value)} /></label>
+      <label><RequiredLabel>Nhập {curriculum.cohortCode} để xác nhận</RequiredLabel><input ref={input} required value={code} maxLength={40} autoComplete="off" disabled={busy} onChange={(event) => { event.target.setCustomValidity(mismatchOf(event.target.value)); setCode(event.target.value); }} /></label>
       {error && <p className="admin-error cm-prewrap" role="alert">{error}</p>}
       <div className="cm-actions cm-dialog-actions">
         <button type="button" className="am-outline" disabled={busy} onClick={close}><Icon name="close" /> Hủy</button>
-        <button className="am-primary am-delete" disabled={busy || !matches}><Icon name="trash" /> {busy ? "Đang xóa…" : "Xóa liên kết"}</button>
+        <button className="am-primary am-delete" disabled={busy}><Icon name="trash" /> {busy ? "Đang xóa…" : "Xóa liên kết"}</button>
       </div>
-    </form>
+    </CheckedForm>
   </Modal>;
 }

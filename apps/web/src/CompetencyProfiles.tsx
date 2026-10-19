@@ -7,6 +7,8 @@ import {
   COMPETENCY_API, competencyDate, competencyRequest, percentage, statusLabels,
   useCompetencyData, type CatalogSkill, type EventEntry, type Group, type Skill, type SkillDetail,
 } from "./competency-types";
+import { CheckedForm, DescriptionField } from "./CheckedForm";
+import { DESCRIPTION_MAX_WORDS, LONG_DESCRIPTION_MAX_WORDS } from "./form-checks";
 
 type TabProps = { canManage: boolean; revision: number; onSaved: () => void };
 type EditorProps<T> = { current: T | null; close: () => void; saved: () => void };
@@ -131,7 +133,7 @@ function GroupEditor({ current, close, saved }: EditorProps<Group>) {
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const submitting = useRef(false);
   return <Modal title={current ? "Chỉnh sửa nhóm năng lực" : "Thêm nhóm năng lực"} onClose={close} busy={busy}>
-    <form className="cm-dialog-body cm-form" onSubmit={async event => {
+    <CheckedForm className="cm-dialog-body cm-form" onSubmit={async event => {
       event.preventDefault(); if (submitting.current) return;
       submitting.current = true; setBusy(true); setError("");
       try {
@@ -145,7 +147,7 @@ function GroupEditor({ current, close, saved }: EditorProps<Group>) {
     }}>
       <fieldset className="cm-fields" disabled={busy}>
         <label><RequiredLabel>Tên nhóm năng lực</RequiredLabel><input required maxLength={160} value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} /></label>
-        <label>Mô tả<textarea rows={4} maxLength={2000} value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} /></label>
+        <DescriptionField label="Mô tả" maxWords={DESCRIPTION_MAX_WORDS} rows={4} maxLength={2000} value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} />
         <label className="cm-check"><input type="checkbox" checked={form.isActive} onChange={event => setForm({ ...form, isActive: event.target.checked })} /> Đang sử dụng</label>
         {current && <p className="comp-hint">Để ngừng sử dụng nhóm, cần điều chỉnh các cấu hình học phần đang áp dụng có kỹ năng thuộc nhóm này.</p>}
       </fieldset>
@@ -155,7 +157,7 @@ function GroupEditor({ current, close, saved }: EditorProps<Group>) {
         {error && <button type="button" className="am-outline" disabled={busy} onClick={saved}><Icon name="refresh" /> Đóng và tải lại</button>}
         <button className="am-primary" disabled={busy}><Icon name="save" /> {busy ? "Đang lưu…" : "Lưu nhóm năng lực"}</button>
       </div>
-    </form>
+    </CheckedForm>
   </Modal>;
 }
 
@@ -230,7 +232,7 @@ function SkillEditor({ current, revision, groups, close, saved }: EditorProps<Sk
   const canSave = Boolean(form.groupId && form.name.trim() && !profiled);
 
   return <Modal title={current ? "Chỉnh sửa cấu hình năng lực" : "Thêm cấu hình năng lực"} onClose={close} busy={busy}>
-    <form className="cm-dialog-body cm-form" onSubmit={async event => {
+    <CheckedForm className="cm-dialog-body cm-form" onSubmit={async event => {
       event.preventDefault();
       if (submitting.current) return;
       if (!canSave) { setError(profiled ? "Kỹ năng này đã có cấu hình năng lực. Hãy tìm trong danh sách và dùng “Chỉnh sửa cấu hình năng lực”." : "Hãy nhập tên kỹ năng và chọn nhóm năng lực."); return; }
@@ -249,13 +251,13 @@ function SkillEditor({ current, revision, groups, close, saved }: EditorProps<Sk
         {match && (profiled
           ? <p className="admin-error" role="alert">Kỹ năng “{match.name}” đã có cấu hình năng lực. Hãy tìm trong danh sách và dùng “Chỉnh sửa cấu hình năng lực”.</p>
           : <p className="comp-hint">“{match.name}” đã có trong danh mục Kỹ năng: cấu hình năng lực sẽ dùng kỹ năng này{keepsDescription ? " và giữ mô tả hiện có" : ""}.</p>)}
-        <label>Mô tả kỹ năng chung<textarea rows={3} maxLength={2000} readOnly={keepsDescription} value={keepsDescription ? match?.description ?? "" : form.description} onChange={event => setForm({ ...form, description: event.target.value })} /></label>
+        <DescriptionField label="Mô tả kỹ năng chung" maxWords={DESCRIPTION_MAX_WORDS} rows={3} maxLength={2000} readOnly={keepsDescription} value={keepsDescription ? match?.description ?? "" : form.description} onChange={event => setForm({ ...form, description: event.target.value })} />
         <label><RequiredLabel>Nhóm năng lực</RequiredLabel><select required value={form.groupId} onChange={event => setForm({ ...form, groupId: event.target.value })}>
           <option value="">Chọn nhóm năng lực</option>{groups.map(group => <option key={group.id} value={group.id}>{group.name}{group.isActive ? "" : " (ngừng sử dụng)"}</option>)}
           {current && !groups.some(group => group.id === current.groupId) && <option value={current.groupId}>{current.groupName}</option>}
         </select></label>
         {!groups.length && <p className="comp-hint">Chưa tải được nhóm năng lực. Đóng hộp thoại và tải lại danh sách nhóm trước khi lưu.</p>}
-        <label>Phạm vi đánh giá<textarea rows={5} maxLength={4000} value={form.scope} placeholder="Nội dung và phạm vi đánh giá kỹ năng…" onChange={event => setForm({ ...form, scope: event.target.value })} /></label>
+        <DescriptionField label="Phạm vi đánh giá" maxWords={LONG_DESCRIPTION_MAX_WORDS} rows={5} maxLength={4000} value={form.scope} placeholder="Nội dung và phạm vi đánh giá kỹ năng…" onChange={event => setForm({ ...form, scope: event.target.value })} />
         <label className="cm-check"><input type="checkbox" checked={form.isActive} onChange={event => setForm({ ...form, isActive: event.target.checked })} /> Đang sử dụng trong đánh giá năng lực</label>
         {current && <p className="comp-hint">Tên và mô tả dùng chung với quản lý nghề nghiệp. Việc chỉnh sửa sẽ cập nhật thông tin liên quan. Để ngừng sử dụng kỹ năng, cần điều chỉnh các cấu hình học phần đang áp dụng kỹ năng này.</p>}
       </fieldset>
@@ -263,9 +265,9 @@ function SkillEditor({ current, revision, groups, close, saved }: EditorProps<Sk
       <div className="cm-actions cm-dialog-actions">
         <button type="button" className="am-outline" disabled={busy} onClick={close}><Icon name="close" /> Hủy</button>
         {error && <button type="button" className="am-outline" disabled={busy} onClick={saved}><Icon name="refresh" /> Đóng và tải lại</button>}
-        <button className="am-primary" disabled={busy || !canSave}><Icon name="save" /> {busy ? "Đang lưu…" : "Lưu cấu hình năng lực"}</button>
+        <button className="am-primary" disabled={busy || profiled}><Icon name="save" /> {busy ? "Đang lưu…" : "Lưu cấu hình năng lực"}</button>
       </div>
-    </form>
+    </CheckedForm>
   </Modal>;
 }
 
@@ -346,7 +348,7 @@ function SkillDelete({ current, close, saved }: { current: Skill; close: () => v
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const submitting = useRef(false);
   return <Modal title="Xóa cấu hình năng lực" onClose={close} busy={busy} size="sm">
-    <form className="cm-dialog-body cm-form" onSubmit={async event => {
+    <CheckedForm className="cm-dialog-body cm-form" onSubmit={async event => {
       event.preventDefault(); if (!confirmed || submitting.current) return;
       submitting.current = true; setBusy(true); setError("");
       try {
@@ -364,6 +366,6 @@ function SkillDelete({ current, close, saved }: { current: Skill; close: () => v
         {error && <button type="button" className="am-outline" disabled={busy} onClick={saved}><Icon name="refresh" /> Đóng và tải lại</button>}
         <button className="am-primary am-delete" disabled={busy || !confirmed}><Icon name="trash" /> {busy ? "Đang xóa…" : "Xác nhận xóa"}</button>
       </div>
-    </form>
+    </CheckedForm>
   </Modal>;
 }

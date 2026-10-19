@@ -4,11 +4,12 @@ import { z } from "zod";
 import type { PoolClient } from "pg";
 import type { DatabasePool } from "../db/pool.js";
 import { access, CareerError, fold, lockSkillCatalog } from "./shared.js";
+import { LONG_DESCRIPTION_MAX_WORDS, limitedText } from "../word-limits.js";
 
 const input = z.object({
   careerPositionId: z.uuid(),
   title: z.string().trim().min(1).max(160),
-  description: z.string().trim().max(4000),
+  description: limitedText(4000, LONG_DESCRIPTION_MAX_WORDS),
   skillId: z.uuid().nullable(),
   skillName: z.string().trim().max(100).default(""),
   isRequired: z.boolean(),

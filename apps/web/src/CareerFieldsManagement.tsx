@@ -5,6 +5,8 @@ import { careerRequest, type CareerField } from "./career-types";
 import { searchTerm } from "./student-curriculum-types";
 import "./curricula.css";
 import "./careers.css";
+import { CheckedForm, DescriptionField } from "./CheckedForm";
+import { DESCRIPTION_MAX_WORDS } from "./form-checks";
 
 const endpoint = "/api/admin/careers/fields";
 
@@ -74,7 +76,7 @@ function FieldEditor({ current, close, saved }: { current: CareerField | null; c
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   return <Modal title={current ? "Chỉnh sửa lĩnh vực nghề nghiệp" : "Thêm lĩnh vực nghề nghiệp"} onClose={close} busy={busy}>
-    <form className="cm-dialog-body cm-form" onSubmit={async event => {
+    <CheckedForm className="cm-dialog-body cm-form" onSubmit={async event => {
       event.preventDefault(); setBusy(true); setError("");
       try {
         await careerRequest(current ? `${endpoint}/${current.id}` : endpoint, {
@@ -89,14 +91,14 @@ function FieldEditor({ current, close, saved }: { current: CareerField | null; c
       <fieldset className="cm-fields" disabled={busy}>
         <p>{current ? `Số thứ tự: ${current.code}` : "Số thứ tự được cấp tự động khi lưu."}</p>
         <label><RequiredLabel>Tên lĩnh vực</RequiredLabel><input required maxLength={160} value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} /></label>
-        <label>Mô tả<textarea rows={4} maxLength={2000} value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} /></label>
+        <DescriptionField label="Mô tả" maxWords={DESCRIPTION_MAX_WORDS} rows={4} maxLength={2000} value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} />
       </fieldset>
       {error && <p className="admin-error" role="alert">{error}</p>}
       <div className="cm-actions cm-dialog-actions">
         <button type="button" className="am-outline" disabled={busy} onClick={close}><Icon name="close" /> Hủy</button>
         <button className="am-primary" disabled={busy}><Icon name="save" /> {busy ? "Đang lưu…" : "Lưu lĩnh vực"}</button>
       </div>
-    </form>
+    </CheckedForm>
   </Modal>;
 }
 

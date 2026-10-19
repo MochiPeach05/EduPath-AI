@@ -7,6 +7,8 @@ import CareerRequirementsManagement from "./CareerRequirementsManagement";
 import CareerLinksManagement from "./CareerLinksManagement";
 import "./curricula.css";
 import "./careers.css";
+import { CheckedForm, DescriptionField } from "./CheckedForm";
+import { LONG_DESCRIPTION_MAX_WORDS } from "./form-checks";
 const endpoint = "/api/admin/careers";
 export default function CareersManagement({
   canManage,
@@ -227,7 +229,7 @@ function Editor({
       onClose={close}
       busy={busy}
     >
-      <form
+      <CheckedForm
         className="cm-dialog-body cm-form"
         onSubmit={async (e) => {
           e.preventDefault();
@@ -294,17 +296,14 @@ function Editor({
             </select>
             {!fields.length && <small>Thêm lĩnh vực nghề nghiệp trước khi thêm vị trí.</small>}
           </label>
-          <label>
-            Mô tả công việc
-            <textarea
-              rows={4}
-              maxLength={4000}
-              value={form.description}
-              onChange={(e) =>
-                setForm({ ...form, description: e.target.value })
-              }
-            />
-          </label>
+          <DescriptionField
+            label="Mô tả công việc"
+            maxWords={LONG_DESCRIPTION_MAX_WORDS}
+            rows={4}
+            maxLength={4000}
+            value={form.description}
+            onChange={(e) => setForm({ ...form, description: e.target.value })}
+          />
           {current ? <div><strong>Kỹ năng liên kết</strong><p>{current.skills.join(" · ") || "Chưa liên kết kỹ năng."}</p><small>Quản lý yêu cầu và kỹ năng bằng mục Tạo liên kết kỹ năng trong menu Thao tác của vị trí.</small></div> : <p>Sau khi lưu, chọn Liên kết kỹ năng trong menu Thao tác của vị trí để thêm yêu cầu và liên kết kỹ năng.</p>}
         </fieldset>
         {error && (
@@ -325,7 +324,7 @@ function Editor({
             <Icon name="save" /> {busy ? "Đang lưu…" : "Lưu vị trí nghề nghiệp"}
           </button>
         </div>
-      </form>
+      </CheckedForm>
     </Modal>
   );
 }

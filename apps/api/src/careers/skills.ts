@@ -4,10 +4,11 @@ import { z } from "zod";
 import type { DatabasePool } from "../db/pool.js";
 import { access, CareerError, fold, lockSkillCatalog } from "./shared.js";
 import { refreshCareerSkills } from "./requirements.js";
+import { DESCRIPTION_MAX_WORDS, limitedText } from "../word-limits.js";
 
 const input = z.object({
   name: z.string().trim().min(1).max(100),
-  description: z.string().trim().max(2000),
+  description: limitedText(2000, DESCRIPTION_MAX_WORDS),
 }).strict();
 const columns = `id,name,description,version`;
 const usage = `(SELECT count(DISTINCT r.career_position_id)::int FROM career_requirements r

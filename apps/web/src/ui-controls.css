@@ -20,6 +20,25 @@
 
 .ep-icon { display: block; width: 20px; height: 20px; flex-shrink: 0; }
 
+/* CheckedForm (form-checks.ts): the message of a field that needs fixing, under the field inside its label. */
+:root label[data-error]::after {
+  content: attr(data-error);
+  display: block;
+  flex-basis: 100%;
+  color: #b42318;
+  font-size: 12.5px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+:root label[data-error] :is(input, select, textarea)[aria-invalid="true"] {
+  border-color: #d92d20;
+  box-shadow: 0 0 0 3px rgba(217, 45, 32, 0.12);
+}
+:root label.cm-check[data-error] { flex-wrap: wrap; }
+/* DescriptionField: the word counter under a description. */
+:root .cm-word-count { justify-self: end; color: var(--ep-control-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+:root .cm-word-count-over { color: #b42318; font-weight: 700; }
+
 /* :root keeps page-specific form resets from changing the shared appearance. */
 :root :is(.am-primary, .am-outline, .am-quiet, .am-logout, .sw-primary, .sw-outline, .sr-secondary, .admin-primary, .admin-secondary, .lp-button, .microsoft-button) {
   align-items: center;
