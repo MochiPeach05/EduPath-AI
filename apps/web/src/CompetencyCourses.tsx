@@ -11,9 +11,10 @@ import { CompetencyBulkAi } from "./CompetencyBulkAi";
 type Props = { curriculum: CurriculumRevision; canManage: boolean; revision: number; onSaved: () => void };
 /**
  * What a course row opens: details, the full editor, one of the manual steps, or an AI proposal.
- * "Thêm trọng số (Thủ công)" and "(AI)" were merged into "Tạo liên kết kỹ năng" (user, 2026-10-20).
+ * "Thêm trọng số (Thủ công)" and "(AI)" were merged into "Tạo liên kết kỹ năng", and "Xóa liên kết"
+ * and "Xóa trọng số" into one "Xóa liên kết và trọng số" (user, 2026-10-20).
  */
-type Mode = "view" | "edit" | "links" | "removeLinks" | "clearWeights" | "aiLinks";
+type Mode = "view" | "edit" | "links" | "removeLinks" | "aiLinks";
 const courseUrl = (revisionId: string, code: string) => `${COMPETENCY_API}/courses/${encodeURIComponent(revisionId)}/${encodeURIComponent(code)}`;
 const putCourse = (detail: CourseDetail, body: { status: "draft" | "active"; links: { skillId: string; weight: number }[]; note: string }) =>
   competencyRequest(courseUrl(detail.revisionId, detail.courseCode), { method: "PUT", headers: { "Content-Type": "application/json", "x-version": detail.version ?? "new" }, body: JSON.stringify(body) });
@@ -59,8 +60,7 @@ export function CompetencyCoursesTab({ curriculum, canManage, revision, onSaved 
               { key: "links", icon: "link", label: "Tạo liên kết kỹ năng (Thủ công)", disabled: repeated, onSelect: () => open(course, "links") },
               { key: "aiLinks", icon: "spark", label: "Tạo liên kết kỹ năng (AI)", disabled: repeated, onSelect: () => open(course, "aiLinks") },
               { key: "edit", icon: "edit", label: "Chỉnh sửa liên kết và trọng số", disabled: repeated, onSelect: () => open(course, "edit") },
-              { key: "removeLinks", icon: "trash", label: "Xóa liên kết", danger: true, disabled: repeated || !linked, onSelect: () => open(course, "removeLinks") },
-              { key: "clearWeights", icon: "trash", label: "Xóa trọng số", danger: true, disabled: repeated || course.totalWeight <= 0, onSelect: () => open(course, "clearWeights") },
+              { key: "removeLinks", icon: "trash", label: "Xóa liên kết và trọng số", danger: true, disabled: repeated || !linked, onSelect: () => open(course, "removeLinks") },
             ] : []),
           ]} /></td>
         </tr>;
@@ -73,7 +73,7 @@ export function CompetencyCoursesTab({ curriculum, canManage, revision, onSaved 
 }
 
 const dialogTitles: Partial<Record<Mode, string>> = {
-  links: "Tạo liên kết kỹ năng (Thủ công)", removeLinks: "Xóa liên kết kỹ năng", clearWeights: "Xóa trọng số",
+  links: "Tạo liên kết kỹ năng (Thủ công)", removeLinks: "Xóa liên kết và trọng số",
 };
 
 function CourseDialog({ curriculum, course, mode, canManage, close, saved }: { curriculum: CurriculumRevision; course: CompetencyCourse; mode: Mode; canManage: boolean; close: () => void; saved: () => void }) {
@@ -85,7 +85,6 @@ function CourseDialog({ curriculum, course, mode, canManage, close, saved }: { c
     <div className="cm-dialog-body comp-course-dialog"><p className="comp-hint">{course.code} · {course.name} · {curriculum.cohortCode} · phiên bản {curriculum.version} · {curriculum.isCurrent ? "Hiện hành" : "Lịch sử"}</p><Status {...remote} />
       {remote.data && (mode === "links" ? <ManualLinks key={course.code} {...step} />
           : mode === "removeLinks" ? <RemoveLinks key={course.code} {...step} />
-            : mode === "clearWeights" ? <ClearWeights key={course.code} {...step} />
               : <CourseConfiguration key={course.code} initial={remote.data} canManage={canManage} startEditing={mode === "edit"} close={close} saved={saved} busy={busy} setBusy={setBusy} />)}
       {!remote.data && <div className="cm-actions"><button className="am-outline" onClick={close}><Icon name="close" /> Đóng</button></div>}
     </div>
@@ -180,7 +179,11 @@ function ManualLinks({ detail, canManage, close, saved, busy, setBusy }: StepPro
   </div>;
 }
 
-/** "Xóa liên kết": untick skills from the course; an applied course goes back to draft when its total is no longer 100%. */
+/**
+ * "Xóa liên kết và trọng số" (the former "Xóa liên kết" and "Xóa trọng số", merged 2026-10-20): the
+ * ticked skills leave the course with their weights; "Chọn tất cả" empties it. An applied course goes
+ * back to draft when its total is no longer 100%.
+ */
 function RemoveLinks({ detail, canManage, close, saved, busy, setBusy }: StepProps) {
   const [current] = useState(detail);
   const [removed, setRemoved] = useState<string[]>([]);
@@ -189,6 +192,7 @@ function RemoveLinks({ detail, canManage, close, saved, busy, setBusy }: StepPro
   const kept = current.links.filter((link) => !removed.includes(link.skillId)).map((link) => ({ skillId: link.skillId, weight: link.weight }));
   const nextStatus = keepStatus(current, kept);
   const toDraft = current.status === "active" && nextStatus === "draft";
+  const all = current.links.length > 0 && removed.length === current.links.length;
   async function save() {
     if (busy || !canManage || !removed.length || !confirmed) return;
     setBusy(true); setError("");
@@ -197,36 +201,18 @@ function RemoveLinks({ detail, canManage, close, saved, busy, setBusy }: StepPro
     finally { setBusy(false); }
   }
   return <div className="cm-form">
-    <p className="comp-hint">Chọn kỹ năng cần xóa liên kết khỏi học phần. Lịch sử cấu hình vẫn giữ trọng số cũ để đối chiếu.</p>
+    <p className="comp-hint">Chọn kỹ năng cần xóa khỏi học phần. Xóa liên kết cũng xóa trọng số của kỹ năng đó; lịch sử cấu hình vẫn giữ trọng số cũ để đối chiếu.</p>
     <fieldset className="cm-fields comp-pick-list" disabled={busy}>
       <legend className="sr-only">Kỹ năng đang liên kết</legend>
+      <label className="cm-check comp-pick-all"><input type="checkbox" checked={all} onChange={() => { setRemoved(all ? [] : current.links.map((link) => link.skillId)); setConfirmed(false); }} /><span><strong>Chọn tất cả {current.links.length.toLocaleString("vi-VN")} kỹ năng</strong></span></label>
       {current.links.map((link) => <label key={link.skillId} className="cm-check"><input type="checkbox" checked={removed.includes(link.skillId)}
         onChange={() => setRemoved((previous) => previous.includes(link.skillId) ? previous.filter((id) => id !== link.skillId) : [...previous, link.skillId])} /><span>{link.skillName}<small> · {percentage(link.weight)}</small></span></label>)}
     </fieldset>
-    {toDraft && <p className="cm-warning" role="alert">Sau khi xóa liên kết, tổng trọng số không còn 100% nên học phần chuyển về Bản nháp và tạm không được tính vào đánh giá năng lực. Hãy thêm trọng số lại để áp dụng.</p>}
-    <label className="cm-check"><input type="checkbox" checked={confirmed} disabled={busy || !removed.length} onChange={(event) => setConfirmed(event.target.checked)} /><span>Tôi xác nhận xóa liên kết {removed.length} kỹ năng khỏi {current.courseCode}.</span></label>
+    {all ? <p className="cm-warning" role="alert">Học phần sẽ không còn kỹ năng nào, chuyển về Bản nháp và không được tính vào đánh giá năng lực cho đến khi tạo liên kết kỹ năng lại.</p>
+      : toDraft && <p className="cm-warning" role="alert">Sau khi xóa, tổng trọng số không còn 100% nên học phần chuyển về Bản nháp và tạm không được tính vào đánh giá năng lực. Hãy dùng Tạo liên kết kỹ năng hoặc Chỉnh sửa liên kết và trọng số để chia lại 100% rồi áp dụng.</p>}
+    <label className="cm-check"><input type="checkbox" checked={confirmed} disabled={busy || !removed.length} onChange={(event) => setConfirmed(event.target.checked)} /><span>Tôi xác nhận xóa liên kết và trọng số của {removed.length} kỹ năng khỏi {current.courseCode}.</span></label>
     {error && <p className="admin-error cm-prewrap" role="alert">{error}</p>}
-    <DialogActions busy={busy} close={close}><button type="button" className="am-primary am-delete" disabled={busy || !removed.length || !confirmed} onClick={() => void save()}><Icon name="trash" /> {busy ? "Đang xóa…" : "Xác nhận xóa liên kết"}</button></DialogActions>
-  </div>;
-}
-
-/** "Xóa trọng số": every weight back to 0% and the course back to draft; the links stay. */
-function ClearWeights({ detail, canManage, close, saved, busy, setBusy }: StepProps) {
-  const [current] = useState(detail);
-  const [confirmed, setConfirmed] = useState(false);
-  const [error, setError] = useState("");
-  async function save() {
-    if (busy || !canManage || !confirmed) return;
-    setBusy(true); setError("");
-    try { await putCourse(current, { status: "draft", links: current.links.map((link) => ({ skillId: link.skillId, weight: 0 })), note: current.note }); saved(); }
-    catch (failure) { setError((failure as Error).message); }
-    finally { setBusy(false); }
-  }
-  return <div className="cm-form">
-    <p>Đặt trọng số của {current.links.length} kỹ năng về 0% và chuyển học phần về Bản nháp. Học phần sẽ không được tính vào đánh giá năng lực cho đến khi thêm trọng số lại. Liên kết kỹ năng được giữ nguyên.</p>
-    <label className="cm-check"><input type="checkbox" checked={confirmed} disabled={busy} onChange={(event) => setConfirmed(event.target.checked)} /><span>Tôi xác nhận xóa trọng số của {current.courseCode}.</span></label>
-    {error && <p className="admin-error cm-prewrap" role="alert">{error}</p>}
-    <DialogActions busy={busy} close={close}><button type="button" className="am-primary am-delete" disabled={busy || !confirmed} onClick={() => void save()}><Icon name="trash" /> {busy ? "Đang xóa…" : "Xác nhận xóa trọng số"}</button></DialogActions>
+    <DialogActions busy={busy} close={close}><button type="button" className="am-primary am-delete" disabled={busy || !removed.length || !confirmed} onClick={() => void save()}><Icon name="trash" /> {busy ? "Đang xóa…" : "Xác nhận xóa"}</button></DialogActions>
   </div>;
 }
 
