@@ -1,6 +1,13 @@
 import { WEIGHT_TOLERANCE } from "./competency-types";
 
 export type AllocationInput = { skillId: string; percent: string };
+
+/** Whole percents that split 100 evenly over count skills (the first ones take the remainder): 3 → 34, 33, 33. */
+export function splitEvenly(count: number): number[] {
+  if (count <= 0) return [];
+  const base = Math.floor(100 / count);
+  return Array.from({ length: count }, (_, index) => base + (index < 100 - base * count ? 1 : 0));
+}
 export function assessAllocations(rows: AllocationInput[]) {
   const seen = new Set<string>();
   let total = 0;

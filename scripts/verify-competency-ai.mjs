@@ -200,14 +200,15 @@ try {
   const profiles = offered.filter((entry) => entry.group !== "kỹ năng nghề, chưa có nhóm");
   const careerOnly = offered.find((entry) => entry.group === "kỹ năng nghề, chưa có nhóm");
   assert(profiles.length >= 2, "at least two profiles are offered");
+  // Since 2026-10-20 the links answer also splits the course's 100% ("Thêm trọng số" merged in).
   const linksOutput = {
     links: [
-      { skillKey: profiles[0].key, groupKey: "G1", reason: `Học phần rèn ${profiles[0].key} trực tiếp.` },
-      { skillKey: profiles[1].key, groupKey: "G1", reason: "Dùng trong bài tập lớn." },
-      { skillKey: profiles[0].key, groupKey: "G1", reason: "lặp" },
-      ...(careerOnly ? [{ skillKey: careerOnly.key, groupKey: "G1", reason: "Kỹ năng nghề đang thiếu học phần đo." }] : [])
+      { skillKey: profiles[0].key, groupKey: "G1", percent: 50, reason: `Học phần rèn ${profiles[0].key} trực tiếp.` },
+      { skillKey: profiles[1].key, groupKey: "G1", percent: 20, reason: "Dùng trong bài tập lớn." },
+      { skillKey: profiles[0].key, groupKey: "G1", percent: 90, reason: "lặp" },
+      ...(careerOnly ? [{ skillKey: careerOnly.key, groupKey: "G1", percent: 20, reason: "Kỹ năng nghề đang thiếu học phần đo." }] : [])
     ],
-    newSkills: [{ name: "Kỹ năng kiểm chứng tự động bằng giả lập", groupKey: "G1", reason: "Học phần có phần kiểm chứng." }]
+    newSkills: [{ name: "Kỹ năng kiểm chứng tự động bằng giả lập", groupKey: "G1", percent: 10, reason: "Học phần có phần kiểm chứng." }]
   };
   assert.deepEqual((await complete(linksJob, linksOutput)).body, { ok: true });
   const proposal = (await ai("GET", `/${linksJob.id}`)).body.suggestion;
@@ -217,24 +218,26 @@ try {
   assert.equal(proposal.items.at(-1).skillName, "Kiểm chứng tự động bằng giả lập");
   assert.equal(proposal.items.at(-1).isNewSkill, true);
   if (careerOnly) assert.equal(proposal.items[2].hasProfile, false);
+  assert.equal(proposal.items.reduce((sum, item) => sum + item.percent, 0), 100, "the proposal's percents add up to 100");
   assert.equal((await ai("GET", `/latest?revisionId=${empty.revisionId}&code=${first.code}&mode=links`)).body.suggestion.id, linksJob.id);
   const skillsBefore = await count("career_skills WHERE deleted_at IS NULL");
   const profilesBefore = await count("ad_comp_skills WHERE deleted_at IS NULL");
-  const keep = (item) => ({ skillId: item.skillId, skillName: item.skillId ? "" : item.skillName, groupId: item.groupId });
-  const noGroup = await ai("POST", `/${linksJob.id}/apply`, { body: { items: proposal.items.map((item) => ({ ...keep(item), groupId: item.hasProfile ? item.groupId : null })) } });
+  const keep = (item) => ({ skillId: item.skillId, skillName: item.skillId ? "" : item.skillName, groupId: item.groupId, percent: item.percent });
+  const noGroup = await ai("POST", `/${linksJob.id}/apply`, { body: { status: "draft", items: proposal.items.map((item) => ({ ...keep(item), groupId: item.hasProfile ? item.groupId : null })) } });
   assert.equal(noGroup.body.error, "group_required", "a skill without a profile needs a group");
-  const applied = await ai("POST", `/${linksJob.id}/apply`, { body: { items: proposal.items.map(keep) } });
+  assert.equal((await ai("POST", `/${linksJob.id}/apply`, { body: { items: proposal.items.map(keep) } })).status, 400, "the status is required");
+  const applied = await ai("POST", `/${linksJob.id}/apply`, { body: { status: "draft", items: proposal.items.map(keep) } });
   assert.equal(applied.status, 201, JSON.stringify(applied.body));
   assert.equal(applied.body.course.status, "draft");
   assert.equal(applied.body.course.links.length, proposal.items.length);
-  assert(applied.body.course.links.every((link) => link.weight === 0), "new links start at 0%");
+  assert(Math.abs(applied.body.course.links.reduce((sum, link) => sum + link.weight, 0) - 1) < 1e-9, "the links carry the reviewed weights (100%)");
   assert.equal(await count("career_skills WHERE deleted_at IS NULL"), skillsBefore + 1, "the new skill joins the shared catalog");
   assert.equal(await count("ad_comp_skills WHERE deleted_at IS NULL"), profilesBefore + (careerOnly ? 2 : 1), "profiles for the career skill and the new skill");
-  assert.equal((await ai("POST", `/${linksJob.id}/apply`, { body: { items: [keep(proposal.items[0])] } })).body.error, "suggestion_already_applied");
+  assert.equal((await ai("POST", `/${linksJob.id}/apply`, { body: { status: "draft", items: [keep(proposal.items[0])] } })).body.error, "suggestion_already_applied");
   assert.equal((await ai("GET", `/latest?revisionId=${empty.revisionId}&code=${first.code}&mode=links`)).body.suggestion, null);
-  checks.push(`links: claim without key maps, ${proposal.items.length} proposed skills (repeat dropped, key in prose named), apply links them at 0% as a draft, adds the new skill to the shared catalog and creates the missing profiles; a second apply is 409`);
+  checks.push(`links: claim without key maps, ${proposal.items.length} proposed skills (repeat dropped, key in prose named), apply saves them with the reviewed weights (100%) as a draft, adds the new skill to the shared catalog and creates the missing profiles; a second apply is 409`);
 
-  // Weights: AI percents scaled to 100, applied.
+  // Weights (API only: "Thêm trọng số (AI)" has no button since 2026-10-20): AI percents scaled to 100, applied.
   const weightsQueued = await ai("POST", "", { body: { revisionId: empty.revisionId, code: first.code, mode: "weights" } });
   assert.equal(weightsQueued.status, 201, JSON.stringify(weightsQueued.body));
   const weightsJob = await claim();
@@ -250,16 +253,28 @@ try {
   assert.equal(activated.status, 201, JSON.stringify(activated.body));
   assert.equal(activated.body.course.status, "active");
   assert(Math.abs(activated.body.course.links.reduce((sum, link) => sum + link.weight, 0) - 1) < 1e-9);
-  checks.push(`weights: the model's ${linkedKeys.length} percents are scaled to exactly 100, a mismatched link set is 409 links_changed, and apply activates the course`);
+  checks.push(`weights (API only, no button): the model's ${linkedKeys.length} percents are scaled to exactly 100, a mismatched link set is 409 links_changed, and apply activates the course`);
 
-  // Links on an applied course keep it applied; then the whole-program run.
+  // Links on a course that has links: the linked skills are offered as "đã liên kết" and always kept;
+  // one the model leaves out comes back at 0%. Then the whole-program run.
+  const linkedNow = activated.body.course.links.map((link) => link.skillId);
   const more = await ai("POST", "", { body: { revisionId: empty.revisionId, code: first.code, mode: "links" } });
   const moreJob = await claim();
-  const moreOffered = candidates(moreJob.user);
-  await complete(moreJob, { links: [{ skillKey: moreOffered[0].key, groupKey: "G1", reason: "Bổ sung." }], newSkills: [] });
+  assert.equal(moreJob.user.split("\n").filter((line) => / \| đã liên kết$/.test(line)).length, linkedNow.length, "every linked skill is offered, marked");
+  const linkedNames = activated.body.course.links.map((link) => link.skillName);
+  const fresh = candidates(moreJob.user).find((entry) => !linkedNames.includes(entry.name));
+  await complete(moreJob, { links: [{ skillKey: fresh.key, groupKey: "G1", percent: 100, reason: "Bổ sung." }], newSkills: [] });
   const moreProposal = (await ai("GET", `/${more.body.suggestion.id}`)).body.suggestion;
-  const kept = await ai("POST", `/${more.body.suggestion.id}/apply`, { body: { items: moreProposal.items.map(keep) } });
-  assert.equal(kept.body.course.status, "active", "a 0% link keeps an applied course applied");
+  assert.equal(moreProposal.items.length, linkedNow.length + 1);
+  assert(moreProposal.items.filter((item) => item.alreadyLinked).every((item) => item.percent === 0), "a linked skill the model left out comes back at 0%");
+  assert.equal(moreProposal.stale, false);
+  const dropLinked = moreProposal.items.filter((item) => item.skillId !== linkedNow[0]).map(keep);
+  assert.equal((await ai("POST", `/${more.body.suggestion.id}/apply`, { body: { status: "active", items: dropLinked } })).body.error, "links_changed", "the review keeps every linked skill");
+  const kept = await ai("POST", `/${more.body.suggestion.id}/apply`, { body: { status: "active", items: moreProposal.items.map(keep) } });
+  assert.equal(kept.status, 201, JSON.stringify(kept.body));
+  assert.equal(kept.body.course.status, "active");
+  assert.equal(kept.body.course.links.length, linkedNow.length + 1);
+  checks.push(`links on a linked course: ${linkedNow.length} linked skills offered as "đã liên kết", left out ones come back at 0%, a review without them is 409 links_changed, apply keeps them and activates at 100%`);
 
   const batch = await ai("POST", "/batches", { body: { revisionId: empty.revisionId } });
   assert.equal(batch.status, 201, JSON.stringify(batch.body));

@@ -1,6 +1,7 @@
 // Types and pure helpers for the AI proposals of the Năng lực courses ("Tạo liên kết kỹ năng (AI)",
-// "Thêm trọng số (AI)" and the whole-program run). The local AI proposes, the admin reviews; only the
-// reviewed rows are saved. No DOM here — unit tested.
+// which also splits the course's 100% since "Thêm trọng số" was merged into it on 2026-10-20, and the
+// whole-program run). The local AI proposes, the admin reviews; only the reviewed rows are saved.
+// No DOM here — unit tested.
 import { COMPETENCY_API, readCompetencyResponse, WEIGHT_TOLERANCE } from "./competency-types";
 
 /** A failed request with the API error code kept (the message is the competency page's own). */
@@ -28,6 +29,7 @@ export const SKILL_NAME_MAX = 100;
 /** Shown while the AI works on a run or a proposal (wording from the function list, 2026-10-19). */
 export const AI_COMPUTING_MESSAGE = "AI đang trong quá trình tính toán... Bạn có thể thực hiện các thao tác khác trên hệ thống và quay lại nhận kết quả sau ít phút nữa.";
 
+/** "weights" is the former "Thêm trọng số (AI)": no button since 2026-10-20. */
 export type CourseAiMode = "links" | "weights";
 export type CourseAiStatusCode = "queued" | "processing" | "completed" | "failed" | "cancelled";
 export type CourseAiStatus = { enabled: boolean; worker: { online: boolean; supportsSuggestions: boolean; seenAt: string | null } };
@@ -42,7 +44,7 @@ export type CourseAiItem = {
   hasProfile: boolean;
   isNewSkill: boolean;
   alreadyLinked: boolean;
-  /** weights: whole percent (the items add up to 100); null in links. */
+  /** Whole percent (the items add up to 100); null only in links proposals made before 2026-10-20. */
   percent: number | null;
   reason: string;
 };
@@ -61,7 +63,7 @@ export type CourseAiSuggestion = {
   model: string | null;
   promptVersion: string | null;
   items: CourseAiItem[];
-  /** weights: the course's links changed since the proposal was made. */
+  /** The course's links changed since the proposal was made: create it again. */
   stale: boolean;
 };
 export type CourseAiBatch = {
@@ -118,6 +120,7 @@ export const skipReason = (code: string) => SKIP_REASONS[code] ?? "không lưu �
 export type LinkRow = {
   key: string;
   index: number;
+  /** A linked skill is always kept (the review only changes its percent). */
   checked: boolean;
   skillId: string | null;
   skillName: string;
@@ -125,34 +128,44 @@ export type LinkRow = {
   hasProfile: boolean;
   isNewSkill: boolean;
   alreadyLinked: boolean;
+  /** The reviewed percent, as typed. */
+  percent: string;
   reason: string;
 };
-/** Skills start ticked unless already linked; new skills start unticked (the admin opts in). */
+/** Catalog and linked skills start ticked; new skills start unticked (the admin opts in). */
 export function linkRows(items: CourseAiItem[]): LinkRow[] {
   return items.map((item) => ({
     key: `row-${item.index}`,
     index: item.index,
-    checked: !item.alreadyLinked && !item.isNewSkill,
+    checked: item.alreadyLinked || !item.isNewSkill,
     skillId: item.skillId,
     skillName: item.skillName,
     groupId: item.groupId ?? "",
     hasProfile: item.hasProfile,
     isNewSkill: item.isNewSkill,
     alreadyLinked: item.alreadyLinked,
+    percent: String(item.percent ?? 0),
     reason: item.reason,
   }));
 }
 export const foldName = (value: string) => value.trim().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").toLowerCase().replace(/\s+/g, " ");
 
-/** Per-row messages and whether the selection can be saved (mirrors the server checks). */
-export function validateLinkRows(rows: LinkRow[]): { valid: boolean; selected: number; errors: Record<string, string[]> } {
+/**
+ * Per-row messages, the total of the kept rows and whether they can be saved as a draft (valid) or
+ * applied (canActivate: exactly 100%), mirroring the server checks. Linked skills always count.
+ */
+export function validateLinkRows(rows: LinkRow[]): { valid: boolean; canActivate: boolean; selected: number; added: number; total: number; errors: Record<string, string[]> } {
   const errors: Record<string, string[]> = {};
   const seen = new Set<string>();
-  let selected = 0;
+  let selected = 0, added = 0, total = 0;
   for (const row of rows) {
-    if (!row.checked || row.alreadyLinked) continue;
+    if (!row.checked && !row.alreadyLinked) continue;
     selected += 1;
+    if (!row.alreadyLinked) added += 1;
     const messages: string[] = [];
+    const percent = Number(row.percent);
+    if (!row.percent.trim() || !Number.isFinite(percent) || percent < 0 || percent > 100) messages.push("Nhập trọng số từ 0 đến 100.");
+    else total += percent;
     const name = row.skillName.replace(/\s+/g, " ").trim();
     if (row.isNewSkill && !name) messages.push("Nhập tên kỹ năng mới.");
     if (row.isNewSkill && name.length > SKILL_NAME_MAX) messages.push(`Tên kỹ năng tối đa ${SKILL_NAME_MAX} ký tự.`);
@@ -162,41 +175,17 @@ export function validateLinkRows(rows: LinkRow[]): { valid: boolean; selected: n
     seen.add(key);
     if (messages.length) errors[row.key] = messages;
   }
-  return { valid: selected > 0 && !Object.keys(errors).length, selected, errors };
+  const valid = selected > 0 && !Object.keys(errors).length;
+  return { valid, canActivate: valid && Math.abs(total / 100 - 1) <= WEIGHT_TOLERANCE, selected, added, total, errors };
 }
+/** The body items of a save: every kept row (linked ones included) with its percent. */
 export function applyLinkItems(rows: LinkRow[]) {
-  return rows.filter((row) => row.checked && !row.alreadyLinked).map((row) => ({
+  return rows.filter((row) => row.checked || row.alreadyLinked).map((row) => ({
     skillId: row.skillId,
     skillName: row.skillId ? "" : row.skillName.replace(/\s+/g, " ").trim(),
     groupId: row.hasProfile ? null : row.groupId || null,
+    percent: Number(row.percent),
   }));
-}
-
-/* ---------------------------------------------------------- weight review */
-
-export type WeightRow = { key: string; skillId: string; skillName: string; percent: string; proposed: number; reason: string };
-export function weightRows(items: CourseAiItem[]): WeightRow[] {
-  return items.filter((item) => item.skillId).map((item) => ({
-    key: `row-${item.index}`,
-    skillId: item.skillId!,
-    skillName: item.skillName,
-    percent: String(item.percent ?? 0),
-    proposed: item.percent ?? 0,
-    reason: item.reason,
-  }));
-}
-/** The reviewed weights: total in percent, whether each value is valid and the body of a save. */
-export function assessWeightRows(rows: WeightRow[]) {
-  const errors: Record<string, string> = {};
-  let total = 0;
-  const weights = rows.map((row) => {
-    const value = Number(row.percent);
-    if (!row.percent.trim() || !Number.isFinite(value) || value < 0 || value > 100) errors[row.key] = "Nhập số từ 0 đến 100.";
-    else total += value;
-    return { skillId: row.skillId, percent: value };
-  });
-  const valid = rows.length > 0 && !Object.keys(errors).length;
-  return { weights, total, errors, valid, canActivate: valid && Math.abs(total / 100 - 1) <= WEIGHT_TOLERANCE, edited: rows.filter((row) => Number(row.percent) !== row.proposed).length };
 }
 
 /* ------------------------------------------------------------- whole run */

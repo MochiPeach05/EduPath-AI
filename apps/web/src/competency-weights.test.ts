@@ -32,3 +32,14 @@ describe("competency weight entry", () => {
     expect(assessAllocations(rows).canActivate).toBe(false);
   });
 });
+
+describe("Chia đều 100% (2026-10-20)", () => {
+  it("splits 100 into whole percents, the first skills taking the remainder", async () => {
+    const { splitEvenly } = await import("./competency-weights");
+    expect(splitEvenly(0)).toEqual([]);
+    expect(splitEvenly(1)).toEqual([100]);
+    expect(splitEvenly(3)).toEqual([34, 33, 33]);
+    expect(splitEvenly(6)).toEqual([17, 17, 17, 17, 16, 16]);
+    for (const count of [7, 9, 11, 33]) expect(splitEvenly(count).reduce((sum, value) => sum + value, 0)).toBe(100);
+  });
+});

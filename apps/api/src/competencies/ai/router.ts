@@ -1,7 +1,8 @@
 // Admin API for the AI proposals of the Năng lực courses, mounted by the competencies router at
 // /ai (after its admin session, role and Origin checks). Nothing is linked or weighted until an admin
 // applies a proposal; the stored AI result itself is never edited.
-//   POST /                       one course: links ("Tạo liên kết kỹ năng (AI)") or weights ("Thêm trọng số (AI)")
+//   POST /                       one course: links ("Tạo liên kết kỹ năng (AI)": skills and weights since
+//                                2026-10-20); weights (the former "Thêm trọng số (AI)", no button any more)
 //   POST /batches                whole program: one "full" proposal per course that has no link yet
 //   POST /batches/:id/apply      saves every finished proposal of a run as drafts, or applies them
 import { Router } from "express";
@@ -46,12 +47,15 @@ const columns = `id,revision_id AS "revisionId",course_code AS "courseCode",mode
 const iso = (value: Date | string | null) => (value === null ? null : new Date(value).toISOString());
 const uuid = z.uuid();
 const collapse = (value: string) => value.replace(/\s+/g, " ").trim();
+/** The reviewed course: every skill it keeps (its current links included) with its percent. */
 const linksBody = z.object({
   items: z.array(z.object({
     skillId: uuid.nullable(),
     skillName: z.string().transform(collapse).pipe(z.string().max(100)),
-    groupId: uuid.nullable()
-  }).strict().refine((item) => item.skillId !== null || item.skillName.length > 0)).min(1).max(12)
+    groupId: uuid.nullable(),
+    percent: z.number().min(0).max(100)
+  }).strict().refine((item) => item.skillId !== null || item.skillName.length > 0)).min(1).max(200),
+  status: z.enum(["draft", "active"])
 }).strict();
 const weightsBody = z.object({
   weights: z.array(z.object({ skillId: uuid, percent: z.number().min(0).max(100) }).strict()).min(1).max(200),
@@ -68,7 +72,8 @@ async function linkedSkillIds(db: Db, revisionId: string, code: string) {
 
 /**
  * API shape: items carry current names and groups, whether the skill has a profile and is linked by
- * now; a weights proposal is "stale" when the course's links changed since it was made.
+ * now; a proposal is "stale" when the course's links changed since it was made (a links proposal no
+ * longer lists every linked skill, a weights proposal no longer covers exactly them).
  */
 async function present(db: Db, row: SuggestionRow) {
   const { result, ...rest } = row;
@@ -101,7 +106,9 @@ async function present(db: Db, row: SuggestionRow) {
       reason: item.reason
     }];
   });
-  const stale = row.mode === "weights" && (items.length !== linked.size || items.some((item) => !item.skillId || !linked.has(item.skillId)));
+  // weights: the proposal covers exactly the linked skills; links (v4): it lists every linked skill.
+  const stale = row.mode === "weights" ? items.length !== linked.size || items.some((item) => !item.skillId || !linked.has(item.skillId))
+    : row.mode === "links" && [...linked].some((skillId) => !items.some((item) => item.skillId === skillId));
   return { ...base, items, stale };
 }
 
@@ -319,11 +326,14 @@ async function markApplied(client: PoolClient, id: string, actor: AuthenticatedU
     [id, actor.userId, JSON.stringify(summary)]);
 }
 
-/** "Tạo liên kết kỹ năng (AI)": the kept skills join the course at 0%; an applied course stays applied. */
+/**
+ * "Tạo liên kết kỹ năng (AI)" (with "Thêm trọng số" merged in, 2026-10-20): the reviewed skills and
+ * percentages become the course's links and weights, as a draft or applied. The review always keeps
+ * the course's current links, so a link missing from the body means the course changed meanwhile.
+ */
 async function applyLinks(client: PoolClient, repository: CompetencyRepository, row: SuggestionRow, body: z.infer<typeof linksBody>, actor: AuthenticatedUser) {
   const state = await repository.lockCourse(client, row.revisionId, courseOf(row));
-  const linked = new Set(state.links.map((link) => link.skillId));
-  const added: string[] = [];
+  const kept: { skillId: string; percent: number }[] = [];
   const conflicts: string[] = [];
   let newSkills = 0, profiles = 0;
   for (const item of body.items) {
@@ -338,21 +348,23 @@ async function applyLinks(client: PoolClient, repository: CompetencyRepository, 
       if (!skill.rows[0]) throw new CompetencyError("skill_not_found", 404);
       name = skill.rows[0].name;
     }
-    if (linked.has(skillId) || added.includes(skillId)) { conflicts.push(name); continue; }
+    if (kept.some((entry) => entry.skillId === skillId)) { conflicts.push(name); continue; }
     const hasProfile = await client.query("SELECT 1 FROM ad_comp_skills WHERE skill_id=$1 AND deleted_at IS NULL", [skillId]);
     if (!hasProfile.rowCount) {
       if (!item.groupId) throw new CompetencyError("group_required", 400, [name]);
       if (await repository.ensureProfile(client, skillId, item.groupId, actor, "Tạo cấu hình năng lực từ đề xuất AI")) profiles += 1;
     }
-    added.push(skillId);
+    kept.push({ skillId, percent: item.percent });
   }
-  if (conflicts.length) throw new CompetencyError("skill_already_linked", 409, conflicts);
-  const status = state.config?.status === "active" ? "active" : "draft";
-  const links = [...state.links, ...added.map((skillId) => ({ skillId, weight: 0 }))];
+  if (conflicts.length) throw new CompetencyError("duplicate_skill_link", 409, conflicts);
+  if (state.links.some((link) => !kept.some((entry) => entry.skillId === link.skillId))) throw new CompetencyError("links_changed", 409);
+  const links = kept.map((entry) => ({ skillId: entry.skillId, weight: entry.percent / 100 }));
+  const added = kept.length - state.links.length;
   const course = await repository.writeCourse(client, row.revisionId, courseOf(row), state.config,
-    { status, links, note: state.config?.note ?? "" }, actor, `Thêm ${added.length} liên kết kỹ năng từ đề xuất AI`);
+    { status: body.status, links, note: state.config?.note ?? "" }, actor,
+    body.status === "active" ? `Áp dụng liên kết và trọng số từ đề xuất AI (thêm ${added} kỹ năng)` : `Lưu bản nháp liên kết và trọng số từ đề xuất AI (thêm ${added} kỹ năng)`);
   const suggested = row.result?.items.length ?? 0;
-  await markApplied(client, row.id, actor, { suggested, saved: added.length, newSkills, profiles });
+  await markApplied(client, row.id, actor, { suggested, saved: kept.length, added, newSkills, profiles, status: body.status });
   return course;
 }
 

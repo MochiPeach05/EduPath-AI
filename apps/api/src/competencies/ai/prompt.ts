@@ -1,6 +1,8 @@
 // Prompts for the AI proposals of the Năng lực (AD-COMP) courses. Pure: no DB, no network.
-// - links:   "Tạo liên kết kỹ năng với học phần (AI)" picks the skills a course trains.
-// - weights: "Thêm trọng số năng lực (AI)" splits the course's 100% over the skills linked to it.
+// - links:   "Tạo liên kết kỹ năng với học phần (AI)" picks the skills a course trains and, since v4
+//            (2026-10-20, "Thêm trọng số" merged into it), splits the course's 100% over all of its
+//            skills: the ones already linked (offered as "đã liên kết") and the new ones.
+// - weights: the former "Thêm trọng số năng lực (AI)"; no button since 2026-10-20, kept for old proposals.
 // - full:    the whole-program run picks the skills and splits 100% in one answer, for courses
 //            that have no link yet.
 // The model picks skills by short keys (S001…) and groups by G1…, so it can never link a skill or a
@@ -20,7 +22,7 @@ import type { JsonSchema } from "../../competency-assessment/ai/schema.js";
 export const COURSE_AI_MODES = ["links", "weights", "full"] as const;
 export type CourseAiMode = (typeof COURSE_AI_MODES)[number];
 export const COURSE_AI_PROMPT_VERSIONS: Record<CourseAiMode, string> = {
-  links: "comp-link-v3",
+  links: "comp-link-v4",
   weights: "comp-weight-v2",
   full: "comp-course-v3"
 };
@@ -123,14 +125,15 @@ ${first + 1}. Viết tiếng Việt có dấu đầy đủ, tự nhiên; chỉ v
 
 export const COURSE_AI_SYSTEM_PROMPTS: Record<CourseAiMode, string> = {
   links: `${INTRO}
-Việc của bạn: đọc thông tin học phần ở mục [4] và chọn trong danh mục ở mục [3] những kỹ năng mà học phần này trực tiếp rèn luyện hoặc đánh giá. Mục [5] là kỹ năng đã liên kết với học phần: không chọn lại.
+Việc của bạn: đọc thông tin học phần ở mục [4], chọn trong danh mục ở mục [3] những kỹ năng mà học phần trực tiếp rèn luyện hoặc đánh giá, rồi chia 100% trọng số của học phần cho các kỹ năng của học phần. Kỹ năng ghi "đã liên kết" ở mục [3] (liệt kê lại ở mục [5]) là kỹ năng học phần đang có: luôn đưa chúng vào "links" kèm phần trăm, kể cả khi không chọn thêm kỹ năng nào.
 
 Quy tắc:
 ${PICK_RULES}
-10. newSkills: chỉ dùng khi học phần rèn một kỹ năng chuyên môn quan trọng mà danh mục rõ ràng chưa có, tối đa ${L.newSkills} mục. Tên là cụm danh từ tiếng Việt ngắn, không mở đầu bằng "Kỹ năng", không trùng hay gần nghĩa với kỹ năng ở mục [3] hoặc [5]. Thường để trống.
-${TEXT_RULES(11)}
+10. percent là số nguyên từ 0 đến 100; tổng percent của mọi mục trong "links" và "newSkills" bằng đúng 100. Kỹ năng trọng tâm của học phần nhận phần trăm cao nhất; kỹ năng đã liên kết mà học phần gần như không rèn thì cho 0.
+11. newSkills: chỉ dùng khi học phần rèn một kỹ năng chuyên môn quan trọng mà danh mục rõ ràng chưa có, tối đa ${L.newSkills} mục. Tên là cụm danh từ tiếng Việt ngắn, không mở đầu bằng "Kỹ năng", không trùng hay gần nghĩa với kỹ năng ở mục [3]. Thường để trống.
+${TEXT_RULES(12)}
 
-Chỉ trả về một đối tượng JSON gồm "links" (tối đa ${L.links} mục { skillKey, groupKey, reason }, có thể rỗng) và "newSkills" (tối đa ${L.newSkills} mục { name, groupKey, reason }), không thêm bất kỳ văn bản nào bên ngoài JSON.`,
+Chỉ trả về một đối tượng JSON gồm "links" (các mục { skillKey, groupKey, percent, reason }, có thể rỗng) và "newSkills" (tối đa ${L.newSkills} mục { name, groupKey, percent, reason }), không thêm bất kỳ văn bản nào bên ngoài JSON.`,
 
   weights: `${INTRO}
 Việc của bạn: chia 100% trọng số của học phần ở mục [2] cho các kỹ năng đã liên kết ở mục [3], theo mức học phần rèn luyện và đánh giá từng kỹ năng.
@@ -167,9 +170,10 @@ export function groupKeys(source: { groups: readonly { id: string; name: string 
 }
 
 /**
- * The skills offered to the model. links/full: every profile (by group, then name) and then the
- * career skills without a profile (by name), minus the skills already linked, capped. weights: the
- * linked skills, by name.
+ * The skills offered to the model. full: every profile (by group, then name) and then the career
+ * skills without a profile (by name), minus the skills already linked, capped. links: the same list
+ * with the linked skills kept in it (and added after the cap if it cut them), so the model weighs them
+ * too. weights: the linked skills, by name.
  */
 export function skillKeys(source: CourseAiSource, mode: CourseAiMode, groups: readonly GroupKey[]): SkillKey[] {
   const byName = (a: { name: string; id: string }, b: { name: string; id: string }) => a.name.localeCompare(b.name, "vi") || (a.id < b.id ? -1 : 1);
@@ -178,14 +182,21 @@ export function skillKeys(source: CourseAiSource, mode: CourseAiMode, groups: re
       .map((link, index) => ({ key: skillKey(index), id: link.skillId, name: link.name, groupId: link.groupId }));
   }
   const linked = new Set(source.links.map((link) => link.skillId));
+  const keepLinked = mode === "links";
   const groupOrder = new Map(groups.map((group, index) => [group.id, index]));
-  const profiles = source.profiles.filter((skill) => !linked.has(skill.id) && groupOrder.has(skill.groupId))
+  const profiles = source.profiles.filter((skill) => (keepLinked || !linked.has(skill.id)) && groupOrder.has(skill.groupId))
     .sort((a, b) => (groupOrder.get(a.groupId)! - groupOrder.get(b.groupId)!) || byName(a, b));
   const careerOnly = source.careerSkills.filter((skill) => !linked.has(skill.id)).sort(byName);
-  return [...profiles.map((skill) => ({ id: skill.id, name: skill.name, groupId: skill.groupId as string | null })),
-    ...careerOnly.map((skill) => ({ id: skill.id, name: skill.name, groupId: null }))]
-    .slice(0, L.catalog)
-    .map((skill, index) => ({ key: skillKey(index), ...skill }));
+  const offered: { id: string; name: string; groupId: string | null }[] = [
+    ...profiles.map((skill) => ({ id: skill.id, name: skill.name, groupId: skill.groupId as string | null })),
+    ...careerOnly.map((skill) => ({ id: skill.id, name: skill.name, groupId: null }))
+  ].slice(0, L.catalog);
+  if (keepLinked) {
+    for (const link of [...source.links].sort((a, b) => byName({ name: a.name, id: a.skillId }, { name: b.name, id: b.skillId }))) {
+      if (!offered.some((skill) => skill.id === link.skillId)) offered.push({ id: link.skillId, name: link.name, groupId: link.groupId });
+    }
+  }
+  return offered.map((skill, index) => ({ key: skillKey(index), ...skill }));
 }
 
 const text = (maxLength: number): JsonSchema => ({ type: "string", minLength: 1, maxLength });
@@ -197,8 +208,11 @@ const object = (properties: Record<string, JsonSchema>): JsonSchema => ({
 });
 const choice = (values: readonly string[]): JsonSchema => ({ type: "string", enum: [...values] });
 
-/** Per-job output schema; the enums are exactly the keys of this job (callers never pass empty lists). */
-export function buildCourseAiSchema(mode: CourseAiMode, skills: readonly string[], groups: readonly string[]): JsonSchema {
+/**
+ * Per-job output schema; the enums are exactly the keys of this job (callers never pass empty lists).
+ * In links mode the list holds the linked skills too, so it may be longer than L.links by that many.
+ */
+export function buildCourseAiSchema(mode: CourseAiMode, skills: readonly string[], groups: readonly string[], linkedCount = 0): JsonSchema {
   if (mode === "weights") {
     return object({
       weights: {
@@ -208,14 +222,12 @@ export function buildCourseAiSchema(mode: CourseAiMode, skills: readonly string[
       }
     });
   }
-  const link = mode === "full"
-    ? object({ skillKey: choice(skills), groupKey: choice(groups), percent: { type: "integer" }, reason: text(L.reason) })
-    : object({ skillKey: choice(skills), groupKey: choice(groups), reason: text(L.reason) });
-  const links: JsonSchema = { type: "array", maxItems: Math.min(L.links, skills.length), items: link };
+  const link = object({ skillKey: choice(skills), groupKey: choice(groups), percent: { type: "integer" }, reason: text(L.reason) });
+  const links: JsonSchema = { type: "array", maxItems: Math.min(L.links + (mode === "links" ? linkedCount : 0), skills.length), items: link };
   if (mode === "full") return object({ links });
   return object({
     links,
-    newSkills: { type: "array", maxItems: L.newSkills, items: object({ name: text(L.skillName), groupKey: choice(groups), reason: text(L.reason) }) }
+    newSkills: { type: "array", maxItems: L.newSkills, items: object({ name: text(L.skillName), groupKey: choice(groups), percent: { type: "integer" }, reason: text(L.reason) }) }
   });
 }
 
@@ -264,15 +276,18 @@ export function renderCourseDataBlock(source: CourseAiSource, mode: CourseAiMode
   const lines: string[] = [];
   const push = (...items: string[]) => lines.push(...items);
   const groupNames = new Map(groups.map((group) => [group.id, group.name]));
+  const linked = new Map(source.links.map((link) => [link.skillId, link]));
   const descriptions = new Map([
     ...source.profiles.map((skill) => [skill.id, skill.description] as const),
     ...source.careerSkills.map((skill) => [skill.id, skill.description] as const),
-    ...source.links.map((link) => [link.skillId, link.description] as const)
+    // A link's own description (the profile's scope or the skill's description) only fills a gap.
+    ...source.links.filter((link) => link.description && !source.profiles.some((skill) => skill.id === link.skillId)).map((link) => [link.skillId, link.description] as const)
   ]);
   const skillLine = (entry: SkillKey) => {
     const description = sanitizeText(descriptions.get(entry.id) ?? "", L.catalogDescription);
     const group = entry.groupId ? sanitizeText(groupNames.get(entry.groupId) ?? "", 160) || "chưa có nhóm" : "kỹ năng nghề, chưa có nhóm";
-    return `${entry.key} | ${sanitizeText(entry.name, 100)} | ${group}${description ? ` | ${description}` : ""}`;
+    const marker = mode === "links" && linked.has(entry.id) ? " | đã liên kết" : "";
+    return `${entry.key} | ${sanitizeText(entry.name, 100)} | ${group}${description ? ` | ${description}` : ""}${marker}`;
   };
   const curriculum = source.curriculum;
 
@@ -292,14 +307,16 @@ export function renderCourseDataBlock(source: CourseAiSource, mode: CourseAiMode
   for (const entry of skills) push(skillLine(entry));
   push("", "[4. HỌC PHẦN CẦN LIÊN KẾT KỸ NĂNG]", ...courseLines(source));
   if (mode === "links") {
-    push("", "[5. KỸ NĂNG ĐÃ LIÊN KẾT VỚI HỌC PHẦN] (không chọn lại)");
+    push("", "[5. KỸ NĂNG ĐÃ LIÊN KẾT VỚI HỌC PHẦN] (luôn đưa vào \"links\" kèm phần trăm)");
     if (!source.links.length) push("Chưa có.");
-    for (const link of source.links) push(`- ${sanitizeText(link.name, 100)}`);
+    for (const entry of skills.filter((item) => linked.has(item.id))) {
+      push(`- ${entry.key} · ${sanitizeText(entry.name, 100)} (trọng số hiện tại ${Math.round((linked.get(entry.id)!.weight ?? 0) * 100)}%)`);
+    }
   }
   push("", "=== KẾT THÚC DỮ LIỆU ===", "",
-    (mode === "links" ? "Hãy chọn kỹ năng cho học phần ở mục [4] theo đúng cấu trúc JSON đã mô tả."
-      : "Hãy chọn kỹ năng và chia trọng số cho học phần ở mục [4] theo đúng cấu trúc JSON đã mô tả.")
-      + " Nếu mục [3] không có kỹ năng nào là nội dung chính của học phần, trả về \"links\": [].");
+    "Hãy chọn kỹ năng và chia trọng số cho học phần ở mục [4] theo đúng cấu trúc JSON đã mô tả."
+      + (mode === "links" && source.links.length ? " Luôn đưa các kỹ năng đã liên kết ở mục [5] vào \"links\"."
+        : " Nếu mục [3] không có kỹ năng nào là nội dung chính của học phần, trả về \"links\": []."));
   return lines.join("\n");
 }
 
@@ -311,7 +328,7 @@ export function buildCourseAiInput(source: CourseAiSource, mode: CourseAiMode): 
     mode,
     system: COURSE_AI_SYSTEM_PROMPTS[mode],
     user: renderCourseDataBlock(source, mode, skills, groups),
-    schema: buildCourseAiSchema(mode, skills.map((entry) => entry.key), groups.map((entry) => entry.key)),
+    schema: buildCourseAiSchema(mode, skills.map((entry) => entry.key), groups.map((entry) => entry.key), source.links.length),
     options: { ...COURSE_AI_OPTIONS },
     think: COURSE_AI_THINK,
     promptVersion: COURSE_AI_PROMPT_VERSIONS[mode],

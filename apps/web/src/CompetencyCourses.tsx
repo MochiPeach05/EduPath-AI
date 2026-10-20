@@ -3,14 +3,17 @@ import { Icon } from "./admin-account-shared";
 import { ActionMenu, Modal, Pagination, Status } from "./admin-ui";
 import { useLiveFilters } from "./use-live-filters";
 import { searchTerm } from "./student-curriculum-types";
-import { assessAllocations, type AllocationInput } from "./competency-weights";
+import { assessAllocations, splitEvenly, type AllocationInput } from "./competency-weights";
 import { COMPETENCY_API, competencyDate, competencyRequest, percentage, statusLabels, useCompetencyData, type CompetencyCourse, type CompetencySummary, type CourseDetail, type CurriculumRevision, type EventEntry, type Group, type Skill } from "./competency-types";
 import CompetencyCourseAi from "./CompetencyCourseAi";
 import { CompetencyBulkAi } from "./CompetencyBulkAi";
 
 type Props = { curriculum: CurriculumRevision; canManage: boolean; revision: number; onSaved: () => void };
-/** What a course row opens: details, the full editor, one of the manual steps, or an AI proposal. */
-type Mode = "view" | "edit" | "links" | "weights" | "removeLinks" | "clearWeights" | "aiLinks" | "aiWeights";
+/**
+ * What a course row opens: details, the full editor, one of the manual steps, or an AI proposal.
+ * "Thêm trọng số (Thủ công)" and "(AI)" were merged into "Tạo liên kết kỹ năng" (user, 2026-10-20).
+ */
+type Mode = "view" | "edit" | "links" | "removeLinks" | "clearWeights" | "aiLinks";
 const courseUrl = (revisionId: string, code: string) => `${COMPETENCY_API}/courses/${encodeURIComponent(revisionId)}/${encodeURIComponent(code)}`;
 const putCourse = (detail: CourseDetail, body: { status: "draft" | "active"; links: { skillId: string; weight: number }[]; note: string }) =>
   competencyRequest(courseUrl(detail.revisionId, detail.courseCode), { method: "PUT", headers: { "Content-Type": "application/json", "x-version": detail.version ?? "new" }, body: JSON.stringify(body) });
@@ -34,7 +37,7 @@ export function CompetencyCoursesTab({ curriculum, canManage, revision, onSaved 
         <div><span>Chưa cấu hình</span><strong>{summary.data.missingCount}</strong><small>{summary.data.archivedCount} cấu hình đã lưu trữ</small></div>
         <div><span>Kỹ năng chưa đóng góp</span><strong>{summary.data.unlinkedSkillCount}</strong><small>Có cấu hình năng lực</small></div>
       </div>
-      {summary.data.activeCount === 0 && summary.data.draftCount === 0 && <p className="comp-empty-config" role="status">{curriculum.cohortCode} · phiên bản {curriculum.version} chưa có cấu hình học phần nào đang sử dụng. Có thể chạy AI cho cả chương trình hoặc tạo liên kết, trọng số cho từng học phần.</p>}
+      {summary.data.activeCount === 0 && summary.data.draftCount === 0 && <p className="comp-empty-config" role="status">{curriculum.cohortCode} · phiên bản {curriculum.version} chưa có cấu hình học phần nào đang sử dụng. Có thể chạy AI cho cả chương trình hoặc tạo liên kết kỹ năng kèm trọng số cho từng học phần.</p>}
       {summary.data.warnings.length > 0 && <details className="cm-warning"><summary>{summary.data.warnings.length} cảnh báo cần rà soát</summary><ul>{summary.data.warnings.map((warning, index) => <li key={`${warning.code}-${index}`}>{warning.courseCode && <strong>{warning.courseCode}: </strong>}{warning.message}</li>)}</ul></details>}
     </>}</section>
     <CompetencyBulkAi curriculum={curriculum} canManage={canManage} revision={revision} onSaved={onSaved} />
@@ -55,8 +58,6 @@ export function CompetencyCoursesTab({ curriculum, canManage, revision, onSaved 
             ...(canManage ? [
               { key: "links", icon: "link", label: "Tạo liên kết kỹ năng (Thủ công)", disabled: repeated, onSelect: () => open(course, "links") },
               { key: "aiLinks", icon: "spark", label: "Tạo liên kết kỹ năng (AI)", disabled: repeated, onSelect: () => open(course, "aiLinks") },
-              { key: "weights", icon: "chart", label: "Thêm trọng số (Thủ công)", disabled: repeated || !linked, onSelect: () => open(course, "weights") },
-              { key: "aiWeights", icon: "spark", label: "Thêm trọng số (AI)", disabled: repeated || !linked, onSelect: () => open(course, "aiWeights") },
               { key: "edit", icon: "edit", label: "Chỉnh sửa liên kết và trọng số", disabled: repeated, onSelect: () => open(course, "edit") },
               { key: "removeLinks", icon: "trash", label: "Xóa liên kết", danger: true, disabled: repeated || !linked, onSelect: () => open(course, "removeLinks") },
               { key: "clearWeights", icon: "trash", label: "Xóa trọng số", danger: true, disabled: repeated || course.totalWeight <= 0, onSelect: () => open(course, "clearWeights") },
@@ -65,14 +66,14 @@ export function CompetencyCoursesTab({ curriculum, canManage, revision, onSaved 
         </tr>;
       })}</tbody></table></div>{!courses.data.items.length && <p className="am-empty">Không có học phần phù hợp.</p>}<Pagination total={courses.data.items.length} page={page} setPage={setPage} /></>}
     </section>
-    {selected && (mode === "aiLinks" || mode === "aiWeights")
-      ? <CompetencyCourseAi curriculum={curriculum} course={selected} mode={mode === "aiLinks" ? "links" : "weights"} close={close} saved={saved} />
+    {selected && mode === "aiLinks"
+      ? <CompetencyCourseAi curriculum={curriculum} course={selected} close={close} saved={saved} />
       : selected && <CourseDialog curriculum={curriculum} course={selected} mode={mode} canManage={canManage} close={close} saved={saved} />}
   </div>;
 }
 
 const dialogTitles: Partial<Record<Mode, string>> = {
-  links: "Tạo liên kết kỹ năng (Thủ công)", weights: "Thêm trọng số (Thủ công)", removeLinks: "Xóa liên kết kỹ năng", clearWeights: "Xóa trọng số",
+  links: "Tạo liên kết kỹ năng (Thủ công)", removeLinks: "Xóa liên kết kỹ năng", clearWeights: "Xóa trọng số",
 };
 
 function CourseDialog({ curriculum, course, mode, canManage, close, saved }: { curriculum: CurriculumRevision; course: CompetencyCourse; mode: Mode; canManage: boolean; close: () => void; saved: () => void }) {
@@ -83,7 +84,6 @@ function CourseDialog({ curriculum, course, mode, canManage, close, saved }: { c
   return <Modal title={title ? `${title} · ${course.code}` : `${course.code} · ${course.name}`} onClose={close} busy={busy}>
     <div className="cm-dialog-body comp-course-dialog"><p className="comp-hint">{course.code} · {course.name} · {curriculum.cohortCode} · phiên bản {curriculum.version} · {curriculum.isCurrent ? "Hiện hành" : "Lịch sử"}</p><Status {...remote} />
       {remote.data && (mode === "links" ? <ManualLinks key={course.code} {...step} />
-        : mode === "weights" ? <ManualWeights key={course.code} {...step} />
           : mode === "removeLinks" ? <RemoveLinks key={course.code} {...step} />
             : mode === "clearWeights" ? <ClearWeights key={course.code} {...step} />
               : <CourseConfiguration key={course.code} initial={remote.data} canManage={canManage} startEditing={mode === "edit"} close={close} saved={saved} busy={busy} setBusy={setBusy} />)}
@@ -102,31 +102,52 @@ function DialogActions({ busy, close, children }: { busy: boolean; close: () => 
   return <div className="cm-actions cm-dialog-actions"><button type="button" className="am-outline" disabled={busy} onClick={close}><Icon name="close" /> Hủy</button><div className="cm-dialog-actions-main">{children}</div></div>;
 }
 
-/** "Tạo liên kết kỹ năng (Thủ công)": tick skills of the competency catalog; they join the course at 0%. */
+/**
+ * "Tạo liên kết kỹ năng (Thủ công)" (with "Thêm trọng số (Thủ công)" merged in, user 2026-10-20): tick
+ * skills of the competency catalog and give every skill of the course its percent, linked ones included.
+ * A draft is saved whatever the total; applying needs exactly 100% and skills in use.
+ */
 function ManualLinks({ detail, canManage, close, saved, busy, setBusy }: StepProps) {
   const [current] = useState(detail);
   const skills = useCompetencyData<{ items: Skill[] }>(`${COMPETENCY_API}/skills`);
   const groups = useCompetencyData<{ items: Group[] }>(`${COMPETENCY_API}/groups`);
   const [chosen, setChosen] = useState<string[]>([]);
+  const [percents, setPercents] = useState<Record<string, string>>(() =>
+    Object.fromEntries(current.links.map((link) => [link.skillId, String(Number((link.weight * 100).toFixed(8)))])));
   const [term, setTerm] = useState("");
   const [groupId, setGroupId] = useState("");
   const [error, setError] = useState("");
   const linked = new Set(current.links.map((link) => link.skillId));
+  const catalog = new Map((skills.data?.items ?? []).map((skill) => [skill.id, skill]));
   const available = (skills.data?.items ?? []).filter((skill) => !linked.has(skill.id) && skill.isActive && skill.groupActive
     && (!groupId || skill.groupId === groupId) && searchTerm(`${skill.name} ${skill.groupName}`).includes(searchTerm(term)));
-  const toggle = (id: string) => setChosen((previous) => previous.includes(id) ? previous.filter((item) => item !== id) : [...previous, id]);
-  async function save() {
-    if (busy || !canManage || !chosen.length) return;
+  // Every skill of the course after the save: its links first, then the ticked ones.
+  const rows = [
+    ...current.links.map((link) => ({ skillId: link.skillId, name: link.skillName, group: link.groupName, linked: true, usable: link.isActive })),
+    ...chosen.map((id) => {
+      const skill = catalog.get(id);
+      return { skillId: id, name: skill?.name ?? "", group: skill?.groupName ?? "", linked: false, usable: Boolean(skill?.isActive && skill.groupActive) };
+    }),
+  ];
+  const allocation = assessAllocations(rows.map((row) => ({ skillId: row.skillId, percent: percents[row.skillId] ?? "0" })));
+  const unavailable = rows.some((row) => !row.usable);
+  const toggle = (id: string) => {
+    setChosen((previous) => previous.includes(id) ? previous.filter((item) => item !== id) : [...previous, id]);
+    setPercents((previous) => id in previous ? previous : { ...previous, [id]: "0" });
+  };
+  const even = () => {
+    const values = splitEvenly(rows.length);
+    setPercents((previous) => ({ ...previous, ...Object.fromEntries(rows.map((row, index) => [row.skillId, String(values[index])])) }));
+  };
+  async function save(status: "draft" | "active") {
+    if (busy || !canManage || !rows.length || allocation.errors.length || (status === "active" && (!allocation.canActivate || unavailable))) return;
     setBusy(true); setError("");
-    try {
-      const links = [...current.links.map((link) => ({ skillId: link.skillId, weight: link.weight })), ...chosen.map((skillId) => ({ skillId, weight: 0 }))];
-      await putCourse(current, { status: keepStatus(current, links), links, note: current.note });
-      saved();
-    } catch (failure) { setError((failure as Error).message); }
+    try { await putCourse(current, { status, links: allocation.links, note: current.note }); saved(); }
+    catch (failure) { setError((failure as Error).message); }
     finally { setBusy(false); }
   }
   return <div className="cm-form">
-    <p className="comp-hint">Chọn kỹ năng học phần này rèn luyện. Kỹ năng mới được thêm với trọng số 0%; dùng “Thêm trọng số” để chia 100% sau. Học phần đã có {current.links.length} kỹ năng liên kết.</p>
+    <p className="comp-hint">Chọn kỹ năng học phần này rèn luyện rồi nhập trọng số cho mọi kỹ năng của học phần. Áp dụng cần tổng đúng 100%; bản nháp được lưu dù tổng chưa đủ. Học phần đã có {current.links.length} kỹ năng liên kết.</p>
     <Status {...skills} />
     <div className="cm-filters comp-pick-filters">
       <label className="cm-search">Tìm kỹ năng<input maxLength={200} value={term} onChange={(event) => setTerm(event.target.value)} placeholder="Tên kỹ năng…" /></label>
@@ -137,40 +158,23 @@ function ManualLinks({ detail, canManage, close, saved, busy, setBusy }: StepPro
       {available.map((skill) => <label key={skill.id} className="cm-check"><input type="checkbox" checked={chosen.includes(skill.id)} onChange={() => toggle(skill.id)} /><span>{skill.name}<small> · {skill.groupName}</small></span></label>)}
       {!available.length && <p className="comp-hint">Không còn kỹ năng phù hợp để liên kết.</p>}
     </fieldset>}
-    <p className="cai-summary" aria-live="polite">Đã chọn {chosen.length.toLocaleString("vi-VN")} kỹ năng</p>
-    {error && <p className="admin-error cm-prewrap" role="alert">{error}</p>}
-    <DialogActions busy={busy} close={close}><button type="button" className="am-primary" disabled={busy || !chosen.length} onClick={() => void save()}><Icon name="link" /> {busy ? "Đang lưu…" : `Lưu ${chosen.length.toLocaleString("vi-VN")} liên kết`}</button></DialogActions>
-  </div>;
-}
-
-/** "Thêm trọng số (Thủ công)": split the course's 100% over its linked skills. */
-function ManualWeights({ detail, canManage, close, saved, busy, setBusy }: StepProps) {
-  const [current] = useState(detail);
-  const [rows, setRows] = useState<AllocationInput[]>(current.links.map((link) => ({ skillId: link.skillId, percent: String(Number((link.weight * 100).toFixed(8))) })));
-  const [error, setError] = useState("");
-  const allocation = assessAllocations(rows);
-  const unavailable = current.links.some((link) => !link.isActive);
-  async function save(status: "draft" | "active") {
-    if (busy || !canManage || allocation.errors.length || (status === "active" && (!allocation.canActivate || unavailable))) return;
-    setBusy(true); setError("");
-    try { await putCourse(current, { status, links: allocation.links, note: current.note }); saved(); }
-    catch (failure) { setError((failure as Error).message); }
-    finally { setBusy(false); }
-  }
-  return <div className="cm-form">
-    <p className="comp-hint">Nhập phần trăm cho từng kỹ năng đã liên kết. Áp dụng cần tổng đúng 100%; bản nháp được lưu dù tổng chưa đủ.</p>
-    <fieldset className="cm-fields" disabled={busy}><div className="comp-allocation-list">
-      {current.links.map((link, index) => <div className="comp-allocation-row comp-weight-row" key={link.skillId}>
-        <label>Kỹ năng<strong>{link.skillName}<small> · {link.groupName}</small></strong></label>
-        <label className="comp-percent">Trọng số (%)<input type="number" min="0" max="100" step="any" value={rows[index]?.percent ?? "0"} onChange={(event) => setRows(rows.map((row, at) => at === index ? { ...row, percent: event.target.value } : row))} /></label>
-        {!link.isActive && <small className="comp-row-warning">Kỹ năng hoặc nhóm đang ngừng sử dụng; không thể áp dụng.</small>}
+    <p className="cai-summary" aria-live="polite">Đã chọn thêm {chosen.length.toLocaleString("vi-VN")} kỹ năng</p>
+    <h4 className="comp-subheading">Trọng số của {rows.length.toLocaleString("vi-VN")} kỹ năng</h4>
+    {rows.length ? <fieldset className="cm-fields" disabled={busy}><div className="comp-allocation-list">
+      {rows.map((row) => <div className="comp-allocation-row comp-weight-row" key={row.skillId}>
+        <label>Kỹ năng<strong>{row.name}<small> · {row.group}{row.linked ? " · đã liên kết" : " · mới"}</small></strong></label>
+        <label className="comp-percent">Trọng số (%)<input type="number" min="0" max="100" step="any" value={percents[row.skillId] ?? "0"}
+          onChange={(event) => setPercents((previous) => ({ ...previous, [row.skillId]: event.target.value }))} /></label>
+        {!row.usable && <small className="comp-row-warning">Kỹ năng hoặc nhóm đang ngừng sử dụng; không thể áp dụng.</small>}
       </div>)}
-    </div></fieldset>
+    </div>
+    <button type="button" className="am-outline comp-even-split" onClick={even}><Icon name="chart" /> Chia đều 100%</button></fieldset>
+      : <p className="comp-hint">Chưa có kỹ năng nào: hãy chọn kỹ năng ở danh sách trên.</p>}
     <div className={`comp-weight-total${allocation.canActivate ? " comp-weight-valid" : ""}`} role="status"><span>Tổng trọng số</span><strong>{percentage(allocation.total)} / 100%</strong></div>
     {allocation.errors.length > 0 && <div className="admin-error" role="alert"><ul>{allocation.errors.map((message) => <li key={message}>{message}</li>)}</ul></div>}
     {error && <p className="admin-error cm-prewrap" role="alert">{error}</p>}
     <DialogActions busy={busy} close={close}>
-      <button type="button" className="am-outline" disabled={busy || allocation.errors.length > 0} onClick={() => void save("draft")}><Icon name="save" /> {busy ? "Đang lưu…" : "Lưu bản nháp"}</button>
+      <button type="button" className="am-outline" disabled={busy || !rows.length || allocation.errors.length > 0} onClick={() => void save("draft")}><Icon name="save" /> {busy ? "Đang lưu…" : "Lưu bản nháp"}</button>
       <button type="button" className="am-primary" disabled={busy || !allocation.canActivate || unavailable} onClick={() => void save("active")}><Icon name="save" /> {busy ? "Đang lưu…" : "Lưu và áp dụng"}</button>
     </DialogActions>
   </div>;

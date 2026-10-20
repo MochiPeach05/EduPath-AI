@@ -21,7 +21,7 @@ export type StoredCourseAiItem = {
   /** false for a career skill without a profile and for a new skill: applying creates the profile. */
   hasProfile: boolean;
   isNewSkill: boolean;
-  /** weights and full: whole percent, all items together exactly 100. null in links. */
+  /** Whole percent, all items together exactly 100; null only in links proposals made before v4 (2026-10-20). */
   percent: number | null;
   reason: string;
 };
@@ -31,7 +31,7 @@ export type StoredCourseAiResult = {
   /** Items the model returned and how many of them were dropped. */
   returned: number;
   dropped: number;
-  /** weights and full: the model's own total before scaling to 100 (null in links). */
+  /** The model's own total before scaling to 100 (null when it gave no percent). */
   modelTotal: number | null;
 };
 export type CourseAiContext = { mode: CourseAiMode; skills: SkillKey[]; groups: GroupKey[]; linked: { id: string; name: string }[] };
@@ -42,9 +42,10 @@ export type CourseAiValidation =
 const raw = z.string().max(4000);
 const key = z.string().max(16);
 const percent = z.number();
+// Since v4 a links answer carries percents and lists the linked skills too; a v3 answer has no percent.
 const linksOutput = z.object({
-  links: z.array(z.object({ skillKey: key, groupKey: key, reason: raw }).strict()).max(L.links),
-  newSkills: z.array(z.object({ name: raw, groupKey: key, reason: raw }).strict()).max(L.newSkills)
+  links: z.array(z.object({ skillKey: key, groupKey: key, percent: percent.optional(), reason: raw }).strict()).max(300),
+  newSkills: z.array(z.object({ name: raw, groupKey: key, percent: percent.optional(), reason: raw }).strict()).max(L.newSkills)
 }).strict();
 const weightsOutput = z.object({ weights: z.array(z.object({ skillKey: key, percent, reason: raw }).strict()).max(300) }).strict();
 const fullOutput = z.object({ links: z.array(z.object({ skillKey: key, groupKey: key, percent, reason: raw }).strict()).max(L.links) }).strict();
@@ -167,12 +168,14 @@ export function validateCourseAiOutput(output: unknown, context: CourseAiContext
   if (!parsed.success) return fail(parsed.error);
   const linkedNames = new Set(context.linked.map((skill) => folded(skill.name)));
   const newNames = new Set<string>();
+  const given: (number | undefined)[] = [];
   for (const item of parsed.data.links) {
     const entry = byKey.get(item.skillKey);
-    if (!entry || used.has(entry.id) || linkedIds.has(entry.id)) continue;
+    if (!entry || used.has(entry.id)) continue;
     used.add(entry.id);
-    items.push({ skillId: entry.id, skillName: entry.name, groupId: groupOf(entry, item.groupKey), hasProfile: entry.groupId !== null,
+    items.push({ skillId: entry.id, skillName: entry.name, groupId: groupOf(entry, item.groupKey), hasProfile: entry.groupId !== null || linkedIds.has(entry.id),
       isNewSkill: false, percent: null, reason: reasonOf(item.reason) });
+    given.push(item.percent);
   }
   for (const item of parsed.data.newSkills) {
     const name = cleanNewSkillName(sanitizeText(cleanKeyText(item.name, names), L.skillName));
@@ -190,8 +193,23 @@ export function validateCourseAiOutput(output: unknown, context: CourseAiContext
       items.push({ skillId: null, skillName: name, groupId: groupIds.get(item.groupKey) ?? fallbackGroup, hasProfile: false,
         isNewSkill: true, percent: null, reason: reasonOf(item.reason) });
     }
+    given.push(item.percent);
   }
   const returned = parsed.data.links.length + parsed.data.newSkills.length;
   if (returned > 0 && !items.length) return { ok: false, reason: "no_valid_items", path: "" };
-  return { ok: true, result: { mode: "links", items, returned, dropped: returned - items.length, modelTotal: null } };
+  const dropped = returned - items.length;
+  // v4 answers carry percents; a v3 answer (queued before 2026-10-20) has none and keeps null percents.
+  const hasPercents = given.some((value) => typeof value === "number");
+  // The course keeps its links: one the model left out is listed with 0%.
+  for (const link of context.linked) {
+    if (used.has(link.id)) continue;
+    used.add(link.id);
+    items.push({ skillId: link.id, skillName: link.name, groupId: context.skills.find((entry) => entry.id === link.id)?.groupId ?? null,
+      hasProfile: true, isNewSkill: false, percent: null, reason: "" });
+    given.push(0);
+  }
+  // Whole percents that add up to 100 over every item.
+  const modelTotal = hasPercents ? given.reduce<number>((sum, value) => sum + (typeof value === "number" && Number.isFinite(value) ? value : 0), 0) : null;
+  if (hasPercents) normalizePercents(given.map((value) => value ?? 0)).forEach((value, index) => { items[index]!.percent = value; });
+  return { ok: true, result: { mode: "links", items, returned, dropped, modelTotal } };
 }

@@ -30,30 +30,43 @@ describe("normalizePercents", () => {
 });
 
 describe("validateCourseAiOutput", () => {
-  it("links: keeps known keys once, never a linked skill, and names a career skill's group", () => {
+  it("links (v4): keeps known keys once, keeps the linked skill (0% when left out) and scales every percent to 100", () => {
+    // Keys: S001 Lập trình web, S002 Thiết kế cơ sở dữ liệu (linked), S003 Làm việc nhóm, S004 Docker.
     const context = contextFor("links", courseSource({ links: [{ skillId: SKILL_DB, name: "Thiết kế cơ sở dữ liệu", groupId: GROUP_CORE, description: "", weight: 1 }] }));
     const result = validateCourseAiOutput({
       links: [
-        { skillKey: "S001", groupKey: "G2", reason: "Học phần xây dựng ứng dụng S001 hoàn chỉnh." },
-        { skillKey: "S001", groupKey: "G1", reason: "lặp" },
-        { skillKey: "S099", groupKey: "G1", reason: "không có" },
-        { skillKey: "S003", groupKey: "G1", reason: "Đóng gói bản triển khai bằng container." }
+        { skillKey: "S001", groupKey: "G2", percent: 50, reason: "Học phần xây dựng ứng dụng S001 hoàn chỉnh." },
+        { skillKey: "S001", groupKey: "G1", percent: 90, reason: "lặp" },
+        { skillKey: "S099", groupKey: "G1", percent: 10, reason: "không có" },
+        { skillKey: "S004", groupKey: "G1", percent: 20, reason: "Đóng gói bản triển khai bằng container." }
       ],
       newSkills: [
-        { name: "Kỹ năng  kiểm thử API", groupKey: "G1", reason: "Học phần có phần kiểm thử API." },
-        { name: "thiết kế cơ sở dữ liệu", groupKey: "G1", reason: "đã liên kết" }
+        { name: "Kỹ năng  kiểm thử API", groupKey: "G1", percent: 10, reason: "Học phần có phần kiểm thử API." },
+        { name: "thiết kế cơ sở dữ liệu", groupKey: "G1", percent: 5, reason: "đã liên kết" }
       ]
     }, context);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.result.items).toEqual([
       // A profile keeps its own group whatever the model wrote; the key in prose became the name.
-      { skillId: SKILL_WEB, skillName: "Lập trình web", groupId: GROUP_CORE, hasProfile: true, isNewSkill: false, percent: null, reason: "Học phần xây dựng ứng dụng Lập trình web hoàn chỉnh." },
-      { skillId: SKILL_DOCKER, skillName: "Docker", groupId: GROUP_CORE, hasProfile: false, isNewSkill: false, percent: null, reason: "Đóng gói bản triển khai bằng container." },
-      { skillId: null, skillName: "Kiểm thử API", groupId: GROUP_CORE, hasProfile: false, isNewSkill: true, percent: null, reason: "Học phần có phần kiểm thử API." }
+      { skillId: SKILL_WEB, skillName: "Lập trình web", groupId: GROUP_CORE, hasProfile: true, isNewSkill: false, percent: 63, reason: "Học phần xây dựng ứng dụng Lập trình web hoàn chỉnh." },
+      { skillId: SKILL_DOCKER, skillName: "Docker", groupId: GROUP_CORE, hasProfile: false, isNewSkill: false, percent: 25, reason: "Đóng gói bản triển khai bằng container." },
+      { skillId: null, skillName: "Kiểm thử API", groupId: GROUP_CORE, hasProfile: false, isNewSkill: true, percent: 12, reason: "Học phần có phần kiểm thử API." },
+      { skillId: SKILL_DB, skillName: "Thiết kế cơ sở dữ liệu", groupId: GROUP_CORE, hasProfile: true, isNewSkill: false, percent: 0, reason: "" }
     ]);
     expect(result.result.returned).toBe(6);
     expect(result.result.dropped).toBe(3);
+    expect(result.result.modelTotal).toBe(80);
+    // The model may weigh the linked skill itself.
+    const weighed = validateCourseAiOutput({ links: [{ skillKey: "S002", groupKey: "G1", percent: 40, reason: "Thiết kế dữ liệu." }, { skillKey: "S001", groupKey: "G1", percent: 60, reason: "Trọng tâm." }], newSkills: [] }, context);
+    expect(weighed.ok && weighed.result.items.map((item) => [item.skillName, item.percent])).toEqual([["Thiết kế cơ sở dữ liệu", 40], ["Lập trình web", 60]]);
+  });
+
+  it("links: an answer without percents (v3, queued before 2026-10-20) keeps null percents and lists the linked skills", () => {
+    const context = contextFor("links", courseSource({ links: [{ skillId: SKILL_DB, name: "Thiết kế cơ sở dữ liệu", groupId: GROUP_CORE, description: "", weight: 1 }] }));
+    const result = validateCourseAiOutput({ links: [{ skillKey: "S001", groupKey: "G1", reason: "Trọng tâm." }], newSkills: [] }, context);
+    expect(result.ok && result.result.items.map((item) => [item.skillName, item.percent])).toEqual([["Lập trình web", null], ["Thiết kế cơ sở dữ liệu", null]]);
+    expect(result.ok && result.result.modelTotal).toBeNull();
   });
 
   it("links: an empty answer is a valid empty proposal; only bad items fail the job", () => {

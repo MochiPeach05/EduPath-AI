@@ -92,7 +92,7 @@ const failures: Record<string, string> = {
   course_already_linked: "Học phần đã có liên kết kỹ năng nên không chạy lại cho cả chương trình.",
   no_candidate_skills: NO_MATCHING_SKILL_MESSAGE,
   no_active_groups: "Chưa có nhóm năng lực đang sử dụng. Hãy thêm nhóm năng lực trước.",
-  links_changed: "Liên kết kỹ năng của học phần vừa thay đổi. Hãy tạo lại đề xuất trọng số.",
+  links_changed: "Liên kết kỹ năng của học phần vừa thay đổi. Hãy tạo lại đề xuất.",
   skill_already_linked: "Có kỹ năng đã được liên kết với học phần. Hãy kiểm tra lại danh sách.",
   group_required: "Hãy chọn nhóm năng lực cho kỹ năng chưa có cấu hình năng lực.",
   confirmation_mismatch: "Mã khóa nhập để xác nhận chưa đúng.",

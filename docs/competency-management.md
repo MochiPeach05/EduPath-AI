@@ -12,10 +12,9 @@ Nhóm **Quản lý năng lực** trên thanh bên quản trị (mở/đóng như
 | AD-COMP-02 Xem danh sách kỹ năng đánh giá, AD-COMP-12 Tìm kiếm, AD-COMP-15 Lọc | Trang **Cấu hình năng lực**: tìm có/không dấu, lọc nhóm năng lực và trạng thái. |
 | AD-COMP-04 Thêm, AD-COMP-05 Cập nhật, Xóa kỹ năng đánh giá | Thêm: chỉ nhập tên kỹ năng, không còn ô "Nguồn kỹ năng" (18/10/2026). Tên đã có trong danh mục Kỹ năng (bỏ qua hoa thường, dấu, khoảng trắng) thì dùng lại kỹ năng đó và giữ mô tả hiện có (mô tả trống thì lấy mô tả vừa nhập); kỹ năng đã có cấu hình năng lực thì form báo và khóa nút lưu, cần dùng Chỉnh sửa. Chỉnh sửa, Xóa (xóa mềm, chặn khi cấu hình đang áp dụng còn dùng). |
 | AD-COMP-06 Xem trọng số năng lực | Trang **Cấu hình học phần** (trước là tab "Trọng số học phần"): tổng %, trạng thái, chi tiết và lịch sử từng học phần. |
-| AD-COMP-09 Tạo liên kết kỹ năng với học phần (Thủ công) | **Tạo liên kết kỹ năng (Thủ công)**: chọn kỹ năng; kỹ năng mới vào học phần với trọng số 0%. |
-| Tạo liên kết kỹ năng với học phần (AI) | **Tạo liên kết kỹ năng (AI)**: AI đề xuất kỹ năng, quản trị viên duyệt rồi lưu (xem mục AI). |
-| AD-COMP-07 Thêm trọng số năng lực (Thủ công) | **Thêm trọng số (Thủ công)**: nhập % cho các kỹ năng đã liên kết; áp dụng cần tổng 100%. |
-| Thêm trọng số năng lực (AI) | **Thêm trọng số (AI)**: AI chia 100%, quản trị viên sửa rồi lưu bản nháp hoặc áp dụng. |
+| AD-COMP-09 Tạo liên kết kỹ năng với học phần (Thủ công) | **Tạo liên kết kỹ năng (Thủ công)**: chọn kỹ năng và nhập trọng số (%) cho mọi kỹ năng của học phần, kể cả kỹ năng đã liên kết; nút "Chia đều 100%"; lưu bản nháp (tổng bất kỳ) hoặc áp dụng (tổng đúng 100%). |
+| Tạo liên kết kỹ năng với học phần (AI) | **Tạo liên kết kỹ năng (AI)**: AI đề xuất kỹ năng **kèm trọng số**, quản trị viên duyệt, sửa % rồi lưu bản nháp hoặc áp dụng (xem mục AI). |
+| AD-COMP-07 Thêm trọng số năng lực (Thủ công) và (AI) | Gộp vào hai mục Tạo liên kết kỹ năng ở trên từ 20/10/2026 theo yêu cầu; menu không còn hai mục "Thêm trọng số". Sửa riêng trọng số dùng **Chỉnh sửa liên kết và trọng số**. |
 | AD-COMP-08 Cập nhật trọng số, AD-COMP-10 Cập nhật liên kết | **Chỉnh sửa liên kết và trọng số**: trình chỉnh sửa đầy đủ (thêm, đổi, gỡ dòng và %). |
 | AD-COMP-14 Xóa liên kết kỹ năng với học phần | **Xóa liên kết**: chọn kỹ năng cần gỡ. Học phần đang áp dụng mà tổng không còn 100% chuyển về bản nháp. |
 | Xóa trọng số năng lực | **Xóa trọng số**: mọi trọng số về 0%, học phần về bản nháp, liên kết giữ nguyên. |
@@ -87,8 +86,8 @@ Việc v2 gửi `think: true` trong job; worker trước 17/10/2026 luôn gửi 
 
 | Chế độ | Prompt | AI trả về | Lưu |
 | --- | --- | --- | --- |
-| `links` — Tạo liên kết kỹ năng (AI) | `comp-link-v3` | Tối đa 8 kỹ năng theo khóa `S001…` + nhóm `G1…`, tối đa 2 kỹ năng mới theo tên, lý do ngắn | Kỹ năng được chọn vào học phần với 0%; học phần đang áp dụng vẫn áp dụng (tổng không đổi), học phần mới thành bản nháp. |
-| `weights` — Thêm trọng số (AI) | `comp-weight-v2` | % nguyên cho từng kỹ năng đã liên kết | Trọng số đã duyệt thay trọng số cũ; lưu bản nháp hoặc áp dụng. 409 `links_changed` nếu liên kết đã đổi. |
+| `links` — Tạo liên kết kỹ năng (AI) | `comp-link-v4` | Tối đa 8 kỹ năng mới theo khóa `S001…` + nhóm `G1…` và mọi kỹ năng đã liên kết (đưa vào danh mục với dấu "đã liên kết", nhắc lại ở mục [5] kèm trọng số hiện tại), tối đa 2 kỹ năng mới theo tên; **mỗi mục có % nguyên**, server chia lại cho tổng đúng 100; kỹ năng đã liên kết mà AI bỏ sót được thêm với 0% | Body `{items:[{skillId\|null, skillName, groupId\|null, percent}], status}`: các kỹ năng giữ lại kèm % thành liên kết và trọng số của học phần, lưu bản nháp hoặc áp dụng. Mọi kỹ năng đã liên kết phải có trong body (thiếu → 409 `links_changed`; đề xuất thiếu kỹ năng đã liên kết hiện "stale"). Đề xuất `comp-link-v3` (trước 20/10/2026) không có % nên bắt đầu từ 0%. |
+| `weights` — Thêm trọng số (AI) cũ | `comp-weight-v2` | % nguyên cho từng kỹ năng đã liên kết | Không còn nút từ 20/10/2026; API giữ lại cho đề xuất cũ. |
 | `full` — cả chương trình | `comp-course-v3` | Tối đa 8 kỹ năng kèm %, không kỹ năng mới; rỗng khi không có kỹ năng phù hợp | "Lưu tất cả thành bản nháp" hoặc "Lưu và áp dụng" (cần tick xác nhận); mỗi học phần một savepoint, học phần có liên kết từ trước bị bỏ qua. |
 
 - **Ứng viên**: cấu hình năng lực đang dùng (theo nhóm rồi tên) và **kỹ năng nghề nghiệp chưa đo** — kỹ năng chung mà nghề còn yêu cầu nhưng chưa có cấu hình năng lực (Docker, Linux…). Khi lưu, kỹ năng nghề chưa đo được tạo cấu hình năng lực trong nhóm AI chọn (quản trị viên đổi được); kỹ năng mới được thêm vào kho kỹ năng chung của Nghề nghiệp rồi tạo cấu hình. Nhờ vậy kỹ năng do AI tạo luôn dùng được cho nghề nghiệp, và kỹ năng nghề chưa đo trở nên đo được.
@@ -109,6 +108,10 @@ Việc v2 gửi `think: true` trong job; worker trước 17/10/2026 luôn gửi 
 - 17/10/2026: thêm nút **Thêm bằng AI** ở tab Danh mục kỹ năng (migration 035, chế độ `skills`), rồi gỡ trong cùng ngày theo yêu cầu (migration 036); thêm kỹ năng chỉ còn nút thủ công.
 - 17/10/2026 (sau): thống nhất thuật ngữ Nhóm năng lực / Kỹ năng / Cấu hình năng lực (bảng ở đầu tài liệu); tab "Trọng số học phần" đổi tên thành Cấu hình học phần; rồi ba tab của trang "Năng lực" được tách thành ba trang trong nhóm **Quản lý năng lực** trên thanh bên.
 - 20/10/2026: thêm "nhóm năng lực theo lĩnh vực" (4b36081: một kỹ năng có nhóm mặc định cộng thêm một nhóm cho mỗi lĩnh vực nghề nghiệp, điểm tính theo comp-calc-v10), rồi hoàn tác trong cùng ngày theo yêu cầu ("thấy đang có sai sai"). Code trở về bản bbfe5f2 (comp-calc-v9). Migration 037 vẫn giữ vì production đã chạy; bảng `ad_comp_skill_field_groups` không còn được dùng.
+- 20/10/2026 (sau): theo yêu cầu "Bỏ thêm trọng số bằng AI và thủ công gộp chúng vào chức năng Tạo liên kết kỹ năng", menu học phần bỏ "Thêm trọng số (Thủ công)" và "(AI)".
+  - **Tạo liên kết kỹ năng (Thủ công)**: chọn kỹ năng và nhập % trong cùng hộp thoại, có nút "Chia đều 100%".
+  - **Tạo liên kết kỹ năng (AI)** (prompt `comp-link-v4`): AI đề xuất kỹ năng kèm % cho cả học phần, gồm các kỹ năng đã liên kết. Lưu bản nháp hoặc áp dụng ngay.
+  - Loại việc của máy AI không đổi nên không cần khởi động lại worker.
 - 20/10/2026 (sau): ô Nhóm năng lực trong form Thêm/Chỉnh sửa cấu hình năng lực không còn dòng "Chọn nhóm năng lực". Cấu hình mới chọn sẵn nhóm đầu tiên đang sử dụng; nhóm hiện trên ô luôn là nhóm được lưu, kể cả khi danh sách nhóm tải xong sau lúc mở hộp thoại.
 - 19/10/2026: trường hợp "Không có kỹ năng nào phù hợp với môn đó" (prompt v3, câu "Danh sách kỹ năng hiện tại trong kho dữ liệu của bạn chưa đủ đáp ứng môn học này. Vui lòng bổ sung thêm kỹ năng", ô đếm Chưa có kỹ năng phù hợp) và thông báo "AI đang trong quá trình tính toán…" khi lần chạy cho cả chương trình đang xử lý.
 - 20/10/2026: form Nhóm năng lực và Cấu hình năng lực hiện thông báo tiếng Việt dưới ô bắt buộc. Mô tả nhóm và mô tả kỹ năng chung tối đa 200 từ, phạm vi đánh giá tối đa 400 từ, có bộ đếm từ. Nút "Lưu cấu hình năng lực" không còn bị khóa mà không nói lý do. Xem `docs/admin-form-checks.md`.

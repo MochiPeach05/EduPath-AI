@@ -19,63 +19,70 @@ const suggestion = (patch: Partial<CourseAiSuggestion>): CourseAiSuggestion => (
   status: "completed", errorCode: null, createdAt: "2026-10-16T05:00:00.000Z", updatedAt: "2026-10-16T05:00:40.000Z", completedAt: "2026-10-16T05:00:40.000Z",
   appliedAt: null, model: "gemma4:e4b", promptVersion: "comp-link-v1", items: [], stale: false, ...patch });
 
-function render(mode: "links" | "weights", latest: CourseAiSuggestion | null, status: CourseAiStatus = online) {
+function render(latest: CourseAiSuggestion | null, status: CourseAiStatus = online) {
   liveData.mockImplementation((url: string) => url.endsWith("/status") ? { data: status, error: null, loading: false }
     : url.includes("/latest?") ? { data: { suggestion: latest }, error: null, loading: false }
       : { data: { items: [{ id: "g1", name: "Chuyên môn", description: "", isActive: true, version: "v", skillCount: 3 }] }, error: null, loading: false });
-  return renderToStaticMarkup(createElement(CompetencyCourseAi, { curriculum, course, mode, close: () => {}, saved: () => {} }));
+  return renderToStaticMarkup(createElement(CompetencyCourseAi, { curriculum, course, close: () => {}, saved: () => {} }));
 }
 
 describe("CompetencyCourseAi", () => {
-  it("introduces each mode and keeps student data out", () => {
-    const links = render("links", null);
+  it("proposes skills and weights in one step and keeps student data out (2026-10-20)", () => {
+    const links = render(null);
     expect(links).toContain("Tạo liên kết kỹ năng (AI) · 71ITSE40103");
+    expect(links).toContain("chia 100% trọng số cho các kỹ năng của học phần, kể cả 2 kỹ năng đã liên kết");
     expect(links).toContain("không nhận dữ liệu sinh viên");
     expect(links).toMatch(/<button type="button" class="am-primary">.*Tạo đề xuất<\/button>/);
-    expect(render("weights", null)).toContain("AI chia 100% trọng số của học phần cho 2 kỹ năng đã liên kết.");
-    expect(render("links", null, { enabled: false, worker: { online: false, supportsSuggestions: false, seenAt: null } }))
+    expect(render(null, { enabled: false, worker: { online: false, supportsSuggestions: false, seenAt: null } }))
       .toMatch(/Máy chủ chưa bật tính năng AI\.[\s\S]*<button type="button" class="am-primary" disabled="">/);
   });
 
   it("shows the waiting and failed states", () => {
-    expect(render("links", suggestion({ status: "queued", completedAt: null }))).toContain("Đang chờ máy AI nhận việc…");
-    expect(render("weights", suggestion({ status: "processing", completedAt: null }))).toContain("AI đang chia trọng số…");
-    expect(render("links", suggestion({ status: "failed", errorCode: "ai_timeout" }))).toContain("Máy AI xử lý quá thời gian cho phép.");
-    expect(render("links", suggestion({ status: "processing", completedAt: null })))
+    expect(render(suggestion({ status: "queued", completedAt: null }))).toContain("Đang chờ máy AI nhận việc…");
+    expect(render(suggestion({ status: "processing", completedAt: null }))).toContain("AI đang chọn kỹ năng và chia trọng số cho học phần…");
+    expect(render(suggestion({ status: "failed", errorCode: "ai_timeout" }))).toContain("Máy AI xử lý quá thời gian cho phép.");
+    expect(render(suggestion({ status: "processing", completedAt: null })))
       .toContain("AI đang trong quá trình tính toán... Bạn có thể thực hiện các thao tác khác trên hệ thống và quay lại nhận kết quả sau ít phút nữa.");
   });
 
   it("says the catalog has no fitting skill when the AI picks none (2026-10-19)", () => {
-    const html = render("links", suggestion({ items: [] }));
+    const html = render(suggestion({ items: [] }));
     expect(html).toContain("Chưa có kỹ năng phù hợp cho 71ITSE40103");
     expect(html).toContain("Danh sách kỹ năng hiện tại trong kho dữ liệu của bạn chưa đủ đáp ứng môn học này. Vui lòng bổ sung thêm kỹ năng.");
     expect(html).toContain('<a class="am-outline" href="/quantri/cau-hinh-nang-luc">');
-    expect(html).not.toContain("liên kết</button>");
+    expect(html).not.toContain("Lưu và áp dụng</button>");
   });
 
-  it("reviews links: a career skill without a profile needs a group, a new skill starts unticked", () => {
-    const html = render("links", suggestion({ items: [
-      item({}),
-      item({ index: 1, skillId: "s-docker", skillName: "Docker", hasProfile: false, groupId: null, groupName: null }),
-      item({ index: 2, skillId: null, skillName: "Kiểm thử API", hasProfile: false, isNewSkill: true }),
-      item({ index: 3, skillId: "s-team", skillName: "Làm việc nhóm", alreadyLinked: true }),
+  it("reviews skills with their percents: a career skill without a profile needs a group, a new skill starts unticked, a linked one stays", () => {
+    const html = render(suggestion({ items: [
+      item({ percent: 50 }),
+      item({ index: 1, skillId: "s-docker", skillName: "Docker", hasProfile: false, groupId: null, groupName: null, percent: 20 }),
+      item({ index: 2, skillId: null, skillName: "Kiểm thử API", hasProfile: false, isNewSkill: true, percent: 10 }),
+      item({ index: 3, skillId: "s-team", skillName: "Làm việc nhóm", alreadyLinked: true, percent: 20 }),
     ] }));
-    expect(html).toContain("AI đề xuất 4 kỹ năng cho 71ITSE40103");
+    expect(html).toContain("AI đề xuất 3 kỹ năng mới và trọng số cho 71ITSE40103");
     expect(html).toContain("Kỹ năng nghề chưa đo");
     expect(html).toContain("Kỹ năng mới");
     expect(html).toContain("Đã liên kết");
     expect(html).toContain("Chọn nhóm năng lực.");
-    expect(html).toContain("Lưu 2 liên kết");
+    // The linked skill is always kept and has no remove button; the unticked new skill cannot take a percent.
+    expect(html).toContain('<input type="checkbox" disabled="" checked=""/><span>Làm việc nhóm</span>');
+    expect(html).not.toContain('aria-label="Bỏ đề xuất Làm việc nhóm"');
+    expect(html).toMatch(/<input type="number" min="0" max="100" step="any" disabled="" value="10"\/>/);
+    // Kept: web 50 + Docker 20 + linked 20 = 90%: a draft only.
+    expect(html).toContain("71ITSE40103 sẽ có 3 kỹ năng (2 kỹ năng mới)");
+    expect(html).toMatch(/<div class="comp-weight-total" role="status"><span>Tổng trọng số<\/span><strong>90% \/ 100%<\/strong>/);
+    expect(html).toMatch(/<button type="button" class="am-primary" disabled="">.*Lưu và áp dụng<\/button>/);
   });
 
-  it("reviews weights with the total and blocks a stale proposal", () => {
-    const items = [item({ percent: 70 }), item({ index: 1, skillId: "s-db", skillName: "Thiết kế cơ sở dữ liệu", percent: 30 })];
-    const html = render("weights", suggestion({ mode: "weights", items }));
-    expect(html).toContain("AI chia trọng số cho 2 kỹ năng của 71ITSE40103");
+  it("applies at exactly 100% and blocks a stale proposal", () => {
+    const items = [item({ percent: 70 }), item({ index: 1, skillId: "s-db", skillName: "Thiết kế cơ sở dữ liệu", alreadyLinked: true, percent: 30 })];
+    const html = render(suggestion({ items }));
     expect(html).toMatch(/comp-weight-total comp-weight-valid[\s\S]*100%/);
+    expect(html).toMatch(/<button type="button" class="am-outline">.*Lưu bản nháp<\/button>/);
     expect(html).toMatch(/<button type="button" class="am-primary">.*Lưu và áp dụng<\/button>/);
-    const stale = render("weights", suggestion({ mode: "weights", items, stale: true }));
-    expect(stale).toContain("Liên kết kỹ năng của học phần đã thay đổi sau khi AI đề xuất.");
+    const stale = render(suggestion({ items, stale: true }));
+    expect(stale).toContain("Liên kết kỹ năng của học phần đã thay đổi sau khi AI đề xuất. Hãy tạo lại đề xuất.");
     expect(stale).toMatch(/<button type="button" class="am-primary" disabled="">.*Lưu và áp dụng<\/button>/);
   });
 });
