@@ -35,13 +35,12 @@ Tab "Danh mục kỹ năng" đổi thành **Cấu hình năng lực**, nút "Th�
 
 ## Dữ liệu
 
-Migration **026** tạo các bảng; **034** thêm xóa mềm nhóm và bảng đề xuất AI; **035** thêm chế độ `skills` cho nút "Thêm bằng AI" của trang Cấu hình năng lực (khi đó là tab "Danh mục kỹ năng") (`course_code` NULL); nút này đã được gỡ ngày 17/10/2026 theo yêu cầu, **036** hủy các đề xuất `skills` còn chờ; **037** thêm bảng nhóm năng lực theo lĩnh vực (20/10/2026). Giá trị `skills` trong ràng buộc chế độ và `course_code` cho phép NULL vẫn giữ vì 035 đã chạy trên production; không còn mã nào tạo dòng `skills`.
+Migration **026** tạo các bảng; **034** thêm xóa mềm nhóm và bảng đề xuất AI; **035** thêm chế độ `skills` cho nút "Thêm bằng AI" của trang Cấu hình năng lực (khi đó là tab "Danh mục kỹ năng") (`course_code` NULL); nút này đã được gỡ ngày 17/10/2026 theo yêu cầu, **036** hủy các đề xuất `skills` còn chờ. **037** tạo bảng `ad_comp_skill_field_groups` cho "nhóm năng lực theo lĩnh vực". Tính năng này đã được hoàn tác ngày 20/10/2026; file 037 vẫn giữ vì production đã chạy, và bảng không còn được đọc hay ghi. Giá trị `skills` trong ràng buộc chế độ và `course_code` cho phép NULL vẫn giữ vì 035 đã chạy trên production; không còn mã nào tạo dòng `skills`.
 
 | Bảng | Vai trò |
 | --- | --- |
 | `ad_comp_groups` | Nhóm, mô tả, trạng thái, token phiên bản, `deleted_at` (034). Tên duy nhất trong các nhóm chưa xóa. |
-| `ad_comp_skills` | Cấu hình năng lực theo **`career_skills.id`** (khóa chính cũng là khóa ngoại): nhóm (nhóm mặc định), phạm vi, trạng thái, xóa mềm. Mọi kỹ năng năng lực vì vậy luôn là kỹ năng chung của mục Nghề nghiệp. |
-| `ad_comp_skill_field_groups` (037) | **Nhóm năng lực theo lĩnh vực**: `(skill_id, field_id) → group_id`, tối đa một nhóm cho mỗi kỹ năng và lĩnh vực nghề nghiệp (`career_fields`). Sinh viên có nghề mục tiêu thuộc lĩnh vực đó được tính kỹ năng vào nhóm này thay cho nhóm mặc định. Dòng của cấu hình, lĩnh vực hoặc nhóm đã xóa được giữ cho lịch sử nhưng không được dùng khi tính điểm. |
+| `ad_comp_skills` | Cấu hình năng lực theo **`career_skills.id`** (khóa chính cũng là khóa ngoại): nhóm, phạm vi, trạng thái, xóa mềm. Mọi kỹ năng năng lực vì vậy luôn là kỹ năng chung của mục Nghề nghiệp. |
 | `ad_comp_course_configs` | Cấu hình theo `(phiên bản CTĐT, mã học phần)`: trạng thái `draft`/`active`/`archived`, token, ghi chú. |
 | `ad_comp_course_links` | Liên kết kỹ năng–học phần **kèm trọng số** `[0,1]`: liên kết và trọng số là cùng một dòng. Trọng số là phần của kỹ năng trong 100% của học phần. |
 | `ad_comp_events` | Snapshot mỗi lần lưu, người thực hiện, thời gian. |
@@ -58,9 +57,9 @@ Prefix **`/api/admin/competencies`**; mọi endpoint cần quyền quản trị 
 | --- | --- |
 | GET `/groups`, GET `/groups/:id` | Nhóm chưa xóa, số kỹ năng, chi tiết và lịch sử. |
 | POST `/groups`, PATCH `/groups/:id` | Thêm, cập nhật (`x-version`). |
-| DELETE `/groups/:id` | Xóa mềm; `x-version` + `{confirmed:true}`; 409 `group_not_empty` khi còn kỹ năng, kể cả khi nhóm còn là nhóm theo lĩnh vực của một kỹ năng. |
+| DELETE `/groups/:id` | Xóa mềm; `x-version` + `{confirmed:true}`; 409 `group_not_empty` khi còn kỹ năng. |
 | GET `/catalog` | Kỹ năng chung dùng lại được. |
-| GET/POST `/skills`, GET/PATCH/DELETE `/skills/:id` | Cấu hình năng lực. Mỗi cấu hình có `fieldGroups` (`fieldId`, `fieldName`, `groupId`, `groupName`, cờ lĩnh vực đã xóa và nhóm ngừng sử dụng). POST/PATCH nhận `fieldGroups: [{fieldId, groupId}]`: không gửi thì giữ nguyên, gửi danh sách thì thay toàn bộ. Dòng có nhóm trùng nhóm mặc định bị bỏ; hai dòng cùng lĩnh vực → 400; lĩnh vực đã xóa → 409 `field_unavailable`. Bộ lọc `?groupId` tìm cả kỹ năng thuộc nhóm theo lĩnh vực. Nhóm có `fieldSkillCount`, chi tiết nhóm có `fieldSkills`. |
+| GET/POST `/skills`, GET/PATCH/DELETE `/skills/:id` | Cấu hình năng lực. |
 | GET `/curricula`, GET `/courses?revisionId=`, GET `/courses/:revisionId/:code`, GET `/summary?revisionId=` | Phiên bản CTĐT, học phần, chi tiết, thống kê và cảnh báo. |
 | PUT `/courses/:revisionId/:code` | Lưu toàn bộ liên kết và trọng số `{status,links:[{skillId,weight}],note}`; mọi thao tác thủ công trên giao diện (tạo liên kết, thêm/xóa trọng số, xóa liên kết) dùng endpoint này. |
 | POST `/courses/activate` | `{revisionId,confirmed:true}`: áp dụng mọi bản nháp của phiên bản, mỗi học phần một savepoint; trả `{activated,skipped:[{courseCode,reason}]}` (`course_has_no_links`, `weight_total_invalid`, `skill_unavailable`, `group_unavailable`). |
@@ -109,10 +108,7 @@ Việc v2 gửi `think: true` trong job; worker trước 17/10/2026 luôn gửi 
 - 16/10/2026: theo danh sách chức năng bản 7, thêm xóa nhóm, các nút Thủ công/AI cho liên kết và trọng số, chạy AI cho cả chương trình; xóa phần nhập Excel.
 - 17/10/2026: thêm nút **Thêm bằng AI** ở tab Danh mục kỹ năng (migration 035, chế độ `skills`), rồi gỡ trong cùng ngày theo yêu cầu (migration 036); thêm kỹ năng chỉ còn nút thủ công.
 - 17/10/2026 (sau): thống nhất thuật ngữ Nhóm năng lực / Kỹ năng / Cấu hình năng lực (bảng ở đầu tài liệu); tab "Trọng số học phần" đổi tên thành Cấu hình học phần; rồi ba tab của trang "Năng lực" được tách thành ba trang trong nhóm **Quản lý năng lực** trên thanh bên.
-- 20/10/2026: **nhóm năng lực theo lĩnh vực** (migration 037), theo trường hợp "kỹ năng mềm của lĩnh vực này nhưng là kỹ năng chuyên môn của lĩnh vực kia". Ví dụ: Đọc tài liệu là Kỹ năng mềm, nhưng là Chuyên môn ở lĩnh vực Kiểm thử & Chất lượng. Người dùng chọn cách "theo lĩnh vực" thay vì "nhiều nhóm cùng lúc", để điểm không bị tính hai lần.
-  - Form Cấu hình năng lực có ô "Nhóm năng lực mặc định" và mục "Nhóm năng lực theo lĩnh vực": mỗi dòng là một lĩnh vực và một nhóm; một lĩnh vực chỉ được chọn một lần; không chọn được nhóm mặc định.
-  - Danh sách kỹ năng ghi thêm "Chuyên môn với Kiểm thử & Chất lượng". Chi tiết nhóm có phần "Kỹ năng thuộc nhóm theo lĩnh vực".
-  - Điểm sinh viên tính theo lĩnh vực của nghề mục tiêu từ comp-calc-v10 (xem `docs/competency-assessment.md`).
+- 20/10/2026: thêm "nhóm năng lực theo lĩnh vực" (4b36081: một kỹ năng có nhóm mặc định cộng thêm một nhóm cho mỗi lĩnh vực nghề nghiệp, điểm tính theo comp-calc-v10), rồi hoàn tác trong cùng ngày theo yêu cầu ("thấy đang có sai sai"). Code trở về bản bbfe5f2 (comp-calc-v9). Migration 037 vẫn giữ vì production đã chạy; bảng `ad_comp_skill_field_groups` không còn được dùng.
 - 19/10/2026: trường hợp "Không có kỹ năng nào phù hợp với môn đó" (prompt v3, câu "Danh sách kỹ năng hiện tại trong kho dữ liệu của bạn chưa đủ đáp ứng môn học này. Vui lòng bổ sung thêm kỹ năng", ô đếm Chưa có kỹ năng phù hợp) và thông báo "AI đang trong quá trình tính toán…" khi lần chạy cho cả chương trình đang xử lý.
 - 20/10/2026: form Nhóm năng lực và Cấu hình năng lực hiện thông báo tiếng Việt dưới ô bắt buộc. Mô tả nhóm và mô tả kỹ năng chung tối đa 200 từ, phạm vi đánh giá tối đa 400 từ, có bộ đếm từ. Nút "Lưu cấu hình năng lực" không còn bị khóa mà không nói lý do. Xem `docs/admin-form-checks.md`.
 - 17/10/2026 (sau): người dùng không chấp nhận liên kết, trọng số K30 do AI không suy luận tạo trên production. Bật chế độ suy luận cho mọi việc AI của mục Năng lực (prompt v2, loại việc `competency_course_suggestion_v2`), thêm nút **Xóa liên kết của cả chương trình** để chạy lại.

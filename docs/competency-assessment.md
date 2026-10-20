@@ -34,7 +34,7 @@ Phần "Xét tốt nghiệp (tham khảo)" của trang `#competency` **không** 
 | Nhận xét AI | `ai/*`, `apps/api/src/ai-worker/*`, `services/ai/` |
 | Lời khuyên xét tốt nghiệp (AI, trang `#graduation`) | `apps/api/src/graduation/advice/*`, cùng worker; xem `docs/graduation-advice.md` |
 
-## Công thức và ngưỡng (`CALC_VERSION = "comp-calc-v10"`)
+## Công thức và ngưỡng (`CALC_VERSION = "comp-calc-v9"`)
 
 > comp-calc-v2: kỹ năng dưới ngưỡng còn học phần **Học cải thiện** không bị liệt kê là "Không còn học phần nào trong CTĐT để học thêm" (chỉ khi không còn học phần học mới lẫn học cải thiện).
 >
@@ -49,12 +49,6 @@ Phần "Xét tốt nghiệp (tham khảo)" của trang `#competency` **không** 
 > comp-calc-v7 (góp ý "đã chọn nghề thì phải đề xuất theo nghề"): mỗi kế hoạch có `purpose`. **Đã chọn nghề**: chỉ lập kế hoạch cho kỹ năng **của nghề mục tiêu** đã đạt ngưỡng nhưng chưa tới mức Thành thạo (dưới 85) — `purpose: "deepen"`, nâng kỹ năng nghề lên Thành thạo; kỹ năng yếu ngoài nghề (ví dụ kỹ năng mạng khi nghề là kỹ sư phần mềm) không có kế hoạch, chỉ hiện điểm trong bảng thành thạo; khoảng trống nghề vẫn có gợi ý riêng như trước. **Chưa chọn nghề**: kế hoạch cho kỹ năng dưới Khá như v6 (`purpose: "strengthen"`). **Học phần thay thế đồ án/khóa luận tốt nghiệp** (nhóm tự chọn có học phần tên "Đồ án/Khóa luận tốt nghiệp" đủ hạn mức tín chỉ của nhóm, cùng quy tắc `apps/api/src/graduation/thesis.ts`) không bao giờ được gợi ý ở danh sách học mới — của khoảng trống nghề lẫn kế hoạch — trừ khi sinh viên đã bắt đầu học phần thay thế; mã bị loại ghi ở `excludedThesisReplacements`. Đồ án/khóa luận vẫn được gợi ý nếu có trọng số kỹ năng. Nhóm không xác định được hạn mức (ví dụ chưa chọn chuyên ngành nên chưa có tiêu chuẩn) thì chưa nhận diện được nhóm đồ án.
 >
 > comp-calc-v8 (STU-COMP-07): thêm `history` — với mỗi học kỳ có điểm trong bảng điểm (cũ nhất trước), hệ thống chạy lại đúng cách tính trên bảng điểm **cắt đến cuối học kỳ đó** (giữ các mục không có năm học/học kỳ như điểm bảo lưu; lần học sau học kỳ đó bị bỏ, nên học phần học lại về sau vẫn tính theo điểm lúc ấy), cùng CTĐT, trọng số và nghề hiện hành, rồi lưu điểm tổng, mức, số kỹ năng có minh chứng và điểm từng nhóm. Điểm cuối cùng trùng với kết quả hiện tại. Không gửi cho mô hình AI (prompt vẫn comp-v5). Trang `#competency` hiển thị thành bảng "Theo dõi năng lực theo học kỳ": câu tóm tắt xu hướng, nhóm theo năm học (điểm cuối năm), mỗi học kỳ có thanh điểm, mức, điểm từng nhóm và thay đổi (số nguyên như trang hiển thị; tăng xanh, giảm đỏ). Kết quả lưu trước v8 không có `history`; trang nhắc bấm "Đánh giá lại".
->
-> comp-calc-v10 (nhóm năng lực theo lĩnh vực, 20/10/2026): khi đọc dữ liệu (`inputs.ts`), nếu sinh viên có nghề mục tiêu còn hoạt động và lĩnh vực của nghề (`career_positions.category` = `career_fields.code`) chưa bị xóa, mỗi kỹ năng có dòng trong `ad_comp_skill_field_groups` cho lĩnh vực đó được tính vào nhóm của dòng thay cho nhóm mặc định. Ví dụ: Đọc tài liệu là Kỹ năng mềm, nhưng là Chuyên môn với nghề thuộc lĩnh vực Kiểm thử & Chất lượng.
-> - Nhóm ngừng sử dụng hoặc đã xóa bị bỏ qua, khi đó kỹ năng giữ nhóm mặc định.
-> - Sinh viên chưa chọn nghề hoặc có nghề đã xóa dùng nhóm mặc định.
-> - Bộ máy tính điểm (`calculate.ts`) không đổi: điểm nhóm, điểm tổng, lịch sử và nhận xét AI đều dùng nhóm đã đổi.
-> - `meta.weights.fieldGroups` ghi `{ fieldId, fieldName, moved }`, trong đó `moved` là số kỹ năng đã đổi nhóm (null khi không có nghề hoặc lĩnh vực).
 >
 > comp-calc-v9 (STU-GAP-07): mỗi điểm của `history` có thêm `career` (null khi chưa chọn nghề) — kỹ năng của nghề mục tiêu tính trên bảng điểm cắt đến học kỳ đó: `fitCode`, `fitLabel`, số kỹ năng đạt ngưỡng `met`/`total` và từng yêu cầu `{ requirementId, score, status }` (thứ tự theo khoảng trống của học kỳ đó, nên tra theo `requirementId`). Trang `#skill-gap` hiển thị thành bảng "Theo dõi mức độ cải thiện kỹ năng": câu tóm tắt (số kỹ năng nghề đạt ngưỡng từ học kỳ đầu đến nay và kỹ năng tăng nhiều nhất), mỗi kỹ năng một dòng (Bắt buộc trước, như bảng khoảng trống), mỗi học kỳ một cột nhóm theo năm học, ô là điểm số nguyên như trang (xanh có ✓ là đạt ngưỡng, đỏ là dưới ngưỡng, "—" là chưa có điểm, rê chuột xem trạng thái), cột "Thay đổi" = điểm hiện tại − điểm đầu tiên, dòng cuối "Kỹ năng đạt ngưỡng" theo học kỳ. Không gửi cho mô hình AI. Kết quả lưu trước v9 không có `career` trong `history`; bảng nhắc bấm "Đánh giá lại".
 
@@ -161,4 +155,4 @@ Chế độ suy luận (comp-v7, 18/10/2026, `num_gpu` 38): 6 hồ sơ tổng h�
 - Khoảng 30 kỹ năng nghề chưa có học phần đo (hiện là "Chưa đủ dữ liệu").
 - Chưa có yêu cầu nghề nào được đánh dấu "Bắt buộc".
 - STU-COMP-07 tính lại theo bảng điểm nên phản ánh năng lực tại từng học kỳ theo **trọng số và CTĐT hiện hành**, không phải điểm đã từng hiển thị lúc đó. STU-GAP-07 (comp-calc-v9) cũng vậy với kỹ năng của nghề mục tiêu hiện tại.
-- Kết quả và nhận xét lưu trước comp-calc-v10/comp-v7 giữ nguyên cho đến khi sinh viên bấm "Đánh giá lại".
+- Kết quả và nhận xét lưu trước comp-calc-v9/comp-v7 giữ nguyên cho đến khi sinh viên bấm "Đánh giá lại".

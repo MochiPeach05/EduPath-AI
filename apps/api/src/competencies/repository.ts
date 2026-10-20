@@ -9,33 +9,24 @@ import { CompetencyError, validateWeights, WEIGHT_TOLERANCE } from "./model.js";
 
 type Database = DatabasePool | PoolClient;
 type GroupChange = { name: string; description: string; isActive: boolean };
-type FieldGroupChange = { fieldId: string; groupId: string };
-type SkillChange = { name: string; description: string; scope: string; groupId: string; isActive: boolean; fieldGroups?: FieldGroupChange[] | undefined };
+type SkillChange = { name: string; description: string; scope: string; groupId: string; isActive: boolean };
 type ConfigurationChange = { status: "draft" | "active"; links: { skillId: string; weight: number }[]; note?: string };
 type Revision = { curriculumId: string; revisionId: string; cohortCode: string; name: string; version: number; isCurrent: boolean; isActive: boolean; data: CurriculumData };
-type Group = { id: string; name: string; description: string; isActive: boolean; version: string; skillCount: number; fieldSkillCount: number };
-/** A group the skill has in one career field instead of its default group (2026-10-20). */
-type FieldGroup = { fieldId: string; fieldName: string; fieldDeleted: boolean; groupId: string; groupName: string; groupActive: boolean };
-type Skill = { id: string; name: string; description: string; scope: string; legacySkillId: string | null; groupId: string; groupName: string; isActive: boolean; groupActive: boolean; version: string; careerCount: number; courseCount: number; fieldGroups: FieldGroup[] };
+type Group = { id: string; name: string; description: string; isActive: boolean; version: string; skillCount: number };
+type Skill = { id: string; name: string; description: string; scope: string; legacySkillId: string | null; groupId: string; groupName: string; isActive: boolean; groupActive: boolean; version: string; careerCount: number; courseCount: number };
 type CourseLink = { skillId: string; skillName: string; groupId: string; groupName: string; isActive: boolean; weight: number };
 type CourseConfiguration = { id: string; courseCode: string; status: "draft" | "active" | "archived"; version: string; note: string; skillCount: number; totalWeight: string | number };
 type Warning = { code: string; message: string; courseCode?: string };
 
 const groupColumns = `g.id,g.name,g.description,g.is_active AS "isActive",g.version,
- (SELECT count(*)::int FROM ad_comp_skills cs WHERE cs.group_id=g.id AND cs.deleted_at IS NULL) AS "skillCount",
- (SELECT count(*)::int FROM ad_comp_skill_field_groups o JOIN ad_comp_skills cs ON cs.skill_id=o.skill_id AND cs.deleted_at IS NULL
-  JOIN career_fields f ON f.id=o.field_id AND f.deleted_at IS NULL WHERE o.group_id=g.id) AS "fieldSkillCount"`;
+ (SELECT count(*)::int FROM ad_comp_skills cs WHERE cs.group_id=g.id AND cs.deleted_at IS NULL) AS "skillCount"`;
 const skillColumns = `s.id,s.name,s.description,cs.scope,cs.legacy_skill_id AS "legacySkillId",cs.group_id AS "groupId",g.name AS "groupName",
  cs.is_active AS "isActive",g.is_active AS "groupActive",cs.version,
  (SELECT count(DISTINCT r.career_position_id)::int FROM career_requirements r
   JOIN career_positions p ON p.id=r.career_position_id
   WHERE r.skill_id=s.id AND r.deleted_at IS NULL AND p.deleted_at IS NULL) AS "careerCount",
  (SELECT count(*)::int FROM ad_comp_course_links l JOIN ad_comp_course_configs c ON c.id=l.config_id
-  WHERE l.skill_id=s.id AND c.status='active' AND l.weight>0) AS "courseCount",
- COALESCE((SELECT jsonb_agg(jsonb_build_object('fieldId',o.field_id,'fieldName',f.name,'fieldDeleted',f.deleted_at IS NOT NULL,
-  'groupId',o.group_id,'groupName',og.name,'groupActive',og.is_active AND og.deleted_at IS NULL) ORDER BY f.name,f.id)
-  FROM ad_comp_skill_field_groups o JOIN career_fields f ON f.id=o.field_id JOIN ad_comp_groups og ON og.id=o.group_id
-  WHERE o.skill_id=s.id),'[]'::jsonb) AS "fieldGroups"`;
+  WHERE l.skill_id=s.id AND c.status='active' AND l.weight>0) AS "courseCount"`;
 const skillTables = `FROM ad_comp_skills cs JOIN career_skills s ON s.id=cs.skill_id
  JOIN ad_comp_groups g ON g.id=cs.group_id`;
 
@@ -95,13 +86,7 @@ export class CompetencyRepository {
     const group = await this.groupRecord(db, id);
     const skills = await db.query<Skill>(`SELECT ${skillColumns} ${skillTables}
  WHERE cs.group_id=$1 AND cs.deleted_at IS NULL AND s.deleted_at IS NULL ORDER BY s.name,s.id`, [id]);
-    // Skills whose default group is another one but that belong to this group in a career field.
-    const fieldSkills = await db.query<{ skillId: string; skillName: string; fieldName: string; defaultGroupName: string }>(`SELECT s.id AS "skillId",
- s.name AS "skillName",f.name AS "fieldName",g.name AS "defaultGroupName" FROM ad_comp_skill_field_groups o
- JOIN ad_comp_skills cs ON cs.skill_id=o.skill_id AND cs.deleted_at IS NULL JOIN career_skills s ON s.id=cs.skill_id AND s.deleted_at IS NULL
- JOIN career_fields f ON f.id=o.field_id AND f.deleted_at IS NULL JOIN ad_comp_groups g ON g.id=cs.group_id
- WHERE o.group_id=$1 ORDER BY s.name,f.name,s.id`, [id]);
-    return { ...group, skills: skills.rows, fieldSkills: fieldSkills.rows };
+    return { ...group, skills: skills.rows };
   }
 
   async group(id: string) {
@@ -150,10 +135,6 @@ export class CompetencyRepository {
       const skills = await client.query<{ count: number }>("SELECT count(*)::int AS count FROM ad_comp_skills WHERE group_id=$1 AND deleted_at IS NULL", [id]);
       const count = skills.rows[0]?.count ?? 0;
       if (count) throw new CompetencyError("group_not_empty", 409, [`Nhóm còn ${count} kỹ năng.`]);
-      const byField = await client.query<{ count: number }>(`SELECT count(*)::int AS count FROM ad_comp_skill_field_groups o
- JOIN ad_comp_skills cs ON cs.skill_id=o.skill_id AND cs.deleted_at IS NULL WHERE o.group_id=$1`, [id]);
-      const fieldCount = byField.rows[0]?.count ?? 0;
-      if (fieldCount) throw new CompetencyError("group_not_empty", 409, [`Nhóm còn là nhóm theo lĩnh vực của ${fieldCount} kỹ năng.`]);
       const previous = await this.groupSnapshot(client, id);
       const nextVersion = randomUUID();
       const removed = await client.query<{ deletedAt: string }>(`UPDATE ad_comp_groups SET deleted_at=now(),is_active=false,version=$2,updated_at=now()
@@ -169,10 +150,8 @@ export class CompetencyRepository {
   }
 
   async skills(query: { q: string; groupId: string; active: "" | "true" | "false" }) {
-    // A group filter also finds the skills that belong to the group in a career field.
     const result = await this.pool.query<Skill>(`SELECT ${skillColumns} ${skillTables}
- WHERE cs.deleted_at IS NULL AND s.deleted_at IS NULL AND ($1='' OR cs.group_id=NULLIF($1,'')::uuid
-  OR EXISTS(SELECT 1 FROM ad_comp_skill_field_groups o WHERE o.skill_id=cs.skill_id AND o.group_id=NULLIF($1,'')::uuid))
+ WHERE cs.deleted_at IS NULL AND s.deleted_at IS NULL AND ($1='' OR cs.group_id=NULLIF($1,'')::uuid)
  AND ($2='' OR cs.is_active=($2='true')) ORDER BY s.name,s.id`, [query.groupId, query.active]);
     const term = fold(query.q);
     return result.rows.filter(row => fold(`${row.name} ${row.description} ${row.scope} ${row.groupName}`).includes(term));
@@ -208,26 +187,6 @@ export class CompetencyRepository {
     const result = await db.query<{ is_active: boolean }>("SELECT is_active FROM ad_comp_groups WHERE id=$1 AND deleted_at IS NULL FOR SHARE", [id]);
     if (!result.rowCount) throw new CompetencyError("group_not_found", 404);
     return result.rows[0]!;
-  }
-
-  /**
-   * Replaces the skill's groups by career field. A row whose group is the default group changes
-   * nothing and is not kept; the fields and groups must exist (not deleted).
-   */
-  private async writeFieldGroups(client: PoolClient, skillId: string, defaultGroupId: string, rows: FieldGroupChange[] | undefined) {
-    if (!rows) return;
-    const kept = rows.filter((row) => row.groupId !== defaultGroupId);
-    const fieldIds = kept.map((row) => row.fieldId), groupIds = [...new Set(kept.map((row) => row.groupId))];
-    if (kept.length) {
-      const fields = await client.query("SELECT id FROM career_fields WHERE id=ANY($1::uuid[]) AND deleted_at IS NULL FOR SHARE", [fieldIds]);
-      if (fields.rowCount !== fieldIds.length) throw new CompetencyError("field_unavailable", 409);
-      const groups = await client.query("SELECT id FROM ad_comp_groups WHERE id=ANY($1::uuid[]) AND deleted_at IS NULL FOR SHARE", [groupIds]);
-      if (groups.rowCount !== groupIds.length) throw new CompetencyError("group_not_found", 404);
-    }
-    await client.query("DELETE FROM ad_comp_skill_field_groups WHERE skill_id=$1", [skillId]);
-    for (const row of kept) {
-      await client.query("INSERT INTO ad_comp_skill_field_groups(skill_id,field_id,group_id) VALUES($1,$2,$3)", [skillId, row.fieldId, row.groupId]);
-    }
   }
 
   private async activeSkillUsage(db: Database, id: string) {
@@ -271,8 +230,6 @@ export class CompetencyRepository {
         await client.query("INSERT INTO ad_comp_skills(skill_id,group_id,scope,is_active) VALUES($1,$2,$3,$4)",
           [id, data.groupId, data.scope, data.isActive]);
       }
-      // A restored profile starts from the groups by field of this form, never from the old ones.
-      await this.writeFieldGroups(client, id, data.groupId, data.fieldGroups ?? (restored ? [] : undefined));
       const snapshot = await this.skillSnapshot(client, id);
       await this.event(client, "skill", id, actor, snapshot, restored ? "Khôi phục cấu hình năng lực"
         : match ? "Thêm cấu hình năng lực cho kỹ năng có sẵn trong danh mục" : "Thêm cấu hình năng lực");
@@ -304,7 +261,6 @@ export class CompetencyRepository {
       }
       await client.query(`UPDATE ad_comp_skills SET group_id=$2,scope=$3,is_active=$4,version=$5,updated_at=now()
  WHERE skill_id=$1`, [id, data.groupId, data.scope, data.isActive, randomUUID()]);
-      await this.writeFieldGroups(client, id, data.groupId, data.fieldGroups);
       const snapshot = await this.skillSnapshot(client, id);
       await this.event(client, "skill", id, actor, snapshot, "Cập nhật cấu hình năng lực");
       return snapshot;

@@ -35,7 +35,7 @@ const migrations = ["007_student_transcripts.sql", "010_transcript_jobs.sql", "0
   // The transcript routes purge graduation advice and the worker router expires it; /claim also runs the
   // course-proposal housekeeping, so the audit schema needs the tables up to 036 like production.
   "031_career_ai_suggestions.sql", "032_graduation_ai_advice.sql", "033_competency_cloud_ai.sql", "034_competency_ai_suggestions.sql",
-  "035_competency_ai_skills.sql", "036_cancel_competency_ai_skills.sql", "037_competency_field_groups.sql"];
+  "035_competency_ai_skills.sql", "036_cancel_competency_ai_skills.sql"];
 const adminPool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 1 });
 // search_path is the audit schema ONLY, so a missing table can never fall through to public.
 const pool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 8, options: `-c search_path=${schema}` });
@@ -130,7 +130,7 @@ const ageAssessments = (user) => pool.query("UPDATE stu_comp_assessments SET cre
 
 try {
   const { revisionId, skills } = await setupSchema();
-  checks.push("migrations 028-037 apply with 007-027 in a throwaway schema");
+  checks.push("migrations 028-036 apply with 007-027 in a throwaway schema");
 
   const app = express();
   app.use("/api/worker/transcripts", createTranscriptWorkerRouter(pool, workerKey));
@@ -167,22 +167,6 @@ try {
     await probe.query("ROLLBACK");
   } finally { probe.release(); }
   checks.push("the snapshot reader works inside REPEATABLE READ READ ONLY (row locks there fail with 25006, so it takes none)");
-
-  // Nhóm năng lực theo lĩnh vực (comp-calc-v10): with a target career in a field, a skill counts in its group for that field.
-  const seededGroup = (await pool.query("SELECT group_id FROM ad_comp_skills WHERE skill_id=$1", [skills[0]])).rows[0].group_id;
-  const otherGroup = (await pool.query("SELECT id FROM ad_comp_groups WHERE is_active AND id<>$1 ORDER BY name LIMIT 1", [seededGroup])).rows[0].id;
-  const careerInField = (await pool.query(`SELECT p.id,f.id AS "fieldId",f.name AS "fieldName" FROM career_positions p
- JOIN career_fields f ON f.code=p.category AND f.deleted_at IS NULL WHERE p.deleted_at IS NULL ORDER BY p.code LIMIT 1`)).rows[0];
-  await pool.query("INSERT INTO ad_comp_skill_field_groups(skill_id,field_id,group_id) VALUES($1,$2,$3)", [skills[1], careerInField.fieldId, otherGroup]);
-  await pool.query("UPDATE student_profiles SET career_position_id=$2 WHERE user_id=$1", [actors.b.userId, careerInField.id]);
-  const byField = await loadAssessmentInputs(pool, actors.b.userId);
-  const groupsOf = (loaded) => skills.map((id) => loaded.weights.skills.find((skill) => skill.skillId === id).groupId);
-  assert.deepEqual(groupsOf(byField), [seededGroup, otherGroup]);
-  assert.deepEqual(byField.weights.fieldGroups, { fieldId: careerInField.fieldId, fieldName: careerInField.fieldName, moved: 1 });
-  assert.deepEqual(groupsOf(await loadAssessmentInputs(pool, actors.a.userId)), [seededGroup, seededGroup], "without a target career: default groups");
-  await pool.query("DELETE FROM ad_comp_skill_field_groups WHERE skill_id=$1", [skills[1]]);
-  await pool.query("UPDATE student_profiles SET career_position_id=NULL WHERE user_id=$1", [actors.b.userId]);
-  checks.push("nhóm năng lực theo lĩnh vực: a student whose target career is in the field gets the skill in that field's group (meta records the field and 1 moved skill); a student without a career keeps the default groups");
 
   // Create, consent, cooldown.
   const first = await assess("a");

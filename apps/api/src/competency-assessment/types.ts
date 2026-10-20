@@ -100,12 +100,6 @@ export type WeightsInput = {
   skills: WeightSkillInput[];
   /** Active ad_comp_groups (id, name). The engine orders groups itself. */
   groups: { id: string; name: string }[];
-  /**
-   * comp-calc-v10: the career field of the target career whose "nhóm năng lực theo lĩnh vực" were
-   * applied to skills (skills[].groupId already holds them) and how many skills changed group.
-   * Null without a live target career in a live field; absent in older inputs.
-   */
-  fieldGroups?: { fieldId: string; fieldName: string; moved: number } | null;
 };
 
 /**
@@ -231,7 +225,7 @@ export type AssessmentMeta = {
   transcriptVersion: string;
   cohortCode: string;
   curriculum: { id: string; revisionId: string; version: number };
-  weights: { revisionId: string; version: number; activeCount: number; maxConfigUpdatedAt: string | null; fieldGroups?: { fieldId: string; fieldName: string; moved: number } | null };
+  weights: { revisionId: string; version: number; activeCount: number; maxConfigUpdatedAt: string | null };
   graduationStandardId: string | null;
   graduationStandardRevisionId: string | null;
   graduationStandardVersion: number | null;
