@@ -1,4 +1,4 @@
-"""Unit tests for Paddle device selection and the text-first OCR route."""
+"""Unit tests for Paddle device selection, the text-first OCR route and the row rules of the adapter."""
 from collections import Counter
 import builtins
 from pathlib import Path
@@ -88,6 +88,88 @@ class NativeRouteTests(TestCase):
         self.assertEqual([page["method"] for page in result["pages"]], ["pdf_text"])
         ocr_page.assert_not_called()
         self.assertEqual(models, {})
+
+
+class AdapterRuleTests(TestCase):
+    """Synthetic rows in the VLU eight-column layout (no student data)."""
+
+    @staticmethod
+    def page(rows, number=1):
+        return {"page": number, "method": "pdf_text", "warnings": [], "rows": rows}
+
+    def test_absent_vt_is_a_failed_attempt_without_a_score(self):
+        import test_ocr
+
+        rows = [
+            ["Năm học: 2023-2024 - Học kỳ: HK01"],
+            ["1", "71ENG110013", "Anh văn 1 (AV1)", "3", "VT", "VT", "VT", "✗"],
+            ["2", "71ITBS10103", "Nhập môn công nghệ thông tin", "3", "6.0", "2.40", "C", "✓"],
+        ]
+        courses, _summaries, unparsed = test_ocr.parse_pages([self.page(rows)], {})
+        absent = courses[0]
+        self.assertEqual(unparsed, [])
+        self.assertEqual(absent["issues"], [])
+        self.assertEqual((absent["score_10"], absent["score_4"], absent["letter_grade"], absent["result"]), (None, None, "VT", "failed"))
+        # A VT row with a number in the other score column is still flagged.
+        mixed = test_ocr.parse_pages([self.page([rows[0], ["1", "71ENG110013", "Anh văn 1 (AV1)", "3", "VT", "2.40", "VT", "✗"]])], {})[0][0]
+        self.assertEqual(mixed["issues"], ["incomplete_scores"])
+
+    def test_vt_counts_zero_in_the_semester_gpa_check(self):
+        import test_ocr
+
+        rows = [
+            ["Năm học: 2023-2024 - Học kỳ: HK01"],
+            ["1", "71ENG110013", "Anh văn 1 (AV1)", "3", "VT", "VT", "VT", "✗"],
+            ["2", "71ITBS10103", "Nhập môn công nghệ thông tin", "3", "6.0", "2.40", "C", "✓"],
+            ["3", "71PEBB10032", "Bóng rổ", "2", "VT", "VT", "VT", "✗"],
+            ["- Số tín chỉ đạt học kỳ: 3\n- Điểm TB học kỳ (Hệ 4): 1.20", "- Tổng số tín chỉ tích lũy: 3"],
+        ]
+        courses, summaries, _unparsed = test_ocr.parse_pages([self.page(rows)], {})
+        [semester] = test_ocr.parse_semesters(summaries, courses)
+        self.assertEqual(semester["computed_from_courses"]["semester_gpa_4"], 1.2)
+        self.assertEqual(semester["issues"], [])
+
+    def test_a_passing_mark_on_vt_conflicts_with_the_grade(self):
+        import test_ocr
+
+        rows = [["Năm học: 2023-2024 - Học kỳ: HK01"], ["1", "71PEBB10032", "Bóng rổ", "2", "VT", "VT", "VT", "✓"]]
+        self.assertEqual(test_ocr.parse_pages([self.page(rows)], {})[0][0]["issues"], ["result_conflicts_with_grade"])
+
+    def test_a_running_term_is_not_ranked(self):
+        import test_ocr
+
+        issues = []
+        self.assertEqual(test_ocr.summary_value("KXL", "rank", None, issues, "semester_rank"), "kxl")
+        self.assertEqual(issues, [])
+
+    def test_a_digital_page_with_only_the_summary_box_is_read_as_text(self):
+        import test_ocr
+
+        class Table:
+            bbox = (0, 0, 1, 1)
+
+            @staticmethod
+            def extract():
+                return [["- Số tín chỉ đạt học kỳ:\n- Xếp loại học tập HK: KXL", "- Tổng số tín chỉ tích lũy: 109"]]
+
+        class SummaryPage:
+            rect = SimpleNamespace(width=595, height=842)
+
+            def __init__(self, scanned):
+                self.scanned = scanned
+
+            @staticmethod
+            def get_text():
+                return "- Số tín chỉ đạt học kỳ:\n- Tổng số tín chỉ tích lũy: 109\n"
+
+            @staticmethod
+            def find_tables():
+                return SimpleNamespace(tables=[Table()])
+
+        with patch.object(test_ocr, "is_scanned", side_effect=lambda page: page.scanned):
+            self.assertTrue(test_ocr.native_rows(SummaryPage(scanned=False))[1])
+            # A scan with a text layer but no course codes still goes to OCR.
+            self.assertFalse(test_ocr.native_rows(SummaryPage(scanned=True))[1])
 
 
 if __name__ == "__main__":

@@ -1,5 +1,6 @@
 import type { GraduationData } from "../graduation/model.js";
 import type { TranscriptData } from "../student/transcript-parser.js";
+import { ABSENT_LETTER } from "./constants.js";
 import {
   conditionOnlyCodes, courseKey, curriculumCreditMap, deriveElectiveGroups, estimateProgramCredits, isConditionOnly, isPassedState,
   latestResultSection, printedCumulativeCredits, printedSummaryNumber, transcriptCourses, uniqueCurriculumCourses,
@@ -173,7 +174,7 @@ export const countsInGpa = (record: TranscriptCourseRecord, conditionCodes: Read
 
 /**
  * The attempt the GPA estimate counts for a course: its best graded attempt on the scale, an F
- * included (a failed course enters the GPA at its F); undefined for registrations without grades.
+ * included (a failed course enters the GPA at its F, a VT at 0); undefined for registrations without grades.
  */
 export function gpaAttempt(record: TranscriptCourseRecord, scale: 4 | 10): Attempt | undefined {
   const field = scale === 4 ? "score4" : "score10";
@@ -212,7 +213,8 @@ export function assessGraduationGpa(
     if (!countsInGpa(record, conditionCodes)) continue;
     const best = gpaAttempt(record, scale);
     if (!best) continue; // Registrations without grades do not enter the GPA.
-    const value = scale === 4 ? best.score4 : best.score10;
+    // VT (vắng thi) prints no score and counts 0, like the transcript's own semester GPA.
+    const value = best.letter === ABSENT_LETTER && best.score4 === null && best.score10 === null ? 0 : scale === 4 ? best.score4 : best.score10;
     if (!numericIn(value, scale)) return unknown(`Chưa có đủ điểm hệ ${scale} hoặc tín chỉ của môn ${record.code} để tính điểm trung bình.`);
     if (best.credits === 0) continue;
     credits += best.credits;

@@ -119,8 +119,11 @@ function parsePages(pages: Page[]): TranscriptData {
       if (!codePattern.test(cells[1]!) || !/^\d+$/.test(cells[0]!) || !cells[2] || cells.some(c => c.includes("\ufffd"))) throw new TranscriptError("unreadable_rows");
       const credits = numeric(cells[3]!, 30, true)!;
       if (!Number.isInteger(credits)) throw new TranscriptError("unreadable_grades");
-      const score10 = numeric(cells[4]!, 10), score4 = numeric(cells[5]!, 4), letter = cells[6] || null;
-      if (letter && !/^(A\+?|B\+?|C\+?|D\+?|F|MT)$/.test(letter)) throw new TranscriptError("unreadable_grades");
+      const letter = cells[6] || null;
+      // "VT" (vắng thi) fills the score columns too: a failed attempt without a score.
+      const absent = letter === "VT", blank = (cell: string) => absent && (cell === "" || cell === "VT");
+      const score10 = blank(cells[4]!) ? null : numeric(cells[4]!, 10), score4 = blank(cells[5]!) ? null : numeric(cells[5]!, 4);
+      if (letter && !/^(A\+?|B\+?|C\+?|D\+?|F|MT|VT)$/.test(letter)) throw new TranscriptError("unreadable_grades");
       if ((score10 === null) !== (score4 === null)) throw new TranscriptError("unreadable_grades");
       if (active.courses.some(c => c.ordinal === Number(cells[0]))) throw new TranscriptError("duplicate_rows");
       active.courses.push({ ordinal: Number(cells[0]), code: cells[1]!, name: cells[2]!, credits, score10, score4, letter, result: cells[7] || null, conditional: cells[2]!.includes("*"), sourcePage: page.page });

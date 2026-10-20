@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Transcript } from "./StudentTranscript";
 import {
-  PASS_LETTERS, attemptOutcome, transcriptCreditCheck, transcriptOutcomes, transcriptResults,
+  FAIL_LETTERS, PASS_LETTERS, attemptOutcome, isFailLetter, transcriptCreditCheck, transcriptOutcomes, transcriptResults,
 } from "./transcript-results";
 
 type Attempt = { code: string; result: string | null; letter?: string | null; score10?: number | null };
@@ -102,7 +102,7 @@ describe("shared result cases", () => {
     const fixture = await sharedResultCases();
     expect(fixture.cases.length).toBeGreaterThan(0);
     expect([...PASS_LETTERS].sort()).toEqual([...fixture.passLetters].sort());
-    expect(fixture.failLetters).toEqual(["F"]);
+    expect(fixture.failLetters).toEqual([...FAIL_LETTERS]);
     for (const { name, result, letter, expected, inferred } of fixture.cases) {
       const outcome = attemptOutcome({ code: "71ITSE30503", result, letter });
       const decided = outcome.status === "pass" || outcome.status === "fail" ? outcome.status : "unknown";
@@ -119,6 +119,12 @@ describe("letter grade fallback for blank result cells", () => {
       expect(attemptOutcome({ code: "X", result: null, letter })).toEqual({ status: "pass", inferred: true, exempt: false });
     expect(attemptOutcome({ code: "X", result: "  ", letter: "F" })).toEqual({ status: "fail", inferred: true, exempt: false });
     expect(attemptOutcome({ code: "X", result: null, letter: "MT" })).toEqual({ status: "pass", inferred: false, exempt: true });
+  });
+
+  it("fails an absent VT (vắng thi) attempt and shows it like an F", () => {
+    expect(attemptOutcome({ code: "X", result: null, letter: "VT", score10: null })).toEqual({ status: "fail", inferred: true, exempt: false });
+    expect(["F", " vt ", "VT"].map(isFailLetter)).toEqual([true, true, true]);
+    expect(["D", "MT", null].map(isFailLetter)).toEqual([false, false, false]);
   });
 
   it("lets a printed result win and never reads the letter behind unreadable text", () => {

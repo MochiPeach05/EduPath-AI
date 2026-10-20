@@ -20,6 +20,11 @@ describe("OCR result boundary", () => {
     expect(result.sections[0]?.summaries).toEqual([{ label: "Điểm TB học kỳ (Hệ 4)", value: "2.4" }]);
     expect(result.ocr?.needsReview).toBe(true);
   });
+  it("accepts VT (vắng thi): a failed attempt printed without a score", () => {
+    const f = fixture();
+    Object.assign(f.courses[0]!, { score_10: null, score_4: null, letter_grade: "VT", result: "failed" });
+    expect(mapOcrTranscript(f).sections[0]?.courses[0]).toMatchObject({ score10: null, score4: null, letter: "VT", result: "Không đạt" });
+  });
   it.each(["count", "missing_row", "score", "semester", "duplicate", "issue", "page"])("rejects %s rather than saving partial/corrupt data", kind => {
     const f = fixture();
     if (kind === 'count') f.course_count = 2;

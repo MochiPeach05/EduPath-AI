@@ -59,7 +59,12 @@ export const MAX_RELATED_SKILLS = 3;
 
 /** Same pass letters as the OCR pipeline (services/ocr/test_ocr.py PASS_LETTERS). */
 export const PASS_LETTERS: readonly string[] = ["A+", "A", "B+", "B", "C+", "C", "D+", "D"];
-export const FAIL_LETTERS: readonly string[] = ["F"];
+/**
+ * "VT" (vắng thi, absent from the exam) is printed in the score and letter columns alike: a failed
+ * attempt without a score, worth 0 in the printed semester GPA like an F (services/ocr FAIL_LETTERS).
+ */
+export const ABSENT_LETTER = "VT";
+export const FAIL_LETTERS: readonly string[] = ["F", ABSENT_LETTER];
 /** Exemption/recognition letter. Counts as passed; never inferred. */
 export const EXEMPT_LETTER = "MT";
 

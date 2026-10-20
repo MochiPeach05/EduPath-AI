@@ -82,6 +82,15 @@ describe("graduation port: shared web/API cases (spec §7.9)", () => {
     });
   }
 
+  it("counts an absent VT attempt at 0 in the calculated GPA, like the transcript's semester GPA", () => {
+    const transcript = syntheticTranscript([{ year: "2023-2024", semester: "HK01", rows: [
+      ["71ITBS10103", 3, 8, 3.5, "B+", "Đạt"], ["71ENG110013", 3, null, null, "VT", "Không đạt"],
+    ] }]);
+    const records = transcriptCourses(transcript);
+    expect(records.get("71ENG110013")?.state).toBe("failed");
+    expect(assessGraduationGpa({ minimumGpa: 2, gpaScale: 4 }, transcript, records, new Set())).toMatchObject({ actual: 1.75, status: "fail", source: "calculated" });
+  });
+
   it("keeps the GPA scale at 4 when the standard has none (K29)", () => {
     const transcript = syntheticTranscript([{ year: "2024-2025", semester: "HK01", rows: [["71ITBS10103", 3, 8, 3.5, "B+", "Đạt"]] }]);
     const gpa = assessGraduationGpa({ minimumGpa: 2, gpaScale: null }, transcript, transcriptCourses(transcript), new Set());

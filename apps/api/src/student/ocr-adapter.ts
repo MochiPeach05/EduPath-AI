@@ -6,7 +6,8 @@ const courseSchema = z.object({
   ordinal: z.number().int().min(1).max(1000), course_code: z.string().regex(/^\d{2}[A-Z]{2,10}\d{5,8}$/),
   course_name: text.min(1), credits: z.number().int().min(0).max(30),
   score_10: z.number().min(0).max(10).nullable(), score_4: z.number().min(0).max(4).nullable(),
-  letter_grade: z.enum(["A+", "A", "B+", "B", "C+", "C", "D+", "D", "F", "MT"]).nullable(),
+  // VT: vắng thi (absent from the exam), a failed attempt without a score.
+  letter_grade: z.enum(["A+", "A", "B+", "B", "C+", "C", "D+", "D", "F", "MT", "VT"]).nullable(),
   result: z.enum(["passed", "failed"]).nullable(), source_page: z.number().int().min(1).max(20),
   academic_year: z.string().regex(/^\d{4}-\d{4}$/).nullable(), semester: z.enum(["HK01", "HK02", "HK03"]).nullable(),
   section: z.enum(["semester", "credit_transfer"]), needs_review: z.boolean(), issues: z.array(text).max(100)

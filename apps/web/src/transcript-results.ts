@@ -21,6 +21,9 @@ export type CourseOutcome = {
 
 /** Passing letter grades; the OCR pipeline uses the same set (services/ocr/test_ocr.py PASS_LETTERS). */
 export const PASS_LETTERS: readonly string[] = ["A+", "A", "B+", "B", "C+", "C", "D+", "D"];
+/** Failing letter grades: F and VT (vắng thi, absent from the exam: printed without a score). */
+export const FAIL_LETTERS: readonly string[] = ["F", "VT"];
+export const isFailLetter = (letter: string | null | undefined) => FAIL_LETTERS.includes(letter?.trim().toUpperCase() ?? "");
 export const INFERRED_RESULT_NOTE = "suy ra từ điểm chữ";
 
 const key = (code: string) => code.trim().toUpperCase();
@@ -38,7 +41,7 @@ export function attemptOutcome(course: ResultCourse): CourseOutcome {
     return { status, inferred: false, exempt: false };
   }
   if (PASS_LETTERS.includes(letter)) return { status: "pass", inferred: true, exempt: false };
-  if (letter === "F") return { status: "fail", inferred: true, exempt: false };
+  if (FAIL_LETTERS.includes(letter)) return { status: "fail", inferred: true, exempt: false };
   const graded = letter !== "" || (course.score10 ?? null) !== null || (course.score4 ?? null) !== null;
   return { status: graded ? "unknown" : "pending", inferred: false, exempt: false };
 }

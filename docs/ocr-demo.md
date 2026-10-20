@@ -53,6 +53,13 @@ Sau mỗi tác vụ thành công, worker in thời gian xử lý, số trang, s�
 
 Giữ cửa sổ worker và mạng hoạt động. Ctrl+C dừng worker. Website vẫn hoạt động khi máy tắt, nhưng các PDF mới sẽ chờ. Đổi cấu hình `.env` cần khởi động lại worker; thêm khóa cho backend local cần khởi động lại `npm run dev`.
 
+## Quy tắc đọc bảng điểm (21/10/2026)
+
+- **VT (vắng thi)** in ở cả cột điểm hệ 10, hệ 4 và điểm chữ: worker ghi điểm số rỗng, điểm chữ `VT`, kết quả rớt, không đánh dấu lỗi; server chấp nhận `VT` trong `letter_grade`. Phép đối chiếu điểm TB học kỳ tính VT là 0 như bảng điểm của trường. Trước đó một bảng điểm có VT bị từ chối với `invalid_ocr_result` ("Kết quả nhận dạng chưa hợp lệ").
+- **Trang chỉ có ô tổng kết** (tổng kết của học kỳ cuối rơi sang trang mới, không có mã môn) được đọc bằng lớp chữ như các trang khác; trước đó trang này bị coi là không có lớp chữ và phải chạy OCR hình ảnh. Trang scan (ảnh phủ phần lớn trang) vẫn chạy OCR.
+- Xếp loại học kỳ **KXL** (không xếp loại, học kỳ đang học) là giá trị hợp lệ.
+- Mỗi việc chạy trong một tiến trình con mới (`worker.py --parse`), nên worker chạy từ thư mục repo dùng ngay mã mới ở việc kế tiếp. Kiểm thử: `D:\EduPathOCR\.venv\Scripts\python.exe -m unittest test_ocr_device` trong `services/ocr`.
+
 ## Trạng thái và bảo toàn dữ liệu
 
 - Upload trả 202 và mã tác vụ; trang tự lấy trạng thái, có thể rời trang rồi quay lại.

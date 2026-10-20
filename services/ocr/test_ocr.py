@@ -27,12 +27,19 @@ DEFAULT_REC_MODEL = ROOT / 'models/f3'
 DEFAULT_DPI = {'ppocr': 150, 'vl': 300}
 DEFAULT_DET_MODEL = 'PP-OCRv5_server_det'
 PASS_LETTERS = {'A+', 'A', 'B+', 'B', 'C+', 'C', 'D+', 'D'}
+# VT (vắng thi, absent from the exam) is printed in the score and letter columns alike: a failed
+# attempt without a score (it counts 0 in the printed semester GPA, like F).
+ABSENT_LETTER = 'VT'
+FAIL_LETTERS = {'F', ABSENT_LETTER}
+LETTERS = PASS_LETTERS | FAIL_LETTERS | {'MT'}
 RESULT_MARKS = {'✓': 'passed', '✗': 'failed'}  # written into the result cell by ppocr_table.result_mark
 RESULT_WORDS = {'dat': 'passed', 'dau': 'passed', 'khong dat': 'failed', 'rot': 'failed', 'truot': 'failed'}
 # Conditional courses (national defence, physical education) are excluded from the semester GPA.
 CONDITIONAL_PREFIXES = ('71NAD', '71PE')
 RANKS = {'xuat sac': ('Xuất sắc', 'excellent'), 'gioi': ('Giỏi', 'very_good'), 'kha': ('Khá', 'good'),
-         'trung binh': ('Trung bình', 'average'), 'yeu': ('Yếu', 'weak'), 'kem': ('Kém', 'poor')}
+         'trung binh': ('Trung bình', 'average'), 'yeu': ('Yếu', 'weak'), 'kem': ('Kém', 'poor'),
+         # A term that is still running is printed "KXL" (không xếp loại).
+         'kxl': ('Không xếp loại', 'unranked')}
 # Folded summary label -> (field, kind, upper bound). Most specific labels first.
 SUMMARY_FIELDS = [
     ('so tin chi dat hoc ky', 'semester_credits_passed', 'int', None),
@@ -108,7 +115,9 @@ def native_rows(page):
     expected = Counter(CODE.findall(text))
     actual = Counter(clean(r[1]) for r in rows
                      if len(r) == 8 and CODE.fullmatch(clean(r[1])))
-    usable = bool(expected) and expected == actual and '\ufffd' not in text
+    # A digital page without course codes (the last term's summary box spilling onto its own page)
+    # is read as text too; a scanned page needs OCR unless its text layer has every course row.
+    usable = expected == actual and '\ufffd' not in text and (bool(expected) or not is_scanned(page))
     return rows, usable, expected
 
 
@@ -154,7 +163,7 @@ def course_result(raw, letter, issues):
     else:
         issues.append('unrecognized_result')
         return None, None
-    expected = 'passed' if letter in PASS_LETTERS else 'failed' if letter == 'F' else None
+    expected = 'passed' if letter in PASS_LETTERS else 'failed' if letter in FAIL_LETTERS else None
     if expected and result != expected:
         issues.append('result_conflicts_with_grade')
     return result, source
@@ -199,8 +208,10 @@ def parse_semesters(summaries, courses):
             else:
                 record[field] = parsed
     for record in semesters.values():
+        # A VT attempt enters the printed semester GPA at 0, like an F.
         graded = [c for c in courses if (c['academic_year'], c['semester']) ==
-                  (record['academic_year'], record['semester']) and c['score_4'] is not None
+                  (record['academic_year'], record['semester'])
+                  and (c['score_4'] is not None or c['letter_grade'] == ABSENT_LETTER)
                   and c['credits'] and not c['course_code'].startswith(CONDITIONAL_PREFIXES)]
         issues = record['issues']
         if record['academic_year'] is None:
@@ -208,7 +219,7 @@ def parse_semesters(summaries, courses):
         computed = {}
         if graded:
             credits = sum(c['credits'] for c in graded)
-            computed['semester_gpa_4'] = round(sum(c['credits'] * c['score_4'] for c in graded) / credits + 1e-9, 2)
+            computed['semester_gpa_4'] = round(sum(c['credits'] * (c['score_4'] or 0) for c in graded) / credits + 1e-9, 2)
             computed['semester_credits_passed'] = sum(c['credits'] for c in graded
                                                       if c['letter_grade'] in PASS_LETTERS)
             for field, value in computed.items():
@@ -347,17 +358,19 @@ def parse_pages(pages, catalog):
             credits = number(cells[3], 'credits', issues, integer=True)
             if credits is None:
                 issues.append('missing_credits')
-            score10 = number(cells[4], 'score_10', issues, upper=10)
-            score4 = number(cells[5], 'score_4', issues, upper=4)
             letter = cells[6] or None
+            # "VT" in a score column is the absence mark, not an unreadable number.
+            absent = letter == ABSENT_LETTER
+            score10 = None if absent and cells[4] in ('', ABSENT_LETTER) else number(cells[4], 'score_10', issues, upper=10)
+            score4 = None if absent and cells[5] in ('', ABSENT_LETTER) else number(cells[5], 'score_4', issues, upper=4)
             if letter is None and (score10 is not None or score4 is not None):
                 issues.append('missing_letter_grade')
             if (score10 is None) != (score4 is None):
                 issues.append('incomplete_scores')
-            if letter and letter not in {'A+', 'A', 'B+', 'B', 'C+', 'C', 'D+', 'D', 'F', 'MT'}:
+            if letter and letter not in LETTERS:
                 issues.append('unrecognized_letter_grade')
             result, result_source = course_result(cells[7], letter, issues)
-            if result is None and has_result_marks and (letter in PASS_LETTERS or letter == 'F'):
+            if result is None and has_result_marks and (letter in PASS_LETTERS or letter in FAIL_LETTERS):
                 issues.append('missing_result')
             suggestions = []
             matched = code in catalog

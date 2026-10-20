@@ -37,7 +37,8 @@ JSON contains `schemaVersion`, `parserVersion`, `pageCount`, `courseCount`, `sec
 
 - A printed result always wins: "Đạt…" or ✓ is a pass; "Không đạt…", "Chưa đạt…" or ✗ is a fail; any other text stays unknown.
 - Letter MT is an exemption and passes.
-- Only when the result cell is blank: A+, A, B+, B, C+, C, D+ and D pass, and F fails. This is the same `PASS_LETTERS` set as the OCR pipeline (`services/ocr/test_ocr.py`). The pages label these results "suy ra từ điểm chữ" in text.
+- **VT** (vắng thi, absent from the exam; 2026-10-21) is printed in the score and letter columns alike. It is read as a failed attempt without a score; the page shows it in red like an F. The VLU semester GPA counts it at 0 (for example (7.2 + 6.72 + 7.92 + 0) / 12 = 1.82 on a real export), and so do the OCR cross-check and the graduation page's calculated GPA.
+- Only when the result cell is blank: A+, A, B+, B, C+, C, D+ and D pass, and F and VT fail. This is the same `PASS_LETTERS` set as the OCR pipeline (`services/ocr/test_ocr.py`). The pages label these results "suy ra từ điểm chữ" in text.
 - Without a letter, a row with scores is graded but unknown; a row without scores is a registration that has no grade yet.
 - Across retakes any pass wins. A course counts as inferred only when no attempt printed or exempted its result.
 
