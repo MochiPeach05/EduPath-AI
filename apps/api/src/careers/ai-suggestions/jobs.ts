@@ -17,9 +17,9 @@ import { buildCareerSuggestionInput, type CareerSuggestionSource } from "./promp
 import { suggestionContextFromAiInput, validateCareerSuggestionOutput, type StoredSuggestionResult } from "./validate.js";
 
 /** At most this many queued/processing career suggestions system-wide. */
-export const MAX_PENDING_CAREER_SUGGESTIONS = 10;
+const MAX_PENDING_CAREER_SUGGESTIONS = 10;
 /** Serializes the pending check and the queue-size check of concurrent requests. */
-export const CAREER_SUGGESTION_QUEUE_LOCK = "edupath:career-ai-suggestions";
+const CAREER_SUGGESTION_QUEUE_LOCK = "edupath:career-ai-suggestions";
 
 type Db = Pick<DatabasePool, "query">;
 const PENDING = "('queued','processing')";
@@ -49,7 +49,7 @@ export function createCareerSuggestionExpiry(intervalMs: number = AI_HOUSEKEEPIN
 }
 
 /** Reads the career, its requirements and the skill catalog; career_not_found (404) when it is gone. */
-export async function loadCareerSuggestionSource(client: PoolClient, careerPositionId: string): Promise<CareerSuggestionSource> {
+async function loadCareerSuggestionSource(client: PoolClient, careerPositionId: string): Promise<CareerSuggestionSource> {
   const career = await client.query<{ code: string; nameVi: string; nameEn: string; description: string; fieldName: string; fieldDescription: string }>(
     `SELECT c.code,c.name_vi AS "nameVi",c.name_en AS "nameEn",c.description,f.name AS "fieldName",f.description AS "fieldDescription"
       FROM career_positions c JOIN career_fields f ON f.code=c.category

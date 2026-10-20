@@ -40,7 +40,7 @@ export function shownGpa(actual: number, required: number | null, status: GradSt
 }
 
 /** A GPA shortfall rounded UP to 2 decimals, the rule of the AI prompt (a 1e-9 tolerance absorbs float noise). */
-export const gpaShortfall = (remaining: number): number => Math.ceil(remaining * 100 - 1e-9) / 100;
+const gpaShortfall = (remaining: number): number => Math.ceil(remaining * 100 - 1e-9) / 100;
 export const formatGpaShortfall = (remaining: number): string => twoDecimals.format(gpaShortfall(remaining));
 
 const validDate = (iso: string | null | undefined): Date | null => {
@@ -105,7 +105,7 @@ export const COURSE_STATES: Record<GradCourseState, { glyph: string; label: stri
   not_taken: { glyph: "○", label: "Chưa học", tone: "neutral" },
 };
 
-export const isPassedState = (state: GradCourseState) => state === "passed" || state === "exempt";
+const isPassedState = (state: GradCourseState) => state === "passed" || state === "exempt";
 
 /** "Chưa đạt (đã học 2 lần)" for repeated failures, otherwise the state label. */
 export function courseStateText(row: Pick<GraduationCourseRow, "state" | "attempts">): string {
@@ -152,7 +152,7 @@ export function standardGroupLabels(standard: Pick<StudentGraduationStandard, "g
 
 /* ------------------------------------------------------- standard section */
 
-export type Threshold = { key: string; label: string; value: string; known: boolean };
+type Threshold = { key: string; label: string; value: string; known: boolean };
 /** The five thresholds of the standard, in the order of the official form. */
 export function standardThresholds(standard: StudentGraduationStandard): Threshold[] {
   const credits = (key: "minimumCredits" | "mandatoryCredits" | "electiveCredits" | "freeElectiveCredits", label: string): Threshold => ({
@@ -201,7 +201,7 @@ export function profileLine(profile: StudentGraduationResponse["profile"]): stri
   return metaText(profileLineParts(profile));
 }
 
-export type UnresolvedCopy = { title: string; text: string; suggestion: string | null; action: { label: string; href: string } | null };
+type UnresolvedCopy = { title: string; text: string; suggestion: string | null; action: { label: string; href: string } | null };
 /** What to say when no standard could be picked for the student (no other cohort is ever shown). */
 export function unresolvedCopy(data: Pick<StudentGraduationResponse, "profile" | "resolution" | "specialtySuggestion">): UnresolvedCopy {
   const cohort = data.profile.cohortCode;
@@ -366,7 +366,7 @@ function creditsCoveredByGroups(evaluation: Pick<GraduationEvaluation, "groups" 
   return groups !== null && groups > 0 && groups + 1e-9 >= credits.remaining;
 }
 
-export type Verdict = { tone: Tone; glyph: string; text: string };
+type Verdict = { tone: Tone; glyph: string; text: string };
 /**
  * The banner, the same sentence on the graduation page and on the competency page: pass, every
  * failing part with its shortfall (a total-credit shortfall the failing groups already explain is
@@ -397,7 +397,7 @@ export function verdictHeadline(evaluation: Pick<GraduationEvaluation, "status" 
   };
 }
 
-export type CriteriaRow = { key: string; title: string; actual: string; required: string; status: GradStatus; note: string | null };
+type CriteriaRow = { key: string; title: string; actual: string; required: string; status: GradStatus; note: string | null };
 const range = (lower: number | null, upper: number | null) =>
   lower === null ? "—" : upper !== null && upper > lower ? `${formatNumber(lower)}–${formatNumber(upper)}` : formatNumber(lower);
 /** The criteria table of the competency page: the same conditions, order and numbers as conditionItems. */
@@ -462,7 +462,7 @@ const foldName = (text: string) => text.normalize("NFD").replace(/[̀-ͯ]/g, "")
   .toLowerCase().replace(/\s+/g, " ").trim();
 const THESIS_NAME = /\b(do an|khoa luan) tot nghiep\b/;
 
-export type ThesisOption = {
+type ThesisOption = {
   /** The graduation thesis (Đồ án / Khóa luận tốt nghiệp) whose credits alone complete the group. */
   thesis: GraduationCourseRow;
   /** The group's other courses: the replacement path ("học phần thay thế KL/ĐA TN"). */

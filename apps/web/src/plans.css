@@ -1,10 +1,4 @@
 /* Plans reuse the curricula frame (cm-*); these rules cover plan-only parts. */
-.pm-toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
-}
 
 .pm-import input[type="file"] {
   min-height: 44px;

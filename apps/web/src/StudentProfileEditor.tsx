@@ -4,7 +4,7 @@ import { type CareerSelection } from "./career-types";
 import StudentCareerExplorer from "./StudentCareerExplorer";
 import { SPECIALTIES, specialtyLabel } from "./competency-assessment-types";
 import "./student-records.css";
-export type EditableStudentProfile = {
+type EditableStudentProfile = {
   className: string | null;
   interests: string | null;
   careerGoal: string | null;

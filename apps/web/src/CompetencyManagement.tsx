@@ -11,7 +11,7 @@ import "./competencies.css";
  * Cấu hình năng lực (the skills that are assessed, each in a group), then Cấu hình học phần (which
  * course trains which skill, and how much).
  */
-export type CompetencySection = "groups" | "profiles" | "courses";
+type CompetencySection = "groups" | "profiles" | "courses";
 
 export default function CompetencyManagement({ canManage, section }: { canManage: boolean; section: CompetencySection }) {
   const [revision, setRevision] = useState(0);

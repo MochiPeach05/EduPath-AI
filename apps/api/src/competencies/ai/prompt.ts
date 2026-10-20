@@ -32,12 +32,12 @@ export const COURSE_AI_PROMPT_VERSIONS: Record<CourseAiMode, string> = {
  * laptop that takes 30 seconds to 2 minutes per course instead of about 25 seconds, but it follows
  * the rules.
  */
-export const COURSE_AI_THINK = true;
+const COURSE_AI_THINK = true;
 /**
  * Ollama options; num_predict covers the thinking and the answer. num_ctx stays 16384 like the other
  * kinds so the model is not reloaded: a course prompt is about 5.3K tokens, so 8K of output fits.
  */
-export const COURSE_AI_OPTIONS = { num_ctx: 16384, num_predict: 8192, temperature: 0.2, top_p: 0.95, top_k: 64 } as const;
+const COURSE_AI_OPTIONS = { num_ctx: 16384, num_predict: 8192, temperature: 0.2, top_p: 0.95, top_k: 64 } as const;
 export type AiOptions = { num_ctx: number; num_predict: number; temperature: number; top_p: number; top_k: number };
 
 /**
@@ -123,7 +123,7 @@ const PICK_RULES = `1. Chỉ chọn kỹ năng trong mục [3] bằng khóa củ
 const TEXT_RULES = (first: number) => `${first}. reason: một câu ngắn, tối đa ${L.promptReason} ký tự, nói học phần rèn hoặc dùng kỹ năng đó như thế nào. Gọi kỹ năng bằng tên; không viết khóa S…, G… hay mã học phần.
 ${first + 1}. Viết tiếng Việt có dấu đầy đủ, tự nhiên; chỉ viết văn bản thuần, không dùng markdown hay emoji.`;
 
-export const COURSE_AI_SYSTEM_PROMPTS: Record<CourseAiMode, string> = {
+const COURSE_AI_SYSTEM_PROMPTS: Record<CourseAiMode, string> = {
   links: `${INTRO}
 Việc của bạn: đọc thông tin học phần ở mục [4], chọn trong danh mục ở mục [3] những kỹ năng mà học phần trực tiếp rèn luyện hoặc đánh giá, rồi chia 100% trọng số của học phần cho các kỹ năng của học phần. Kỹ năng ghi "đã liên kết" ở mục [3] (liệt kê lại ở mục [5]) là kỹ năng học phần đang có: luôn đưa chúng vào "links" kèm phần trăm, kể cả khi không chọn thêm kỹ năng nào.
 
@@ -159,11 +159,11 @@ Chỉ trả về một đối tượng JSON gồm "links" (tối đa ${L.links} 
 };
 
 /** "S001", "S002", … and "G1", "G2", … in the order given. */
-export const skillKey = (index: number) => `S${String(index + 1).padStart(3, "0")}`;
-export const groupKey = (index: number) => `G${index + 1}`;
+const skillKey = (index: number) => `S${String(index + 1).padStart(3, "0")}`;
+const groupKey = (index: number) => `G${index + 1}`;
 
 /** Groups in name order, keyed G1… */
-export function groupKeys(source: { groups: readonly { id: string; name: string }[] }): GroupKey[] {
+function groupKeys(source: { groups: readonly { id: string; name: string }[] }): GroupKey[] {
   return [...source.groups]
     .sort((a, b) => a.name.localeCompare(b.name, "vi") || (a.id < b.id ? -1 : 1))
     .map((group, index) => ({ key: groupKey(index), id: group.id, name: group.name }));
@@ -175,7 +175,7 @@ export function groupKeys(source: { groups: readonly { id: string; name: string 
  * with the linked skills kept in it (and added after the cap if it cut them), so the model weighs them
  * too. weights: the linked skills, by name.
  */
-export function skillKeys(source: CourseAiSource, mode: CourseAiMode, groups: readonly GroupKey[]): SkillKey[] {
+function skillKeys(source: CourseAiSource, mode: CourseAiMode, groups: readonly GroupKey[]): SkillKey[] {
   const byName = (a: { name: string; id: string }, b: { name: string; id: string }) => a.name.localeCompare(b.name, "vi") || (a.id < b.id ? -1 : 1);
   if (mode === "weights") {
     return [...source.links].sort((a, b) => byName({ name: a.name, id: a.skillId }, { name: b.name, id: b.skillId }))
@@ -212,7 +212,7 @@ const choice = (values: readonly string[]): JsonSchema => ({ type: "string", enu
  * Per-job output schema; the enums are exactly the keys of this job (callers never pass empty lists).
  * In links mode the list holds the linked skills too, so it may be longer than L.links by that many.
  */
-export function buildCourseAiSchema(mode: CourseAiMode, skills: readonly string[], groups: readonly string[], linkedCount = 0): JsonSchema {
+function buildCourseAiSchema(mode: CourseAiMode, skills: readonly string[], groups: readonly string[], linkedCount = 0): JsonSchema {
   if (mode === "weights") {
     return object({
       weights: {
@@ -272,7 +272,7 @@ function courseLines(source: CourseAiSource): string[] {
  * The user message: a delimited data block. In links/full the shared part (curriculum, groups,
  * catalog) comes first, so consecutive jobs of a whole-program run share one long prefix.
  */
-export function renderCourseDataBlock(source: CourseAiSource, mode: CourseAiMode, skills: readonly SkillKey[], groups: readonly GroupKey[]): string {
+function renderCourseDataBlock(source: CourseAiSource, mode: CourseAiMode, skills: readonly SkillKey[], groups: readonly GroupKey[]): string {
   const lines: string[] = [];
   const push = (...items: string[]) => lines.push(...items);
   const groupNames = new Map(groups.map((group) => [group.id, group.name]));

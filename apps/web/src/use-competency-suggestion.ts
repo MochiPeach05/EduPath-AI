@@ -7,7 +7,7 @@ import {
 } from "./competency-ai";
 
 export type SuggestionBusy = "create" | "cancel" | "apply" | null;
-export type SuggestionView = "loading" | "intro" | "waiting" | "failed" | "completed";
+type SuggestionView = "loading" | "intro" | "waiting" | "failed" | "completed";
 
 /**
  * One AI proposal shown in a dialog: the latest one (latestUrl), polled while it is queued or

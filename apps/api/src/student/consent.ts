@@ -8,7 +8,7 @@ import type { DatabasePool } from "../db/pool.js";
 export const TRANSCRIPT_POLICY_VERSION = "2026-10-11";
 
 /** data_consents.purpose values allowed by migrations 018 and 030. */
-export type ConsentPurpose = "transcript_processing" | "competency_assessment";
+type ConsentPurpose = "transcript_processing" | "competency_assessment";
 
 // Caller holds the user's row lock. Consent to a newer policy supersedes the active one;
 // repeating consent to the same version keeps the original record.

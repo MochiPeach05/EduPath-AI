@@ -25,13 +25,13 @@ export type GraduationAdviceContext = {
   courseCodes: ReadonlySet<string>;
 };
 
-export type GraduationAdviceValidation =
+type GraduationAdviceValidation =
   | { ok: true; output: GraduationAdviceOutput; dropped: number }
   | { ok: false; reason: "schema" | "summary" | "no_advice" | "no_next_steps"; path: string };
 
 const raw = z.string().max(4000);
 /** The shape only; lengths and counts are capped by the grammar and trimmed below. */
-export const graduationAdviceOutputSchema = z.object({
+const graduationAdviceOutputSchema = z.object({
   summary: raw,
   advice: z.array(z.object({ focus: z.string().max(64), text: raw }).strict()).max(20),
   nextSteps: z.array(raw).max(20),

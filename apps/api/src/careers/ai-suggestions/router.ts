@@ -17,7 +17,7 @@ import type { StoredSuggestionItem, StoredSuggestionResult } from "./validate.js
 import { LONG_DESCRIPTION_MAX_WORDS, limitedText } from "../../word-limits.js";
 
 /** /latest only returns suggestions created within this many days. */
-export const RECENT_SUGGESTION_DAYS = 7;
+const RECENT_SUGGESTION_DAYS = 7;
 
 type Db = DatabasePool | PoolClient;
 type SuggestionRow = {

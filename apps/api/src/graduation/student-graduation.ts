@@ -39,7 +39,7 @@ export type StudentGraduation = {
 };
 
 /** Courses of the cohort's single active CTĐT (current revision); [] when there is none or several. */
-export async function readCohortCurriculumCourses(db: Db, cohortCode: string): Promise<CurriculumCourseInput[]> {
+async function readCohortCurriculumCourses(db: Db, cohortCode: string): Promise<CurriculumCourseInput[]> {
   const curricula = await db.query<{ revision_id: string }>(
     `SELECT c.current_revision AS revision_id FROM curricula c JOIN curriculum_revisions r ON r.id=c.current_revision
      WHERE c.is_active AND c.cohort_code=$1 ORDER BY c.id`, [cohortCode]);
@@ -123,7 +123,7 @@ export function canonicalJson(value: unknown): string {
   return JSON.stringify(value) ?? "null";
 }
 
-export type GraduationFingerprintInput = {
+type GraduationFingerprintInput = {
   profile: StudentGraduationProfile;
   standard: Pick<GraduationStandardInput, "revisionId">;
   evaluation: GraduationEvaluation;

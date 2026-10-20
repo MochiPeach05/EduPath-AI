@@ -2,7 +2,7 @@ import { z } from "zod";
 import { AI_JOB_KINDS, COMPETENCY_ASSESSMENT_KIND, type AiJobKind } from "../competency-assessment/ai/worker-protocol.js";
 import type { AiErrorCode, FetchLike, OllamaMetrics } from "./ollama.js";
 
-export const WORKER_API_PATH = "/api/worker/competency-assessments";
+const WORKER_API_PATH = "/api/worker/competency-assessments";
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 /** Claimed jobs carry the prompt and schema; anything far above this is not a real response. */
 const DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
@@ -47,7 +47,7 @@ export interface WorkerClient {
   complete(jobId: string, body: CompleteBody): Promise<void>;
 }
 
-export interface WorkerClientOptions {
+interface WorkerClientOptions {
   apiUrl: string;
   workerKey: string;
   fetch?: FetchLike;

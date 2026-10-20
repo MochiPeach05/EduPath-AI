@@ -6,7 +6,7 @@ import { AI_OUTPUT_LIMITS as L, AI_PRIORITIES, schemaContext, type AiOutput, typ
 
 export type { AiOutput } from "./schema.js";
 
-export type AiValidationReason =
+type AiValidationReason =
   | "schema"
   | "unknown_group_key"
   | "unknown_skill_key"
@@ -16,10 +16,10 @@ export type AiValidationReason =
   | "forbidden_content"
   | "invented_number";
 
-export type AiValidationError = { code: "invalid_ai_output"; reason: AiValidationReason; path: string };
-export type AiValidationResult = { ok: true; output: AiOutput } | { ok: false; error: AiValidationError };
+type AiValidationError = { code: "invalid_ai_output"; reason: AiValidationReason; path: string };
+type AiValidationResult = { ok: true; output: AiOutput } | { ok: false; error: AiValidationError };
 
-export type AiValidationContext = OutputSchemaContext & {
+type AiValidationContext = OutputSchemaContext & {
   /** Every numeric value that appears in the data block sent to the model. */
   numbers: ReadonlySet<number>;
   /** Every course-code-like token of the data block; free text may name only these. */
@@ -30,7 +30,7 @@ const text = (max: number) => z.string().max(max).refine((value) => value.trim()
 const priority = z.enum(AI_PRIORITIES);
 const courseChoice = z.object({ courseCode: z.string().max(32), reason: text(L.courseReason) }).strict();
 
-export const aiOutputSchema = z.object({
+const aiOutputSchema = z.object({
   summary: text(L.summary),
   groupInsights: z.array(z.object({ groupKey: z.string().max(16), comment: text(L.groupComment) }).strict()).max(L.groupInsights),
   strengths: z.array(z.object({ skillKey: z.string().max(16), comment: text(L.skillComment) }).strict()).max(L.strengths),
@@ -60,10 +60,6 @@ const NUMBER_PATTERN = /\d+(?:[.,]\d+)?/g;
 /** Numeric tokens of a text ("72,5" and "72.5" both read as 72.5; "HK253" gives 253). */
 export function numbersIn(value: string): number[] {
   return (value.match(NUMBER_PATTERN) ?? []).map((token) => Number(token.replace(",", ".")));
-}
-
-export function numberSet(value: string): Set<number> {
-  return new Set(numbersIn(value));
 }
 
 const TERM_WORDS_PATTERN = /học kỳ (\d) năm học (\d{4})\s*[–-]\s*\d{4}/g;

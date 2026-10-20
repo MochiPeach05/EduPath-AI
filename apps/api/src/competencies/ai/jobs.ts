@@ -18,9 +18,9 @@ import { buildCourseAiInput, type CourseAiInput, type CourseAiMode, type CourseA
 import { courseAiContextFromInput, validateCourseAiOutput, type StoredCourseAiResult } from "./validate.js";
 
 /** At most this many queued/processing course proposals system-wide (a whole program fits). */
-export const MAX_PENDING_COURSE_SUGGESTIONS = 300;
+const MAX_PENDING_COURSE_SUGGESTIONS = 300;
 /** Serializes the pending check and the queue-size check of concurrent requests. */
-export const COURSE_SUGGESTION_QUEUE_LOCK = "edupath:competency-course-ai";
+const COURSE_SUGGESTION_QUEUE_LOCK = "edupath:competency-course-ai";
 
 type Db = Pick<DatabasePool, "query">;
 const PENDING = "('queued','processing')";
@@ -53,7 +53,7 @@ type RevisionRow = { cohortCode: string; name: string; version: number; courses:
 type SharedSource = Pick<CourseAiSource, "curriculum" | "groups" | "profiles" | "careerSkills"> & { courses: Map<string, { course: CurriculumCourse; count: number }> };
 
 /** The revision, its courses and the catalog shared by every course of one request. */
-export async function loadSharedSource(client: Db, revisionId: string): Promise<SharedSource> {
+async function loadSharedSource(client: Db, revisionId: string): Promise<SharedSource> {
   const revision = await client.query<RevisionRow>(`SELECT c.cohort_code AS "cohortCode",COALESCE(r.data->>'name','') AS name,r.version,
     COALESCE(r.data->'courses','[]'::jsonb) AS courses FROM curriculum_revisions r JOIN curricula c ON c.id=r.curriculum_id WHERE r.id=$1`, [revisionId]);
   const row = revision.rows[0];
@@ -88,7 +88,7 @@ export async function loadSharedSource(client: Db, revisionId: string): Promise<
 }
 
 /** Current links of every configured course of the revision (any status). */
-export async function loadRevisionLinks(client: Db, revisionId: string) {
+async function loadRevisionLinks(client: Db, revisionId: string) {
   const result = await client.query<{ courseCode: string; skillId: string; name: string; groupId: string; description: string; weight: number }>(
     `SELECT c.course_code AS "courseCode",l.skill_id AS "skillId",s.name,cs.group_id AS "groupId",
       COALESCE(NULLIF(cs.scope,''),s.description) AS description,l.weight::float8 AS weight
@@ -107,7 +107,7 @@ export async function loadRevisionLinks(client: Db, revisionId: string) {
 const hour = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : null);
 
 /** One course of the shared source: course_not_found (404) or duplicate_curriculum_course (409). */
-export function courseSource(shared: SharedSource, code: string, links: CourseAiSource["links"]): CourseAiSource {
+function courseSource(shared: SharedSource, code: string, links: CourseAiSource["links"]): CourseAiSource {
   const occurrence = shared.courses.get(code);
   if (!occurrence) throw new CompetencyError("course_not_found", 404);
   if (occurrence.count !== 1) throw new CompetencyError("duplicate_curriculum_course", 409, [code]);
@@ -135,7 +135,7 @@ export function courseSource(shared: SharedSource, code: string, links: CourseAi
 }
 
 /** Why a course cannot be sent to the model in this mode (409), checked before anything is queued. */
-export function assertRunnable(input: CourseAiInput) {
+function assertRunnable(input: CourseAiInput) {
   if (!input.groups.length) throw new CompetencyError("no_active_groups", 409);
   if (input.mode === "weights" && !input.linked.length) throw new CompetencyError("course_has_no_links", 409);
   if (input.mode === "full" && input.linked.length) throw new CompetencyError("course_already_linked", 409);
@@ -178,7 +178,7 @@ export async function enqueueCourseSuggestion(
   return { id, created: true };
 }
 
-export type BatchQueued = {
+type BatchQueued = {
   batchId: string | null;
   queued: number;
   /** Courses left out: already linked, repeated course codes, already queued in another run. */

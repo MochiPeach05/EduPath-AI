@@ -30,7 +30,7 @@ type Fixture = {
 
 let cached: Fixture | null = null;
 /** The raw fixture (parsed once; callers get a deep copy). */
-export function syntheticFixture(): Fixture {
+function syntheticFixture(): Fixture {
   cached ??= JSON.parse(readFileSync(new URL("./synthetic-k29.json", import.meta.url), "utf8")) as Fixture;
   return structuredClone(cached);
 }
@@ -107,7 +107,7 @@ export function syntheticCurriculum(fixture = syntheticFixture()): CurriculumInp
   };
 }
 
-export function syntheticWeights(fixture = syntheticFixture()): WeightsInput {
+function syntheticWeights(fixture = syntheticFixture()): WeightsInput {
   const w = fixture.weights;
   return {
     revisionId: w.revisionId, version: w.version, activeCount: w.activeCount, maxConfigUpdatedAt: w.maxConfigUpdatedAt,

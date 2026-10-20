@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 
 /** Keys the AI worker reads from services/ai/.env. Anything else in that file is ignored. */
-export const AI_WORKER_ENV_KEYS = [
+const AI_WORKER_ENV_KEYS = [
   "AI_API_URL",
   "AI_WORKER_KEY",
   "OLLAMA_URL",
@@ -16,10 +16,10 @@ export type AiWorkerEnv = Partial<Record<AiWorkerEnvKey, string>>;
 
 export const DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434";
 export const DEFAULT_OLLAMA_MODEL = "gemma4:e4b";
-export const DEFAULT_OLLAMA_CONTEXT = 16384;
-export const DEFAULT_AI_TIMEOUT_MS = 600_000;
+const DEFAULT_OLLAMA_CONTEXT = 16384;
+const DEFAULT_AI_TIMEOUT_MS = 600_000;
 
-export interface AiWorkerConfig {
+interface AiWorkerConfig {
   /** Origin of the EduPath API, e.g. http://localhost:4000 or https://api.example.com. */
   apiUrl: string;
   workerKey: string;

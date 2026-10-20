@@ -9,7 +9,7 @@ import { graduationFingerprint, type StudentGraduation } from "../student-gradua
 import type { EvaluatedGraduation } from "./jobs.js";
 
 export const ADVICE_TRANSCRIPT_VERSION = "00000000-0000-4000-8000-0000000000f1";
-export const ADVICE_TRANSCRIPT_UPDATED_AT = "2026-10-01T08:00:00.000Z";
+const ADVICE_TRANSCRIPT_UPDATED_AT = "2026-10-01T08:00:00.000Z";
 
 /** The synthetic CNPM student's terms with the printed summaries of the last graded term replaced. */
 export const termsWithSummaries = (summaries: [string, string][], terms: TranscriptTerm[] = syntheticStudentTerms()) =>
@@ -35,7 +35,7 @@ export function gpaFailingTerms(): TranscriptTerm[] {
 export const THESIS_GROUP_ID = "row-92";
 
 /** [code, name, credits] of a standard course. */
-export type StandardCourseSpec = [string, string, number | null];
+type StandardCourseSpec = [string, string, number | null];
 
 /** K29 "Nhóm tự chọn TC306" of the three K29 standards: Đồ án Tốt nghiệp (6 TC) or 3-TC replacement courses. */
 export const K29_THESIS_COURSES: StandardCourseSpec[] = [
@@ -58,7 +58,7 @@ export const withThesisGroup = (courses: readonly StandardCourseSpec[], name?: s
   ],
 });
 
-export type SyntheticGraduationOptions = {
+type SyntheticGraduationOptions = {
   terms?: TranscriptTerm[];
   /** Edits the CNPM standard's data (gpaScale already defaulted to 4). */
   standard?: (data: GraduationData) => GraduationData;

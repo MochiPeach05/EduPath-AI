@@ -60,7 +60,7 @@ export interface GraduationGroupEvaluation {
   courses: GraduationCourseRow[];
 }
 
-export type GraduationWarningCode =
+type GraduationWarningCode =
   | "results_inferred" | "credits_mismatch" | "printed_credits_unreadable" | "ocr_needs_review" | "standard_ambiguous_codes";
 
 export interface GraduationWarning {
@@ -214,4 +214,3 @@ export type GraduationAdviceStatusResponse = {
  * with an advice of status "deferred" (id and createdAt null, nothing stored); advice is null when
  * AI is off or there is nothing to advise on.
  */
-export type GraduationAdviceWriteResponse = { advice: StoredAdvice | null };

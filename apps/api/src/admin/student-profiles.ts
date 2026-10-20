@@ -12,7 +12,7 @@ export interface StudentProfileQuery {
   active?: "true" | "false" | undefined;
   profileStatus?: "missing" | "incomplete" | "complete" | undefined;
 }
-export interface StudentProfileSummary {
+interface StudentProfileSummary {
   id: string; name: string; email: string | null; isActive: boolean;
   studentCode: string | null; cohortYear: number | null;
   cohortCode: string | null; className: string | null;

@@ -21,36 +21,6 @@
   border-bottom: 1px solid var(--admin-border);
 }
 
-.admin-brand {
-  display: flex;
-  gap: 12px;
-  align-items: center;
-}
-
-.admin-brand-symbol {
-  width: 44px;
-  height: 44px;
-  color: var(--admin-red);
-}
-
-.admin-brand strong {
-  font-size: 25px;
-  letter-spacing: -.8px;
-}
-
-.admin-brand strong span {
-  color: var(--admin-red);
-}
-
-.admin-brand small {
-  display: block;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 2.4px;
-  margin-top: 3px;
-  color: var(--admin-muted);
-}
-
 /* Matches the EduPath mark's artwork width so neither logo reads as the smaller one. */
 .admin-university-logo {
   width: 176px;
@@ -264,72 +234,10 @@
   flex: 1;
 }
 
-.admin-workspace-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 24px;
-  margin-bottom: 32px;
-}
-
 .admin-workspace h1 {
   font-size: clamp(26px, 3vw, 38px);
   margin: 10px 0;
   overflow-wrap: anywhere;
-}
-
-.admin-workspace-heading p:not(.admin-eyebrow),
-.admin-next>p:not(.admin-eyebrow) {
-  color: var(--admin-muted);
-  line-height: 1.8;
-}
-
-.admin-session-card {
-  border: 1px solid var(--admin-border);
-  background: #fff;
-  border-radius: 12px;
-  padding: 32px;
-}
-
-.admin-status {
-  color: #23623d;
-  background: #eaf6ee;
-  padding: 7px 12px;
-  border-radius: 6px;
-  font-size: 12px;
-  display: inline-block;
-}
-
-.admin-session-card h2,
-.admin-next h2 {
-  font-size: 22px;
-  margin: 22px 0;
-}
-
-.admin-profile {
-  display: grid;
-  grid-template-columns: 1.5fr 1fr 1fr;
-  gap: 24px;
-  margin: 0;
-}
-
-.admin-profile dt {
-  color: var(--admin-muted);
-  font-size: 13px;
-  margin-bottom: 8px;
-}
-
-.admin-profile dd {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 600;
-  overflow-wrap: anywhere;
-}
-
-.admin-next {
-  margin-top: 28px;
-  padding: 8px 0;
-  max-width: 760px;
 }
 
 @media (max-width: 900px) {
@@ -356,20 +264,6 @@
   .admin-header {
     padding: 12px 20px;
     gap: 12px;
-  }
-
-  .admin-brand strong {
-    font-size: 21px;
-  }
-
-  .admin-brand-symbol {
-    width: 32px;
-    height: 32px;
-  }
-
-  .admin-brand small {
-    font-size: 8px;
-    letter-spacing: 1.5px;
   }
 
   .admin-university-logo {
@@ -400,18 +294,6 @@
     font-size: 14px;
   }
 
-  .admin-workspace-heading {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .admin-profile {
-    grid-template-columns: 1fr;
-  }
-
-  .admin-session-card {
-    padding: 24px;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

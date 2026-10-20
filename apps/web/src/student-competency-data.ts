@@ -120,7 +120,7 @@ export const CONFIDENCE_LABELS: Record<Confidence, string> = { low: "Độ tin c
 
 export type StatusTone = "pass" | "fail" | "unknown" | "neutral";
 /** Deficits are unrounded; shown as whole points rounded UP (matches the rounded-down score), never "thiếu 0 điểm". */
-export function deficitPoints(deficit: number): number {
+function deficitPoints(deficit: number): number {
   return Math.max(1, Math.ceil(deficit - 1e-9));
 }
 export function deficitText(deficit: number | null): string {
@@ -197,13 +197,13 @@ export const careerSkillKeys = (result: Pick<AssessmentResult, "career">): Set<s
 
 /* ------------------------------------------------- history (STU-COMP-07) */
 
-export type HistoryRow = HistoryPoint & {
+type HistoryRow = HistoryPoint & {
   /** Whole-point change of the overall score from the previous term with a score, as the page shows the scores (rounded down). */
   change: number | null;
   /** The newest term: the result shown everywhere else on the page. */
   latest: boolean;
 };
-export type HistoryYear = { schoolYear: string; rows: HistoryRow[]; end: HistoryRow };
+type HistoryYear = { schoolYear: string; rows: HistoryRow[]; end: HistoryRow };
 
 const shown = (score: number | null) => score === null ? null : Math.floor(score + 1e-9);
 
@@ -223,7 +223,7 @@ export function historyYears(history: readonly HistoryPoint[]): HistoryYear[] {
 }
 
 /** "học kỳ 1 năm học 2023–2024". */
-export const termInWords = (point: Pick<HistoryPoint, "semester" | "schoolYear">) => `học kỳ ${point.semester} năm học ${point.schoolYear}`;
+const termInWords = (point: Pick<HistoryPoint, "semester" | "schoolYear">) => `học kỳ ${point.semester} năm học ${point.schoolYear}`;
 
 /** One sentence on the overall trend from the first term with a score to the newest one; null with fewer than two. */
 export function historySentence(history: readonly HistoryPoint[]): string | null {
@@ -241,14 +241,14 @@ export function historySentence(history: readonly HistoryPoint[]): string | null
 
 /* ------------------------------------------------- STU-GAP-07: career skills by term */
 
-export type GapHistoryRow = {
+type GapHistoryRow = {
   requirementId: string; name: string; priorityLabel: string; isRequired: boolean; threshold: number;
   /** One cell per point: the score as the page shows it (rounded down) and the status of that term. */
   cells: { term: string; score: number | null; status: CareerRequirementResult["status"] | null }[];
   /** Latest scored cell − first scored cell; null with fewer than two scored cells. */
   change: number | null;
 };
-export type GapHistory =
+type GapHistory =
   | { state: "empty" }
   | { state: "outdated" }
   | { state: "ready"; points: HistoryPoint[]; rows: GapHistoryRow[]; sentence: string };
@@ -288,7 +288,7 @@ export function gapHistory(result: Pick<AssessmentResult, "career" | "history">)
 
 /** The level columns of the proficiency table, best first; "Chưa có minh chứng" last (not a weakness). */
 export const LEVEL_COLUMNS = ["proficient", "good", "basic", "needs_work", "no_evidence"] as const satisfies readonly LevelCode[];
-export type LevelRow = {
+type LevelRow = {
   key: string; name: string; score: number | null; level: LevelCode; levelLabel: string;
   /** Skills of the group counted like the group line: condition-only and not-applicable skills left out. */
   total: number;
@@ -365,7 +365,7 @@ export const EMPTY_SKILL_FILTERS: SkillFilters = { group: "", level: "", confide
 const fold = (text: string) => text.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/g, "d").replace(/Đ/g, "D").toLowerCase().trim();
 
 /** "Cần cải thiện" = scored below Khá. */
-export const skillNeedsWork = (skill: Pick<SkillResult, "level">) => skill.level === "basic" || skill.level === "needs_work";
+const skillNeedsWork = (skill: Pick<SkillResult, "level">) => skill.level === "basic" || skill.level === "needs_work";
 
 export function filterSkills(skills: readonly SkillResult[], filters: SkillFilters): SkillResult[] {
   const query = fold(filters.search);
@@ -387,7 +387,7 @@ export function groupEvidenceCounts(skills: readonly Pick<SkillResult, "groupKey
   return { withEvidence: counted.filter((skill) => skill.status === "scored" || skill.status === "exempt_only").length, total: counted.length };
 }
 
-export type SkillBucket = { id: string; title: string; note: string | null; skills: SkillResult[] };
+type SkillBucket = { id: string; title: string; note: string | null; skills: SkillResult[] };
 /**
  * Groups for the skill list: one per engine group (scored or exempt skills),
  * then condition-only skills, skills outside the student's choices and, last,

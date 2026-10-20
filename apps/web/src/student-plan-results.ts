@@ -28,8 +28,8 @@ export function studentPlanResult(
   return results.get(item.code.trim().toUpperCase());
 }
 
-export type PhysicalEducationProgress = { passed: number; confirmed: number };
-export type PlanResult = { result: CourseResult; inferred: boolean };
+type PhysicalEducationProgress = { passed: number; confirmed: number };
+type PlanResult = { result: CourseResult; inferred: boolean };
 
 /** Distinct passed PE electives, and how many of those passes are confirmed by
     a printed result or MT rather than inferred from a letter grade. */

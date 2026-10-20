@@ -6,7 +6,7 @@ import type { CurriculumData } from "./model.js";
 
 // Student responses expose the current teaching framework, never administrative
 // tokens, actors, source cells, files, audit events or historical revisions.
-export function studentCurriculumData(data: CurriculumData) {
+function studentCurriculumData(data: CurriculumData) {
   return {
     name: data.name,
     major: data.major,

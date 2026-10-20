@@ -53,13 +53,12 @@
 .comp-pick-list small { color: var(--cm-muted); }
 
 /* AI weights review: name and percent on one line */
-.comp-ai-weight-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+
 /* Tạo liên kết kỹ năng: skills and weights in one dialog (2026-10-20). */
 .cai-row-head .cai-percent { width: 132px; margin-left: auto; }
 .comp-subheading { margin: 6px 0 0; color: var(--cm-ink); font-size: 14px; }
 .comp-even-split { justify-self: start; margin-top: 4px; }
 .comp-pick-all { padding-bottom: 8px; border-bottom: 1px solid var(--cm-line); }
-.comp-ai-weight-row .comp-percent { width: 132px; }
 
 /* Whole-program AI run */
 .comp-ai-batch { display: grid; gap: 16px; padding: 24px; }

@@ -17,7 +17,7 @@ import type {
 type StandardGroup = GraduationData["groups"][number];
 type StandardCourse = GraduationData["courses"][number];
 
-export const GRADUATION_STATUS_LABELS: Record<TriState, string> = {
+const GRADUATION_STATUS_LABELS: Record<TriState, string> = {
   pass: "Đạt các điều kiện (tham khảo)",
   fail: "Chưa đủ điều kiện",
   unknown: "Chưa xác định",
@@ -54,7 +54,7 @@ export function matchStandardElectiveGroup(courseCodes: readonly string[], stand
 }
 
 /** CTĐT elective code of a standard group (the inverse match). */
-export function matchCurriculumElective(group: StandardGroup, standard: Pick<GraduationData, "courses">, electives: readonly ElectiveGroup[]): string | null {
+function matchCurriculumElective(group: StandardGroup, standard: Pick<GraduationData, "courses">, electives: readonly ElectiveGroup[]): string | null {
   const codes = standardGroupCodes(standard, group.id);
   let best: { code: string; shared: number; difference: number } | null = null;
   for (const elective of electives) {
@@ -236,7 +236,7 @@ export const decide = (lower: number | null, upper: number | null, required: num
  * program estimate with lower/upper bounds. An unreadable or conflicting printed value falls back to
  * the estimate (E5; the graduation page warns printed_credits_unreadable).
  */
-export function assessGraduationCredits(
+function assessGraduationCredits(
   required: number,
   transcript: TranscriptData,
   records: ReadonlyMap<string, TranscriptCourseRecord>,
@@ -256,7 +256,7 @@ export function assessGraduationCredits(
  * an unknown result); pass when lower ≥ required, fail when upper < required, otherwise unknown (E2).
  * Mandatory groups count courses, (*) included (E8); elective groups count E3 credits.
  */
-export function assessGraduationGroups(
+function assessGraduationGroups(
   standard: Pick<GraduationData, "groups" | "courses">,
   records: ReadonlyMap<string, TranscriptCourseRecord>,
   programCredits: ReadonlyMap<string, number | null>,
@@ -296,7 +296,7 @@ export function assessGraduationGroups(
 }
 
 /** The verdict against one resolved standard (everything of GraduationSummary but the resolution and the standard's identity). */
-export type GraduationAssessment = Pick<GraduationSummary, "status" | "reason" | "groups" | "groupStatus" | "credits" | "needsImprovement"> & {
+type GraduationAssessment = Pick<GraduationSummary, "status" | "reason" | "groups" | "groupStatus" | "credits" | "needsImprovement"> & {
   gpa: GraduationGpa;
 };
 

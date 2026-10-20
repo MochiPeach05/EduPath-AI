@@ -27,13 +27,11 @@
   font-weight: 500;
   color: var(--sw-muted);
 }
-.sg-improvement { padding: 16px 20px; border: 1px solid #e9d39b; border-radius: 8px; background: #fff8e8; color: #775014; }
-.sg-improvement h3 { margin: 0 0 8px; font-size: 15px; }
-.sg-improvement p + p { margin-top: 8px; }
+
 .sg-status-pass { color: #16804a; }
 .sg-status-fail { color: #c62828; }
 .sg-status-unknown { color: #805900; }
-.sg-verdict { padding: 16px; border: 1px solid currentColor; border-radius: 8px; font-weight: 600; }
+
 @media (max-width: 1000px) {
   .sg-stats {
     grid-template-columns: repeat(3, minmax(0, 1fr));

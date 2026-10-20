@@ -393,10 +393,6 @@
   margin-top: 8px;
 }
 
-.cm-preview-button {
-  width: 100%;
-}
-
 .cm-upload input::file-selector-button {
   border: 1px solid #c2b8bd;
   border-radius: 5px;

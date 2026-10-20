@@ -31,7 +31,7 @@ export function physicalEducationSlot(name: string): number | null {
   return slot ? Number(slot[1]) : null;
 }
 
-export type ChoiceRule = {
+type ChoiceRule = {
   /** k in "Chọn k trong n", or null. */
   k: number | null;
   /** n in "trong n", or null. */

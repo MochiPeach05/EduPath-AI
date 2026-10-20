@@ -55,7 +55,7 @@ export interface OllamaChatResult {
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
-export interface OllamaDeps {
+interface OllamaDeps {
   fetch?: FetchLike;
   /**
    * Abort when no new data arrives for this long once streaming has started. Default 120 s.
@@ -66,8 +66,8 @@ export interface OllamaDeps {
   maxOutputChars?: number;
 }
 
-export const OLLAMA_KEEP_ALIVE = "15m";
-export const DEFAULT_INACTIVITY_MS = 120_000;
+const OLLAMA_KEEP_ALIVE = "15m";
+const DEFAULT_INACTIVITY_MS = 120_000;
 const DEFAULT_MAX_OUTPUT_CHARS = 200_000;
 /** Generation options the worker forwards from the claimed job. Anything else (e.g. shift) is dropped. */
 const FORWARDED_OPTION_KEYS = ["num_ctx", "num_predict", "temperature", "top_p", "top_k"] as const;
@@ -145,7 +145,7 @@ export class NdjsonAccumulator {
   }
 }
 
-export function pickMetrics(line: Record<string, unknown>): OllamaMetrics {
+function pickMetrics(line: Record<string, unknown>): OllamaMetrics {
   const metrics: OllamaMetrics = {};
   for (const key of METRIC_KEYS) {
     const value = line[key];

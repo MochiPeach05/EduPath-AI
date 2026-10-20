@@ -75,7 +75,7 @@ export async function parseTranscript(pdf: Buffer): Promise<TranscriptData> {
   } finally { extracting = false; }
 }
 
-export function parsePages(pages: Page[]): TranscriptData {
+function parsePages(pages: Page[]): TranscriptData {
   const sections: TranscriptSection[] = [];
   let active: TranscriptSection | undefined;
   let count = 0;

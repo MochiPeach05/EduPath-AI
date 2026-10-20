@@ -35,7 +35,9 @@ const migrations = ["007_student_transcripts.sql", "010_transcript_jobs.sql", "0
   "026_competency_management.sql", "028_student_specialty.sql", "029_student_competency_assessments.sql", "030_competency_consent.sql",
   "031_career_ai_suggestions.sql",
   // The worker router's /claim housekeeping also expires graduation advice.
-  "032_graduation_ai_advice.sql"];
+  "032_graduation_ai_advice.sql",
+  // /claim also runs the course-proposal housekeeping, so the schema needs the tables up to 036 like production.
+  "033_competency_cloud_ai.sql", "034_competency_ai_suggestions.sql", "035_competency_ai_skills.sql", "036_cancel_competency_ai_skills.sql"];
 const copied = ["career_fields", "career_positions", "career_skills", "career_requirements"];
 const adminPool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 1 });
 // search_path is the audit schema ONLY, so a missing table can never fall through to public.
@@ -144,7 +146,7 @@ try {
   const target = targetCodes.map((code) => careers.get(code));
   const others = [...careers.values()].filter((career) => !targetCodes.includes(career.code));
   assert(others.length >= 9, "the checks need at least 12 careers");
-  checks.push(`migrations 007-032 apply in a throwaway schema; copied ${careers.size} careers, ${await count("career_skills WHERE deleted_at IS NULL")} skills and ${await count("career_requirements WHERE deleted_at IS NULL")} links read-only from public`);
+  checks.push(`migrations 007-036 apply in a throwaway schema; copied ${careers.size} careers, ${await count("career_skills WHERE deleted_at IS NULL")} skills and ${await count("career_requirements WHERE deleted_at IS NULL")} links read-only from public`);
 
   const app = express();
   app.use("/api/worker/competency-assessments", createCompetencyWorkerRouter(pool, workerKey));

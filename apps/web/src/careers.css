@@ -5,12 +5,7 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.career-row-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.career-row-actions svg,
+
 .career-workspace .am-primary svg {
   width: 20px;
   height: 20px;

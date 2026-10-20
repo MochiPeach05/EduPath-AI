@@ -19,11 +19,6 @@ export const GRADUATION_ADVICE_LIMITS = {
 export const GENERAL_FOCUS = "GENERAL";
 
 /** What the model returns (before the server cleans it). */
-export type GraduationAdviceModelOutput = {
-  summary: string;
-  advice: { focus: string; text: string }[];
-  nextSteps: string[];
-};
 
 const L = GRADUATION_ADVICE_LIMITS;
 

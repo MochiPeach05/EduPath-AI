@@ -29,15 +29,15 @@ import { AI_OUTPUT_LIMITS as L, buildOutputSchema, type JsonSchema, type OutputS
 export const PROMPT_VERSION = "comp-v7";
 
 /** Gemma reasons before it writes the comment; the worker sends it to Ollama as think:true. */
-export const AI_THINK = true;
+const AI_THINK = true;
 /**
  * Ollama options sent with every job (worker adds stream/truncate/keep_alive/model). num_predict covers
  * the thinking and the answer; num_ctx stays 16384 like every other kind so the model is never reloaded.
  */
 export const AI_OPTIONS = { num_ctx: 16384, num_predict: 8192, temperature: 0.4, top_p: 0.95, top_k: 64 } as const;
-export type AiOptions = typeof AI_OPTIONS;
+type AiOptions = typeof AI_OPTIONS;
 
-export type AiInput = {
+type AiInput = {
   system: string;
   user: string;
   schema: JsonSchema;
@@ -62,9 +62,9 @@ const SPECIAL_TOKEN_PATTERN = new RegExp(
 );
 
 /** Default cap for one name/label field. */
-export const NAME_MAX_LENGTH = 120;
+const NAME_MAX_LENGTH = 120;
 /** Cap for a skill scope (spec §10). */
-export const SCOPE_PROMPT_MAX_LENGTH = 200;
+const SCOPE_PROMPT_MAX_LENGTH = 200;
 
 /**
  * Makes a DB/OCR string safe to embed in the prompt: control characters and line breaks
@@ -213,7 +213,7 @@ function excludedReplacementsOf(result: AssessmentResult): ReadonlySet<string> {
 }
 
 /** The weakest skills below Khá (scored, not condition-only) of every group below Khá, by group key. */
-export function weakGroupSkills(result: AssessmentResult): Map<string, SkillResult[]> {
+function weakGroupSkills(result: AssessmentResult): Map<string, SkillResult[]> {
   const weakest = new Map<string, SkillResult[]>();
   for (const group of result.groups) {
     if (!WEAK_LEVELS.includes(group.level)) continue;
@@ -231,7 +231,7 @@ export function weakGroupSkills(result: AssessmentResult): Map<string, SkillResu
  * skills of the offered plans (comp-v4). Without a career also the weakest skills of the groups below
  * Khá; with one the skills outside it are context only, so none is added for them (comp-v5).
  */
-export function selectedSkillKeys(result: AssessmentResult): string[] {
+function selectedSkillKeys(result: AssessmentResult): string[] {
   const s = result.promptSelection;
   const planned = (promptPlans(result) ?? []).map((plan) => plan.skillKey);
   const weakest = result.career ? [] : [...weakGroupSkills(result).values()].flat().map((skill) => skill.key);
@@ -266,20 +266,20 @@ function improvementCourses(result: AssessmentResult): CourseOptions {
 }
 
 /** Gap candidates: career requirements below/not studied/upcoming, then self-study items. */
-export function gapCandidates(result: AssessmentResult): OutputSchemaContext["gapSkills"] {
+function gapCandidates(result: AssessmentResult): OutputSchemaContext["gapSkills"] {
   const options = careerGapCourses(result);
   for (const item of result.selfStudy) if (!options.has(item.skillKey)) options.set(item.skillKey, []);
   return [...options].map(([key, courses]) => ({ key, courseCodes: courses.map((course) => course.code) }));
 }
 
 /** The course codes allowed for each improvement key (section 6 and the improvements branches). */
-export function improvementCandidates(result: AssessmentResult, improvementKeys: readonly string[]): OutputSchemaContext["improvementSkills"] {
+function improvementCandidates(result: AssessmentResult, improvementKeys: readonly string[]): OutputSchemaContext["improvementSkills"] {
   const options = improvementCourses(result);
   return improvementKeys.map((key) => ({ key, courseCodes: (options.get(key) ?? []).map((course) => course.code) }));
 }
 
 /** The schema allowlists plus the skill keys listed in section 3 of the data block. */
-export type PromptContext = OutputSchemaContext & { skillKeys: string[] };
+type PromptContext = OutputSchemaContext & { skillKeys: string[] };
 
 /**
  * Strength and improvement keys among the sent skills, so the model cannot contradict the engine (no
@@ -289,7 +289,7 @@ export type PromptContext = OutputSchemaContext & { skillKeys: string[] };
  * below Khá to strengthen (comp-v4), or all of them for a result stored before plans (comp-v3). A
  * strength is any other skill scored at Khá or above (unrounded level from the engine).
  */
-export function strengthAndImprovementKeys(result: AssessmentResult, selected: readonly string[]): { strengthKeys: string[]; improvementKeys: string[] } {
+function strengthAndImprovementKeys(result: AssessmentResult, selected: readonly string[]): { strengthKeys: string[]; improvementKeys: string[] } {
   const skills = new Map(result.skills.map((skill) => [skill.key, skill]));
   const below = new Set<string>();
   const notStudied = new Set<string>();
@@ -452,7 +452,7 @@ function skillsHeading(result: AssessmentResult): string {
 }
 
 /** Renders the user message: a delimited data block (spec §10 "Khối dữ liệu"). */
-export function renderDataBlock(result: AssessmentResult, context: PromptContext = buildPromptContext(result)): string {
+function renderDataBlock(result: AssessmentResult, context: PromptContext = buildPromptContext(result)): string {
   const lines: string[] = [];
   const push = (...items: string[]) => lines.push(...items);
   const courses = new Map(result.courses.map((course) => [course.code, course]));

@@ -24,29 +24,24 @@ import type {
 
 /* ----------------------------- labels ----------------------------- */
 
-export const LEVEL_LABELS: Record<LevelCode, string> = {
+const LEVEL_LABELS: Record<LevelCode, string> = {
   proficient: "Thành thạo", good: "Khá", basic: "Cơ bản", needs_work: "Cần củng cố",
   no_evidence: "Chưa có minh chứng", exempt: "Miễn/công nhận",
 };
-export const CONFIDENCE_LABELS: Record<Confidence, string> = { low: "Thấp", medium: "Trung bình", high: "Cao" };
-export const GAP_STATUS_LABELS: Record<GapStatus, string> = {
+const CONFIDENCE_LABELS: Record<Confidence, string> = { low: "Thấp", medium: "Trung bình", high: "Cao" };
+const GAP_STATUS_LABELS: Record<GapStatus, string> = {
   met: "Đạt ngưỡng", below: "Dưới ngưỡng", upcoming: "Sắp học", not_studied: "Chưa học", no_data: "Chưa đủ dữ liệu",
 };
-export const DEFICIT_BAND_LABELS: Record<DeficitBand, string> = {
+const DEFICIT_BAND_LABELS: Record<DeficitBand, string> = {
   near: "Gần ngưỡng", moderate: "Thiếu vừa", large: "Thiếu nhiều", not_studied: "Chưa học",
 };
-export const FIT_LABELS: Record<FitCode, string> = {
+const FIT_LABELS: Record<FitCode, string> = {
   fit: "Phù hợp", fairly_fit: "Khá phù hợp", needs_more: "Cần bổ sung nhiều", insufficient_data: "Chưa đủ dữ liệu",
 };
-export const ELIGIBILITY_LABELS: Record<Eligibility, string> = {
+const ELIGIBILITY_LABELS: Record<Eligibility, string> = {
   eligible: "Đủ điều kiện", not_eligible: "Chưa đủ điều kiện", review: "Cần xác nhận",
 };
-export const NOT_APPLICABLE_LABELS: Record<NotApplicableReason, string> = {
-  other_specialty: "Chỉ có trong học phần của chuyên ngành khác",
-  elective_not_chosen: "Không thuộc lựa chọn tự chọn của bạn",
-  no_credits: "Học phần liên quan không có tín chỉ",
-};
-export const SELF_STUDY_REASON_LABELS: Record<SelfStudyReason, string> = {
+const SELF_STUDY_REASON_LABELS: Record<SelfStudyReason, string> = {
   not_measured: "CTĐT chưa có học phần đo kỹ năng này",
   other_specialty: "Chỉ được dạy trong học phần của chuyên ngành khác",
   elective_quota_used: "Thuộc nhóm tự chọn bạn đã chọn đủ tín chỉ",
@@ -55,13 +50,13 @@ export const SELF_STUDY_REASON_LABELS: Record<SelfStudyReason, string> = {
 
 /* ------------------------- pure formula helpers ------------------------- */
 
-export const round = (value: number, digits = 2) => {
+const round = (value: number, digits = 2) => {
   const factor = 10 ** digits;
   const rounded = Math.round((value + Number.EPSILON) * factor) / factor;
   return Object.is(rounded, -0) ? 0 : rounded;
 };
 /** Vietnamese decimal formatting without locale data: 0.6 → "0,6". */
-export const vn = (value: number, digits = 2) => String(round(value, digits)).replace(".", ",");
+const vn = (value: number, digits = 2) => String(round(value, digits)).replace(".", ",");
 /** A computed 0–100 score without float noise (84.99999999999999 → 85), so a level is not missed by 1e-14. */
 export const snapScore = (value: number) => Math.round(value * 1e9) / 1e9;
 /**
@@ -77,9 +72,9 @@ export function levelOf(score: number | null, exemptOnly = false): LevelCode {
     : score >= LEVEL_THRESHOLDS.basic ? "basic" : "needs_work";
 }
 
-export const coverageBand = (coverage: number): Confidence =>
+const coverageBand = (coverage: number): Confidence =>
   coverage >= COVERAGE_BANDS.high ? "high" : coverage >= COVERAGE_BANDS.medium ? "medium" : "low";
-export const evidenceBand = (evidence: number): Confidence =>
+const evidenceBand = (evidence: number): Confidence =>
   evidence >= EVIDENCE_BANDS.high ? "high" : evidence >= EVIDENCE_BANDS.medium ? "medium" : "low";
 const CONFIDENCE_RANK: Record<Confidence, number> = { low: 0, medium: 1, high: 2 };
 /** Confidence = min(coverage band, evidence band). */

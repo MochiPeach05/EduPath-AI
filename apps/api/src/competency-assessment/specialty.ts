@@ -4,7 +4,7 @@ import type { GraduationResolution, SpecialtyCode, SpecialtySuggestion } from ".
 export const fold = (value: string) =>
   value.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").toLowerCase().replace(/\s+/g, " ").trim();
 
-export type SpecialtyInfo = {
+type SpecialtyInfo = {
   code: SpecialtyCode;
   label: string;
   /** Program code matched in graduation standards (data.specialty / classBlock / standardCode). */
@@ -29,7 +29,7 @@ export const specialtyLabel = (code: SpecialtyCode | null): string | null =>
   SPECIALTIES.find((item) => item.code === code)?.label ?? null;
 
 /** Folded curriculum specialty values that mean "học phần chung". */
-export const COMMON_SPECIALTY_VALUES: readonly string[] = ["", "0", "tu chon chuyen nganh", "hoc phan thay the do an tot nghiep"];
+const COMMON_SPECIALTY_VALUES: readonly string[] = ["", "0", "tu chon chuyen nganh", "hoc phan thay the do an tot nghiep"];
 
 export type CurriculumSpecialtyClass =
   | { kind: "common"; known: boolean }
@@ -48,7 +48,7 @@ export function classifyCurriculumSpecialty(raw: string): CurriculumSpecialtyCla
 }
 
 /** Specialty named at the start of a text: "CNPM", "Công nghệ phần mềm …", "Trí tuệ Nhân tạo". */
-export function specialtyAtStart(text: string): SpecialtyCode | null {
+function specialtyAtStart(text: string): SpecialtyCode | null {
   const value = fold(text).replace(/^[\s:.,;()-]+/, "");
   const match = SPECIALTIES.find((item) => {
     const short = fold(item.code);
@@ -113,7 +113,7 @@ export function specialtyBlocks(raw: string): Map<SpecialtyCode, string> | null 
   return headings ? new Map([...blocks].map(([code, lines]) => [code, lines.join("\n")])) : null;
 }
 
-export type SpecialtyCounts = Record<SpecialtyCode, number>;
+type SpecialtyCounts = Record<SpecialtyCode, number>;
 
 /** Passed (or MT) mandatory specialty courses per specialty. */
 export function specialtyCounts(courses: readonly { type: string; specialty: CurriculumSpecialtyClass; passed: boolean }[]): SpecialtyCounts {

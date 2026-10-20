@@ -43,8 +43,6 @@ import {
   type AiJobKind
 } from "./worker-protocol.js";
 
-export { AI_HOUSEKEEPING_INTERVAL_MS, AI_JOB_LEASE_MINUTES, AI_JOB_MAX_ATTEMPTS, AI_WORKER_ERROR_CODES } from "./worker-protocol.js";
-
 class WorkerError extends Error {
   constructor(readonly code: string, readonly status: number) { super(code); }
 }

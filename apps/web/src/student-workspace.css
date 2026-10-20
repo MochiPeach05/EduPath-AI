@@ -782,7 +782,6 @@
 
 .sw-shell .sr-personal dt,
 .sw-shell .sr-file-info p,
-.sw-shell .sr-disclaimer,
 .sw-shell .sr-summaries dt {
   color: var(--sw-muted);
 }

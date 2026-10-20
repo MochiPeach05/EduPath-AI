@@ -20,7 +20,7 @@ import { normalizePercents, type StoredCourseAiItem, type StoredCourseAiResult }
 import type { CourseAiMode } from "./prompt.js";
 
 /** /latest only returns proposals created within this many days. */
-export const RECENT_SUGGESTION_DAYS = 7;
+const RECENT_SUGGESTION_DAYS = 7;
 
 type Db = DatabasePool | PoolClient;
 type SuggestionRow = {

@@ -1,6 +1,6 @@
 import { canAccessAdmin } from "./types.js";
 import { randomUUID } from "node:crypto";
-import { Router, type Request, type Response } from "express";
+import { Router, type Request } from "express";
 import type { AppConfig } from "../config.js";
 import type { UserRepository } from "../users/user-repository.js";
 import type { AuthTransaction, MicrosoftAuthClient } from "./types.js";
@@ -17,7 +17,7 @@ import {
 } from "./security.js";
 import type { AppRole } from "./types.js";
 
-export interface AuthRouterDependencies {
+interface AuthRouterDependencies {
   authActivity?: AuthActivity;
   config: AppConfig;
   microsoftAuthClient: MicrosoftAuthClient;

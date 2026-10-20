@@ -28,7 +28,7 @@ import {
 import type { GraduationAdviceOutput } from "./validate.js";
 
 /** One advice as the page sees it. "deferred" (queue full) is never stored: its id and createdAt are null. */
-export type StoredGraduationAdvice = {
+type StoredGraduationAdvice = {
   id: string | null;
   status: GraduationAdviceStatus | "deferred";
   errorCode: string | null;
@@ -41,9 +41,9 @@ export type StoredGraduationAdvice = {
   output: GraduationAdviceOutput | null;
 };
 
-export type AdviceWorkerStatus = { online: boolean; supportsAdvice: boolean };
+type AdviceWorkerStatus = { online: boolean; supportsAdvice: boolean };
 
-export type GraduationAdviceRouterOptions = {
+type GraduationAdviceRouterOptions = {
   /** AI_WORKER_KEY is configured; otherwise nothing is queued. */
   enabled: boolean;
   /** Test seam; readStudentGraduation by default. */
@@ -53,7 +53,7 @@ export type GraduationAdviceRouterOptions = {
 const emptyObject = z.object({}).strict();
 const iso = (value: Date | string | null) => (value === null ? null : new Date(value).toISOString());
 
-export function presentGraduationAdvice(row: GraduationAdviceRow): StoredGraduationAdvice {
+function presentGraduationAdvice(row: GraduationAdviceRow): StoredGraduationAdvice {
   return {
     id: row.id,
     status: row.status,
@@ -67,7 +67,7 @@ export function presentGraduationAdvice(row: GraduationAdviceRow): StoredGraduat
 }
 
 /** The advice an ensure/retry answers with; null when there is nothing to advise on. */
-export function outcomeAdvice(outcome: AdviceOutcome): StoredGraduationAdvice | null {
+function outcomeAdvice(outcome: AdviceOutcome): StoredGraduationAdvice | null {
   if (outcome.kind === "unavailable") return null;
   if (outcome.kind === "stored") return presentGraduationAdvice(outcome.row);
   return {

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 type Filters = { q: string } & Record<string, string>;
-export function validFilterDates(filters: Record<string, string>) {
+function validFilterDates(filters: Record<string, string>) {
   const { from, to } = filters;
   const valid = (date: string | undefined) => !date || (/^\d{4}-\d{2}-\d{2}$/.test(date) && date >= "0001-01-01" && date <= "9999-12-30" && Number.isFinite(Date.parse(`${date}T00:00:00+07:00`)));
   return valid(from) && valid(to) && (!from || !to || from <= to);

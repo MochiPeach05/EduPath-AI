@@ -37,7 +37,7 @@ import {
   requireAdminAccess
 } from "./middleware/authorization.js";
 
-export interface CreateAppDependencies {
+interface CreateAppDependencies {
   databasePool?: DatabasePool;
   studentProfileRepository?: StudentProfileRepository;
   authActivity?: AuthActivity;

@@ -25,7 +25,7 @@ export interface CompetencyAiQueueHook {
   workerOnline(db: Pick<DatabasePool, "query">): Promise<boolean>;
 }
 
-export type CompetencyAssessmentRouterOptions = {
+type CompetencyAssessmentRouterOptions = {
   /** Copied into meta.promptVersion (the AI prompt module's PROMPT_VERSION when AI is wired). */
   promptVersion?: string;
   /** Test seams; default to the real snapshot reader and engine. */

@@ -17,7 +17,7 @@ export type AdminPage = (typeof adminNavigation)[number];
  * Sidebar groups: one entry that opens and closes, with its pages below it. A group sits where its
  * first page is in adminNavigation; its pages keep their own paths, titles and breadcrumbs.
  */
-export const adminNavigationGroups = [
+const adminNavigationGroups = [
   // In the order they are set up: fields, then the shared skills, then the careers that use both.
   { id: "careers", label: "Quản lý nghề nghiệp", icon: "briefcase", paths: ["/quantri/linh-vuc-nghe-nghiep", "/quantri/ky-nang", "/quantri/vi-tri-nghe-nghiep"] },
   { id: "competencies", label: "Quản lý năng lực", icon: "target", paths: ["/quantri/nhom-nang-luc", "/quantri/cau-hinh-nang-luc", "/quantri/cau-hinh-hoc-phan"] }
@@ -29,7 +29,7 @@ const adminPathAliases: Record<string, string> = {
   "/quantri/danh-gia-nang-luc": "/quantri/nhom-nang-luc"
 };
 
-export type AdminSidebarEntry =
+type AdminSidebarEntry =
   | { kind: "page"; page: AdminPage }
   | { kind: "group"; id: string; label: string; icon: string; pages: AdminPage[] };
 

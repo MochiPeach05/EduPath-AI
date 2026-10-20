@@ -23,17 +23,17 @@ import { buildGraduationAdviceInput } from "./prompt.js";
 import { graduationAdviceContextFromAiInput, validateGraduationAdviceOutput, type GraduationAdviceOutput } from "./validate.js";
 
 /** Serializes the pending checks, the queue-size check and the inserts of concurrent requests. */
-export const GRADUATION_ADVICE_QUEUE_LOCK = "edupath:graduation-ai-advice";
+const GRADUATION_ADVICE_QUEUE_LOCK = "edupath:graduation-ai-advice";
 /** New work is deferred while this many jobs of OTHER students are queued or processing. */
-export const MAX_PENDING_GRADUATION_ADVICE = 20;
+const MAX_PENDING_GRADUATION_ADVICE = 20;
 /** Rows kept per student (newest first); older finished rows are pruned on every insert. */
-export const MAX_ADVICE_PER_USER = 5;
+const MAX_ADVICE_PER_USER = 5;
 /** At most one insert per student within this many seconds. */
-export const ADVICE_INSERT_INTERVAL_SECONDS = 30;
+const ADVICE_INSERT_INTERVAL_SECONDS = 30;
 /** ensure re-queues failed/cancelled advice by itself only this long after it finished… */
-export const ADVICE_AUTO_RETRY_SECONDS = 60;
+const ADVICE_AUTO_RETRY_SECONDS = 60;
 /** …and only while fewer rows than this exist for the same facts (manual retry ignores the cap). */
-export const MAX_AUTO_ADVICE_PER_FINGERPRINT = 2;
+const MAX_AUTO_ADVICE_PER_FINGERPRINT = 2;
 
 type Db = Pick<DatabasePool, "query">;
 const PENDING = "('queued','processing')";
@@ -60,7 +60,7 @@ export type GraduationAdviceRow = {
 /** A graduation page with an evaluation: the only kind advice is written for. */
 export type EvaluatedGraduation = StudentGraduation & { standard: GraduationStandardInput; evaluation: GraduationEvaluation; fingerprint: string };
 
-export const isEvaluated = (graduation: StudentGraduation | null): graduation is EvaluatedGraduation =>
+const isEvaluated = (graduation: StudentGraduation | null): graduation is EvaluatedGraduation =>
   Boolean(graduation?.standard && graduation.evaluation && graduation.fingerprint);
 
 export class GraduationAdviceError extends Error {
@@ -71,7 +71,7 @@ export class GraduationAdviceError extends Error {
 }
 
 export type GraduationAdviceReader = (db: Pick<PoolClient, "query">, userId: string) => Promise<StudentGraduation>;
-export type AdviceJobOptions = {
+type AdviceJobOptions = {
   /** Rate-limited housekeeping run inside the transaction (createGraduationAdviceExpiry). */
   expire?: (db: Db) => Promise<unknown>;
   /** Test seam; readStudentGraduation by default. */
@@ -157,7 +157,7 @@ export async function pruneGraduationAdvice(db: Db, userId: string): Promise<voi
 }
 
 /** Cancels the student's pending advice written for other facts; returns how many rows changed. */
-export async function cancelPendingGraduationAdvice(db: Db, userId: string, keepFingerprint: string): Promise<number> {
+async function cancelPendingGraduationAdvice(db: Db, userId: string, keepFingerprint: string): Promise<number> {
   const result = await db.query(`UPDATE stu_grad_advice SET status='cancelled',ai_input=NULL,lease_token=NULL,lease_until=NULL,
       completed_at=now(),updated_at=now() WHERE user_id=$1 AND status IN ${PENDING} AND fingerprint<>$2`, [userId, keepFingerprint]);
   return result.rowCount ?? 0;

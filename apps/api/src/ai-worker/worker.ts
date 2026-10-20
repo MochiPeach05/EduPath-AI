@@ -27,7 +27,7 @@ export interface WorkerTimings {
   completeRetries: number;
 }
 
-export const DEFAULT_TIMINGS: WorkerTimings = {
+const DEFAULT_TIMINGS: WorkerTimings = {
   heartbeatMs: 20_000,
   idlePollMs: 5_000,
   errorBackoffMs: 15_000,
@@ -44,7 +44,7 @@ export interface WorkerDeps {
 }
 
 /** Resolves after ms, or immediately when the signal aborts. */
-export function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     if (signal?.aborted) return resolve();
     const timer = setTimeout(done, ms);
@@ -67,7 +67,7 @@ export function errorFields(error: unknown): LogFields {
   return { error: "unknown" };
 }
 
-export interface GenerationResult {
+interface GenerationResult {
   output: Record<string, unknown>;
   metrics: OllamaMetrics;
   attempts: number;
@@ -77,7 +77,7 @@ export interface GenerationResult {
  * Runs the chat call and the local output check for the job kind. Retries exactly once when the model
  * returned unparseable or mis-shaped JSON; never retries truncation (done_reason "length"), timeouts or other errors.
  */
-export async function generateWithRetry(
+async function generateWithRetry(
   ollama: OllamaPort,
   job: OllamaJob,
   signal: AbortSignal,
@@ -106,7 +106,7 @@ export async function generateWithRetry(
   }
 }
 
-export type JobOutcome = "completed" | "failed" | "abandoned";
+type JobOutcome = "completed" | "failed" | "abandoned";
 
 async function completeWithRetry(deps: WorkerDeps, timings: WorkerTimings, jobId: string, body: CompleteBody, signal: AbortSignal): Promise<boolean> {
   for (let attempt = 0; ; attempt++) {

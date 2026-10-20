@@ -1,4 +1,4 @@
-export type AppRoute = "landing" | "policy" | "faq" | "login" | "authenticated" | "admin";
+type AppRoute = "landing" | "policy" | "faq" | "login" | "authenticated" | "admin";
 
 export function resolveAppRoute(pathname: string, search: string): AppRoute {
   const path = pathname.replace(/\/+$/, "") || "/";

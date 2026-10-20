@@ -235,15 +235,6 @@
     color: #bd3838
 }
 
-.sr-disclaimer {
-    background: #f5f6f9;
-    border-radius: 6px;
-    padding: 12px 15px;
-    color: #777d8c;
-    font-size: 11px;
-    line-height: 1.9
-}
-
 .sr-table-filters {
     display: flex;
     align-items: end;

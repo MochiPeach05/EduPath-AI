@@ -172,11 +172,6 @@ export default function StudentTranscript() {
     catch (e) { setDeleteError(e instanceof Error ? e.message : "Không xóa được bảng điểm."); }
     finally { setBusy(false); }
   };
-  const exportJson = () => {
-    if (!transcript) return;
-    const url = URL.createObjectURL(new Blob([JSON.stringify(transcript.data, null, 2)], { type: "application/json" }));
-    const link = document.createElement("a"); link.href = url; link.download = "bang-diem.json"; link.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-  };
   const sections = transcript?.data.sections.filter(s => filter === "all" || s.id === filter) ?? [];
   const creditCheck = transcriptCreditCheck(transcript);
   const inferredRows = transcript?.data.sections.reduce((n, s) => n + s.courses.filter(c => attemptOutcome(c).inferred).length, 0) ?? 0;

@@ -295,13 +295,6 @@
   outline: none;
 }
 
-.am-system-label {
-  font-size: 10px;
-  color: var(--am-muted);
-  white-space: nowrap;
-  padding-bottom: 4px;
-}
-
 .am-card {
   background: #fff;
   border: 1px solid var(--am-line);
@@ -341,47 +334,6 @@
   padding: 4px 8px;
   margin-left: 6px;
   vertical-align: middle;
-}
-
-.am-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-  padding: 0 24px 22px;
-}
-
-.am-search {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: 1;
-  max-width: 560px;
-}
-
-.am-search>svg {
-  width: 17px;
-  height: 17px;
-  margin-right: -42px;
-  margin-left: 14px;
-  z-index: 1;
-  color: #88818e;
-  pointer-events: none;
-}
-
-.am-search input {
-  width: 100%;
-  min-width: 60px;
-  border: 1px solid #dedbe3;
-  border-radius: 6px;
-  padding: 12px 12px 12px 39px;
-  font: inherit;
-  font-size: 12px;
-  background: #fafafb;
-}
-
-.am-search button {
-  white-space: nowrap;
 }
 
 .am-table-scroll {
@@ -479,12 +431,6 @@
   color: #aa3a45;
 }
 
-.am-date {
-  color: var(--am-muted);
-  font-size: 11px;
-  white-space: nowrap;
-}
-
 .am-pagination {
   display: flex;
   justify-content: space-between;
@@ -524,31 +470,6 @@
   text-align: center;
   color: var(--am-muted);
   font-size: 13px;
-}
-
-.am-placeholder {
-  padding: 56px 32px;
-  text-align: center;
-}
-
-.am-placeholder>svg {
-  display: block;
-  width: 46px;
-  height: 46px;
-  color: #ac3350;
-  margin: 0 auto 20px;
-}
-
-.am-placeholder h2 {
-  margin-top: 22px;
-}
-
-.am-placeholder p {
-  max-width: 510px;
-  margin: 16px auto 26px;
-  font-size: 14px;
-  line-height: 1.8;
-  color: var(--am-muted);
 }
 
 .am-create-layout {
@@ -667,10 +588,6 @@
     padding: 24px;
   }
 
-  .am-system-label {
-    display: none;
-  }
-
   .am-create-layout {
     grid-template-columns: 1fr;
   }
@@ -756,27 +673,6 @@
     padding: 20px;
   }
 
-  .am-toolbar {
-    padding-inline: 20px;
-    flex-wrap: wrap;
-  }
-
-  .am-search {
-    flex-basis: 100%;
-  }
-
-  .am-search input {
-    font-size: 16px;
-  }
-
-  .am-search>svg {
-    display: none;
-  }
-
-  .am-search input {
-    padding-left: 12px;
-  }
-
   .am-pagination {
     align-items: flex-start;
     flex-direction: column;
@@ -855,13 +751,6 @@
   border-color: #b51639;
   color: #a41c3b;
   font-weight: 700;
-}
-
-.am-row-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  min-width: 180px;
 }
 
 .am-name-link {
@@ -964,9 +853,6 @@
     padding: 16px;
   }
 
-  .am-row-actions button {
-    min-height: 44px;
-  }
 }
 
 .am-sidebar-brand .ep-brand {

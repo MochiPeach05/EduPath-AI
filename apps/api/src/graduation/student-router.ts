@@ -6,7 +6,7 @@ import type { GraduationData } from "./model.js";
 import { loadStudentGraduation, type StudentGraduation } from "./student-graduation.js";
 
 /** Only the conditions a student needs; source workbook details and review notes stay in the admin portal. */
-export function studentGraduationData(data: GraduationData) {
+function studentGraduationData(data: GraduationData) {
   return {
     name: data.name,
     cohortCode: data.cohortCode,
@@ -46,7 +46,7 @@ export function studentGraduationData(data: GraduationData) {
  * cohort in the account and the specialty in the profile — with the server-side evaluation. There
  * is no way to read another cohort's or specialty's standard (the former GET /:id is gone).
  */
-export function studentGraduationResponse(loaded: StudentGraduation) {
+function studentGraduationResponse(loaded: StudentGraduation) {
   const standard = loaded.standard;
   return {
     profile: loaded.profile,
@@ -61,7 +61,6 @@ export function studentGraduationResponse(loaded: StudentGraduation) {
 }
 
 /** Body of GET /api/student/graduation (the web mirrors it). */
-export type StudentGraduationResponse = ReturnType<typeof studentGraduationResponse>;
 
 export function createStudentGraduationRouter(pool: DatabasePool | undefined) {
   const router = Router();

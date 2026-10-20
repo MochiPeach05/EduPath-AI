@@ -36,7 +36,7 @@ export const MAX_MISSING_COURSES_PER_GROUP = 12;
 export type GraduationAdviceKey = { key: string; groupId: string | null; label: string };
 
 /** Everything a worker needs for one job plus the key map; stored in stu_grad_advice.ai_input. */
-export type GraduationAdviceAiInput = {
+type GraduationAdviceAiInput = {
   system: string;
   user: string;
   schema: JsonSchema;
@@ -324,7 +324,7 @@ function groupLines(group: GraduationGroupEvaluation, key: string): string[] {
 }
 
 /** Renders the user message: a delimited data block (design §5.6, sections [1]–[7]). */
-export function renderGraduationDataBlock(facts: AdviceFacts, list: readonly Condition[] = conditions(facts.evaluation)): string {
+function renderGraduationDataBlock(facts: AdviceFacts, list: readonly Condition[] = conditions(facts.evaluation)): string {
   const { profile, standard, evaluation } = facts;
   const lines: string[] = [];
   const push = (...items: string[]) => lines.push(...items);

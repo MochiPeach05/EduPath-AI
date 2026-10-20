@@ -30,13 +30,13 @@ export type StoredSuggestionResult = {
   dropped: number;
 };
 export type CareerSuggestionContext = { catalog: CatalogKey[]; linked: { id: string; name: string }[] };
-export type CareerSuggestionValidation =
+type CareerSuggestionValidation =
   | { ok: true; result: StoredSuggestionResult }
   | { ok: false; reason: "schema" | "no_valid_items"; path: string };
 
 const raw = z.string().max(4000);
 const details = { priority: z.enum(CAREER_PRIORITIES), title: raw, description: raw, reason: raw };
-export const careerSuggestionOutputSchema = z.object({
+const careerSuggestionOutputSchema = z.object({
   suggestions: z.array(z.object({ skillKey: z.string().max(16), ...details }).strict()).max(L.suggestions),
   newSkills: z.array(z.object({ name: raw, ...details }).strict()).max(L.newSkills)
 }).strict();

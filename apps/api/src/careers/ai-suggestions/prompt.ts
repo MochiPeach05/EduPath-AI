@@ -35,7 +35,6 @@ export const CAREER_SUGGESTION_LIMITS = {
 } as const;
 
 export const CAREER_PRIORITIES = ["required", "preferred"] as const;
-export type CareerPriority = (typeof CAREER_PRIORITIES)[number];
 
 /** Everything read from the database for one job. */
 export type CareerSuggestionSource = {
@@ -51,7 +50,7 @@ export type CareerSuggestionSource = {
 /** One catalog skill offered to the model. */
 export type CatalogKey = { key: string; id: string; name: string };
 
-export type CareerSuggestionAiInput = {
+type CareerSuggestionAiInput = {
   system: string;
   user: string;
   schema: JsonSchema;
@@ -90,7 +89,7 @@ Chỉ trả về một đối tượng JSON gồm "suggestions" (tối đa ${L.s
 export const catalogKey = (index: number) => `S${String(index + 1).padStart(3, "0")}`;
 
 /** The catalog skills offered to the model: not linked, sorted by name, capped. */
-export function catalogKeys(source: CareerSuggestionSource): CatalogKey[] {
+function catalogKeys(source: CareerSuggestionSource): CatalogKey[] {
   const linked = new Set(source.linkedSkills.map((skill) => skill.id));
   return source.catalog
     .filter((skill) => !linked.has(skill.id))
@@ -122,7 +121,7 @@ export function buildCareerSuggestionSchema(keys: readonly string[]): JsonSchema
 }
 
 /** Renders the user message: a delimited data block. */
-export function renderCareerDataBlock(source: CareerSuggestionSource, keys: readonly CatalogKey[]): string {
+function renderCareerDataBlock(source: CareerSuggestionSource, keys: readonly CatalogKey[]): string {
   const lines: string[] = [];
   const push = (...items: string[]) => lines.push(...items);
   const descriptions = new Map(source.catalog.map((skill) => [skill.id, skill.description]));

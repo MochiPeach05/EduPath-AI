@@ -34,8 +34,8 @@ export type StoredCourseAiResult = {
   /** The model's own total before scaling to 100 (null when it gave no percent). */
   modelTotal: number | null;
 };
-export type CourseAiContext = { mode: CourseAiMode; skills: SkillKey[]; groups: GroupKey[]; linked: { id: string; name: string }[] };
-export type CourseAiValidation =
+type CourseAiContext = { mode: CourseAiMode; skills: SkillKey[]; groups: GroupKey[]; linked: { id: string; name: string }[] };
+type CourseAiValidation =
   | { ok: true; result: StoredCourseAiResult }
   | { ok: false; reason: "schema" | "no_valid_items"; path: string };
 

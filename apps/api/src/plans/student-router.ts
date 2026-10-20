@@ -4,7 +4,7 @@ import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
 import { identity, type PlanData } from "./model.js";
 
-export function studentPlanData(data: PlanData) {
+function studentPlanData(data: PlanData) {
   return {
     name: data.name,
     major: data.major,

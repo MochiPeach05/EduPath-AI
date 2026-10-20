@@ -131,7 +131,7 @@
 :root :is(.sr-career-clear, .am-delete-icon) { color: var(--ep-action); }
 :root :is(.sr-career-clear, .am-delete-icon):hover:not(:disabled) { color: var(--ep-action-hover); background: var(--ep-control-soft); border-color: var(--ep-control-border); }
 
-:root :is(.am-primary, .am-outline, .am-quiet, .am-logout, .sw-primary, .sw-outline, .sr-secondary, .admin-primary, .admin-secondary, .lp-button, .microsoft-button, .am-icon-btn, .sw-icon-button, .sr-career-icon, .lp-menu-toggle, .am-menu-toggle, .am-menu-item, .sw-text-link, .ep-text-action) > svg {
+:root :is(.am-primary, .am-outline, .am-quiet, .am-logout, .sw-primary, .sw-outline, .sr-secondary, .admin-primary, .admin-secondary, .lp-button, .microsoft-button, .am-icon-btn, .sw-icon-button, .sr-career-icon, .lp-menu-toggle, .am-menu-toggle, .am-menu-item, .sw-text-link) > svg {
   width: 18px;
   height: 18px;
   flex-shrink: 0;
@@ -143,10 +143,10 @@
 :root .am-menu-item:hover:not(:disabled) { background: #f3f4f6; }
 :root .am-menu-danger:hover:not(:disabled) { background: var(--ep-control-soft); }
 
-:root :is(.sw-text-link, .ep-text-action) { display: inline-flex; align-items: center; gap: var(--ep-control-gap); min-height: var(--ep-control-height); padding: 8px 0; border: 0; background: transparent; color: var(--ep-action); font-size: var(--ep-control-font-size); font-weight: var(--ep-control-font-weight); cursor: pointer; text-decoration: none; transition: var(--ep-control-transition); }
-:root :is(.sw-text-link, .ep-text-action):hover:not(:disabled) { color: var(--ep-action-hover); text-decoration: underline; }
+:root :is(.sw-text-link) { display: inline-flex; align-items: center; gap: var(--ep-control-gap); min-height: var(--ep-control-height); padding: 8px 0; border: 0; background: transparent; color: var(--ep-action); font-size: var(--ep-control-font-size); font-weight: var(--ep-control-font-weight); cursor: pointer; text-decoration: none; transition: var(--ep-control-transition); }
+:root :is(.sw-text-link):hover:not(:disabled) { color: var(--ep-action-hover); text-decoration: underline; }
 
-:root :is(button, a.lp-button, a.microsoft-button, a.am-outline, a.sw-outline, a.ep-text-action):focus-visible { outline: 3px solid var(--ep-control-focus); outline-offset: 3px; }
+:root :is(button, a.lp-button, a.microsoft-button, a.am-outline, a.sw-outline):focus-visible { outline: 3px solid var(--ep-control-focus); outline-offset: 3px; }
 :root :is(.am-dialog-heading, .sw-popover) button:focus-visible { outline-offset: -4px; }
 :root button:disabled { cursor: not-allowed; opacity: .55; }
 

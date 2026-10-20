@@ -39,7 +39,7 @@ export type CareerAiSuggestion = {
   items: CareerAiSuggestionItem[];
 };
 export type CareerAiStatus = { enabled: boolean; worker: { online: boolean; supportsSuggestions: boolean; seenAt: string | null } };
-export type ApplyItem = { skillId: string | null; skillName: string; title: string; description: string; isRequired: boolean; sourceIndex: number | null };
+type ApplyItem = { skillId: string | null; skillName: string; title: string; description: string; isRequired: boolean; sourceIndex: number | null };
 /** A skill already linked to the career (from the requirement list with kind=skill). */
 export type LinkedSkill = { skillId: string | null; skillName: string | null };
 
@@ -118,7 +118,7 @@ export const jsonPost = (body: unknown): RequestInit => ({ method: "POST", heade
 
 /* ------------------------------------------------------------- formatting */
 
-export type WorkerTone = "ok" | "warn" | "off";
+type WorkerTone = "ok" | "warn" | "off";
 /** The worker line under the intro and the waiting state, and whether creating is allowed. */
 export function workerLine(status: CareerAiStatus | null | undefined): { text: string; tone: WorkerTone; canCreate: boolean } {
   if (!status) return { text: "Đang kiểm tra máy AI…", tone: "off", canCreate: false };
@@ -182,7 +182,7 @@ export function rowSkillName(row: SuggestionRow, catalog: CareerSkill[]): string
   return catalog.find((skill) => skill.id === row.skillId)?.name ?? row.skillName;
 }
 
-export type RowValidation = { errors: Record<string, string[]>; valid: boolean; selected: number; selectable: number; required: number };
+type RowValidation = { errors: Record<string, string[]>; valid: boolean; selected: number; selectable: number; required: number };
 /**
  * Checks the ticked rows the way the API will: a title, a new-skill name, no skill
  * ticked twice and no skill already linked to the career. A new name matching a

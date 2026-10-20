@@ -224,8 +224,6 @@
 .scomp-page .scomp-two-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .scomp-page .scomp-plan-list { display: grid; gap: 8px; margin: 8px 0 0; padding: 0; list-style: none; font-size: 13px; }
 .scomp-page .scomp-plan-list li { padding: 10px 12px; border: 1px solid var(--sw-border); border-radius: 8px; }
-.scomp-page .sg-verdict { font-size: 15px; }
-.scomp-page .scomp-verdict-reason { margin-top: 4px; }
 
 /* Status colours inside the page: two classes, so they win over .scomp-page .scomp-meta and the sw-shell text colours. */
 .scomp-page .sg-status-pass { color: #16804a; }

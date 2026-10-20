@@ -1,7 +1,11 @@
 # EduPath AI
 
 Nền tảng đánh giá năng lực và tư vấn lộ trình học tập cho sinh viên Công nghệ
-Thông tin. Phiên bản hiện tại gồm đăng nhập Microsoft Entra ID, quản lý tài khoản
+Thông tin.
+
+**Kiến trúc và cách chia module:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Tài liệu này tổng
+quan các module API và web, worker AI/OCR, migration, kiểm thử, triển khai và quy ước khi thêm chức
+năng. Các mục bên dưới là ghi chú triển khai từ Sprint 2. Phiên bản hiện tại gồm đăng nhập Microsoft Entra ID, quản lý tài khoản
 quản trị và quản lý hồ sơ sinh viên trên PostgreSQL (Sprint 2).
 
 ## Bản đầy đủ trên Render — Sprint 2

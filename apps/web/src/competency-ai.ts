@@ -148,7 +148,7 @@ export function linkRows(items: CourseAiItem[]): LinkRow[] {
     reason: item.reason,
   }));
 }
-export const foldName = (value: string) => value.trim().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").toLowerCase().replace(/\s+/g, " ");
+const foldName = (value: string) => value.trim().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").toLowerCase().replace(/\s+/g, " ");
 
 /**
  * Per-row messages, the total of the kept rows and whether they can be saved as a draft (valid) or

@@ -18,9 +18,9 @@ export const MAX_PENDING_AI_JOBS = 25;
 /** The worker counts as online when its heartbeat is newer than this. */
 export const WORKER_ONLINE_SECONDS = 60;
 
-export type QueueInput = { assessmentId: string; userId: string; result: AssessmentResult };
+type QueueInput = { assessmentId: string; userId: string; result: AssessmentResult };
 
-export interface CompetencyAiQueue {
+interface CompetencyAiQueue {
   enabled: boolean;
   /** POST /: cancels the user's pending job, then queues (or defers when the queue is full). */
   enqueue(client: PoolClient, input: QueueInput): Promise<"queued" | "deferred">;

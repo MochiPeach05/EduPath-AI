@@ -117,7 +117,7 @@ export interface GraduationEvaluation {
   warnings: GraduationWarning[];
 }
 
-export type GraduationEvaluationInput = {
+type GraduationEvaluationInput = {
   /** The resolved standard (gpaScale already defaulted by the resolver; a missing one reads 4 anyway). */
   standard: Pick<GraduationStandardInput, "data">;
   transcript: { version: string; updatedAt: string; data: TranscriptData };

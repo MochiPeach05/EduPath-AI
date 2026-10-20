@@ -17,7 +17,7 @@ export function specialtyLabel(code: string | null | undefined): string {
 }
 
 /** Result types of the engine; GraduationResolution is the only input type the result uses. */
-export type GraduationResolution = "specialty" | "general" | "specialty_unset" | "not_found" | "ambiguous";
+type GraduationResolution = "specialty" | "general" | "specialty_unset" | "not_found" | "ambiguous";
 
 export type LevelCode = "proficient" | "good" | "basic" | "needs_work" | "no_evidence" | "exempt";
 export type Confidence = "low" | "medium" | "high";
@@ -26,12 +26,12 @@ export type CourseState = "passed" | "failed" | "exempt" | "graded_unknown" | "i
 export type AttemptOutcome = "pass" | "fail" | "unknown";
 export type GapStatus = "met" | "below" | "upcoming" | "not_studied" | "no_data";
 export type DeficitBand = "near" | "moderate" | "large" | "not_studied";
-export type FitCode = "fit" | "fairly_fit" | "needs_more" | "insufficient_data";
+type FitCode = "fit" | "fairly_fit" | "needs_more" | "insufficient_data";
 export type Eligibility = "eligible" | "not_eligible" | "review";
 export type SkillStatus = "scored" | "exempt_only" | "no_evidence" | "not_applicable";
 export type NotApplicableReason = "other_specialty" | "elective_not_chosen" | "no_credits";
-export type EvidenceRole = "score" | "exempt" | "studied" | "in_progress" | "planned" | "not_chosen";
-export type TriState = "pass" | "fail" | "unknown";
+type EvidenceRole = "score" | "exempt" | "studied" | "in_progress" | "planned" | "not_chosen";
+type TriState = "pass" | "fail" | "unknown";
 
 export type AssessmentMeta = {
   calcVersion: string;
@@ -71,7 +71,7 @@ export type AssessmentWarning = {
   details: string[];
 };
 
-export type CreditCheck = {
+type CreditCheck = {
   /** Σ transcript credits of passed/MT courses, condition-only courses excluded. */
   computed: number;
   /** "Tổng số tín chỉ tích lũy" printed on the latest graded term, or null. */
@@ -279,7 +279,7 @@ export type CourseSuggestion = Omit<SupportCourse, "reason"> & {
   reason: string;
 };
 
-export type SelfStudyReason = "not_measured" | "other_specialty" | "elective_quota_used" | "no_course_left";
+type SelfStudyReason = "not_measured" | "other_specialty" | "elective_quota_used" | "no_course_left";
 
 export type SelfStudyItem = {
   skillKey: string;
@@ -344,14 +344,14 @@ export type HistoryPoint = {
   career?: HistoryCareer | null;
 };
 
-export type PlanCourseRef = { code: string; name: string; credits: number | null; state: CourseState };
+type PlanCourseRef = { code: string; name: string; credits: number | null; state: CourseState };
 
-export type LateEntry =
+type LateEntry =
   | { kind: "course"; code: string; name: string; credits: number; termCode: string; state: CourseState }
   | { kind: "choice"; label: string; termCode: string; required: number; unit: "course" | "credit"; missing: number; missingCredits: number; options: PlanCourseRef[] }
   | { kind: "physical_education"; label: string; termCode: string; required: number; passed: number; missingCredits: number };
 
-export type NextEntry =
+type NextEntry =
   | { kind: "course"; code: string; name: string; credits: number; state: CourseState }
   | { kind: "choice"; label: string; required: number; unit: "course" | "credit"; remaining: number; options: PlanCourseRef[] }
   | { kind: "physical_education"; label: string; required: number; passed: number };
@@ -373,7 +373,7 @@ export type PlanProgressResult = {
   countMismatches: { label: string; termCode: string; stated: number; actual: number }[];
 };
 
-export type GraduationGroupCheck = {
+type GraduationGroupCheck = {
   groupId: string;
   /** The group name; a name shared by several groups adds " · n học phần, gồm <first code>" (comp-calc-v5). */
   label: string;
@@ -393,7 +393,7 @@ export type GraduationGroupCheck = {
   curriculumElectiveCode: string | null;
 };
 
-export type GraduationGpa = {
+type GraduationGpa = {
   actual: number | null;
   required: number | null;
   scale: 4 | 10;
@@ -402,7 +402,7 @@ export type GraduationGpa = {
   reason: string;
 };
 
-export type GraduationCredits = {
+type GraduationCredits = {
   /** Printed cumulative credits, or the certainly passed estimate ("ước tính"). */
   lower: number | null;
   upper: number | null;

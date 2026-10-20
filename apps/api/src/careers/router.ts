@@ -21,7 +21,7 @@ const fieldDetails = z.object({
 // Accept legacy clients' code during rollout; the database assigns the actual number.
 const fieldInput = fieldDetails.extend({ code: fieldCode.optional() });
 const fieldColumns = `id,code,name,description,version`;
-export const careerInput = z
+const careerInput = z
   .object({
     // Legacy clients may send a code; it never controls the database-assigned code.
     code: z.string().trim().max(60).optional(),

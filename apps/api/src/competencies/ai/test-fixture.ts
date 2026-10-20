@@ -1,7 +1,7 @@
 // Synthetic course, groups and catalog for the course AI tests (no real curriculum or student data).
 import type { CourseAiSource } from "./prompt.js";
 
-export const fixtureId = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+const fixtureId = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
 export const GROUP_CORE = fixtureId(1);
 export const GROUP_SOFT = fixtureId(2);

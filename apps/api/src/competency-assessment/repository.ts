@@ -4,9 +4,9 @@ import type { DatabasePool } from "../db/pool.js";
 import type { AssessmentMeta, AssessmentResult } from "./types.js";
 
 /** Most recent assessments kept per student (spec §8); older ones are removed on insert. */
-export const MAX_ASSESSMENTS_PER_USER = 20;
+const MAX_ASSESSMENTS_PER_USER = 20;
 /** One new assessment per student per 60 seconds. */
-export const ASSESSMENT_COOLDOWN_SECONDS = 60;
+const ASSESSMENT_COOLDOWN_SECONDS = 60;
 /**
  * Advisory lock key for the competency AI queue. Never reuse 1946032027 (shared by the OCR queue
  * and the AD-COMP catalog lock) or 1946032026 (migrations).
@@ -18,7 +18,7 @@ export type AiStatus = "disabled" | "deferred" | "queued" | "processing" | "comp
 export const REGENERABLE_AI_STATUSES: readonly AiStatus[] = ["failed", "cancelled", "deferred", "disabled"];
 
 /** Response shape of every student endpoint that returns an assessment (contract C4). */
-export type StoredAssessment = {
+type StoredAssessment = {
   id: string;
   createdAt: string;
   meta: AssessmentMeta;
@@ -36,7 +36,7 @@ type AssessmentRow = {
 const assessmentColumns = "id,created_at,meta,computed,ai_status,ai_error_code,ai_model,ai_completed_at,ai_output";
 const iso = (value: Date | string | null) => value === null ? null : new Date(value).toISOString();
 
-export function toStoredAssessment(row: AssessmentRow): StoredAssessment {
+function toStoredAssessment(row: AssessmentRow): StoredAssessment {
   return {
     id: row.id,
     createdAt: iso(row.created_at)!,

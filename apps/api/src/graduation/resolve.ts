@@ -25,7 +25,7 @@ export const standardIdentity = (data: Pick<GraduationData, "specialty" | "class
 });
 
 /** Active standards of a cohort (normalized code), current revision, in a deterministic order. */
-export async function readCohortStandards(db: Db, cohortCode: string): Promise<GraduationStandardInput[]> {
+async function readCohortStandards(db: Db, cohortCode: string): Promise<GraduationStandardInput[]> {
   const standards = await db.query<{ id: string; revision_id: string; version: number; data: GraduationData }>(
     `SELECT g.id,g.current_revision AS revision_id,r.version,r.data FROM graduation_standards g
      JOIN graduation_revisions r ON r.id=g.current_revision WHERE g.is_active AND g.cohort_code=$1 ORDER BY g.id`, [cohortCode]);

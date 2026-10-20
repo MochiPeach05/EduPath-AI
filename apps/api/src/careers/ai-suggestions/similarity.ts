@@ -11,7 +11,7 @@ const STOPWORDS = new Set(["va", "voi", "bang", "cho", "cua", "trong", "tren"]);
  * syllables, so siblings such as "Phát triển ứng dụng Android" / "... desktop" (0.67) or
  * "Xây dựng mô hình học máy" / "... học sâu" (0.71) share most tokens without being the same skill.
  */
-export const SIMILAR_JACCARD = 0.75;
+const SIMILAR_JACCARD = 0.75;
 /** Vietnamese tone marks (huyền, sắc, ngã, hỏi, nặng) after NFD; â/ê/ô/ơ/ư/ă keep their own marks. */
 const TONE = /[̣̀́̃̉]/g;
 

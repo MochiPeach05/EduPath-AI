@@ -72,7 +72,7 @@ export function transcriptResults(sections: { courses: ResultCourse[] }[]) {
 }
 
 /** GDTC/GDQP: no academic credits. Matches the OCR adapter's 71NAD/71PE rule. */
-export const conditionalCourseCode = /^(71NAD|71PE)/;
+const conditionalCourseCode = /^(71NAD|71PE)/;
 const fold = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").toLowerCase().replace(/\s+/g, " ");
 
 export type CreditCheck = {

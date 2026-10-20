@@ -55,7 +55,7 @@ export function academicSections(data: TranscriptData): TranscriptSection[] {
 export const hasScore = (section: TranscriptSection) => section.courses.some((course) => course.score10 !== null || course.score4 !== null);
 
 /** Latest term that has grades, or undefined. */
-export function latestGradedSection(data: TranscriptData): TranscriptSection | undefined {
+function latestGradedSection(data: TranscriptData): TranscriptSection | undefined {
   return [...academicSections(data)].reverse().find(hasScore);
 }
 
@@ -91,7 +91,7 @@ export function printedSummaryNumber(section: TranscriptSection | undefined, lab
  * tích lũy" and "Số tín chỉ tích lũy" (also "TC" for "tín chỉ" and "đã tích lũy"), with the spaces
  * OCR may drop; never a per-term line ("… đạt học kỳ", "… đăng ký", or any "tích lũy … học kỳ/HK").
  */
-export const CUMULATIVE_CREDITS_LABEL = /^[^a-z0-9]*(?:tong\s*)?so\s*(?:tin\s*chi|tc)\s*(?:da\s*)?tich\s*luy(?![a-z])(?!.*(?:hoc\s*ky|\bhk))/;
+const CUMULATIVE_CREDITS_LABEL = /^[^a-z0-9]*(?:tong\s*)?so\s*(?:tin\s*chi|tc)\s*(?:da\s*)?tich\s*luy(?![a-z])(?!.*(?:hoc\s*ky|\bhk))/;
 
 /** "Tổng số tín chỉ tích lũy" printed on the latest graded term; null when missing, NaN when unreadable or conflicting. */
 export const printedCumulativeCredits = (data: TranscriptData) =>
@@ -273,7 +273,7 @@ export function estimateProgramCredits(
  * an unknown result, with CTĐT credits; condition-only courses and codes outside the CTĐT
  * (AV0, 0-credit rows) are not accumulated, as on the printed transcript.
  */
-export function passedCurriculumCredits(
+function passedCurriculumCredits(
   records: ReadonlyMap<string, TranscriptCourseRecord>,
   curriculumCredits: ReadonlyMap<string, number>,
   conditionCodes: ReadonlySet<string>,
