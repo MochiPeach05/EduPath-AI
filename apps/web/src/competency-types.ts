@@ -8,7 +8,7 @@ export type CatalogSkill = { id: string; name: string; description: string; vers
 export type Skill = CatalogSkill & { scope: string; groupId: string; groupName: string; isActive: boolean; groupActive: boolean; careerCount: number; courseCount: number; legacySkillId: string | null };
 /** `scope`: the cohort and CTĐT version of an entry saved before the courses were shared (2026-10-20). */
 export type EventEntry = { id: string; note: string; createdAt: string; actorName?: string | null; kind?: string; snapshot: unknown; scope?: string | null };
-/** A shared course that the skill is linked to; `cohorts` have it in their current CTĐT. */
+/** A shared course that the skill is linked to; `cohorts` have it in their newest CTĐT revision. */
 export type Contribution = { courseId: string; courseCode: string; courseName: string; cohorts: string[]; weight: number; status: ConfigurationStatus };
 export type SkillDetail = Skill & { contributions: Contribution[]; history?: EventEntry[]; events?: EventEntry[] };
 type ConfigurationStatus = "draft" | "active" | "archived";
@@ -17,13 +17,13 @@ export type CourseStatus = ConfigurationStatus | "missing";
 export type Cohort = { cohortCode: string; courseCount: number };
 /**
  * A shared course ("môn học", 2026-10-20): one code, name and number of credits, configured once for
- * every cohort. `cohorts` have it in their current CTĐT, `pastCohorts` only in an older version;
- * `mergedFrom` names the cohorts whose own configuration was replaced when the courses were shared.
+ * every cohort. Only the newest CTĐT revision of each curriculum counts: `cohorts` have the course in
+ * it. `mergedFrom` names the cohorts whose own configuration was replaced when the courses were shared.
  */
-export type CompetencyCourse = { id: string; code: string; name: string; credits: number; type: string; block: string; specialty: string; cohorts: string[]; pastCohorts: string[];
+export type CompetencyCourse = { id: string; code: string; name: string; credits: number; type: string; block: string; specialty: string; cohorts: string[];
   status: CourseStatus; configId: string | null; version: string | null; skillCount: number; totalWeight: number; mergedFrom: string[] };
 export type CourseLink = { skillId: string; skillName: string; groupId: string; groupName: string; isActive: boolean; weight: number };
-export type CourseDetail = { courseId: string; courseCode: string; courseName: string; credits: number; cohorts: string[]; pastCohorts: string[]; configId: string | null;
+export type CourseDetail = { courseId: string; courseCode: string; courseName: string; credits: number; cohorts: string[]; configId: string | null;
   status: CourseStatus; version: string | null; note: string; mergedFrom: string[]; links: CourseLink[]; history: EventEntry[] };
 export type CompetencySummary = { cohort: string; courseCount: number; activeCount: number; draftCount: number; archivedCount: number; missingCount: number; skillCount: number;
   unlinkedSkillCount: number; warnings: { code: string; message: string; courseCode?: string }[] };
@@ -41,9 +41,8 @@ export const NO_MATCHING_SKILL_MESSAGE = "Danh sách kỹ năng hiện tại tro
 export const ADD_SKILLS_PATH = "/quantri/cau-hinh-nang-luc";
 /** What the admin types to clear the links of every course (no cohort filter); the server folds case and accents. */
 export const ALL_COURSES_CONFIRMATION = "TẤT CẢ";
-/** "K29, K30" or a sentence when no current CTĐT has the course. */
-export const cohortList = (course: Pick<CompetencyCourse, "cohorts" | "pastCohorts">) => course.cohorts.length ? course.cohorts.join(", ")
-  : course.pastCohorts.length ? `Chỉ có trong CTĐT cũ của ${course.pastCohorts.join(", ")}` : "Chưa thuộc CTĐT nào";
+/** "K29, K30": the cohorts whose newest CTĐT revision has the course. */
+export const cohortList = (course: Pick<CompetencyCourse, "cohorts">) => course.cohorts.join(", ");
 
 const failures: Record<string, string> = {
   authentication_required: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",

@@ -28,7 +28,7 @@ describe("competency row menus", () => {
 });
 
 describe("course row menu (2026-10-20)", () => {
-  const course = { id: "c-web", code: "71ITSE30203", name: "Lập trình Web", credits: 3, type: "BB", block: "", specialty: "", cohorts: ["K29", "K30"], pastCohorts: [],
+  const course = { id: "c-web", code: "71ITSE30203", name: "Lập trình Web", credits: 3, type: "BB", block: "", specialty: "", cohorts: ["K29", "K30"],
     status: "active", configId: "cfg", version: "v1", skillCount: 2, totalWeight: 1, mergedFrom: ["K29 · phiên bản 1"] };
   const render = () => {
     liveData.mockImplementation((url: string) => ({ error: null, loading: false, data: url.includes("/courses?") ? { items: [course] }

@@ -29,7 +29,7 @@ function setup(options: { role?: AuthenticatedUser["role"] | null; revokedAtWrit
   let savedLinks = configExists ? [{ skillId, skillName: "Lập trình", groupId, groupName: group.name, isActive: true, weight: 1 }] : [];
   // A shared course ("môn học", migration 038) as the course list query returns it.
   const course = () => ({ id: courseId, code: "A101", name: "Lập trình", credits: 3, type: "BB", block: "Chuyên môn", specialty: "", cohorts: ["K29", "K30"],
-    pastCohorts: [], configId: configExists ? configId : null, status: configExists ? configStatus : "missing", version: configExists ? configVersion : null,
+    configId: configExists ? configId : null, status: configExists ? configStatus : "missing", version: configExists ? configVersion : null,
     note: "", mergedFrom: [], skillCount: configExists ? savedLinks.length : 0, totalWeight: configExists ? savedLinks.reduce((sum, link) => sum + link.weight, 0) : 0 });
   const rows = (items: Record<string, unknown>[] = []) => ({ rows: items, rowCount: items.length });
   const query = vi.fn(async (sql: string) => {
@@ -155,7 +155,7 @@ describe("competency administration API", () => {
     await request(app).post("/competencies/courses/clear").set("Origin", origin).send({ cohort: "", confirm: "K29" }).expect(400, { error: "confirmation_mismatch", details: [] });
     expect(connect).not.toHaveBeenCalled();
     await request(app).get("/competencies/courses?cohort=K29").expect(200, { items: [{ id: courseId, code: "A101", name: "Lập trình", credits: 3, type: "BB", block: "Chuyên môn",
-      specialty: "", cohorts: ["K29", "K30"], pastCohorts: [], configId: null, status: "missing", version: null, mergedFrom: [], skillCount: 0, totalWeight: 0 }] });
+      specialty: "", cohorts: ["K29", "K30"], configId: null, status: "missing", version: null, mergedFrom: [], skillCount: 0, totalWeight: 0 }] });
   });
 
   it("prevents active allocations from using inactive groups and blocks group deactivation while in use", async () => {

@@ -9,7 +9,7 @@ const liveData = vi.hoisted(() => vi.fn());
 vi.mock("./use-live-data", () => ({ useLiveData: liveData }));
 
 const course: CompetencyCourse = { id: "c-web2", code: "71ITSE40103", name: "Lập trình web nâng cao", credits: 3, type: "BB", block: "Chuyên ngành", specialty: "",
-  cohorts: ["K99"], pastCohorts: [], status: "draft", configId: "cfg", version: "v1", skillCount: 2, totalWeight: 0, mergedFrom: [] };
+  cohorts: ["K99"], status: "draft", configId: "cfg", version: "v1", skillCount: 2, totalWeight: 0, mergedFrom: [] };
 const online: CourseAiStatus = { enabled: true, worker: { online: true, supportsSuggestions: true, seenAt: "2026-10-16T05:00:00.000Z" } };
 const item = (patch: Partial<CourseAiItem>): CourseAiItem => ({ index: 0, skillId: "s-web", skillName: "Lập trình web", groupId: "g1", groupName: "Chuyên môn",
   hasProfile: true, isNewSkill: false, alreadyLinked: false, percent: null, reason: "Học phần dạy trực tiếp.", ...patch });

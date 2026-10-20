@@ -28,7 +28,8 @@ const migrations = ["007_student_transcripts.sql", "010_transcript_jobs.sql", "0
   "019_career_skill_management.sql", "020_career_field_numbers.sql", "021_career_position_codes.sql", "018_data_consents.sql",
   "026_competency_management.sql", "028_student_specialty.sql", "029_student_competency_assessments.sql", "030_competency_consent.sql",
   "031_career_ai_suggestions.sql", "032_graduation_ai_advice.sql", "033_competency_cloud_ai.sql", "034_competency_ai_suggestions.sql",
-  "035_competency_ai_skills.sql", "036_cancel_competency_ai_skills.sql", "037_competency_field_groups.sql", "038_competency_shared_courses.sql"];
+  "035_competency_ai_skills.sql", "036_cancel_competency_ai_skills.sql", "037_competency_field_groups.sql", "038_competency_shared_courses.sql",
+  "039_competency_newest_revisions.sql"];
 const adminPool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 1 });
 // search_path is the audit schema ONLY, so a missing table can never fall through to public.
 const pool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 8, options: `-c search_path=${schema}` });
@@ -113,7 +114,7 @@ function candidates(user) {
 try {
   const publicBefore = await publicCounts();
   await setupSchema();
-  checks.push(`migrations 007-038 apply in a throwaway schema; copied ${await count("ad_comp_skills WHERE deleted_at IS NULL")} profiles, ${await count("ad_comp_course_configs")} configurations and ${await count("career_requirements WHERE deleted_at IS NULL")} career links read-only from public`);
+  checks.push(`migrations 007-039 apply in a throwaway schema; copied ${await count("ad_comp_skills WHERE deleted_at IS NULL")} profiles, ${await count("ad_comp_course_configs")} configurations and ${await count("career_requirements WHERE deleted_at IS NULL")} career links read-only from public`);
 
   const app = express();
   app.use("/api/worker/competency-assessments", createCompetencyWorkerRouter(pool, workerKey));

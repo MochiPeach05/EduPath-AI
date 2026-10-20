@@ -171,8 +171,9 @@ try {
   await pool.query(`BEGIN; ${positionCodesMigration.replaceAll("public.", `${schema}.`)} COMMIT;`);
   const competenciesMigration = await readFile("apps/api/migrations/026_competency_management.sql", "utf8");
   await pool.query(`BEGIN; ${competenciesMigration.replaceAll("public.", `${schema}.`).replaceAll("SET search_path=public,pg_temp", `SET search_path=${schema},pg_temp`).replaceAll("nspname='public'", `nspname='${schema}'`)} COMMIT;`);
-  // The career skill routes read the shared courses of migration 038, which builds on 034-037.
-  for (const file of ["034_competency_ai_suggestions.sql", "035_competency_ai_skills.sql", "036_cancel_competency_ai_skills.sql", "037_competency_field_groups.sql", "038_competency_shared_courses.sql"]) {
+  // The career skill routes read the shared courses of migrations 038-039, which build on 034-037.
+  for (const file of ["034_competency_ai_suggestions.sql", "035_competency_ai_skills.sql", "036_cancel_competency_ai_skills.sql", "037_competency_field_groups.sql",
+    "038_competency_shared_courses.sql", "039_competency_newest_revisions.sql"]) {
     const migration = await readFile(`apps/api/migrations/${file}`, "utf8");
     await pool.query(`BEGIN; ${migration.replaceAll("public.", `${schema}.`).replaceAll("SET search_path=public,pg_temp", `SET search_path=${schema},pg_temp`).replaceAll("nspname='public'", `nspname='${schema}'`)} COMMIT;`);
   }

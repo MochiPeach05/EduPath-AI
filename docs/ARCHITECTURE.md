@@ -152,7 +152,7 @@ Khi thêm code, không tạo thêm vòng mới. Phần dùng chung nên tách th
 ### 3.6 Cơ sở dữ liệu và migration
 
 - `apps/api/migrations/NNN_ten.sql` chạy theo số. Runner (`db/migrate.ts`) ghi checksum từng tệp vào `schema_migrations` và **từ chối khởi động nếu một tệp đã chạy bị sửa**.
-- Không bao giờ sửa migration đã lên production. Muốn thay đổi thì thêm số tiếp theo (hiện là 039).
+- Không bao giờ sửa migration đã lên production. Muốn thay đổi thì thêm số tiếp theo (hiện là 040).
 - Production tự chạy migration khi deploy (`DATABASE_AUTO_MIGRATE=true`); server chỉ mở cổng sau khi chạy xong.
 - Bảng mới bật Row Level Security và thu quyền của `anon`/`authenticated`/`service_role`, theo mẫu ở `034_competency_ai_suggestions.sql`.
 - Có phần được **giữ lại dù không còn dùng**, vì production đã chạy và xóa sẽ làm lệch lịch sử migration:

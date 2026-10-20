@@ -301,7 +301,7 @@ function SkillDetails({ current, revision, canManage, close, edit }: { current: 
               <tbody>{detail.contributions.slice((page - 1) * 10, page * 10).map((item, index) => <tr key={item.courseId}>
                 <td className="cm-stt">{(page - 1) * 10 + index + 1}</td>
                 <td><strong>{item.courseCode}</strong><br />{item.courseName}</td>
-                <td>{item.cohorts.length ? item.cohorts.join(", ") : "Chỉ có trong CTĐT cũ"}</td>
+                <td>{item.cohorts.join(", ")}</td>
                 <td>{percentage(item.weight)}{item.weight === 0 && <small className="comp-hint">Không đóng góp</small>}</td>
                 <td>{statusLabels[item.status]}</td>
               </tr>)}</tbody>

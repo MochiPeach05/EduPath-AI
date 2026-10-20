@@ -73,17 +73,17 @@ async function loadSharedSource(client: Db): Promise<SharedSource> {
 }
 
 /**
- * The course data sent to the model: the row of the newest cohort whose current curriculum has the
- * course (any revision when none does). The courses come back by code and name.
+ * The course data sent to the model: the row of the newest cohort whose newest CTĐT revision has the
+ * course (a course of older revisions only is not offered, migration 039). By code and name.
  */
 async function loadSourceRows(client: Db, courseIds: string[]): Promise<SourceRow[]> {
   const result = await client.query<SourceRow>(`SELECT * FROM (SELECT DISTINCT ON (cc.course_id) cc.course_id AS "courseId",
       cc.revision_id AS "revisionId",cc.code AS "sourceCode",c.code,c.name,cc.data AS course,cu.cohort_code AS "cohortCode",COALESCE(r.data->>'name','') AS "curriculumName",r.version
       FROM curriculum_courses cc JOIN ad_comp_courses c ON c.id=cc.course_id
-      JOIN curriculum_revisions r ON r.id=cc.revision_id JOIN curricula cu ON cu.id=r.curriculum_id
+      JOIN curriculum_revisions r ON r.id=cc.revision_id JOIN curricula cu ON cu.id=r.curriculum_id AND cu.current_revision=r.id
       WHERE cc.course_id=ANY($1::uuid[])
-      ORDER BY cc.course_id,(cu.current_revision=r.id) DESC,NULLIF(regexp_replace(cu.cohort_code,'\\D','','g'),'')::int DESC NULLS LAST,
-        cu.cohort_code DESC,r.version DESC) x ORDER BY code,name,"courseId"`, [courseIds]);
+      ORDER BY cc.course_id,NULLIF(regexp_replace(cu.cohort_code,'\\D','','g'),'')::int DESC NULLS LAST,cu.cohort_code DESC,cu.id) x
+      ORDER BY code,name,"courseId"`, [courseIds]);
   return result.rows;
 }
 

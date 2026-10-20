@@ -14,9 +14,9 @@ type Group = { id: string; name: string; description: string; isActive: boolean;
 type Skill = { id: string; name: string; description: string; scope: string; legacySkillId: string | null; groupId: string; groupName: string; isActive: boolean; groupActive: boolean; version: string; careerCount: number; courseCount: number };
 type CourseLink = { skillId: string; skillName: string; groupId: string; groupName: string; isActive: boolean; weight: number };
 type CourseStatus = "draft" | "active" | "archived" | "missing";
-/** One shared course ("môn học") with its configuration; `cohorts` have it in their current curriculum. */
+/** One shared course ("môn học") with its configuration; `cohorts` have it in their newest CTĐT revision. */
 type CourseRow = { id: string; code: string; name: string; credits: number; type: string; block: string; specialty: string;
-  cohorts: string[]; pastCohorts: string[]; configId: string | null; status: CourseStatus; version: string | null; note: string;
+  cohorts: string[]; configId: string | null; status: CourseStatus; version: string | null; note: string;
   mergedFrom: string[]; skillCount: number; totalWeight: number };
 type Warning = { code: string; message: string; courseCode?: string };
 
@@ -170,12 +170,13 @@ export class CompetencyRepository {
     return result.rows[0]!;
   }
 
+  /** The courses of the newest CTĐT revisions that link the skill (the scope of "Cấu hình môn học"). */
   private async contributions(db: Database, id: string) {
-    const result = await db.query(`SELECT c.id AS "courseId",c.code AS "courseCode",c.name AS "courseName",
- COALESCE((SELECT array_agg(DISTINCT cu.cohort_code ORDER BY cu.cohort_code) FROM curriculum_courses cc
- JOIN curricula cu ON cu.current_revision=cc.revision_id WHERE cc.course_id=c.id),'{}') AS cohorts,l.weight::float8 AS weight,cfg.status
+    const result = await db.query(`SELECT * FROM (SELECT c.id AS "courseId",c.code AS "courseCode",c.name AS "courseName",
+ (SELECT array_agg(DISTINCT cu.cohort_code ORDER BY cu.cohort_code) FROM curriculum_courses cc
+ JOIN curricula cu ON cu.current_revision=cc.revision_id WHERE cc.course_id=c.id) AS cohorts,l.weight::float8 AS weight,cfg.status
  FROM ad_comp_course_links l JOIN ad_comp_course_configs cfg ON cfg.id=l.config_id JOIN ad_comp_courses c ON c.id=cfg.course_id
- WHERE l.skill_id=$1 ORDER BY c.code,c.name,c.id`, [id]);
+ WHERE l.skill_id=$1) x WHERE cohorts IS NOT NULL ORDER BY "courseCode","courseName","courseId"`, [id]);
     return result.rows;
   }
 
@@ -295,21 +296,20 @@ export class CompetencyRepository {
   }
 
   /**
-   * The shared courses of the filter ("" = every course of any curriculum, otherwise the courses of
-   * the cohort's current curricula), or one course by id. Type, block and specialty come from the
-   * filtered cohort, otherwise from the newest cohort that has the course.
+   * The shared courses of the filter, or one course by id. Only the newest CTĐT revision of each
+   * curriculum counts (user, 2026-10-20: "chỉ lấy ở phiên bản mới nhất"): "" = every course of the
+   * newest revisions, a cohort = the courses of its newest revisions. A course that only an older
+   * revision has is not listed (migration 039 archives its configuration). Type, block and specialty
+   * come from the filtered cohort, otherwise from the newest cohort that has the course.
    */
   private async courseRows(db: Database, cohort: string, id: string | null = null): Promise<CourseRow[]> {
     const result = await db.query<CourseRow>(`WITH occ AS (SELECT cc.course_id,cc.position,cc.course_type,cc.block,cc.specialty,
- cu.cohort_code,r.version,cu.current_revision=r.id AS is_current
- FROM curriculum_courses cc JOIN curriculum_revisions r ON r.id=cc.revision_id JOIN curricula cu ON cu.id=r.curriculum_id),
+ cu.cohort_code,cu.id AS curriculum_id FROM curriculum_courses cc JOIN curricula cu ON cu.current_revision=cc.revision_id),
  shown AS (SELECT DISTINCT ON (course_id) course_id,position,course_type,block,specialty FROM occ
- WHERE ($1='' OR (cohort_code=$1 AND is_current)) AND ($2::uuid IS NULL OR course_id=$2)
- ORDER BY course_id,is_current DESC,${cohortOrder("cohort_code")},version DESC)
+ WHERE ($1='' OR cohort_code=$1) AND ($2::uuid IS NULL OR course_id=$2)
+ ORDER BY course_id,${cohortOrder("cohort_code")},curriculum_id)
  SELECT c.id,c.code,c.name,c.credits::float8 AS credits,s.course_type AS type,s.block,s.specialty,
- COALESCE((SELECT array_agg(DISTINCT o.cohort_code ORDER BY o.cohort_code) FROM occ o WHERE o.course_id=c.id AND o.is_current),'{}') AS cohorts,
- COALESCE((SELECT array_agg(DISTINCT o.cohort_code ORDER BY o.cohort_code) FROM occ o WHERE o.course_id=c.id AND NOT o.is_current
- AND NOT EXISTS(SELECT 1 FROM occ p WHERE p.course_id=c.id AND p.cohort_code=o.cohort_code AND p.is_current)),'{}') AS "pastCohorts",
+ (SELECT array_agg(DISTINCT o.cohort_code ORDER BY o.cohort_code) FROM occ o WHERE o.course_id=c.id) AS cohorts,
  cfg.id AS "configId",COALESCE(cfg.status,'missing') AS status,cfg.version,COALESCE(cfg.note,'') AS note,
  COALESCE(cfg.merged_from,'{}') AS "mergedFrom",
  (SELECT count(*)::int FROM ad_comp_course_links l WHERE l.config_id=cfg.id) AS "skillCount",
@@ -345,8 +345,7 @@ export class CompetencyRepository {
  JOIN career_skills s ON s.id=cs.skill_id JOIN ad_comp_groups g ON g.id=cs.group_id
  WHERE l.config_id=$1 ORDER BY g.name,s.name,s.id`, [course.configId])).rows : [];
     return { courseId: course.id, courseCode: course.code, courseName: course.name, credits: course.credits, cohorts: course.cohorts,
-      pastCohorts: course.pastCohorts, configId: course.configId, status: course.status, version: course.version, note: course.note,
-      mergedFrom: course.mergedFrom, links };
+      configId: course.configId, status: course.status, version: course.version, note: course.note, mergedFrom: course.mergedFrom, links };
   }
 
   /**

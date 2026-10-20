@@ -9,7 +9,7 @@ const liveData = vi.hoisted(() => vi.fn());
 vi.mock("./use-live-data", () => ({ useLiveData: liveData }));
 
 const course = (code: string, skillCount: number, status?: CompetencyCourse["status"]): CompetencyCourse => ({ id: `id-${code}`, code, name: code, credits: 3, type: "BB",
-  block: "", specialty: "", cohorts: ["K30"], pastCohorts: [], status: status ?? (skillCount ? "active" : "missing"), configId: null, version: null, skillCount,
+  block: "", specialty: "", cohorts: ["K30"], status: status ?? (skillCount ? "active" : "missing"), configId: null, version: null, skillCount,
   totalWeight: skillCount ? 1 : 0, mergedFrom: [] });
 const online: CourseAiStatus = { enabled: true, worker: { online: true, supportsSuggestions: true, seenAt: "2026-10-17T05:00:00.000Z" } };
 const pendingBatch: CourseAiBatch = { id: "b1", createdAt: "2026-10-17T05:00:00.000Z", total: 1, queued: 1, processing: 0, completed: 0, failed: 0, cancelled: 0,

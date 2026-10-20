@@ -1,10 +1,10 @@
-// PostgreSQL checks for migration 038 ("Cấu hình môn học", 2026-10-20): the shared courses, the merge of
-// the configurations that several cohorts had for one course, and the curriculum trigger
-// (docs/competency-management.md).
+// PostgreSQL checks for migrations 038 and 039 ("Cấu hình môn học", 2026-10-20): the shared courses, the
+// merge of the configurations that several cohorts had for one course, the curriculum trigger, and
+// only the newest CTĐT revisions counting (docs/competency-management.md).
 // Every write stays in a disposable LOCAL schema that is dropped at the end. Migrations 007-037 build
 // the schema as production had it before 038; the curricula, the skill catalog and the competency
 // configuration are copied read-only from the local public schema (admin data only; no users or
-// student data). Configurations of other cohorts are then added by hand, 038 is applied and checked.
+// student data). Configurations of other cohorts are then added by hand, 038 and 039 are applied and checked.
 // Run: node scripts/verify-competency-shared-courses.mjs
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -165,6 +165,49 @@ try {
   await assert.rejects(pool.query("UPDATE ad_comp_course_configs SET course_id=$1 WHERE id=(SELECT id FROM ad_comp_course_configs ORDER BY id LIMIT 1)", [credits.course_id]),
     (error) => error.constraint === "competency_scope_immutable");
   checks.push("a curriculum row with the same code, name and credits (other case, spaces, trailing zeros) reuses the course; another name or credits add one; a configuration cannot move to another course");
+
+  // 039: a course that only an older revision has loses its live configuration (archived, with history).
+  const oldOnly = (await q(`SELECT x.id FROM ad_comp_courses x WHERE NOT EXISTS(SELECT 1 FROM curriculum_courses cc
+    JOIN curricula cu ON cu.current_revision=cc.revision_id WHERE cc.course_id=x.id) ORDER BY x.code,x.id`)).map((row) => row.id);
+  assert(oldOnly.length >= 2, "some courses exist only in older revisions locally");
+  const liveSkill = (await q(`SELECT l.skill_id FROM ad_comp_course_links l JOIN ad_comp_course_configs c ON c.id=l.config_id
+    WHERE c.status='active' ORDER BY l.skill_id LIMIT 1`))[0].skill_id;
+  for (const [index, status] of ["active", "draft"].entries()) {
+    const id = randomUUID();
+    await pool.query("BEGIN");
+    await pool.query("INSERT INTO ad_comp_course_configs(id,course_id,status) VALUES($1,$2,$3)", [id, oldOnly[index], status]);
+    await pool.query("INSERT INTO ad_comp_course_links(config_id,skill_id,weight) VALUES($1,$2,1)", [id, liveSkill]);
+    await pool.query("COMMIT");
+  }
+  const appliedBefore = await count("ad_comp_course_configs WHERE status='active'");
+  await pool.query(`BEGIN; ${inSchema(await readFile("apps/api/migrations/039_competency_newest_revisions.sql", "utf8"))} COMMIT;`);
+  const note = "Lưu trữ vì môn học không còn trong CTĐT mới nhất của khóa nào.";
+  assert.deepEqual((await q("SELECT status FROM ad_comp_course_configs WHERE course_id=ANY($1::uuid[])", [oldOnly.slice(0, 2)])).map((row) => row.status), ["archived", "archived"]);
+  assert.equal(await count("ad_comp_course_configs WHERE status='active'"), appliedBefore - 1, "only the hidden applied configuration is archived");
+  assert.equal(await count("ad_comp_events WHERE note=$1 AND entity_key=ANY($2::text[])", [note, oldOnly.slice(0, 2)]), 2, "each archived configuration gets a history entry");
+  checks.push(`039 archives the live configurations of courses that only older revisions have (${oldOnly.length} such courses locally), with a history entry each; applied configurations of the newest revisions stay`);
+
+  // An import that makes a new revision current archives the courses it drops, unless another cohort's newest revision has them.
+  const k29Curriculum = (await q("SELECT id,current_revision AS revision FROM curricula WHERE cohort_code='K29' ORDER BY id LIMIT 1"))[0];
+  const applied = (others) => q(`SELECT cc.code,cc.course_id AS "courseId" FROM curriculum_courses cc
+    JOIN ad_comp_course_configs cfg ON cfg.course_id=cc.course_id AND cfg.status='active' WHERE cc.revision_id=$1
+    AND ${others ? "" : "NOT "}EXISTS(SELECT 1 FROM curriculum_courses o JOIN curricula cu ON cu.current_revision=o.revision_id
+      WHERE o.course_id=cc.course_id AND cu.id<>$2) ORDER BY cc.code LIMIT 1`, [k29Curriculum.revision, k29Curriculum.id]);
+  const [onlyK29] = await applied(false), [sharedK29] = await applied(true);
+  assert(onlyK29 && sharedK29, "K29 has an applied course of its own and one that another cohort shares");
+  const nextRevision = randomUUID();
+  await pool.query(`INSERT INTO curriculum_revisions(id,curriculum_id,version,data,source_filename,source_data,source_sha256,change_note)
+    SELECT $1,curriculum_id,version+1,data,'audit.xlsx',source_data,source_sha256,'audit' FROM curriculum_revisions WHERE id=$2`, [nextRevision, k29Curriculum.revision]);
+  await pool.query(`INSERT INTO curriculum_courses(revision_id,code,position,name,credits,course_type,semester,study_year,block,specialty,data)
+    SELECT $1,code,position,name,credits,course_type,semester,study_year,block,specialty,data FROM curriculum_courses
+    WHERE revision_id=$2 AND code<>ALL($3::text[])`, [nextRevision, k29Curriculum.revision, [onlyK29.code, sharedK29.code]]);
+  const appliedBeforeImport = await count("ad_comp_course_configs WHERE status='active'");
+  await pool.query("UPDATE curricula SET current_revision=$2 WHERE id=$1", [k29Curriculum.id, nextRevision]);
+  assert.equal((await q("SELECT status FROM ad_comp_course_configs WHERE course_id=$1", [onlyK29.courseId]))[0].status, "archived", "a course no newest revision has any more is archived");
+  assert.equal((await q("SELECT status FROM ad_comp_course_configs WHERE course_id=$1", [sharedK29.courseId]))[0].status, "active", "a course another cohort's newest revision has stays applied");
+  assert.equal(await count("ad_comp_course_configs WHERE status='active'"), appliedBeforeImport - 1);
+  assert.equal(await count("ad_comp_events WHERE note=$1 AND entity_key=$2", [note, onlyK29.courseId]), 1);
+  checks.push(`a new K29 revision without ${onlyK29.code} archives that course's configuration; ${sharedK29.code}, which another cohort's newest revision still has, stays applied`);
   console.log(checks.map((check) => `PASS ${check}`).join("\n"));
 } finally {
   await pool.end();

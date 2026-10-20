@@ -33,9 +33,10 @@ const migrations = ["007_student_transcripts.sql", "010_transcript_jobs.sql", "0
   "019_career_skill_management.sql", "020_career_field_numbers.sql", "021_career_position_codes.sql", "018_data_consents.sql",
   "026_competency_management.sql", "028_student_specialty.sql", "029_student_competency_assessments.sql", "030_competency_consent.sql",
   // The transcript routes purge graduation advice and the worker router expires it; /claim also runs the
-  // course-proposal housekeeping, so the audit schema needs the tables up to 038 like production.
+  // course-proposal housekeeping, so the audit schema needs the tables up to 039 like production.
   "031_career_ai_suggestions.sql", "032_graduation_ai_advice.sql", "033_competency_cloud_ai.sql", "034_competency_ai_suggestions.sql",
-  "035_competency_ai_skills.sql", "036_cancel_competency_ai_skills.sql", "037_competency_field_groups.sql", "038_competency_shared_courses.sql"];
+  "035_competency_ai_skills.sql", "036_cancel_competency_ai_skills.sql", "037_competency_field_groups.sql", "038_competency_shared_courses.sql",
+  "039_competency_newest_revisions.sql"];
 const adminPool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 1 });
 // search_path is the audit schema ONLY, so a missing table can never fall through to public.
 const pool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 8, options: `-c search_path=${schema}` });
@@ -132,7 +133,7 @@ const ageAssessments = (user) => pool.query("UPDATE stu_comp_assessments SET cre
 
 try {
   const { revisionId, skills } = await setupSchema();
-  checks.push("migrations 028-038 apply with 007-027 in a throwaway schema");
+  checks.push("migrations 028-039 apply with 007-027 in a throwaway schema");
 
   const app = express();
   app.use("/api/worker/transcripts", createTranscriptWorkerRouter(pool, workerKey));
