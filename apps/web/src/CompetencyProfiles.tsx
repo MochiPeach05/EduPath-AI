@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ActionMenu, Modal, Pagination, Status } from "./admin-ui";
 import { Icon, RequiredLabel } from "./admin-account-shared";
 import { searchTerm } from "./student-curriculum-types";
@@ -223,7 +223,11 @@ function SkillEditor({ current, revision, groups, close, saved }: EditorProps<Sk
   // and a skill that already has a cấu hình năng lực is edited from the list instead.
   const catalog = useCompetencyData<{ items: CatalogSkill[] }>(`${COMPETENCY_API}/catalog`, revision);
   const profiles = useCompetencyData<{ items: Skill[] }>(`${COMPETENCY_API}/skills`, revision);
-  const [form, setForm] = useState({ name: current?.name ?? "", description: current?.description ?? "", scope: current?.scope ?? "", groupId: current?.groupId ?? "", isActive: current?.isActive ?? true });
+  // No "Chọn nhóm năng lực" placeholder (user, 2026-10-20): a new profile starts in the first group in use.
+  const firstGroup = groups.find(group => group.isActive)?.id ?? groups[0]?.id ?? "";
+  const [form, setForm] = useState({ name: current?.name ?? "", description: current?.description ?? "", scope: current?.scope ?? "", groupId: current?.groupId ?? firstGroup, isActive: current?.isActive ?? true });
+  // The groups can arrive after the dialog opens: the shown group and the saved one stay the same.
+  useEffect(() => { if (firstGroup) setForm(previous => previous.groupId ? previous : { ...previous, groupId: firstGroup }); }, [firstGroup]);
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const submitting = useRef(false);
   const match = !current && form.name.trim() ? catalog.data?.items.find(skill => skillKey(skill.name) === skillKey(form.name)) : undefined;
@@ -253,7 +257,7 @@ function SkillEditor({ current, revision, groups, close, saved }: EditorProps<Sk
           : <p className="comp-hint">“{match.name}” đã có trong danh mục Kỹ năng: cấu hình năng lực sẽ dùng kỹ năng này{keepsDescription ? " và giữ mô tả hiện có" : ""}.</p>)}
         <DescriptionField label="Mô tả kỹ năng chung" maxWords={DESCRIPTION_MAX_WORDS} rows={3} maxLength={2000} readOnly={keepsDescription} value={keepsDescription ? match?.description ?? "" : form.description} onChange={event => setForm({ ...form, description: event.target.value })} />
         <label><RequiredLabel>Nhóm năng lực</RequiredLabel><select required value={form.groupId} onChange={event => setForm({ ...form, groupId: event.target.value })}>
-          <option value="">Chọn nhóm năng lực</option>{groups.map(group => <option key={group.id} value={group.id}>{group.name}{group.isActive ? "" : " (ngừng sử dụng)"}</option>)}
+          {groups.map(group => <option key={group.id} value={group.id}>{group.name}{group.isActive ? "" : " (ngừng sử dụng)"}</option>)}
           {current && !groups.some(group => group.id === current.groupId) && <option value={current.groupId}>{current.groupName}</option>}
         </select></label>
         {!groups.length && <p className="comp-hint">Chưa tải được nhóm năng lực. Đóng hộp thoại và tải lại danh sách nhóm trước khi lưu.</p>}
