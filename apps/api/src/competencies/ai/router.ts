@@ -3,7 +3,8 @@
 // applies a proposal; the stored AI result itself is never edited.
 //   POST /                       one course: links ("Tạo liên kết kỹ năng (AI)": skills and weights since
 //                                2026-10-20); weights (the former "Thêm trọng số (AI)", no button any more)
-//   POST /batches                whole program: one "full" proposal per course that has no link yet
+//   POST /batches                the courses of the cohort filter (all courses without one): one
+//                                "full" proposal per course that has no link yet
 //   POST /batches/:id/apply      saves every finished proposal of a run as drafts, or applies them
 import { Router } from "express";
 import { z } from "zod";
@@ -12,8 +13,7 @@ import type { AuthenticatedUser } from "../../auth/types.js";
 import type { DatabasePool } from "../../db/pool.js";
 import { WORKER_ONLINE_SECONDS } from "../../competency-assessment/ai/queue.js";
 import { COMPETENCY_COURSE_SUGGESTION_KIND } from "../../competency-assessment/ai/worker-protocol.js";
-import { courseCode } from "../../curricula/course-codes.js";
-import { CompetencyError } from "../model.js";
+import { CompetencyError, cohortFilter } from "../model.js";
 import type { CompetencyRepository } from "../repository.js";
 import { createCourseSuggestionExpiry, enqueueCourseBatch, enqueueCourseSuggestion } from "./jobs.js";
 import { normalizePercents, type StoredCourseAiItem, type StoredCourseAiResult } from "./validate.js";
@@ -25,8 +25,8 @@ const RECENT_SUGGESTION_DAYS = 7;
 type Db = DatabasePool | PoolClient;
 type SuggestionRow = {
   id: string;
-  revisionId: string;
-  /** NULL only on proposals of the removed "Thêm kỹ năng (AI)" (mode 'skills', migrations 035/036). */
+  /** The shared course (migration 038); NULL only on proposals of the removed "Thêm kỹ năng (AI)" (mode 'skills'). */
+  courseId: string | null;
   courseCode: string | null;
   mode: CourseAiMode;
   batchId: string | null;
@@ -41,7 +41,7 @@ type SuggestionRow = {
   result: StoredCourseAiResult | null;
 };
 
-const columns = `id,revision_id AS "revisionId",course_code AS "courseCode",mode,batch_id AS "batchId",status,error_code AS "errorCode",
+const columns = `id,course_id AS "courseId",course_code AS "courseCode",mode,batch_id AS "batchId",status,error_code AS "errorCode",
  created_at AS "createdAt",updated_at AS "updatedAt",completed_at AS "completedAt",applied_at AS "appliedAt",ai_model AS model,
  prompt_version AS "promptVersion",result`;
 const iso = (value: Date | string | null) => (value === null ? null : new Date(value).toISOString());
@@ -64,9 +64,9 @@ const weightsBody = z.object({
 const statusBody = z.object({ status: z.enum(["draft", "active"]) }).strict();
 
 /** Current links of a course, by skill id. */
-async function linkedSkillIds(db: Db, revisionId: string, code: string) {
+async function linkedSkillIds(db: Db, courseId: string) {
   const result = await db.query<{ skillId: string }>(`SELECT l.skill_id AS "skillId" FROM ad_comp_course_configs c
-    JOIN ad_comp_course_links l ON l.config_id=c.id WHERE c.revision_id=$1 AND c.course_code=$2`, [revisionId, code]);
+    JOIN ad_comp_course_links l ON l.config_id=c.id WHERE c.course_id=$1`, [courseId]);
   return new Set(result.rows.map((row) => row.skillId));
 }
 
@@ -87,7 +87,7 @@ async function present(db: Db, row: SuggestionRow) {
   const groups = await db.query<{ id: string; name: string }>("SELECT id,name FROM ad_comp_groups WHERE deleted_at IS NULL AND is_active");
   const current = new Map(skills.rows.map((skill) => [skill.id, skill]));
   const groupNames = new Map(groups.rows.map((group) => [group.id, group.name]));
-  const linked = row.courseCode === null ? new Set<string>() : await linkedSkillIds(db, row.revisionId, row.courseCode);
+  const linked = row.courseId === null ? new Set<string>() : await linkedSkillIds(db, row.courseId);
   const items = stored.flatMap((item, index) => {
     // A catalog skill deleted since the proposal was made is no longer offered.
     const skill = item.skillId ? current.get(item.skillId) : undefined;
@@ -119,12 +119,15 @@ async function readSuggestion(db: Db, id: string) {
   return present(db, row);
 }
 
-/** Progress of a whole-program run. */
+/** Progress of a run over many courses. */
 async function readBatch(db: Db, batchId: string) {
-  const rows = await db.query<{ id: string; courseCode: string | null; status: string; errorCode: string | null; appliedAt: Date | null; appliedStatus: string | null; createdAt: Date; itemCount: number }>(
-    `SELECT id,course_code AS "courseCode",status,error_code AS "errorCode",applied_at AS "appliedAt",applied_summary->>'status' AS "appliedStatus",
-      created_at AS "createdAt",COALESCE(jsonb_array_length(result->'items'),0)::int AS "itemCount"
-      FROM ad_comp_ai_suggestions WHERE batch_id=$1 ORDER BY course_code,id`, [batchId]);
+  const rows = await db.query<{ id: string; courseId: string | null; courseCode: string | null; courseName: string | null; status: string; errorCode: string | null;
+    appliedAt: Date | null; appliedStatus: string | null; createdAt: Date; itemCount: number; linked: boolean }>(
+    `SELECT s.id,s.course_id AS "courseId",COALESCE(c.code,s.course_code) AS "courseCode",c.name AS "courseName",s.status,s.error_code AS "errorCode",
+      s.applied_at AS "appliedAt",s.applied_summary->>'status' AS "appliedStatus",s.created_at AS "createdAt",
+      COALESCE(jsonb_array_length(s.result->'items'),0)::int AS "itemCount",
+      EXISTS(SELECT 1 FROM ad_comp_course_configs cfg JOIN ad_comp_course_links l ON l.config_id=cfg.id WHERE cfg.course_id=s.course_id) AS linked
+      FROM ad_comp_ai_suggestions s LEFT JOIN ad_comp_courses c ON c.id=s.course_id WHERE s.batch_id=$1 ORDER BY 3,4,s.id`, [batchId]);
   if (!rows.rowCount) throw new CompetencyError("batch_not_found", 404);
   const count = (status: string) => rows.rows.filter((row) => row.status === status).length;
   const first = rows.rows.reduce((min, row) => (new Date(row.createdAt) < new Date(min.createdAt) ? row : min), rows.rows[0]!);
@@ -145,8 +148,8 @@ async function readBatch(db: Db, batchId: string) {
     ready: rows.rows.filter((row) => row.status === "completed" && !row.appliedAt && row.itemCount > 0).length,
     /** Finished with no fitting skill (2026-10-19): the page asks the admin to add skills. */
     noMatch: rows.rows.filter(noMatch).length,
-    items: rows.rows.map((row) => ({ id: row.id, courseCode: row.courseCode, status: row.status, errorCode: row.errorCode, applied: Boolean(row.appliedAt),
-      itemCount: row.itemCount, noMatch: noMatch(row) }))
+    items: rows.rows.map((row) => ({ id: row.id, courseId: row.courseId, courseCode: row.courseCode, courseName: row.courseName, status: row.status,
+      errorCode: row.errorCode, applied: Boolean(row.appliedAt), itemCount: row.itemCount, noMatch: noMatch(row), linked: row.linked }))
   };
 }
 
@@ -180,17 +183,17 @@ export function createCompetencyAiRouter(pool: DatabasePool, repository: Compete
   });
 
   router.get("/latest", async (req, res) => {
-    const query = z.object({ revisionId: uuid, code: courseCode, mode: z.enum(["links", "weights"]) }).strict().parse(req.query);
+    const query = z.object({ courseId: uuid, mode: z.enum(["links", "weights"]) }).strict().parse(req.query);
     await expireQuietly();
     const found = await pool.query<SuggestionRow>(`SELECT ${columns} FROM ad_comp_ai_suggestions
-      WHERE revision_id=$1 AND course_code=$2 AND mode=$3 AND created_at>now()-make_interval(days => $4) AND status<>'cancelled' AND applied_at IS NULL
-      ORDER BY created_at DESC,id DESC LIMIT 1`, [query.revisionId, query.code, query.mode, RECENT_SUGGESTION_DAYS]);
+      WHERE course_id=$1 AND mode=$2 AND created_at>now()-make_interval(days => $3) AND status<>'cancelled' AND applied_at IS NULL
+      ORDER BY created_at DESC,id DESC LIMIT 1`, [query.courseId, query.mode, RECENT_SUGGESTION_DAYS]);
     const row = found.rows[0];
     res.json({ suggestion: row ? await present(pool, row) : null });
   });
 
   router.post("/", async (req, res) => {
-    const data = z.object({ revisionId: uuid, code: courseCode, mode: z.enum(["links", "weights"]) }).strict().parse(req.body);
+    const data = z.object({ courseId: uuid, mode: z.enum(["links", "weights"]) }).strict().parse(req.body);
     if (!enabled) throw new CompetencyError("ai_disabled", 503);
     const { queued, suggestion } = await repository.transaction(actorOf(req.session.user), async (client) => {
       await expire(client);
@@ -200,23 +203,24 @@ export function createCompetencyAiRouter(pool: DatabasePool, repository: Compete
     res.status(queued.created ? 201 : 200).json({ suggestion });
   });
 
-  /* ------------------------------------------------------- whole program */
+  /* ------------------------------------------------------- many courses */
 
+  /** The latest run, whatever filter it was started from: the courses are shared by every cohort. */
   router.get("/batches/latest", async (req, res) => {
-    const query = z.object({ revisionId: uuid }).strict().parse(req.query);
+    z.object({}).strict().parse(req.query);
     await expireQuietly();
     const found = await pool.query<{ batchId: string }>(`SELECT batch_id AS "batchId" FROM ad_comp_ai_suggestions
-      WHERE revision_id=$1 AND batch_id IS NOT NULL GROUP BY batch_id ORDER BY min(created_at) DESC,batch_id DESC LIMIT 1`, [query.revisionId]);
+      WHERE batch_id IS NOT NULL GROUP BY batch_id ORDER BY min(created_at) DESC,batch_id DESC LIMIT 1`);
     const batchId = found.rows[0]?.batchId;
     res.json({ batch: batchId ? await readBatch(pool, batchId) : null });
   });
 
   router.post("/batches", async (req, res) => {
-    const data = z.object({ revisionId: uuid }).strict().parse(req.body);
+    const data = z.object({ cohort: cohortFilter.default("") }).strict().parse(req.body);
     if (!enabled) throw new CompetencyError("ai_disabled", 503);
     const result = await repository.transaction(actorOf(req.session.user), async (client) => {
       await expire(client);
-      const queued = await enqueueCourseBatch(client, { revisionId: data.revisionId, requestedBy: req.session.user!.userId });
+      const queued = await enqueueCourseBatch(client, { courseIds: await repository.scopeCourseIds(client, data.cohort), requestedBy: req.session.user!.userId });
       return { ...queued, batch: queued.batchId ? await readBatch(client, queued.batchId) : null };
     });
     res.status(result.queued ? 201 : 200).json(result);
@@ -315,10 +319,10 @@ export function createCompetencyAiRouter(pool: DatabasePool, repository: Compete
   return router;
 }
 
-/** The course of a links, weights or full proposal. */
+/** The shared course of a links, weights or full proposal. */
 function courseOf(row: SuggestionRow): string {
-  if (row.courseCode === null) throw new CompetencyError("suggestion_mode_mismatch", 409);
-  return row.courseCode;
+  if (row.courseId === null) throw new CompetencyError("suggestion_mode_mismatch", 409);
+  return row.courseId;
 }
 
 async function markApplied(client: PoolClient, id: string, actor: AuthenticatedUser, summary: Record<string, unknown>) {
@@ -332,7 +336,7 @@ async function markApplied(client: PoolClient, id: string, actor: AuthenticatedU
  * the course's current links, so a link missing from the body means the course changed meanwhile.
  */
 async function applyLinks(client: PoolClient, repository: CompetencyRepository, row: SuggestionRow, body: z.infer<typeof linksBody>, actor: AuthenticatedUser) {
-  const state = await repository.lockCourse(client, row.revisionId, courseOf(row));
+  const state = await repository.lockCourse(client, courseOf(row));
   const kept: { skillId: string; percent: number }[] = [];
   const conflicts: string[] = [];
   let newSkills = 0, profiles = 0;
@@ -360,9 +364,9 @@ async function applyLinks(client: PoolClient, repository: CompetencyRepository, 
   if (state.links.some((link) => !kept.some((entry) => entry.skillId === link.skillId))) throw new CompetencyError("links_changed", 409);
   const links = kept.map((entry) => ({ skillId: entry.skillId, weight: entry.percent / 100 }));
   const added = kept.length - state.links.length;
-  const course = await repository.writeCourse(client, row.revisionId, courseOf(row), state.config,
+  const course = await repository.writeCourse(client, courseOf(row), state.config,
     { status: body.status, links, note: state.config?.note ?? "" }, actor,
-    body.status === "active" ? `Áp dụng liên kết và trọng số từ đề xuất AI (thêm ${added} kỹ năng)` : `Lưu bản nháp liên kết và trọng số từ đề xuất AI (thêm ${added} kỹ năng)`);
+    body.status === "active" ? `Áp dụng liên kết và trọng số từ đề xuất AI (thêm ${added} kỹ năng)` : `Lưu bản nháp liên kết và trọng số từ đề xuất AI (thêm ${added} kỹ năng)`, true);
   const suggested = row.result?.items.length ?? 0;
   await markApplied(client, row.id, actor, { suggested, saved: kept.length, added, newSkills, profiles, status: body.status });
   return course;
@@ -370,15 +374,15 @@ async function applyLinks(client: PoolClient, repository: CompetencyRepository, 
 
 /** "Thêm trọng số (AI)": the reviewed percentages replace the weights of exactly the linked skills. */
 async function applyWeights(client: PoolClient, repository: CompetencyRepository, row: SuggestionRow, body: z.infer<typeof weightsBody>, actor: AuthenticatedUser) {
-  const state = await repository.lockCourse(client, row.revisionId, courseOf(row));
+  const state = await repository.lockCourse(client, courseOf(row));
   const current = new Set(state.links.map((link) => link.skillId));
   const given = new Set(body.weights.map((item) => item.skillId));
   if (given.size !== body.weights.length) throw new CompetencyError("duplicate_skill_link", 409);
   if (current.size !== given.size || [...given].some((skillId) => !current.has(skillId))) throw new CompetencyError("links_changed", 409);
   const links = body.weights.map((item) => ({ skillId: item.skillId, weight: item.percent / 100 }));
-  const course = await repository.writeCourse(client, row.revisionId, courseOf(row), state.config,
+  const course = await repository.writeCourse(client, courseOf(row), state.config,
     { status: body.status, links, note: state.config?.note ?? "" }, actor,
-    body.status === "active" ? "Áp dụng trọng số từ đề xuất AI" : "Lưu bản nháp trọng số từ đề xuất AI");
+    body.status === "active" ? "Áp dụng trọng số từ đề xuất AI" : "Lưu bản nháp trọng số từ đề xuất AI", true);
   const proposed = new Map((row.result?.items ?? []).map((item) => [item.skillId, item.percent]));
   const edited = body.weights.filter((item) => proposed.get(item.skillId) !== item.percent).length;
   await markApplied(client, row.id, actor, { suggested: proposed.size, saved: body.weights.length, edited, status: body.status });
@@ -386,11 +390,11 @@ async function applyWeights(client: PoolClient, repository: CompetencyRepository
 }
 
 /**
- * One course of a whole-program run. Profiles are created for career skills in the group the model
+ * One course of a run over many courses. Profiles are created for career skills in the group the model
  * chose; items that cannot be used any more are dropped and the rest re-scaled to 100%.
  */
 async function applyFull(client: PoolClient, repository: CompetencyRepository, row: SuggestionRow, status: "draft" | "active", actor: AuthenticatedUser): Promise<"empty" | "active" | "draft"> {
-  const state = await repository.lockCourse(client, row.revisionId, courseOf(row));
+  const state = await repository.lockCourse(client, courseOf(row));
   if (state.links.length) throw new CompetencyError("course_already_linked", 409);
   const kept: { skillId: string; percent: number }[] = [];
   let profiles = 0;
@@ -406,7 +410,7 @@ async function applyFull(client: PoolClient, repository: CompetencyRepository, r
       if (!item.groupId) continue;
       const group = await client.query("SELECT 1 FROM ad_comp_groups WHERE id=$1 AND deleted_at IS NULL AND is_active", [item.groupId]);
       if (!group.rowCount) continue;
-      if (await repository.ensureProfile(client, item.skillId, item.groupId, actor, "Tạo cấu hình năng lực từ đề xuất AI cho cả chương trình")) profiles += 1;
+      if (await repository.ensureProfile(client, item.skillId, item.groupId, actor, "Tạo cấu hình năng lực từ đề xuất AI cho nhiều môn học")) profiles += 1;
     }
     kept.push({ skillId: item.skillId, percent: item.percent ?? 0 });
   }
@@ -416,8 +420,8 @@ async function applyFull(client: PoolClient, repository: CompetencyRepository, r
   }
   const percents = normalizePercents(kept.map((item) => item.percent));
   const links = kept.map((item, index) => ({ skillId: item.skillId, weight: percents[index]! / 100 }));
-  await repository.writeCourse(client, row.revisionId, courseOf(row), state.config, { status, links, note: state.config?.note ?? "" }, actor,
-    status === "active" ? "Áp dụng liên kết và trọng số từ AI cho cả chương trình" : "Lưu bản nháp liên kết và trọng số từ AI cho cả chương trình");
+  await repository.writeCourse(client, courseOf(row), state.config, { status, links, note: state.config?.note ?? "" }, actor,
+    status === "active" ? "Áp dụng liên kết và trọng số từ AI cho nhiều môn học" : "Lưu bản nháp liên kết và trọng số từ AI cho nhiều môn học");
   await markApplied(client, row.id, actor, { suggested: row.result?.items.length ?? 0, saved: kept.length, profiles, status });
   return status;
 }

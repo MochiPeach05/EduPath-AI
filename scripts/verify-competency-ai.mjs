@@ -28,7 +28,7 @@ const migrations = ["007_student_transcripts.sql", "010_transcript_jobs.sql", "0
   "019_career_skill_management.sql", "020_career_field_numbers.sql", "021_career_position_codes.sql", "018_data_consents.sql",
   "026_competency_management.sql", "028_student_specialty.sql", "029_student_competency_assessments.sql", "030_competency_consent.sql",
   "031_career_ai_suggestions.sql", "032_graduation_ai_advice.sql", "033_competency_cloud_ai.sql", "034_competency_ai_suggestions.sql",
-  "035_competency_ai_skills.sql", "036_cancel_competency_ai_skills.sql"];
+  "035_competency_ai_skills.sql", "036_cancel_competency_ai_skills.sql", "037_competency_field_groups.sql", "038_competency_shared_courses.sql"];
 const adminPool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 1 });
 // search_path is the audit schema ONLY, so a missing table can never fall through to public.
 const pool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 8, options: `-c search_path=${schema}` });
@@ -83,7 +83,8 @@ async function setupSchema() {
   // actor_id points to public users, which are never copied.
   await copy(adminPool, "curriculum_revisions", { exclude: ["actor_id"] });
   await adminPool.query(`UPDATE ${schema}.curricula c SET current_revision=p.current_revision FROM public.curricula p WHERE p.id=c.id`);
-  for (const table of ["curriculum_courses", "ad_comp_groups", "ad_comp_skills", "ad_comp_course_configs", "ad_comp_course_links"]) await copy(adminPool, table);
+  // The shared courses first: the curriculum trigger then finds each course by its key and keeps its id.
+  for (const table of ["ad_comp_courses", "curriculum_courses", "ad_comp_groups", "ad_comp_skills", "ad_comp_course_configs", "ad_comp_course_links"]) await copy(adminPool, table);
   await adminPool.query("COMMIT");
   await pool.query("ALTER TABLE career_fields ENABLE TRIGGER career_fields_assign_number; ALTER TABLE career_positions ENABLE TRIGGER career_positions_assign_code");
 }
@@ -112,7 +113,7 @@ function candidates(user) {
 try {
   const publicBefore = await publicCounts();
   await setupSchema();
-  checks.push(`migrations 007-036 apply in a throwaway schema; copied ${await count("ad_comp_skills WHERE deleted_at IS NULL")} profiles, ${await count("ad_comp_course_configs")} configurations and ${await count("career_requirements WHERE deleted_at IS NULL")} career links read-only from public`);
+  checks.push(`migrations 007-038 apply in a throwaway schema; copied ${await count("ad_comp_skills WHERE deleted_at IS NULL")} profiles, ${await count("ad_comp_course_configs")} configurations and ${await count("career_requirements WHERE deleted_at IS NULL")} career links read-only from public`);
 
   const app = express();
   app.use("/api/worker/competency-assessments", createCompetencyWorkerRouter(pool, workerKey));
@@ -168,33 +169,40 @@ try {
   assert.equal(await count("career_skills WHERE deleted_at IS NULL"), catalogBefore + 1, "a new name adds one catalog skill");
   checks.push("adding a cấu hình năng lực with a name already in the Kỹ năng catalog (case, spaces, accents ignored) reuses that skill and keeps its description (an empty one takes the typed text); a second time is 409 skill_profile_exists; a new name adds one catalog skill; existingSkillId is refused");
 
-  // Pick an unconfigured revision for the AI flows.
-  const revisions = (await call("GET", "/curricula")).body.items;
-  const empty = revisions.filter((item) => item.configuredCount === 0 && item.courseCount >= 5).sort((a, b) => b.courseCount - a.courseCount)[0];
-  assert(empty, "an unconfigured CTĐT revision with courses exists locally");
-  const courses = (await call("GET", `/courses?revisionId=${empty.revisionId}`)).body.items.filter((course) => course.occurrenceCount === 1);
+  // Pick the cohort whose current CTĐT has the most courses without a configuration (the courses are
+  // shared by every cohort since migration 038, so most of them are configured through K29).
+  const cohortRows = (await call("GET", "/cohorts")).body.items;
+  const byCohort = await Promise.all(cohortRows.map(async (item) => ({ cohort: item.cohortCode, courses: (await call("GET", `/courses?cohort=${item.cohortCode}`)).body.items })));
+  const chosen = byCohort.map((item) => ({ ...item, unlinked: item.courses.filter((course) => course.skillCount === 0) })).sort((a, b) => b.unlinked.length - a.unlinked.length)[0];
+  assert(chosen && chosen.unlinked.length >= 3, "a cohort with at least three unconfigured courses exists locally");
+  const scope = chosen.cohort;
+  const courses = chosen.unlinked;
   const [first, second] = courses;
-  checks.push(`AI flows use ${empty.cohortCode} v${empty.version} (${empty.courseCount} courses, none configured)`);
+  assert.equal((await call("GET", `/courses?cohort=${scope};`)).status, 400, "the cohort filter is validated");
+  checks.push(`AI flows use the courses of ${scope} (${chosen.courses.length} courses, ${courses.length} without a configuration)`);
 
   // Status and an up-to-date worker heartbeat.
   assert.equal((await ai("GET", "/status")).body.worker.online, false);
   await worker("/heartbeat", { kinds: [KIND] });
   assert.equal((await ai("GET", "/status")).body.worker.supportsSuggestions, true);
-  assert.deepEqual((await ai("POST", "", { body: { revisionId: empty.revisionId, code: first.code, mode: "weights" } })).body.error, "course_has_no_links");
-  assert.equal((await ai("POST", "", { body: { revisionId: empty.revisionId, code: "XX999", mode: "links" } })).body.error, "course_not_found");
-  checks.push("a worker advertising the kind is reported as supporting it; weights for a course without links is 409 course_has_no_links");
+  assert.deepEqual((await ai("POST", "", { body: { courseId: first.id, mode: "weights" } })).body.error, "course_has_no_links");
+  assert.equal((await ai("POST", "", { body: { courseId: randomUUID(), mode: "links" } })).body.error, "course_not_found");
+  assert.equal((await ai("POST", "", { body: { revisionId: randomUUID(), code: first.code, mode: "links" } })).status, 400, "proposals are asked by course id");
+  checks.push("a worker advertising the kind is reported as supporting it; weights for a course without links is 409 course_has_no_links; an unknown course is 404");
 
   // Links: queue, claim (no key maps), simulated answer, review, apply.
-  const queued = await ai("POST", "", { body: { revisionId: empty.revisionId, code: first.code, mode: "links" } });
+  const queued = await ai("POST", "", { body: { courseId: first.id, mode: "links" } });
   assert.equal(queued.status, 201, JSON.stringify(queued.body));
   assert.equal(queued.body.suggestion.status, "queued");
-  assert.equal((await ai("POST", "", { body: { revisionId: empty.revisionId, code: first.code, mode: "links" } })).body.suggestion.id, queued.body.suggestion.id);
+  assert.equal(queued.body.suggestion.courseId, first.id);
+  assert.equal((await ai("POST", "", { body: { courseId: first.id, mode: "links" } })).body.suggestion.id, queued.body.suggestion.id);
   const linksJob = await claim();
   assert.equal(linksJob.kind, KIND);
   assert.equal(linksJob.promptVersion, COURSE_AI_PROMPT_VERSIONS.links);
   assert.deepEqual(Object.keys(linksJob).sort(), ["id", "kind", "leaseToken", "options", "promptVersion", "schema", "system", "think", "user"], "the claim carries no key map");
   assert.equal(linksJob.think, true, "course proposals run with Gemma's thinking mode");
   assert.equal(linksJob.options.num_predict, 8192);
+  assert(linksJob.user.includes(first.code), "the job describes the shared course");
   assert.equal((await worker("/claim", { kinds: ["competency_course_suggestion"] })).body.job, null, "a worker released before thinking gets no course job");
   const offered = candidates(linksJob.user);
   const profiles = offered.filter((entry) => entry.group !== "kỹ năng nghề, chưa có nhóm");
@@ -219,7 +227,7 @@ try {
   assert.equal(proposal.items.at(-1).isNewSkill, true);
   if (careerOnly) assert.equal(proposal.items[2].hasProfile, false);
   assert.equal(proposal.items.reduce((sum, item) => sum + item.percent, 0), 100, "the proposal's percents add up to 100");
-  assert.equal((await ai("GET", `/latest?revisionId=${empty.revisionId}&code=${first.code}&mode=links`)).body.suggestion.id, linksJob.id);
+  assert.equal((await ai("GET", `/latest?courseId=${first.id}&mode=links`)).body.suggestion.id, linksJob.id);
   const skillsBefore = await count("career_skills WHERE deleted_at IS NULL");
   const profilesBefore = await count("ad_comp_skills WHERE deleted_at IS NULL");
   const keep = (item) => ({ skillId: item.skillId, skillName: item.skillId ? "" : item.skillName, groupId: item.groupId, percent: item.percent });
@@ -229,16 +237,18 @@ try {
   const applied = await ai("POST", `/${linksJob.id}/apply`, { body: { status: "draft", items: proposal.items.map(keep) } });
   assert.equal(applied.status, 201, JSON.stringify(applied.body));
   assert.equal(applied.body.course.status, "draft");
+  assert.equal(applied.body.course.courseId, first.id);
   assert.equal(applied.body.course.links.length, proposal.items.length);
   assert(Math.abs(applied.body.course.links.reduce((sum, link) => sum + link.weight, 0) - 1) < 1e-9, "the links carry the reviewed weights (100%)");
   assert.equal(await count("career_skills WHERE deleted_at IS NULL"), skillsBefore + 1, "the new skill joins the shared catalog");
   assert.equal(await count("ad_comp_skills WHERE deleted_at IS NULL"), profilesBefore + (careerOnly ? 2 : 1), "profiles for the career skill and the new skill");
   assert.equal((await ai("POST", `/${linksJob.id}/apply`, { body: { status: "draft", items: [keep(proposal.items[0])] } })).body.error, "suggestion_already_applied");
-  assert.equal((await ai("GET", `/latest?revisionId=${empty.revisionId}&code=${first.code}&mode=links`)).body.suggestion, null);
-  checks.push(`links: claim without key maps, ${proposal.items.length} proposed skills (repeat dropped, key in prose named), apply saves them with the reviewed weights (100%) as a draft, adds the new skill to the shared catalog and creates the missing profiles; a second apply is 409`);
+  assert.equal((await ai("GET", `/latest?courseId=${first.id}&mode=links`)).body.suggestion, null);
+  assert.equal(await count("ad_comp_course_configs WHERE course_id=$1 AND revision_id IS NULL", [first.id]), 1, "a new configuration belongs to the course, not to a revision");
+  checks.push(`links: claim without key maps, ${proposal.items.length} proposed skills (repeat dropped, key in prose named), apply saves them with the reviewed weights (100%) as a draft of the shared course, adds the new skill to the shared catalog and creates the missing profiles; a second apply is 409`);
 
   // Weights (API only: "Thêm trọng số (AI)" has no button since 2026-10-20): AI percents scaled to 100, applied.
-  const weightsQueued = await ai("POST", "", { body: { revisionId: empty.revisionId, code: first.code, mode: "weights" } });
+  const weightsQueued = await ai("POST", "", { body: { courseId: first.id, mode: "weights" } });
   assert.equal(weightsQueued.status, 201, JSON.stringify(weightsQueued.body));
   const weightsJob = await claim();
   const linkedKeys = candidates(weightsJob.user).map((entry) => entry.key);
@@ -256,9 +266,9 @@ try {
   checks.push(`weights (API only, no button): the model's ${linkedKeys.length} percents are scaled to exactly 100, a mismatched link set is 409 links_changed, and apply activates the course`);
 
   // Links on a course that has links: the linked skills are offered as "đã liên kết" and always kept;
-  // one the model leaves out comes back at 0%. Then the whole-program run.
+  // one the model leaves out comes back at 0%. Then the run over the courses of the cohort.
   const linkedNow = activated.body.course.links.map((link) => link.skillId);
-  const more = await ai("POST", "", { body: { revisionId: empty.revisionId, code: first.code, mode: "links" } });
+  const more = await ai("POST", "", { body: { courseId: first.id, mode: "links" } });
   const moreJob = await claim();
   assert.equal(moreJob.user.split("\n").filter((line) => / \| đã liên kết$/.test(line)).length, linkedNow.length, "every linked skill is offered, marked");
   const linkedNames = activated.body.course.links.map((link) => link.skillName);
@@ -276,33 +286,36 @@ try {
   assert.equal(kept.body.course.links.length, linkedNow.length + 1);
   checks.push(`links on a linked course: ${linkedNow.length} linked skills offered as "đã liên kết", left out ones come back at 0%, a review without them is 409 links_changed, apply keeps them and activates at 100%`);
 
-  const batch = await ai("POST", "/batches", { body: { revisionId: empty.revisionId } });
+  const ids = courses.map((course) => course.id);
+  const linkedInScope = chosen.courses.length - courses.length;
+  const batch = await ai("POST", "/batches", { body: { cohort: scope } });
   assert.equal(batch.status, 201, JSON.stringify(batch.body));
-  assert.equal(batch.body.skipped.linked, 1, "the configured course is skipped");
+  assert.equal(batch.body.skipped.linked, linkedInScope + 1, "the configured courses of the cohort are skipped");
   const total = batch.body.queued;
   assert.equal(total, courses.length - 1);
-  assert.equal((await ai("POST", "/batches", { body: { revisionId: empty.revisionId } })).body.queued, 0, "a second run queues nothing while the first is pending");
+  assert.equal((await ai("POST", "/batches", { body: { cohort: scope } })).body.queued, 0, "a second run queues nothing while the first is pending");
   let done = 0, emptyAnswers = 0;
   for (;;) {
     const job = await claim();
     if (!job) break;
     assert.equal(job.promptVersion, COURSE_AI_PROMPT_VERSIONS.full);
-    if (done % 5 === 4) emptyAnswers += 1;
+    if (done % 3 === 2) emptyAnswers += 1;
     const keys = candidates(job.user);
-    // Every 5th course gets an empty answer (a course with no matching skill); the rest two skills 70/30.
-    const output = done % 5 === 4 ? { links: [] } : { links: [
+    // Every 3rd course gets an empty answer (a course with no matching skill); the rest two skills 70/30.
+    const output = done % 3 === 2 ? { links: [] } : { links: [
       { skillKey: keys[0].key, groupKey: "G1", percent: 70, reason: "Trọng tâm." },
       { skillKey: keys[1].key, groupKey: "G1", percent: 30, reason: "Phụ." }] };
     assert.deepEqual((await complete(job, output)).body, { ok: true });
     done += 1;
   }
   assert.equal(done, total);
-  const progress = (await ai("GET", `/batches/latest?revisionId=${empty.revisionId}`)).body.batch;
+  const progress = (await ai("GET", "/batches/latest")).body.batch;
   assert.deepEqual([progress.total, progress.completed, progress.queued, progress.failed], [total, total, 0, 0]);
+  assert(progress.items.every((item) => item.courseId && item.courseName && ids.includes(item.courseId)), "run items carry the shared course and its name");
   // An empty answer = no skill of the catalog fits the course: counted apart, never as ready or saved.
   assert.equal(progress.noMatch, emptyAnswers);
   assert.equal(progress.ready, total - emptyAnswers);
-  assert.equal(progress.items.filter((item) => item.noMatch).length, emptyAnswers);
+  assert.equal(progress.items.filter((item) => item.noMatch && !item.linked).length, emptyAnswers);
   const drafts = await ai("POST", `/batches/${progress.id}/apply`, { body: { status: "draft" } });
   assert.equal(drafts.status, 200, JSON.stringify(drafts.body));
   assert.equal(drafts.body.drafted + drafts.body.empty, total);
@@ -310,65 +323,63 @@ try {
   assert.equal(drafts.body.empty, emptyAnswers);
   assert.equal(drafts.body.batch.applied, drafts.body.drafted, "an empty answer is not counted as saved");
   assert.equal(drafts.body.batch.noMatch, emptyAnswers);
-  const configured = await count("ad_comp_course_configs WHERE revision_id=$1 AND status='draft'", [empty.revisionId]);
-  assert.equal(configured, drafts.body.drafted);
-  const totals = (await pool.query(`SELECT c.course_code,sum(l.weight)::float8 AS total FROM ad_comp_course_configs c JOIN ad_comp_course_links l ON l.config_id=c.id
-    WHERE c.revision_id=$1 AND c.status='draft' GROUP BY c.course_code`, [empty.revisionId])).rows;
+  assert.equal(await count("ad_comp_course_configs WHERE course_id=ANY($1::uuid[]) AND status='draft'", [ids]), drafts.body.drafted);
+  const totals = (await pool.query(`SELECT c.course_id,sum(l.weight)::float8 AS total FROM ad_comp_course_configs c JOIN ad_comp_course_links l ON l.config_id=c.id
+    WHERE c.course_id=ANY($1::uuid[]) AND c.status='draft' GROUP BY c.course_id`, [ids])).rows;
   assert(totals.every((row) => Math.abs(row.total - 1) < 1e-9), "every draft adds up to 100%");
   assert.equal((await ai("POST", `/batches/${progress.id}/apply`, { body: { status: "active" } })).body.drafted, 0, "nothing is applied twice");
-  checks.push(`whole program: ${total} courses queued (the configured one skipped, a second run queues nothing), ${drafts.body.drafted} saved as drafts at 100% and ${drafts.body.empty} empty answers counted as "chưa có kỹ năng phù hợp" (never as saved), nothing applied twice`);
+  checks.push(`run over ${scope}: ${total} courses queued (${linkedInScope + 1} configured ones skipped, a second run queues nothing), ${drafts.body.drafted} saved as drafts at 100% and ${drafts.body.empty} empty answers counted as "chưa có kỹ năng phù hợp" (never as saved), nothing applied twice`);
 
-  // "Áp dụng bản nháp": the drafts of the run become active at once; a draft without links is skipped.
-  assert.equal((await call("POST", "/courses/activate", { body: { revisionId: empty.revisionId } })).status, 400, "the confirmation is required");
-  const activatedRun = await call("POST", "/courses/activate", { body: { revisionId: empty.revisionId, confirmed: true } });
+  // "Áp dụng bản nháp": the drafts of the cohort's courses become active at once.
+  assert.equal((await call("POST", "/courses/activate", { body: { cohort: scope } })).status, 400, "the confirmation is required");
+  const activatedRun = await call("POST", "/courses/activate", { body: { cohort: scope, confirmed: true } });
   assert.equal(activatedRun.status, 200, JSON.stringify(activatedRun.body));
   assert.deepEqual(activatedRun.body, { activated: drafts.body.drafted, skipped: [] });
-  assert.equal(await count("ad_comp_course_configs WHERE revision_id=$1 AND status='draft'", [empty.revisionId]), 0);
-  assert.equal(await count("ad_comp_course_configs WHERE revision_id=$1 AND status='active'", [empty.revisionId]), drafts.body.drafted + 1);
+  assert.equal(await count("ad_comp_course_configs WHERE course_id=ANY($1::uuid[]) AND status='draft'", [ids]), 0);
+  assert.equal(await count("ad_comp_course_configs WHERE course_id=ANY($1::uuid[]) AND status='active'", [ids]), drafts.body.drafted + 1);
   checks.push(`applying the drafts activates all ${drafts.body.drafted} drafts of the run at once (confirmation required)`);
 
-  // "Xóa liên kết của cả chương trình": every linked course becomes an empty draft, then a new run covers them all.
-  const linkedBefore = (await call("GET", `/courses?revisionId=${empty.revisionId}`)).body.items.filter((course) => course.skillCount > 0).length;
-  assert.equal((await call("POST", "/courses/clear", { body: { revisionId: empty.revisionId, confirm: "K00" } })).body.error, "confirmation_mismatch");
-  assert.equal((await call("POST", "/courses/clear", { user: "student", body: { revisionId: empty.revisionId, confirm: empty.cohortCode } })).status, 403);
-  const clearedRun = await call("POST", "/courses/clear", { body: { revisionId: empty.revisionId, confirm: empty.cohortCode.toLowerCase() } });
+  // "Xóa liên kết của N môn": every linked course of the cohort becomes an empty draft, then a new run covers them all.
+  const linkedBefore = (await call("GET", `/courses?cohort=${scope}`)).body.items.filter((course) => course.skillCount > 0).length;
+  assert.equal((await call("POST", "/courses/clear", { body: { cohort: scope, confirm: "K00" } })).body.error, "confirmation_mismatch");
+  assert.equal((await call("POST", "/courses/clear", { body: { cohort: "", confirm: scope } })).body.error, "confirmation_mismatch", "without a filter the admin types TẤT CẢ");
+  assert.equal((await call("POST", "/courses/clear", { user: "student", body: { cohort: scope, confirm: scope } })).status, 403);
+  const clearedRun = await call("POST", "/courses/clear", { body: { cohort: scope, confirm: scope.toLowerCase() } });
   assert.equal(clearedRun.status, 200, JSON.stringify(clearedRun.body));
   assert.equal(clearedRun.body.cleared, linkedBefore);
-  const afterClear = (await call("GET", `/courses?revisionId=${empty.revisionId}`)).body.items;
-  assert(afterClear.every((course) => course.skillCount === 0), "no course keeps a link");
-  assert.equal(await count("ad_comp_course_configs WHERE revision_id=$1 AND status='active'", [empty.revisionId]), 0);
-  const clearedHistory = (await call("GET", `/courses/${empty.revisionId}/${first.code}`)).body.history;
-  assert.equal(clearedHistory[0].note, "Xóa liên kết và trọng số của cả chương trình");
-  const emptyDrafts = await call("POST", "/courses/activate", { body: { revisionId: empty.revisionId, confirmed: true } });
+  const afterClear = (await call("GET", `/courses?cohort=${scope}`)).body.items;
+  assert(afterClear.every((course) => course.skillCount === 0), "no course of the cohort keeps a link");
+  const clearedHistory = (await call("GET", `/courses/${first.id}`)).body.history;
+  assert.equal(clearedHistory[0].note, `Xóa liên kết và trọng số của các môn học ${scope}`);
+  const emptyDrafts = await call("POST", "/courses/activate", { body: { cohort: scope, confirmed: true } });
   assert.equal(emptyDrafts.body.activated, 0);
   assert(emptyDrafts.body.skipped.length === linkedBefore && emptyDrafts.body.skipped.every((item) => item.reason === "course_has_no_links"), "empty drafts are skipped");
-  const rerun = await ai("POST", "/batches", { body: { revisionId: empty.revisionId } });
-  assert.equal(rerun.body.queued, courses.length, "after clearing, a run covers every course again");
+  const rerun = await ai("POST", "/batches", { body: { cohort: scope } });
+  assert.equal(rerun.body.queued, afterClear.length, "after clearing, a run covers every course of the cohort again");
   await ai("POST", `/batches/${rerun.body.batchId}/cancel`, { body: {} });
-  checks.push(`clearing the whole program needs the cohort code, empties ${linkedBefore} linked courses as drafts with a history entry, and a new run covers all ${courses.length} courses`);
+  checks.push(`clearing the courses of ${scope} needs the cohort code (TẤT CẢ without a filter), empties ${linkedBefore} linked shared courses as drafts with a history entry, and a new run covers all ${afterClear.length} courses`);
 
   // "Thêm kỹ năng (AI)" was removed: its API is gone and migration 036 cancels its pending proposals.
-  assert.equal((await ai("POST", "/skills", { body: { revisionId: empty.revisionId } })).status, 404);
+  assert.equal((await ai("POST", "/skills", { body: { cohort: scope } })).status, 404);
+  const anyRevision = (await pool.query("SELECT revision_id,code FROM curriculum_courses WHERE course_id=$1 ORDER BY revision_id LIMIT 1", [second.id])).rows[0];
   const leftover = randomUUID();
   await pool.query(`INSERT INTO ad_comp_ai_suggestions(id,revision_id,course_code,mode,status,ai_input,prompt_version)
-    VALUES($1,$2,NULL,'skills','queued','{}','comp-skill-v2')`, [leftover, empty.revisionId]);
+    VALUES($1,$2,NULL,'skills','queued','{}','comp-skill-v2')`, [leftover, anyRevision.revision_id]);
   await pool.query(inSchema(await readFile("apps/api/migrations/036_cancel_competency_ai_skills.sql", "utf8")));
   assert.deepEqual((await pool.query("SELECT status,ai_input FROM ad_comp_ai_suggestions WHERE id=$1", [leftover])).rows[0], { status: "cancelled", ai_input: null });
   checks.push("the removed \"Thêm kỹ năng (AI)\" answers 404 and migration 036 cancels a pending proposal of it");
 
-  // Cancel a run, expiry, and the public schema.
-  const second2 = revisions.find((item) => item.revisionId !== empty.revisionId && item.configuredCount === 0 && item.courseCount >= 2);
-  if (second2) {
-    const other = await ai("POST", "/batches", { body: { revisionId: second2.revisionId } });
-    assert.equal(other.status, 201, JSON.stringify(other.body));
-    const cancelled = await ai("POST", `/batches/${other.body.batchId}/cancel`, { body: {} });
-    assert.equal(cancelled.body.batch.cancelled, other.body.queued);
-    assert.equal(await claim(), null, "a cancelled run leaves nothing to claim");
-    checks.push(`cancelling a run of ${other.body.queued} courses leaves nothing for the worker`);
-  }
+  // A run over every course (no filter) can be cancelled; expiry; the public schema.
+  const everything = await ai("POST", "/batches", { body: {} });
+  assert.equal(everything.status, 201, JSON.stringify(everything.body));
+  assert(everything.body.queued >= afterClear.length, "without a filter the run covers the unlinked courses of every cohort");
+  const cancelled = await ai("POST", `/batches/${everything.body.batchId}/cancel`, { body: {} });
+  assert.equal(cancelled.body.batch.cancelled, everything.body.queued);
+  assert.equal(await claim(), null, "a cancelled run leaves nothing to claim");
+  checks.push(`a run over every course (${everything.body.queued} unlinked) is cancelled and leaves nothing for the worker`);
   const stale = randomUUID();
-  await pool.query(`INSERT INTO ad_comp_ai_suggestions(id,revision_id,course_code,mode,status,ai_input,prompt_version,created_at)
-    VALUES($1,$2,$3,'links','queued','{}','comp-link-v1',now()-interval '25 hours')`, [stale, empty.revisionId, second.code]);
+  await pool.query(`INSERT INTO ad_comp_ai_suggestions(id,course_id,revision_id,course_code,mode,status,ai_input,prompt_version,created_at)
+    VALUES($1,$2,$3,$4,'links','queued','{}','comp-link-v1',now()-interval '25 hours')`, [stale, second.id, anyRevision.revision_id, anyRevision.code]);
   await expireCourseSuggestions(pool);
   assert.deepEqual((await pool.query("SELECT status,error_code,ai_input FROM ad_comp_ai_suggestions WHERE id=$1", [stale])).rows[0],
     { status: "failed", error_code: "worker_timeout", ai_input: null });

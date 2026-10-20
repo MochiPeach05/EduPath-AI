@@ -65,7 +65,7 @@ Phần "Xét tốt nghiệp (tham khảo)" của trang `#competency` **không** 
 ### Chọn phiên bản dữ liệu
 
 - CTĐT: bản đang áp dụng của khóa sinh viên (nhiều bản → `curriculum_ambiguous`).
-- Trọng số: revision mới nhất của cùng CTĐT có ít nhất một cấu hình đang áp dụng.
+- Trọng số (từ 20/10/2026, migration 038): cấu hình đang áp dụng của các **môn học dùng chung** có trong CTĐT hiện hành của khóa, khớp theo môn (mã, tên, tín chỉ; bỏ qua hoa thường và khoảng trắng). Một môn có một cấu hình cho mọi khóa, nên `meta.weights` luôn là CTĐT hiện hành và cảnh báo `weights_revision_differs` không còn xuất hiện. Không có môn nào có cấu hình đang áp dụng → `competency_weights_unavailable`. Trước đó trọng số lấy từ revision mới nhất của cùng CTĐT có cấu hình. Xem `docs/competency-management.md`.
 - Tiêu chuẩn tốt nghiệp: bộ chọn chung `apps/api/src/graduation/resolve.ts` (cùng trang Điều kiện xét tốt nghiệp và lời khuyên AI): tiêu chuẩn đang mở của khóa, bản hiện hành, chọn theo chuyên ngành với định danh đầy đủ (chuyên ngành, khối lớp, mã tiêu chuẩn); `gpaScale` mặc định 4. Quy tắc `specialty`/`general`/`specialty_unset`/`not_found`/`ambiguous`: xem `docs/graduation-standards.md`.
 - KHĐT: bản gắn với CTĐT, rồi bản cùng định danh; còn lại → ghi là chưa xác định.
 - Mỗi kết quả lưu `meta` (phiên bản bảng điểm, CTĐT, trọng số, tiêu chuẩn tốt nghiệp `graduationStandardId`/`RevisionId`/`Version`, `calcVersion`, `promptVersion`). Kết quả không bị xóa theo thời gian; chỉ giữ 20 bản mới nhất mỗi sinh viên.
@@ -151,7 +151,7 @@ Chế độ suy luận (comp-v7, 18/10/2026, `num_gpu` 38): 6 hồ sơ tổng h�
 
 ## Giới hạn hiện tại
 
-- Chỉ K29 có trọng số kỹ năng.
+- Trọng số kỹ năng được nhập cho K29; từ 20/10/2026 các khóa khác dùng chung cấu hình của những môn trùng (dữ liệu cục bộ: K30 85/87 môn, K31 85/89, K32 72/81). Môn chỉ có ở khóa sau vẫn cần cấu hình riêng.
 - Khoảng 30 kỹ năng nghề chưa có học phần đo (hiện là "Chưa đủ dữ liệu").
 - Chưa có yêu cầu nghề nào được đánh dấu "Bắt buộc".
 - STU-COMP-07 tính lại theo bảng điểm nên phản ánh năng lực tại từng học kỳ theo **trọng số và CTĐT hiện hành**, không phải điểm đã từng hiển thị lúc đó. STU-GAP-07 (comp-calc-v9) cũng vậy với kỹ năng của nghề mục tiêu hiện tại.

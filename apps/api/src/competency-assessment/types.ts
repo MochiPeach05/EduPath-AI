@@ -65,7 +65,7 @@ export type CurriculumInput = {
 
 /** One ad_comp_course_links row (weight > 0) of an ACTIVE config in the weights revision (ORDER BY course_code, skill_id). */
 export type WeightLinkInput = {
-  /** ad_comp_course_configs.course_code; matched to the current curriculum by code. */
+  /** The code of the current curriculum's row whose shared course has the configuration. */
   courseCode: string;
   /** ad_comp_course_links.skill_id */
   skillId: string;
@@ -88,11 +88,14 @@ export type WeightSkillInput = {
 };
 
 export type WeightsInput = {
-  /** Newest revision of the same curriculum with ≥1 active ad_comp_course_configs row (§2.3). */
+  /**
+   * The student's current curriculum revision: since migration 038 a course ("môn học") has one
+   * configuration for every cohort, so the weights are always those of the current revision (§2.3).
+   */
   revisionId: string;
   /** curriculum_revisions.version of that revision. */
   version: number;
-  /** count(*) of active ad_comp_course_configs in that revision. */
+  /** count(*) of the active configurations of that revision's courses. */
   activeCount: number;
   /** max(updated_at) of those active configs, ISO string, or null. */
   maxConfigUpdatedAt: string | null;

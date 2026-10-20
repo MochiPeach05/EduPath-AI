@@ -9,7 +9,7 @@ export const adminNavigation = [
   { path: "/quantri/vi-tri-nghe-nghiep", label: "Nghề nghiệp", eyebrow: "QUẢN LÝ NGHỀ NGHIỆP", icon: "users" },
   { path: "/quantri/nhom-nang-luc", label: "Nhóm năng lực", eyebrow: "QUẢN LÝ NĂNG LỰC", icon: "book" },
   { path: "/quantri/cau-hinh-nang-luc", label: "Cấu hình năng lực", eyebrow: "QUẢN LÝ NĂNG LỰC", icon: "profile" },
-  { path: "/quantri/cau-hinh-hoc-phan", label: "Cấu hình học phần", eyebrow: "QUẢN LÝ NĂNG LỰC", icon: "chart" }
+  { path: "/quantri/cau-hinh-mon-hoc", label: "Cấu hình môn học", eyebrow: "QUẢN LÝ NĂNG LỰC", icon: "chart" }
 ] as const;
 export type AdminPage = (typeof adminNavigation)[number];
 
@@ -20,13 +20,15 @@ export type AdminPage = (typeof adminNavigation)[number];
 const adminNavigationGroups = [
   // In the order they are set up: fields, then the shared skills, then the careers that use both.
   { id: "careers", label: "Quản lý nghề nghiệp", icon: "briefcase", paths: ["/quantri/linh-vuc-nghe-nghiep", "/quantri/ky-nang", "/quantri/vi-tri-nghe-nghiep"] },
-  { id: "competencies", label: "Quản lý năng lực", icon: "target", paths: ["/quantri/nhom-nang-luc", "/quantri/cau-hinh-nang-luc", "/quantri/cau-hinh-hoc-phan"] }
+  { id: "competencies", label: "Quản lý năng lực", icon: "target", paths: ["/quantri/nhom-nang-luc", "/quantri/cau-hinh-nang-luc", "/quantri/cau-hinh-mon-hoc"] }
 ] as const;
 
 /** Pages that moved: an old link opens the page that replaced it. */
 const adminPathAliases: Record<string, string> = {
   // "Năng lực" (one page with three tabs) became the three pages of "Quản lý năng lực" on 2026-10-17.
-  "/quantri/danh-gia-nang-luc": "/quantri/nhom-nang-luc"
+  "/quantri/danh-gia-nang-luc": "/quantri/nhom-nang-luc",
+  // "Cấu hình học phần" (per CTĐT revision) became "Cấu hình môn học" (shared courses) on 2026-10-20.
+  "/quantri/cau-hinh-hoc-phan": "/quantri/cau-hinh-mon-hoc"
 };
 
 type AdminSidebarEntry =

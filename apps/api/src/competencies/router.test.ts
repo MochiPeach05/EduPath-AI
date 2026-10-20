@@ -8,32 +8,33 @@ import { createCompetenciesRouter } from "./router.js";
 
 const actorId = "11111111-1111-4111-8111-111111111111";
 const version = "22222222-2222-4222-8222-222222222222";
-const revisionId = "33333333-3333-4333-8333-333333333333";
+const courseId = "33333333-3333-4333-8333-333333333333";
 const skillId = "44444444-4444-4444-8444-444444444444";
 const secondSkillId = "55555555-5555-4555-8555-555555555555";
 const groupId = "66666666-6666-4666-8666-666666666666";
 const configId = "77777777-7777-4777-8777-777777777777";
 const origin = "https://edupath.example";
-const coursePath = `/competencies/courses/${revisionId}/A101`;
+const coursePath = `/competencies/courses/${courseId}`;
 const groupData = { name: "Chuyên môn", description: "Kỹ năng chuyên môn", isActive: true };
 const activeData = { status: "active", links: [{ skillId, weight: 1 }], note: "Rà soát phân bổ" };
 
 function setup(options: { role?: AuthenticatedUser["role"] | null; revokedAtWrite?: boolean; missingDatabase?: boolean;
-  duplicateCourse?: boolean; existingConfig?: boolean; inactiveGroup?: boolean; groupUsed?: boolean; deferredFailure?: boolean } = {}) {
+  missingCourse?: boolean; existingConfig?: boolean; inactiveGroup?: boolean; groupUsed?: boolean; deferredFailure?: boolean } = {}) {
   const role = options.role === undefined ? "admin" : options.role;
   const user = role ? { userId: actorId, tenantId: actorId, role } as AuthenticatedUser : undefined;
   const group = { id: groupId, ...groupData, version, skillCount: 0 };
-  const course = { code: "A101", name: "Lập trình", credits: 3, type: "BB", block: "Chuyên môn", specialty: "" };
-  const revision = { curriculumId: actorId, revisionId, cohortCode: "K29", name: "CTĐT K29", version: 1,
-    isCurrent: true, isActive: true, data: { courses: options.duplicateCourse ? [course, course] : [course] } };
   let configExists = options.existingConfig ?? false;
   let configVersion = version;
   let configStatus = "active";
-  let savedLinks = [{ skillId, skillName: "Lập trình", groupId, groupName: group.name, isActive: true, weight: 1 }];
+  let savedLinks = configExists ? [{ skillId, skillName: "Lập trình", groupId, groupName: group.name, isActive: true, weight: 1 }] : [];
+  // A shared course ("môn học", migration 038) as the course list query returns it.
+  const course = () => ({ id: courseId, code: "A101", name: "Lập trình", credits: 3, type: "BB", block: "Chuyên môn", specialty: "", cohorts: ["K29", "K30"],
+    pastCohorts: [], configId: configExists ? configId : null, status: configExists ? configStatus : "missing", version: configExists ? configVersion : null,
+    note: "", mergedFrom: [], skillCount: configExists ? savedLinks.length : 0, totalWeight: configExists ? savedLinks.reduce((sum, link) => sum + link.weight, 0) : 0 });
   const rows = (items: Record<string, unknown>[] = []) => ({ rows: items, rowCount: items.length });
   const query = vi.fn(async (sql: string) => {
     if (sql.includes("FROM users")) return rows([{ id: actorId }]);
-    if (sql.includes("FROM curriculum_revisions r JOIN curricula c")) return rows([revision]);
+    if (sql.startsWith("WITH occ AS")) return rows(options.missingCourse ? [] : [course()]);
     if (sql.includes("FROM ad_comp_groups g")) return rows([group]);
     return rows();
   });
@@ -41,12 +42,11 @@ function setup(options: { role?: AuthenticatedUser["role"] | null; revokedAtWrit
     if (sql.includes("FROM users")) return rows(options.revokedAtWrite ? [] : [{ id: actorId }]);
     if (sql === "COMMIT" && options.deferredFailure)
       throw Object.assign(new Error("competency_weight_total"), { code: "23514", constraint: "competency_active_total" });
-    if (sql.includes("FROM curriculum_revisions r JOIN curricula c")) return rows([revision]);
+    if (sql.startsWith("WITH occ AS")) return rows(options.missingCourse ? [] : [course()]);
     if (sql.startsWith("SELECT id,version FROM ad_comp_course_configs")) return rows(configExists ? [{ id: configId, version: configVersion }] : []);
     if (sql.startsWith("SELECT id,version,status,note")) return rows(configExists ? [{ id: configId, version: configVersion, status: configStatus, note: "" }] : []);
-    if (sql.startsWith("SELECT id,course_code")) return rows(configExists ? [{ id: configId, courseCode: "A101", status: configStatus, version: configVersion, note: activeData.note }] : []);
     if (sql.includes("s.id=ANY")) return rows((values?.[0] as string[]).map(id => ({ id, name: "Lập trình", isActive: true, groupActive: !options.inactiveGroup })));
-    if (sql.startsWith("INSERT INTO ad_comp_course_configs")) { configExists = true; configVersion = skillId; configStatus = String(values?.[3]); return rows(); }
+    if (sql.startsWith("INSERT INTO ad_comp_course_configs")) { configExists = true; configVersion = skillId; configStatus = String(values?.[2]); return rows(); }
     if (sql.startsWith("UPDATE ad_comp_course_configs SET status='archived'")) { configStatus = "archived"; configVersion = String(values?.[1]); return rows(); }
     if (sql.startsWith("UPDATE ad_comp_course_configs SET status=")) { configStatus = String(values?.[1]); configVersion = String(values?.[3]); return rows(); }
     if (sql.startsWith("DELETE FROM ad_comp_course_links")) { savedLinks = []; return rows(); }
@@ -127,13 +127,35 @@ describe("competency administration API", () => {
     expect(clientQuery.mock.calls.some(([sql]) => sql.startsWith("DELETE FROM ad_comp_course_links"))).toBe(false);
   });
 
-  it("blocks draft and active saves for repeated curriculum course rows", async () => {
-    const { app, clientQuery } = setup({ duplicateCourse: true });
-    for (const status of ["draft", "active"]) {
-      const result = await request(app).put(coursePath).set("Origin", origin).set("x-version", "new").send({ ...activeData, status }).expect(409);
-      expect(result.body.error).toBe("duplicate_curriculum_course");
-    }
+  it("answers course_not_found for a course that is not in any curriculum and writes nothing", async () => {
+    const { app, clientQuery } = setup({ missingCourse: true });
+    const result = await request(app).put(coursePath).set("Origin", origin).set("x-version", "new").send(activeData).expect(404);
+    expect(result.body.error).toBe("course_not_found");
+    expect(clientQuery).toHaveBeenCalledWith("ROLLBACK");
     expect(clientQuery.mock.calls.some(([sql]) => sql.startsWith("INSERT INTO ad_comp_course_configs"))).toBe(false);
+  });
+
+  it("creates one configuration for the shared course, whatever cohort it is opened from (2026-10-20)", async () => {
+    const { app, clientQuery } = setup();
+    const result = await request(app).put(coursePath).set("Origin", origin).set("x-version", "new").send(activeData).expect(200);
+    expect(result.body).toMatchObject({ courseId, courseCode: "A101", cohorts: ["K29", "K30"], status: "active", links: [{ skillId, weight: 1 }] });
+    const insert = clientQuery.mock.calls.find(([sql]) => sql.startsWith("INSERT INTO ad_comp_course_configs"));
+    expect(insert?.[0]).toContain("(id,course_id,status,note)");
+    expect(insert?.[1]?.[1]).toBe(courseId);
+    // The history is kept per course, so every cohort sees the same entries.
+    const event = clientQuery.mock.calls.find(([sql]) => sql.includes("INSERT INTO ad_comp_events"));
+    expect(event?.[1]?.slice(0, 2)).toEqual(["course", courseId]);
+  });
+
+  it("validates the cohort filter of the course list, the summary and the bulk actions", async () => {
+    const { app, connect } = setup();
+    await request(app).get("/competencies/courses?cohort=K29%3B").expect(400);
+    await request(app).get("/competencies/summary?revisionId=x").expect(400);
+    await request(app).post("/competencies/courses/clear").set("Origin", origin).send({ cohort: "K29", confirm: "K30" }).expect(400, { error: "confirmation_mismatch", details: [] });
+    await request(app).post("/competencies/courses/clear").set("Origin", origin).send({ cohort: "", confirm: "K29" }).expect(400, { error: "confirmation_mismatch", details: [] });
+    expect(connect).not.toHaveBeenCalled();
+    await request(app).get("/competencies/courses?cohort=K29").expect(200, { items: [{ id: courseId, code: "A101", name: "Lập trình", credits: 3, type: "BB", block: "Chuyên môn",
+      specialty: "", cohorts: ["K29", "K30"], pastCohorts: [], configId: null, status: "missing", version: null, mergedFrom: [], skillCount: 0, totalWeight: 0 }] });
   });
 
   it("prevents active allocations from using inactive groups and blocks group deactivation while in use", async () => {

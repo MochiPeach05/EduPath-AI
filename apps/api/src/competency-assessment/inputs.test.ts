@@ -6,7 +6,6 @@ import { AssessmentError, loadAssessmentInputs, readAssessmentInputs } from "./i
 const userId = "11111111-1111-4111-8111-111111111111";
 const curriculumId = "c0000000-0000-4000-8000-000000000001";
 const currentRevision = "c0000000-0000-4000-8000-000000000002";
-const olderRevision = "c0000000-0000-4000-8000-000000000003";
 const transcriptData = {
   schemaVersion: 1, parserVersion: "vlu-native-1", pageCount: 1, courseCount: 2, warnings: [],
   sections: [{
@@ -38,13 +37,14 @@ function fakeDb(overrides: Partial<Tables> = {}) {
     if (sql.includes("FROM curricula")) return rows(Array.from({ length: t.curricula }, (_, i) => ({
       id: i ? `other-${i}` : curriculumId, identity_key: "cong nghe thong tin:K29", revision_id: currentRevision, version: 3, name: "CTĐT K29", admission_year: 2023,
     })));
+    // Weights of the shared courses of the current revision (migration 038), before the plain course rows.
+    if (sql.includes("JOIN ad_comp_course_links")) return rows([{ course_code: "71ITBS10103", skill_id: "k1", weight: "0.5000000000" }]);
+    if (sql.includes("JOIN ad_comp_course_configs")) return rows([{ active_count: t.weights ? 5 : 0, max_updated: t.weights ? new Date("2026-10-01T00:00:00Z") : null }]);
     if (sql.includes("FROM curriculum_courses")) return rows([
       { code: "71ITBS10103", name: "Nhập môn Công nghệ thông tin", credits: "3", type: "BB", block: "Kiến thức cơ sở khối ngành", specialty: "", semester: 1, study_year: 1 },
       { code: "71PEKC10062", name: "Cờ vua", credits: "2", type: "TC002 (2TC)", block: "Giáo dục thể chất và giáo dục quốc phòng", specialty: "", semester: 2, study_year: 1 },
     ]);
     if (sql.includes("FROM curriculum_relations")) return rows([{ course_code: "71ITBS10103", kind: "prior", raw: "", target_codes: [], unresolved_codes: [], review_required: false }]);
-    if (sql.includes("FROM curriculum_revisions r JOIN ad_comp_course_configs")) return rows(t.weights ? [{ id: olderRevision, version: 2, active_count: 5, max_updated: new Date("2026-10-01T00:00:00Z") }] : []);
-    if (sql.includes("JOIN ad_comp_course_links")) return rows([{ course_code: "71ITBS10103", skill_id: "k1", weight: "0.5000000000" }]);
     if (sql.includes("FROM ad_comp_skills")) return rows([{ skill_id: "k1", name: "Lập trình", description: "", scope: "Phạm vi", group_id: "g1" }]);
     if (sql.includes("FROM ad_comp_groups")) return rows([{ id: "g1", name: "Chuyên môn" }]);
     if (sql.includes("FROM graduation_standards")) return rows([
@@ -72,7 +72,7 @@ describe("readAssessmentInputs", () => {
     expect(inputs.curriculum.courses[0]).toEqual({ code: "71ITBS10103", name: "Nhập môn Công nghệ thông tin", credits: 3, type: "BB",
       block: "Kiến thức cơ sở khối ngành", specialty: "", semester: 1, studyYear: 1 });
     expect(inputs.curriculum.relations).toHaveLength(1);
-    expect(inputs.weights).toMatchObject({ revisionId: olderRevision, version: 2, activeCount: 5, maxConfigUpdatedAt: "2026-10-01T00:00:00.000Z",
+    expect(inputs.weights).toMatchObject({ revisionId: currentRevision, version: 3, activeCount: 5, maxConfigUpdatedAt: "2026-10-01T00:00:00.000Z",
       links: [{ courseCode: "71ITBS10103", skillId: "k1", weight: 0.5 }], groups: [{ id: "g1", name: "Chuyên môn" }] });
     expect(inputs.graduation.resolution).toBe("specialty");
     expect(inputs.graduation.standard).toMatchObject({ id: "std-cndl", revisionId: "r2", version: 4, data: { gpaScale: 4 } });
@@ -83,8 +83,13 @@ describe("readAssessmentInputs", () => {
     expect(inputs.promptVersion).toBe("comp-v1");
     const calls = db.sql();
     expect(calls.some((sql) => /FOR (UPDATE|SHARE|NO KEY|KEY)/i.test(sql))).toBe(false);
-    for (const sql of calls.filter((text) => !/FROM (student_profiles|student_transcripts|career_positions) WHERE/.test(text)))
+    // Single-row reads need no order: the profile, the transcript, the career and the weight totals.
+    for (const sql of calls.filter((text) => !/FROM (student_profiles|student_transcripts|career_positions) WHERE|^SELECT count\(\*\)::int AS active_count/.test(text)))
       expect(sql).toMatch(/ORDER BY/);
+    // The weights are those of the shared courses of the current revision (migration 038).
+    const weightLinks = db.query.mock.calls.find(([sql]) => String(sql).includes("JOIN ad_comp_course_links"));
+    expect(String(weightLinks?.[0])).toContain("cfg.course_id=cc.course_id AND cfg.status='active'");
+    expect(weightLinks?.[1]).toEqual([currentRevision]);
     // Interests and career goals never leave the profile table.
     expect(calls.find((sql) => sql.includes("FROM student_profiles"))).not.toMatch(/interests|career_goal|full_name|student_code/);
     const catalog = db.query.mock.calls.find(([sql]) => String(sql).includes("course_catalog"));

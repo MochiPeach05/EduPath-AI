@@ -1,4 +1,4 @@
-// AI proposal jobs for the courses of a CTĐT revision. A row of ad_comp_ai_suggestions is queued
+// AI proposal jobs for the shared courses ("môn học", migration 038). A row of ad_comp_ai_suggestions is queued
 // inside the admin transaction and handed to the same AI worker as the other kinds
 // (/api/worker/competency-assessments, kind "competency_course_suggestion"); the worker router
 // calls the claim/extend/complete functions below. Rows are never deleted: they are the audit
@@ -17,7 +17,7 @@ import { CompetencyError } from "../model.js";
 import { buildCourseAiInput, type CourseAiInput, type CourseAiMode, type CourseAiSource } from "./prompt.js";
 import { courseAiContextFromInput, validateCourseAiOutput, type StoredCourseAiResult } from "./validate.js";
 
-/** At most this many queued/processing course proposals system-wide (a whole program fits). */
+/** At most this many queued/processing course proposals system-wide (every shared course fits). */
 const MAX_PENDING_COURSE_SUGGESTIONS = 300;
 /** Serializes the pending check and the queue-size check of concurrent requests. */
 const COURSE_SUGGESTION_QUEUE_LOCK = "edupath:competency-course-ai";
@@ -49,21 +49,12 @@ export function createCourseSuggestionExpiry(intervalMs: number = AI_HOUSEKEEPIN
   };
 }
 
-type RevisionRow = { cohortCode: string; name: string; version: number; courses: CurriculumCourse[] };
-type SharedSource = Pick<CourseAiSource, "curriculum" | "groups" | "profiles" | "careerSkills"> & { courses: Map<string, { course: CurriculumCourse; count: number }> };
+type SharedSource = Pick<CourseAiSource, "groups" | "profiles" | "careerSkills">;
+/** The curriculum row a course's AI input is read from, and its CTĐT. */
+type SourceRow = { courseId: string; revisionId: string; sourceCode: string; code: string; name: string; course: CurriculumCourse; cohortCode: string; curriculumName: string; version: number };
 
-/** The revision, its courses and the catalog shared by every course of one request. */
-async function loadSharedSource(client: Db, revisionId: string): Promise<SharedSource> {
-  const revision = await client.query<RevisionRow>(`SELECT c.cohort_code AS "cohortCode",COALESCE(r.data->>'name','') AS name,r.version,
-    COALESCE(r.data->'courses','[]'::jsonb) AS courses FROM curriculum_revisions r JOIN curricula c ON c.id=r.curriculum_id WHERE r.id=$1`, [revisionId]);
-  const row = revision.rows[0];
-  if (!row) throw new CompetencyError("curriculum_revision_not_found", 404);
-  const courses = new Map<string, { course: CurriculumCourse; count: number }>();
-  for (const course of Array.isArray(row.courses) ? row.courses : []) {
-    const previous = courses.get(course.code);
-    if (previous) previous.count += 1;
-    else courses.set(course.code, { course, count: 1 });
-  }
+/** The catalog shared by every course of one request. */
+async function loadSharedSource(client: Db): Promise<SharedSource> {
   const groups = await client.query<{ id: string; name: string }>(
     "SELECT id,name FROM ad_comp_groups WHERE deleted_at IS NULL AND is_active ORDER BY name,id");
   const profiles = await client.query<{ id: string; name: string; description: string; groupId: string }>(
@@ -78,49 +69,55 @@ async function loadSharedSource(client: Db, revisionId: string): Promise<SharedS
           WHERE r.skill_id=s.id AND r.deleted_at IS NULL AND p.deleted_at IS NULL)
         AND NOT EXISTS(SELECT 1 FROM ad_comp_skills cs WHERE cs.skill_id=s.id AND cs.deleted_at IS NULL)
       ORDER BY s.name,s.id`);
-  return {
-    curriculum: { cohortCode: row.cohortCode, name: row.name, version: row.version },
-    groups: groups.rows,
-    profiles: profiles.rows,
-    careerSkills: careerSkills.rows,
-    courses
-  };
+  return { groups: groups.rows, profiles: profiles.rows, careerSkills: careerSkills.rows };
 }
 
-/** Current links of every configured course of the revision (any status). */
-async function loadRevisionLinks(client: Db, revisionId: string) {
-  const result = await client.query<{ courseCode: string; skillId: string; name: string; groupId: string; description: string; weight: number }>(
-    `SELECT c.course_code AS "courseCode",l.skill_id AS "skillId",s.name,cs.group_id AS "groupId",
+/**
+ * The course data sent to the model: the row of the newest cohort whose current curriculum has the
+ * course (any revision when none does). The courses come back by code and name.
+ */
+async function loadSourceRows(client: Db, courseIds: string[]): Promise<SourceRow[]> {
+  const result = await client.query<SourceRow>(`SELECT * FROM (SELECT DISTINCT ON (cc.course_id) cc.course_id AS "courseId",
+      cc.revision_id AS "revisionId",cc.code AS "sourceCode",c.code,c.name,cc.data AS course,cu.cohort_code AS "cohortCode",COALESCE(r.data->>'name','') AS "curriculumName",r.version
+      FROM curriculum_courses cc JOIN ad_comp_courses c ON c.id=cc.course_id
+      JOIN curriculum_revisions r ON r.id=cc.revision_id JOIN curricula cu ON cu.id=r.curriculum_id
+      WHERE cc.course_id=ANY($1::uuid[])
+      ORDER BY cc.course_id,(cu.current_revision=r.id) DESC,NULLIF(regexp_replace(cu.cohort_code,'\\D','','g'),'')::int DESC NULLS LAST,
+        cu.cohort_code DESC,r.version DESC) x ORDER BY code,name,"courseId"`, [courseIds]);
+  return result.rows;
+}
+
+/** Current links of the courses (any status), by course id. */
+async function loadCourseLinks(client: Db, courseIds: string[]) {
+  const result = await client.query<{ courseId: string; skillId: string; name: string; groupId: string; description: string; weight: number }>(
+    `SELECT c.course_id AS "courseId",l.skill_id AS "skillId",s.name,cs.group_id AS "groupId",
       COALESCE(NULLIF(cs.scope,''),s.description) AS description,l.weight::float8 AS weight
       FROM ad_comp_course_configs c JOIN ad_comp_course_links l ON l.config_id=c.id
       JOIN ad_comp_skills cs ON cs.skill_id=l.skill_id JOIN career_skills s ON s.id=l.skill_id
-      WHERE c.revision_id=$1 ORDER BY c.course_code,s.name,s.id`, [revisionId]);
+      WHERE c.course_id=ANY($1::uuid[]) ORDER BY c.course_id,s.name,s.id`, [courseIds]);
   const byCourse = new Map<string, CourseAiSource["links"]>();
   for (const row of result.rows) {
-    const bucket = byCourse.get(row.courseCode) ?? [];
+    const bucket = byCourse.get(row.courseId) ?? [];
     bucket.push({ skillId: row.skillId, name: row.name, groupId: row.groupId, description: row.description, weight: row.weight });
-    byCourse.set(row.courseCode, bucket);
+    byCourse.set(row.courseId, bucket);
   }
   return byCourse;
 }
 
 const hour = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : null);
 
-/** One course of the shared source: course_not_found (404) or duplicate_curriculum_course (409). */
-function courseSource(shared: SharedSource, code: string, links: CourseAiSource["links"]): CourseAiSource {
-  const occurrence = shared.courses.get(code);
-  if (!occurrence) throw new CompetencyError("course_not_found", 404);
-  if (occurrence.count !== 1) throw new CompetencyError("duplicate_curriculum_course", 409, [code]);
-  const course = occurrence.course;
+/** One course: the shared catalog, its curriculum row and its links. */
+function courseSource(shared: SharedSource, row: SourceRow, links: CourseAiSource["links"]): CourseAiSource {
+  const course = row.course;
   return {
-    curriculum: shared.curriculum,
+    curriculum: { cohortCode: row.cohortCode, name: row.curriculumName, version: row.version },
     groups: shared.groups,
     profiles: shared.profiles,
     careerSkills: shared.careerSkills,
     links,
     course: {
-      code: course.code,
-      name: course.name,
+      code: row.code,
+      name: row.name,
       englishName: course.englishName ?? "",
       description: course.description ?? "",
       credits: Number(course.credits) || 0,
@@ -147,12 +144,14 @@ async function pendingCount(client: PoolClient) {
   return count.rows[0]?.count ?? 0;
 }
 
-async function insertJob(client: PoolClient, data: { revisionId: string; code: string; mode: CourseAiMode; requestedBy: string; batchId: string | null; input: CourseAiInput }) {
+/** revision_id and course_code name the curriculum row the course data was read from. */
+async function insertJob(client: PoolClient, data: { source: SourceRow; mode: CourseAiMode; requestedBy: string; batchId: string | null; input: CourseAiInput }) {
   const id = randomUUID();
   await client.query(
-    `INSERT INTO ad_comp_ai_suggestions(id,revision_id,course_code,mode,batch_id,requested_by,status,ai_input,prompt_version)
-      VALUES($1,$2,$3,$4,$5,$6,'queued',$7::jsonb,$8)`,
-    [id, data.revisionId, data.code, data.mode, data.batchId, data.requestedBy, JSON.stringify(data.input), data.input.promptVersion]);
+    `INSERT INTO ad_comp_ai_suggestions(id,course_id,revision_id,course_code,mode,batch_id,requested_by,status,ai_input,prompt_version)
+      VALUES($1,$2,$3,$4,$5,$6,$7,'queued',$8::jsonb,$9)`,
+    [id, data.source.courseId, data.source.revisionId, data.source.sourceCode, data.mode, data.batchId, data.requestedBy,
+      JSON.stringify(data.input), data.input.promptVersion]);
   return id;
 }
 
@@ -162,55 +161,56 @@ async function insertJob(client: PoolClient, data: { revisionId: string; code: s
  */
 export async function enqueueCourseSuggestion(
   client: PoolClient,
-  input: { revisionId: string; code: string; mode: "links" | "weights"; requestedBy: string }
+  input: { courseId: string; mode: "links" | "weights"; requestedBy: string }
 ): Promise<{ id: string; created: boolean }> {
   await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [COURSE_SUGGESTION_QUEUE_LOCK]);
   const pending = await client.query<{ id: string }>(
-    `SELECT id FROM ad_comp_ai_suggestions WHERE revision_id=$1 AND course_code=$2 AND mode=$3 AND status IN ${PENDING}`,
-    [input.revisionId, input.code, input.mode]);
+    `SELECT id FROM ad_comp_ai_suggestions WHERE course_id=$1 AND mode=$2 AND status IN ${PENDING}`, [input.courseId, input.mode]);
   if (pending.rows[0]) return { id: pending.rows[0].id, created: false };
-  const shared = await loadSharedSource(client, input.revisionId);
-  const links = (await loadRevisionLinks(client, input.revisionId)).get(input.code) ?? [];
-  const aiInput = buildCourseAiInput(courseSource(shared, input.code, links), input.mode);
+  const [source] = await loadSourceRows(client, [input.courseId]);
+  if (!source) throw new CompetencyError("course_not_found", 404);
+  const links = (await loadCourseLinks(client, [input.courseId])).get(input.courseId) ?? [];
+  const aiInput = buildCourseAiInput(courseSource(await loadSharedSource(client), source, links), input.mode);
   assertRunnable(aiInput);
   if (await pendingCount(client) >= MAX_PENDING_COURSE_SUGGESTIONS) throw new CompetencyError("ai_queue_full", 429);
-  const id = await insertJob(client, { ...input, batchId: null, input: aiInput });
+  const id = await insertJob(client, { source, mode: input.mode, requestedBy: input.requestedBy, batchId: null, input: aiInput });
   return { id, created: true };
 }
 
 type BatchQueued = {
   batchId: string | null;
   queued: number;
-  /** Courses left out: already linked, repeated course codes, already queued in another run. */
-  skipped: { linked: number; duplicate: number; pending: number };
+  /** Courses left out: already linked, already queued in another run. */
+  skipped: { linked: number; pending: number };
 };
 
 /**
- * The whole-program run: one "full" proposal for every course of the revision that has no link yet,
- * no repeated code and no pending run. Nothing is queued (batchId null) when no course qualifies.
+ * The run over the courses of the filter ("Chạy AI cho N môn chưa có liên kết"): one "full" proposal
+ * for every course that has no link yet and no pending run. Nothing is queued (batchId null) when no
+ * course qualifies.
  */
-export async function enqueueCourseBatch(client: PoolClient, input: { revisionId: string; requestedBy: string }): Promise<BatchQueued> {
+export async function enqueueCourseBatch(client: PoolClient, input: { courseIds: string[]; requestedBy: string }): Promise<BatchQueued> {
   await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [COURSE_SUGGESTION_QUEUE_LOCK]);
-  const shared = await loadSharedSource(client, input.revisionId);
-  const links = await loadRevisionLinks(client, input.revisionId);
-  const pending = await client.query<{ courseCode: string }>(
-    `SELECT course_code AS "courseCode" FROM ad_comp_ai_suggestions WHERE revision_id=$1 AND mode='full' AND status IN ${PENDING}`, [input.revisionId]);
-  const pendingCodes = new Set(pending.rows.map((row) => row.courseCode));
-  const skipped = { linked: 0, duplicate: 0, pending: 0 };
-  const inputs: { code: string; input: CourseAiInput }[] = [];
-  for (const [code, occurrence] of [...shared.courses].sort(([a], [b]) => a.localeCompare(b))) {
-    if (occurrence.count !== 1) { skipped.duplicate += 1; continue; }
-    if ((links.get(code) ?? []).length) { skipped.linked += 1; continue; }
-    if (pendingCodes.has(code)) { skipped.pending += 1; continue; }
-    const aiInput = buildCourseAiInput(courseSource(shared, code, []), "full");
+  const sources = await loadSourceRows(client, input.courseIds);
+  const links = await loadCourseLinks(client, input.courseIds);
+  const pending = await client.query<{ courseId: string }>(
+    `SELECT course_id AS "courseId" FROM ad_comp_ai_suggestions WHERE course_id=ANY($1::uuid[]) AND mode='full' AND status IN ${PENDING}`, [input.courseIds]);
+  const pendingIds = new Set(pending.rows.map((row) => row.courseId));
+  const shared = await loadSharedSource(client);
+  const skipped = { linked: 0, pending: 0 };
+  const inputs: { source: SourceRow; input: CourseAiInput }[] = [];
+  for (const source of sources) {
+    if ((links.get(source.courseId) ?? []).length) { skipped.linked += 1; continue; }
+    if (pendingIds.has(source.courseId)) { skipped.pending += 1; continue; }
+    const aiInput = buildCourseAiInput(courseSource(shared, source, []), "full");
     assertRunnable(aiInput);
-    inputs.push({ code, input: aiInput });
+    inputs.push({ source, input: aiInput });
   }
   if (!inputs.length) return { batchId: null, queued: 0, skipped };
   if (await pendingCount(client) + inputs.length > MAX_PENDING_COURSE_SUGGESTIONS) throw new CompetencyError("ai_queue_full", 429);
   const batchId = randomUUID();
   for (const item of inputs) {
-    await insertJob(client, { revisionId: input.revisionId, code: item.code, mode: "full", requestedBy: input.requestedBy, batchId, input: item.input });
+    await insertJob(client, { source: item.source, mode: "full", requestedBy: input.requestedBy, batchId, input: item.input });
   }
   return { batchId, queued: inputs.length, skipped };
 }

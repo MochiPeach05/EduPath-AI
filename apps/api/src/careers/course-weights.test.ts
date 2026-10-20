@@ -139,8 +139,9 @@ describe("career requirement course-weight read API", () => {
     expect(sql).toContain("JOIN ad_comp_skills cs ON cs.skill_id=s.id AND cs.deleted_at IS NULL AND cs.is_active");
     expect(sql).toContain("JOIN ad_comp_groups g ON g.id=cs.group_id AND g.is_active");
     expect(sql).toContain("JOIN ad_comp_course_links l ON l.skill_id=s.id AND l.weight>0");
-    expect(sql).toContain("JOIN ad_comp_course_configs cfg ON cfg.id=l.config_id AND cfg.status='active' AND cfg.revision_id=$2");
+    expect(sql).toContain("JOIN ad_comp_course_configs cfg ON cfg.id=l.config_id AND cfg.status='active'");
     expect(sql).toContain("WHERE r.career_position_id=$1 AND r.deleted_at IS NULL");
-    expect(sql).toContain("JOIN curriculum_courses cc ON cc.revision_id=cfg.revision_id AND cc.code=cfg.course_code");
+    // A course has one configuration for every cohort (migration 038): the revision only picks its rows.
+    expect(sql).toContain("JOIN curriculum_courses cc ON cc.course_id=cfg.course_id AND cc.revision_id=$2");
   });
 });

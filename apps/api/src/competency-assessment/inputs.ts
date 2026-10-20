@@ -59,23 +59,28 @@ export async function readAssessmentInputs(db: Db, userId: string, options: { pr
   }));
   const admissionYear = num(curriculumRow.admission_year);
 
-  /* Weights (§2.3): newest revision of the same curriculum with at least one active config. */
-  const weightRevision = await db.query<{ id: string; version: number; active_count: number; max_updated: Date | string | null }>(
-    `SELECT r.id,r.version,count(*)::int AS active_count,max(cc.updated_at) AS max_updated
-     FROM curriculum_revisions r JOIN ad_comp_course_configs cc ON cc.revision_id=r.id AND cc.status='active'
-     WHERE r.curriculum_id=$1 GROUP BY r.id,r.version ORDER BY r.version DESC,r.id LIMIT 1`, [curriculumRow.id]);
-  const weightRow = weightRevision.rows[0];
-  if (!weightRow) throw new AssessmentError("competency_weights_unavailable", 409);
+  /*
+   * Weights (§2.3): the applied configurations of the shared courses ("môn học", migration 038) of
+   * the current revision, matched to its rows by course; a course has one configuration for every cohort.
+   */
+  const weightState = await db.query<{ active_count: number; max_updated: Date | string | null }>(
+    `SELECT count(*)::int AS active_count,max(cfg.updated_at) AS max_updated
+     FROM curriculum_courses cc JOIN ad_comp_course_configs cfg ON cfg.course_id=cc.course_id AND cfg.status='active'
+     WHERE cc.revision_id=$1`, [curriculumRow.revision_id]);
+  const weightRow = weightState.rows[0];
+  if (!weightRow?.active_count) throw new AssessmentError("competency_weights_unavailable", 409);
   const links = await db.query<{ course_code: string; skill_id: string; weight: string | number }>(
-    `SELECT cc.course_code,l.skill_id,l.weight FROM ad_comp_course_configs cc JOIN ad_comp_course_links l ON l.config_id=cc.id
-     WHERE cc.revision_id=$1 AND cc.status='active' AND l.weight>0 ORDER BY cc.course_code,l.skill_id`, [weightRow.id]);
+    `SELECT cc.code AS course_code,l.skill_id,l.weight FROM curriculum_courses cc
+     JOIN ad_comp_course_configs cfg ON cfg.course_id=cc.course_id AND cfg.status='active'
+     JOIN ad_comp_course_links l ON l.config_id=cfg.id
+     WHERE cc.revision_id=$1 AND l.weight>0 ORDER BY cc.code,l.skill_id`, [curriculumRow.revision_id]);
   const skills = await db.query<{ skill_id: string; name: string; description: string; scope: string; group_id: string }>(
     `SELECT s.skill_id,k.name,k.description,left(s.scope,$1) AS scope,s.group_id
      FROM ad_comp_skills s JOIN career_skills k ON k.id=s.skill_id JOIN ad_comp_groups g ON g.id=s.group_id
      WHERE s.is_active AND s.deleted_at IS NULL AND k.deleted_at IS NULL AND g.is_active ORDER BY k.name,s.skill_id`, [SCOPE_MAX_LENGTH]);
   const groups = await db.query<{ id: string; name: string }>("SELECT id,name FROM ad_comp_groups WHERE is_active ORDER BY name,id");
   const weights: WeightsInput = {
-    revisionId: weightRow.id, version: weightRow.version, activeCount: weightRow.active_count,
+    revisionId: curriculumRow.revision_id, version: curriculumRow.version, activeCount: weightRow.active_count,
     maxConfigUpdatedAt: weightRow.max_updated === null ? null : new Date(weightRow.max_updated).toISOString(),
     links: links.rows.map((row) => ({ courseCode: row.course_code, skillId: row.skill_id, weight: Number(row.weight) })),
     skills: skills.rows.map((row) => ({ skillId: row.skill_id, name: row.name, description: row.description, scope: row.scope, groupId: row.group_id })),

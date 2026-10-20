@@ -79,7 +79,8 @@ export function createCareerRequirementsRouter(pool: DatabasePool) {
       isCurrent: boolean; isActive: boolean; activeCount: number;
     }>(`SELECT r.id AS "revisionId",c.cohort_code AS "cohortCode",r.data->>'name' AS name,r.version,
       c.current_revision=r.id AS "isCurrent",c.is_active AS "isActive",
-      (SELECT count(*)::int FROM ad_comp_course_configs cfg WHERE cfg.revision_id=r.id AND cfg.status='active') AS "activeCount"
+      (SELECT count(*)::int FROM curriculum_courses cc JOIN ad_comp_course_configs cfg ON cfg.course_id=cc.course_id AND cfg.status='active'
+        WHERE cc.revision_id=r.id) AS "activeCount"
       FROM curricula c JOIN curriculum_revisions r ON r.curriculum_id=c.id
       ORDER BY c.cohort_code DESC,r.version DESC,c.id`);
     // Choose a visible default only; an explicitly requested revision never falls back to another cohort.
@@ -93,8 +94,8 @@ export function createCareerRequirementsRouter(pool: DatabasePool) {
       JOIN ad_comp_skills cs ON cs.skill_id=s.id AND cs.deleted_at IS NULL AND cs.is_active
       JOIN ad_comp_groups g ON g.id=cs.group_id AND g.is_active
       JOIN ad_comp_course_links l ON l.skill_id=s.id AND l.weight>0
-      JOIN ad_comp_course_configs cfg ON cfg.id=l.config_id AND cfg.status='active' AND cfg.revision_id=$2
-      JOIN curriculum_courses cc ON cc.revision_id=cfg.revision_id AND cc.code=cfg.course_code
+      JOIN ad_comp_course_configs cfg ON cfg.id=l.config_id AND cfg.status='active'
+      JOIN curriculum_courses cc ON cc.course_id=cfg.course_id AND cc.revision_id=$2
       WHERE r.career_position_id=$1 AND r.deleted_at IS NULL ORDER BY cc.code,s.id`,
     [query.careerPositionId, selected.revisionId]) : { rows: [] };
     res.json({ careerPositionId: query.careerPositionId, revisions: revisions.rows,

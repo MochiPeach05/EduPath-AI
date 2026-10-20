@@ -10,6 +10,8 @@ export const skillInput = z.object({
   name: z.string().trim().min(1).max(100), description: limitedText(2000, DESCRIPTION_MAX_WORDS), scope: limitedText(4000, LONG_DESCRIPTION_MAX_WORDS),
   groupId: z.uuid(), isActive: z.boolean(),
 }).strict();
+/** The cohort filter of "Cấu hình môn học" ("" = every course). */
+export const cohortFilter = z.string().trim().max(20).regex(/^[0-9A-Za-z]*$/);
 const allocationSchema = z.object({ skillId: z.uuid(), weight: z.number().min(0).max(1) }).strict();
 export const configurationInput = z.object({ status: z.enum(["draft", "active"]), links: z.array(allocationSchema).max(200), note: z.string().trim().max(500).default("") }).strict();
 export function validateWeights(links: {skillId: string; weight: number}[], status: string): number {

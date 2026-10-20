@@ -33,9 +33,9 @@ const migrations = ["007_student_transcripts.sql", "010_transcript_jobs.sql", "0
   "019_career_skill_management.sql", "020_career_field_numbers.sql", "021_career_position_codes.sql", "018_data_consents.sql",
   "026_competency_management.sql", "028_student_specialty.sql", "029_student_competency_assessments.sql", "030_competency_consent.sql",
   // The transcript routes purge graduation advice and the worker router expires it; /claim also runs the
-  // course-proposal housekeeping, so the audit schema needs the tables up to 036 like production.
+  // course-proposal housekeeping, so the audit schema needs the tables up to 038 like production.
   "031_career_ai_suggestions.sql", "032_graduation_ai_advice.sql", "033_competency_cloud_ai.sql", "034_competency_ai_suggestions.sql",
-  "035_competency_ai_skills.sql", "036_cancel_competency_ai_skills.sql"];
+  "035_competency_ai_skills.sql", "036_cancel_competency_ai_skills.sql", "037_competency_field_groups.sql", "038_competency_shared_courses.sql"];
 const adminPool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 1 });
 // search_path is the audit schema ONLY, so a missing table can never fall through to public.
 const pool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 8, options: `-c search_path=${schema}` });
@@ -102,7 +102,9 @@ async function setupSchema() {
   }
   for (const [code, weights] of [["71ITBS10203", [0.6, 0.4]], ["71ITSE30103", [1, 0]], ["71ITIS30103", [0, 1]]]) {
     const configId = randomUUID();
-    await pool.query("INSERT INTO ad_comp_course_configs(id,revision_id,course_code,status) VALUES($1,$2,$3,'draft')", [configId, revisionId, code]);
+    // A configuration belongs to the shared course of the curriculum row (migration 038).
+    await pool.query(`INSERT INTO ad_comp_course_configs(id,course_id,status)
+ SELECT $1,course_id,'draft' FROM curriculum_courses WHERE revision_id=$2 AND code=$3`, [configId, revisionId, code]);
     for (const [index, weight] of weights.entries()) if (weight) await pool.query("INSERT INTO ad_comp_course_links(config_id,skill_id,weight) VALUES($1,$2,$3)", [configId, skills[index], weight]);
     await pool.query("UPDATE ad_comp_course_configs SET status='active' WHERE id=$1", [configId]);
   }
@@ -130,7 +132,7 @@ const ageAssessments = (user) => pool.query("UPDATE stu_comp_assessments SET cre
 
 try {
   const { revisionId, skills } = await setupSchema();
-  checks.push("migrations 028-036 apply with 007-027 in a throwaway schema");
+  checks.push("migrations 028-038 apply with 007-027 in a throwaway schema");
 
   const app = express();
   app.use("/api/worker/transcripts", createTranscriptWorkerRouter(pool, workerKey));
@@ -167,6 +169,31 @@ try {
     await probe.query("ROLLBACK");
   } finally { probe.release(); }
   checks.push("the snapshot reader works inside REPEATABLE READ READ ONLY (row locks there fail with 25006, so it takes none)");
+
+  // Shared courses (migration 038): a K30 CTĐT with the same course (code, name, credits; case and
+  // spaces ignored) uses the K29 configuration; the same code under another name is another course.
+  const k30Curriculum = randomUUID(), k30Revision = randomUUID();
+  await pool.query("INSERT INTO curricula(id,identity_key,cohort_code,is_active,lock_version) VALUES($1,'cong nghe thong tin:K30','K30',TRUE,$2)", [k30Curriculum, randomUUID()]);
+  await pool.query(`INSERT INTO curriculum_revisions(id,curriculum_id,version,data,source_filename,source_data,source_sha256,change_note)
+ VALUES($1,$2,1,$3,'audit_K30.xlsx',$4,$5,'Synthetic audit curriculum')`,
+  [k30Revision, k30Curriculum, JSON.stringify({ name: "CTĐT K30 (tổng hợp)", admissionYear: 2024, courses: [] }), Buffer.from("audit"), "d".repeat(64)]);
+  await pool.query("UPDATE curricula SET current_revision=$2 WHERE id=$1", [k30Curriculum, k30Revision]);
+  for (const [index, [code, name]] of [["71ITBS10203", "  CƠ SỞ   lập  trình "], ["71ITSE30103", "Kỹ thuật lập trình nâng cao"]].entries()) {
+    await pool.query(`INSERT INTO curriculum_courses(revision_id,code,position,name,credits,course_type,block,specialty,semester,study_year,data)
+ VALUES($1,$2,$3,$4,3.0,'BB','Kiến thức cơ sở ngành','',1,1,$5)`, [k30Revision, code, index + 1, name, JSON.stringify({ code })]);
+  }
+  const k30Student = actors.k30 = actor("k30");
+  await pool.query(`INSERT INTO users(id,entra_tenant_id,entra_object_id,entra_subject,display_name,email,username,role,is_active)
+ VALUES($1,$2,$3,$4,$5,$6,$7,'student',TRUE)`, [k30Student.userId, tenantId, k30Student.objectId, k30Student.objectId, k30Student.name, k30Student.email, k30Student.username]);
+  await pool.query("INSERT INTO student_profiles(user_id,cohort_code,specialty) VALUES($1,'K30',NULL)", [k30Student.userId]);
+  await setTranscript(k30Student, transcriptData([["71ITBS10203", "B", 7]]));
+  const shared = await loadAssessmentInputs(pool, k30Student.userId);
+  assert.equal(shared.weights.revisionId, k30Revision, "the weights are read for the student's own CTĐT");
+  assert.equal(shared.weights.activeCount, 1);
+  assert.deepEqual(shared.weights.links.map((link) => link.courseCode), ["71ITBS10203", "71ITBS10203"]);
+  assert.deepEqual(shared.weights.links.map((link) => link.weight).sort(), [0.4, 0.6]);
+  assert.equal(await count("ad_comp_courses WHERE code='71ITSE30103'"), 2, "the same code under another name is another course");
+  checks.push("a K30 student gets the K29 configuration of the same course (case and spaces ignored); the same code under another name is another course without one");
 
   // Create, consent, cooldown.
   const first = await assess("a");

@@ -71,8 +71,8 @@ Dữ liệu sinh viên thật (bảng điểm, kết quả OCR) không bao giờ
 | `/api/student/graduation/advice` | `graduation/advice/` | Lời khuyên tốt nghiệp do AI viết, tự xếp hàng theo dấu vân tay dữ liệu | `graduation-advice.md` |
 | `/api/admin/careers`, `/api/student/careers` | `careers/` | Lĩnh vực, kỹ năng (danh mục dùng chung), nghề nghiệp, yêu cầu kỹ năng | `career-positions.md` |
 | `/api/admin/careers/requirements/ai-suggestions` | `careers/ai-suggestions/` | AI đề xuất kỹ năng cho nghề nghiệp | `career-ai-suggestions.md` |
-| `/api/admin/competencies` | `competencies/` | Nhóm năng lực, cấu hình năng lực, cấu hình học phần (liên kết + trọng số) | `competency-management.md` |
-| `/api/admin/competencies/ai` | `competencies/ai/` | AI tạo liên kết kỹ năng kèm trọng số; chạy AI cho cả chương trình | `competency-management.md` |
+| `/api/admin/competencies` | `competencies/` | Nhóm năng lực, cấu hình năng lực, cấu hình môn học (môn học dùng chung cho mọi khóa, migration 038; liên kết + trọng số) | `competency-management.md` |
+| `/api/admin/competencies/ai` | `competencies/ai/` | AI tạo liên kết kỹ năng kèm trọng số; chạy AI cho các môn chưa có liên kết | `competency-management.md` |
 | `/api/student/competency-assessments` | `competency-assessment/` | Đánh giá năng lực, khoảng trống kỹ năng, tiến độ, lịch sử theo học kỳ | `competency-assessment.md` |
 | `/api/worker/competency-assessments` | `competency-assessment/ai/` | Nhận xét AI cho sinh viên; **cửa chung của worker AI** cho mọi loại việc | `competency-assessment.md` |
 | — | `ai-worker/` | Mã worker AI chạy trên máy cục bộ (`npm run ai-worker`): client, Ollama, vòng lặp | `services/ai/README.md` |
@@ -152,7 +152,7 @@ Khi thêm code, không tạo thêm vòng mới. Phần dùng chung nên tách th
 ### 3.6 Cơ sở dữ liệu và migration
 
 - `apps/api/migrations/NNN_ten.sql` chạy theo số. Runner (`db/migrate.ts`) ghi checksum từng tệp vào `schema_migrations` và **từ chối khởi động nếu một tệp đã chạy bị sửa**.
-- Không bao giờ sửa migration đã lên production. Muốn thay đổi thì thêm số tiếp theo (hiện là 038).
+- Không bao giờ sửa migration đã lên production. Muốn thay đổi thì thêm số tiếp theo (hiện là 039).
 - Production tự chạy migration khi deploy (`DATABASE_AUTO_MIGRATE=true`); server chỉ mở cổng sau khi chạy xong.
 - Bảng mới bật Row Level Security và thu quyền của `anon`/`authenticated`/`service_role`, theo mẫu ở `034_competency_ai_suggestions.sql`.
 - Có phần được **giữ lại dù không còn dùng**, vì production đã chạy và xóa sẽ làm lệch lịch sử migration:

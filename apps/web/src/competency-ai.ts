@@ -1,6 +1,6 @@
-// Types and pure helpers for the AI proposals of the Năng lực courses ("Tạo liên kết kỹ năng (AI)",
-// which also splits the course's 100% since "Thêm trọng số" was merged into it on 2026-10-20, and the
-// whole-program run). The local AI proposes, the admin reviews; only the reviewed rows are saved.
+// Types and pure helpers for the AI proposals of the shared courses of "Cấu hình môn học" ("Tạo liên
+// kết kỹ năng (AI)", which also splits the course's 100% since "Thêm trọng số" was merged into it on
+// 2026-10-20, and the run over the courses without a link). The local AI proposes, the admin reviews; only the reviewed rows are saved.
 // No DOM here — unit tested.
 import { COMPETENCY_API, readCompetencyResponse, WEIGHT_TOLERANCE } from "./competency-types";
 
@@ -50,7 +50,7 @@ export type CourseAiItem = {
 };
 export type CourseAiSuggestion = {
   id: string;
-  revisionId: string;
+  courseId: string;
   courseCode: string;
   mode: CourseAiMode | "full";
   batchId: string | null;
@@ -81,7 +81,9 @@ export type CourseAiBatch = {
   ready: number;
   /** Finished with no usable skill: no skill of the catalog fits the course (absent before 2026-10-19). */
   noMatch?: number;
-  items: { id: string; courseCode: string; status: CourseAiStatusCode; errorCode: string | null; applied: boolean; itemCount: number; noMatch?: boolean }[];
+  /** linked: the course has links by now (saved from this run or by hand). */
+  items: { id: string; courseId: string; courseCode: string; courseName: string | null; status: CourseAiStatusCode; errorCode: string | null; applied: boolean;
+    itemCount: number; noMatch?: boolean; linked: boolean }[];
 };
 export type BatchApplyResult = { activated: number; drafted: number; empty: number; skipped: { courseCode: string; reason: string }[]; batch: CourseAiBatch };
 
@@ -102,11 +104,10 @@ export function failureMessage(code: string | null | undefined): string {
   return FAILURE_MESSAGES[code ?? ""] ?? "Chưa tạo được đề xuất.";
 }
 
-/** Why a course was not saved by a whole-program apply. */
+/** Why a course was not saved by "Lưu … đề xuất" or "Áp dụng … bản nháp". */
 const SKIP_REASONS: Record<string, string> = {
   course_already_linked: "đã có liên kết kỹ năng",
-  duplicate_curriculum_course: "mã học phần lặp trong CTĐT",
-  course_not_found: "không còn trong CTĐT",
+  course_not_found: "không còn trong danh sách môn học",
   skill_unavailable: "kỹ năng đã ngừng sử dụng",
   group_unavailable: "nhóm đã ngừng sử dụng",
   weight_total_invalid: "tổng trọng số chưa đủ 100%",
@@ -188,20 +189,16 @@ export function applyLinkItems(rows: LinkRow[]) {
   }));
 }
 
-/* ------------------------------------------------------------- whole run */
+/* ------------------------------------------------------------- many courses */
 
 /**
- * The courses of a run that the AI found no fitting skill for and that still have no link, with
- * their names, in course-code order.
+ * The courses of a run that the AI found no fitting skill for and that still have no link, in the
+ * run's order (by code and name). Two courses can share a code, so `key` is the course id.
  */
-export function noMatchCourses(batch: CourseAiBatch, courses: readonly { code: string; name: string; skillCount: number }[]) {
-  const byCode = new Map(courses.map((course) => [course.code, course]));
+export function noMatchCourses(batch: CourseAiBatch) {
   return batch.items
-    .filter((item) => item.noMatch ?? (item.status === "completed" && item.itemCount === 0))
-    .flatMap((item) => {
-      const course = byCode.get(item.courseCode);
-      return course && course.skillCount === 0 ? [{ code: course.code, name: course.name }] : [];
-    });
+    .filter((item) => (item.noMatch ?? (item.status === "completed" && item.itemCount === 0)) && !item.linked)
+    .map((item) => ({ key: item.courseId ?? item.id, code: item.courseCode, name: item.courseName ?? item.courseCode }));
 }
 
 /** Done = finished in any way; the bar counts done out of total. */

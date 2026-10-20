@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import type { AuthenticatedUser } from "../auth/types.js";
 import type { DatabasePool } from "../db/pool.js";
-import type { CurriculumCourse, CurriculumData } from "../curricula/model.js";
 import { access, fold, lockSkillCatalog } from "../careers/shared.js";
 import { refreshCareerSkills } from "../careers/requirements.js";
 import { CompetencyError, validateWeights, WEIGHT_TOLERANCE } from "./model.js";
@@ -11,11 +10,14 @@ type Database = DatabasePool | PoolClient;
 type GroupChange = { name: string; description: string; isActive: boolean };
 type SkillChange = { name: string; description: string; scope: string; groupId: string; isActive: boolean };
 type ConfigurationChange = { status: "draft" | "active"; links: { skillId: string; weight: number }[]; note?: string };
-type Revision = { curriculumId: string; revisionId: string; cohortCode: string; name: string; version: number; isCurrent: boolean; isActive: boolean; data: CurriculumData };
 type Group = { id: string; name: string; description: string; isActive: boolean; version: string; skillCount: number };
 type Skill = { id: string; name: string; description: string; scope: string; legacySkillId: string | null; groupId: string; groupName: string; isActive: boolean; groupActive: boolean; version: string; careerCount: number; courseCount: number };
 type CourseLink = { skillId: string; skillName: string; groupId: string; groupName: string; isActive: boolean; weight: number };
-type CourseConfiguration = { id: string; courseCode: string; status: "draft" | "active" | "archived"; version: string; note: string; skillCount: number; totalWeight: string | number };
+type CourseStatus = "draft" | "active" | "archived" | "missing";
+/** One shared course ("môn học") with its configuration; `cohorts` have it in their current curriculum. */
+type CourseRow = { id: string; code: string; name: string; credits: number; type: string; block: string; specialty: string;
+  cohorts: string[]; pastCohorts: string[]; configId: string | null; status: CourseStatus; version: string | null; note: string;
+  mergedFrom: string[]; skillCount: number; totalWeight: number };
 type Warning = { code: string; message: string; courseCode?: string };
 
 const groupColumns = `g.id,g.name,g.description,g.is_active AS "isActive",g.version,
@@ -29,6 +31,10 @@ const skillColumns = `s.id,s.name,s.description,cs.scope,cs.legacy_skill_id AS "
   WHERE l.skill_id=s.id AND c.status='active' AND l.weight>0) AS "courseCount"`;
 const skillTables = `FROM ad_comp_skills cs JOIN career_skills s ON s.id=cs.skill_id
  JOIN ad_comp_groups g ON g.id=cs.group_id`;
+/** Newest cohort first ("K32" before "K29"). */
+const cohortOrder = (column: string) => `NULLIF(regexp_replace(${column},'\\D','','g'),'')::int DESC NULLS LAST,${column} DESC`;
+/** What the admin types to clear the links of every course (no cohort filter). */
+export const ALL_COURSES_CONFIRMATION = "TẤT CẢ";
 
 export class CompetencyRepository {
   constructor(readonly pool: DatabasePool) {}
@@ -165,13 +171,11 @@ export class CompetencyRepository {
   }
 
   private async contributions(db: Database, id: string) {
-    const result = await db.query(`SELECT c.revision_id AS "revisionId",cu.cohort_code AS "cohortCode",
- r.data->>'name' AS "curriculumName",r.version AS "curriculumVersion",cu.current_revision=r.id AS "isCurrent",
- c.course_code AS "courseCode",cc.name AS "courseName",l.weight::float8 AS weight,c.status
- FROM ad_comp_course_links l JOIN ad_comp_course_configs c ON c.id=l.config_id
- JOIN curriculum_revisions r ON r.id=c.revision_id JOIN curricula cu ON cu.id=r.curriculum_id
- JOIN curriculum_courses cc ON cc.revision_id=c.revision_id AND cc.code=c.course_code
- WHERE l.skill_id=$1 ORDER BY cu.cohort_code DESC,r.version DESC,c.course_code`, [id]);
+    const result = await db.query(`SELECT c.id AS "courseId",c.code AS "courseCode",c.name AS "courseName",
+ COALESCE((SELECT array_agg(DISTINCT cu.cohort_code ORDER BY cu.cohort_code) FROM curriculum_courses cc
+ JOIN curricula cu ON cu.current_revision=cc.revision_id WHERE cc.course_id=c.id),'{}') AS cohorts,l.weight::float8 AS weight,cfg.status
+ FROM ad_comp_course_links l JOIN ad_comp_course_configs cfg ON cfg.id=l.config_id JOIN ad_comp_courses c ON c.id=cfg.course_id
+ WHERE l.skill_id=$1 ORDER BY c.code,c.name,c.id`, [id]);
     return result.rows;
   }
 
@@ -283,78 +287,79 @@ export class CompetencyRepository {
     });
   }
 
-  async curricula() {
-    const result = await this.pool.query(`SELECT c.id AS "curriculumId",r.id AS "revisionId",c.cohort_code AS "cohortCode",
- r.data->>'name' AS name,r.version,c.current_revision=r.id AS "isCurrent",c.is_active AS "isActive",
- (SELECT count(DISTINCT x->>'code')::int FROM jsonb_array_elements(r.data->'courses') x) AS "courseCount",
- (SELECT count(*)::int FROM ad_comp_course_configs cc WHERE cc.revision_id=r.id) AS "configuredCount",
- (SELECT count(*)::int FROM ad_comp_course_configs cc WHERE cc.revision_id=r.id AND cc.status='active') AS "activeCount",
- (SELECT count(*)::int FROM ad_comp_course_configs cc WHERE cc.revision_id=r.id AND cc.status='draft') AS "draftCount"
- FROM curricula c JOIN curriculum_revisions r ON r.curriculum_id=c.id
- ORDER BY c.cohort_code DESC,r.version DESC,c.id`);
+  /** Cohorts of the filter, newest first, with the number of courses of their current curricula. */
+  async cohorts() {
+    return (await this.pool.query<{ cohortCode: string; courseCount: number }>(`SELECT cu.cohort_code AS "cohortCode",
+ count(DISTINCT cc.course_id)::int AS "courseCount" FROM curricula cu JOIN curriculum_courses cc ON cc.revision_id=cu.current_revision
+ GROUP BY cu.cohort_code ORDER BY ${cohortOrder("cu.cohort_code")}`)).rows;
+  }
+
+  /**
+   * The shared courses of the filter ("" = every course of any curriculum, otherwise the courses of
+   * the cohort's current curricula), or one course by id. Type, block and specialty come from the
+   * filtered cohort, otherwise from the newest cohort that has the course.
+   */
+  private async courseRows(db: Database, cohort: string, id: string | null = null): Promise<CourseRow[]> {
+    const result = await db.query<CourseRow>(`WITH occ AS (SELECT cc.course_id,cc.position,cc.course_type,cc.block,cc.specialty,
+ cu.cohort_code,r.version,cu.current_revision=r.id AS is_current
+ FROM curriculum_courses cc JOIN curriculum_revisions r ON r.id=cc.revision_id JOIN curricula cu ON cu.id=r.curriculum_id),
+ shown AS (SELECT DISTINCT ON (course_id) course_id,position,course_type,block,specialty FROM occ
+ WHERE ($1='' OR (cohort_code=$1 AND is_current)) AND ($2::uuid IS NULL OR course_id=$2)
+ ORDER BY course_id,is_current DESC,${cohortOrder("cohort_code")},version DESC)
+ SELECT c.id,c.code,c.name,c.credits::float8 AS credits,s.course_type AS type,s.block,s.specialty,
+ COALESCE((SELECT array_agg(DISTINCT o.cohort_code ORDER BY o.cohort_code) FROM occ o WHERE o.course_id=c.id AND o.is_current),'{}') AS cohorts,
+ COALESCE((SELECT array_agg(DISTINCT o.cohort_code ORDER BY o.cohort_code) FROM occ o WHERE o.course_id=c.id AND NOT o.is_current
+ AND NOT EXISTS(SELECT 1 FROM occ p WHERE p.course_id=c.id AND p.cohort_code=o.cohort_code AND p.is_current)),'{}') AS "pastCohorts",
+ cfg.id AS "configId",COALESCE(cfg.status,'missing') AS status,cfg.version,COALESCE(cfg.note,'') AS note,
+ COALESCE(cfg.merged_from,'{}') AS "mergedFrom",
+ (SELECT count(*)::int FROM ad_comp_course_links l WHERE l.config_id=cfg.id) AS "skillCount",
+ COALESCE((SELECT sum(l.weight)::float8 FROM ad_comp_course_links l WHERE l.config_id=cfg.id),0) AS "totalWeight"
+ FROM ad_comp_courses c JOIN shown s ON s.course_id=c.id LEFT JOIN ad_comp_course_configs cfg ON cfg.course_id=c.id
+ ORDER BY ${cohort ? "s.position," : ""}c.code,c.name,c.id`, [cohort, id]);
     return result.rows;
   }
 
-  private async revision(db: Database, id: string): Promise<Revision> {
-    const result = await db.query<Revision>(`SELECT c.id AS "curriculumId",r.id AS "revisionId",c.cohort_code AS "cohortCode",
- r.data->>'name' AS name,r.version,c.current_revision=r.id AS "isCurrent",c.is_active AS "isActive",r.data
- FROM curriculum_revisions r JOIN curricula c ON c.id=r.curriculum_id WHERE r.id=$1`, [id]);
-    if (!result.rowCount) throw new CompetencyError("curriculum_revision_not_found", 404);
-    return result.rows[0]!;
+  /** Ids of the courses of the filter (see courseRows), for the AI run over the filter. */
+  async scopeCourseIds(db: Database, cohort: string) {
+    return (await this.courseRows(db, cohort)).map(row => row.id);
   }
 
-  private courseOccurrences(revision: Revision) {
-    const rows = new Map<string, { course: CurriculumCourse; occurrenceCount: number }>();
-    for (const course of revision.data.courses) {
-      const previous = rows.get(course.code);
-      if (previous) previous.occurrenceCount++;
-      else rows.set(course.code, { course, occurrenceCount: 1 });
-    }
-    return rows;
-  }
-
-  private async configurations(db: Database, revisionId: string) {
-    const result = await db.query<CourseConfiguration>(`SELECT c.id,c.course_code AS "courseCode",c.status,c.version,c.note,
- count(l.skill_id)::int AS "skillCount",COALESCE(sum(l.weight),0) AS "totalWeight"
- FROM ad_comp_course_configs c LEFT JOIN ad_comp_course_links l ON l.config_id=c.id
- WHERE c.revision_id=$1 GROUP BY c.id ORDER BY c.course_code`, [revisionId]);
-    return new Map(result.rows.map(row => [row.courseCode, row]));
-  }
-
-  async courses(revisionId: string, query: { q: string; status: "" | "missing" | "draft" | "active" | "archived" }) {
-    const revision = await this.revision(this.pool, revisionId);
-    const configurations = await this.configurations(this.pool, revisionId);
+  async courses(query: { cohort: string; q: string; status: "" | CourseStatus }) {
     const term = fold(query.q);
-    return [...this.courseOccurrences(revision).values()].map(({ course, occurrenceCount }) => {
-      const config = configurations.get(course.code);
-      return { code: course.code, name: course.name, credits: course.credits, type: course.type, block: course.block,
-        specialty: course.specialty, occurrenceCount, status: config?.status ?? "missing", configId: config?.id ?? null,
-        version: config?.version ?? null, skillCount: config?.skillCount ?? 0, totalWeight: Number(config?.totalWeight ?? 0) };
-    }).filter(row => (!query.status || row.status === query.status) &&
-      fold(`${row.code} ${row.name} ${row.block} ${row.specialty}`).includes(term));
+    return (await this.courseRows(this.pool, query.cohort)).map(({ note: _note, ...row }) => row)
+      .filter(row => (!query.status || row.status === query.status) && fold(`${row.code} ${row.name} ${row.block} ${row.specialty}`).includes(term));
   }
 
-  private async courseSnapshot(db: Database, revisionId: string, code: string) {
-    const revision = await this.revision(db, revisionId);
-    const occurrence = this.courseOccurrences(revision).get(code);
-    if (!occurrence) throw new CompetencyError("course_not_found", 404);
-    const configuration = await db.query<CourseConfiguration>(`SELECT id,course_code AS "courseCode",status,version,note
- FROM ad_comp_course_configs WHERE revision_id=$1 AND course_code=$2`, [revisionId, code]);
-    const config = configuration.rows[0];
-    const result = config ? await db.query<CourseLink>(`SELECT l.skill_id AS "skillId",s.name AS "skillName",
+  private async courseRecord(db: Database, id: string) {
+    const [course] = await this.courseRows(db, "", id);
+    if (!course) throw new CompetencyError("course_not_found", 404);
+    return course;
+  }
+
+  private async courseSnapshot(db: Database, id: string) {
+    const course = await this.courseRecord(db, id);
+    const links = course.configId ? (await db.query<CourseLink>(`SELECT l.skill_id AS "skillId",s.name AS "skillName",
  cs.group_id AS "groupId",g.name AS "groupName",
  (cs.is_active AND cs.deleted_at IS NULL AND g.is_active AND s.deleted_at IS NULL) AS "isActive",l.weight::float8 AS weight
  FROM ad_comp_course_links l JOIN ad_comp_skills cs ON cs.skill_id=l.skill_id
  JOIN career_skills s ON s.id=cs.skill_id JOIN ad_comp_groups g ON g.id=cs.group_id
- WHERE l.config_id=$1 ORDER BY g.name,s.name,s.id`, [config.id]) : null;
-    return { revisionId, courseCode: code, courseName: occurrence.course.name, occurrenceCount: occurrence.occurrenceCount,
-      configId: config?.id ?? null, status: config?.status ?? "missing", version: config?.version ?? null,
-      note: config?.note ?? "", links: result?.rows ?? [] };
+ WHERE l.config_id=$1 ORDER BY g.name,s.name,s.id`, [course.configId])).rows : [];
+    return { courseId: course.id, courseCode: course.code, courseName: course.name, credits: course.credits, cohorts: course.cohorts,
+      pastCohorts: course.pastCohorts, configId: course.configId, status: course.status, version: course.version, note: course.note,
+      mergedFrom: course.mergedFrom, links };
   }
 
-  async course(revisionId: string, code: string) {
-    return { ...await this.courseSnapshot(this.pool, revisionId, code),
-      history: await this.history(this.pool, ["course"], `${revisionId}:${code}`) };
+  /**
+   * The course and its history. Entries saved per CTĐT revision before the courses were shared, and
+   * the merge entries of migration 038, name that revision's cohort and version in `scope`.
+   */
+  async course(id: string) {
+    const history = await this.pool.query(`SELECT e.id,e.note,e.created_at AS "createdAt",u.display_name AS "actorName",e.snapshot,
+ CASE WHEN r.id IS NOT NULL THEN cu.cohort_code||' · phiên bản '||r.version END AS scope
+ FROM ad_comp_events e LEFT JOIN users u ON u.id=e.actor_id
+ LEFT JOIN curriculum_revisions r ON r.id::text=e.snapshot->>'revisionId' LEFT JOIN curricula cu ON cu.id=r.curriculum_id
+ WHERE e.kind='course' AND e.entity_key=$1 ORDER BY e.created_at DESC,e.id DESC`, [id]);
+    return { ...await this.courseSnapshot(this.pool, id), history: history.rows };
   }
 
   private async validateCourseLinks(db: Database, links: ConfigurationChange["links"], status: ConfigurationChange["status"]) {
@@ -372,17 +377,11 @@ export class CompetencyRepository {
     }
   }
 
-  /**
-   * Locks the course's configuration for a write and reads its links (by skill id). Throws
-   * course_not_found (404) and duplicate_curriculum_course (409) like a manual save.
-   */
-  async lockCourse(client: PoolClient, revisionId: string, code: string) {
-    const revision = await this.revision(client, revisionId);
-    const occurrence = this.courseOccurrences(revision).get(code);
-    if (!occurrence) throw new CompetencyError("course_not_found", 404);
-    if (occurrence.occurrenceCount !== 1) throw new CompetencyError("duplicate_curriculum_course", 409, [code]);
+  /** Locks the course's configuration for a write and reads its links (by skill id); course_not_found (404). */
+  async lockCourse(client: PoolClient, id: string) {
+    await this.courseRecord(client, id);
     const existing = await client.query<{ id: string; version: string; status: "draft" | "active" | "archived"; note: string }>(`SELECT id,version,status,note
- FROM ad_comp_course_configs WHERE revision_id=$1 AND course_code=$2 FOR UPDATE`, [revisionId, code]);
+ FROM ad_comp_course_configs WHERE course_id=$1 FOR UPDATE`, [id]);
     const config = existing.rows[0] ?? null;
     const links = config ? (await client.query<{ skillId: string; weight: number }>(`SELECT skill_id AS "skillId",weight::float8 AS weight
  FROM ad_comp_course_links WHERE config_id=$1 ORDER BY skill_id`, [config.id])).rows : [];
@@ -391,39 +390,40 @@ export class CompetencyRepository {
 
   /**
    * Writes a whole configuration (its links are replaced) and the history event. The caller holds
-   * the row lock from lockCourse inside this repository's write transaction.
+   * the row lock from lockCourse inside this repository's write transaction. `reviewed` (a save from
+   * the course's own dialog) also clears the note of a configuration merged by migration 038.
    */
-  async writeCourse(client: PoolClient, revisionId: string, code: string, config: { id: string } | null, data: ConfigurationChange,
-    actor: AuthenticatedUser, note: string) {
+  async writeCourse(client: PoolClient, courseId: string, config: { id: string } | null, data: ConfigurationChange,
+    actor: AuthenticatedUser, note: string, reviewed = false) {
     validateWeights(data.links, data.status);
     await this.validateCourseLinks(client, data.links, data.status);
     const id = config?.id ?? randomUUID();
     if (config) {
-      await client.query(`UPDATE ad_comp_course_configs SET status=$2,note=$3,version=$4,updated_at=now() WHERE id=$1`,
+      await client.query(`UPDATE ad_comp_course_configs SET status=$2,note=$3,version=$4,updated_at=now()${reviewed ? ",merged_from='{}'" : ""} WHERE id=$1`,
         [id, data.status, data.note ?? "", randomUUID()]);
       await client.query("DELETE FROM ad_comp_course_links WHERE config_id=$1", [id]);
     } else {
-      await client.query(`INSERT INTO ad_comp_course_configs(id,revision_id,course_code,status,note)
- VALUES($1,$2,$3,$4,$5)`, [id, revisionId, code, data.status, data.note ?? ""]);
+      await client.query(`INSERT INTO ad_comp_course_configs(id,course_id,status,note)
+ VALUES($1,$2,$3,$4)`, [id, courseId, data.status, data.note ?? ""]);
     }
     for (const link of [...data.links].sort((a, b) => a.skillId.localeCompare(b.skillId))) {
       await client.query("INSERT INTO ad_comp_course_links(config_id,skill_id,weight) VALUES($1,$2,$3)",
         [id, link.skillId, link.weight]);
     }
-    const snapshot = await this.courseSnapshot(client, revisionId, code);
-    await this.event(client, "course", `${revisionId}:${code}`, actor, snapshot, note);
+    const snapshot = await this.courseSnapshot(client, courseId);
+    await this.event(client, "course", courseId, actor, snapshot, note);
     return snapshot;
   }
 
-  async saveCourse(revisionId: string, code: string, version: string, data: ConfigurationChange, actor: AuthenticatedUser) {
+  async saveCourse(id: string, version: string, data: ConfigurationChange, actor: AuthenticatedUser) {
     // Reject malformed weights before connecting, including duplicate skill IDs.
     validateWeights(data.links, data.status);
     return this.write(actor, async client => {
-      const { config } = await this.lockCourse(client, revisionId, code);
+      const { config } = await this.lockCourse(client, id);
       if ((config && config.version !== version) || (!config && version !== "new"))
         throw new CompetencyError("configuration_changed", 409);
-      return this.writeCourse(client, revisionId, code, config, data, actor,
-        data.note?.trim() || (config ? "Cập nhật phân bổ năng lực học phần" : "Thêm phân bổ năng lực học phần"));
+      return this.writeCourse(client, id, config, data, actor,
+        data.note?.trim() || (config ? "Cập nhật phân bổ năng lực môn học" : "Thêm phân bổ năng lực môn học"), true);
     });
   }
 
@@ -471,44 +471,49 @@ export class CompetencyRepository {
   }
 
   /**
-   * "Xóa liên kết của cả chương trình": every course of the revision that has links loses its links
-   * and weights and becomes an empty draft, so the whole-program AI run can propose them again. The
-   * admin repeats the cohort code (confirmation_mismatch otherwise). Each course keeps its history.
+   * "Xóa liên kết của N môn": every course of the filter that has links loses its links and weights
+   * and becomes an empty draft, so an AI run can propose them again. The courses are shared, so every
+   * cohort that has them loses them too. The admin repeats the cohort code, or ALL_COURSES_CONFIRMATION
+   * without a filter (confirmation_mismatch otherwise). Each course keeps its history.
    */
-  async clearRevision(revisionId: string, cohortCode: string, actor: AuthenticatedUser) {
+  async clearCourses(cohort: string, confirmation: string, actor: AuthenticatedUser) {
+    const same = (text: string) => fold(text.replace(/\s+/g, " ").trim());
+    if (same(confirmation) !== same(cohort || ALL_COURSES_CONFIRMATION)) throw new CompetencyError("confirmation_mismatch", 400);
     return this.write(actor, async client => {
-      const revision = await this.revision(client, revisionId);
-      if (fold(cohortCode.trim()) !== fold(revision.cohortCode)) throw new CompetencyError("confirmation_mismatch", 400);
-      const configs = await client.query<{ id: string; code: string; note: string }>(`SELECT c.id,c.course_code AS code,c.note
- FROM ad_comp_course_configs c WHERE c.revision_id=$1 AND EXISTS(SELECT 1 FROM ad_comp_course_links l WHERE l.config_id=c.id)
- ORDER BY c.course_code FOR UPDATE`, [revisionId]);
+      const rows = await this.courseRows(client, cohort);
+      const configs = await client.query<{ id: string; courseId: string; note: string }>(`SELECT c.id,c.course_id AS "courseId",c.note
+ FROM ad_comp_course_configs c WHERE c.course_id=ANY($1::uuid[]) AND EXISTS(SELECT 1 FROM ad_comp_course_links l WHERE l.config_id=c.id)
+ ORDER BY c.id FOR UPDATE`, [rows.map(row => row.id)]);
       for (const config of configs.rows) {
-        await this.writeCourse(client, revisionId, config.code, config, { status: "draft", links: [], note: config.note }, actor,
-          "Xóa liên kết và trọng số của cả chương trình");
+        await this.writeCourse(client, config.courseId, config, { status: "draft", links: [], note: config.note }, actor,
+          cohort ? `Xóa liên kết và trọng số của các môn học ${cohort}` : "Xóa liên kết và trọng số của mọi môn học");
       }
       return { cleared: configs.rows.length };
     });
   }
 
   /**
-   * "Áp dụng bản nháp": every draft of the revision becomes active, one course at a time (a savepoint
+   * "Áp dụng bản nháp": every draft of the filter becomes active, one course at a time (a savepoint
    * each). A draft that cannot be applied (no link, a total other than 100%, a skill or group no
    * longer in use) is skipped with its reason and the others go on.
    */
-  async activateDrafts(revisionId: string, actor: AuthenticatedUser) {
+  async activateDrafts(cohort: string, actor: AuthenticatedUser) {
     return this.write(actor, async client => {
-      await this.revision(client, revisionId);
-      const drafts = await client.query<{ id: string; code: string; note: string }>(`SELECT id,course_code AS code,note
- FROM ad_comp_course_configs WHERE revision_id=$1 AND status='draft' ORDER BY course_code FOR UPDATE`, [revisionId]);
+      const rows = await this.courseRows(client, cohort);
+      const locked = await client.query<{ id: string; courseId: string; note: string }>(`SELECT id,course_id AS "courseId",note
+ FROM ad_comp_course_configs WHERE course_id=ANY($1::uuid[]) AND status='draft' ORDER BY id FOR UPDATE`, [rows.map(row => row.id)]);
+      const drafts = new Map(locked.rows.map(draft => [draft.courseId, draft]));
       let activated = 0;
-      const skipped: { courseCode: string; reason: string }[] = [];
-      for (const draft of drafts.rows) {
+      const skipped: { courseCode: string; courseName: string; reason: string }[] = [];
+      for (const course of rows) {
+        const draft = drafts.get(course.id);
+        if (!draft) continue;
         await client.query("SAVEPOINT activate_draft");
         try {
           const links = (await client.query<{ skillId: string; weight: number }>(`SELECT skill_id AS "skillId",weight::float8 AS weight
  FROM ad_comp_course_links WHERE config_id=$1 ORDER BY skill_id`, [draft.id])).rows;
           if (!links.length) throw new CompetencyError("course_has_no_links", 409);
-          await this.writeCourse(client, revisionId, draft.code, draft, { status: "active", links, note: draft.note }, actor, "Áp dụng bản nháp của cả chương trình");
+          await this.writeCourse(client, course.id, draft, { status: "active", links, note: draft.note }, actor, "Áp dụng bản nháp của nhiều môn học");
           // Deferred weight checks run now, so one bad course never fails the others at commit.
           await client.query("SET CONSTRAINTS ALL IMMEDIATE");
           await client.query("SET CONSTRAINTS ALL DEFERRED");
@@ -517,7 +522,7 @@ export class CompetencyRepository {
         } catch (error) {
           await client.query("ROLLBACK TO SAVEPOINT activate_draft");
           const database = error as { code?: string; constraint?: string };
-          skipped.push({ courseCode: draft.code, reason: error instanceof CompetencyError ? error.code
+          skipped.push({ courseCode: course.code, courseName: course.name, reason: error instanceof CompetencyError ? error.code
             : database.code === "23514" ? (database.constraint === "competency_active_total" ? "weight_total_invalid" : "skill_unavailable")
               : "invalid_competency_reference" });
         }
@@ -526,66 +531,66 @@ export class CompetencyRepository {
     });
   }
 
-  async archiveCourse(revisionId: string, code: string, version: string, actor: AuthenticatedUser) {
+  async archiveCourse(id: string, version: string, actor: AuthenticatedUser) {
     return this.write(actor, async client => {
       const current = await client.query<{ id: string; version: string }>(`SELECT id,version FROM ad_comp_course_configs
- WHERE revision_id=$1 AND course_code=$2 FOR UPDATE`, [revisionId, code]);
+ WHERE course_id=$1 FOR UPDATE`, [id]);
       if (!current.rowCount) throw new CompetencyError("course_not_found", 404);
       if (current.rows[0]!.version !== version) throw new CompetencyError("configuration_changed", 409);
       await client.query("UPDATE ad_comp_course_configs SET status='archived',version=$2,updated_at=now() WHERE id=$1",
         [current.rows[0]!.id, randomUUID()]);
-      const snapshot = await this.courseSnapshot(client, revisionId, code);
-      await this.event(client, "course", `${revisionId}:${code}`, actor, snapshot, "Ngừng áp dụng phân bổ năng lực học phần");
+      const snapshot = await this.courseSnapshot(client, id);
+      await this.event(client, "course", id, actor, snapshot, "Ngừng áp dụng phân bổ năng lực môn học");
       return snapshot;
     });
   }
 
-  async summary(revisionId: string) {
-    const revision = await this.revision(this.pool, revisionId);
-    const occurrences = this.courseOccurrences(revision);
-    const configurations = await this.configurations(this.pool, revisionId);
-    const links = await this.pool.query<{ courseCode: string; skillId: string; skillName: string; weight: number; isActive: boolean }>(`SELECT c.course_code AS "courseCode",
+  async summary(cohort: string) {
+    const rows = await this.courseRows(this.pool, cohort);
+    const links = await this.pool.query<{ courseId: string; skillId: string; skillName: string; weight: number; isActive: boolean }>(`SELECT c.course_id AS "courseId",
  l.skill_id AS "skillId",s.name AS "skillName",l.weight::float8 AS weight,
  (cs.is_active AND cs.deleted_at IS NULL AND g.is_active AND s.deleted_at IS NULL) AS "isActive"
  FROM ad_comp_course_configs c JOIN ad_comp_course_links l ON l.config_id=c.id
  JOIN ad_comp_skills cs ON cs.skill_id=l.skill_id JOIN career_skills s ON s.id=cs.skill_id
- JOIN ad_comp_groups g ON g.id=cs.group_id WHERE c.revision_id=$1 ORDER BY c.course_code,s.name,s.id`, [revisionId]);
+ JOIN ad_comp_groups g ON g.id=cs.group_id WHERE c.course_id=ANY($1::uuid[]) ORDER BY s.name,s.id`, [rows.map(row => row.id)]);
     const eligible = await this.pool.query<{ id: string }>(`SELECT s.id ${skillTables}
  WHERE cs.deleted_at IS NULL AND cs.is_active AND s.deleted_at IS NULL AND g.is_active`);
     const linksByCourse = new Map<string, typeof links.rows>();
     for (const link of links.rows) {
-      const bucket = linksByCourse.get(link.courseCode) ?? [];
+      const bucket = linksByCourse.get(link.courseId) ?? [];
       bucket.push(link);
-      linksByCourse.set(link.courseCode, bucket);
+      linksByCourse.set(link.courseId, bucket);
     }
-    const linked = new Set(links.rows.filter(link => link.weight > 0 && link.isActive && configurations.get(link.courseCode)?.status === "active")
-      .map(link => link.skillId));
+    const status = new Map(rows.map(row => [row.id, row.status]));
+    const linked = new Set(links.rows.filter(link => link.weight > 0 && link.isActive && status.get(link.courseId) === "active").map(link => link.skillId));
     const warnings: Warning[] = [];
     let activeCount = 0, draftCount = 0, archivedCount = 0, missingCount = 0;
-    for (const [code, occurrence] of occurrences) {
-      const config = configurations.get(code);
-      if (occurrence.occurrenceCount > 1) warnings.push({ code: "duplicate_curriculum_course", courseCode: code,
-        message: `${code} xuất hiện ${occurrence.occurrenceCount} dòng trong phiên bản CTĐT; cần rà soát trước khi lưu phân bổ.` });
-      if (!config) {
+    for (const course of rows) {
+      // Two courses can share a code (another name or credits), so a warning names the course.
+      const name = course.name;
+      if (course.mergedFrom.length) warnings.push({ code: "merged_configuration", courseCode: course.code,
+        message: `${name}: đã gộp cấu hình khác của ${course.mergedFrom.join(", ")}; xem Lịch sử cấu hình để đối chiếu.` });
+      if (course.status === "missing") {
         missingCount++;
-        warnings.push({ code: "missing_configuration", courseCode: code, message: `${code} chưa có phân bổ năng lực.` });
+        warnings.push({ code: "missing_configuration", courseCode: course.code, message: `${name} chưa có phân bổ năng lực.` });
         continue;
       }
-      if (config.status === "active") activeCount++;
-      else if (config.status === "draft") draftCount++;
+      if (course.status === "active") activeCount++;
+      else if (course.status === "draft") draftCount++;
       else archivedCount++;
-      const courseLinks = linksByCourse.get(code) ?? [];
-      if (config.status === "draft" && (!courseLinks.length || Math.abs(Number(config.totalWeight) - 1) > WEIGHT_TOLERANCE || courseLinks.some(link => !link.isActive)))
-        warnings.push({ code: "incomplete_draft", courseCode: code,
-          message: `${code} là bản nháp chưa đủ phân bổ 100% hoặc có năng lực chưa khả dụng.` });
-      if (config.status !== "archived") for (const link of courseLinks.filter(link => link.weight === 0))
-        warnings.push({ code: "zero_contribution", courseCode: code, message: `${link.skillName} có trọng số 0% trong ${code}; liên kết này không đóng góp vào năng lực.` });
+      const courseLinks = linksByCourse.get(course.id) ?? [];
+      if (course.status === "draft" && (!courseLinks.length || Math.abs(course.totalWeight - 1) > WEIGHT_TOLERANCE || courseLinks.some(link => !link.isActive)))
+        warnings.push({ code: "incomplete_draft", courseCode: course.code,
+          message: `${name} là bản nháp chưa đủ phân bổ 100% hoặc có năng lực chưa khả dụng.` });
+      if (course.status !== "archived") for (const link of courseLinks.filter(link => link.weight === 0))
+        warnings.push({ code: "zero_contribution", courseCode: course.code, message: `${link.skillName} có trọng số 0% trong ${name}; liên kết này không đóng góp vào năng lực.` });
     }
-    if (!configurations.size) warnings.unshift({ code: "no_configurations", message: "Phiên bản CTĐT này chưa có cấu hình năng lực học phần." });
+    if (rows.length && missingCount === rows.length) warnings.unshift({ code: "no_configurations",
+      message: cohort ? `Các môn học của ${cohort} chưa có cấu hình năng lực.` : "Chưa có môn học nào có cấu hình năng lực." });
     const unlinkedSkillCount = eligible.rows.filter(skill => !linked.has(skill.id)).length;
-    if (unlinkedSkillCount) warnings.push({ code: "unlinked_skills", message: `${unlinkedSkillCount} năng lực khả dụng chưa có học phần đóng góp trong phiên bản này.` });
-    return { revisionId, cohortCode: revision.cohortCode, curriculumName: revision.name, curriculumVersion: revision.version,
-      isCurrent: revision.isCurrent, courseCount: occurrences.size, activeCount, draftCount, archivedCount, missingCount,
+    if (unlinkedSkillCount) warnings.push({ code: "unlinked_skills",
+      message: `${unlinkedSkillCount} năng lực khả dụng chưa có môn học đóng góp${cohort ? ` trong các môn của ${cohort}` : ""}.` });
+    return { cohort, courseCount: rows.length, activeCount, draftCount, archivedCount, missingCount,
       skillCount: eligible.rows.length, unlinkedSkillCount, warnings };
   }
 }

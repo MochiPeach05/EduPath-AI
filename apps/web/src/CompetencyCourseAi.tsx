@@ -3,7 +3,7 @@ import { Modal, Status } from "./admin-ui";
 import { Icon, RequiredLabel } from "./admin-account-shared";
 import {
   ADD_SKILLS_PATH, COMPETENCY_API, NO_MATCHING_SKILL_MESSAGE, percentage, useCompetencyData,
-  type CompetencyCourse, type CurriculumRevision, type Group,
+  type CompetencyCourse, type Group,
 } from "./competency-types";
 import {
   AI_COMPUTING_MESSAGE, COMPETENCY_AI_API, SKILL_NAME_MAX,
@@ -14,18 +14,18 @@ import { Elapsed, ReviewHead, WorkerLine } from "./CompetencyAiParts";
 import { useCompetencySuggestion, type SuggestionBusy as Busy } from "./use-competency-suggestion";
 import "./careers.css";
 
-type Props = { curriculum: CurriculumRevision; course: CompetencyCourse; close: () => void; saved: () => void };
+type Props = { course: CompetencyCourse; close: () => void; saved: () => void };
 
 /**
  * "Tạo liên kết kỹ năng (AI)" for one course: the local AI picks the skills and splits the course's
  * 100% over all of its skills ("Thêm trọng số (AI)" was merged into it, 2026-10-20). The admin reviews
  * and saves what is kept as a draft or applied. The AI receives curriculum data only, never student data.
  */
-export default function CompetencyCourseAi({ curriculum, course, close, saved }: Props) {
+export default function CompetencyCourseAi({ course, close, saved }: Props) {
   const mode = "links";
-  const query = new URLSearchParams({ revisionId: curriculum.revisionId, code: course.code, mode });
+  const query = new URLSearchParams({ courseId: course.id, mode });
   const { latest, latestFailed, statusLoading, worker, suggestion, view, busy, setBusy, error, create, cancel } =
-    useCompetencySuggestion(`${COMPETENCY_AI_API}/latest?${query}`, COMPETENCY_AI_API, { revisionId: curriculum.revisionId, code: course.code, mode });
+    useCompetencySuggestion(`${COMPETENCY_AI_API}/latest?${query}`, COMPETENCY_AI_API, { courseId: course.id, mode });
 
   return <Modal title={`Tạo liên kết kỹ năng (AI) · ${course.code}`} onClose={close} busy={busy !== null}>
     <div className="cm-dialog-body cm-form cai-body">
@@ -36,7 +36,7 @@ export default function CompetencyCourseAi({ curriculum, course, close, saved }:
           <span className="cai-intro-icon" aria-hidden="true"><Icon name="spark" /></span>
           <div>
             <h3>{course.code} · {course.name}</h3>
-            <p>AI đọc tên, mô tả, khối kiến thức và số giờ của học phần cùng các kỹ năng đã có cấu hình năng lực (gồm cả kỹ năng nghề nghiệp chưa có học phần đo), đề xuất những kỹ năng học phần rèn luyện và chia 100% trọng số cho các kỹ năng của học phần{course.skillCount ? `, kể cả ${course.skillCount} kỹ năng đã liên kết` : ""}. Bạn xem, sửa rồi lưu bản nháp hoặc áp dụng.</p>
+            <p>AI đọc tên, mô tả, khối kiến thức và số giờ của môn học cùng các kỹ năng đã có cấu hình năng lực (gồm cả kỹ năng nghề nghiệp chưa có môn học đo), đề xuất những kỹ năng môn học rèn luyện và chia 100% trọng số cho các kỹ năng của môn học{course.skillCount ? `, kể cả ${course.skillCount} kỹ năng đã liên kết` : ""}. Bạn xem, sửa rồi lưu bản nháp hoặc áp dụng.</p>
             <p className="cai-muted">AI chỉ nhận dữ liệu chương trình đào tạo, không nhận dữ liệu sinh viên. Kết quả chỉ là gợi ý: bạn chọn, sửa rồi mới lưu.</p>
           </div>
         </div>
@@ -51,7 +51,7 @@ export default function CompetencyCourseAi({ curriculum, course, close, saved }:
         <div className="cai-waiting">
           <span className="cai-spinner" aria-hidden="true" />
           <div>
-            <p className="cai-state" role="status" aria-live="polite">{suggestion.status === "queued" ? "Đang chờ máy AI nhận việc…" : "AI đang chọn kỹ năng và chia trọng số cho học phần…"}</p>
+            <p className="cai-state" role="status" aria-live="polite">{suggestion.status === "queued" ? "Đang chờ máy AI nhận việc…" : "AI đang chọn kỹ năng và chia trọng số cho môn học…"}</p>
             {suggestion.status === "processing" && <p className="cai-muted"><Elapsed since={suggestion.updatedAt} /> · AI suy luận trước khi trả lời nên thường mất 30 giây đến 2 phút.</p>}
             {(suggestion.status === "processing" || worker.tone === "ok") && <p className="cai-muted">{AI_COMPUTING_MESSAGE}</p>}
             <p className="cai-muted">{course.code} · {course.name}</p>
@@ -102,7 +102,7 @@ function LinksReview({ suggestion, course, busy, setBusy, createError, canCreate
   return <>
     <ReviewHead suggestion={suggestion} heading={suggestion.items.length ? `AI đề xuất ${proposed.toLocaleString("vi-VN")} kỹ năng mới và trọng số cho ${course.code}` : `Chưa có kỹ năng phù hợp cho ${course.code}`}
       text={suggestion.items.length ? "Bỏ chọn kỹ năng không phù hợp, chọn nhóm năng lực cho kỹ năng chưa có cấu hình năng lực và sửa phần trăm nếu cần. Kỹ năng đã liên kết luôn được giữ. Áp dụng cần tổng đúng 100%; bản nháp được lưu dù tổng chưa đủ." : NO_MATCHING_SKILL_MESSAGE} />
-    {suggestion.stale && <p className="cm-warning" role="alert">Liên kết kỹ năng của học phần đã thay đổi sau khi AI đề xuất. Hãy tạo lại đề xuất.</p>}
+    {suggestion.stale && <p className="cm-warning" role="alert">Liên kết kỹ năng của môn học đã thay đổi sau khi AI đề xuất. Hãy tạo lại đề xuất.</p>}
     {!suggestion.items.length && <p className="cai-muted">Bổ sung kỹ năng ở Cấu hình năng lực rồi tạo lại đề xuất, hoặc tạo liên kết thủ công.</p>}
     <Status {...groups} />
     {rows.length > 0 && <ul className="cai-rows">{rows.map((row) => {
@@ -125,7 +125,7 @@ function LinksReview({ suggestion, course, busy, setBusy, createError, canCreate
             <option value="">Chọn nhóm</option>{options.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
           </select></label>
         </fieldset>}
-        {!row.hasProfile && !row.alreadyLinked && <p className="cai-similar">{row.isNewSkill ? "Khi lưu, kỹ năng mới được thêm vào mục Kỹ năng của Nghề nghiệp và được tạo cấu hình năng lực." : "Kỹ năng này đang được nghề nghiệp yêu cầu nhưng chưa có học phần đo. Khi lưu, kỹ năng được tạo cấu hình năng lực."}</p>}
+        {!row.hasProfile && !row.alreadyLinked && <p className="cai-similar">{row.isNewSkill ? "Khi lưu, kỹ năng mới được thêm vào mục Kỹ năng của Nghề nghiệp và được tạo cấu hình năng lực." : "Kỹ năng này đang được nghề nghiệp yêu cầu nhưng chưa có môn học đo. Khi lưu, kỹ năng được tạo cấu hình năng lực."}</p>}
         {row.reason && <p className="cai-reason">Lý do AI đề xuất: {row.reason}</p>}
         {rowErrors.length > 0 && <ul className="cai-row-errors" role="alert">{rowErrors.map((message) => <li key={message}>{message}</li>)}</ul>}
       </li>;

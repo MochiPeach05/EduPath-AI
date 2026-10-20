@@ -64,20 +64,20 @@ describe("whole-program run", () => {
   });
 
   it("lists the courses no catalog skill fits that still have no link (2026-10-19)", () => {
-    const entry = (courseCode: string, patch: Partial<CourseAiBatch["items"][number]>) =>
-      ({ id: courseCode, courseCode, status: "completed" as const, errorCode: null, applied: false, itemCount: 0, ...patch });
+    const entry = (courseCode: string, courseName: string, patch: Partial<CourseAiBatch["items"][number]>) =>
+      ({ id: `job-${courseCode}`, courseId: `course-${courseCode}`, courseCode, courseName, status: "completed" as const, errorCode: null, applied: false, itemCount: 0, linked: false, ...patch });
     const run = batch({ items: [
-      entry("A", {}),
-      entry("B", { applied: true, noMatch: true }),
-      entry("C", { itemCount: 2, noMatch: false }),
+      entry("A", "Tiếng Nhật 1", {}),
+      entry("B", "Kế toán tài chính 1", { applied: true, noMatch: true }),
+      entry("C", "Lập trình web", { itemCount: 2, noMatch: false }),
       // Every pick became unusable when the run was saved.
-      entry("D", { applied: true, itemCount: 2, noMatch: true }),
-      entry("E", { status: "processing" }),
-      entry("F", {}),
+      entry("D", "Sinh học đại cương", { applied: true, itemCount: 2, noMatch: true }),
+      entry("E", "Đang chạy", { status: "processing" }),
+      // Linked by hand since the run.
+      entry("F", "Đã liên kết thủ công", { linked: true }),
     ] });
-    const courses = [["A", "Tiếng Nhật 1", 0], ["B", "Kế toán tài chính 1", 0], ["C", "Lập trình web", 0], ["D", "Sinh học đại cương", 0], ["E", "Đang chạy", 0], ["F", "Đã liên kết thủ công", 2]]
-      .map(([code, name, skillCount]) => ({ code: code as string, name: name as string, skillCount: skillCount as number }));
-    expect(noMatchCourses(run, courses)).toEqual([{ code: "A", name: "Tiếng Nhật 1" }, { code: "B", name: "Kế toán tài chính 1" }, { code: "D", name: "Sinh học đại cương" }]);
+    expect(noMatchCourses(run)).toEqual([{ key: "course-A", code: "A", name: "Tiếng Nhật 1" }, { key: "course-B", code: "B", name: "Kế toán tài chính 1" },
+      { key: "course-D", code: "D", name: "Sinh học đại cương" }]);
   });
 
   it("explains failures and skipped courses in the admin's words", () => {

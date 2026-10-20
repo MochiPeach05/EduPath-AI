@@ -3,8 +3,7 @@ import { z } from "zod";
 import type { DatabasePool } from "../db/pool.js";
 import { requireAdminAccess } from "../middleware/authorization.js";
 import { CareerError } from "../careers/shared.js";
-import { courseCode } from "../curricula/course-codes.js";
-import { CompetencyError, configurationInput, groupInput, skillInput } from "./model.js";
+import { CompetencyError, cohortFilter, configurationInput, groupInput, skillInput } from "./model.js";
 import { CompetencyRepository } from "./repository.js";
 import { createCompetencyAiRouter } from "./ai/router.js";
 
@@ -78,40 +77,39 @@ export function createCompetenciesRouter(pool: DatabasePool | undefined, webOrig
     res.json(await repository!.deleteSkill(id, version, req.session.user!));
   });
 
-  router.get("/curricula", async (req, res) => {
+  router.get("/cohorts", async (req, res) => {
     emptyQuery.parse(req.query);
-    res.json({ items: await repository!.curricula() });
+    res.json({ items: await repository!.cohorts() });
   });
   router.get("/courses", async (req, res) => {
-    const query = z.object({ revisionId: uuid, q: z.string().trim().max(300).default(""),
+    const query = z.object({ cohort: cohortFilter.default(""), q: z.string().trim().max(300).default(""),
       status: z.enum(["", "missing", "draft", "active", "archived"]).default("") }).strict().parse(req.query);
-    res.json({ items: await repository!.courses(query.revisionId, query) });
+    res.json({ items: await repository!.courses(query) });
   });
-  router.get("/courses/:revisionId/:code", async (req, res) => {
+  router.get("/courses/:id", async (req, res) => {
     emptyQuery.parse(req.query);
-    res.json(await repository!.course(uuid.parse(req.params.revisionId), courseCode.parse(req.params.code)));
+    res.json(await repository!.course(uuid.parse(req.params.id)));
   });
-  router.put("/courses/:revisionId/:code", async (req, res) => {
+  router.put("/courses/:id", async (req, res) => {
     const version = z.union([z.literal("new"), uuid]).parse(req.get("x-version"));
-    res.json(await repository!.saveCourse(uuid.parse(req.params.revisionId), courseCode.parse(req.params.code), version,
-      configurationInput.parse(req.body), req.session.user!));
+    res.json(await repository!.saveCourse(uuid.parse(req.params.id), version, configurationInput.parse(req.body), req.session.user!));
   });
   router.post("/courses/clear", async (req, res) => {
-    const data = z.object({ revisionId: uuid, confirm: z.string().max(40) }).strict().parse(req.body);
-    res.json(await repository!.clearRevision(data.revisionId, data.confirm, req.session.user!));
+    const data = z.object({ cohort: cohortFilter, confirm: z.string().max(40) }).strict().parse(req.body);
+    res.json(await repository!.clearCourses(data.cohort, data.confirm, req.session.user!));
   });
   router.post("/courses/activate", async (req, res) => {
-    const data = z.object({ revisionId: uuid, confirmed: z.literal(true) }).strict().parse(req.body);
-    res.json(await repository!.activateDrafts(data.revisionId, req.session.user!));
+    const data = z.object({ cohort: cohortFilter, confirmed: z.literal(true) }).strict().parse(req.body);
+    res.json(await repository!.activateDrafts(data.cohort, req.session.user!));
   });
-  router.delete("/courses/:revisionId/:code", async (req, res) => {
-    const revisionId = uuid.parse(req.params.revisionId), code = courseCode.parse(req.params.code), version = uuid.parse(req.get("x-version"));
+  router.delete("/courses/:id", async (req, res) => {
+    const id = uuid.parse(req.params.id), version = uuid.parse(req.get("x-version"));
     confirmed.parse(req.body);
-    res.json(await repository!.archiveCourse(revisionId, code, version, req.session.user!));
+    res.json(await repository!.archiveCourse(id, version, req.session.user!));
   });
   router.get("/summary", async (req, res) => {
-    const query = z.object({ revisionId: uuid }).strict().parse(req.query);
-    res.json(await repository!.summary(query.revisionId));
+    const query = z.object({ cohort: cohortFilter.default("") }).strict().parse(req.query);
+    res.json(await repository!.summary(query.cohort));
   });
 
   const errors: ErrorRequestHandler = (error, req, res, next) => {

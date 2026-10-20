@@ -69,10 +69,10 @@ export function createCareerSkillsRouter(pool: DatabasePool) {
             // Record names and allocations here so old history does not change after another rename.
             const profile = await client.query(`SELECT s.id,s.name,s.description,cs.scope,cs.legacy_skill_id AS "legacySkillId",cs.group_id AS "groupId",
  g.name AS "groupName",cs.is_active AS "isActive",g.is_active AS "groupActive",cs.version,
- COALESCE((SELECT jsonb_agg(jsonb_build_object('revisionId',c.revision_id,'courseCode',c.course_code,
- 'courseName',cc.name,'weight',l.weight,'status',c.status) ORDER BY c.revision_id,c.course_code)
+ COALESCE((SELECT jsonb_agg(jsonb_build_object('courseId',x.id,'courseCode',x.code,
+ 'courseName',x.name,'weight',l.weight,'status',c.status) ORDER BY x.code,x.name,x.id)
  FROM ad_comp_course_links l JOIN ad_comp_course_configs c ON c.id=l.config_id
- JOIN curriculum_courses cc ON cc.revision_id=c.revision_id AND cc.code=c.course_code WHERE l.skill_id=s.id),'[]'::jsonb) AS contributions
+ JOIN ad_comp_courses x ON x.id=c.course_id WHERE l.skill_id=s.id),'[]'::jsonb) AS contributions
  FROM career_skills s JOIN ad_comp_skills cs ON cs.skill_id=s.id JOIN ad_comp_groups g ON g.id=cs.group_id
  WHERE s.id=$1 AND cs.deleted_at IS NULL`, [id]);
             if (profile.rowCount) await client.query(`INSERT INTO ad_comp_events(kind,entity_key,actor_id,snapshot,note)
