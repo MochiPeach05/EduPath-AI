@@ -2,7 +2,7 @@ import { referencedCourseCodes } from "../curricula/course-codes.js";
 import { startsReplacementPath, THESIS_NAME_PATTERN } from "../graduation/thesis.js";
 import {
   CALC_VERSION, CAREER_COEFFICIENTS, CAREER_THRESHOLDS, COVERAGE_BANDS, DEFICIT_BANDS, EVIDENCE_BANDS, FIT_BELOW_FLOOR,
-  FIT_BELOW_MAX_CREDIT, FIT_LABEL_THRESHOLDS, FIT_MIN_DATA_SHARE, HIGHLIGHT_COUNT, isStrengthConfidence, LEVEL_THRESHOLDS, MAX_RELATED_SKILLS,
+  FIT_BELOW_MAX_CREDIT, FIT_LABELS, fitCodeOf, HIGHLIGHT_COUNT, isStrengthConfidence, LEVEL_THRESHOLDS, MAX_RELATED_SKILLS,
   MAX_SKILL_PLANS, MAX_SUPPORT_COURSES, MIN_WEIGHTED_COURSE_SHARE, SCOPE_MAX_LENGTH,
 } from "./constants.js";
 import {
@@ -18,7 +18,7 @@ import {
 } from "./specialty.js";
 import type {
   AssessmentInputs, AssessmentResult, AssessmentWarning, AttemptOutcome, CareerRequirementResult, CareerResult, Confidence,
-  CourseFact, CourseState, CourseSuggestion, DeficitBand, Eligibility, EvidenceRole, FitCode, GapStatus, GroupResult, HistoryPoint,
+  CourseFact, CourseState, CourseSuggestion, DeficitBand, Eligibility, EvidenceRole, GapStatus, GroupResult, HistoryPoint,
   LevelCode, NotApplicableReason, PrerequisiteGap, SelfStudyItem, SelfStudyReason, SkillEvidenceRow, SkillPlan, SkillResult, SupportCourse,
 } from "./types.js";
 
@@ -34,9 +34,6 @@ const GAP_STATUS_LABELS: Record<GapStatus, string> = {
 };
 const DEFICIT_BAND_LABELS: Record<DeficitBand, string> = {
   near: "Gần ngưỡng", moderate: "Thiếu vừa", large: "Thiếu nhiều", not_studied: "Chưa học",
-};
-const FIT_LABELS: Record<FitCode, string> = {
-  fit: "Phù hợp", fairly_fit: "Khá phù hợp", needs_more: "Cần bổ sung nhiều", insufficient_data: "Chưa đủ dữ liệu",
 };
 const ELIGIBILITY_LABELS: Record<Eligibility, string> = {
   eligible: "Đủ điều kiện", not_eligible: "Chưa đủ điều kiện", review: "Cần xác nhận",
@@ -97,10 +94,6 @@ export function fitCredit(status: GapStatus, score: number | null, threshold: nu
   return null;
 }
 
-export function fitCodeOf(fit: number | null, dataShare: number): FitCode {
-  if (fit === null || dataShare < FIT_MIN_DATA_SHARE) return "insufficient_data";
-  return fit >= FIT_LABEL_THRESHOLDS.fit ? "fit" : fit >= FIT_LABEL_THRESHOLDS.fairlyFit ? "fairly_fit" : "needs_more";
-}
 
 const compareText = (a: string, b: string) => {
   const left = fold(a), right = fold(b);
@@ -630,8 +623,10 @@ function assess(inputs: AssessmentInputs): Assessment {
     const fitRaw = includedCoefficient > 0
       ? included.reduce((sum, row) => sum + row.coefficient * (fitCredit(row.status, workById.get(row.skillId ?? "")?.score ?? null, row.threshold) ?? 0), 0) / includedCoefficient
       : null;
-    const dataShare = totalCoefficient > 0 ? includedCoefficient / totalCoefficient : 0;
-    const fitCode = fitCodeOf(fitRaw, dataShare);
+    const fit = fitRaw === null ? null : round(fitRaw, 4);
+    const dataShare = round(totalCoefficient > 0 ? includedCoefficient / totalCoefficient : 0, 4);
+    // Read from the stored values: the page and the AI prompt derive the level from them too.
+    const fitCode = fitCodeOf(fit, dataShare);
     const scoredRows = rows.filter((row) => row.skillId && workById.get(row.skillId)?.score != null);
     const meanCoefficient = scoredRows.reduce((sum, row) => sum + row.coefficient, 0);
     const counts = {
@@ -642,7 +637,7 @@ function assess(inputs: AssessmentInputs): Assessment {
       id: career.id, code: career.code, nameVi: career.nameVi, nameEn: career.nameEn, deleted: career.deleted, requirements: rows, counts,
       summaryText: `Đạt ${counts.met}/${counts.total} kỹ năng · ${counts.upcoming} sắp học · ${counts.noData} chưa đủ dữ liệu`,
       dataText: `${counts.withData}/${counts.total} kỹ năng có dữ liệu`,
-      fit: fitRaw === null ? null : round(fitRaw, 4), fitCode, fitLabel: FIT_LABELS[fitCode], dataShare: round(dataShare, 4),
+      fit, fitCode, fitLabel: FIT_LABELS[fitCode], dataShare,
       weightedMeanScore: meanCoefficient > 0
         ? floorScore(snapScore(scoredRows.reduce((sum, row) => sum + row.coefficient * workById.get(row.skillId!)!.score!, 0) / meanCoefficient)) : null,
       weightedMeanCount: scoredRows.length,

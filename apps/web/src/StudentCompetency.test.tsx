@@ -87,7 +87,9 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
     const html = render({ assessment: fixtureAssessment("disabled"), aiEnabled: false, workerOnline: false });
     expect(html).toContain("Nhận xét AI chưa được bật");
     expect(html).not.toContain("Tạo lại nhận xét");
-    expect(html).toContain("Khá phù hợp");
+    // The fixture is stored with the earlier label "Khá phù hợp"; 0,58 reads "Trung bình" on the 2026-10-21 scale.
+    expect(html).toContain('<strong class="scomp-fit-label">Trung bình</strong>');
+    expect(html).not.toContain("Khá phù hợp");
     expect(html).toContain("Bảng phân tích mức độ thành thạo theo nhóm năng lực");
   });
   it("explains the proficiency table and counts skills per level and group", () => {
@@ -312,7 +314,9 @@ describe("StudentCompetency — Khoảng trống kỹ năng", () => {
     const html = withAi("completed", "gap");
     const summary = html.slice(html.indexOf('id="sgap-summary"'), html.indexOf('id="scomp-ai"'));
     expect(summary).toContain("<summary>Thang mức phù hợp</summary>");
-    expect(summary).toContain('<strong>Khá phù hợp</strong><span class="scomp-career-tag">Mức của bạn</span>');
+    expect(summary).toContain('<strong>Trung bình</strong><span class="scomp-career-tag">Mức của bạn</span>');
+    expect(summary).toContain('<strong class="scomp-fit-label">Trung bình</strong>');
+    expect(summary).not.toContain("Khá phù hợp");
     expect(summary.match(/Mức của bạn/g)).toHaveLength(1);
     expect(summary).toContain("Bạn đang đạt khoảng 58% yêu cầu của nghề Lập trình viên web.");
     expect(summary).toContain("Kỹ năng Bắt buộc tính gấp đôi kỹ năng Ưu tiên.");

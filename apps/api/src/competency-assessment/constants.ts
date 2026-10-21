@@ -1,4 +1,4 @@
-import type { Confidence } from "./types.js";
+import type { Confidence, FitCode } from "./types.js";
 
 // Every threshold and band used by the competency calculation lives here.
 // Changing a value changes stored results, so bump CALC_VERSION with it.
@@ -39,9 +39,26 @@ export const CAREER_COEFFICIENTS = { required: 2, preferred: 1 } as const;
 /** A 'below' requirement earns at most this much, scaled from FIT_BELOW_FLOOR up to the threshold. */
 export const FIT_BELOW_MAX_CREDIT = 0.5;
 export const FIT_BELOW_FLOOR = 40;
-export const FIT_LABEL_THRESHOLDS = { fit: 0.8, fairlyFit: 0.5 } as const;
+/**
+ * Fit levels in steps of 20% (user, 2026-10-21: "một thang nhất quán … Rất phù hợp / Phù hợp / Trung
+ * bình / Ít phù hợp / Không phù hợp"; before: Phù hợp ≥ 0,8, Khá phù hợp ≥ 0,5, Cần bổ sung nhiều).
+ * The level is read from the stored (rounded) fit and data share, and the page and the AI prompt
+ * read it the same way for older results, so CALC_VERSION (which also dates the graduation advice)
+ * was not bumped. Mirrored in apps/web/src/student-competency-data.ts (fitLevelOf).
+ */
+export const FIT_LABEL_THRESHOLDS = { veryFit: 0.8, fit: 0.6, average: 0.4, lowFit: 0.2 } as const;
 /** Below this share of coefficients with data the fit label is "Chưa đủ dữ liệu". */
 export const FIT_MIN_DATA_SHARE = 0.5;
+export const FIT_LABELS: Record<FitCode, string> = {
+  very_fit: "Rất phù hợp", fit: "Phù hợp", average: "Trung bình", low_fit: "Ít phù hợp", not_fit: "Không phù hợp",
+  insufficient_data: "Chưa đủ dữ liệu",
+};
+export function fitCodeOf(fit: number | null, dataShare: number): FitCode {
+  if (fit === null || dataShare + 1e-9 < FIT_MIN_DATA_SHARE) return "insufficient_data";
+  const reaches = (floor: number) => fit + 1e-9 >= floor;
+  const t = FIT_LABEL_THRESHOLDS;
+  return reaches(t.veryFit) ? "very_fit" : reaches(t.fit) ? "fit" : reaches(t.average) ? "average" : reaches(t.lowFit) ? "low_fit" : "not_fit";
+}
 
 /** Deficit bands for 'below': ≤ near → gần ngưỡng, ≤ moderate → thiếu vừa, otherwise thiếu nhiều. */
 export const DEFICIT_BANDS = { near: 5, moderate: 15 } as const;

@@ -20,7 +20,7 @@ const valid = (): AiOutput => ({
       comment: "Cơ sở dữ liệu đạt 72, đã qua ngưỡng của nghề; học cải thiện Nhập môn cơ sở dữ liệu để nâng lên mức Thành thạo."
     }
   ],
-  careerFit: { comment: "Bạn đạt 2/4 kỹ năng của nghề, mức Khá phù hợp." },
+  careerFit: { comment: "Bạn đạt 2/4 kỹ năng của nghề, mức Phù hợp." },
   gaps: [
     { skillKey: "S03", priority: "high", explanation: "Đây là kỹ năng bắt buộc của nghề.", courses: [{ courseCode: "TST201", reason: "Học ở HK261." }], selfStudy: ["Viết bộ kiểm thử cho một dự án cá nhân."] },
     { skillKey: "S05", priority: "low", explanation: "Chương trình chưa đo kỹ năng này.", courses: [], selfStudy: ["Tự triển khai một ứng dụng nhỏ lên nền tảng đám mây."] }

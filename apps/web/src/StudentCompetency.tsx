@@ -6,7 +6,7 @@ import type { StudentProfile } from "./StudentOverview";
 import { specialtyLabel, type AiStatus, type AssessmentResult, type AssessmentStatusResponse, type CareerRequirementResult, type CourseSuggestion, type LatestAssessmentResponse, type LevelCode, type SkillPlan, type SkillResult, type StoredAssessment, type SupportCourse } from "./competency-assessment-types";
 import {
   CHART_LEVELS, COMPETENCY_API, CONFIDENCE_LABELS, COURSE_STATE_LABELS, EMPTY_SKILL_FILTERS, FIT_SCALE, LEVEL_COLUMNS, LEVEL_SCALE, PRECONDITION_COPY, PRIORITY_LABELS,
-  aiErrorMessage, aiReasoned, aiStateCopy, bucketSkills, canRegenerate, careerSkillKeys, confidentStrengths, courseStanding, dataUsedLine, displayLevel, eligibilityDisplay, errorMessage, filterSkills, fitPercent, formatDateTime,
+  aiErrorMessage, aiReasoned, aiStateCopy, bucketSkills, canRegenerate, careerSkillKeys, confidentStrengths, courseStanding, dataUsedLine, displayLevel, eligibilityDisplay, errorMessage, filterSkills, fitLabelOf, fitLevelOf, fitPercent, formatDateTime,
   formatNumber, formatPercent, formatScore, gapHistory, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isPreconditionError, levelChart, levelSentence, levelStep, levelSummary, levelText, mapAiOutput, missingRequirements, missingRequirementsMessage, modelLabel,
   plansFor, scoreDifference, shouldPoll, skillName, sortRequirements, type ChartLevel, type DisplayLevel, type LevelBar, type LevelSegment, type MappedAiOutput, type PreconditionError, type SkillFilters, type StatusTone,
 } from "./student-competency-data";
@@ -155,7 +155,7 @@ function Overview({ result }: { result: AssessmentResult }) {
       <div className="scomp-fit-tile">
         <span className="scomp-kicker">Mức phù hợp nghề</span>
         {career ? <>
-          <strong className="scomp-fit-label">{career.fitLabel}</strong>
+          <strong className="scomp-fit-label">{fitLabelOf(career)}</strong>
           <p>{career.nameVi}</p>
           <p className="scomp-meta">{career.summaryText}</p>
           <a className="sw-text-link" href="#skill-gap">Xem khoảng trống kỹ năng <Icon name="arrow" /></a>
@@ -497,11 +497,12 @@ function GraduationSection() {
 
 /** "Thang mức phù hợp" (user, 2026-10-21): the four fit levels with the student's own marked, and how the share is counted. */
 function FitScale({ career }: { career: NonNullable<AssessmentResult["career"]> }) {
-  const own = career.fitCode === "insufficient_data" ? `Mới có khoảng ${fitPercent(career.dataShare)} yêu cầu của nghề có điểm để so sánh.`
+  const level = fitLevelOf(career);
+  const own = level === "insufficient_data" ? `Mới có khoảng ${fitPercent(career.dataShare)} yêu cầu của nghề có điểm để so sánh.`
     : career.fit !== null ? `Bạn đang đạt khoảng ${fitPercent(career.fit)} yêu cầu của nghề ${career.nameVi}.` : null;
   return <details className="scomp-legend"><summary>Thang mức phù hợp</summary>
     <ul>{FIT_SCALE.map((item) => <li key={item.code}>
-      <span className="scomp-fit-scale-name"><strong>{item.label}</strong>{item.code === career.fitCode && <span className="scomp-career-tag">Mức của bạn</span>}</span>
+      <span className="scomp-fit-scale-name"><strong>{item.label}</strong>{item.code === level && <span className="scomp-career-tag">Mức của bạn</span>}</span>
       <span className="scomp-legend-range">{item.range}</span>
       <span>{item.text}</span>
     </li>)}</ul>
@@ -518,7 +519,7 @@ function GapSummary({ result }: { result: AssessmentResult }) {
   const missing = sortRequirements(career.requirements).filter((req) => req.status === "below" || req.status === "not_studied");
   return <Section id="sgap-summary" title="Mức phù hợp với nghề mục tiêu" description={<>So với yêu cầu của nghề <strong>{career.nameVi}</strong> ({career.nameEn}).{career.deleted && " Nghề này đã ngừng sử dụng trong danh mục; bạn nên chọn nghề khác."}</>}>
     <div className="scomp-fit-summary">
-      <div><span className="scomp-kicker">Mức phù hợp</span><strong className="scomp-fit-label">{career.fitLabel}</strong></div>
+      <div><span className="scomp-kicker">Mức phù hợp</span><strong className="scomp-fit-label">{fitLabelOf(career)}</strong></div>
       <ul className="scomp-fit-facts">
         <li>{career.summaryText}</li>
         <li>{career.dataText}</li>

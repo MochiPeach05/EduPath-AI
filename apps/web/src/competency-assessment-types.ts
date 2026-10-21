@@ -26,7 +26,8 @@ export type CourseState = "passed" | "failed" | "exempt" | "graded_unknown" | "i
 export type AttemptOutcome = "pass" | "fail" | "unknown";
 export type GapStatus = "met" | "below" | "upcoming" | "not_studied" | "no_data";
 export type DeficitBand = "near" | "moderate" | "large" | "not_studied";
-type FitCode = "fit" | "fairly_fit" | "needs_more" | "insufficient_data";
+/** Since 2026-10-21; "fairly_fit"/"needs_more" (and "fit" ≥ 0,8) are results stored before: the page reads the level with fitLevelOf. */
+type FitCode = "very_fit" | "fit" | "average" | "low_fit" | "not_fit" | "insufficient_data" | "fairly_fit" | "needs_more";
 export type Eligibility = "eligible" | "not_eligible" | "review";
 export type SkillStatus = "scored" | "exempt_only" | "no_evidence" | "not_applicable";
 export type NotApplicableReason = "other_specialty" | "elective_not_chosen" | "no_credits";

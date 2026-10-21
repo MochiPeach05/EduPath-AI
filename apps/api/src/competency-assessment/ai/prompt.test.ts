@@ -256,8 +256,16 @@ describe("buildAiInput", () => {
     for (const value of [117, 126, 3.11, 31, 34]) expect(numbersIn(user)).not.toContain(value);
   });
 
+  it("names the fit with the 2026-10-21 scale, also for a result stored with the earlier labels", () => {
+    const stored = syntheticResult();
+    stored.career = { ...stored.career!, fit: 0.58, fitCode: "fairly_fit" as never, fitLabel: "Khá phù hợp" };
+    const user = buildAiInput(stored).user;
+    expect(user).toContain("Mức phù hợp: Trung bình\n");
+    expect(user).not.toContain("Khá phù hợp");
+  });
+
   it("does not send the numeric fit index, only the label", () => {
-    expect(input.user).toContain("Mức phù hợp: Khá phù hợp\n");
+    expect(input.user).toContain("Mức phù hợp: Phù hợp\n");
     expect(input.user).not.toContain("chỉ số");
     expect(input.user).not.toContain("0,79");
   });

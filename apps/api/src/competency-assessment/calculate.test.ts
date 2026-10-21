@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  calculateAssessment, compareSkills, confidenceOf, deficitBand, fitCodeOf, fitCredit, floorScore, levelOf, snapScore, termParts,
+  calculateAssessment, compareSkills, confidenceOf, deficitBand, fitCredit, floorScore, levelOf, snapScore, termParts,
 } from "./calculate.js";
-import { CALC_VERSION, MAX_SKILL_PLANS } from "./constants.js";
+import { CALC_VERSION, fitCodeOf, MAX_SKILL_PLANS } from "./constants.js";
 import {
   SKILL, syntheticCareer, syntheticInputs, syntheticStudentTerms, syntheticTranscript, type SyntheticOptions, type TranscriptTerm,
 } from "./fixtures/synthetic-k29.js";
@@ -75,16 +75,18 @@ describe("formula helpers (spec §7.3, §7.5, §7.6)", () => {
     expect(fitCredit("not_studied", null, 70)).toBe(0);
     expect(fitCredit("upcoming", null, 70)).toBeNull();
     expect(fitCredit("no_data", null, 70)).toBeNull();
-    expect([fitCodeOf(0.8, 1), fitCodeOf(0.79, 1), fitCodeOf(0.5, 1), fitCodeOf(0.49, 1), fitCodeOf(1, 0.49), fitCodeOf(null, 1)])
-      .toEqual(["fit", "fairly_fit", "fairly_fit", "needs_more", "insufficient_data", "insufficient_data"]);
+    // One scale in steps of 20% (2026-10-21); a value a hair under a floor from float noise still reaches it.
+    expect([0.8, 0.7999, 0.6, 0.5999, 0.4, 0.3999, 0.2, 0.1999, 0, 0.8 - 1e-12].map((fit) => fitCodeOf(fit, 1)))
+      .toEqual(["very_fit", "fit", "fit", "average", "average", "low_fit", "low_fit", "not_fit", "not_fit", "very_fit"]);
+    expect([fitCodeOf(1, 0.49), fitCodeOf(1, 0.5), fitCodeOf(null, 1)]).toEqual(["insufficient_data", "very_fit", "insufficient_data"]);
   });
 
-  it("never labels a profile whose requirements are all below threshold 'Phù hợp' or even 'Khá phù hợp'", () => {
+  it("never labels a profile whose requirements are all below threshold 'Rất phù hợp' or 'Phù hợp'", () => {
     for (let seed = 1; seed <= 500; seed++) {
       const required = seed % 3 === 0;
       const threshold = required ? 85 : 70;
       const score = 40 + ((seed * 7919) % 1000) / 1000 * (threshold - 40 - 0.001);
-      expect(fitCodeOf(fitCredit("below", score, threshold), 1)).toBe("needs_more");
+      expect(["average", "low_fit", "not_fit"]).toContain(fitCodeOf(fitCredit("below", score, threshold), 1));
     }
   });
 
@@ -302,7 +304,7 @@ describe("career gaps and fit (spec §7.5–§7.7)", () => {
     const fit = (2 * 1 + 1 * 0.5 * (56 - 40) / 30 + 2 * 0.5 * (47 - 40) / 45 + 0) / 6;
     expect(result.career!.fit).toBeCloseTo(fit, 4);
     expect(result.career).toMatchObject({
-      fitCode: "needs_more", fitLabel: "Cần bổ sung nhiều", dataShare: 0.75,
+      fitCode: "average", fitLabel: "Trung bình", dataShare: 0.75,
       summaryText: "Đạt 1/6 kỹ năng · 1 sắp học · 1 chưa đủ dữ liệu", dataText: "5/6 kỹ năng có dữ liệu",
       counts: { total: 6, met: 1, below: 2, upcoming: 1, notStudied: 1, noData: 1, withData: 5 },
       weightedMeanScore: 65.2, weightedMeanCount: 3,
@@ -374,7 +376,7 @@ describe("career gaps and fit (spec §7.5–§7.7)", () => {
     }));
     expect(allC.career!.requirements.every((item) => item.status === "below")).toBe(true);
     expect(allC.career!.fit!).toBeLessThan(0.5);
-    expect(allC.career!.fitCode).toBe("needs_more");
+    expect(allC.career!).toMatchObject({ fitCode: "low_fit", fitLabel: "Ít phù hợp" });
   });
 
   it("handles a requirement without a skill and a deleted career", () => {

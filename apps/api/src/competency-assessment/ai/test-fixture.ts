@@ -147,7 +147,7 @@ export function syntheticResult(options: { career?: boolean } = {}): AssessmentR
       ],
       counts: { total: 4, met: 2, below: 1, upcoming: 0, notStudied: 0, noData: 1, withData: 3 },
       summaryText: "Đạt 2/4 kỹ năng · 0 sắp học · 1 chưa đủ dữ liệu", dataText: "3/4 kỹ năng có dữ liệu",
-      fit: 0.79, fitCode: "fairly_fit", fitLabel: "Khá phù hợp", dataShare: 0.83, weightedMeanScore: 70.6, weightedMeanCount: 3
+      fit: 0.79, fitCode: "fit", fitLabel: "Phù hợp", dataShare: 0.83, weightedMeanScore: 70.6, weightedMeanCount: 3
     } : null,
     courseSuggestions: [],
     selfStudy: withCareer ? [{

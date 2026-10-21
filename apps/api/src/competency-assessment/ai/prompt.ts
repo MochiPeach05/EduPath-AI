@@ -14,7 +14,7 @@ import type {
   SkillResult,
   SupportCourse
 } from "../types.js";
-import { isStrengthConfidence } from "../constants.js";
+import { FIT_LABELS, fitCodeOf, isStrengthConfidence } from "../constants.js";
 import { AI_OUTPUT_LIMITS as L, buildOutputSchema, type JsonSchema, type OutputSchemaContext } from "./schema.js";
 
 /**
@@ -510,7 +510,8 @@ function renderDataBlock(result: AssessmentResult, context: PromptContext = buil
   } else {
     push(`${sanitizeText(career.nameVi)}: ${sanitizeText(career.summaryText, 200)}; ${sanitizeText(career.dataText, 80)}`);
     // Only the label: the raw fit index invites "Phù hợp 72%"-style numbers (spec §11 "Không làm").
-    push(`Mức phù hợp: ${sanitizeText(career.fitLabel, 60)}`);
+    // The 2026-10-21 scale, also for a result stored with the earlier labels (regenerated comments).
+    push(`Mức phù hợp: ${FIT_LABELS[fitCodeOf(career.fit, career.dataShare)]}`);
     for (const req of career.requirements) {
       const name = req.skillKey ? `${req.skillKey} ${skillName(req.skillKey)}` : sanitizeText(req.skillName ?? req.title);
       const title = req.skillName && sanitizeText(req.title) !== sanitizeText(req.skillName) ? ` (yêu cầu: ${sanitizeText(req.title)})` : "";
