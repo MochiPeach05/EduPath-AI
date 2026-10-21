@@ -6,7 +6,7 @@ import type { StudentProfile } from "./StudentOverview";
 import { specialtyLabel, type AiStatus, type AssessmentResult, type AssessmentStatusResponse, type CareerRequirementResult, type CourseSuggestion, type LatestAssessmentResponse, type LevelCode, type SkillPlan, type SkillResult, type StoredAssessment, type SupportCourse } from "./competency-assessment-types";
 import {
   CHART_LEVELS, COMPETENCY_API, CONFIDENCE_LABELS, COURSE_STATE_LABELS, EMPTY_SKILL_FILTERS, LEVEL_COLUMNS, LEVEL_SCALE, PRECONDITION_COPY, PRIORITY_LABELS,
-  aiErrorMessage, aiReasoned, aiStateCopy, bucketSkills, canRegenerate, careerSkillKeys, courseStanding, dataUsedLine, eligibilityDisplay, errorMessage, filterSkills, formatDateTime,
+  aiErrorMessage, aiReasoned, aiStateCopy, bucketSkills, canRegenerate, careerSkillKeys, confidentStrengths, courseStanding, dataUsedLine, eligibilityDisplay, errorMessage, filterSkills, formatDateTime,
   formatNumber, formatPercent, formatScore, gapHistory, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isPreconditionError, levelChart, levelSentence, levelStep, levelSummary, mapAiOutput, modelLabel,
   plansFor, scoreDifference, shouldPoll, skillName, sortRequirements, type ChartLevel, type LevelBar, type LevelSegment, type MappedAiOutput, type PreconditionError, type SkillFilters, type StatusTone,
 } from "./student-competency-data";
@@ -133,7 +133,7 @@ function DeleteDialog({ busy, error, onClose, onConfirm }: { busy: boolean; erro
 function Overview({ result }: { result: AssessmentResult }) {
   const { overall, career } = result;
   const names = (keys: string[]) => keys.map((key) => ({ key, name: skillName(result, key) })).filter((item): item is { key: string; name: string } => Boolean(item.name));
-  const strengths = names(result.highlights.strengths), improvements = names(result.highlights.improvements);
+  const strengths = names(confidentStrengths(result)), improvements = names(result.highlights.improvements);
   return <Section id="scomp-overview" title="Tổng quan" className="scomp-overview">
     <div className="scomp-overview-grid">
       <div className="scomp-score-card">

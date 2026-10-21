@@ -1,11 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
-  aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, countAxis, dataUsedLine, gapHistory, levelChart, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
+  aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, confidentStrengths, countAxis, dataUsedLine, gapHistory, levelChart, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
   gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isPreconditionError, PRIORITY_LABELS, levelStep, mapAiOutput, modelLabel, plansFor,
   scoreDifference, shouldPoll, sortRequirements, termLabel, EMPTY_SKILL_FILTERS,
 } from "./student-competency-data";
 import { fixtureAiOutput, fixtureAssessment, fixtureResult } from "./student-competency.fixture";
 import type { CareerRequirementResult } from "./competency-assessment-types";
+
+describe("strengths (2026-10-21)", () => {
+  it("only names skills with at least medium confidence, also in results stored before the rule", () => {
+    const skills = fixtureResult.skills.slice(0, 3).map((skill, index) => ({ ...skill, confidence: (["low", "medium", "high"] as const)[index] }));
+    const result = { ...fixtureResult, skills, highlights: { ...fixtureResult.highlights, strengths: skills.map((skill) => skill.key) } };
+    expect(confidentStrengths(result)).toEqual([skills[1]!.key, skills[2]!.key]);
+  });
+});
 
 describe("career skills by term (STU-GAP-07)", () => {
   it("lists every career skill per term with the change since its first score and a one-line summary", () => {

@@ -2,7 +2,7 @@ import { referencedCourseCodes } from "../curricula/course-codes.js";
 import { startsReplacementPath, THESIS_NAME_PATTERN } from "../graduation/thesis.js";
 import {
   CALC_VERSION, CAREER_COEFFICIENTS, CAREER_THRESHOLDS, COVERAGE_BANDS, DEFICIT_BANDS, EVIDENCE_BANDS, FIT_BELOW_FLOOR,
-  FIT_BELOW_MAX_CREDIT, FIT_LABEL_THRESHOLDS, FIT_MIN_DATA_SHARE, HIGHLIGHT_COUNT, LEVEL_THRESHOLDS, MAX_RELATED_SKILLS,
+  FIT_BELOW_MAX_CREDIT, FIT_LABEL_THRESHOLDS, FIT_MIN_DATA_SHARE, HIGHLIGHT_COUNT, isStrengthConfidence, LEVEL_THRESHOLDS, MAX_RELATED_SKILLS,
   MAX_SKILL_PLANS, MAX_SUPPORT_COURSES, MIN_WEIGHTED_COURSE_SHARE, SCOPE_MAX_LENGTH,
 } from "./constants.js";
 import {
@@ -786,7 +786,9 @@ function assess(inputs: AssessmentInputs): Assessment {
   /** Unrounded score ascending, evidence descending, key. */
   const weakestFirst = (a: SkillResult, b: SkillResult) =>
     rawScore.get(a.key)!.score! - rawScore.get(b.key)!.score! || rawScore.get(b.key)!.evidence - rawScore.get(a.key)!.evidence || compareCode(a.key, b.key);
-  const strengths = ranked.filter((skill) => !belowGood(skill)).slice(0, HIGHLIGHT_COUNT).map((skill) => skill.key);
+  // A strength needs at least medium confidence (user, 2026-10-21): one course with a small weight can
+  // score high (MLOps 94 from a single 15% link) and must not be shown as a strength.
+  const strengths = ranked.filter((skill) => !belowGood(skill) && isStrengthConfidence(skill.confidence)).slice(0, HIGHLIGHT_COUNT).map((skill) => skill.key);
   const improvements = ranked.filter(belowGood).sort(weakestFirst).slice(0, HIGHLIGHT_COUNT).map((skill) => skill.key);
   // Course plans (comp-calc-v6). With a career (v7) only its met skills below Thành thạo, to deepen:
   // the other weak skills get none, and career gaps keep their own courses. Without one, every

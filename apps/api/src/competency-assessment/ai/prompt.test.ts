@@ -85,8 +85,8 @@ describe("buildAiInput", () => {
   };
 
   it("uses the spec system prompt verbatim plus the output description", () => {
-    expect(PROMPT_VERSION).toBe("comp-v7");
-    expect(input.promptVersion).toBe("comp-v7");
+    expect(PROMPT_VERSION).toBe("comp-v8");
+    expect(input.promptVersion).toBe("comp-v8");
     expect(input.think).toBe(true);
     expect(input.system).toBe(SYSTEM_PROMPT);
     expect(input.system.startsWith("Bạn là cố vấn học tập của EduPath AI, đồng hành cùng sinh viên ngành Công nghệ Thông tin, Trường Đại học Văn Lang.\n")).toBe(true);
@@ -365,6 +365,15 @@ describe("buildPromptContext", () => {
       expect(context.strengthKeys).not.toContain(key);
       expect(context.improvementKeys).not.toContain(key);
     }
+  });
+
+  it("names only skills with at least medium confidence as strengths (comp-v8)", () => {
+    const result = syntheticResult();
+    const strong = buildPromptContext(result).strengthKeys;
+    expect(strong.length).toBeGreaterThan(0);
+    const index = result.skills.findIndex((skill) => skill.key === strong[0]);
+    result.skills[index] = { ...result.skills[index]!, confidence: "low", confidenceLabel: "Thấp" };
+    expect(buildPromptContext(result).strengthKeys).not.toContain(strong[0]);
   });
 
   it("without a career: improvements are the skills below Khá with a plan to strengthen (comp-v4)", () => {

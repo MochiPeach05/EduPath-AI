@@ -165,6 +165,8 @@ describe("calculateAssessment on the synthetic CNPM student", () => {
     expect(result.overall).toMatchObject({ groupsWithScore: 3, basis: { skillsWithEvidence: 9, applicableSkills: 10, evidenceCourses: 9 } });
     const conditionKeys = result.skills.filter((skill) => skill.conditionOnly).map((skill) => skill.key);
     expect(conditionKeys).toHaveLength(2);
+    // A strength needs at least medium confidence (2026-10-21).
+    for (const key of result.highlights.strengths) expect(["medium", "high"]).toContain(result.skills.find((skill) => skill.key === key)!.confidence);
     for (const key of conditionKeys) {
       expect(result.highlights.strengths).not.toContain(key);
       expect(result.promptSelection.topSkillKeys).not.toContain(key);

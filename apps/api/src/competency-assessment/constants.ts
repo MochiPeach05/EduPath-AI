@@ -1,3 +1,5 @@
+import type { Confidence } from "./types.js";
+
 // Every threshold and band used by the competency calculation lives here.
 // Changing a value changes stored results, so bump CALC_VERSION with it.
 
@@ -54,6 +56,13 @@ export const MIN_WEIGHTED_COURSE_SHARE = 0.8;
 export const SCOPE_MAX_LENGTH = 200;
 /** Size of the strongest/weakest skill lists. */
 export const HIGHLIGHT_COUNT = 5;
+/**
+ * A strength (the page's "Điểm mạnh" and the AI comment's) needs at least medium confidence (user,
+ * 2026-10-21): one course with a small weight can score high (MLOps 94 from a single 15% link).
+ * The page filters stored results the same way, so CALC_VERSION (which also dates the graduation
+ * advice) was not bumped for it.
+ */
+export const isStrengthConfidence = (confidence: Confidence | null) => confidence === "medium" || confidence === "high";
 /** Related measured skills listed as context for one self-study item. */
 export const MAX_RELATED_SKILLS = 3;
 

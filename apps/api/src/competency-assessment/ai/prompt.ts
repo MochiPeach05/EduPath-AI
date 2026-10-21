@@ -14,6 +14,7 @@ import type {
   SkillResult,
   SupportCourse
 } from "../types.js";
+import { isStrengthConfidence } from "../constants.js";
 import { AI_OUTPUT_LIMITS as L, buildOutputSchema, type JsonSchema, type OutputSchemaContext } from "./schema.js";
 
 /**
@@ -25,8 +26,9 @@ import { AI_OUTPUT_LIMITS as L, buildOutputSchema, type JsonSchema, type OutputS
  * comp-v5: with a career, improvements are only its skills (below its threshold, or met to deepen) and other skills are context.
  * comp-v6: the skill groups are called "nhóm năng lực", like the pages (terminology of 2026-10-17).
  * comp-v7: Gemma's thinking mode is on: the model reasons over the data before it writes (user, 2026-10-18).
+ * comp-v8: only skills with at least medium confidence may be named strengths (user, 2026-10-21), like the page.
  */
-export const PROMPT_VERSION = "comp-v7";
+export const PROMPT_VERSION = "comp-v8";
 
 /** Gemma reasons before it writes the comment; the worker sends it to Ollama as think:true. */
 const AI_THINK = true;
@@ -287,7 +289,8 @@ type PromptContext = OutputSchemaContext & { skillKeys: string[] };
  * is below a career threshold or has an offered plan, so it always has courses to name (or truly
  * none): with a career only its own skills, the met ones to deepen (comp-v5); without one the skills
  * below Khá to strengthen (comp-v4), or all of them for a result stored before plans (comp-v3). A
- * strength is any other skill scored at Khá or above (unrounded level from the engine).
+ * strength is any other skill scored at Khá or above (unrounded level from the engine) with at least
+ * medium confidence (comp-v8): a high score from one lightly weighted course is not a strength.
  */
 function strengthAndImprovementKeys(result: AssessmentResult, selected: readonly string[]): { strengthKeys: string[]; improvementKeys: string[] } {
   const skills = new Map(result.skills.map((skill) => [skill.key, skill]));
@@ -307,7 +310,7 @@ function strengthAndImprovementKeys(result: AssessmentResult, selected: readonly
     if (!skill || skill.status !== "scored" || skill.score === null || skill.conditionOnly) continue;
     const goodLevel = skill.level === "good" || skill.level === "proficient";
     if (below.has(key) || planned.has(key)) improvementKeys.push(key);
-    else if (goodLevel && !notStudied.has(key)) strengthKeys.push(key);
+    else if (goodLevel && !notStudied.has(key) && isStrengthConfidence(skill.confidence)) strengthKeys.push(key);
     else if (!goodLevel && !result.career && plans === null) improvementKeys.push(key);
   }
   return { strengthKeys, improvementKeys };

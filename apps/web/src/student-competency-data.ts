@@ -433,6 +433,16 @@ export function aiStateCopy(status: AiStatus, workerOnline: boolean, aiEnabled: 
   }
 }
 
+/**
+ * "Điểm mạnh": the result's strengths with at least medium confidence (user, 2026-10-21). One course
+ * with a small weight can score high (MLOps 94 from a single 15% link); results stored before the
+ * engine applied the same rule are filtered here, so they show it without a new assessment.
+ */
+export function confidentStrengths(result: Pick<AssessmentResult, "highlights" | "skills">): string[] {
+  const confident = new Set(result.skills.filter((skill) => skill.confidence === "medium" || skill.confidence === "high").map((skill) => skill.key));
+  return result.highlights.strengths.filter((key) => confident.has(key));
+}
+
 /** Comments written with Gemma's thinking mode: prompt comp-v7 and later. */
 export function aiReasoned(promptVersion: string | null | undefined): boolean {
   const match = /^comp-v(\d+)$/.exec(promptVersion ?? "");
