@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, confidentStrengths, countAxis, dataUsedLine, displayLevel, gapHistory, levelChart, levelSummary, levelText, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
+  aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, confidentStrengths, countAxis, dataUsedLine, displayLevel, FIT_SCALE, fitPercent, gapHistory, levelChart, levelSummary, levelText, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
   gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isPreconditionError, PRIORITY_LABELS, levelStep, mapAiOutput, missingRequirements, missingRequirementsMessage, modelLabel, plansFor,
   scoreDifference, shouldPoll, sortRequirements, termLabel, EMPTY_SKILL_FILTERS,
 } from "./student-competency-data";
@@ -29,6 +29,18 @@ describe("skills without a score: Sắp học or Chưa có điểm (2026-10-21)"
   it("labels a group or the overall without evidence Chưa có điểm", () => {
     expect(levelText("no_evidence", "Chưa có minh chứng")).toBe("Chưa có điểm");
     expect(levelText("good", "Khá")).toBe("Khá");
+  });
+});
+
+describe("fit scale (2026-10-21)", () => {
+  it("lists the four fit levels with their bands and shows a share rounded down", () => {
+    expect(FIT_SCALE.map((item) => [item.code, item.label, item.range])).toEqual([
+      ["fit", "Phù hợp", "từ 80% yêu cầu"], ["fairly_fit", "Khá phù hợp", "50% đến dưới 80%"],
+      ["needs_more", "Cần bổ sung nhiều", "dưới 50%"], ["insufficient_data", "Chưa đủ dữ liệu", "dưới một nửa có điểm"],
+    ]);
+    expect(fitPercent(0.7996)).toBe("79%");
+    expect(fitPercent(0.58)).toBe("58%");
+    expect(fitPercent(0)).toBe("0%");
   });
 });
 

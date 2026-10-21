@@ -5,8 +5,8 @@ import { competencyPolicyHref, policyVersion } from "./public-information";
 import type { StudentProfile } from "./StudentOverview";
 import { specialtyLabel, type AiStatus, type AssessmentResult, type AssessmentStatusResponse, type CareerRequirementResult, type CourseSuggestion, type LatestAssessmentResponse, type LevelCode, type SkillPlan, type SkillResult, type StoredAssessment, type SupportCourse } from "./competency-assessment-types";
 import {
-  CHART_LEVELS, COMPETENCY_API, CONFIDENCE_LABELS, COURSE_STATE_LABELS, EMPTY_SKILL_FILTERS, LEVEL_COLUMNS, LEVEL_SCALE, PRECONDITION_COPY, PRIORITY_LABELS,
-  aiErrorMessage, aiReasoned, aiStateCopy, bucketSkills, canRegenerate, careerSkillKeys, confidentStrengths, courseStanding, dataUsedLine, displayLevel, eligibilityDisplay, errorMessage, filterSkills, formatDateTime,
+  CHART_LEVELS, COMPETENCY_API, CONFIDENCE_LABELS, COURSE_STATE_LABELS, EMPTY_SKILL_FILTERS, FIT_SCALE, LEVEL_COLUMNS, LEVEL_SCALE, PRECONDITION_COPY, PRIORITY_LABELS,
+  aiErrorMessage, aiReasoned, aiStateCopy, bucketSkills, canRegenerate, careerSkillKeys, confidentStrengths, courseStanding, dataUsedLine, displayLevel, eligibilityDisplay, errorMessage, filterSkills, fitPercent, formatDateTime,
   formatNumber, formatPercent, formatScore, gapHistory, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isPreconditionError, levelChart, levelSentence, levelStep, levelSummary, levelText, mapAiOutput, missingRequirements, missingRequirementsMessage, modelLabel,
   plansFor, scoreDifference, shouldPoll, skillName, sortRequirements, type ChartLevel, type DisplayLevel, type LevelBar, type LevelSegment, type MappedAiOutput, type PreconditionError, type SkillFilters, type StatusTone,
 } from "./student-competency-data";
@@ -495,6 +495,21 @@ function GraduationSection() {
 
 /* ------------------------------------------------- "Khoảng trống kỹ năng" page */
 
+/** "Thang mức phù hợp" (user, 2026-10-21): the four fit levels with the student's own marked, and how the share is counted. */
+function FitScale({ career }: { career: NonNullable<AssessmentResult["career"]> }) {
+  const own = career.fitCode === "insufficient_data" ? `Mới có khoảng ${fitPercent(career.dataShare)} yêu cầu của nghề có điểm để so sánh.`
+    : career.fit !== null ? `Bạn đang đạt khoảng ${fitPercent(career.fit)} yêu cầu của nghề ${career.nameVi}.` : null;
+  return <details className="scomp-legend"><summary>Thang mức phù hợp</summary>
+    <ul>{FIT_SCALE.map((item) => <li key={item.code}>
+      <span className="scomp-fit-scale-name"><strong>{item.label}</strong>{item.code === career.fitCode && <span className="scomp-career-tag">Mức của bạn</span>}</span>
+      <span className="scomp-legend-range">{item.range}</span>
+      <span>{item.text}</span>
+    </li>)}</ul>
+    {own && <p className="scomp-meta">{own}</p>}
+    <p className="scomp-meta">Cách tính phần trăm: kỹ năng đạt ngưỡng được tính trọn; kỹ năng dưới ngưỡng được tính một phần, tối đa một nửa, càng gần ngưỡng càng nhiều; kỹ năng chưa học tính 0. Kỹ năng Bắt buộc tính gấp đôi kỹ năng Ưu tiên. Kỹ năng sắp học hoặc chưa đủ dữ liệu không tính.</p>
+  </details>;
+}
+
 function GapSummary({ result }: { result: AssessmentResult }) {
   const career = result.career;
   if (!career) return <Section id="sgap-summary" title="Mức phù hợp với nghề mục tiêu">
@@ -521,6 +536,7 @@ function GapSummary({ result }: { result: AssessmentResult }) {
         : <p className={career.requirements.length ? "scomp-meta sg-status-pass" : "scomp-meta"}>{career.requirements.length ? "✓ Bạn đã đạt mọi kỹ năng có dữ liệu của nghề này." : "Nghề này chưa có yêu cầu kỹ năng trong danh mục nên chưa so sánh được."}</p>}
     </div>
     <p className="scomp-meta">Ngưỡng đạt: kỹ năng Ưu tiên từ 70 (mức Khá), kỹ năng Bắt buộc từ 85 (mức Thành thạo). Kỹ năng sắp học hoặc chưa đủ dữ liệu không được tính vào mức phù hợp.</p>
+    <FitScale career={career} />
   </Section>;
 }
 

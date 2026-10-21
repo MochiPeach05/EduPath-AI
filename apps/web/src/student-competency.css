@@ -111,6 +111,8 @@
 .scomp-page .scomp-legend li { display: grid; grid-template-columns: 180px 120px minmax(0, 1fr); gap: 12px; align-items: center; font-size: 13px; }
 .scomp-page .scomp-legend li > span:last-child { color: var(--sw-muted); }
 .scomp-page .scomp-legend-range { color: var(--sw-muted); font-size: 12px; }
+.scomp-page .scomp-legend > p { margin-top: 10px; }
+.scomp-page .scomp-fit-scale-name { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 
 /* AI panel */
 .scomp-page .scomp-ai { border-color: #cfdaeb; }

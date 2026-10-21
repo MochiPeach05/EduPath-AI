@@ -1,7 +1,7 @@
 // Pure helpers for the #competency page: labels, formatting, AI key mapping and
 // the polling decision. No fetch, no DOM — everything here is unit tested.
 import type {
-  AiOutput, AiPriority, AiStatus, AssessmentResult, CareerRequirementResult, Confidence,
+  AiOutput, AiPriority, AiStatus, AssessmentResult, CareerRequirementResult, CareerResult, Confidence,
   CourseState, Eligibility, HistoryPoint, LevelCode, SkillPlan, SkillResult, StoredAssessment, SupportCourse,
 } from "./competency-assessment-types";
 
@@ -191,6 +191,20 @@ export function sortRequirements(list: readonly CareerRequirementResult[]): Care
     || a.title.localeCompare(b.title, "vi"));
 }
 export const isGap = (req: Pick<CareerRequirementResult, "status">) => req.status !== "met";
+
+/**
+ * "Thang mức phù hợp" of the gap page (user, 2026-10-21): the engine's fit labels and their bands
+ * (FIT_LABEL_THRESHOLDS 0,8 / 0,5; "Chưa đủ dữ liệu" when under FIT_MIN_DATA_SHARE 0,5 of the
+ * coefficients has data), in the student's words.
+ */
+export const FIT_SCALE: readonly { code: CareerResult["fitCode"]; label: string; range: string; text: string }[] = [
+  { code: "fit", label: "Phù hợp", range: "từ 80% yêu cầu", text: "Bạn đã đạt gần hết kỹ năng mà nghề này yêu cầu." },
+  { code: "fairly_fit", label: "Khá phù hợp", range: "50% đến dưới 80%", text: "Bạn đạt phần lớn yêu cầu; còn một vài kỹ năng cần nâng lên ngưỡng." },
+  { code: "needs_more", label: "Cần bổ sung nhiều", range: "dưới 50%", text: "Nhiều kỹ năng của nghề chưa đạt ngưỡng; hãy bắt đầu từ các kỹ năng còn thiếu ở trên." },
+  { code: "insufficient_data", label: "Chưa đủ dữ liệu", range: "dưới một nửa có điểm", text: "Chưa tới một nửa yêu cầu của nghề có điểm để so sánh (phần lớn còn sắp học hoặc chương trình chưa đo), nên chưa xếp mức." },
+];
+/** A fit share as a whole percent rounded DOWN, like the scores: 79,96% reads 79%, never 80% under Khá phù hợp. */
+export const fitPercent = (share: number) => `${Math.floor(share * 100 + 1e-9).toLocaleString("vi-VN")}%`;
 
 export function eligibilityDisplay(eligibility: Eligibility, missing: { code: string; name: string | null }[]): { tone: StatusTone; glyph: string; text: string } {
   if (eligibility === "eligible") return { tone: "pass", glyph: "✓", text: "Đủ điều kiện đăng ký" };

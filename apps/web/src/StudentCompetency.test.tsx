@@ -308,6 +308,15 @@ describe("StudentCompetency — Khoảng trống kỹ năng", () => {
     expect(summary).toContain("Thiếu vừa");
     expect(summary).not.toContain("Lập trình web</strong>");
   });
+  it("explains the fit levels with the student's own marked (2026-10-21)", () => {
+    const html = withAi("completed", "gap");
+    const summary = html.slice(html.indexOf('id="sgap-summary"'), html.indexOf('id="scomp-ai"'));
+    expect(summary).toContain("<summary>Thang mức phù hợp</summary>");
+    expect(summary).toContain('<strong>Khá phù hợp</strong><span class="scomp-career-tag">Mức của bạn</span>');
+    expect(summary.match(/Mức của bạn/g)).toHaveLength(1);
+    expect(summary).toContain("Bạn đang đạt khoảng 58% yêu cầu của nghề Lập trình viên web.");
+    expect(summary).toContain("Kỹ năng Bắt buộc tính gấp đôi kỹ năng Ưu tiên.");
+  });
   it("shows the gap part of the AI text with its courses", () => {
     const html = withAi("completed", "gap");
     expect(html).toContain("Nhận xét từ EduPath AI về khoảng trống kỹ năng");
