@@ -16,15 +16,21 @@
 // Since v3 (2026-10-19, test case "không có kỹ năng nào phù hợp với môn đó") an empty list is the
 // right answer when no catalog skill is the course's main content: v2 gave "Tiếng Nhật 1" the soft
 // skill "Giao tiếp" and "Kế toán tài chính 1" math, critical thinking and report writing.
+// Since links v5 / full v4 (2026-10-22, "hợp nhất các kỹ năng một cách chính xác hơn"): the CTĐT has no
+// course descriptions, so the whole-program run of 2026-10-16 guessed technologies from names alone
+// (PHP/MySQL became JavaScript, Android became Flutter and Kotlin, Python became C#). The prompt now
+// shows the skills the faculty imported for the course (mục [5], from the course history) as the most
+// reliable source, gives longer skill descriptions so their limits ("không mặc định Flutter…") are
+// visible, and asks to keep the faculty's technologies and to pick one skill among near synonyms.
 import { sanitizeText } from "../../competency-assessment/ai/prompt.js";
 import type { JsonSchema } from "../../competency-assessment/ai/schema.js";
 
 export const COURSE_AI_MODES = ["links", "weights", "full"] as const;
 export type CourseAiMode = (typeof COURSE_AI_MODES)[number];
 export const COURSE_AI_PROMPT_VERSIONS: Record<CourseAiMode, string> = {
-  links: "comp-link-v4",
+  links: "comp-link-v5",
   weights: "comp-weight-v2",
-  full: "comp-course-v3"
+  full: "comp-course-v4"
 };
 
 /**
@@ -50,9 +56,12 @@ export const COURSE_AI_LIMITS = {
   promptReason: 160,
   reason: 300,
   skillName: 100,
-  /** Candidate skills sent to the model; with descriptions cut to 80 characters this fits num_ctx. */
+  /**
+   * Candidate skills sent to the model. Descriptions are cut to 120 characters (v5; 80 before) so a
+   * scope's limit is read; about 110 skills then make a 7K-token prompt, which leaves 8K for the answer.
+   */
   catalog: 300,
-  catalogDescription: 80,
+  catalogDescription: 120,
   courseDescription: 1200
 } as const;
 
@@ -80,6 +89,11 @@ export type CourseAiSource = {
   careerSkills: { id: string; name: string; description: string }[];
   /** Skills linked to the course now (empty when it has no configuration). */
   links: { skillId: string; name: string; groupId: string | null; description: string; weight: number }[];
+  /**
+   * The skills the faculty imported for the course (its first "Nhập dữ liệu" history entry), live
+   * profiles only, highest weight first; absent or empty when the course has none (v5).
+   */
+  facultyLinks?: { skillId: string; name: string; weight: number }[];
 };
 
 /** One candidate skill offered to the model; groupId null = a career skill without a profile. */
@@ -108,30 +122,33 @@ const INTRO = "Bạn là chuyên gia xây dựng chương trình đào tạo ng�
 
 /** Shared by the links and full modes: what may be picked, by knowledge block (rule 4). */
 const PICK_RULES = `1. Chỉ chọn kỹ năng trong mục [3] bằng khóa của nó (S001, S002…).
-2. Chỉ chọn kỹ năng là nội dung chính mà học phần trực tiếp dạy hoặc rèn luyện, căn cứ vào tên, mô tả, khối kiến thức và số giờ của học phần. Học phần chưa có mô tả thì chỉ dựa vào tên và khối kiến thức; không suy đoán nội dung mà tên học phần không thể hiện.
-3. Không chọn kỹ năng chỉ vì học phần có dùng tới nó: môn nào cũng cần giao tiếp, tư duy, tính toán, viết báo cáo hay tự học. Kỹ năng mềm chỉ chọn theo quy tắc 7.
-4. Thường chọn 2 đến 5 kỹ năng, tối đa ${L.links}. Nếu danh mục không đủ kỹ năng phù hợp, chọn ít hơn; không chọn cho đủ số.
-5. Nếu danh mục không có kỹ năng nào là nội dung chính của học phần (ví dụ học phần của lĩnh vực khác như kế toán, sinh học, hội họa, hoặc một ngoại ngữ mà danh mục chưa có kỹ năng), trả về "links": [] (danh sách rỗng). Danh sách rỗng là câu trả lời đúng và có ích: quản trị viên sẽ biết cần bổ sung kỹ năng. Không chọn kỹ năng gần đúng hay kỹ năng chung chung cho có.
-6. Khối kiến thức cho biết loại học phần:
+2. Chỉ chọn kỹ năng là nội dung chính mà học phần trực tiếp dạy hoặc rèn luyện, căn cứ vào tên, mô tả, khối kiến thức và số giờ của học phần cùng các kỹ năng Khoa đã nhập ở mục [5]. Học phần chưa có mô tả thì chỉ dựa vào tên, khối kiến thức và mục [5]; không suy đoán nội dung mà các thông tin đó không thể hiện.
+3. Mục [5] (nếu có) là các kỹ năng Khoa đã nhập cho chính học phần này, nguồn đáng tin nhất về nội dung học phần (ngôn ngữ lập trình, framework, hệ quản trị cơ sở dữ liệu…). Giữ các kỹ năng đó với tỉ lệ gần như Khoa đã ghi; không thay một công nghệ Khoa đã ghi bằng công nghệ khác.
+4. Đọc kỹ mô tả của từng kỹ năng ở mục [3]. Mô tả ghi giới hạn (ví dụ "không mặc định Flutter hoặc React Native", "chỉ dùng cho học phần …", "không quy … thành …") thì làm đúng giới hạn đó.
+5. Kỹ năng gắn với một công nghệ cụ thể (ví dụ Kotlin/Swift, Flutter/React Native, C#/C++, React) chỉ chọn khi tên, mô tả học phần hoặc mục [5] cho thấy học phần dạy đúng công nghệ đó; tên chung như "Lập trình ứng dụng di động" chưa đủ để khẳng định công nghệ.
+6. Không chọn kỹ năng chỉ vì học phần có dùng tới nó: môn nào cũng cần giao tiếp, tư duy, tính toán, viết báo cáo hay tự học. Kỹ năng mềm chỉ chọn theo quy tắc 10.
+7. Thường chọn 2 đến 5 kỹ năng, tối đa ${L.links}. Nếu danh mục không đủ kỹ năng phù hợp, chọn ít hơn; không chọn cho đủ số.
+8. Nếu danh mục không có kỹ năng nào là nội dung chính của học phần (ví dụ học phần của lĩnh vực khác như kế toán, sinh học, hội họa, hoặc một ngoại ngữ mà danh mục chưa có kỹ năng), trả về "links": [] (danh sách rỗng). Danh sách rỗng là câu trả lời đúng và có ích: quản trị viên sẽ biết cần bổ sung kỹ năng. Không chọn kỹ năng gần đúng hay kỹ năng chung chung cho có.
+9. Khối kiến thức cho biết loại học phần:
 - Khối "Lý luận chính trị", "Giáo dục thể chất và giáo dục quốc phòng", "Ngoại ngữ" và "Đại cương": chỉ chọn kỹ năng đúng với chính môn học đó (ví dụ Triết học → kiến thức chính trị và xã hội; Pháp luật đại cương → pháp luật; Giáo dục quốc phòng → quốc phòng và an ninh; Bóng chuyền → thể chất; Tiếng Anh → tiếng Anh; Toán cao cấp → toán học). Ngoại ngữ khác tiếng Anh không nhận kỹ năng tiếng Anh. Danh mục không có kỹ năng của chính môn đó thì trả về rỗng.
 - Các khối kiến thức cơ sở, cơ sở ngành, chuyên ngành, thực tập, đồ án và khóa luận là học phần chuyên môn Công nghệ Thông tin: không chọn kỹ năng về chính trị và xã hội, pháp luật, quốc phòng và an ninh, thể chất, thể thao, môi trường hay tiếng Anh, trừ khi tên học phần nói rõ nội dung đó.
 - Khối liên ngành có thể là học phần của ngành khác (kế toán, quản trị, thiết kế…): chỉ chọn kỹ năng đúng với nội dung chính của học phần đó; không có thì trả về rỗng.
-7. Ưu tiên kỹ năng chuyên môn mà học phần dạy trực tiếp. Kỹ năng mềm (làm việc nhóm, thuyết trình, giao tiếp…) chỉ chọn khi học phần có đồ án, thực tập, thực hành nhóm hoặc thuyết trình rõ ràng.
-8. Khi nhiều kỹ năng trong danh mục gần giống nhau, chỉ chọn một kỹ năng sát nhất.
-9. groupKey là khóa nhóm (G1, G2…) ở mục [2]. Kỹ năng đã có nhóm thì ghi đúng nhóm của nó; kỹ năng ghi "kỹ năng nghề, chưa có nhóm" thì ghi nhóm phù hợp nhất.`;
+10. Ưu tiên kỹ năng chuyên môn mà học phần dạy trực tiếp. Kỹ năng mềm (làm việc nhóm, thuyết trình, giao tiếp…) chỉ chọn khi học phần có đồ án, thực tập, thực hành nhóm hoặc thuyết trình rõ ràng, hoặc khi Khoa đã ghi ở mục [5].
+11. Hợp nhất: khi nhiều kỹ năng trong danh mục gần nghĩa, chỉ chọn một kỹ năng sát nhất, ưu tiên kỹ năng Khoa đã dùng cho học phần (mục [5]); không chọn cùng lúc kỹ năng chung và kỹ năng con có cùng nội dung.
+12. groupKey là khóa nhóm (G1, G2…) ở mục [2]. Kỹ năng đã có nhóm thì ghi đúng nhóm của nó; kỹ năng ghi "kỹ năng nghề, chưa có nhóm" thì ghi nhóm phù hợp nhất.`;
 
 const TEXT_RULES = (first: number) => `${first}. reason: một câu ngắn, tối đa ${L.promptReason} ký tự, nói học phần rèn hoặc dùng kỹ năng đó như thế nào. Gọi kỹ năng bằng tên; không viết khóa S…, G… hay mã học phần.
 ${first + 1}. Viết tiếng Việt có dấu đầy đủ, tự nhiên; chỉ viết văn bản thuần, không dùng markdown hay emoji.`;
 
 const COURSE_AI_SYSTEM_PROMPTS: Record<CourseAiMode, string> = {
   links: `${INTRO}
-Việc của bạn: đọc thông tin học phần ở mục [4], chọn trong danh mục ở mục [3] những kỹ năng mà học phần trực tiếp rèn luyện hoặc đánh giá, rồi chia 100% trọng số của học phần cho các kỹ năng của học phần. Kỹ năng ghi "đã liên kết" ở mục [3] (liệt kê lại ở mục [5]) là kỹ năng học phần đang có: luôn đưa chúng vào "links" kèm phần trăm, kể cả khi không chọn thêm kỹ năng nào.
+Việc của bạn: đọc thông tin học phần ở mục [4] và các kỹ năng Khoa đã nhập cho học phần ở mục [5], chọn trong danh mục ở mục [3] những kỹ năng mà học phần trực tiếp rèn luyện hoặc đánh giá, rồi chia 100% trọng số của học phần cho các kỹ năng của học phần. Kỹ năng ghi "đã liên kết" ở mục [3] (liệt kê lại ở mục [6]) là kỹ năng học phần đang có: luôn đưa chúng vào "links" kèm phần trăm, kể cả khi không chọn thêm kỹ năng nào. Kỹ năng đã liên kết có thể do AI đề xuất trước đây nên không phải bằng chứng về nội dung học phần: kỹ năng nào trái với mục [5] (ví dụ một công nghệ khác với công nghệ Khoa ghi) thì vẫn đưa vào nhưng cho 0%, và chia trọng số theo mục [5].
 
 Quy tắc:
 ${PICK_RULES}
-10. percent là số nguyên từ 0 đến 100; tổng percent của mọi mục trong "links" và "newSkills" bằng đúng 100. Kỹ năng trọng tâm của học phần nhận phần trăm cao nhất; kỹ năng đã liên kết mà học phần gần như không rèn thì cho 0.
-11. newSkills: chỉ dùng khi học phần rèn một kỹ năng chuyên môn quan trọng mà danh mục rõ ràng chưa có, tối đa ${L.newSkills} mục. Tên là cụm danh từ tiếng Việt ngắn, không mở đầu bằng "Kỹ năng", không trùng hay gần nghĩa với kỹ năng ở mục [3]. Thường để trống.
-${TEXT_RULES(12)}
+13. percent là số nguyên từ 0 đến 100; tổng percent của mọi mục trong "links" và "newSkills" bằng đúng 100. Kỹ năng trọng tâm của học phần nhận phần trăm cao nhất (thường 40–65%), kỹ năng phụ 10–25%; mỗi kỹ năng mềm tối đa 15% trừ khi học phần là môn kỹ năng mềm. Kỹ năng đã liên kết mà học phần gần như không rèn, hoặc trái với mục [5], thì cho 0.
+14. newSkills: chỉ dùng khi học phần rèn một kỹ năng chuyên môn quan trọng mà danh mục rõ ràng chưa có, tối đa ${L.newSkills} mục. Tên là cụm danh từ tiếng Việt ngắn, không mở đầu bằng "Kỹ năng", không trùng, không gần nghĩa và không là biến thể (thêm hay bớt tên công cụ, viết tắt, tiếng Anh hay tiếng Việt) của kỹ năng ở mục [3]; có kỹ năng gần nghĩa thì chọn kỹ năng đó. Thường để trống.
+${TEXT_RULES(15)}
 
 Chỉ trả về một đối tượng JSON gồm "links" (các mục { skillKey, groupKey, percent, reason }, có thể rỗng) và "newSkills" (tối đa ${L.newSkills} mục { name, groupKey, percent, reason }), không thêm bất kỳ văn bản nào bên ngoài JSON.`,
 
@@ -152,8 +169,8 @@ Việc của bạn: đọc thông tin học phần ở mục [4], chọn trong d
 
 Quy tắc:
 ${PICK_RULES}
-10. percent là số nguyên từ 0 đến 100; tổng percent của các kỹ năng đã chọn bằng đúng 100. Kỹ năng trọng tâm của học phần nhận phần trăm cao nhất.
-${TEXT_RULES(11)}
+13. percent là số nguyên từ 0 đến 100; tổng percent của các kỹ năng đã chọn bằng đúng 100. Kỹ năng trọng tâm của học phần nhận phần trăm cao nhất (thường 40–65%), kỹ năng phụ 10–25%; mỗi kỹ năng mềm tối đa 15% trừ khi học phần là môn kỹ năng mềm.
+${TEXT_RULES(14)}
 
 Chỉ trả về một đối tượng JSON gồm "links" (tối đa ${L.links} mục { skillKey, groupKey, percent, reason }, có thể rỗng), không thêm bất kỳ văn bản nào bên ngoài JSON.`
 };
@@ -306,8 +323,14 @@ function renderCourseDataBlock(source: CourseAiSource, mode: CourseAiMode, skill
   push("", "[3. DANH MỤC KỸ NĂNG ĐƯỢC CHỌN] (khóa | tên | nhóm | mô tả)");
   for (const entry of skills) push(skillLine(entry));
   push("", "[4. HỌC PHẦN CẦN LIÊN KẾT KỸ NĂNG]", ...courseLines(source));
+  // v5: what the faculty imported for this course, the most reliable account of its content.
+  const keyById = new Map(skills.map((entry) => [entry.id, entry]));
+  const faculty = (source.facultyLinks ?? []).filter((link) => link.weight > 0 && keyById.has(link.skillId));
+  push("", "[5. KỸ NĂNG KHOA ĐÃ NHẬP CHO HỌC PHẦN] (nguồn đáng tin nhất về nội dung học phần)");
+  if (!faculty.length) push("Chưa có.");
+  for (const link of faculty) push(`- ${keyById.get(link.skillId)!.key} · ${sanitizeText(link.name, 100)} (Khoa ghi ${Math.round(link.weight * 100)}%)`);
   if (mode === "links") {
-    push("", "[5. KỸ NĂNG ĐÃ LIÊN KẾT VỚI HỌC PHẦN] (luôn đưa vào \"links\" kèm phần trăm)");
+    push("", "[6. KỸ NĂNG ĐÃ LIÊN KẾT VỚI HỌC PHẦN] (luôn đưa vào \"links\" kèm phần trăm; kỹ năng trái với mục [5] thì cho 0%)");
     if (!source.links.length) push("Chưa có.");
     for (const entry of skills.filter((item) => linked.has(item.id))) {
       push(`- ${entry.key} · ${sanitizeText(entry.name, 100)} (trọng số hiện tại ${Math.round((linked.get(entry.id)!.weight ?? 0) * 100)}%)`);
@@ -315,7 +338,7 @@ function renderCourseDataBlock(source: CourseAiSource, mode: CourseAiMode, skill
   }
   push("", "=== KẾT THÚC DỮ LIỆU ===", "",
     "Hãy chọn kỹ năng và chia trọng số cho học phần ở mục [4] theo đúng cấu trúc JSON đã mô tả."
-      + (mode === "links" && source.links.length ? " Luôn đưa các kỹ năng đã liên kết ở mục [5] vào \"links\"."
+      + (mode === "links" && source.links.length ? " Luôn đưa các kỹ năng đã liên kết ở mục [6] vào \"links\"."
         : " Nếu mục [3] không có kỹ năng nào là nội dung chính của học phần, trả về \"links\": []."));
   return lines.join("\n");
 }

@@ -99,6 +99,34 @@ export function normalizePercents(values: readonly number[]): number[] {
   return result;
 }
 
+/** Words of a skill name for the near-duplicate check: folded, split at punctuation, filler words left out. */
+const FILLER_WORDS = new Set(["va", "voi", "cac", "cua", "cho", "trong", "ve", "ky", "nang"]);
+const wordsOf = (name: string) => new Set(fold(name).split(/[^\p{L}\p{N}#+.]+/u).map((word) => word.replace(/^\.+|\.+$/g, "")).filter((word) => word && !FILLER_WORDS.has(word)));
+
+/**
+ * The candidate a "new" skill name only varies (v5, 2026-10-22: "hợp nhất các kỹ năng"), or null.
+ * A match: every word of one name is in the other and that name has at least two words; a one-word
+ * candidate of three letters or more inside a new name of at most three words ("Lập trình Python" →
+ * Python); or at least 60% of the words shared. The candidate sharing the most words wins.
+ */
+export function similarSkill<T extends { name: string }>(name: string, candidates: readonly T[]): T | null {
+  const words = wordsOf(name);
+  if (!words.size) return null;
+  let best: { candidate: T; shared: number; jaccard: number } | null = null;
+  for (const candidate of candidates) {
+    const other = wordsOf(candidate.name);
+    const shared = [...words].filter((word) => other.has(word)).length;
+    if (!shared) continue;
+    const jaccard = shared / new Set([...words, ...other]).size;
+    const inside = (small: Set<string>, large: Set<string>) => [...small].every((word) => large.has(word));
+    const contained = (other.size >= 2 && inside(other, words)) || (words.size >= 2 && inside(words, other))
+      || (other.size === 1 && [...other][0]!.length >= 3 && words.size <= 3 && inside(other, words));
+    if (!contained && jaccard < 0.6) continue;
+    if (!best || shared > best.shared || (shared === best.shared && jaccard > best.jaccard)) best = { candidate, shared, jaccard };
+  }
+  return best?.candidate ?? null;
+}
+
 export function validateCourseAiOutput(output: unknown, context: CourseAiContext): CourseAiValidation {
   const byKey = new Map(context.skills.map((entry) => [entry.key, entry]));
   const groupIds = new Map(context.groups.map((entry) => [entry.key, entry.id]));
@@ -181,8 +209,8 @@ export function validateCourseAiOutput(output: unknown, context: CourseAiContext
     const name = cleanNewSkillName(sanitizeText(cleanKeyText(item.name, names), L.skillName));
     const key = folded(name);
     if (!name || hasForbiddenContent(name) || linkedNames.has(key)) continue;
-    // A "new" name that is already a candidate becomes that skill.
-    const existing = byName.get(key);
+    // A "new" name that is already a candidate, or only a variant of one (v5), becomes that skill.
+    const existing = byName.get(key) ?? similarSkill(name, context.skills);
     if (existing ? used.has(existing.id) || linkedIds.has(existing.id) : newNames.has(key)) continue;
     if (existing) {
       used.add(existing.id);

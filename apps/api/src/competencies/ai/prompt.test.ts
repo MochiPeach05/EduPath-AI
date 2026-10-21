@@ -20,7 +20,7 @@ describe("course AI prompt", () => {
     // The linked skill is marked, listed again with its weight, and must come back with a percent.
     expect(input.user).toContain("S002 | Thiết kế cơ sở dữ liệu | Chuyên môn | Mô hình hóa dữ liệu quan hệ | đã liên kết");
     expect(input.user).toContain("- S002 · Thiết kế cơ sở dữ liệu (trọng số hiện tại 50%)");
-    expect(input.user.trimEnd().endsWith('Luôn đưa các kỹ năng đã liên kết ở mục [5] vào "links".')).toBe(true);
+    expect(input.user.trimEnd().endsWith('Luôn đưa các kỹ năng đã liên kết ở mục [6] vào "links".')).toBe(true);
     expect(input.system).toContain("tổng percent của mọi mục trong \"links\" và \"newSkills\" bằng đúng 100");
     // The full mode (whole program, courses without links) still leaves linked skills out.
     expect(buildCourseAiInput(courseSource({ links: [{ skillId: SKILL_DB, name: "Thiết kế cơ sở dữ liệu", groupId: GROUP_CORE, description: "", weight: 0.5 }] }), "full").skills
@@ -66,7 +66,7 @@ describe("course AI prompt", () => {
   });
 
   it("asks for an empty list when no catalog skill is the course's main content (v3, 2026-10-19)", () => {
-    expect(COURSE_AI_PROMPT_VERSIONS).toEqual({ links: "comp-link-v4", weights: "comp-weight-v2", full: "comp-course-v3" });
+    expect(COURSE_AI_PROMPT_VERSIONS).toEqual({ links: "comp-link-v5", weights: "comp-weight-v2", full: "comp-course-v4" });
     for (const mode of ["links", "full"] as const) {
       const input = buildCourseAiInput(courseSource(), mode);
       expect(input.system).toContain('trả về "links": [] (danh sách rỗng)');
@@ -76,6 +76,41 @@ describe("course AI prompt", () => {
       // The grammar allows an empty answer.
       expect((input.schema as { properties: { links: { minItems?: number } } }).properties.links.minItems).toBeUndefined();
     }
+  });
+
+  it("shows the skills the faculty imported as the most reliable source and keeps their technologies (v5, 2026-10-22)", () => {
+    const facultyLinks = [{ skillId: SKILL_DB, name: "Thiết kế cơ sở dữ liệu", weight: 0.6 }, { skillId: SKILL_WEB, name: "Lập trình web", weight: 0.4 },
+      { skillId: "00000000-0000-4000-8000-000000000099", name: "Kỹ năng không còn trong danh mục", weight: 0.2 }];
+    for (const mode of ["links", "full"] as const) {
+      const input = buildCourseAiInput(courseSource({ facultyLinks }), mode);
+      const section = input.user.slice(input.user.indexOf("[5. KỸ NĂNG KHOA ĐÃ NHẬP CHO HỌC PHẦN]"));
+      expect(section).toContain("- S002 · Thiết kế cơ sở dữ liệu (Khoa ghi 60%)");
+      expect(section).toContain("- S001 · Lập trình web (Khoa ghi 40%)");
+      // A skill that is no longer a candidate is not listed (the model can only answer with keys).
+      expect(section).not.toContain("không còn trong danh mục");
+      expect(input.user.indexOf("[4. HỌC PHẦN")).toBeLessThan(input.user.indexOf("[5. KỸ NĂNG KHOA"));
+      expect(input.system).toContain("nguồn đáng tin nhất về nội dung học phần");
+      expect(input.system).toContain("không thay một công nghệ Khoa đã ghi bằng công nghệ khác");
+      expect(input.system).toContain('"không mặc định Flutter hoặc React Native"');
+      expect(input.system).toContain("tên chung như \"Lập trình ứng dụng di động\" chưa đủ để khẳng định công nghệ");
+      expect(input.system).toContain("Hợp nhất: khi nhiều kỹ năng trong danh mục gần nghĩa, chỉ chọn một kỹ năng sát nhất");
+      expect(input.system).toContain("thường 40–65%");
+    }
+    const linked = buildCourseAiInput(courseSource({ facultyLinks, links: [{ skillId: SKILL_DB, name: "Thiết kế cơ sở dữ liệu", groupId: GROUP_CORE, description: "", weight: 1 }] }), "links");
+    expect(linked.user.indexOf("[5. KỸ NĂNG KHOA")).toBeLessThan(linked.user.indexOf("[6. KỸ NĂNG ĐÃ LIÊN KẾT"));
+    expect(linked.system).toContain("không là biến thể (thêm hay bớt tên công cụ, viết tắt, tiếng Anh hay tiếng Việt)");
+    // Trial of 2026-10-22: Gemma kept the AI's Flutter/Kotlin links of a mobile course while the faculty had Android.
+    expect(linked.system).toContain("không phải bằng chứng về nội dung học phần");
+    expect(linked.system).toContain("kỹ năng nào trái với mục [5] (ví dụ một công nghệ khác với công nghệ Khoa ghi) thì vẫn đưa vào nhưng cho 0%");
+    expect(linked.user).toContain("(luôn đưa vào \"links\" kèm phần trăm; kỹ năng trái với mục [5] thì cho 0%)");
+    expect(buildCourseAiInput(courseSource(), "full").user).toContain("[5. KỸ NĂNG KHOA ĐÃ NHẬP CHO HỌC PHẦN] (nguồn đáng tin nhất về nội dung học phần)\nChưa có.");
+  });
+
+  it("gives each skill up to 120 characters of its description, so a scope's limits are read (v5)", () => {
+    const scope = "Xây dựng ứng dụng Android: layout XML, Activity/Intent, sự kiện và lưu trữ; không mặc định Flutter hoặc React Native.";
+    const input = buildCourseAiInput(courseSource({ profiles: [{ id: SKILL_WEB, name: "Phát triển ứng dụng Android", description: scope, groupId: GROUP_CORE }] }), "full");
+    expect(scope.length).toBeLessThanOrEqual(120);
+    expect(input.user).toContain(`S001 | Phát triển ứng dụng Android | Chuyên môn | ${scope}`);
   });
 
   it("has no new skills in full mode and keeps student data out", () => {

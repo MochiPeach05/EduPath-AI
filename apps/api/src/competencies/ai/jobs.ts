@@ -87,6 +87,28 @@ async function loadSourceRows(client: Db, courseIds: string[]): Promise<SourceRo
   return result.rows;
 }
 
+/**
+ * The skills the faculty imported for each course (v5): the links of its first "Nhập dữ liệu" history
+ * entry (the K29 workbook import), mapped to the live, active profiles, highest weight first.
+ */
+async function loadFacultyLinks(client: Db, courseIds: string[]) {
+  const result = await client.query<{ courseId: string; skillId: string; name: string; weight: number }>(
+    `WITH origin AS (SELECT DISTINCT ON (e.entity_key) e.entity_key,e.snapshot->'links' AS links FROM ad_comp_events e
+        WHERE e.kind='course' AND e.entity_key=ANY($1::text[]) AND e.note LIKE 'Nhập dữ liệu%' ORDER BY e.entity_key,e.created_at,e.id)
+      SELECT o.entity_key AS "courseId",s.id AS "skillId",s.name,(l->>'weight')::float8 AS weight
+      FROM origin o CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(o.links)='array' THEN o.links ELSE '[]'::jsonb END) l
+      JOIN career_skills s ON s.id::text=l->>'skillId' AND s.deleted_at IS NULL
+      JOIN ad_comp_skills cs ON cs.skill_id=s.id AND cs.deleted_at IS NULL AND cs.is_active
+      WHERE (l->>'weight')::float8>0 ORDER BY o.entity_key,weight DESC,s.name,s.id`, [courseIds]);
+  const byCourse = new Map<string, NonNullable<CourseAiSource["facultyLinks"]>>();
+  for (const row of result.rows) {
+    const bucket = byCourse.get(row.courseId) ?? [];
+    bucket.push({ skillId: row.skillId, name: row.name, weight: row.weight });
+    byCourse.set(row.courseId, bucket);
+  }
+  return byCourse;
+}
+
 /** Current links of the courses (any status), by course id. */
 async function loadCourseLinks(client: Db, courseIds: string[]) {
   const result = await client.query<{ courseId: string; skillId: string; name: string; groupId: string; description: string; weight: number }>(
@@ -107,7 +129,7 @@ async function loadCourseLinks(client: Db, courseIds: string[]) {
 const hour = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : null);
 
 /** One course: the shared catalog, its curriculum row and its links. */
-function courseSource(shared: SharedSource, row: SourceRow, links: CourseAiSource["links"]): CourseAiSource {
+function courseSource(shared: SharedSource, row: SourceRow, links: CourseAiSource["links"], facultyLinks: NonNullable<CourseAiSource["facultyLinks"]> = []): CourseAiSource {
   const course = row.course;
   return {
     curriculum: { cohortCode: row.cohortCode, name: row.curriculumName, version: row.version },
@@ -115,6 +137,7 @@ function courseSource(shared: SharedSource, row: SourceRow, links: CourseAiSourc
     profiles: shared.profiles,
     careerSkills: shared.careerSkills,
     links,
+    facultyLinks,
     course: {
       code: row.code,
       name: row.name,
@@ -170,7 +193,8 @@ export async function enqueueCourseSuggestion(
   const [source] = await loadSourceRows(client, [input.courseId]);
   if (!source) throw new CompetencyError("course_not_found", 404);
   const links = (await loadCourseLinks(client, [input.courseId])).get(input.courseId) ?? [];
-  const aiInput = buildCourseAiInput(courseSource(await loadSharedSource(client), source, links), input.mode);
+  const faculty = (await loadFacultyLinks(client, [input.courseId])).get(input.courseId) ?? [];
+  const aiInput = buildCourseAiInput(courseSource(await loadSharedSource(client), source, links, faculty), input.mode);
   assertRunnable(aiInput);
   if (await pendingCount(client) >= MAX_PENDING_COURSE_SUGGESTIONS) throw new CompetencyError("ai_queue_full", 429);
   const id = await insertJob(client, { source, mode: input.mode, requestedBy: input.requestedBy, batchId: null, input: aiInput });
@@ -193,6 +217,7 @@ export async function enqueueCourseBatch(client: PoolClient, input: { courseIds:
   await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [COURSE_SUGGESTION_QUEUE_LOCK]);
   const sources = await loadSourceRows(client, input.courseIds);
   const links = await loadCourseLinks(client, input.courseIds);
+  const faculty = await loadFacultyLinks(client, input.courseIds);
   const pending = await client.query<{ courseId: string }>(
     `SELECT course_id AS "courseId" FROM ad_comp_ai_suggestions WHERE course_id=ANY($1::uuid[]) AND mode='full' AND status IN ${PENDING}`, [input.courseIds]);
   const pendingIds = new Set(pending.rows.map((row) => row.courseId));
@@ -202,7 +227,7 @@ export async function enqueueCourseBatch(client: PoolClient, input: { courseIds:
   for (const source of sources) {
     if ((links.get(source.courseId) ?? []).length) { skipped.linked += 1; continue; }
     if (pendingIds.has(source.courseId)) { skipped.pending += 1; continue; }
-    const aiInput = buildCourseAiInput(courseSource(shared, source, []), "full");
+    const aiInput = buildCourseAiInput(courseSource(shared, source, [], faculty.get(source.courseId) ?? []), "full");
     assertRunnable(aiInput);
     inputs.push({ source, input: aiInput });
   }

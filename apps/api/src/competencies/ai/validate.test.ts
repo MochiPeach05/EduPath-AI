@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildCourseAiInput } from "./prompt.js";
-import { courseAiContextFromInput, normalizePercents, validateCourseAiOutput } from "./validate.js";
+import { courseAiContextFromInput, normalizePercents, similarSkill, validateCourseAiOutput } from "./validate.js";
 import { courseSource, GROUP_CORE, GROUP_SOFT, SKILL_DB, SKILL_DOCKER, SKILL_TEAM, SKILL_WEB } from "./test-fixture.js";
 
 const contextFor = (mode: "links" | "weights" | "full", source = courseSource()) => {
@@ -118,5 +118,26 @@ describe("validateCourseAiOutput", () => {
     expect(courseAiContextFromInput({ mode: "other", skills: [], groups: [], linked: [] })).toBeNull();
     // "skills" proposals (the removed "Thêm kỹ năng (AI)") are no longer a mode this server runs.
     expect(courseAiContextFromInput({ mode: "skills", skills: [], groups: [], linked: [] })).toBeNull();
+  });
+});
+
+describe("near-duplicate new skills (v5, 2026-10-22: hợp nhất các kỹ năng)", () => {
+  const catalog = ["Lập trình hệ thống nhúng và IoT (ESP32)", "Python", "SQL", "Quản trị cơ sở dữ liệu SQL Server", "Phân tích dữ liệu",
+    "Lập trình Java", "Lập trình C#", "Kiểm thử", "Web security"].map((name) => ({ name }));
+  const match = (name: string) => similarSkill(name, catalog)?.name ?? null;
+  it("maps a variant of a catalog skill to that skill", () => {
+    expect(match("Hệ thống nhúng IoT")).toBe("Lập trình hệ thống nhúng và IoT (ESP32)");
+    expect(match("Lập trình Python")).toBe("Python");
+    expect(match("Python nâng cao")).toBe("Python");
+    expect(match("SQL Server")).toBe("Quản trị cơ sở dữ liệu SQL Server");
+    expect(match("Phân tích dữ liệu lớn")).toBe("Phân tích dữ liệu");
+    expect(match("Kiểm thử phần mềm")).toBe("Kiểm thử");
+  });
+  it("keeps a really new skill new", () => {
+    expect(match("Thiết kế trải nghiệm người dùng")).toBeNull();
+    expect(match("Tiếp thị trực tuyến")).toBeNull();
+    expect(match("Lập trình Go")).toBeNull();
+    expect(match("Phát triển ứng dụng web với React và Node.js")).toBeNull();
+    expect(match("")).toBeNull();
   });
 });
