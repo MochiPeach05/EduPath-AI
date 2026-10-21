@@ -5,7 +5,15 @@ export const COMPETENCY_API = "/api/admin/competencies";
 export const WEIGHT_TOLERANCE = 0.000001;
 export type Group = { id: string; name: string; description: string; isActive: boolean; version: string; skillCount: number };
 export type CatalogSkill = { id: string; name: string; description: string; version: string };
-export type Skill = CatalogSkill & { scope: string; groupId: string; groupName: string; isActive: boolean; groupActive: boolean; careerCount: number; courseCount: number; legacySkillId: string | null };
+export type SkillGroup = { id: string; name: string; isActive: boolean };
+/**
+ * groupId/groupName/groupActive: the profile's first group. groups: every group of the skill, the first
+ * one first (2026-10-22: one or more groups); read it with skillGroups, an older API sends none.
+ */
+export type Skill = CatalogSkill & { scope: string; groupId: string; groupName: string; isActive: boolean; groupActive: boolean; groups?: SkillGroup[]; careerCount: number; courseCount: number; legacySkillId: string | null };
+export const skillGroups = (skill: Pick<Skill, "groupId" | "groupName" | "groupActive" | "groups">): SkillGroup[] =>
+  skill.groups?.length ? skill.groups : [{ id: skill.groupId, name: skill.groupName, isActive: skill.groupActive }];
+export const skillGroupNames = (skill: Pick<Skill, "groupId" | "groupName" | "groupActive" | "groups">) => skillGroups(skill).map((group) => group.name).join(", ");
 /** `scope`: the cohort and CTĐT version of an entry saved before the courses were shared (2026-10-20). */
 export type EventEntry = { id: string; note: string; createdAt: string; actorName?: string | null; kind?: string; snapshot: unknown; scope?: string | null };
 /** A shared course that the skill is linked to; `cohorts` have it in their newest CTĐT revision. */
@@ -22,7 +30,9 @@ export type Cohort = { cohortCode: string; courseCount: number };
  */
 export type CompetencyCourse = { id: string; code: string; name: string; credits: number; type: string; block: string; specialty: string; cohorts: string[];
   status: CourseStatus; configId: string | null; version: string | null; skillCount: number; totalWeight: number; mergedFrom: string[] };
-export type CourseLink = { skillId: string; skillName: string; groupId: string; groupName: string; isActive: boolean; weight: number };
+/** groupNames: every group of the skill, the first one first (2026-10-22); an older API sends groupName only. */
+export type CourseLink = { skillId: string; skillName: string; groupId: string; groupName: string; groupNames?: string[]; isActive: boolean; weight: number };
+export const linkGroupNames = (link: Pick<CourseLink, "groupName" | "groupNames">) => link.groupNames?.length ? link.groupNames.join(", ") : link.groupName;
 export type CourseDetail = { courseId: string; courseCode: string; courseName: string; credits: number; cohorts: string[]; configId: string | null;
   status: CourseStatus; version: string | null; note: string; mergedFrom: string[]; links: CourseLink[]; history: EventEntry[] };
 export type CompetencySummary = { cohort: string; courseCount: number; activeCount: number; draftCount: number; archivedCount: number; missingCount: number; skillCount: number;

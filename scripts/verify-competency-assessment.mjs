@@ -36,7 +36,7 @@ const migrations = ["007_student_transcripts.sql", "010_transcript_jobs.sql", "0
   // course-proposal housekeeping, so the audit schema needs the tables up to 039 like production.
   "031_career_ai_suggestions.sql", "032_graduation_ai_advice.sql", "033_competency_cloud_ai.sql", "034_competency_ai_suggestions.sql",
   "035_competency_ai_skills.sql", "036_cancel_competency_ai_skills.sql", "037_competency_field_groups.sql", "038_competency_shared_courses.sql",
-  "039_competency_newest_revisions.sql"];
+  "039_competency_newest_revisions.sql", "040_competency_skill_groups.sql"];
 const adminPool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 1 });
 // search_path is the audit schema ONLY, so a missing table can never fall through to public.
 const pool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 8, options: `-c search_path=${schema}` });
@@ -135,7 +135,7 @@ const ageAssessments = (user) => pool.query("UPDATE stu_comp_assessments SET cre
 
 try {
   const { revisionId, skills } = await setupSchema();
-  checks.push("migrations 028-039 apply with 007-027 in a throwaway schema");
+  checks.push("migrations 028-040 apply with 007-027 in a throwaway schema");
 
   const app = express();
   app.use("/api/worker/transcripts", createTranscriptWorkerRouter(pool, workerKey));
@@ -199,6 +199,17 @@ try {
   assert.equal(await count("ad_comp_courses WHERE code='71ITSE30103'"), 2, "the same code under another name is another course");
   checks.push("a K30 student gets the K29 configuration of the same course (case and spaces ignored); the same code under another name is another course without one");
 
+  // A skill in two groups (2026-10-22, migration 040): read by the real SQL, counted in both groups.
+  const firstGroupId = (await pool.query("SELECT group_id FROM ad_comp_skills WHERE skill_id=$1", [skills[1]])).rows[0].group_id;
+  const secondGroupId = (await pool.query("SELECT id FROM ad_comp_groups WHERE id<>$1 AND is_active AND deleted_at IS NULL ORDER BY name LIMIT 1", [firstGroupId])).rows[0].id;
+  await pool.query("INSERT INTO ad_comp_skill_groups(skill_id,group_id) VALUES($1,$2)", [skills[1], secondGroupId]);
+  const twoGroups = await loadAssessmentInputs(pool, actors.a.userId);
+  assert.deepEqual(twoGroups.weights.skills.map((skill) => [skill.skillId, skill.otherGroupIds]).sort(), [[skills[0], []], [skills[1], [secondGroupId]]].sort());
+  await pool.query("UPDATE ad_comp_groups SET is_active=false WHERE id=$1", [secondGroupId]);
+  assert.deepEqual((await loadAssessmentInputs(pool, actors.a.userId)).weights.skills.find((skill) => skill.skillId === skills[1]).otherGroupIds, [], "an inactive group is not read");
+  await pool.query("UPDATE ad_comp_groups SET is_active=true WHERE id=$1", [secondGroupId]);
+  checks.push("the snapshot reader returns a skill's other active groups (ad_comp_skill_groups), never an inactive one");
+
   // All three of the checklist are required (2026-10-21): without a target career or a specialty, nothing is stored.
   const career = (await pool.query("SELECT career_position_id FROM student_profiles WHERE user_id=$1", [actors.a.userId])).rows[0].career_position_id;
   assert(career, "the audit profiles have a target career");
@@ -215,6 +226,9 @@ try {
   const first = await assess("a");
   assert.equal(first.status, 201, JSON.stringify(first.body));
   const stored = first.body.assessment;
+  assert.equal(stored.result.skills.find((skill) => skill.skillId === skills[1]).groupKeys.length, 2, "the skill counts in both of its groups");
+  assert.equal(stored.result.groups.length, 2);
+  assert.deepEqual(stored.result.groups.map((group) => group.skillCount).sort(), [1, 2]);
   assert.equal(stored.ai.status, "disabled");
   assert.equal(stored.meta.transcriptVersion, inputs.transcript.version);
   assert.equal(stored.result.meta.weights.activeCount, 3);

@@ -83,8 +83,10 @@ export type WeightSkillInput = {
   description: string;
   /** ad_comp_skills.scope (the engine trims it to 200 characters). */
   scope: string;
-  /** ad_comp_skills.group_id */
+  /** ad_comp_skills.group_id: the skill's first group. */
   groupId: string;
+  /** Its other active groups (ad_comp_skill_groups, migration 040); the skill counts in every group. */
+  otherGroupIds?: string[];
 };
 
 export type WeightsInput = {
@@ -362,9 +364,15 @@ export type SkillResult = ScoreSummary & {
   key: string;
   skillId: string;
   name: string;
+  /** The skill's first group (ad_comp_skills.group_id). */
   groupKey: string;
   groupId: string;
   groupName: string;
+  /**
+   * Every group the skill counts in, in group order, the first group included (2026-10-22: a skill can
+   * belong to several groups). Absent in results stored before: read it as [groupKey].
+   */
+  groupKeys: string[];
   /** ad_comp_skills.scope trimmed to 200 characters. */
   scope: string;
   status: SkillStatus;

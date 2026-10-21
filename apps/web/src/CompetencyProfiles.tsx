@@ -4,7 +4,7 @@ import { Icon, RequiredLabel } from "./admin-account-shared";
 import { searchTerm } from "./student-curriculum-types";
 import { useLiveFilters } from "./use-live-filters";
 import {
-  COMPETENCY_API, competencyDate, competencyRequest, percentage, statusLabels,
+  COMPETENCY_API, competencyDate, competencyRequest, percentage, skillGroups, statusLabels,
   useCompetencyData, type CatalogSkill, type EventEntry, type Group, type Skill, type SkillDetail,
 } from "./competency-types";
 import { CheckedForm, DescriptionField } from "./CheckedForm";
@@ -13,6 +13,18 @@ import { DESCRIPTION_MAX_WORDS, LONG_DESCRIPTION_MAX_WORDS } from "./form-checks
 type TabProps = { canManage: boolean; revision: number; onSaved: () => void };
 type EditorProps<T> = { current: T | null; close: () => void; saved: () => void };
 type GroupDetail = Group & { skills?: Skill[]; history?: EventEntry[] };
+
+/** A profile's groups (2026-10-22: one or more), naming the ones no longer in use. */
+function GroupNames({ skill }: { skill: Skill }) {
+  const groups = skillGroups(skill), inactive = groups.filter(group => !group.isActive);
+  return <>{groups.map(group => group.name).join(", ")}{inactive.length > 0 && <small className="comp-hint">Nhóm ngừng sử dụng{groups.length > 1 ? `: ${inactive.map(group => group.name).join(", ")}` : ""}</small>}</>;
+}
+
+/** Group names of a history snapshot: every group since 2026-10-22, the single group before. */
+function snapshotGroups(snapshot: Record<string, unknown>): string {
+  const groups = Array.isArray(snapshot.groups) ? snapshot.groups.map(group => (group && typeof group === "object" ? String((group as { name?: unknown }).name ?? "") : "")).filter(Boolean) : [];
+  return groups.length ? groups.join(", ") : String(snapshot.groupName ?? "");
+}
 
 function ProfileState({ active }: { active: boolean }) {
   return <span className={`comp-state${active ? "" : " comp-state-inactive"}`}>{active ? "Đang sử dụng" : "Ngừng sử dụng"}</span>;
@@ -172,7 +184,7 @@ export function CompetencySkillsTab({ canManage, revision, onSaved }: TabProps) 
 
   return <section className="cm-workspace comp-workspace">
     <div className="cm-toolbar">
-      <p>Mỗi cấu hình năng lực gồm một kỹ năng, nhóm năng lực, phạm vi đánh giá và trạng thái sử dụng.</p>
+      <p>Mỗi cấu hình năng lực gồm một kỹ năng, một hoặc nhiều nhóm năng lực, phạm vi đánh giá và trạng thái sử dụng.</p>
       {canManage && <button className="am-primary" onClick={() => { setSelected(null); setMode("edit"); }}><Icon name="plus" /> Thêm cấu hình năng lực</button>}
     </div>
     <section className="cm-panel">
@@ -192,7 +204,7 @@ export function CompetencySkillsTab({ canManage, revision, onSaved }: TabProps) 
           <tbody>{remote.data.items.slice((page - 1) * 10, page * 10).map((skill, index) => <tr key={skill.id}>
             <td className="cm-stt">{(page - 1) * 10 + index + 1}</td>
             <td><button className="am-name-link" onClick={() => { setSelected(skill); setMode("detail"); }}>{skill.name}</button></td>
-            <td>{skill.groupName}{!skill.groupActive && <small className="comp-hint">Nhóm ngừng sử dụng</small>}</td>
+            <td><GroupNames skill={skill} /></td>
             <td className="comp-description">{skill.scope || "Chưa bổ sung"}</td>
             <td><ProfileState active={skill.isActive} /></td>
             <td>{skill.courseCount} môn học<br />{skill.careerCount} nghề nghiệp</td>
@@ -218,34 +230,50 @@ export function CompetencySkillsTab({ canManage, revision, onSaved }: TabProps) 
 /** Same comparison as the server: whitespace, case and accents ignored. */
 const skillKey = (name: string) => searchTerm(name.replace(/\s+/g, " "));
 
-function SkillEditor({ current, revision, groups, close, saved }: EditorProps<Skill> & { revision: number; groups: Group[] }) {
+export function SkillEditor({ current, revision, groups, close, saved }: EditorProps<Skill> & { revision: number; groups: Group[] }) {
   // No "Nguồn kỹ năng" choice (user, 2026-10-18): a name already in the Kỹ năng catalog reuses that skill,
   // and a skill that already has a cấu hình năng lực is edited from the list instead.
   const catalog = useCompetencyData<{ items: CatalogSkill[] }>(`${COMPETENCY_API}/catalog`, revision);
   const profiles = useCompetencyData<{ items: Skill[] }>(`${COMPETENCY_API}/skills`, revision);
   // No "Chọn nhóm năng lực" placeholder (user, 2026-10-20): a new profile starts in the first group in use.
   const firstGroup = groups.find(group => group.isActive)?.id ?? groups[0]?.id ?? "";
-  const [form, setForm] = useState({ name: current?.name ?? "", description: current?.description ?? "", scope: current?.scope ?? "", groupId: current?.groupId ?? firstGroup, isActive: current?.isActive ?? true });
-  // The groups can arrive after the dialog opens: the shown group and the saved one stay the same.
-  useEffect(() => { if (firstGroup) setForm(previous => previous.groupId ? previous : { ...previous, groupId: firstGroup }); }, [firstGroup]);
+  // One or more groups (user, 2026-10-22: "Viết tài liệu" is Kỹ năng mềm and also Chuyên môn): the skill score counts in each.
+  const [form, setForm] = useState({ name: current?.name ?? "", description: current?.description ?? "", scope: current?.scope ?? "",
+    groupIds: current ? skillGroups(current).map(group => group.id) : firstGroup ? [firstGroup] : [], isActive: current?.isActive ?? true });
+  // The groups can arrive after the dialog opens: the shown groups and the saved ones stay the same.
+  useEffect(() => { if (firstGroup) setForm(previous => previous.groupIds.length ? previous : { ...previous, groupIds: [firstGroup] }); }, [firstGroup]);
+  // Groups of the profile that the list no longer has (deleted) stay visible, so the admin can untick them.
+  const groupOptions = [...groups, ...(current ? skillGroups(current).filter(group => !groups.some(item => item.id === group.id)) : [])];
+  const toggleGroup = (id: string) => setForm(previous => ({ ...previous,
+    groupIds: previous.groupIds.includes(id) ? previous.groupIds.filter(item => item !== id) : [...previous.groupIds, id] }));
+  const firstGroupBox = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const box = firstGroupBox.current;
+    if (!box) return;
+    box.setCustomValidity(form.groupIds.length ? "" : "Chọn ít nhất một nhóm năng lực.");
+    // Ticking any group clears the message CheckedForm wrote under the first box (it rechecks only the box clicked).
+    if (form.groupIds.length && box.getAttribute("aria-invalid") === "true") { box.removeAttribute("aria-invalid"); box.closest("label")?.removeAttribute("data-error"); }
+  }, [form.groupIds.length, groupOptions.length]);
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
   const submitting = useRef(false);
   const match = !current && form.name.trim() ? catalog.data?.items.find(skill => skillKey(skill.name) === skillKey(form.name)) : undefined;
   const profiled = Boolean(match && profiles.data?.items.some(skill => skill.id === match.id));
   const keepsDescription = Boolean(match?.description);
-  const canSave = Boolean(form.groupId && form.name.trim() && !profiled);
+  const canSave = Boolean(form.groupIds.length && form.name.trim() && !profiled);
+  const profiledMessage = (name: string) => `Kỹ năng “${name}” đã có cấu hình năng lực. Muốn thêm nhóm năng lực cho kỹ năng này, hãy tìm trong danh sách và dùng “Chỉnh sửa cấu hình năng lực”.`;
 
   return <Modal title={current ? "Chỉnh sửa cấu hình năng lực" : "Thêm cấu hình năng lực"} onClose={close} busy={busy}>
     <CheckedForm className="cm-dialog-body cm-form" onSubmit={async event => {
       event.preventDefault();
       if (submitting.current) return;
-      if (!canSave) { setError(profiled ? "Kỹ năng này đã có cấu hình năng lực. Hãy tìm trong danh sách và dùng “Chỉnh sửa cấu hình năng lực”." : "Hãy nhập tên kỹ năng và chọn nhóm năng lực."); return; }
+      if (!canSave) { setError(profiled ? profiledMessage(match?.name ?? form.name.trim()) : "Hãy nhập tên kỹ năng và chọn ít nhất một nhóm năng lực."); return; }
       submitting.current = true; setBusy(true); setError("");
       try {
         await competencyRequest(current ? `${COMPETENCY_API}/skills/${current.id}` : `${COMPETENCY_API}/skills`, {
           method: current ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json", ...(current ? { "x-version": current.version } : {}) },
-          body: JSON.stringify(form),
+          // The groups in the order of the list, so the first group is the same whatever the ticking order.
+          body: JSON.stringify({ ...form, groupIds: groupOptions.filter(group => form.groupIds.includes(group.id)).map(group => group.id) }),
         }); saved();
       } catch (failure) { setError((failure as Error).message); }
       finally { submitting.current = false; setBusy(false); }
@@ -253,13 +281,15 @@ function SkillEditor({ current, revision, groups, close, saved }: EditorProps<Sk
       <fieldset className="cm-fields" disabled={busy}>
         <label><RequiredLabel>Tên kỹ năng</RequiredLabel><input required maxLength={100} value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} /></label>
         {match && (profiled
-          ? <p className="admin-error" role="alert">Kỹ năng “{match.name}” đã có cấu hình năng lực. Hãy tìm trong danh sách và dùng “Chỉnh sửa cấu hình năng lực”.</p>
+          ? <p className="admin-error" role="alert">{profiledMessage(match.name)}</p>
           : <p className="comp-hint">“{match.name}” đã có trong danh mục Kỹ năng: cấu hình năng lực sẽ dùng kỹ năng này{keepsDescription ? " và giữ mô tả hiện có" : ""}.</p>)}
         <DescriptionField label="Mô tả kỹ năng chung" maxWords={DESCRIPTION_MAX_WORDS} rows={3} maxLength={2000} readOnly={keepsDescription} value={keepsDescription ? match?.description ?? "" : form.description} onChange={event => setForm({ ...form, description: event.target.value })} />
-        <label><RequiredLabel>Nhóm năng lực</RequiredLabel><select required value={form.groupId} onChange={event => setForm({ ...form, groupId: event.target.value })}>
-          {groups.map(group => <option key={group.id} value={group.id}>{group.name}{group.isActive ? "" : " (ngừng sử dụng)"}</option>)}
-          {current && !groups.some(group => group.id === current.groupId) && <option value={current.groupId}>{current.groupName}</option>}
-        </select></label>
+        <fieldset className="comp-group-picks">
+          <legend><RequiredLabel>Nhóm năng lực</RequiredLabel></legend>
+          {groupOptions.map((group, index) => <label key={group.id} className="cm-check"><input ref={index === 0 ? firstGroupBox : undefined} type="checkbox"
+            checked={form.groupIds.includes(group.id)} onChange={() => toggleGroup(group.id)} /> {group.name}{group.isActive ? "" : " (ngừng sử dụng)"}</label>)}
+          <p className="comp-hint">Chọn một hoặc nhiều nhóm. Điểm kỹ năng được tính vào từng nhóm đã chọn. Mức quan trọng của kỹ năng với từng nghề đặt ở yêu cầu của nghề (Bắt buộc/Ưu tiên).</p>
+        </fieldset>
         {!groups.length && <p className="comp-hint">Chưa tải được nhóm năng lực. Đóng hộp thoại và tải lại danh sách nhóm trước khi lưu.</p>}
         <DescriptionField label="Phạm vi đánh giá" maxWords={LONG_DESCRIPTION_MAX_WORDS} rows={5} maxLength={4000} value={form.scope} placeholder="Nội dung và phạm vi đánh giá kỹ năng…" onChange={event => setForm({ ...form, scope: event.target.value })} />
         <label className="cm-check"><input type="checkbox" checked={form.isActive} onChange={event => setForm({ ...form, isActive: event.target.checked })} /> Đang sử dụng trong đánh giá năng lực</label>
@@ -285,7 +315,7 @@ function SkillDetails({ current, revision, canManage, close, edit }: { current: 
       {detail && <>
         <dl className="comp-detail-grid">
           <div><dt>Tên kỹ năng</dt><dd>{detail.name}</dd></div>
-          <div><dt>Nhóm năng lực</dt><dd>{detail.groupName}{!detail.groupActive && <small className="comp-hint">Nhóm ngừng sử dụng</small>}</dd></div>
+          <div><dt>Nhóm năng lực</dt><dd><GroupNames skill={detail} /></dd></div>
           <div><dt>Mô tả kỹ năng chung</dt><dd className="comp-description">{detail.description || "Chưa bổ sung."}</dd></div>
           <div><dt>Phạm vi đánh giá</dt><dd className="comp-description">{detail.scope || "Chưa bổ sung."}</dd></div>
           <div><dt>Trạng thái sử dụng</dt><dd><ProfileState active={detail.isActive} /></dd></div>
@@ -334,7 +364,7 @@ function ProfileHistory({ entries, entity }: { entries: EventEntry[]; entity: "s
             <dl className="comp-detail-grid comp-snapshot">
               {typeof snapshot.name === "string" && <div><dt>{entity === "group" ? "Tên nhóm" : "Tên kỹ năng"}</dt><dd>{snapshot.name}</dd></div>}
               {typeof snapshot.description === "string" && <div><dt>Mô tả</dt><dd className="comp-description">{snapshot.description || "Chưa bổ sung."}</dd></div>}
-              {typeof snapshot.groupName === "string" && <div><dt>Nhóm năng lực</dt><dd>{snapshot.groupName}</dd></div>}
+              {typeof snapshot.groupName === "string" && <div><dt>Nhóm năng lực</dt><dd>{snapshotGroups(snapshot)}</dd></div>}
               {typeof snapshot.scope === "string" && <div><dt>Phạm vi</dt><dd className="comp-description">{snapshot.scope || "Chưa bổ sung."}</dd></div>}
               {typeof snapshot.skillCount === "number" && <div><dt>Số kỹ năng</dt><dd>{snapshot.skillCount}</dd></div>}
               {typeof snapshot.isActive === "boolean" && <div><dt>Trạng thái</dt><dd><ProfileState active={snapshot.isActive} /></dd></div>}

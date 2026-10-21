@@ -29,7 +29,7 @@ const migrations = ["007_student_transcripts.sql", "010_transcript_jobs.sql", "0
   "026_competency_management.sql", "028_student_specialty.sql", "029_student_competency_assessments.sql", "030_competency_consent.sql",
   "031_career_ai_suggestions.sql", "032_graduation_ai_advice.sql", "033_competency_cloud_ai.sql", "034_competency_ai_suggestions.sql",
   "035_competency_ai_skills.sql", "036_cancel_competency_ai_skills.sql", "037_competency_field_groups.sql", "038_competency_shared_courses.sql",
-  "039_competency_newest_revisions.sql"];
+  "039_competency_newest_revisions.sql", "040_competency_skill_groups.sql"];
 const adminPool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 1 });
 // search_path is the audit schema ONLY, so a missing table can never fall through to public.
 const pool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 8, options: `-c search_path=${schema}` });
@@ -114,7 +114,7 @@ function candidates(user) {
 try {
   const publicBefore = await publicCounts();
   await setupSchema();
-  checks.push(`migrations 007-039 apply in a throwaway schema; copied ${await count("ad_comp_skills WHERE deleted_at IS NULL")} profiles, ${await count("ad_comp_course_configs")} configurations and ${await count("career_requirements WHERE deleted_at IS NULL")} career links read-only from public`);
+  checks.push(`migrations 007-040 apply in a throwaway schema; copied ${await count("ad_comp_skills WHERE deleted_at IS NULL")} profiles, ${await count("ad_comp_course_configs")} configurations and ${await count("career_requirements WHERE deleted_at IS NULL")} career links read-only from public`);
 
   const app = express();
   app.use("/api/worker/competency-assessments", createCompetencyWorkerRouter(pool, workerKey));
@@ -169,6 +169,32 @@ try {
   assert.equal((await profile("Kỹ năng kiểm thử mới", "Mô tả")).status, 201);
   assert.equal(await count("career_skills WHERE deleted_at IS NULL"), catalogBefore + 1, "a new name adds one catalog skill");
   checks.push("adding a cấu hình năng lực with a name already in the Kỹ năng catalog (case, spaces, accents ignored) reuses that skill and keeps its description (an empty one takes the typed text); a second time is 409 skill_profile_exists; a new name adds one catalog skill; existingSkillId is refused");
+
+  // One or more groups per profile (2026-10-22, migration 040): "Viết tài liệu" is Kỹ năng mềm and also Chuyên môn.
+  const [groupOne, groupTwo] = (await call("GET", "/groups")).body.items.filter((group) => group.isActive);
+  assert(groupTwo, "two active groups exist locally");
+  const writing = await call("POST", "/skills", { body: { name: "Kiểm thử viết tài liệu", description: "", scope: "", groupIds: [groupTwo.id, groupOne.id, groupTwo.id], isActive: true } });
+  assert.equal(writing.status, 201, JSON.stringify(writing.body));
+  assert.deepEqual([writing.body.groupId, writing.body.groups.map((group) => group.id)], [groupTwo.id, [groupTwo.id, groupOne.id]], "repeats dropped, the first group given is group_id");
+  const listedIn = async (groupId) => (await call("GET", `/skills?groupId=${groupId}`)).body.items.some((skill) => skill.id === writing.body.id);
+  assert.deepEqual([await listedIn(groupOne.id), await listedIn(groupTwo.id)], [true, true], "the group filter finds the skill by every group");
+  assert((await call("GET", `/groups/${groupOne.id}`)).body.skills.some((skill) => skill.id === writing.body.id), "the group details list it");
+  const onlyOne = await call("PATCH", `/skills/${writing.body.id}`, { body: { name: writing.body.name, description: "", scope: "", groupIds: [groupOne.id], isActive: true }, headers: { "x-version": writing.body.version } });
+  assert.equal(onlyOne.status, 200, JSON.stringify(onlyOne.body));
+  assert.deepEqual([onlyOne.body.groupId, onlyOne.body.groups.map((group) => group.id)], [groupOne.id, [groupOne.id]], "unticking the first group moves it to the next");
+  assert.equal(await listedIn(groupTwo.id), false);
+  assert.equal(await count("ad_comp_skill_groups WHERE skill_id=$1", [writing.body.id]), 0);
+  assert.equal((await call("POST", "/skills", { body: { name: "Kiểm thử không nhóm", description: "", scope: "", groupIds: [], isActive: true } })).status, 400, "at least one group");
+  const spare = await call("POST", "/groups", { body: { name: "Nhóm kiểm thử phụ", description: "", isActive: true } });
+  const twoAgain = await call("PATCH", `/skills/${writing.body.id}`, { body: { name: writing.body.name, description: "", scope: "", groupIds: [groupOne.id, spare.body.id], isActive: true }, headers: { "x-version": onlyOne.body.version } });
+  assert.equal(twoAgain.status, 200, JSON.stringify(twoAgain.body));
+  const spareNow = (await call("GET", "/groups")).body.items.find((group) => group.id === spare.body.id);
+  assert.equal(spareNow.skillCount, 1, "a group counts the skills that have it as another group");
+  assert.equal((await call("DELETE", `/groups/${spare.body.id}`, { body: { confirmed: true }, headers: { "x-version": spareNow.version } })).body.error, "group_not_empty");
+  const removed = await call("DELETE", `/skills/${writing.body.id}`, { body: { confirmed: true }, headers: { "x-version": twoAgain.body.version } });
+  assert.deepEqual(removed.body, { deleted: true });
+  assert.equal(await count("ad_comp_skill_groups WHERE skill_id=$1", [writing.body.id]), 0, "deleting the profile drops its other groups");
+  checks.push("a cấu hình năng lực takes one or more groups (repeats dropped, the first one is group_id, a single groupId still works); the group filter, group details and skill counts see every group; unticking the first group moves it to the next; no group is 400; a group used only as another group cannot be deleted; deleting the profile drops its other groups");
 
   // Pick the cohort whose current CTĐT has the most courses without a configuration (the courses are
   // shared by every cohort since migration 038, so most of them are configured through K29).

@@ -79,6 +79,9 @@ describe("readAssessmentInputs", () => {
     expect(inputs.plan.resolution).toBe("found");
     expect(inputs.plan.revision).toMatchObject({ id: "plan-1", physicalEducationGroups: { TC002: ["71PEKC10062"], TC102: [] } });
     expect(inputs.career).toMatchObject({ id: "p1", code: "NN009", requirements: [{ id: "req1", skillId: "k1", isRequired: true }] });
+    // A skill's other groups (migration 040), only the active ones; none here.
+    expect(inputs.weights.skills).toEqual([{ skillId: "k1", name: "Lập trình", description: "", scope: "Phạm vi", groupId: "g1", otherGroupIds: [] }]);
+    expect(db.sql().find((sql) => sql.includes("FROM ad_comp_skills s"))).toContain("FROM ad_comp_skill_groups m JOIN ad_comp_groups o ON o.id=m.group_id AND o.is_active");
     expect(inputs.catalogNames).toEqual({ "71AV010003": "Anh văn đầu vào" });
     expect(inputs.promptVersion).toBe("comp-v1");
     const calls = db.sql();

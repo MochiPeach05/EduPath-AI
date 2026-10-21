@@ -6,10 +6,15 @@ export class CompetencyError extends Error {
 }
 export const WEIGHT_TOLERANCE = 0.000001;
 export const groupInput = z.object({ name: z.string().trim().min(1).max(160), description: limitedText(2000, DESCRIPTION_MAX_WORDS), isActive: z.boolean() }).strict();
+/**
+ * A skill profile. groupIds: its competency groups, one or more (2026-10-22, migration 040), duplicates
+ * dropped; a page served before the change still sends a single groupId.
+ */
 export const skillInput = z.object({
   name: z.string().trim().min(1).max(100), description: limitedText(2000, DESCRIPTION_MAX_WORDS), scope: limitedText(4000, LONG_DESCRIPTION_MAX_WORDS),
-  groupId: z.uuid(), isActive: z.boolean(),
-}).strict();
+  groupIds: z.array(z.uuid()).min(1).max(10).optional(), groupId: z.uuid().optional(), isActive: z.boolean(),
+}).strict().refine(value => Boolean(value.groupIds?.length || value.groupId), { path: ["groupIds"] })
+  .transform(({ groupId, groupIds, ...value }) => ({ ...value, groupIds: [...new Set(groupIds ?? [groupId!])] }));
 /** The cohort filter of "Cấu hình môn học" ("" = every course). */
 export const cohortFilter = z.string().trim().max(20).regex(/^[0-9A-Za-z]*$/);
 const allocationSchema = z.object({ skillId: z.uuid(), weight: z.number().min(0).max(1) }).strict();

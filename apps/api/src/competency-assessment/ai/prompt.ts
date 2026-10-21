@@ -220,7 +220,7 @@ function weakGroupSkills(result: AssessmentResult): Map<string, SkillResult[]> {
   for (const group of result.groups) {
     if (!WEAK_LEVELS.includes(group.level)) continue;
     const skills = result.skills
-      .filter((skill) => skill.groupKey === group.key && skill.status === "scored" && skill.score !== null && !skill.conditionOnly && WEAK_LEVELS.includes(skill.level))
+      .filter((skill) => groupsOfSkill(skill).includes(group.key) && skill.status === "scored" && skill.score !== null && !skill.conditionOnly && WEAK_LEVELS.includes(skill.level))
       .sort((a, b) => a.score! - b.score! || b.evidence - a.evidence || compareCode(a.key, b.key))
       .slice(0, MAX_WEAK_GROUP_SKILLS);
     if (skills.length) weakest.set(group.key, skills);
@@ -349,13 +349,16 @@ function evidenceText(row: SkillEvidenceRow, course: CourseFact | undefined): st
   return `${code} ${name} (${state})`;
 }
 
+/** Every group of a skill (2026-10-22); a result stored before has only groupKey. */
+const groupsOfSkill = (skill: Pick<SkillResult, "groupKey" | "groupKeys">) => skill.groupKeys?.length ? skill.groupKeys : [skill.groupKey];
+
 /** With a career (comp-v5), whether the skill is one of its requirements: improvements may only name those. */
 const careerMark = (key: string, careerKeys: ReadonlySet<string> | null) =>
   careerKeys ? (careerKeys.has(key) ? "thuộc nghề mục tiêu" : "ngoài nghề mục tiêu") : null;
 
 function skillLine(skill: SkillResult, courses: Map<string, CourseFact>, careerKeys: ReadonlySet<string> | null, hidden: ReadonlySet<string>): string {
   const mark = careerMark(skill.key, careerKeys);
-  const head = `${skill.key} | ${sanitizeText(skill.name)} | nhóm ${skill.groupKey}${mark ? ` | ${mark}` : ""}`;
+  const head = `${skill.key} | ${sanitizeText(skill.name)} | nhóm ${groupsOfSkill(skill).join(", ")}${mark ? ` | ${mark}` : ""}`;
   let status: string;
   if (skill.status === "scored" && skill.score !== null) {
     status = `điểm ${formatScore(skill.score)} | ${skill.levelLabel}`;

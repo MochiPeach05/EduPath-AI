@@ -159,6 +159,8 @@ type SkillWork = {
   name: string;
   scope: string;
   groupId: string;
+  /** Every group the skill counts in: its first group, then its other active ones (migration 040). */
+  groupIds: string[];
   links: Link[];
   key: string;
   all: Exposure;
@@ -381,13 +383,14 @@ function assess(inputs: AssessmentInputs): Assessment {
     }
     work.push({
       skillId, name: skill.name, scope: trimText(skill.scope, SCOPE_MAX_LENGTH), groupId: skill.groupId, links, key: "",
+      groupIds: [...new Set([skill.groupId, ...(skill.otherGroupIds ?? []).filter((id) => groupsById.has(id))])],
       all, nonCondition, score, status, notApplicableReason: reason, exempt,
       conditionOnly: links.every((link) => link.row.conditionOnly),
     });
   }
 
   /* ---- 4. deterministic keys ---- */
-  const groupOrder = [...new Set(work.map((skill) => skill.groupId))].map((id) => groupsById.get(id)!)
+  const groupOrder = [...new Set(work.flatMap((skill) => skill.groupIds))].map((id) => groupsById.get(id)!)
     .sort((a, b) => compareText(a.name, b.name) || compareCode(a.id, b.id));
   const groupKey = new Map(groupOrder.map((group, index) => [group.id, `G${index + 1}`]));
   work.sort((a, b) => groupOrder.findIndex((group) => group.id === a.groupId) - groupOrder.findIndex((group) => group.id === b.groupId) ||
@@ -429,7 +432,8 @@ function assess(inputs: AssessmentInputs): Assessment {
     const group = groupsById.get(skill.groupId)!;
     return {
       key: skill.key, skillId: skill.skillId, name: skill.name, groupKey: groupKey.get(skill.groupId)!, groupId: skill.groupId,
-      groupName: group.name, scope: skill.scope,
+      groupName: group.name, groupKeys: groupOrder.filter((item) => skill.groupIds.includes(item.id)).map((item) => groupKey.get(item.id)!),
+      scope: skill.scope,
       score: skill.score === null ? null : floorScore(skill.score), level, levelLabel: LEVEL_LABELS[level],
       confidence, confidenceLabel: confidence ? CONFIDENCE_LABELS[confidence] : null,
       coverage: coverage === null ? null : round(coverage, 4), evidence: round(skill.all.num, 4), denominator: round(skill.all.den, 4),
@@ -450,12 +454,13 @@ function assess(inputs: AssessmentInputs): Assessment {
     const confidence = score !== null || exp.exempt > 0 ? confidenceOf(coverage, exp.num) : null;
     return { score, coverage, level, confidence };
   };
+  // A skill in several groups enters each group's score, but the overall coverage and evidence once.
   const totalExposure = emptyExposure();
+  for (const skill of work) addExposure(totalExposure, skill.nonCondition);
   const groupResults: (GroupResult & { rawScore: number | null })[] = groupOrder.map((group) => {
-    const members = work.filter((skill) => skill.groupId === group.id);
+    const members = work.filter((skill) => skill.groupIds.includes(group.id));
     const pooled = emptyExposure();
     for (const skill of members) addExposure(pooled, skill.nonCondition);
-    addExposure(totalExposure, pooled);
     const result = summary(pooled);
     // Same rule as overall.basis: condition-only and not-applicable skills are not counted.
     const counted = members.filter((skill) => !skill.conditionOnly && skill.status !== "not_applicable");

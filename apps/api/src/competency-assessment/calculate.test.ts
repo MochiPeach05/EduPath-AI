@@ -34,6 +34,36 @@ const mapTerms = (map: (row: TranscriptTerm["rows"][number]) => TranscriptTerm["
 const withRows = (termIndex: number, rows: TranscriptTerm["rows"]) =>
   syntheticStudentTerms().map((term, index) => (index === termIndex ? { ...term, rows: [...term.rows, ...rows] } : term));
 
+describe("a skill in several competency groups (2026-10-22)", () => {
+  const base = syntheticInputs();
+  const before = calculateAssessment(base);
+  // A scored skill and a group it is not in.
+  const moved = before.skills.find((skill) => skill.status === "scored" && !skill.conditionOnly)!;
+  const other = before.groups.find((group) => group.id !== moved.groupId)!;
+  const withOtherGroups = (otherGroupIds: string[]): AssessmentInputs => ({ ...base, weights: { ...base.weights,
+    skills: base.weights.skills.map((skill) => (skill.skillId === moved.skillId ? { ...skill, otherGroupIds } : skill)) } });
+  const groupOf = (result: AssessmentResult, id: string) => result.groups.find((group) => group.id === id)!;
+
+  it("counts the skill in each of its groups, and the overall coverage and evidence once", () => {
+    const after = calculateAssessment(withOtherGroups([other.id]));
+    const skill = after.skills.find((item) => item.skillId === moved.skillId)!;
+    expect(skill.groupKey).toBe(moved.groupKey);
+    expect(skill.groupKeys).toEqual(before.groups.filter((group) => [moved.groupId, other.id].includes(group.id)).map((group) => group.key));
+    expect(groupOf(after, other.id).skillCount).toBe(groupOf(before, other.id).skillCount + 1);
+    expect(groupOf(after, other.id).evidence).toBeGreaterThan(groupOf(before, other.id).evidence);
+    expect(groupOf(after, moved.groupId)).toEqual(groupOf(before, moved.groupId));
+    expect(after.overall.basis).toEqual(before.overall.basis);
+    expect([after.overall.coverage, after.overall.evidence]).toEqual([before.overall.coverage, before.overall.evidence]);
+    expect(after.skills.filter((item) => item.skillId !== moved.skillId).every((item) => item.groupKeys.join() === item.groupKey)).toBe(true);
+  });
+
+  it("ignores another group that is not active", () => {
+    const after = calculateAssessment(withOtherGroups(["00000000-0000-4000-8000-00000000ffff"]));
+    expect(after.groups).toEqual(before.groups);
+    expect(after.skills.find((item) => item.skillId === moved.skillId)!.groupKeys).toEqual([moved.groupKey]);
+  });
+});
+
 describe("formula helpers (spec §7.3, §7.5, §7.6)", () => {
   it("removes float noise and stores scores rounded down, so the shown whole number never passes a level", () => {
     expect(snapScore(84.99999999999999)).toBe(85);

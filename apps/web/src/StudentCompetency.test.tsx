@@ -201,6 +201,15 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
     expect(html).toContain("Không phải điểm yếu");
     expect(html).toContain("suy ra từ điểm chữ");
   });
+  it("lists a skill in several groups under each one and names them in its details (2026-10-22)", () => {
+    const assessment = fixtureAssessment("completed");
+    const skills = assessment.result.skills.map((skill) => skill.key === "S03" ? { ...skill, groupKeys: ["G1", "G2"] } : skill);
+    const html = render({ assessment: { ...assessment, result: { ...assessment.result, skills } }, aiEnabled: true, workerOnline: true });
+    expect(html).toContain("Kỹ năng bổ trợ (2)");
+    expect(html).toContain("Kiến thức chuyên môn (4)");
+    expect(html).toContain("Thuộc các nhóm năng lực: Kiến thức chuyên môn, Kỹ năng bổ trợ. Điểm kỹ năng được tính vào từng nhóm.");
+    expect(withAi("completed")).not.toContain("Thuộc các nhóm năng lực");
+  });
   it("shows a skill whose studied course has no score as Chưa có điểm, apart from Sắp học", () => {
     const assessment = fixtureAssessment("completed");
     const skills = assessment.result.skills.map((skill) => skill.key === "S07" ? { ...skill, evidenceCourses: skill.evidenceCourses.map((row) => ({ ...row, role: "studied" as const })) } : skill);

@@ -4,7 +4,7 @@ import { ActionMenu, Modal, Pagination, Status } from "./admin-ui";
 import { useLiveFilters } from "./use-live-filters";
 import { searchTerm } from "./student-curriculum-types";
 import { assessAllocations, splitEvenly, type AllocationInput } from "./competency-weights";
-import { COMPETENCY_API, cohortList, competencyDate, competencyRequest, percentage, statusLabels, useCompetencyData, type Cohort, type CompetencyCourse, type CompetencySummary, type CourseDetail, type EventEntry, type Group, type Skill } from "./competency-types";
+import { COMPETENCY_API, cohortList, competencyDate, competencyRequest, linkGroupNames, percentage, skillGroupNames, skillGroups, statusLabels, useCompetencyData, type Cohort, type CompetencyCourse, type CompetencySummary, type CourseDetail, type EventEntry, type Group, type Skill } from "./competency-types";
 import CompetencyCourseAi from "./CompetencyCourseAi";
 import { CompetencyBulkAi } from "./CompetencyBulkAi";
 
@@ -126,13 +126,13 @@ function ManualLinks({ detail, canManage, close, saved, busy, setBusy }: StepPro
   const linked = new Set(current.links.map((link) => link.skillId));
   const catalog = new Map((skills.data?.items ?? []).map((skill) => [skill.id, skill]));
   const available = (skills.data?.items ?? []).filter((skill) => !linked.has(skill.id) && skill.isActive && skill.groupActive
-    && (!groupId || skill.groupId === groupId) && searchTerm(`${skill.name} ${skill.groupName}`).includes(searchTerm(term)));
+    && (!groupId || skillGroups(skill).some((group) => group.id === groupId)) && searchTerm(`${skill.name} ${skillGroupNames(skill)}`).includes(searchTerm(term)));
   // Every skill of the course after the save: its links first, then the ticked ones.
   const rows = [
-    ...current.links.map((link) => ({ skillId: link.skillId, name: link.skillName, group: link.groupName, linked: true, usable: link.isActive })),
+    ...current.links.map((link) => ({ skillId: link.skillId, name: link.skillName, group: linkGroupNames(link), linked: true, usable: link.isActive })),
     ...chosen.map((id) => {
       const skill = catalog.get(id);
-      return { skillId: id, name: skill?.name ?? "", group: skill?.groupName ?? "", linked: false, usable: Boolean(skill?.isActive && skill.groupActive) };
+      return { skillId: id, name: skill?.name ?? "", group: skill ? skillGroupNames(skill) : "", linked: false, usable: Boolean(skill?.isActive && skill.groupActive) };
     }),
   ];
   const allocation = assessAllocations(rows.map((row) => ({ skillId: row.skillId, percent: percents[row.skillId] ?? "0" })));
@@ -161,7 +161,7 @@ function ManualLinks({ detail, canManage, close, saved, busy, setBusy }: StepPro
     </div>
     {skills.data && <fieldset className="cm-fields comp-pick-list" disabled={busy}>
       <legend className="sr-only">Kỹ năng có thể liên kết</legend>
-      {available.map((skill) => <label key={skill.id} className="cm-check"><input type="checkbox" checked={chosen.includes(skill.id)} onChange={() => toggle(skill.id)} /><span>{skill.name}<small> · {skill.groupName}</small></span></label>)}
+      {available.map((skill) => <label key={skill.id} className="cm-check"><input type="checkbox" checked={chosen.includes(skill.id)} onChange={() => toggle(skill.id)} /><span>{skill.name}<small> · {skillGroupNames(skill)}</small></span></label>)}
       {!available.length && <p className="comp-hint">Không còn kỹ năng phù hợp để liên kết.</p>}
     </fieldset>}
     <p className="cai-summary" aria-live="polite">Đã chọn thêm {chosen.length.toLocaleString("vi-VN")} kỹ năng</p>
@@ -263,7 +263,7 @@ function CourseConfiguration({ initial, canManage, startEditing, close, saved, b
           const selected = options.find(skill => skill.id === row.skillId);
           const linked = current.links.find(link => link.skillId === row.skillId);
           return <div className="comp-allocation-row" key={index}>
-            <label>Kỹ năng {index + 1}{editing ? <select value={row.skillId} onChange={event => setRows(rows.map((item, at) => at === index ? { ...item, skillId: event.target.value } : item))}><option value="">Chọn kỹ năng</option>{!selected && row.skillId && <option value={row.skillId}>{linked?.skillName ?? "Kỹ năng không còn khả dụng"}</option>}{options.map(skill => <option key={skill.id} value={skill.id} disabled={!skill.isActive || !skill.groupActive || rows.some((item, at) => at !== index && item.skillId === skill.id)}>{skill.name} · {skill.groupName}{!skill.isActive || !skill.groupActive ? " · Ngừng sử dụng" : ""}</option>)}</select> : <strong>{skillName(row.skillId)}</strong>}</label>
+            <label>Kỹ năng {index + 1}{editing ? <select value={row.skillId} onChange={event => setRows(rows.map((item, at) => at === index ? { ...item, skillId: event.target.value } : item))}><option value="">Chọn kỹ năng</option>{!selected && row.skillId && <option value={row.skillId}>{linked?.skillName ?? "Kỹ năng không còn khả dụng"}</option>}{options.map(skill => <option key={skill.id} value={skill.id} disabled={!skill.isActive || !skill.groupActive || rows.some((item, at) => at !== index && item.skillId === skill.id)}>{skill.name} · {skillGroupNames(skill)}{!skill.isActive || !skill.groupActive ? " · Ngừng sử dụng" : ""}</option>)}</select> : <strong>{skillName(row.skillId)}</strong>}</label>
             <label className="comp-percent">Trọng số (%)<input type="number" min="0" max="100" step="any" value={row.percent} onChange={event => setRows(rows.map((item, at) => at === index ? { ...item, percent: event.target.value } : item))} /></label>
             {editing && <button type="button" className="am-outline comp-remove-link" aria-label={`Xóa liên kết ${skillName(row.skillId)} khỏi cấu hình môn học`} onClick={() => setRemoveIndex(index)}><Icon name="trash" /> Xóa liên kết</button>}
             {(selected && (!selected.isActive || !selected.groupActive)) || (!selected && linked && !linked.isActive) ? <small className="comp-row-warning">Kỹ năng hoặc nhóm đang ngừng sử dụng; không thể áp dụng.</small> : null}

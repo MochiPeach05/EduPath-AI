@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, confidentStrengths, countAxis, dataUsedLine, displayLevel, FIT_SCALE, fitLabelOf, fitLevelOf, fitPercent, gapHistory, levelChart, levelSummary, levelText, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
-  gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isPreconditionError, PRIORITY_LABELS, levelStep, mapAiOutput, missingRequirements, missingRequirementsMessage, modelLabel, plansFor,
+  gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isPreconditionError, PRIORITY_LABELS, levelStep, mapAiOutput, missingRequirements, missingRequirementsMessage, modelLabel, plansFor, skillGroupKeys,
   scoreDifference, shouldPoll, sortRequirements, termLabel, EMPTY_SKILL_FILTERS,
 } from "./student-competency-data";
 import { fixtureAiOutput, fixtureAssessment, fixtureResult } from "./student-competency.fixture";
@@ -29,6 +29,26 @@ describe("skills without a score: Sắp học or Chưa có điểm (2026-10-21)"
   it("labels a group or the overall without evidence Chưa có điểm", () => {
     expect(levelText("no_evidence", "Chưa có minh chứng")).toBe("Chưa có điểm");
     expect(levelText("good", "Khá")).toBe("Khá");
+  });
+});
+
+describe("a skill in several competency groups (2026-10-22)", () => {
+  // S03 (Thiết kế cơ sở dữ liệu, Khá) also belongs to G2.
+  const multi = { ...fixtureResult, skills: fixtureResult.skills.map((skill) => skill.key === "S03" ? { ...skill, groupKeys: ["G1", "G2"] } : skill) };
+  const homes = (buckets: ReturnType<typeof bucketSkills>) => buckets.filter((bucket) => bucket.skills.some((skill) => skill.key === "S03")).map((bucket) => bucket.id);
+  it("counts the skill in each of its groups", () => {
+    const before = groupEvidenceCounts(fixtureResult.skills, "G2");
+    expect(groupEvidenceCounts(multi.skills, "G2")).toEqual({ withEvidence: before.withEvidence + 1, total: before.total + 1 });
+    expect(groupEvidenceCounts(multi.skills, "G1")).toEqual(groupEvidenceCounts(fixtureResult.skills, "G1"));
+    expect(levelSummary(multi)[1]!.counts.good).toBe(levelSummary(fixtureResult)[1]!.counts.good + 1);
+    expect(levelChart(multi).bars[1]!.total).toBe(levelChart(fixtureResult).bars[1]!.total + 1);
+  });
+  it("lists it under each group, or under the filtered group only", () => {
+    expect(homes(bucketSkills(multi, multi.skills))).toEqual(["G1", "G2"]);
+    expect(homes(bucketSkills(multi, multi.skills, "G2"))).toEqual(["G2"]);
+    expect(filterSkills(multi.skills, { ...EMPTY_SKILL_FILTERS, group: "G2" }).map((skill) => skill.key)).toContain("S03");
+    // A result stored before has no groupKeys: the skill keeps its one group.
+    expect(skillGroupKeys(fixtureResult.skills[2]!)).toEqual(["G1"]);
   });
 });
 

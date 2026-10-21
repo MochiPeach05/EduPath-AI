@@ -7,7 +7,7 @@ import { specialtyLabel, type AiStatus, type AssessmentResult, type AssessmentSt
 import {
   CHART_LEVELS, COMPETENCY_API, CONFIDENCE_LABELS, COURSE_STATE_LABELS, EMPTY_SKILL_FILTERS, FIT_SCALE, LEVEL_COLUMNS, LEVEL_SCALE, PRECONDITION_COPY, PRIORITY_LABELS,
   aiErrorMessage, aiReasoned, aiStateCopy, bucketSkills, canRegenerate, careerSkillKeys, confidentStrengths, courseStanding, dataUsedLine, displayLevel, eligibilityDisplay, errorMessage, filterSkills, fitLabelOf, fitLevelOf, fitPercent, formatDateTime,
-  formatNumber, formatPercent, formatScore, gapHistory, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isPreconditionError, levelChart, levelSentence, levelStep, levelSummary, levelText, mapAiOutput, missingRequirements, missingRequirementsMessage, modelLabel,
+  formatNumber, formatPercent, formatScore, gapHistory, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isPreconditionError, levelChart, levelSentence, levelStep, levelSummary, levelText, mapAiOutput, missingRequirements, skillGroupKeys, missingRequirementsMessage, modelLabel,
   plansFor, scoreDifference, shouldPoll, skillName, sortRequirements, type ChartLevel, type DisplayLevel, type LevelBar, type LevelSegment, type MappedAiOutput, type PreconditionError, type SkillFilters, type StatusTone,
 } from "./student-competency-data";
 import { readGraduation } from "./student-graduation-api";
@@ -304,7 +304,7 @@ function LevelChart({ result, onSelect }: { result: AssessmentResult; onSelect: 
 function SkillsSection({ result }: { result: AssessmentResult }) {
   const [filters, setFilters] = useState<SkillFilters>(EMPTY_SKILL_FILTERS);
   const filtered = useMemo(() => filterSkills(result.skills, filters), [result.skills, filters]);
-  const buckets = useMemo(() => bucketSkills(result, filtered), [result, filtered]);
+  const buckets = useMemo(() => bucketSkills(result, filtered, filters.group), [result, filtered, filters.group]);
   const summary = useMemo(() => levelSummary(result), [result]);
   const defaultOpen = (id: string) => result.groups.some((group) => group.key === id);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -361,7 +361,7 @@ function SkillsSection({ result }: { result: AssessmentResult }) {
       <summary><strong>{bucket.title} ({bucket.skills.length.toLocaleString("vi-VN")})</strong>{group && group.score !== null && <span>Điểm nhóm {formatScore(group.score)} · {group.levelLabel}</span>}{bucket.note && <span>{bucket.note}</span>}</summary>
       {bucket.skills.some((skill) => skill.score !== null) && <div className="scomp-skill-axis" aria-hidden="true"><span /><span>Kỹ năng</span>
         <span className="scomp-skill-track">{SKILL_TICKS.map((tick) => <span key={tick} style={{ left: `${tick}%` }}>{tick}</span>)}</span></div>}
-      <ul className="scomp-skill-list">{bucket.skills.map((skill) => <SkillRow key={skill.key} skill={skill} courses={courses} />)}</ul>
+      <ul className="scomp-skill-list">{bucket.skills.map((skill) => <SkillRow key={skill.key} skill={skill} courses={courses} groups={groups} />)}</ul>
     </details>; })}
     {!buckets.length && <p className="sw-empty">Không có kỹ năng nào phù hợp bộ lọc.</p>}
   </Section>;
@@ -380,7 +380,9 @@ function noScoreText(skill: SkillResult): string {
   return displayLevel(skill) === "no_score" ? "Chưa có điểm" : "Sắp học";
 }
 
-function SkillRow({ skill, courses }: { skill: SkillResult; courses: Map<string, AssessmentResult["courses"][number]> }) {
+function SkillRow({ skill, courses, groups }: { skill: SkillResult; courses: Map<string, AssessmentResult["courses"][number]>; groups: Map<string, AssessmentResult["groups"][number]> }) {
+  // A skill in several groups is listed under each one; its details name them all (2026-10-22).
+  const groupNames = skillGroupKeys(skill).map((key) => groups.get(key)?.name).filter((name): name is string => Boolean(name));
   const score = skill.score === null ? null : Math.max(0, Math.min(100, skill.score));
   const facts = `${skill.confidence ? CONFIDENCE_LABELS[skill.confidence] : "Chưa có độ tin cậy"} · độ phủ ${formatPercent(skill.coverage)}`;
   const moreCourses = skill.evidenceCourses.length - TIP_COURSES;
@@ -407,6 +409,7 @@ function SkillRow({ skill, courses }: { skill: SkillResult; courses: Map<string,
     </summary>
     <div className="scomp-skill-body">
       <p className="scomp-meta">{skill.score !== null ? `${formatScore(skill.score)} điểm · ${skill.levelLabel}` : noScoreText(skill)} · {facts}</p>
+      {groupNames.length > 1 && <p className="scomp-meta">Thuộc các nhóm năng lực: {groupNames.join(", ")}. Điểm kỹ năng được tính vào từng nhóm.</p>}
       {skill.scope && <p className="scomp-prose"><strong>Phạm vi: </strong>{skill.scope}</p>}
       {skill.status === "not_applicable" && <p className="scomp-meta">{skill.notApplicableReason === "other_specialty" ? "Kỹ năng này chỉ có trong học phần của chuyên ngành khác." : skill.notApplicableReason === "elective_not_chosen" ? "Kỹ năng này nằm trong nhóm tự chọn bạn đã chọn đủ bằng học phần khác — không thuộc lựa chọn tự chọn của bạn." : "Học phần đo kỹ năng này không có tín chỉ."}</p>}
       <div className="scomp-table-scroll" tabIndex={0} role="region" aria-label={`Học phần minh chứng của ${skill.name}`}>

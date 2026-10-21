@@ -77,8 +77,11 @@ export async function readAssessmentInputs(db: Db, userId: string, options: { pr
      JOIN ad_comp_course_configs cfg ON cfg.course_id=cc.course_id AND cfg.status='active'
      JOIN ad_comp_course_links l ON l.config_id=cfg.id
      WHERE cc.revision_id=$1 AND l.weight>0 ORDER BY cc.code,l.skill_id`, [curriculumRow.revision_id]);
-  const skills = await db.query<{ skill_id: string; name: string; description: string; scope: string; group_id: string }>(
-    `SELECT s.skill_id,k.name,k.description,left(s.scope,$1) AS scope,s.group_id
+  // A skill's other groups (migration 040) count only while they are active.
+  const skills = await db.query<{ skill_id: string; name: string; description: string; scope: string; group_id: string; other_group_ids?: string[] }>(
+    `SELECT s.skill_id,k.name,k.description,left(s.scope,$1) AS scope,s.group_id,
+       ARRAY(SELECT m.group_id FROM ad_comp_skill_groups m JOIN ad_comp_groups o ON o.id=m.group_id AND o.is_active
+         WHERE m.skill_id=s.skill_id AND m.group_id<>s.group_id ORDER BY o.name,o.id) AS other_group_ids
      FROM ad_comp_skills s JOIN career_skills k ON k.id=s.skill_id JOIN ad_comp_groups g ON g.id=s.group_id
      WHERE s.is_active AND s.deleted_at IS NULL AND k.deleted_at IS NULL AND g.is_active ORDER BY k.name,s.skill_id`, [SCOPE_MAX_LENGTH]);
   const groups = await db.query<{ id: string; name: string }>("SELECT id,name FROM ad_comp_groups WHERE is_active ORDER BY name,id");
@@ -86,7 +89,8 @@ export async function readAssessmentInputs(db: Db, userId: string, options: { pr
     revisionId: curriculumRow.revision_id, version: curriculumRow.version, activeCount: weightRow.active_count,
     maxConfigUpdatedAt: weightRow.max_updated === null ? null : new Date(weightRow.max_updated).toISOString(),
     links: links.rows.map((row) => ({ courseCode: row.course_code, skillId: row.skill_id, weight: Number(row.weight) })),
-    skills: skills.rows.map((row) => ({ skillId: row.skill_id, name: row.name, description: row.description, scope: row.scope, groupId: row.group_id })),
+    skills: skills.rows.map((row) => ({ skillId: row.skill_id, name: row.name, description: row.description, scope: row.scope, groupId: row.group_id,
+      otherGroupIds: row.other_group_ids ?? [] })),
     groups: groups.rows.map((row) => ({ id: row.id, name: row.name })),
   };
 

@@ -1,9 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { validateWeights } from "./model.js";
+import { skillInput, validateWeights } from "./model.js";
 
 const skillId = "11111111-1111-4111-8111-111111111111";
 const secondSkillId = "22222222-2222-4222-8222-222222222222";
 const thirdSkillId = "33333333-3333-4333-8333-333333333333";
+
+describe("skillInput (2026-10-22: one or more competency groups)", () => {
+  const groupA = "44444444-4444-4444-8444-444444444444", groupB = "55555555-5555-4555-8555-555555555555";
+  const base = { name: "Viết tài liệu", description: "", scope: "", isActive: true };
+  it("takes one or more groups, drops repeats and keeps the order; a single groupId still works", () => {
+    expect(skillInput.parse({ ...base, groupIds: [groupB, groupA, groupB] }).groupIds).toEqual([groupB, groupA]);
+    expect(skillInput.parse({ ...base, groupId: groupA })).toEqual({ ...base, groupIds: [groupA] });
+  });
+  it("needs at least one group", () => {
+    expect(skillInput.safeParse({ ...base, groupIds: [] }).success).toBe(false);
+    expect(skillInput.safeParse(base).success).toBe(false);
+    expect(skillInput.safeParse({ ...base, groupIds: ["not-a-uuid"] }).success).toBe(false);
+  });
+});
 
 describe("validateWeights", () => {
   it("accepts only a complete active total, with floating-point tolerance; drafts may be incomplete", () => {

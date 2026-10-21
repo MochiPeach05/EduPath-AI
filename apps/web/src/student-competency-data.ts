@@ -360,8 +360,10 @@ type LevelRow = {
   counts: Record<(typeof LEVEL_COLUMNS)[number], number>;
 };
 /** One row per skill group: how many of its skills sit at each proficiency level. */
-/** A skill counted in its group like the group line: condition-only and not-applicable skills are left out. */
-const countedInGroup = (skill: SkillResult, groupKey: string) => skill.groupKey === groupKey && !skill.conditionOnly && skill.status !== "not_applicable";
+/** Every group a skill counts in (2026-10-22: one or more); a result stored before has only groupKey. */
+export const skillGroupKeys = (skill: Pick<SkillResult, "groupKey" | "groupKeys">): string[] => skill.groupKeys?.length ? skill.groupKeys : [skill.groupKey];
+/** A skill counted in a group like the group line: condition-only and not-applicable skills are left out. */
+const countedInGroup = (skill: SkillResult, groupKey: string) => skillGroupKeys(skill).includes(groupKey) && !skill.conditionOnly && skill.status !== "not_applicable";
 
 export function levelSummary(result: Pick<AssessmentResult, "groups" | "skills">): LevelRow[] {
   return result.groups.map((group) => {
@@ -434,7 +436,7 @@ const skillNeedsWork = (skill: Pick<SkillResult, "level">) => skill.level === "b
 
 export function filterSkills(skills: readonly SkillResult[], filters: SkillFilters): SkillResult[] {
   const query = fold(filters.search);
-  return skills.filter((skill) => (!filters.group || skill.groupKey === filters.group)
+  return skills.filter((skill) => (!filters.group || skillGroupKeys(skill).includes(filters.group))
     && (!filters.level || displayLevel(skill) === filters.level)
     && (!filters.confidence || skill.confidence === filters.confidence)
     && (!filters.careerOnly || skill.careerSkill)
@@ -447,8 +449,8 @@ export function filterSkills(skills: readonly SkillResult[], filters: SkillFilte
  * and not-applicable skills are left out. Derived from the skills so results stored before
  * comp-calc-v3 (whose group skillCount still included not-applicable skills) read the same.
  */
-export function groupEvidenceCounts(skills: readonly Pick<SkillResult, "groupKey" | "conditionOnly" | "status">[], groupKey: string): { withEvidence: number; total: number } {
-  const counted = skills.filter((skill) => skill.groupKey === groupKey && !skill.conditionOnly && skill.status !== "not_applicable");
+export function groupEvidenceCounts(skills: readonly Pick<SkillResult, "groupKey" | "groupKeys" | "conditionOnly" | "status">[], groupKey: string): { withEvidence: number; total: number } {
+  const counted = skills.filter((skill) => skillGroupKeys(skill).includes(groupKey) && !skill.conditionOnly && skill.status !== "not_applicable");
   return { withEvidence: counted.filter((skill) => skill.status === "scored" || skill.status === "exempt_only").length, total: counted.length };
 }
 
@@ -457,8 +459,10 @@ type SkillBucket = { id: string; title: string; note: string | null; skills: Ski
  * Groups for the skill list: one per engine group (scored or exempt skills),
  * then condition-only skills, skills outside the student's choices and, last,
  * "Sắp học" and "Chưa có điểm" (ids = their display levels) — never presented as weaknesses.
+ * A skill in several groups is listed under each of them, or only under `group` when the list is
+ * filtered to one group.
  */
-export function bucketSkills(result: Pick<AssessmentResult, "groups">, skills: readonly SkillResult[]): SkillBucket[] {
+export function bucketSkills(result: Pick<AssessmentResult, "groups">, skills: readonly SkillResult[], group = ""): SkillBucket[] {
   const buckets: SkillBucket[] = result.groups.map((group) => ({ id: group.key, title: group.name, note: null, skills: [] }));
   const condition: SkillBucket = { id: "condition", title: "Môn điều kiện (GDTC/GDQP)", note: "Không tính vào điểm nhóm và điểm tổng.", skills: [] };
   const notApplicable: SkillBucket = { id: "not-applicable", title: "Ngoài lựa chọn học phần của bạn", note: "Chỉ có trong học phần của chuyên ngành khác hoặc nhóm tự chọn bạn không chọn.", skills: [] };
@@ -470,7 +474,10 @@ export function bucketSkills(result: Pick<AssessmentResult, "groups">, skills: r
     else if (level === "upcoming") upcoming.skills.push(skill);
     else if (level === "no_score") noScore.skills.push(skill);
     else if (skill.conditionOnly) condition.skills.push(skill);
-    else (buckets.find((bucket) => bucket.id === skill.groupKey) ?? upcoming).skills.push(skill);
+    else {
+      const homes = buckets.filter((bucket) => skillGroupKeys(skill).includes(bucket.id) && (!group || bucket.id === group));
+      for (const bucket of homes.length ? homes : [upcoming]) bucket.skills.push(skill);
+    }
   }
   return [...buckets, condition, notApplicable, upcoming, noScore].filter((bucket) => bucket.skills.length > 0);
 }

@@ -256,6 +256,16 @@ describe("buildAiInput", () => {
     for (const value of [117, 126, 3.11, 31, 34]) expect(numbersIn(user)).not.toContain(value);
   });
 
+  it("names every group of a skill in several groups, and only the first one of a result stored before (2026-10-22)", () => {
+    const result = syntheticResult();
+    const target = result.skills[0]!;
+    const other = result.groups.find((group) => group.key !== target.groupKey)!.key;
+    result.skills[0] = { ...target, groupKeys: [target.groupKey, other].sort() };
+    expect(buildAiInput(result).user).toContain(`${target.key} | ${target.name} | nhóm ${[target.groupKey, other].sort().join(", ")}`);
+    result.skills[0] = { ...target, groupKeys: undefined as never };
+    expect(buildAiInput(result).user).toContain(`${target.key} | ${target.name} | nhóm ${target.groupKey}`);
+  });
+
   it("names the fit with the 2026-10-21 scale, also for a result stored with the earlier labels", () => {
     const stored = syntheticResult();
     stored.career = { ...stored.career!, fit: 0.58, fitCode: "fairly_fit" as never, fitLabel: "Khá phù hợp" };

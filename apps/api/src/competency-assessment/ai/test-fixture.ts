@@ -35,7 +35,7 @@ const course = (code: string, name: string, extra: Partial<CourseFact> = {}): Co
 });
 
 const skill = (key: string, name: string, groupKey: string, score: number | null, extra: Partial<SkillResult> = {}): SkillResult => ({
-  key, skillId: `skill-${key}`, name, groupKey, groupId: `group-${groupKey}`, groupName: `Nhóm ${groupKey}`,
+  key, skillId: `skill-${key}`, name, groupKey, groupId: `group-${groupKey}`, groupName: `Nhóm ${groupKey}`, groupKeys: [groupKey],
   scope: "Thiết kế và hiện thực ứng dụng mức cơ bản; chưa xác nhận công cụ cụ thể.",
   status: score === null ? "no_evidence" : "scored", notApplicableReason: null, denominator: 3, conditionOnly: false,
   careerSkill: false, evidenceCourses: score === null ? [] : [{ code: "TST101", weight: 0.5, contribution: 1.5, share: 0.5, role: "score" }],

@@ -173,7 +173,10 @@ export type SkillResult = ScoreSummary & {
   key: string;
   skillId: string;
   name: string;
+  /** The skill's first group. */
   groupKey: string;
+  /** Every group the skill counts in, in group order (2026-10-22); results stored before have only groupKey. */
+  groupKeys?: string[];
   groupId: string;
   groupName: string;
   /** ad_comp_skills.scope trimmed to 200 characters. */
