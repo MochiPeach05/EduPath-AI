@@ -89,8 +89,8 @@ export function termLabel(term: string | null | undefined): string {
 
 /* ----------------------------------------------------------------- levels */
 
-/** Blue ramp steps (1 = Cơ bản dưới … 4 = Thành thạo); 0 = no fill (no evidence / exempt). */
-export function levelStep(level: LevelCode | null | undefined): 0 | 1 | 2 | 3 | 4 {
+/** Blue ramp steps (1 = Cơ bản dưới … 4 = Thành thạo); 0 = no fill (no score / exempt). */
+export function levelStep(level: LevelCode | DisplayLevel | null | undefined): 0 | 1 | 2 | 3 | 4 {
   switch (level) {
     case "proficient": return 4;
     case "good": return 3;
@@ -100,14 +100,33 @@ export function levelStep(level: LevelCode | null | undefined): 0 | 1 | 2 | 3 | 
   }
 }
 
-export const LEVEL_SCALE: readonly { code: LevelCode; label: string; range: string; text: string }[] = [
+/**
+ * The level a skill is shown at. The engine's no_evidence ("Chưa có minh chứng") is split for the
+ * student (user, 2026-10-21): "Chưa có điểm" when a related course was studied but has no score
+ * (VT, a pass without a score…), otherwise "Sắp học": courses ahead, in progress or electives still
+ * open. Display only: the engine and stored results keep no_evidence, so older results read the
+ * same. A not-applicable skill has none (it is outside the student's choices).
+ */
+export type DisplayLevel = Exclude<LevelCode, "no_evidence"> | "upcoming" | "no_score";
+export function displayLevel(skill: Pick<SkillResult, "level" | "status" | "evidenceCourses">): DisplayLevel | null {
+  if (skill.status === "not_applicable") return null;
+  if (skill.level !== "no_evidence") return skill.level;
+  return skill.evidenceCourses.some((row) => row.role === "studied") ? "no_score" : "upcoming";
+}
+
+export const LEVEL_SCALE: readonly { code: DisplayLevel; label: string; range: string; text: string }[] = [
   { code: "proficient", label: "Thành thạo", range: "từ 85", text: "Kết quả các học phần liên quan rất tốt và ổn định." },
   { code: "good", label: "Khá", range: "70 đến dưới 85", text: "Nắm chắc phần lớn nội dung; có thể nâng lên bằng dự án thực tế." },
   { code: "basic", label: "Cơ bản", range: "50 đến dưới 70", text: "Đã có nền tảng, nên củng cố thêm để dùng tự tin hơn." },
   { code: "needs_work", label: "Cần củng cố", range: "dưới 50", text: "Kết quả các học phần liên quan còn thấp; nên ôn lại hoặc học cải thiện." },
-  { code: "no_evidence", label: "Chưa có minh chứng", range: "chưa học", text: "Bạn chưa học học phần nào đo kỹ năng này — không phải điểm yếu." },
+  { code: "upcoming", label: "Sắp học", range: "chưa học", text: "Bạn đang học hoặc chưa học tới học phần đo kỹ năng này (kể cả môn tự chọn chưa chọn) — không phải điểm yếu." },
+  { code: "no_score", label: "Chưa có điểm", range: "đã học", text: "Bạn đã học học phần liên quan nhưng bảng điểm chưa có điểm số, nên chưa đánh giá được." },
   { code: "exempt", label: "Miễn/công nhận", range: "MT", text: "Học phần được miễn hoặc công nhận nên không có điểm để tính." },
 ];
+
+/** A group's or the overall level label: with no evidence it reads "Chưa có điểm", like its "—" score. */
+export const levelText = (level: LevelCode | DisplayLevel | null | undefined, label: string | null | undefined): string =>
+  level === "no_evidence" || !label ? "Chưa có điểm" : label;
 
 /** One sentence that explains what the overall level means. */
 export function levelSentence(level: LevelCode | null | undefined): string {
@@ -286,8 +305,8 @@ export function gapHistory(result: Pick<AssessmentResult, "career" | "history">)
 
 /* ---------------------------------------------------- proficiency summary */
 
-/** The level columns of the proficiency table, best first; "Chưa có minh chứng" last (not a weakness). */
-export const LEVEL_COLUMNS = ["proficient", "good", "basic", "needs_work", "no_evidence"] as const satisfies readonly LevelCode[];
+/** The level columns of the proficiency table, best first; "Sắp học" and "Chưa có điểm" last (not weaknesses). */
+export const LEVEL_COLUMNS = ["proficient", "good", "basic", "needs_work", "upcoming", "no_score"] as const satisfies readonly DisplayLevel[];
 type LevelRow = {
   key: string; name: string; score: number | null; level: LevelCode; levelLabel: string;
   /** Skills of the group counted like the group line: condition-only and not-applicable skills left out. */
@@ -301,15 +320,15 @@ const countedInGroup = (skill: SkillResult, groupKey: string) => skill.groupKey 
 export function levelSummary(result: Pick<AssessmentResult, "groups" | "skills">): LevelRow[] {
   return result.groups.map((group) => {
     const skills = result.skills.filter((skill) => countedInGroup(skill, group.key));
-    const counts = Object.fromEntries(LEVEL_COLUMNS.map((level) => [level, skills.filter((skill) => skill.level === level).length])) as LevelRow["counts"];
+    const counts = Object.fromEntries(LEVEL_COLUMNS.map((level) => [level, skills.filter((skill) => displayLevel(skill) === level).length])) as LevelRow["counts"];
     return { key: group.key, name: group.name, score: group.score, level: group.level, levelLabel: group.levelLabel, total: skills.length, counts };
   });
 }
 
 /* ------------------------------------------------- level chart ("Bảng phân tích mức độ thành thạo") */
 
-/** Segment order of each group's bar: the four levels from the top down, then no evidence, then exempt (no score). */
-export const CHART_LEVELS = [...LEVEL_COLUMNS, "exempt"] as const satisfies readonly LevelCode[];
+/** Segment order of each group's bar: the four levels from the top down, then "Sắp học", "Chưa có điểm" and exempt (no score). */
+export const CHART_LEVELS = [...LEVEL_COLUMNS, "exempt"] as const satisfies readonly DisplayLevel[];
 export type ChartLevel = (typeof CHART_LEVELS)[number];
 export type LevelSegment = {
   level: ChartLevel; label: string; count: number;
@@ -342,7 +361,7 @@ export function levelChart(result: Pick<AssessmentResult, "groups" | "skills">):
   const bars = rows.map(({ group, skills }) => {
     let offset = 0;
     const segments = CHART_LEVELS.flatMap((level): LevelSegment[] => {
-      const members = skills.filter((skill) => skill.level === level)
+      const members = skills.filter((skill) => displayLevel(skill) === level)
         .sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || a.name.localeCompare(b.name, "vi"));
       if (!members.length) return [];
       const start = offset / axis.max;
@@ -370,7 +389,7 @@ const skillNeedsWork = (skill: Pick<SkillResult, "level">) => skill.level === "b
 export function filterSkills(skills: readonly SkillResult[], filters: SkillFilters): SkillResult[] {
   const query = fold(filters.search);
   return skills.filter((skill) => (!filters.group || skill.groupKey === filters.group)
-    && (!filters.level || skill.level === filters.level)
+    && (!filters.level || displayLevel(skill) === filters.level)
     && (!filters.confidence || skill.confidence === filters.confidence)
     && (!filters.careerOnly || skill.careerSkill)
     && (!filters.needsWork || skillNeedsWork(skill))
@@ -391,20 +410,23 @@ type SkillBucket = { id: string; title: string; note: string | null; skills: Ski
 /**
  * Groups for the skill list: one per engine group (scored or exempt skills),
  * then condition-only skills, skills outside the student's choices and, last,
- * "Chưa có minh chứng" — never presented as weaknesses.
+ * "Sắp học" and "Chưa có điểm" (ids = their display levels) — never presented as weaknesses.
  */
 export function bucketSkills(result: Pick<AssessmentResult, "groups">, skills: readonly SkillResult[]): SkillBucket[] {
   const buckets: SkillBucket[] = result.groups.map((group) => ({ id: group.key, title: group.name, note: null, skills: [] }));
   const condition: SkillBucket = { id: "condition", title: "Môn điều kiện (GDTC/GDQP)", note: "Không tính vào điểm nhóm và điểm tổng.", skills: [] };
   const notApplicable: SkillBucket = { id: "not-applicable", title: "Ngoài lựa chọn học phần của bạn", note: "Chỉ có trong học phần của chuyên ngành khác hoặc nhóm tự chọn bạn không chọn.", skills: [] };
-  const noEvidence: SkillBucket = { id: "no-evidence", title: "Chưa có minh chứng", note: "Không phải điểm yếu — bạn chưa học học phần nào đo kỹ năng này.", skills: [] };
+  const upcoming: SkillBucket = { id: "upcoming", title: "Sắp học", note: "Không phải điểm yếu — bạn đang học hoặc chưa học tới học phần đo kỹ năng này (kể cả môn tự chọn chưa chọn).", skills: [] };
+  const noScore: SkillBucket = { id: "no_score", title: "Chưa có điểm", note: "Bạn đã học học phần liên quan nhưng bảng điểm chưa có điểm số, nên chưa đánh giá được.", skills: [] };
   for (const skill of skills) {
+    const level = displayLevel(skill);
     if (skill.status === "not_applicable") notApplicable.skills.push(skill);
-    else if (skill.status === "no_evidence") noEvidence.skills.push(skill);
+    else if (level === "upcoming") upcoming.skills.push(skill);
+    else if (level === "no_score") noScore.skills.push(skill);
     else if (skill.conditionOnly) condition.skills.push(skill);
-    else (buckets.find((bucket) => bucket.id === skill.groupKey) ?? noEvidence).skills.push(skill);
+    else (buckets.find((bucket) => bucket.id === skill.groupKey) ?? upcoming).skills.push(skill);
   }
-  return [...buckets, condition, notApplicable, noEvidence].filter((bucket) => bucket.skills.length > 0);
+  return [...buckets, condition, notApplicable, upcoming, noScore].filter((bucket) => bucket.skills.length > 0);
 }
 
 /* --------------------------------------------------------------------- AI */

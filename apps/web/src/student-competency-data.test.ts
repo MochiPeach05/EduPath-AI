@@ -1,11 +1,36 @@
 import { describe, expect, it } from "vitest";
 import {
-  aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, confidentStrengths, countAxis, dataUsedLine, gapHistory, levelChart, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
+  aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, confidentStrengths, countAxis, dataUsedLine, displayLevel, gapHistory, levelChart, levelSummary, levelText, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
   gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isPreconditionError, PRIORITY_LABELS, levelStep, mapAiOutput, modelLabel, plansFor,
   scoreDifference, shouldPoll, sortRequirements, termLabel, EMPTY_SKILL_FILTERS,
 } from "./student-competency-data";
 import { fixtureAiOutput, fixtureAssessment, fixtureResult } from "./student-competency.fixture";
 import type { CareerRequirementResult } from "./competency-assessment-types";
+
+describe("skills without a score: Sắp học or Chưa có điểm (2026-10-21)", () => {
+  const s07 = fixtureResult.skills.find((skill) => skill.key === "S07")!;
+  const withRole = (role: "studied" | "in_progress" | "planned") => ({ ...s07, evidenceCourses: s07.evidenceCourses.map((row) => ({ ...row, role })) });
+  const studied = { ...fixtureResult, skills: fixtureResult.skills.map((skill) => skill.key === "S07" ? withRole("studied") : skill) };
+  it("shows Chưa có điểm once a related course was studied without a score, else Sắp học", () => {
+    expect(displayLevel(s07)).toBe("upcoming");
+    expect(displayLevel(withRole("in_progress"))).toBe("upcoming");
+    expect(displayLevel(withRole("studied"))).toBe("no_score");
+    expect(displayLevel(fixtureResult.skills.find((skill) => skill.key === "S01")!)).toBe("proficient");
+    // Outside the student's choices: no display level, so no level filter shows it.
+    expect(displayLevel(fixtureResult.skills.find((skill) => skill.key === "S08")!)).toBeNull();
+    expect(filterSkills(fixtureResult.skills, { ...EMPTY_SKILL_FILTERS, level: "upcoming" }).map((skill) => skill.key)).toEqual(["S07"]);
+  });
+  it("counts, draws, filters and lists the two cases apart", () => {
+    expect(levelSummary(studied)[0]!.counts).toMatchObject({ upcoming: 0, no_score: 1 });
+    expect(levelChart(studied).bars[0]!.segments.at(-1)).toMatchObject({ level: "no_score", label: "Chưa có điểm", count: 1 });
+    expect(filterSkills(studied.skills, { ...EMPTY_SKILL_FILTERS, level: "no_score" }).map((skill) => skill.key)).toEqual(["S07"]);
+    expect(bucketSkills(studied, studied.skills).map((bucket) => [bucket.id, bucket.title])).toContainEqual(["no_score", "Chưa có điểm"]);
+  });
+  it("labels a group or the overall without evidence Chưa có điểm", () => {
+    expect(levelText("no_evidence", "Chưa có minh chứng")).toBe("Chưa có điểm");
+    expect(levelText("good", "Khá")).toBe("Khá");
+  });
+});
 
 describe("strengths (2026-10-21)", () => {
   it("only names skills with at least medium confidence, also in results stored before the rule", () => {
@@ -49,11 +74,11 @@ describe("level chart", () => {
   it("stacks each group's skills by level on one axis, counted like the group line", () => {
     const { axis, bars } = levelChart(fixtureResult);
     expect(axis.max).toBe(5);
-    // G1: S01, S02 Thành thạo · S03 Khá · S04 Cơ bản · S07 no evidence; S08 is outside the student's choices.
+    // G1: S01, S02 Thành thạo · S03 Khá · S04 Cơ bản · S07 Sắp học; S08 is outside the student's choices.
     const [g1, g2] = bars;
     expect(g1!.total).toBe(5);
     expect(g1!.segments.map((segment) => [segment.level, segment.count, segment.start, segment.end])).toEqual([
-      ["proficient", 2, 0, 0.4], ["good", 1, 0.4, 0.6], ["basic", 1, 0.6, 0.8], ["no_evidence", 1, 0.8, 1],
+      ["proficient", 2, 0, 0.4], ["good", 1, 0.4, 0.6], ["basic", 1, 0.6, 0.8], ["upcoming", 1, 0.8, 1],
     ]);
     expect(g1!.segments[0]!.skills.map((skill) => skill.name)).toEqual(["Lập trình web", "Lập trình hướng đối tượng"]);
     expect(g1!.segments[0]!.share).toBe(0.4);
@@ -156,10 +181,10 @@ describe("skills", () => {
     expect(filterSkills(fixtureResult.skills, { ...EMPTY_SKILL_FILTERS, search: "giai thuat" }).map((s) => s.key)).toEqual(["S04"]);
     expect(filterSkills(fixtureResult.skills, { ...EMPTY_SKILL_FILTERS, group: "G2" }).map((s) => s.key)).toEqual(["S05", "S06"]);
   });
-  it("keeps condition-only, not-applicable and no-evidence skills out of the engine groups, no-evidence last", () => {
+  it("keeps condition-only, not-applicable and unscored skills out of the engine groups, Sắp học last", () => {
     const buckets = bucketSkills(fixtureResult, fixtureResult.skills);
     expect(buckets.map((b) => [b.id, b.skills.map((s) => s.key)])).toEqual([
-      ["G1", ["S01", "S02", "S03", "S04"]], ["G2", ["S05"]], ["condition", ["S06"]], ["not-applicable", ["S08"]], ["no-evidence", ["S07"]],
+      ["G1", ["S01", "S02", "S03", "S04"]], ["G2", ["S05"]], ["condition", ["S06"]], ["not-applicable", ["S08"]], ["upcoming", ["S07"]],
     ]);
     expect(buckets.at(-1)!.note).toContain("Không phải điểm yếu");
   });

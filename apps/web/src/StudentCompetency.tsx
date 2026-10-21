@@ -6,9 +6,9 @@ import type { StudentProfile } from "./StudentOverview";
 import { specialtyLabel, type AiStatus, type AssessmentResult, type AssessmentStatusResponse, type CareerRequirementResult, type CourseSuggestion, type LatestAssessmentResponse, type LevelCode, type SkillPlan, type SkillResult, type StoredAssessment, type SupportCourse } from "./competency-assessment-types";
 import {
   CHART_LEVELS, COMPETENCY_API, CONFIDENCE_LABELS, COURSE_STATE_LABELS, EMPTY_SKILL_FILTERS, LEVEL_COLUMNS, LEVEL_SCALE, PRECONDITION_COPY, PRIORITY_LABELS,
-  aiErrorMessage, aiReasoned, aiStateCopy, bucketSkills, canRegenerate, careerSkillKeys, confidentStrengths, courseStanding, dataUsedLine, eligibilityDisplay, errorMessage, filterSkills, formatDateTime,
-  formatNumber, formatPercent, formatScore, gapHistory, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isPreconditionError, levelChart, levelSentence, levelStep, levelSummary, mapAiOutput, modelLabel,
-  plansFor, scoreDifference, shouldPoll, skillName, sortRequirements, type ChartLevel, type LevelBar, type LevelSegment, type MappedAiOutput, type PreconditionError, type SkillFilters, type StatusTone,
+  aiErrorMessage, aiReasoned, aiStateCopy, bucketSkills, canRegenerate, careerSkillKeys, confidentStrengths, courseStanding, dataUsedLine, displayLevel, eligibilityDisplay, errorMessage, filterSkills, formatDateTime,
+  formatNumber, formatPercent, formatScore, gapHistory, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isPreconditionError, levelChart, levelSentence, levelStep, levelSummary, levelText, mapAiOutput, modelLabel,
+  plansFor, scoreDifference, shouldPoll, skillName, sortRequirements, type ChartLevel, type DisplayLevel, type LevelBar, type LevelSegment, type MappedAiOutput, type PreconditionError, type SkillFilters, type StatusTone,
 } from "./student-competency-data";
 import { readGraduation } from "./student-graduation-api";
 import { GRADUATION_API, unresolvedCopy, verdictHeadline } from "./student-graduation-data";
@@ -60,12 +60,12 @@ const scrollToSection = (id: string) => {
 
 /* ------------------------------------------------------------ small parts */
 
-function LevelBadge({ level, label }: { level: LevelCode | null; label: string | null }) {
+function LevelBadge({ level, label }: { level: LevelCode | DisplayLevel | null; label: string | null }) {
   const step = levelStep(level);
-  const none = level === "no_evidence" || level === null;
+  const none = level === "no_evidence" || level === "upcoming" || level === "no_score" || level === null;
   return <span className={`scomp-level scomp-level-${step}${none ? " scomp-level-none" : ""}`}>
     <span className="scomp-pips" aria-hidden="true">{[1, 2, 3, 4].map((pip) => <i key={pip} className={pip <= step ? "is-on" : undefined} />)}</span>
-    {label ?? "Chưa có minh chứng"}
+    {levelText(level, label)}
   </span>;
 }
 /** Score bar on the shared 0–100 scale; decorative, the number is printed beside it. */
@@ -148,7 +148,7 @@ function Overview({ result }: { result: AssessmentResult }) {
         <ul>{result.groups.map((group) => { const counts = groupEvidenceCounts(result.skills, group.key); return <li key={group.key}>
           <div className="scomp-group-label"><strong>{group.name}</strong><span>{counts.withEvidence.toLocaleString("vi-VN")}/{counts.total.toLocaleString("vi-VN")} kỹ năng có minh chứng</span></div>
           <ScoreBar score={group.score} level={group.level} ticks={[50, 70, 85]} />
-          <div className="scomp-group-value"><strong>{formatScore(group.score)}</strong><span>{group.levelLabel}</span></div>
+          <div className="scomp-group-value"><strong>{formatScore(group.score)}</strong><span>{levelText(group.level, group.levelLabel)}</span></div>
         </li>; })}</ul>
         <div className="scomp-axis-row" aria-hidden="true"><span /><div className="scomp-axis"><span style={{ left: "0%" }}>0</span><span style={{ left: "50%" }}>50</span><span style={{ left: "70%" }}>70</span><span style={{ left: "85%" }}>85</span><span style={{ left: "100%" }}>100</span></div><span /></div>
       </div>
@@ -198,7 +198,7 @@ function HistorySection({ result }: { result: AssessmentResult }) {
               <th scope="col" className="scomp-num">Thay đổi</th>
             </tr></thead>
             {years.map((year) => <tbody key={year.schoolYear}>
-              <tr className="scomp-year-row"><th colSpan={columns} scope="rowgroup">Năm học {year.schoolYear}<span>Cuối năm: {formatScore(year.end.overall.score)} · {year.end.overall.levelLabel}</span></th></tr>
+              <tr className="scomp-year-row"><th colSpan={columns} scope="rowgroup">Năm học {year.schoolYear}<span>Cuối năm: {formatScore(year.end.overall.score)} · {levelText(year.end.overall.level, year.end.overall.levelLabel)}</span></th></tr>
               {year.rows.map((row) => <tr key={row.term} className={row.latest ? "scomp-history-latest" : undefined}>
                 <th scope="row">Học kỳ {row.semester}{row.latest && <span className="scomp-career-tag">Hiện tại</span>}<small>{row.term}</small></th>
                 <td className="scomp-num">{row.gradedCourses.toLocaleString("vi-VN")}</td>
@@ -219,14 +219,15 @@ function HistorySection({ result }: { result: AssessmentResult }) {
 }
 
 const LEVEL_COLUMN_LABELS: Record<(typeof LEVEL_COLUMNS)[number], string> = {
-  proficient: "Thành thạo", good: "Khá", basic: "Cơ bản", needs_work: "Cần củng cố", no_evidence: "Chưa có minh chứng",
+  proficient: "Thành thạo", good: "Khá", basic: "Cơ bản", needs_work: "Cần củng cố", upcoming: "Sắp học", no_score: "Chưa có điểm",
 };
 
 const CHART_TIP_SKILLS = 5;
 const CHART_RANGES: Partial<Record<ChartLevel, string>> = Object.fromEntries(LEVEL_SCALE.map((level) => [level.code, level.range]));
 /** What the tooltip says about the level itself, after the count. */
 function segmentNote(segment: LevelSegment): string {
-  if (segment.level === "no_evidence") return "Chưa học học phần nào đo các kỹ năng này — không phải điểm yếu";
+  if (segment.level === "upcoming") return "Đang học hoặc chưa học tới học phần đo các kỹ năng này — không phải điểm yếu";
+  if (segment.level === "no_score") return "Đã học học phần liên quan nhưng bảng điểm chưa có điểm số, nên chưa đánh giá được";
   if (segment.level === "exempt") return "Học phần được miễn hoặc công nhận nên không có điểm";
   return `Điểm kỹ năng ${CHART_RANGES[segment.level] ?? ""}`;
 }
@@ -265,7 +266,8 @@ function ChartSegment({ bar, segment, last, scaleWidth, onSelect }: { bar: Level
 /** "Bảng phân tích mức độ thành thạo" as one stacked bar per group on a shared count axis (user, 2026-10-17). */
 function LevelChart({ result, onSelect }: { result: AssessmentResult; onSelect: (group: string, level: ChartLevel) => void }) {
   const { axis, bars } = useMemo(() => levelChart(result), [result]);
-  const levels = CHART_LEVELS.filter((level) => level !== "exempt" || bars.some((bar) => bar.segments.some((segment) => segment.level === "exempt")));
+  // "Chưa có điểm" and exempt are rare: in the legend only when a bar has them.
+  const levels = CHART_LEVELS.filter((level) => (level !== "exempt" && level !== "no_score") || bars.some((bar) => bar.segments.some((segment) => segment.level === level)));
   const scaleRef = useRef<HTMLDivElement>(null);
   const [scaleWidth, setScaleWidth] = useState(0);
   useLayoutEffect(() => {
@@ -315,7 +317,7 @@ function SkillsSection({ result }: { result: AssessmentResult }) {
   // A segment of the chart (or a count in its table view) filters the list below to exactly those skills.
   const show = (group: string, level: string) => {
     setFilters({ ...EMPTY_SKILL_FILTERS, group, level });
-    setExpanded((current) => ({ ...current, [level === "no_evidence" ? "no-evidence" : group]: true }));
+    setExpanded((current) => ({ ...current, [level === "upcoming" || level === "no_score" ? level : group]: true }));
     scrollToSection("scomp-skill-list");
   };
   return <Section id="scomp-skills" title="Bảng phân tích mức độ thành thạo theo nhóm năng lực" description={`${result.skills.length.toLocaleString("vi-VN")} kỹ năng, chia theo nhóm. Mỗi kỹ năng được chấm theo thang 0–100 từ điểm các học phần minh chứng, theo trọng số học phần do Khoa cấu hình, rồi xếp vào một mức thành thạo.`}>
@@ -324,7 +326,8 @@ function SkillsSection({ result }: { result: AssessmentResult }) {
       <ul>
         <li><strong>Thành thạo, Khá:</strong> kỹ năng bạn đã nắm chắc qua các học phần đã học; có thể ghi vào hồ sơ xin việc và dùng ngay trong dự án.</li>
         <li><strong>Cơ bản, Cần củng cố:</strong> kỹ năng nên ôn lại hoặc học cải thiện; học phần cụ thể cho từng kỹ năng có ở trang <a className="sw-text-link" href="#skill-gap">Khoảng trống kỹ năng</a>.</li>
-        <li><strong>Chưa có minh chứng:</strong> bạn chưa học học phần nào đo kỹ năng đó — không phải điểm yếu.</li>
+        <li><strong>Sắp học:</strong> bạn đang học hoặc chưa học tới học phần đo kỹ năng đó — không phải điểm yếu.</li>
+        <li><strong>Chưa có điểm:</strong> bạn đã học học phần liên quan nhưng bảng điểm chưa có điểm số, nên chưa đánh giá được.</li>
         <li><strong>Độ tin cậy:</strong> cho biết kết quả dựa trên bao nhiêu minh chứng; tin cậy thấp nghĩa là mới có ít học phần đo kỹ năng này.</li>
       </ul>
     </div>
@@ -374,7 +377,7 @@ const courseScore = (course: AssessmentResult["courses"][number] | undefined) =>
 function noScoreText(skill: SkillResult): string {
   if (skill.status === "not_applicable") return "Ngoài lựa chọn học phần của bạn";
   if (skill.level === "exempt") return "Miễn/công nhận, không có điểm";
-  return "Chưa có minh chứng";
+  return displayLevel(skill) === "no_score" ? "Chưa có điểm" : "Sắp học";
 }
 
 function SkillRow({ skill, courses }: { skill: SkillResult; courses: Map<string, AssessmentResult["courses"][number]> }) {
@@ -392,7 +395,7 @@ function SkillRow({ skill, courses }: { skill: SkillResult; courses: Map<string,
         </> : <span className="scomp-skill-none">{noScoreText(skill)}</span>}
         <span className="sr-only">{skill.score !== null ? `${skill.levelLabel} · ` : ""}{facts}</span>
         <span className="scomp-tip scomp-skill-tip" aria-hidden="true">
-          <span className="scomp-tip-head"><i className={`scomp-chart-key scomp-chart-${skill.level}`} /><strong>{skill.score !== null ? `${formatScore(skill.score)} điểm` : noScoreText(skill)}</strong>{skill.score !== null && <span>{skill.levelLabel}</span>}</span>
+          <span className="scomp-tip-head"><i className={`scomp-chart-key scomp-chart-${displayLevel(skill) ?? skill.level}`} /><strong>{skill.score !== null ? `${formatScore(skill.score)} điểm` : noScoreText(skill)}</strong>{skill.score !== null && <span>{skill.levelLabel}</span>}</span>
           <span>{skill.name}{skill.careerSkill ? " · kỹ năng của nghề mục tiêu" : ""}</span>
           <span>{facts}</span>
           {skill.evidenceCourses.length > 0 && <span className="scomp-tip-list">{skill.evidenceCourses.slice(0, TIP_COURSES).map((row) => { const course = courses.get(row.code); return <span key={row.code}>
@@ -582,7 +585,7 @@ function GapRow({ req }: { req: CareerRequirementResult }) {
   return <tr>
     <th scope="row"><span className="scomp-cell-title">{req.skillName ?? req.title}</span>{req.skillName && req.skillName !== req.title && <small>{req.title}</small>}</th>
     <td data-label="Tính chất"><span className={req.isRequired ? "scomp-required" : undefined}>{req.priorityLabel}</span></td>
-    <td data-label="Hiện tại"><span className="scomp-bullet"><ScoreBar score={req.score} level={req.level} threshold={req.threshold} /><strong>{formatScore(req.score)}</strong></span>{req.levelLabel && <small>{req.levelLabel}</small>}</td>
+    <td data-label="Hiện tại"><span className="scomp-bullet"><ScoreBar score={req.score} level={req.level} threshold={req.threshold} /><strong>{formatScore(req.score)}</strong></span>{req.levelLabel && req.level !== "no_evidence" && <small>{req.levelLabel}</small>}</td>
     <td className="scomp-num" data-label="Ngưỡng">{formatScore(req.threshold)}</td>
     <td className="scomp-num" data-label="Chênh lệch">{difference === null ? "—" : difference > 0 ? `+${formatScore(difference)}` : formatScore(difference)}{req.deficitBandLabel && <small>{req.deficitBandLabel}</small>}</td>
     <td data-label="Trạng thái"><StatusText {...status} />{req.status === "no_data" && <small>{req.noDataReason === "other_specialty" ? "Chỉ có trong học phần của chuyên ngành khác." : "Chương trình đào tạo chưa có học phần đo kỹ năng này — không phải điểm yếu."}</small>}</td>

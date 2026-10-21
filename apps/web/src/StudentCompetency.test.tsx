@@ -94,10 +94,13 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
     const html = withAi("completed");
     expect(html).not.toContain("Chi tiết kỹ năng");
     expect(html).toContain("Kết quả này cho biết gì?");
-    // G1: S01, S02 Thành thạo · S03 Khá · S04 Cơ bản · S07 no evidence (S08 is outside the student's choices).
+    // G1: S01, S02 Thành thạo · S03 Khá · S04 Cơ bản · S07 Sắp học (S08 is outside the student's choices).
     expect(html).toContain('aria-label="2 kỹ năng Thành thạo trong nhóm Kiến thức chuyên môn"');
     expect(html).toContain('aria-label="1 kỹ năng Cơ bản trong nhóm Kiến thức chuyên môn"');
-    expect(html).toContain('aria-label="1 kỹ năng Chưa có minh chứng trong nhóm Kiến thức chuyên môn"');
+    expect(html).toContain('aria-label="1 kỹ năng Sắp học trong nhóm Kiến thức chuyên môn"');
+    // The engine's "Chưa có minh chứng" is never shown: split into Sắp học / Chưa có điểm (2026-10-21).
+    expect(html).not.toContain("Chưa có minh chứng");
+    expect(withAi("completed", "gap")).not.toContain("Chưa có minh chứng");
     expect(html).toContain("Điểm nhóm 79 · Khá");
   });
   it("draws the proficiency table as one stacked bar per group with a tooltip on every segment", () => {
@@ -108,7 +111,7 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
     expect(section).toContain("<span>Điểm nhóm 79</span>");
     expect(section).toContain(">5 kỹ năng</span>");
     // Segments in scale order, each a button that names the group, the count and the share.
-    expect([...section.matchAll(/class="scomp-chart-seg scomp-chart-(\w+)/g)].map((match) => match[1])).toEqual(["proficient", "good", "basic", "no_evidence", "exempt"]);
+    expect([...section.matchAll(/class="scomp-chart-seg scomp-chart-(\w+)/g)].map((match) => match[1])).toEqual(["proficient", "good", "basic", "upcoming", "exempt"]);
     expect(section).toContain('aria-label="Kiến thức chuyên môn: 2 kỹ năng Thành thạo, 40% số kỹ năng của nhóm. Bấm để xem các kỹ năng này."');
     expect(section).toContain("left:0%;width:40%");
     // The tooltip gives the full picture: count, level, group share, the level's range and the skills with their scores.
@@ -118,10 +121,10 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
     expect(tip).toContain("Điểm kỹ năng từ 85");
     expect(tip).toContain("<span>Lập trình web</span><b>91</b>");
     expect(tip).toContain("<span>Lập trình hướng đối tượng</span><b>86</b>");
-    expect(section).toContain("Chưa học học phần nào đo các kỹ năng này — không phải điểm yếu");
+    expect(section).toContain("Đang học hoặc chưa học tới học phần đo các kỹ năng này — không phải điểm yếu");
     // Legend for every level present, axis ticks, and the table as a collapsed twin.
     expect([...section.matchAll(/<li><i class="scomp-chart-key scomp-chart-\w+" aria-hidden="true"><\/i>([^<]+)<\/li>/g)].map((match) => match[1]))
-      .toEqual(["Thành thạo", "Khá", "Cơ bản", "Cần củng cố", "Chưa có minh chứng", "Miễn/công nhận"]);
+      .toEqual(["Thành thạo", "Khá", "Cơ bản", "Cần củng cố", "Sắp học", "Miễn/công nhận"]);
     expect([...section.matchAll(/<span style="left:[\d.]+%">(\d+)<\/span>/g)].map((match) => match[1])).toEqual(["0", "1", "2", "3", "4", "5"]);
     expect(section).toMatch(/<details class="scomp-legend scomp-chart-table"><summary>Xem dạng bảng<\/summary>/);
   });
@@ -142,7 +145,7 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
     // The opened row repeats the facts, so nothing is only in the tooltip.
     expect(row).toContain('<p class="scomp-meta">91 điểm · Thành thạo · Độ tin cậy trung bình · độ phủ 50%</p>');
     // A skill without a score has no bar but says why; the axis marks the level thresholds.
-    expect(list).toContain('<span class="scomp-skill-none">Chưa có minh chứng</span>');
+    expect(list).toContain('<span class="scomp-skill-none">Sắp học</span>');
     expect(list).toContain('<span style="left:50%">50</span><span style="left:70%">70</span><span style="left:85%">85</span>');
   });
   it("follows the competency term by term, grouped by school year (STU-COMP-07)", () => {
@@ -192,9 +195,19 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
   });
   it("groups skills with no evidence last and says it is not a weakness", () => {
     const html = withAi("completed");
-    expect(html.indexOf("Chưa có minh chứng (1)")).toBeGreaterThan(html.indexOf("Kiến thức chuyên môn (4)"));
+    expect(html.indexOf("Sắp học (1)")).toBeGreaterThan(html.indexOf("Kiến thức chuyên môn (4)"));
     expect(html).toContain("Không phải điểm yếu");
     expect(html).toContain("suy ra từ điểm chữ");
+  });
+  it("shows a skill whose studied course has no score as Chưa có điểm, apart from Sắp học", () => {
+    const assessment = fixtureAssessment("completed");
+    const skills = assessment.result.skills.map((skill) => skill.key === "S07" ? { ...skill, evidenceCourses: skill.evidenceCourses.map((row) => ({ ...row, role: "studied" as const })) } : skill);
+    const html = render({ assessment: { ...assessment, result: { ...assessment.result, skills } }, aiEnabled: true, workerOnline: true });
+    expect(html).toContain("Chưa có điểm (1)");
+    expect(html).not.toContain("Sắp học (1)");
+    expect(html).toContain('<span class="scomp-skill-none">Chưa có điểm</span>');
+    expect(html).toContain('class="scomp-chart-seg scomp-chart-no_score');
+    expect(html).toMatch(/<li><i class="scomp-chart-key scomp-chart-no_score" aria-hidden="true"><\/i>Chưa có điểm<\/li>/);
   });
   it("colours progress red when late and green when on plan", () => {
     const late = withAi("completed");

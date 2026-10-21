@@ -119,7 +119,7 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
       "Mỗi học phần rèn luyện một số kỹ năng ở những mức độ khác nhau, và Khoa cấu hình mức độ đó thành trọng số cho từng cặp học phần và kỹ năng. Điểm một kỹ năng là trung bình có trọng số của điểm các học phần liên quan mà bạn đã học, quy về thang 100: học phần càng nhiều tín chỉ và càng rèn luyện kỹ năng đó nhiều thì càng ảnh hưởng lớn đến điểm. Nếu một môn học nhiều lần, hệ thống dùng lần đạt có điểm cao nhất; môn có điểm MT được tính là đã học nhưng không đưa vào điểm trung bình.",
       "Từ điểm kỹ năng, hệ thống xếp mức: từ 85 trở lên là Thành thạo, từ 70 đến dưới 85 là Khá, từ 50 đến dưới 70 là Cơ bản và dưới 50 là Cần củng cố. Điểm nhóm năng lực được tính theo cùng cách, còn điểm tổng là trung bình của các nhóm có dữ liệu; Giáo dục thể chất và Giáo dục quốc phòng không tính vào hai điểm này. Với nghề mục tiêu, mỗi kỹ năng yêu cầu được so với ngưỡng 70 nếu là kỹ năng Ưu tiên và 85 nếu là kỹ năng Bắt buộc."
     ],
-    note: "Kỹ năng mà bạn chưa học học phần liên quan nào được ghi là Chưa có minh chứng, còn kỹ năng nghề mà chương trình đào tạo chưa có học phần đo được ghi là Chưa đủ dữ liệu. Cả hai trường hợp đều không có nghĩa là bạn yếu kỹ năng đó."
+    note: "Kỹ năng mà bạn đang học hoặc chưa học tới học phần liên quan được ghi là Sắp học; kỹ năng có học phần liên quan đã học nhưng bảng điểm chưa có điểm số được ghi là Chưa có điểm; còn kỹ năng nghề mà chương trình đào tạo chưa có học phần đo được ghi là Chưa đủ dữ liệu. Các trường hợp này đều không có nghĩa là bạn yếu kỹ năng đó."
   },
   {
     question: "Mô hình AI nhận những dữ liệu nào của tôi?",
