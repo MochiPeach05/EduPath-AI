@@ -238,7 +238,9 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
     const html = render({ assessment: null, aiEnabled: false, workerOnline: false }, { specialty: null });
     expect(html).toContain("Chưa có kết quả đánh giá");
     expect(html).toContain("Đánh giá năng lực</button>");
-    expect(html).toContain("Chưa xác định");
+    // All three of the checklist are required (2026-10-21): the intro says so, a missing specialty reads "Chưa chọn".
+    expect(html).toContain("Khi hồ sơ có đủ bảng điểm, nghề mục tiêu và chuyên ngành");
+    expect(html).toContain("<span>Chưa chọn</span>");
     expect(html).not.toContain("Xóa kết quả đánh giá");
   });
   it("shows a loading state while the first request runs", () => {

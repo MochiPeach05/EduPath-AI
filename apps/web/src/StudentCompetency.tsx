@@ -7,7 +7,7 @@ import { specialtyLabel, type AiStatus, type AssessmentResult, type AssessmentSt
 import {
   CHART_LEVELS, COMPETENCY_API, CONFIDENCE_LABELS, COURSE_STATE_LABELS, EMPTY_SKILL_FILTERS, LEVEL_COLUMNS, LEVEL_SCALE, PRECONDITION_COPY, PRIORITY_LABELS,
   aiErrorMessage, aiReasoned, aiStateCopy, bucketSkills, canRegenerate, careerSkillKeys, confidentStrengths, courseStanding, dataUsedLine, displayLevel, eligibilityDisplay, errorMessage, filterSkills, formatDateTime,
-  formatNumber, formatPercent, formatScore, gapHistory, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isPreconditionError, levelChart, levelSentence, levelStep, levelSummary, levelText, mapAiOutput, modelLabel,
+  formatNumber, formatPercent, formatScore, gapHistory, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isPreconditionError, levelChart, levelSentence, levelStep, levelSummary, levelText, mapAiOutput, missingRequirements, missingRequirementsMessage, modelLabel,
   plansFor, scoreDifference, shouldPoll, skillName, sortRequirements, type ChartLevel, type DisplayLevel, type LevelBar, type LevelSegment, type MappedAiOutput, type PreconditionError, type SkillFilters, type StatusTone,
 } from "./student-competency-data";
 import { readGraduation } from "./student-graduation-api";
@@ -498,7 +498,7 @@ function GraduationSection() {
 function GapSummary({ result }: { result: AssessmentResult }) {
   const career = result.career;
   if (!career) return <Section id="sgap-summary" title="Mức phù hợp với nghề mục tiêu">
-    <div className="sw-empty scomp-empty"><h3>Bạn chưa chọn nghề mục tiêu</h3><p>Khoảng trống kỹ năng được tính so với yêu cầu của nghề mục tiêu. Năng lực của bạn vẫn được đánh giá đầy đủ ở trang Đánh giá năng lực; chọn một nghề để biết kỹ năng nào đã đạt, kỹ năng nào còn thiếu và học phần nên học.</p><a className="sw-outline" href="#profile">Chọn nghề mục tiêu</a></div>
+    <div className="sw-empty scomp-empty"><h3>Bạn chưa chọn nghề mục tiêu</h3><p>Khoảng trống kỹ năng được tính so với yêu cầu của nghề mục tiêu. Kết quả này được tính khi hồ sơ chưa có nghề mục tiêu; hãy chọn nghề rồi bấm “Đánh giá lại” để biết kỹ năng nào đã đạt, kỹ năng nào còn thiếu và học phần nên học.</p><a className="sw-outline" href="#profile">Chọn nghề mục tiêu</a></div>
   </Section>;
   const missing = sortRequirements(career.requirements).filter((req) => req.status === "below" || req.status === "not_studied");
   return <Section id="sgap-summary" title="Mức phù hợp với nghề mục tiêu" description={<>So với yêu cầu của nghề <strong>{career.nameVi}</strong> ({career.nameEn}).{career.deleted && " Nghề này đã ngừng sử dụng trong danh mục; bạn nên chọn nghề khác."}</>}>
@@ -743,8 +743,8 @@ function Checklist({ hasTranscript, transcriptFailed, profile, suggestion }: { h
   const specialty = profile?.specialty ?? null;
   const items: { label: string; done: boolean | null; value: string; note?: string | null }[] = [
     { label: "Bảng điểm", done: hasTranscript, value: transcriptFailed ? "Chưa kiểm tra được — thử tải lại trang" : hasTranscript === null ? "Đang kiểm tra…" : hasTranscript ? "Đã import" : "Chưa có bảng điểm" },
-    { label: "Nghề mục tiêu", done: profile ? Boolean(profile.careerPositionId) : null, value: profile?.careerPosition?.nameVi ?? (profile ? "Chưa chọn — vẫn đánh giá được năng lực" : "Đang tải…") },
-    { label: "Chuyên ngành", done: profile ? Boolean(specialty) : null, value: profile ? specialtyLabel(specialty) : "Đang tải…", note: !specialty ? suggestion : null },
+    { label: "Nghề mục tiêu", done: profile ? Boolean(profile.careerPositionId) : null, value: profile?.careerPosition?.nameVi ?? (profile ? "Chưa chọn" : "Đang tải…") },
+    { label: "Chuyên ngành", done: profile ? Boolean(specialty) : null, value: profile ? (specialty ? specialtyLabel(specialty) : "Chưa chọn") : "Đang tải…", note: !specialty ? suggestion : null },
   ];
   return <ul className="scomp-checklist" aria-label="Điều kiện đánh giá">{items.map((item) => <li key={item.label}>
     <span className={`so-check ${item.done ? "so-check-done" : ""}`} aria-hidden="true">{item.done ? <Icon name="check" /> : null}</span>
@@ -759,13 +759,13 @@ const HEADER_COPY: Record<CompetencyView, { title: string; resultTitle: string; 
     title: "Đánh giá năng lực của bạn", resultTitle: "Kết quả đánh giá năng lực",
     lead: "Hệ thống tính điểm từng kỹ năng từ bảng điểm và trọng số học phần do Khoa cấu hình, xếp mức thành thạo theo nhóm năng lực và đối chiếu tiến độ học tập.",
     introTitle: "Chưa có kết quả đánh giá",
-    intro: "Bấm “Đánh giá năng lực” để xem điểm theo từng nhóm năng lực, mức thành thạo của từng kỹ năng, tiến độ so với kế hoạch đào tạo và điều kiện xét tốt nghiệp. Kết quả chỉ mang tính tham khảo.",
+    intro: "Khi hồ sơ có đủ bảng điểm, nghề mục tiêu và chuyên ngành, bấm “Đánh giá năng lực” để xem điểm theo từng nhóm năng lực, mức thành thạo của từng kỹ năng, tiến độ so với kế hoạch đào tạo và điều kiện xét tốt nghiệp. Kết quả chỉ mang tính tham khảo.",
   },
   gap: {
     title: "Phân tích khoảng trống kỹ năng", resultTitle: "Kết quả phân tích khoảng trống kỹ năng",
     lead: "Khoảng trống được tính từ điểm từng kỹ năng ở trang Đánh giá năng lực, so với ngưỡng mà nghề mục tiêu của bạn yêu cầu.",
     introTitle: "Chưa có kết quả phân tích",
-    intro: "Khoảng trống kỹ năng được tính cùng lúc với đánh giá năng lực, từ bảng điểm và nghề mục tiêu của bạn. Bấm “Đánh giá năng lực” để bắt đầu. Kết quả chỉ mang tính tham khảo.",
+    intro: "Khoảng trống kỹ năng được tính cùng lúc với đánh giá năng lực, từ bảng điểm, chuyên ngành và nghề mục tiêu của bạn. Khi hồ sơ có đủ ba mục này, bấm “Đánh giá năng lực” để bắt đầu. Kết quả chỉ mang tính tham khảo.",
   },
 };
 
@@ -839,8 +839,13 @@ export default function StudentCompetency({ profile, view = "competency" }: { pr
       }
     } finally { setBusy(null); }
   };
+  const hasTranscript = transcript.loading ? null : transcript.error ? null : transcript.data;
+  const missing = missingRequirements(hasTranscript, profile);
   // Consent is per student and kept by the server (GET /latest consentVersion), never per browser.
-  const start = () => { if (data?.consentVersion === policyVersion) void run(); else setConsentOpen(true); };
+  const start = () => {
+    if (missing.length) { setAnnouncement(""); setError(missingRequirementsMessage(missing)); return; }
+    if (data?.consentVersion === policyVersion) void run(); else setConsentOpen(true);
+  };
   const confirmConsent = () => { void run(); };
   const regenerate = async () => {
     if (!assessment) return;
@@ -873,7 +878,6 @@ export default function StudentCompetency({ profile, view = "competency" }: { pr
 
   const result = assessment?.result ?? null;
   const mapped = useMemo(() => assessment && assessment.ai.status === "completed" ? mapAiOutput(assessment.ai.output, assessment.result) : null, [assessment]);
-  const hasTranscript = transcript.loading ? null : transcript.error ? null : transcript.data;
   // The result was computed for meta.specialty / meta.career; say so when the profile changed since.
   // profile.specialty is undefined only while an older API is serving: skip that comparison then.
   const profileChanged = Boolean(result && profile && (

@@ -10,7 +10,7 @@ export const COMPETENCY_API = "/api/student/competency-assessments";
 /* ----------------------------------------------------------------- errors */
 
 /** Errors of POST / that describe a missing precondition: shown as a calm empty state, not as a failure. */
-export const PRECONDITION_ERRORS = ["transcript_required", "cohort_unknown", "curriculum_unavailable", "curriculum_ambiguous", "competency_weights_unavailable"] as const;
+export const PRECONDITION_ERRORS = ["transcript_required", "career_required", "specialty_required", "cohort_unknown", "curriculum_unavailable", "curriculum_ambiguous", "competency_weights_unavailable"] as const;
 export type PreconditionError = typeof PRECONDITION_ERRORS[number];
 
 export function isPreconditionError(code: string | null | undefined): code is PreconditionError {
@@ -20,6 +20,8 @@ export function isPreconditionError(code: string | null | undefined): code is Pr
 /** Title, explanation and next step for each precondition. */
 export const PRECONDITION_COPY: Record<PreconditionError, { title: string; text: string; action: { label: string; href: string } | null }> = {
   transcript_required: { title: "Cần bảng điểm để bắt đầu", text: "EduPath tính năng lực từ kết quả các học phần bạn đã học. Hãy import bảng điểm PDF xuất từ cổng đào tạo, rồi quay lại đây.", action: { label: "Import bảng điểm", href: "#profile" } },
+  career_required: { title: "Cần chọn nghề mục tiêu", text: "Đánh giá năng lực cần đủ bảng điểm, nghề mục tiêu và chuyên ngành. Hãy chọn nghề mục tiêu trong hồ sơ, rồi quay lại đây.", action: { label: "Chọn nghề mục tiêu", href: "#profile" } },
+  specialty_required: { title: "Cần chọn chuyên ngành", text: "Đánh giá năng lực cần đủ bảng điểm, nghề mục tiêu và chuyên ngành. Hãy chọn chuyên ngành trong hồ sơ, rồi quay lại đây.", action: { label: "Chọn chuyên ngành", href: "#profile" } },
   cohort_unknown: { title: "Hồ sơ chưa có khóa học", text: "Hệ thống cần biết bạn thuộc khóa nào để chọn đúng chương trình đào tạo. Thông tin khóa được đồng bộ từ tài khoản trường; nếu mục Khóa học trong hồ sơ còn trống, hãy liên hệ Khoa để được cập nhật.", action: { label: "Xem hồ sơ", href: "#profile" } },
   curriculum_unavailable: { title: "Chưa có chương trình đào tạo cho khóa của bạn", text: "Khoa chưa công bố chương trình đào tạo đang áp dụng cho khóa này trên EduPath. Bạn có thể quay lại sau khi chương trình được cập nhật.", action: null },
   curriculum_ambiguous: { title: "Khóa của bạn đang có nhiều chương trình đào tạo", text: "Có hơn một chương trình đào tạo đang áp dụng cho khóa này nên hệ thống chưa chọn được bản đúng. Khoa sẽ rà soát lại; bạn chưa cần làm gì thêm.", action: null },
@@ -48,6 +50,23 @@ const ERROR_MESSAGES: Record<string, string> = {
 export function errorMessage(code: string | null | undefined, fallback = "Thao tác chưa thành công. Vui lòng thử lại."): string {
   return ERROR_MESSAGES[code ?? ""] ?? fallback;
 }
+
+/**
+ * The checklist items still missing before an assessment: all three are required (user, 2026-10-21;
+ * the server checks the same). A value not known yet (loading, or an older API without the
+ * specialty) is left to the server.
+ */
+export function missingRequirements(hasTranscript: boolean | null, profile: { careerPositionId?: string | null; specialty?: string | null } | null): string[] {
+  return [
+    hasTranscript === false ? "bảng điểm" : null,
+    profile && !profile.careerPositionId ? "nghề mục tiêu" : null,
+    profile && profile.specialty !== undefined && !profile.specialty ? "chuyên ngành" : null,
+  ].filter((item): item is string => item !== null);
+}
+/** "a", "a và b", "a, b và c". */
+const joinWords = (words: readonly string[]) => words.length < 2 ? words.join("") : `${words.slice(0, -1).join(", ")} và ${words.at(-1)}`;
+export const missingRequirementsMessage = (missing: readonly string[]) =>
+  `Cần đủ bảng điểm, nghề mục tiêu và chuyên ngành để đánh giá năng lực. Hãy bổ sung ${joinWords(missing)} rồi bấm lại.`;
 
 /** Why the AI comment failed, in the student's words. */
 const AI_ERROR_MESSAGES: Record<string, string> = {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, confidentStrengths, countAxis, dataUsedLine, displayLevel, gapHistory, levelChart, levelSummary, levelText, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
-  gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isPreconditionError, PRIORITY_LABELS, levelStep, mapAiOutput, modelLabel, plansFor,
+  gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isPreconditionError, PRIORITY_LABELS, levelStep, mapAiOutput, missingRequirements, missingRequirementsMessage, modelLabel, plansFor,
   scoreDifference, shouldPoll, sortRequirements, termLabel, EMPTY_SKILL_FILTERS,
 } from "./student-competency-data";
 import { fixtureAiOutput, fixtureAssessment, fixtureResult } from "./student-competency.fixture";
@@ -119,10 +119,22 @@ describe("errors", () => {
   it("separates precondition errors from failures and maps codes to Vietnamese", () => {
     expect(isPreconditionError("competency_weights_unavailable")).toBe(true);
     expect(isPreconditionError("transcript_required")).toBe(true);
+    expect(isPreconditionError("career_required")).toBe(true);
+    expect(isPreconditionError("specialty_required")).toBe(true);
     expect(isPreconditionError("assessment_too_frequent")).toBe(false);
     expect(isPreconditionError(undefined)).toBe(false);
     expect(errorMessage("assessment_too_frequent")).toContain("một phút");
     expect(errorMessage("unknown_code")).toBe("Thao tác chưa thành công. Vui lòng thử lại.");
+  });
+  it("asks for all three of the checklist before an assessment (2026-10-21)", () => {
+    expect(missingRequirements(true, { careerPositionId: "career-1", specialty: "CNPM" })).toEqual([]);
+    expect(missingRequirements(false, { careerPositionId: null, specialty: null })).toEqual(["bảng điểm", "nghề mục tiêu", "chuyên ngành"]);
+    expect(missingRequirementsMessage(["nghề mục tiêu", "chuyên ngành"]))
+      .toBe("Cần đủ bảng điểm, nghề mục tiêu và chuyên ngành để đánh giá năng lực. Hãy bổ sung nghề mục tiêu và chuyên ngành rồi bấm lại.");
+    expect(missingRequirementsMessage(["bảng điểm", "nghề mục tiêu", "chuyên ngành"])).toContain("bổ sung bảng điểm, nghề mục tiêu và chuyên ngành rồi");
+    // Values not known yet (loading, an older API without the specialty) are left to the server.
+    expect(missingRequirements(null, null)).toEqual([]);
+    expect(missingRequirements(true, { careerPositionId: "career-1" })).toEqual([]);
   });
 });
 

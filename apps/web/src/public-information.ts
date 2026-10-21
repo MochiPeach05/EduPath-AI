@@ -104,7 +104,7 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
   },
   {
     question: "Làm thế nào để đánh giá năng lực?",
-    answer: ["Đánh giá năng lực dựa trên bảng điểm bạn đã tải lên, cùng chuyên ngành và nghề mục tiêu trong hồ sơ. Bạn vẫn đánh giá được khi chưa chọn chuyên ngành hoặc nghề mục tiêu, nhưng kết quả sẽ đầy đủ hơn khi đã chọn."],
+    answer: ["Đánh giá năng lực dựa trên bảng điểm bạn đã tải lên, cùng chuyên ngành và nghề mục tiêu trong hồ sơ. Cần có đủ cả ba thì mới đánh giá được."],
     steps: [
       "Tải bảng điểm PDF lên ở Hồ sơ và bảng điểm, nếu bạn chưa có bảng điểm trên EduPath AI.",
       "Trong Thông tin cá nhân, chọn chuyên ngành và vị trí nghề nghiệp mong muốn.",

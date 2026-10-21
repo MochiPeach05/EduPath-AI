@@ -105,21 +105,18 @@ describe("readAssessmentInputs", () => {
     await expectCode({ transcript: false }, "transcript_required");
     await expectCode({ profile: null }, "cohort_unknown");
     await expectCode({ profile: { cohort_code: "  ", specialty: null, career_position_id: null } }, "cohort_unknown");
+    // All three of the checklist are required (2026-10-21): a target career and a specialty too.
+    await expectCode({ profile: { cohort_code: "K29", specialty: "CNDL", career_position_id: null } }, "career_required");
+    await expectCode({ career: false }, "career_required");
+    await expectCode({ specialty: null }, "specialty_required");
     await expectCode({ curricula: 0 }, "curriculum_unavailable");
     await expectCode({ curricula: 2 }, "curriculum_ambiguous");
     await expectCode({ weights: false }, "competency_weights_unavailable");
   });
 
-  it("does not block when the specialty is unset and the cohort has only specialty standards", async () => {
-    const inputs = await readAssessmentInputs(fakeDb({ specialty: null }), userId);
-    expect(inputs.student.specialty).toBeNull();
-    expect(inputs.graduation).toEqual({ resolution: "specialty_unset", standard: null });
-  });
-
-  it("marks several unlinked plans as ambiguous and a missing career as none", async () => {
-    const inputs = await readAssessmentInputs(fakeDb({ plans: [{ linked: false, major: "Khác" }, { linked: false, major: "Khác 2" }], career: false }), userId);
+  it("marks several unlinked plans as ambiguous", async () => {
+    const inputs = await readAssessmentInputs(fakeDb({ plans: [{ linked: false, major: "Khác" }, { linked: false, major: "Khác 2" }] }), userId);
     expect(inputs.plan).toEqual({ resolution: "ambiguous", revision: null });
-    expect(inputs.career).toBeNull();
     const none = await readAssessmentInputs(fakeDb({ plans: [] }), userId);
     expect(none.plan).toEqual({ resolution: "not_found", revision: null });
     const byIdentity = await readAssessmentInputs(fakeDb({ plans: [{ linked: false, major: "Khác" }, { linked: false, major: "Công nghệ thông tin" }] }), userId);

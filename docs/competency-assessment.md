@@ -9,6 +9,8 @@ Cổng sinh viên tính năng lực từ bảng điểm, so với nghề mục t
 
 Cả hai trang dùng cùng component `StudentCompetency` (thuộc tính `view`), cùng nút "Đánh giá lại" và cùng hộp thoại đồng ý.
 
+**Điều kiện để đánh giá** (từ 21/10/2026, theo yêu cầu "sửa lại yêu cầu cả 3"; trước đó chỉ cần bảng điểm): hồ sơ phải có đủ **bảng điểm, nghề mục tiêu và chuyên ngành**, ba mục của ô điều kiện đầu trang. Khi bấm "Đánh giá năng lực"/"Đánh giá lại" mà còn thiếu, trang không gửi yêu cầu và nêu mục còn thiếu (`missingRequirements` trong `student-competency-data.ts`). Server cũng từ chối với `career_required` hoặc `specialty_required` (409, `inputs.ts`). Kết quả cũ tính khi chưa chọn nghề hoặc chuyên ngành vẫn hiển thị bình thường.
+
 Phần "Xét tốt nghiệp (tham khảo)" của trang `#competency` **không** đọc bản xét tốt nghiệp lưu kèm kết quả đánh giá: nó gọi `GET /api/student/graduation` như trang `#graduation` (đánh giá tính trên server mỗi lần mở trang) và dùng cùng câu kết luận (`verdictHeadline` trong `apps/web/src/student-graduation-data.ts`), nên hai màn hình luôn cùng kết quả và cùng lý do chưa đạt. Từ 17/10/2026 phần này chỉ còn câu kết luận (đỏ khi chưa đạt, xanh khi đạt) và nút "Xem chi tiết" dẫn sang `#graduation`; tên tiêu chuẩn, danh sách "Nên làm" và bảng tiêu chí chỉ hiện ở trang Điều kiện xét tốt nghiệp. Nhóm tự chọn tốt nghiệp có Đồ án/Khóa luận tốt nghiệp (ví dụ TC306 của K29) được gợi ý theo quy tắc `thesisOption`: đồ án là phương án chính, học phần thay thế chỉ là phương án dự phòng khi sinh viên không làm đồ án theo quy định của Khoa (hoặc là đường tiếp tục nếu đã bắt đầu học phần thay thế). Khi các nhóm chưa đạt đã bù đủ số tín chỉ tích lũy còn thiếu, câu kết luận nói một lần thay vì cộng trùng.
 
 ## Kiến trúc: "Hệ thống AI" lai
@@ -92,7 +94,7 @@ API sinh viên `/api/student/competency-assessments` (cần đăng nhập, `Cach
 
 | Lệnh | Kết quả |
 |---|---|
-| `POST /` + header `X-Consent-Policy-Version` | 201 `{ assessment }`; lỗi `consent_required` (400), `policy_outdated`, `transcript_required`, `cohort_unknown`, `curriculum_unavailable`, `curriculum_ambiguous`, `competency_weights_unavailable`, `transcript_changed` (409), `assessment_too_frequent` (429, 60 giây) |
+| `POST /` + header `X-Consent-Policy-Version` | 201 `{ assessment }`; lỗi `consent_required` (400), `policy_outdated`, `transcript_required`, `cohort_unknown`, `career_required`, `specialty_required`, `curriculum_unavailable`, `curriculum_ambiguous`, `competency_weights_unavailable`, `transcript_changed` (409), `assessment_too_frequent` (429, 60 giây) |
 | `GET /latest` | `{ assessment, aiEnabled, workerOnline, consentVersion }` — `consentVersion` là phiên bản chính sách của đồng ý `competency_assessment` đang hiệu lực của chính sinh viên (null nếu chưa có / đã rút). Trang chỉ bỏ qua hộp thoại đồng ý khi giá trị này bằng phiên bản chính sách hiện tại (không lưu đồng ý theo trình duyệt). |
 | `GET /latest/status` | `{ id, aiStatus, aiErrorCode, workerOnline }` |
 | `POST /:id/ai` | 202 `{ aiStatus }`; `ai_disabled`, `ai_not_regenerable` (409), `queue_full` (429), `assessment_not_found` (404) |

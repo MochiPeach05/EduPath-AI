@@ -81,7 +81,9 @@ async function setupSchema() {
   for (const [key, user] of Object.entries(actors)) {
     await pool.query(`INSERT INTO users(id,entra_tenant_id,entra_object_id,entra_subject,display_name,email,username,role,is_active)
  VALUES($1,$2,$3,$4,$5,$6,$7,'student',$8)`, [user.userId, tenantId, user.objectId, user.objectId, user.name, user.email, user.username, key !== "inactive"]);
-    await pool.query("INSERT INTO student_profiles(user_id,cohort_code,specialty) VALUES($1,'K29',NULL)", [user.userId]);
+    // An assessment needs a target career and a specialty as well as the transcript (2026-10-21).
+    await pool.query(`INSERT INTO student_profiles(user_id,cohort_code,specialty,career_position_id)
+ SELECT $1,'K29','CNPM',id FROM career_positions WHERE deleted_at IS NULL ORDER BY code LIMIT 1`, [user.userId]);
   }
   const curriculumId = randomUUID(), revisionId = randomUUID();
   await pool.query("INSERT INTO curricula(id,identity_key,cohort_code,is_active,lock_version) VALUES($1,'cong nghe thong tin:K29','K29',TRUE,$2)", [curriculumId, randomUUID()]);
@@ -186,7 +188,8 @@ try {
   const k30Student = actors.k30 = actor("k30");
   await pool.query(`INSERT INTO users(id,entra_tenant_id,entra_object_id,entra_subject,display_name,email,username,role,is_active)
  VALUES($1,$2,$3,$4,$5,$6,$7,'student',TRUE)`, [k30Student.userId, tenantId, k30Student.objectId, k30Student.objectId, k30Student.name, k30Student.email, k30Student.username]);
-  await pool.query("INSERT INTO student_profiles(user_id,cohort_code,specialty) VALUES($1,'K30',NULL)", [k30Student.userId]);
+  await pool.query(`INSERT INTO student_profiles(user_id,cohort_code,specialty,career_position_id)
+ SELECT $1,'K30','CNPM',id FROM career_positions WHERE deleted_at IS NULL ORDER BY code LIMIT 1`, [k30Student.userId]);
   await setTranscript(k30Student, transcriptData([["71ITBS10203", "B", 7]]));
   const shared = await loadAssessmentInputs(pool, k30Student.userId);
   assert.equal(shared.weights.revisionId, k30Revision, "the weights are read for the student's own CTĐT");
@@ -195,6 +198,18 @@ try {
   assert.deepEqual(shared.weights.links.map((link) => link.weight).sort(), [0.4, 0.6]);
   assert.equal(await count("ad_comp_courses WHERE code='71ITSE30103'"), 2, "the same code under another name is another course");
   checks.push("a K30 student gets the K29 configuration of the same course (case and spaces ignored); the same code under another name is another course without one");
+
+  // All three of the checklist are required (2026-10-21): without a target career or a specialty, nothing is stored.
+  const career = (await pool.query("SELECT career_position_id FROM student_profiles WHERE user_id=$1", [actors.a.userId])).rows[0].career_position_id;
+  assert(career, "the audit profiles have a target career");
+  await pool.query("UPDATE student_profiles SET career_position_id=NULL WHERE user_id=$1", [actors.a.userId]);
+  assert.deepEqual((await assess("a")).body, { error: "career_required" });
+  await pool.query("UPDATE student_profiles SET career_position_id=$2,specialty=NULL WHERE user_id=$1", [actors.a.userId, career]);
+  assert.deepEqual((await assess("a")).body, { error: "specialty_required" });
+  await pool.query("UPDATE student_profiles SET specialty='CNPM' WHERE user_id=$1", [actors.a.userId]);
+  assert.equal(await count("stu_comp_assessments"), 0);
+  assert.equal(await count("data_consents WHERE user_id=$1 AND purpose='competency_assessment'", [actors.a.userId]), 0);
+  checks.push("POST needs a target career and a specialty as well as the transcript (career_required / specialty_required, 409) and stores nothing without them");
 
   // Create, consent, cooldown.
   const first = await assess("a");
@@ -332,7 +347,7 @@ async function runOllamaCheck(skills) {
     await pool.query("INSERT INTO career_requirements(career_position_id,skill_id,title,is_required) VALUES($1,$2,$3,$4)",
       [position, skill, `Kỹ năng kiểm thử ${index + 1}`, index === 0]);
   }
-  await pool.query("INSERT INTO student_profiles(user_id,cohort_code,specialty,career_position_id) VALUES($1,'K29',NULL,$2)", [user.userId, position]);
+  await pool.query("INSERT INTO student_profiles(user_id,cohort_code,specialty,career_position_id) VALUES($1,'K29','CNPM',$2)", [user.userId, position]);
   await setTranscript(user, transcriptData([["71ITBS10103", "A", 8.6], ["71ITBS10203", "B+", 7.8], ["71ITSE30103", "B", 7.0], ["71AV010003", "MT", null]]));
 
   const app = express();

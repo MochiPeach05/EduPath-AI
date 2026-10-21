@@ -34,6 +34,9 @@ export async function readAssessmentInputs(db: Db, userId: string, options: { pr
   const cohortCode = normalizeCohortCode(profile?.cohort_code);
   if (!cohortCode) throw new AssessmentError("cohort_unknown", 409);
   const specialty = profileSpecialty(profile?.specialty);
+  // All three of the page's checklist are required (user, 2026-10-21): transcript, target career and specialty.
+  if (!profile?.career_position_id) throw new AssessmentError("career_required", 409);
+  if (!specialty) throw new AssessmentError("specialty_required", 409);
 
   /* Curriculum: the single active one of the cohort, current revision. */
   const curricula = await db.query<{ id: string; identity_key: string; revision_id: string; version: number; name: string | null; admission_year: unknown }>(
@@ -127,6 +130,7 @@ export async function readAssessmentInputs(db: Db, userId: string, options: { pr
       };
     }
   }
+  if (!career) throw new AssessmentError("career_required", 409);
 
   /* Catalog names for transcript codes outside the curriculum (names never come from the transcript). */
   const curriculumCodes = new Set(curriculumCourses.map((course) => courseKey(course.code)));
