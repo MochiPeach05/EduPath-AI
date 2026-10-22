@@ -275,7 +275,8 @@ describe("buildAiInput", () => {
     const stored = syntheticResult();
     stored.career = { ...stored.career!, fit: 0.58, fitCode: "fairly_fit" as never, fitLabel: "Khá phù hợp" };
     const user = buildAiInput(stored).user;
-    expect(user).toContain("Mức phù hợp: Ít phù hợp\n");
+    // The level comes from the requirements' điểm phù hợp (2 × 88,5 + 72,5 + 2 × 55) / 5 = 71,9, whatever was stored (comp-calc-v11).
+    expect(user).toContain("Mức phù hợp: Trung bình\n");
     expect(user).not.toContain("Khá phù hợp");
   });
 

@@ -1,4 +1,4 @@
-import type { Confidence, FitCode } from "./types.js";
+import type { Confidence, FitCode, GapStatus } from "./types.js";
 
 // Every threshold and band used by the competency calculation lives here.
 // Changing a value changes stored results, so bump CALC_VERSION with it.
@@ -29,7 +29,11 @@ import type { Confidence, FitCode } from "./types.js";
  * "Bắt buộc" needs Giỏi (80, was 85), "Ưu tiên" Khá (62,5, was 70); strengths, improvements and the
  * plans without a career use Khá too, and a career's met skills below Giỏi are deepened.
  */
-export const CALC_VERSION = "comp-calc-v10";
+/**
+ * v11: the career fit is a 0–100 "điểm phù hợp" (fitScoreOf; user, 2026-10-22: "Sao lại 100% tròn nhỉ
+ * tại vì nó chỉ chấm 92 điểm và sửa lại thành đơn vị điểm"), its level on the competency bounds.
+ */
+export const CALC_VERSION = "comp-calc-v11";
 /**
  * The graduation evaluation uses no skill level, so it keeps the version of its last change:
  * comp-calc-v10 changed only levels and must not re-date every student's graduation advice.
@@ -59,29 +63,39 @@ export const CAREER_COEFFICIENTS = { required: 2, preferred: 1 } as const;
 export const FIT_BELOW_MAX_CREDIT = 0.5;
 export const FIT_BELOW_FLOOR = 40;
 /**
- * Fit levels on the bounds of the competency levels (user, 2026-10-22: "Đồng bộ cái mức phù hợp bên
- * này thành tương tự của phần đánh giá năng lực", same bounds and look): Rất phù hợp ≥ 90%, Phù hợp
- * ≥ 80%, Trung bình ≥ 62,5%, Ít phù hợp ≥ 50%, Không phù hợp below. Before: steps of 20% (2026-10-21,
- * "Rất phù hợp / Phù hợp / Trung bình / Ít phù hợp / Không phù hợp"), and earlier Phù hợp ≥ 0,8, Khá
- * phù hợp ≥ 0,5, Cần bổ sung nhiều. The level is read from the stored (rounded) fit and data share,
- * and the page and the AI prompt read it the same way for older results, so CALC_VERSION was not
- * bumped. Mirrored in apps/web/src/student-competency-data.ts (fitLevelOf).
+ * "Điểm phù hợp" (comp-calc-v11): the career's skills averaged like a score, "Bắt buộc" counted twice
+ * (its coefficient). A met or below skill counts its score, a not-studied one 0; upcoming, no-data and
+ * exempt-only skills are left out; null when nothing is left. Rounded down to 2 decimals like the
+ * scores. It is read from the stored requirements, so the page and the AI prompt show older results
+ * the same way. Before v11 the level came from `fit`, the share of requirement credit (all met = 100%
+ * however high the scores). Mirrored in apps/web/src/student-competency-data.ts (fitScoreOf).
  */
-export const FIT_LABEL_THRESHOLDS = {
-  veryFit: LEVEL_THRESHOLDS.excellent / 100, fit: LEVEL_THRESHOLDS.proficient / 100,
-  average: LEVEL_THRESHOLDS.good / 100, lowFit: LEVEL_THRESHOLDS.basic / 100,
-} as const;
+export function fitScoreOf(requirements: readonly { status: GapStatus; score: number | null; coefficient: number }[]): number | null {
+  let sum = 0, weight = 0;
+  for (const req of requirements) {
+    const value = req.status === "not_studied" ? 0 : req.status === "met" || req.status === "below" ? req.score : null;
+    if (value === null) continue;
+    sum += req.coefficient * value;
+    weight += req.coefficient;
+  }
+  return weight > 0 ? Math.floor((sum / weight) * 100 + 1e-9) / 100 : null;
+}
 /** Below this share of coefficients with data the fit label is "Chưa đủ dữ liệu". */
 export const FIT_MIN_DATA_SHARE = 0.5;
 export const FIT_LABELS: Record<FitCode, string> = {
   very_fit: "Rất phù hợp", fit: "Phù hợp", average: "Trung bình", low_fit: "Ít phù hợp", not_fit: "Không phù hợp",
   insufficient_data: "Chưa đủ dữ liệu",
 };
-export function fitCodeOf(fit: number | null, dataShare: number): FitCode {
-  if (fit === null || dataShare + 1e-9 < FIT_MIN_DATA_SHARE) return "insufficient_data";
-  const reaches = (floor: number) => fit + 1e-9 >= floor;
-  const t = FIT_LABEL_THRESHOLDS;
-  return reaches(t.veryFit) ? "very_fit" : reaches(t.fit) ? "fit" : reaches(t.average) ? "average" : reaches(t.lowFit) ? "low_fit" : "not_fit";
+/**
+ * Fit level of a "điểm phù hợp" on the bounds of the competency levels (user, 2026-10-22: "Đồng bộ cái
+ * mức phù hợp bên này thành tương tự của phần đánh giá năng lực"): Rất phù hợp ≥ 90, Phù hợp ≥ 80,
+ * Trung bình ≥ 62,5, Ít phù hợp ≥ 50, Không phù hợp below. Mirrored in the web's fitLevelOf.
+ */
+export function fitCodeOf(fitScore: number | null, dataShare: number): FitCode {
+  if (fitScore === null || dataShare + 1e-9 < FIT_MIN_DATA_SHARE) return "insufficient_data";
+  const reaches = (bound: number) => fitScore + 1e-9 >= bound;
+  const t = LEVEL_THRESHOLDS;
+  return reaches(t.excellent) ? "very_fit" : reaches(t.proficient) ? "fit" : reaches(t.good) ? "average" : reaches(t.basic) ? "low_fit" : "not_fit";
 }
 
 /** Deficit bands for 'below': ≤ near → gần ngưỡng, ≤ moderate → thiếu vừa, otherwise thiếu nhiều. */

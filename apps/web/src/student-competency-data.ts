@@ -244,21 +244,35 @@ export function sortRequirements(list: readonly CareerRequirementResult[]): Care
 export const isGap = (req: Pick<CareerRequirementResult, "status">) => req.status !== "met";
 
 /**
- * The fit level of a career result on the bounds of the competency levels (user, 2026-10-22: "Đồng bộ
- * cái mức phù hợp bên này thành tương tự của phần đánh giá năng lực"): Rất phù hợp ≥ 90%, Phù hợp
- * ≥ 80%, Trung bình ≥ 62,5%, Ít phù hợp ≥ 50%, Không phù hợp (steps of 20% from 2026-10-21 before).
- * Read from the stored fit and data share exactly like the engine's fitCodeOf (apps/api constants.ts
- * FIT_LABEL_THRESHOLDS, FIT_MIN_DATA_SHARE), so every stored result shows the current scale.
+ * "Điểm phù hợp" 0–100 (comp-calc-v11, user 2026-10-22: "Sao lại 100% tròn nhỉ tại vì nó chỉ chấm 92
+ * điểm và sửa lại thành đơn vị điểm"): the career's skills averaged like a score, Bắt buộc counted
+ * twice; a met or below skill counts its score, a not-studied one 0; upcoming, no-data and exempt-only
+ * skills are left out. Read from the stored requirements, so older results show it too. Mirrors the
+ * API's fitScoreOf (constants.ts).
+ */
+export function fitScoreOf(requirements: readonly Pick<CareerRequirementResult, "status" | "score" | "coefficient">[]): number | null {
+  let sum = 0, weight = 0;
+  for (const req of requirements) {
+    const value = req.status === "not_studied" ? 0 : req.status === "met" || req.status === "below" ? req.score : null;
+    if (value === null) continue;
+    sum += req.coefficient * value;
+    weight += req.coefficient;
+  }
+  return weight > 0 ? Math.floor((sum / weight) * 100 + 1e-9) / 100 : null;
+}
+/**
+ * The fit level: the điểm phù hợp on the bounds of the competency levels (user, 2026-10-22: "Đồng bộ
+ * cái mức phù hợp bên này thành tương tự của phần đánh giá năng lực"): Rất phù hợp ≥ 90, Phù hợp ≥ 80,
+ * Trung bình ≥ 62,5, Ít phù hợp ≥ 50, Không phù hợp; "Chưa đủ dữ liệu" when less than half of the
+ * coefficients have data. Same as the engine's fitCodeOf (FIT_MIN_DATA_SHARE).
  */
 export type FitLevel = "very_fit" | "fit" | "average" | "low_fit" | "not_fit" | "insufficient_data";
-const FIT_FLOORS: readonly [number, FitLevel][] = [
-  [LEVEL_THRESHOLDS.excellent / 100, "very_fit"], [LEVEL_THRESHOLDS.proficient / 100, "fit"],
-  [LEVEL_THRESHOLDS.good / 100, "average"], [LEVEL_THRESHOLDS.basic / 100, "low_fit"],
-];
-export function fitLevelOf(career: Pick<CareerResult, "fit" | "dataShare">): FitLevel {
-  const fit = career.fit;
-  if (fit === null || career.dataShare + 1e-9 < 0.5) return "insufficient_data";
-  return FIT_FLOORS.find(([floor]) => fit + 1e-9 >= floor)?.[1] ?? "not_fit";
+export function fitLevelOf(career: Pick<CareerResult, "requirements" | "dataShare">): FitLevel {
+  const score = fitScoreOf(career.requirements);
+  if (score === null || career.dataShare + 1e-9 < 0.5) return "insufficient_data";
+  const t = LEVEL_THRESHOLDS;
+  const reaches = (bound: number) => score + 1e-9 >= bound;
+  return reaches(t.excellent) ? "very_fit" : reaches(t.proficient) ? "fit" : reaches(t.good) ? "average" : reaches(t.basic) ? "low_fit" : "not_fit";
 }
 
 export const FIT_LABELS: Record<FitLevel, string> = {
@@ -269,19 +283,17 @@ export const FIT_LABELS: Record<FitLevel, string> = {
  * "Chưa đủ dữ liệu" is no level and is explained under the scale when it is the student's).
  */
 export const FIT_SCALE: readonly { code: Exclude<FitLevel, "insufficient_data">; label: string; range: string; text: string }[] = [
-  { code: "very_fit", label: FIT_LABELS.very_fit, range: "từ 90%", text: "Bạn đã đạt gần hết kỹ năng mà nghề này yêu cầu." },
-  { code: "fit", label: FIT_LABELS.fit, range: "80% đến dưới 90%", text: "Bạn đạt phần lớn yêu cầu; còn vài kỹ năng cần nâng lên ngưỡng." },
-  { code: "average", label: FIT_LABELS.average, range: "62,5% đến dưới 80%", text: "Bạn đạt hơn nửa yêu cầu; một số kỹ năng còn dưới ngưỡng hoặc chưa học." },
-  { code: "low_fit", label: FIT_LABELS.low_fit, range: "50% đến dưới 62,5%", text: "Bạn đạt khoảng một nửa yêu cầu; nhiều kỹ năng cần nâng lên ngưỡng." },
-  { code: "not_fit", label: FIT_LABELS.not_fit, range: "dưới 50%", text: "Bạn đạt chưa tới một nửa yêu cầu; phần lớn kỹ năng chưa đạt ngưỡng hoặc chưa học." },
+  { code: "very_fit", label: FIT_LABELS.very_fit, range: "từ 90", text: "Các kỹ năng của nghề đều đạt điểm rất cao." },
+  { code: "fit", label: FIT_LABELS.fit, range: "80 đến dưới 90", text: "Các kỹ năng của nghề đạt điểm tốt; vài kỹ năng có thể nâng thêm." },
+  { code: "average", label: FIT_LABELS.average, range: "62,5 đến dưới 80", text: "Kỹ năng của nghề ở mức khá; một số kỹ năng còn dưới ngưỡng hoặc chưa học." },
+  { code: "low_fit", label: FIT_LABELS.low_fit, range: "50 đến dưới 62,5", text: "Nhiều kỹ năng của nghề còn điểm thấp hoặc chưa học." },
+  { code: "not_fit", label: FIT_LABELS.not_fit, range: "dưới 50", text: "Phần lớn kỹ năng của nghề chưa đạt ngưỡng hoặc chưa học." },
 ];
-export const fitLabelOf = (career: Pick<CareerResult, "fit" | "dataShare">) => FIT_LABELS[fitLevelOf(career)];
+export const fitLabelOf = (career: Pick<CareerResult, "requirements" | "dataShare">) => FIT_LABELS[fitLevelOf(career)];
 /** Ramp step of a fit level, like levelStep (5 = Rất phù hợp … 1 = Không phù hợp; 0 = Chưa đủ dữ liệu). */
 export function fitStep(level: FitLevel): 0 | 1 | 2 | 3 | 4 | 5 {
   return level === "insufficient_data" ? 0 : (5 - FIT_SCALE.findIndex((item) => item.code === level)) as 1 | 2 | 3 | 4 | 5;
 }
-/** A fit share as a percent shown like a score: rounded down (79,96% reads 79%), one decimal from 62,5% to 63%. */
-export const fitPercent = (share: number) => `${formatScore(share * 100)}%`;
 
 export function eligibilityDisplay(eligibility: Eligibility, missing: { code: string; name: string | null }[]): { tone: StatusTone; glyph: string; text: string } {
   if (eligibility === "eligible") return { tone: "pass", glyph: "✓", text: "Đủ điều kiện đăng ký" };
@@ -442,12 +454,16 @@ export function levelSummary(result: Pick<AssessmentResult, "groups" | "skills">
  * comp-calc-v10 still says Ưu tiên 70 and Bắt buộc 85 (no level starts there) until the student runs it again.
  */
 export function careerThresholdsLine(career: Pick<CareerResult, "requirements">): string {
-  const of = (required: boolean, fallback: number) => career.requirements.find((req) => req.isRequired === required)?.threshold ?? fallback;
+  // A career with one kind of requirement: the other threshold of the same version (v10: 62,5/80; before: 70/85).
+  const pairs = [{ preferred: LEVEL_THRESHOLDS.good, required: LEVEL_THRESHOLDS.proficient }, { preferred: 70, required: 85 }];
+  const stored = (required: boolean) => career.requirements.find((req) => req.isRequired === required)?.threshold;
+  const pair = pairs.find((item) => item.preferred === stored(false) || item.required === stored(true)) ?? pairs[0]!;
+  const of = (required: boolean, fallback: number) => stored(required) ?? fallback;
   const named = (value: number) => {
     const level = LEVEL_SCALE.find((item) => item.code !== "needs_work" && LEVEL_THRESHOLDS[item.code] === value);
     return level ? ` (mức ${level.label})` : "";
   };
-  const preferred = of(false, LEVEL_THRESHOLDS.good), required = of(true, LEVEL_THRESHOLDS.proficient);
+  const preferred = of(false, pair.preferred), required = of(true, pair.required);
   return `Ngưỡng đạt: kỹ năng Ưu tiên từ ${formatScore(preferred)}${named(preferred)}, kỹ năng Bắt buộc từ ${formatScore(required)}${named(required)}.`;
 }
 

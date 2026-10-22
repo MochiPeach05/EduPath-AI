@@ -460,7 +460,10 @@ export type CareerResult = {
   summaryText: string;
   /** "x/y kỹ năng có dữ liệu" */
   dataText: string;
+  /** Share of requirement credit (met 1, below up to 0,5, not studied 0); the level used it before comp-calc-v11. */
   fit: number | null;
+  /** "Điểm phù hợp" 0–100 (fitScoreOf, comp-calc-v11; absent before): the level is read from it. */
+  fitScore?: number | null;
   fitCode: FitCode;
   fitLabel: string;
   /** Σ coefficient with data (met/below/not_studied) ÷ Σ coefficient. */

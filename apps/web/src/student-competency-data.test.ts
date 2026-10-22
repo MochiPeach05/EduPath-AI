@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, confidentStrengths, countAxis, dataUsedLine, displayLevel, FIT_SCALE, fitLabelOf, fitLevelOf, fitPercent, fitStep, gapHistory, levelChart, levelSummary, levelText, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
+  aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, confidentStrengths, countAxis, dataUsedLine, displayLevel, FIT_SCALE, fitLabelOf, fitLevelOf, fitScoreOf, fitStep, gapHistory, levelChart, levelSummary, levelText, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
   gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isPreconditionError, PRIORITY_LABELS, levelStep, mapAiOutput, missingRequirements, missingRequirementsMessage, modelLabel, plansFor, skillGroupKeys,
   scoreDifference, shouldPoll, sortRequirements, termLabel, EMPTY_SKILL_FILTERS,
   careerThresholdsLine, chartLevelLabel, currentImprovements, LEVEL_SCALE, levelOfScore, withCurrentLevels,
@@ -46,6 +46,10 @@ describe("levels named like the transcript's classification (comp-calc-v10, user
     const at = (preferred: number, required: number) => ({ requirements: career.requirements.map((req) => ({ ...req, threshold: req.isRequired ? required : preferred })) });
     expect(careerThresholdsLine(at(62.5, 80))).toBe("Ngưỡng đạt: kỹ năng Ưu tiên từ 62,5 (mức Khá), kỹ năng Bắt buộc từ 80 (mức Giỏi).");
     expect(careerThresholdsLine(at(70, 85))).toBe("Ngưỡng đạt: kỹ năng Ưu tiên từ 70, kỹ năng Bắt buộc từ 85.");
+    // A career with Ưu tiên skills only: Bắt buộc is the one of the same version, never a mix (seen 2026-10-22: "70 … 80").
+    const preferredOnly = (preferred: number) => ({ requirements: career.requirements.filter((req) => !req.isRequired).map((req) => ({ ...req, threshold: preferred })) });
+    expect(careerThresholdsLine(preferredOnly(70))).toBe("Ngưỡng đạt: kỹ năng Ưu tiên từ 70, kỹ năng Bắt buộc từ 85.");
+    expect(careerThresholdsLine(preferredOnly(62.5))).toBe("Ngưỡng đạt: kỹ năng Ưu tiên từ 62,5 (mức Khá), kỹ năng Bắt buộc từ 80 (mức Giỏi).");
   });
 });
 
@@ -94,25 +98,32 @@ describe("a skill in several competency groups (2026-10-22)", () => {
   });
 });
 
-describe("fit scale (2026-10-22: the bounds of the competency levels)", () => {
-  it("lists the five fit levels with their bands and shows a share like a score", () => {
+describe("fit scale (2026-10-22: a 0–100 điểm phù hợp on the bounds of the competency levels)", () => {
+  type Req = Pick<CareerRequirementResult, "status" | "score" | "coefficient">;
+  const req = (status: Req["status"], score: number | null, coefficient = 1): Req => ({ status, score, coefficient });
+  const one = (score: number, dataShare = 1) => ({ requirements: [req("met", score)] as CareerRequirementResult[], dataShare });
+  it("averages the career's skills: Bắt buộc twice, not studied 0, upcoming / no data / exempt-only left out", () => {
+    // The student's case: every measured skill met, 92 on average → 92, not 100%.
+    expect(fitScoreOf([req("met", 95, 2), req("met", 90), req("met", 89), req("upcoming", null)])).toBe(92.25);
+    expect(fitScoreOf([req("met", 90, 2), req("below", 50), req("not_studied", null), req("no_data", null)])).toBe(57.5);
+    expect(fitScoreOf([req("met", null), req("upcoming", null)])).toBeNull();
+    // Read from the stored requirements (91, 75, 64,4; Bắt buộc twice), whatever fit was stored.
+    expect(fitScoreOf(fixtureResult.career!.requirements)).toBe(79.28);
+  });
+  it("lists the five fit levels with their bands in points", () => {
     // Only the levels: "Chưa đủ dữ liệu" is no level, like Sắp học on the competency scale.
     expect(FIT_SCALE.map((item) => [item.code, item.label, item.range])).toEqual([
-      ["very_fit", "Rất phù hợp", "từ 90%"], ["fit", "Phù hợp", "80% đến dưới 90%"], ["average", "Trung bình", "62,5% đến dưới 80%"],
-      ["low_fit", "Ít phù hợp", "50% đến dưới 62,5%"], ["not_fit", "Không phù hợp", "dưới 50%"],
+      ["very_fit", "Rất phù hợp", "từ 90"], ["fit", "Phù hợp", "80 đến dưới 90"], ["average", "Trung bình", "62,5 đến dưới 80"],
+      ["low_fit", "Ít phù hợp", "50 đến dưới 62,5"], ["not_fit", "Không phù hợp", "dưới 50"],
     ]);
-    // The engine's fitCodeOf bands (90/80/62,5/50%), read from the stored fit and data share.
-    expect([0.9, 0.8999, 0.8, 0.7999, 0.625, 0.6249, 0.5, 0.4999, 0].map((fit) => fitLevelOf({ fit, dataShare: 1 })))
+    // The engine's fitCodeOf bounds (90/80/62,5/50) on the điểm phù hợp.
+    expect([90, 89.99, 80, 79.99, 62.5, 62.49, 50, 49.99, 0].map((score) => fitLevelOf(one(score))))
       .toEqual(["very_fit", "fit", "fit", "average", "average", "low_fit", "low_fit", "not_fit", "not_fit"]);
-    expect([fitLevelOf({ fit: 1, dataShare: 0.49 }), fitLevelOf({ fit: 1, dataShare: 0.5 }), fitLevelOf({ fit: null, dataShare: 1 })])
+    expect([fitLevelOf(one(100, 0.49)), fitLevelOf(one(100, 0.5)), fitLevelOf({ requirements: [], dataShare: 1 })])
       .toEqual(["insufficient_data", "very_fit", "insufficient_data"]);
     expect((["very_fit", "fit", "average", "low_fit", "not_fit", "insufficient_data"] as const).map(fitStep)).toEqual([5, 4, 3, 2, 1, 0]);
-    // A result stored with the earlier labels (Khá phù hợp, 0,58) reads the current scale.
-    expect(fitLabelOf(fixtureResult.career!)).toBe("Ít phù hợp");
-    expect(fitPercent(0.7996)).toBe("79%");
-    expect(fitPercent(0.58)).toBe("58%");
-    expect(fitPercent(0.627)).toBe("62,7%");
-    expect(fitPercent(0)).toBe("0%");
+    // A result stored with the earlier labels (Khá phù hợp, 0,58) reads the current scale: 79,28 is Trung bình.
+    expect(fitLabelOf(fixtureResult.career!)).toBe("Trung bình");
   });
 });
 

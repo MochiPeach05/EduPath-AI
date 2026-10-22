@@ -87,9 +87,9 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
     const html = render({ assessment: fixtureAssessment("disabled"), aiEnabled: false, workerOnline: false });
     expect(html).toContain("Nhận xét AI chưa được bật");
     expect(html).not.toContain("Tạo lại nhận xét");
-    // The fixture is stored with the earlier label "Khá phù hợp"; 0,58 reads "Ít phù hợp" on the current scale
-    // (the competency bounds, 2026-10-22), shown as a percent with a pip badge.
-    expect(html).toMatch(/<strong class="scomp-fit-label">58%<\/strong><span class="scomp-level scomp-level-2">.*?<\/span>Ít phù hợp<\/span>/);
+    // The fixture is stored with the earlier label "Khá phù hợp" (0,58); its requirements give a điểm phù hợp
+    // of 79,28 (comp-calc-v11), Trung bình on the competency bounds, shown as points with a pip badge.
+    expect(html).toMatch(/<strong class="scomp-fit-label">79<small>\/100<\/small><\/strong><span class="scomp-level scomp-level-3">.*?<\/span>Trung bình<\/span>/);
     expect(html).not.toContain("Khá phù hợp");
     expect(html).toContain("Bảng phân tích mức độ thành thạo theo nhóm năng lực");
   });
@@ -346,20 +346,21 @@ describe("StudentCompetency — Khoảng trống kỹ năng", () => {
     const html = withAi("completed", "gap");
     const summary = html.slice(html.indexOf('id="sgap-summary"'), html.indexOf('id="scomp-ai"'));
     expect(summary).toContain("<summary>Thang mức phù hợp</summary>");
-    // The fit (0,58) as a percent with a pip badge, like "82/100 · Giỏi".
-    expect(summary).toMatch(/<span class="scomp-kicker">Mức phù hợp<\/span><p class="scomp-big"><strong>58<\/strong><span>%<\/span><\/p><p class="scomp-score-tags"><span class="scomp-level scomp-level-2">.*?<\/span>Ít phù hợp<\/span><\/p>/);
+    // The điểm phù hợp (79,28) in points with a pip badge, like "82/100 · Giỏi" (2026-10-22: "đơn vị điểm thôi chứ khỏi %").
+    expect(summary).toMatch(/<span class="scomp-kicker">Mức phù hợp<\/span><p class="scomp-big"><strong>79<\/strong><span>\/100<\/span><\/p><p class="scomp-score-tags"><span class="scomp-level scomp-level-3">.*?<\/span>Trung bình<\/span><\/p>/);
+    expect(summary).not.toContain("%");
+    expect(summary).not.toContain("Điểm trung bình các kỹ năng nghề có điểm");
     // Five badged levels, the student's marked; "Chưa đủ dữ liệu" is no row of the scale.
     const scale = summary.slice(summary.indexOf("<summary>Thang mức phù hợp</summary>"));
     expect([...scale.matchAll(/<\/span>([^<]+)<\/span>(?:<span class="scomp-career-tag">Mức của bạn<\/span>)?<\/span><span class="scomp-legend-range">([^<]+)<\/span>/g)].map((match) => `${match[1]} ${match[2]}`)).toEqual([
-      "Rất phù hợp từ 90%", "Phù hợp 80% đến dưới 90%", "Trung bình 62,5% đến dưới 80%", "Ít phù hợp 50% đến dưới 62,5%", "Không phù hợp dưới 50%",
+      "Rất phù hợp từ 90", "Phù hợp 80 đến dưới 90", "Trung bình 62,5 đến dưới 80", "Ít phù hợp 50 đến dưới 62,5", "Không phù hợp dưới 50",
     ]);
-    expect(scale).toMatch(/Ít phù hợp<\/span><span class="scomp-career-tag">Mức của bạn<\/span>/);
+    expect(scale).toMatch(/Trung bình<\/span><span class="scomp-career-tag">Mức của bạn<\/span>/);
     expect(scale).not.toContain("Chưa đủ dữ liệu");
     expect(scale).toContain("Cùng ngưỡng với Thang mức năng lực ở trang Đánh giá năng lực.");
     expect(summary).not.toContain("Khá phù hợp");
     expect(summary.match(/Mức của bạn/g)).toHaveLength(1);
-    expect(summary).toContain("Bạn đang đạt khoảng 58% yêu cầu của nghề Lập trình viên web.");
-    expect(summary).toContain("Kỹ năng Bắt buộc tính gấp đôi kỹ năng Ưu tiên.");
+    expect(summary).toContain("Cách tính điểm phù hợp: trung bình điểm các kỹ năng của nghề, kỹ năng Bắt buộc tính gấp đôi kỹ năng Ưu tiên; kỹ năng chưa học tính 0 điểm.");
   });
   it("shows the gap part of the AI text with its courses", () => {
     const html = withAi("completed", "gap");
