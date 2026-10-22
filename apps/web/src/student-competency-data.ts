@@ -244,31 +244,44 @@ export function sortRequirements(list: readonly CareerRequirementResult[]): Care
 export const isGap = (req: Pick<CareerRequirementResult, "status">) => req.status !== "met";
 
 /**
- * The fit level of a career result: one scale in steps of 20% (user, 2026-10-21, "Rất phù hợp …
- * Không phù hợp"), read from the stored fit and data share exactly like the engine's fitCodeOf
- * (apps/api constants.ts FIT_LABEL_THRESHOLDS, FIT_MIN_DATA_SHARE), so results stored with the
- * earlier labels (Phù hợp / Khá phù hợp / Cần bổ sung nhiều) show the same scale without a new assessment.
+ * The fit level of a career result on the bounds of the competency levels (user, 2026-10-22: "Đồng bộ
+ * cái mức phù hợp bên này thành tương tự của phần đánh giá năng lực"): Rất phù hợp ≥ 90%, Phù hợp
+ * ≥ 80%, Trung bình ≥ 62,5%, Ít phù hợp ≥ 50%, Không phù hợp (steps of 20% from 2026-10-21 before).
+ * Read from the stored fit and data share exactly like the engine's fitCodeOf (apps/api constants.ts
+ * FIT_LABEL_THRESHOLDS, FIT_MIN_DATA_SHARE), so every stored result shows the current scale.
  */
 export type FitLevel = "very_fit" | "fit" | "average" | "low_fit" | "not_fit" | "insufficient_data";
-const FIT_FLOORS: readonly [number, FitLevel][] = [[0.8, "very_fit"], [0.6, "fit"], [0.4, "average"], [0.2, "low_fit"]];
+const FIT_FLOORS: readonly [number, FitLevel][] = [
+  [LEVEL_THRESHOLDS.excellent / 100, "very_fit"], [LEVEL_THRESHOLDS.proficient / 100, "fit"],
+  [LEVEL_THRESHOLDS.good / 100, "average"], [LEVEL_THRESHOLDS.basic / 100, "low_fit"],
+];
 export function fitLevelOf(career: Pick<CareerResult, "fit" | "dataShare">): FitLevel {
   const fit = career.fit;
   if (fit === null || career.dataShare + 1e-9 < 0.5) return "insufficient_data";
   return FIT_FLOORS.find(([floor]) => fit + 1e-9 >= floor)?.[1] ?? "not_fit";
 }
 
-/** "Thang mức phù hợp" of the gap page (user, 2026-10-21): the levels of fitLevelOf in the student's words. */
-export const FIT_SCALE: readonly { code: FitLevel; label: string; range: string; text: string }[] = [
-  { code: "very_fit", label: "Rất phù hợp", range: "từ 80% yêu cầu", text: "Bạn đã đạt gần hết kỹ năng mà nghề này yêu cầu." },
-  { code: "fit", label: "Phù hợp", range: "60% đến dưới 80%", text: "Bạn đạt phần lớn yêu cầu; còn vài kỹ năng cần nâng lên ngưỡng." },
-  { code: "average", label: "Trung bình", range: "40% đến dưới 60%", text: "Bạn đạt khoảng một nửa yêu cầu của nghề." },
-  { code: "low_fit", label: "Ít phù hợp", range: "20% đến dưới 40%", text: "Bạn mới đạt một phần nhỏ yêu cầu; nhiều kỹ năng chưa đạt ngưỡng hoặc chưa học." },
-  { code: "not_fit", label: "Không phù hợp", range: "dưới 20%", text: "Hầu hết yêu cầu của nghề chưa đạt hoặc chưa học." },
-  { code: "insufficient_data", label: "Chưa đủ dữ liệu", range: "dưới một nửa có điểm", text: "Chưa tới một nửa yêu cầu của nghề có điểm để so sánh (phần lớn còn sắp học hoặc chương trình chưa đo), nên chưa xếp mức." },
+export const FIT_LABELS: Record<FitLevel, string> = {
+  very_fit: "Rất phù hợp", fit: "Phù hợp", average: "Trung bình", low_fit: "Ít phù hợp", not_fit: "Không phù hợp", insufficient_data: "Chưa đủ dữ liệu",
+};
+/**
+ * "Thang mức phù hợp" of the gap page: the five levels only, like "Thang mức năng lực" (2026-10-22;
+ * "Chưa đủ dữ liệu" is no level and is explained under the scale when it is the student's).
+ */
+export const FIT_SCALE: readonly { code: Exclude<FitLevel, "insufficient_data">; label: string; range: string; text: string }[] = [
+  { code: "very_fit", label: FIT_LABELS.very_fit, range: "từ 90%", text: "Bạn đã đạt gần hết kỹ năng mà nghề này yêu cầu." },
+  { code: "fit", label: FIT_LABELS.fit, range: "80% đến dưới 90%", text: "Bạn đạt phần lớn yêu cầu; còn vài kỹ năng cần nâng lên ngưỡng." },
+  { code: "average", label: FIT_LABELS.average, range: "62,5% đến dưới 80%", text: "Bạn đạt hơn nửa yêu cầu; một số kỹ năng còn dưới ngưỡng hoặc chưa học." },
+  { code: "low_fit", label: FIT_LABELS.low_fit, range: "50% đến dưới 62,5%", text: "Bạn đạt khoảng một nửa yêu cầu; nhiều kỹ năng cần nâng lên ngưỡng." },
+  { code: "not_fit", label: FIT_LABELS.not_fit, range: "dưới 50%", text: "Bạn đạt chưa tới một nửa yêu cầu; phần lớn kỹ năng chưa đạt ngưỡng hoặc chưa học." },
 ];
-export const fitLabelOf = (career: Pick<CareerResult, "fit" | "dataShare">) => FIT_SCALE.find((item) => item.code === fitLevelOf(career))!.label;
-/** A fit share as a whole percent rounded DOWN, like the scores: 79,96% reads 79%, never 80% under Khá phù hợp. */
-export const fitPercent = (share: number) => `${Math.floor(share * 100 + 1e-9).toLocaleString("vi-VN")}%`;
+export const fitLabelOf = (career: Pick<CareerResult, "fit" | "dataShare">) => FIT_LABELS[fitLevelOf(career)];
+/** Ramp step of a fit level, like levelStep (5 = Rất phù hợp … 1 = Không phù hợp; 0 = Chưa đủ dữ liệu). */
+export function fitStep(level: FitLevel): 0 | 1 | 2 | 3 | 4 | 5 {
+  return level === "insufficient_data" ? 0 : (5 - FIT_SCALE.findIndex((item) => item.code === level)) as 1 | 2 | 3 | 4 | 5;
+}
+/** A fit share as a percent shown like a score: rounded down (79,96% reads 79%), one decimal from 62,5% to 63%. */
+export const fitPercent = (share: number) => `${formatScore(share * 100)}%`;
 
 export function eligibilityDisplay(eligibility: Eligibility, missing: { code: string; name: string | null }[]): { tone: StatusTone; glyph: string; text: string } {
   if (eligibility === "eligible") return { tone: "pass", glyph: "✓", text: "Đủ điều kiện đăng ký" };

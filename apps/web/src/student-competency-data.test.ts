@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, confidentStrengths, countAxis, dataUsedLine, displayLevel, FIT_SCALE, fitLabelOf, fitLevelOf, fitPercent, gapHistory, levelChart, levelSummary, levelText, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
+  aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, confidentStrengths, countAxis, dataUsedLine, displayLevel, FIT_SCALE, fitLabelOf, fitLevelOf, fitPercent, fitStep, gapHistory, levelChart, levelSummary, levelText, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
   gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isPreconditionError, PRIORITY_LABELS, levelStep, mapAiOutput, missingRequirements, missingRequirementsMessage, modelLabel, plansFor, skillGroupKeys,
   scoreDifference, shouldPoll, sortRequirements, termLabel, EMPTY_SKILL_FILTERS,
   careerThresholdsLine, chartLevelLabel, currentImprovements, LEVEL_SCALE, levelOfScore, withCurrentLevels,
@@ -94,21 +94,24 @@ describe("a skill in several competency groups (2026-10-22)", () => {
   });
 });
 
-describe("fit scale (2026-10-21)", () => {
-  it("lists the four fit levels with their bands and shows a share rounded down", () => {
+describe("fit scale (2026-10-22: the bounds of the competency levels)", () => {
+  it("lists the five fit levels with their bands and shows a share like a score", () => {
+    // Only the levels: "Chưa đủ dữ liệu" is no level, like Sắp học on the competency scale.
     expect(FIT_SCALE.map((item) => [item.code, item.label, item.range])).toEqual([
-      ["very_fit", "Rất phù hợp", "từ 80% yêu cầu"], ["fit", "Phù hợp", "60% đến dưới 80%"], ["average", "Trung bình", "40% đến dưới 60%"],
-      ["low_fit", "Ít phù hợp", "20% đến dưới 40%"], ["not_fit", "Không phù hợp", "dưới 20%"], ["insufficient_data", "Chưa đủ dữ liệu", "dưới một nửa có điểm"],
+      ["very_fit", "Rất phù hợp", "từ 90%"], ["fit", "Phù hợp", "80% đến dưới 90%"], ["average", "Trung bình", "62,5% đến dưới 80%"],
+      ["low_fit", "Ít phù hợp", "50% đến dưới 62,5%"], ["not_fit", "Không phù hợp", "dưới 50%"],
     ]);
-    // The engine's fitCodeOf bands (steps of 20%), read from the stored fit and data share.
-    expect([0.8, 0.7999, 0.6, 0.5999, 0.4, 0.3999, 0.2, 0.1999, 0].map((fit) => fitLevelOf({ fit, dataShare: 1 })))
+    // The engine's fitCodeOf bands (90/80/62,5/50%), read from the stored fit and data share.
+    expect([0.9, 0.8999, 0.8, 0.7999, 0.625, 0.6249, 0.5, 0.4999, 0].map((fit) => fitLevelOf({ fit, dataShare: 1 })))
       .toEqual(["very_fit", "fit", "fit", "average", "average", "low_fit", "low_fit", "not_fit", "not_fit"]);
     expect([fitLevelOf({ fit: 1, dataShare: 0.49 }), fitLevelOf({ fit: 1, dataShare: 0.5 }), fitLevelOf({ fit: null, dataShare: 1 })])
       .toEqual(["insufficient_data", "very_fit", "insufficient_data"]);
-    // A result stored with the earlier labels (Khá phù hợp, 0,58) reads the new scale.
-    expect(fitLabelOf(fixtureResult.career!)).toBe("Trung bình");
+    expect((["very_fit", "fit", "average", "low_fit", "not_fit", "insufficient_data"] as const).map(fitStep)).toEqual([5, 4, 3, 2, 1, 0]);
+    // A result stored with the earlier labels (Khá phù hợp, 0,58) reads the current scale.
+    expect(fitLabelOf(fixtureResult.career!)).toBe("Ít phù hợp");
     expect(fitPercent(0.7996)).toBe("79%");
     expect(fitPercent(0.58)).toBe("58%");
+    expect(fitPercent(0.627)).toBe("62,7%");
     expect(fitPercent(0)).toBe("0%");
   });
 });

@@ -113,6 +113,8 @@
 .scomp-page .scomp-legend summary { cursor: pointer; font-size: 13px; font-weight: 600; }
 .scomp-page .scomp-legend ul { display: grid; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; }
 .scomp-page .scomp-legend li { display: grid; grid-template-columns: 180px 120px minmax(0, 1fr); gap: 12px; align-items: center; font-size: 13px; }
+/* The fit scale's first column holds a badge and "Mức của bạn" on one line. */
+.scomp-page .scomp-fit-legend li { grid-template-columns: 240px 130px minmax(0, 1fr); }
 .scomp-page .scomp-legend li > span:last-child { color: var(--sw-muted); }
 .scomp-page .scomp-legend-range { color: var(--sw-muted); font-size: 12px; }
 .scomp-page .scomp-legend > p { margin-top: 10px; }
@@ -406,3 +408,5 @@
 @media (prefers-reduced-motion: reduce) {
   .scomp-page * { scroll-behavior: auto !important; transition: none !important; }
 }
+/* "Mức phù hợp" of the gap page: percent and pip badge stacked like the competency score card (2026-10-22). */
+.scomp-page .scomp-fit-score { display: grid; gap: 4px; }

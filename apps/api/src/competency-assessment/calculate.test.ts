@@ -110,8 +110,8 @@ describe("formula helpers (spec §7.3, §7.5, §7.6)", () => {
     expect(fitCredit("not_studied", null, 70)).toBe(0);
     expect(fitCredit("upcoming", null, 70)).toBeNull();
     expect(fitCredit("no_data", null, 70)).toBeNull();
-    // One scale in steps of 20% (2026-10-21); a value a hair under a floor from float noise still reaches it.
-    expect([0.8, 0.7999, 0.6, 0.5999, 0.4, 0.3999, 0.2, 0.1999, 0, 0.8 - 1e-12].map((fit) => fitCodeOf(fit, 1)))
+    // The bounds of the competency levels (2026-10-22): 90/80/62,5/50%; a value a hair under a floor from float noise still reaches it.
+    expect([0.9, 0.8999, 0.8, 0.7999, 0.625, 0.6249, 0.5, 0.4999, 0, 0.9 - 1e-12].map((fit) => fitCodeOf(fit, 1)))
       .toEqual(["very_fit", "fit", "fit", "average", "average", "low_fit", "low_fit", "not_fit", "not_fit", "very_fit"]);
     expect([fitCodeOf(1, 0.49), fitCodeOf(1, 0.5), fitCodeOf(null, 1)]).toEqual(["insufficient_data", "very_fit", "insufficient_data"]);
   });
@@ -339,7 +339,7 @@ describe("career gaps and fit (spec §7.5–§7.7)", () => {
     const fit = (2 * 1 + 1 * 0.5 * (56 - 40) / 22.5 + 2 * 0.5 * (47 - 40) / 40 + 0) / 6;
     expect(result.career!.fit).toBeCloseTo(fit, 4);
     expect(result.career).toMatchObject({
-      fitCode: "average", fitLabel: "Trung bình", dataShare: 0.75,
+      fitCode: "not_fit", fitLabel: "Không phù hợp", dataShare: 0.75,
       summaryText: "Đạt 1/6 kỹ năng · 1 sắp học · 1 chưa đủ dữ liệu", dataText: "5/6 kỹ năng có dữ liệu",
       counts: { total: 6, met: 1, below: 2, upcoming: 1, notStudied: 1, noData: 1, withData: 5 },
       weightedMeanScore: 65.2, weightedMeanCount: 3,
@@ -411,7 +411,7 @@ describe("career gaps and fit (spec §7.5–§7.7)", () => {
     }));
     expect(allC.career!.requirements.every((item) => item.status === "below")).toBe(true);
     expect(allC.career!.fit!).toBeLessThan(0.5);
-    expect(allC.career!).toMatchObject({ fitCode: "low_fit", fitLabel: "Ít phù hợp" });
+    expect(allC.career!).toMatchObject({ fitCode: "not_fit", fitLabel: "Không phù hợp" });
   });
 
   it("handles a requirement without a skill and a deleted career", () => {

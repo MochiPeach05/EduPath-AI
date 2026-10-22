@@ -59,13 +59,18 @@ export const CAREER_COEFFICIENTS = { required: 2, preferred: 1 } as const;
 export const FIT_BELOW_MAX_CREDIT = 0.5;
 export const FIT_BELOW_FLOOR = 40;
 /**
- * Fit levels in steps of 20% (user, 2026-10-21: "một thang nhất quán … Rất phù hợp / Phù hợp / Trung
- * bình / Ít phù hợp / Không phù hợp"; before: Phù hợp ≥ 0,8, Khá phù hợp ≥ 0,5, Cần bổ sung nhiều).
- * The level is read from the stored (rounded) fit and data share, and the page and the AI prompt
- * read it the same way for older results, so CALC_VERSION (which also dates the graduation advice)
- * was not bumped. Mirrored in apps/web/src/student-competency-data.ts (fitLevelOf).
+ * Fit levels on the bounds of the competency levels (user, 2026-10-22: "Đồng bộ cái mức phù hợp bên
+ * này thành tương tự của phần đánh giá năng lực", same bounds and look): Rất phù hợp ≥ 90%, Phù hợp
+ * ≥ 80%, Trung bình ≥ 62,5%, Ít phù hợp ≥ 50%, Không phù hợp below. Before: steps of 20% (2026-10-21,
+ * "Rất phù hợp / Phù hợp / Trung bình / Ít phù hợp / Không phù hợp"), and earlier Phù hợp ≥ 0,8, Khá
+ * phù hợp ≥ 0,5, Cần bổ sung nhiều. The level is read from the stored (rounded) fit and data share,
+ * and the page and the AI prompt read it the same way for older results, so CALC_VERSION was not
+ * bumped. Mirrored in apps/web/src/student-competency-data.ts (fitLevelOf).
  */
-export const FIT_LABEL_THRESHOLDS = { veryFit: 0.8, fit: 0.6, average: 0.4, lowFit: 0.2 } as const;
+export const FIT_LABEL_THRESHOLDS = {
+  veryFit: LEVEL_THRESHOLDS.excellent / 100, fit: LEVEL_THRESHOLDS.proficient / 100,
+  average: LEVEL_THRESHOLDS.good / 100, lowFit: LEVEL_THRESHOLDS.basic / 100,
+} as const;
 /** Below this share of coefficients with data the fit label is "Chưa đủ dữ liệu". */
 export const FIT_MIN_DATA_SHARE = 0.5;
 export const FIT_LABELS: Record<FitCode, string> = {
