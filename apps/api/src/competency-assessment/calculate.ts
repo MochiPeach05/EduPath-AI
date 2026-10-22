@@ -267,7 +267,7 @@ function assess(inputs: AssessmentInputs): Assessment {
     const code = courseKey(course.code);
     const record = records.get(code) ?? null;
     const state: CourseState = record?.state ?? "not_taken";
-    const specialtyClass = classifyCurriculumSpecialty(course.specialty);
+    const specialtyClass = classifyCurriculumSpecialty(course.specialty, inputs.student.cohortCode);
     if (specialtyClass.kind === "common" && !specialtyClass.known) unknownSpecialtyValues.add(course.specialty.trim());
     const plannedFromPlan = planTerms.get(code) ?? null;
     const plannedFromCurriculum = curriculumTermCode(admissionYear, course.studyYear, course.semester);

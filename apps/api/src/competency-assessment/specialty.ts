@@ -13,6 +13,8 @@ type SpecialtyInfo = {
   curriculumName: string;
   /** Training-plan section label (display only; applicability never uses it). */
   planSectionLabel: string;
+  /** Cohorts whose students can choose it; every cohort when absent. */
+  cohorts?: readonly string[];
 };
 
 /** Specialty mapping (spec §4). The web keeps a copy of the labels. */
@@ -20,6 +22,8 @@ export const SPECIALTIES: readonly SpecialtyInfo[] = [
   { code: "CNPM", label: "Công nghệ phần mềm", programCode: "7480201-03", curriculumName: "cong nghe phan mem", planSectionLabel: "Chuyên ngành CNPM" },
   { code: "CNDL", label: "Công nghệ dữ liệu", programCode: "7480201-02", curriculumName: "cong nghe du lieu", planSectionLabel: "Chuyên ngành CNDL" },
   { code: "TTNT", label: "Trí tuệ nhân tạo", programCode: "7480201-04", curriculumName: "tri tue nhan tao", planSectionLabel: "Chuyên ngành Trí tuệ Nhân tạo" },
+  // K27 only (2026-10-23): the K27 standard 71K27CNTT_7480201-01 and the K27 CTĐT courses "An ninh Mạng và IoT".
+  { code: "ANM", label: "An ninh Mạng và IoTs", programCode: "7480201-01", curriculumName: "an ninh mang va iot", planSectionLabel: "Chuyên ngành An ninh Mạng và IoT", cohorts: ["K27"] },
 ];
 
 export const isSpecialtyCode = (value: unknown): value is SpecialtyCode =>
@@ -27,6 +31,12 @@ export const isSpecialtyCode = (value: unknown): value is SpecialtyCode =>
 
 export const specialtyLabel = (code: SpecialtyCode | null): string | null =>
   SPECIALTIES.find((item) => item.code === code)?.label ?? null;
+
+/** Whether a student of the cohort can choose the specialty (An ninh Mạng và IoTs: K27 only). */
+export function specialtyOffered(code: SpecialtyCode, cohortCode: string | null | undefined): boolean {
+  const item = SPECIALTIES.find((entry) => entry.code === code);
+  return Boolean(item) && (!item!.cohorts || item!.cohorts.includes((cohortCode ?? "").trim().toUpperCase()));
+}
 
 /** Folded curriculum specialty values that mean "học phần chung". */
 const COMMON_SPECIALTY_VALUES: readonly string[] = ["", "0", "tu chon chuyen nganh", "hoc phan thay the do an tot nghiep"];
@@ -37,13 +47,15 @@ export type CurriculumSpecialtyClass =
 
 /**
  * Classifies curriculum_courses.specialty. '', '0', 'Tự chọn Chuyên ngành' and
- * 'Học phần thay thế Đồ án tốt nghiệp' are common; the three specialty names map
- * to their codes; any other value is treated as common with known=false (warn).
+ * 'Học phần thay thế Đồ án tốt nghiệp' are common; the names of the specialties the cohort
+ * offers map to their codes ("An ninh Mạng và IoT" only with cohort K27); any other value is
+ * treated as common with known=false (warn).
  */
-export function classifyCurriculumSpecialty(raw: string): CurriculumSpecialtyClass {
+export function classifyCurriculumSpecialty(raw: string, cohortCode?: string | null): CurriculumSpecialtyClass {
   const value = fold(raw);
   if (COMMON_SPECIALTY_VALUES.includes(value) || value.startsWith("hoc phan thay the")) return { kind: "common", known: true };
-  const match = SPECIALTIES.find((item) => value === item.curriculumName || value === fold(item.code) || value.includes(item.curriculumName));
+  const match = SPECIALTIES.find((item) => specialtyOffered(item.code, cohortCode) &&
+    (value === item.curriculumName || value === fold(item.code) || value.includes(item.curriculumName)));
   return match ? { kind: "specialty", code: match.code } : { kind: "common", known: false };
 }
 
@@ -57,7 +69,7 @@ function specialtyAtStart(text: string): SpecialtyCode | null {
   return match?.code ?? null;
 }
 
-/** Specialty of a graduation standard: a code, "other" (e.g. 7480201-01) or null for a general standard. */
+/** Specialty of a graduation standard: a code (7480201-01 is ANM, K27 only), "other" for an unknown program code, or null for a general standard. */
 export function standardSpecialty(data: { specialty: string; classBlock: string; standardCode: string }): SpecialtyCode | "other" | null {
   const text = `${data.specialty} ${data.classBlock} ${data.standardCode}`;
   const codes = [...text.matchAll(/(?<!\d)(\d{7}-\d{2})(?!\d)/g)].map((match) => match[1]!);
@@ -117,7 +129,7 @@ type SpecialtyCounts = Record<SpecialtyCode, number>;
 
 /** Passed (or MT) mandatory specialty courses per specialty. */
 export function specialtyCounts(courses: readonly { type: string; specialty: CurriculumSpecialtyClass; passed: boolean }[]): SpecialtyCounts {
-  const counts: SpecialtyCounts = { CNPM: 0, CNDL: 0, TTNT: 0 };
+  const counts: SpecialtyCounts = { CNPM: 0, CNDL: 0, TTNT: 0, ANM: 0 };
   for (const course of courses) {
     if (course.passed && course.specialty.kind === "specialty" && /^BB/i.test(course.type.trim())) counts[course.specialty.code]++;
   }

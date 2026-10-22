@@ -7,7 +7,7 @@ import { isFailLetter } from "./transcript-results";
 
 export type StudentProfile = {
   careerPositionId?: string | null; careerPosition?: CareerSelection | null;
-  /** Chuyên ngành (CNPM/CNDL/TTNT); null = chưa xác định, absent on older APIs. */
+  /** Chuyên ngành (CNPM/CNDL/TTNT; K27 còn có ANM); null = chưa xác định, absent on older APIs. */
   specialty?: string | null;
   name: string; studentCode: string | null; cohortCode: string | null;
   className: string | null; cohortYear: number | null; currentSemester: number | null;

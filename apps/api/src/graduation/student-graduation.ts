@@ -54,11 +54,11 @@ async function readCohortCurriculumCourses(db: Db, cohortCode: string): Promise<
 }
 
 /** Same rule as the competency assessment: suggested only when the passed mandatory specialty courses point to one specialty. */
-function specialtySuggestionFor(courses: readonly CurriculumCourseInput[], transcript: TranscriptData): StudentGraduationSpecialtySuggestion | null {
+function specialtySuggestionFor(courses: readonly CurriculumCourseInput[], transcript: TranscriptData, cohortCode: string | null): StudentGraduationSpecialtySuggestion | null {
   if (!courses.length) return null;
   const records = transcriptCourses(transcript);
   const suggestion = suggestSpecialty(specialtyCounts(uniqueCurriculumCourses(courses).map((course) => ({
-    type: course.type, specialty: classifyCurriculumSpecialty(course.specialty),
+    type: course.type, specialty: classifyCurriculumSpecialty(course.specialty, cohortCode),
     passed: isPassedState(records.get(courseKey(course.code))?.state ?? "not_taken"),
   }))));
   return suggestion && { code: suggestion.code, label: suggestion.label, count: suggestion.passedCount };
@@ -92,7 +92,7 @@ export async function readStudentGraduation(db: Db, userId: string): Promise<Stu
     transcript: transcript && { version: transcript.version, updatedAt: transcript.updatedAt },
     evaluation,
     fingerprint: standard && evaluation ? graduationFingerprint({ profile, standard, evaluation }) : null,
-    specialtySuggestion: resolution === "specialty_unset" && transcript ? specialtySuggestionFor(curriculumCourses, transcript.data) : null,
+    specialtySuggestion: resolution === "specialty_unset" && transcript ? specialtySuggestionFor(curriculumCourses, transcript.data, profile.cohortCode) : null,
   };
 }
 

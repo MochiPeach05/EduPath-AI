@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { Icon } from "./student-icons";
 import { type CareerSelection } from "./career-types";
 import StudentCareerExplorer from "./StudentCareerExplorer";
-import { SPECIALTIES, specialtyLabel } from "./competency-assessment-types";
+import { specialtiesFor, specialtyLabel } from "./competency-assessment-types";
 import "./student-records.css";
 type EditableStudentProfile = {
   className: string | null;
@@ -12,6 +12,8 @@ type EditableStudentProfile = {
   careerPosition?: CareerSelection | null;
   /** Absent until the API returns it; the field is hidden then so saving keeps working. */
   specialty?: string | null;
+  /** Decides which specialties are offered (An ninh Mạng và IoTs: K27 only). */
+  cohortCode?: string | null;
 };
 async function updateProfile(input: { interests?: string; careerPositionId: string | null; specialty?: string | null }) {
   const res = await fetch("/api/student/profile", {
@@ -26,6 +28,8 @@ async function updateProfile(input: { interests?: string; careerPositionId: stri
     throw new Error(
       body.error === "career_unavailable"
         ? "Vị trí vừa bị xóa khỏi danh mục. Hãy chọn vị trí khác hoặc bỏ chọn."
+        : body.error === "specialty_unavailable"
+          ? "Chuyên ngành này không áp dụng cho khóa của bạn. Hãy chọn chuyên ngành khác."
         : res.status === 401
           ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
           : res.status === 400
@@ -147,7 +151,7 @@ export default function StudentProfileEditor({
             {supportsSpecialty && <label>
               Chuyên ngành
               <select value={draft.specialty} onChange={(e) => setDraft({ ...draft, specialty: e.target.value })}>
-                {SPECIALTIES.map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}
+                {specialtiesFor(profile.cohortCode).map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}
                 <option value="">Chưa xác định</option>
               </select>
               <small>Cùng với khóa, dùng để chọn tiêu chuẩn xét tốt nghiệp của bạn và học phần chuyên ngành khi đánh giá năng lực.</small>

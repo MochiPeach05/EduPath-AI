@@ -8,7 +8,7 @@ import type { TranscriptData } from "../student/transcript-parser.js";
 /* ------------------------------------------------------------------------ */
 
 /** student_profiles.specialty (migration 028). NULL = "Chưa xác định". */
-export type SpecialtyCode = "CNPM" | "CNDL" | "TTNT";
+export type SpecialtyCode = "CNPM" | "CNDL" | "TTNT" | "ANM";
 
 /** One curriculum_courses row of the active curriculum's current revision (ORDER BY position, code). */
 export type CurriculumCourseInput = {

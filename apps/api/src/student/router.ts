@@ -9,6 +9,7 @@ import { parseTranscript, TranscriptError, type TranscriptData } from "./transcr
 import { enqueueTranscript, expireJobs, jobColumns, runAfterTranscriptImport, type TranscriptImportOptions } from "./transcript-jobs.js";
 import { recordTranscriptConsent, TRANSCRIPT_POLICY_VERSION, withdrawTranscriptConsent } from "./consent.js";
 import { deleteCompetencyData } from "../competency-assessment/repository.js";
+import { specialtyOffered } from "../competency-assessment/specialty.js";
 import { deleteGraduationAdvice } from "../graduation/advice/jobs.js";
 
 const transcriptColumns = `version, filename, file_size AS "fileSize", parsed_data AS data,
@@ -37,7 +38,7 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
       careerGoal: z.string().trim().max(2000).nullable().optional(),
       careerPositionId: z.uuid().nullable().optional(),
       currentSemester: z.number().int().min(1).max(3).nullable().optional(),
-      specialty: z.enum(["CNPM", "CNDL", "TTNT"]).nullable().optional()
+      specialty: z.enum(["CNPM", "CNDL", "TTNT", "ANM"]).nullable().optional()
     }).strict().safeParse(req.body);
     if (!input.success) { res.status(400).json({ error: "invalid_profile" }); return; }
     const client = await pool!.connect();
@@ -58,9 +59,14 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
         }
         await client.query("UPDATE student_profiles SET career_position_id=$2 WHERE user_id=$1", [req.session.user!.userId, selected]);
       }
-      // Absent keeps the specialty, null clears it ("Chưa xác định").
-      if (input.data.specialty !== undefined)
+      // Absent keeps the specialty, null clears it ("Chưa xác định"). An ninh Mạng và IoTs is offered to K27 only.
+      if (input.data.specialty !== undefined) {
+        if (input.data.specialty) {
+          const cohort = await client.query<{ cohort_code: string | null }>("SELECT cohort_code FROM student_profiles WHERE user_id=$1", [req.session.user!.userId]);
+          if (!specialtyOffered(input.data.specialty, cohort.rows[0]?.cohort_code)) throw new TranscriptError("specialty_unavailable", 409);
+        }
         await client.query("UPDATE student_profiles SET specialty=$2 WHERE user_id=$1", [req.session.user!.userId, input.data.specialty]);
+      }
       await client.query("COMMIT");
       res.json({ saved: true });
     } catch (error) { await client.query("ROLLBACK"); throw error; }

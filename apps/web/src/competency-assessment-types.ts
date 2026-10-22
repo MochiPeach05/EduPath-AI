@@ -3,14 +3,21 @@
 // with the engine: the page only reads these shapes, it never recomputes them.
 
 /** student_profiles.specialty. null = "Chưa xác định". */
-export type SpecialtyCode = "CNPM" | "CNDL" | "TTNT";
+export type SpecialtyCode = "CNPM" | "CNDL" | "TTNT" | "ANM";
 
-/** Labels copied from the engine's specialty mapping (spec §4). */
-export const SPECIALTIES: readonly { code: SpecialtyCode; label: string }[] = [
+/** Labels copied from the engine's specialty mapping (spec §4); `cohorts` limits who can choose it (absent: everyone). */
+export const SPECIALTIES: readonly { code: SpecialtyCode; label: string; cohorts?: readonly string[] }[] = [
   { code: "CNPM", label: "Công nghệ phần mềm" },
   { code: "CNDL", label: "Công nghệ dữ liệu" },
   { code: "TTNT", label: "Trí tuệ nhân tạo" },
+  { code: "ANM", label: "An ninh Mạng và IoTs", cohorts: ["K27"] },
 ];
+
+/** The specialties a student of the cohort can choose (An ninh Mạng và IoTs: K27 only). */
+export function specialtiesFor(cohortCode: string | null | undefined) {
+  const cohort = (cohortCode ?? "").trim().toUpperCase();
+  return SPECIALTIES.filter((item) => !item.cohorts || item.cohorts.includes(cohort));
+}
 
 export function specialtyLabel(code: string | null | undefined): string {
   return SPECIALTIES.find((item) => item.code === code)?.label ?? "Chưa xác định";

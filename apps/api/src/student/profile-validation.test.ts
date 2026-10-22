@@ -49,6 +49,17 @@ describe("student specialty", () => {
     await request(app).patch("/student/profile").set("Origin", "https://edupath.example").send({ ...profile, specialty }).expect(200);
     expect(query).toHaveBeenCalledWith("UPDATE student_profiles SET specialty=$2 WHERE user_id=$1", ["student-id", specialty]);
   });
+  it.each([["K27", 200], ["K29", 409], [null, 409]] as const)("saves An ninh Mạng và IoTs only in K27 (cohort %s)", async (cohort, status) => {
+    const { app, query } = setup();
+    query.mockImplementation(async (sql: string) => String(sql).startsWith("SELECT cohort_code")
+      ? { rowCount: 1, rows: [{ cohort_code: cohort }] } : { rowCount: 1, rows: [] });
+    const response = await request(app).patch("/student/profile").set("Origin", "https://edupath.example").send({ ...profile, specialty: "ANM" }).expect(status);
+    expect(query.mock.calls.some(([sql]) => String(sql).startsWith("UPDATE student_profiles SET specialty"))).toBe(status === 200);
+    if (status === 409) {
+      expect(response.body).toEqual({ error: "specialty_unavailable" });
+      expect(query).toHaveBeenCalledWith("ROLLBACK");
+    }
+  });
   it("keeps the stored specialty when the field is absent", async () => {
     const { app, query } = setup();
     await request(app).patch("/student/profile").set("Origin", "https://edupath.example").send(profile).expect(200);

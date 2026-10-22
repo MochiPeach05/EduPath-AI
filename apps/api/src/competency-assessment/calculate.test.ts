@@ -727,6 +727,20 @@ describe("data warnings (spec §7.10)", () => {
     expect(calculateAssessment(odd).warnings.find((warning) => warning.code === "specialty_value_unknown")?.details).toEqual(["An ninh Mạng và IoTs"]);
   });
 
+  it("treats the 'An ninh Mạng và IoT' courses of a K27 CTĐT as the ANM specialty (2026-10-23)", () => {
+    const k27 = (specialty: SpecialtyCode | null) => {
+      const inputs = syntheticInputs({ specialty });
+      inputs.student = { ...inputs.student, cohortCode: "K27" };
+      inputs.curriculum.courses.push({ code: "71ITNW40503", name: "Quản trị Mạng", credits: 3, type: "BB", block: "", specialty: "An ninh Mạng và IoT", semester: 1, studyYear: 4 });
+      return calculateAssessment(inputs);
+    };
+    const cnpm = k27("CNPM"), anm = k27("ANM");
+    expect(cnpm.warnings.map((warning) => warning.code)).not.toContain("specialty_value_unknown");
+    expect(cnpm.courses.find((course) => course.code === "71ITNW40503")).toMatchObject({ specialty: "ANM", applicable: false });
+    expect(anm.courses.find((course) => course.code === "71ITNW40503")).toMatchObject({ specialty: "ANM", applicable: true });
+    expect(anm.warnings.map((warning) => warning.code)).not.toContain("specialty_not_in_curriculum");
+  });
+
   it("reports a credit mismatch when printed results need no inference", () => {
     const terms = mapTerms((row) => [row[0], row[1], row[2] ?? null, row[3] ?? null, row[4] ?? null, row[4] === "F" ? "Không đạt" : row[2] !== undefined && row[4] !== "MT" ? "Đạt" : null]);
     terms[5]!.summaries = [["Tổng số tín chỉ tích lũy", "30"]];
