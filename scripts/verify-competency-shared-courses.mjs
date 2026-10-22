@@ -208,6 +208,42 @@ try {
   assert.equal(await count("ad_comp_course_configs WHERE status='active'"), appliedBeforeImport - 1);
   assert.equal(await count("ad_comp_events WHERE note=$1 AND entity_key=$2", [note, onlyK29.courseId]), 1);
   checks.push(`a new K29 revision without ${onlyK29.code} archives that course's configuration; ${sharedK29.code}, which another cohort's newest revision still has, stays applied`);
+
+  // 041 (2026-10-23): a spelling of the same code ("Anh Văn 1" next to "Anh văn 1 (AV1)", "Giáo dục quốc phòng 1"
+  // 0 TC next to "GDQP1: …" 3 TC) is merged into the configured course and joins it on a later import.
+  for (const file of ["040_competency_skill_groups.sql", "041_competency_course_aliases.sql"])
+    await pool.query(`BEGIN; ${inSchema(await readFile("apps/api/migrations/" + file, "utf8"))} COMMIT;`);
+  const target = (await q(`SELECT x.id,x.code,x.name FROM ad_comp_courses x JOIN ad_comp_course_configs cfg ON cfg.course_id=x.id AND cfg.status='active'
+    WHERE EXISTS(SELECT 1 FROM curriculum_courses cc JOIN curricula cu ON cu.current_revision=cc.revision_id WHERE cc.course_id=x.id) ORDER BY x.code LIMIT 1`))[0];
+  // One throwaway K32 revision per row (a revision has a code once).
+  const addRow = async (version) => {
+    const revisionId = randomUUID();
+    await pool.query(`INSERT INTO curriculum_revisions(id,curriculum_id,version,data,source_filename,source_data,source_sha256,change_note)
+      SELECT $1,curriculum_id,$3,data,'audit.xlsx',source_data,source_sha256,'audit' FROM curriculum_revisions WHERE id=$2`, [revisionId, k32, version]);
+    return (await q(`INSERT INTO curriculum_courses(revision_id,code,position,name,credits,course_type,block,specialty,data)
+      VALUES($1,$2,1,$3,0,'BB','x','','{}') RETURNING course_id`, [revisionId, target.code, `${target.name} (biến thể)`]))[0].course_id;
+  };
+  const variant = await addRow(998);
+  assert.notEqual(variant, target.id, "another spelling and other credits are another course before a merge");
+  const proposal = randomUUID();
+  await pool.query(`INSERT INTO ad_comp_ai_suggestions(id,course_id,revision_id,course_code,mode,status,ai_input,prompt_version)
+    VALUES($1,$2,$3,$4,'links','queued','{}','x')`, [proposal, variant, k32, target.code]);
+  const coursesBeforeMerge = await count("ad_comp_courses");
+  await assert.rejects(pool.query("SELECT ad_comp_merge_course($1,$2,'x')", [target.id, variant]), (error) => error.constraint === "course_merge_source_configured");
+  const otherCode = (await q("SELECT id FROM ad_comp_courses WHERE code<>$1 ORDER BY id LIMIT 1", [target.code]))[0].id;
+  await assert.rejects(pool.query("SELECT ad_comp_merge_course($1,$2,'x')", [variant, otherCode]), (error) => error.constraint === "course_merge_other_code");
+  await pool.query("SELECT ad_comp_merge_course($1,$2,$3)", [variant, target.id, "Gộp môn kiểm thử"]);
+  assert.equal(await count("ad_comp_courses"), coursesBeforeMerge - 1, "the merged course is removed");
+  assert.equal(await count("curriculum_courses cc JOIN curriculum_revisions r ON r.id=cc.revision_id WHERE r.version=998 AND cc.course_id=$1", [target.id]), 1,
+    "its curriculum row joins the course");
+  assert.deepEqual((await q("SELECT status,course_id AS \"courseId\" FROM ad_comp_ai_suggestions WHERE id=$1", [proposal]))[0],
+    { status: "cancelled", courseId: target.id }, "its pending AI proposal is cancelled and kept with the course");
+  assert.equal(await count(`ad_comp_events WHERE kind='course' AND entity_key=$1 AND note='Gộp môn kiểm thử'
+    AND snapshot->'mergedCourse'->>'courseId'=$2 AND snapshot->'mergedCourse'->'cohorts'='["K32"]'`, [target.id, variant]), 1, "the course's history notes the merge");
+  assert.equal(await addRow(997), target.id, "importing the merged spelling again joins the course");
+  assert.equal((await q("SELECT name FROM ad_comp_courses WHERE id=$1", [target.id]))[0].name, target.name, "the course keeps its displayed spelling");
+  assert.equal(await count("ad_comp_courses"), coursesBeforeMerge - 1);
+  checks.push(`041 merges a spelling of ${target.code} with other credits into the configured course (not the other way round, never another code): rows and AI proposals follow, the history notes it, and a later import of that spelling joins the course`);
   console.log(checks.map((check) => `PASS ${check}`).join("\n"));
 } finally {
   await pool.end();
