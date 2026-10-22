@@ -7,7 +7,7 @@ import { specialtyLabel, type AiStatus, type AssessmentResult, type AssessmentSt
 import {
   CHART_LEVELS, COMPETENCY_API, CONFIDENCE_LABELS, COURSE_STATE_LABELS, EMPTY_SKILL_FILTERS, FIT_LABELS, FIT_SCALE, LEVEL_COLUMNS, LEVEL_LABELS, LEVEL_SCALE, LEVEL_THRESHOLDS, PRECONDITION_COPY, PRIORITY_LABELS, UNSCORED_STATES,
   aiErrorMessage, aiReasoned, aiStateCopy, bucketSkills, canRegenerate, careerSkillKeys, careerThresholdsLine, chartLevelLabel, confidentStrengths, currentImprovements, courseStanding, dataUsedLine, displayLevel, eligibilityDisplay, errorMessage, filterSkills, fitLevelOf, fitScoreOf, fitStep, formatDateTime,
-  formatNumber, formatPercent, formatScore, gapHistory, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isPreconditionError, levelChart, levelSentence, levelStep, levelSummary, levelText, mapAiOutput, missingRequirements, skillGroupKeys, missingRequirementsMessage, modelLabel,
+  careerSummaryText, formatNumber, formatPercent, formatScore, gapHistory, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isPreconditionError, levelChart, levelSentence, levelStep, levelSummary, levelText, mapAiOutput, missingRequirements, skillGroupKeys, missingRequirementsMessage, modelLabel, needsSelfStudy,
   plansFor, scoreDifference, shouldPoll, skillName, sortRequirements, withCurrentLevels, type ChartLevel, type DisplayLevel, type FitLevel, type LevelBar, type LevelSegment, type MappedAiOutput, type PreconditionError, type SkillFilters, type StatusTone,
 } from "./student-competency-data";
 import { readGraduation } from "./student-graduation-api";
@@ -170,7 +170,7 @@ function Overview({ result }: { result: AssessmentResult }) {
         {career ? <>
           <p className="scomp-score-tags">{fitLevelOf(career) !== "insufficient_data" && <strong className="scomp-fit-label">{formatScore(fitScoreOf(career.requirements))}<small>/100</small></strong>}<FitBadge level={fitLevelOf(career)} /></p>
           <p>{career.nameVi}</p>
-          <p className="scomp-meta">{career.summaryText}</p>
+          <p className="scomp-meta">{careerSummaryText(career)}</p>
           <a className="sw-text-link" href="#skill-gap">Xem khoảng trống kỹ năng <Icon name="arrow" /></a>
         </> : <>
           <strong className="scomp-fit-label">Chưa chọn nghề</strong>
@@ -442,7 +442,8 @@ function SkillRow({ skill, courses, groups }: { skill: SkillResult; courses: Map
           })}</tbody>
         </table>
       </div>
-      {skill.otherSpecialtyCourses.length > 0 && <p className="scomp-meta">Học phần chuyên ngành khác cũng đo kỹ năng này: {skill.otherSpecialtyCourses.join(", ")}</p>}
+      {skill.otherSpecialtyCourses.length > 0 && <p className="scomp-meta">Học phần chuyên ngành khác cũng đo kỹ năng này: {skill.otherSpecialtyCourses
+        .map((code) => (courses.get(code)?.name ? `${courses.get(code)!.name} (${code})` : code)).join(", ")}</p>}
     </div>
   </details></li>;
 }
@@ -524,7 +525,7 @@ function FitScale({ career }: { career: NonNullable<AssessmentResult["career"]> 
     </li>)}</ul>
     <p className="scomp-meta">Cùng ngưỡng với Thang mức năng lực ở trang Đánh giá năng lực.</p>
     {own && <p className="scomp-meta">{own}</p>}
-    <p className="scomp-meta">Cách tính điểm phù hợp: trung bình điểm các kỹ năng của nghề, kỹ năng Bắt buộc tính gấp đôi kỹ năng Ưu tiên; kỹ năng chưa học tính 0 điểm. Kỹ năng sắp học, chưa đủ dữ liệu hoặc chỉ có học phần miễn/công nhận không tính.</p>
+    <p className="scomp-meta">Cách tính điểm phù hợp: trung bình điểm các kỹ năng của nghề, kỹ năng Bắt buộc tính gấp đôi kỹ năng Ưu tiên; kỹ năng chưa học tính 0 điểm. Kỹ năng sắp học, cần tự học, chưa đủ dữ liệu hoặc chỉ có học phần miễn/công nhận không tính.</p>
   </details>;
 }
 
@@ -533,7 +534,7 @@ function GapSummary({ result }: { result: AssessmentResult }) {
   if (!career) return <Section id="sgap-summary" title="Mức phù hợp với nghề mục tiêu">
     <div className="sw-empty scomp-empty"><h3>Bạn chưa chọn nghề mục tiêu</h3><p>Khoảng trống kỹ năng được tính so với yêu cầu của nghề mục tiêu. Kết quả này được tính khi hồ sơ chưa có nghề mục tiêu; hãy chọn nghề rồi bấm “Đánh giá lại” để biết kỹ năng nào đã đạt, kỹ năng nào còn thiếu và học phần nên học.</p><a className="sw-outline" href="#profile">Chọn nghề mục tiêu</a></div>
   </Section>;
-  const missing = sortRequirements(career.requirements).filter((req) => req.status === "below" || req.status === "not_studied");
+  const missing = sortRequirements(career.requirements).filter((req) => req.status === "below" || req.status === "not_studied" || needsSelfStudy(req));
   const level = fitLevelOf(career);
   return <Section id="sgap-summary" title="Mức phù hợp với nghề mục tiêu" description={<>So với yêu cầu của nghề <strong>{career.nameVi}</strong> ({career.nameEn}).{career.deleted && " Nghề này đã ngừng sử dụng trong danh mục; bạn nên chọn nghề khác."}</>}>
     <div className="scomp-fit-summary">
@@ -542,7 +543,7 @@ function GapSummary({ result }: { result: AssessmentResult }) {
         <p className="scomp-score-tags"><FitBadge level={level} /></p>
       </div>
       <ul className="scomp-fit-facts">
-        <li>{career.summaryText}</li>
+        <li>{careerSummaryText(career)}</li>
         <li>{career.dataText}</li>
       </ul>
     </div>
@@ -556,7 +557,7 @@ function GapSummary({ result }: { result: AssessmentResult }) {
       </li>)}</ul>
         : <p className={career.requirements.length ? "scomp-meta sg-status-pass" : "scomp-meta"}>{career.requirements.length ? "✓ Bạn đã đạt mọi kỹ năng có dữ liệu của nghề này." : "Nghề này chưa có yêu cầu kỹ năng trong danh mục nên chưa so sánh được."}</p>}
     </div>
-    <p className="scomp-meta">{careerThresholdsLine(career)} Kỹ năng sắp học hoặc chưa đủ dữ liệu không được tính vào mức phù hợp.</p>
+    <p className="scomp-meta">{careerThresholdsLine(career)} Kỹ năng sắp học, cần tự học hoặc chưa đủ dữ liệu không được tính vào mức phù hợp.</p>
     <FitScale career={career} />
   </Section>;
 }
@@ -566,13 +567,17 @@ function GapTable({ result }: { result: AssessmentResult }) {
   const career = result.career;
   if (!career) return null;
   const rows = sortRequirements(career.requirements).filter((req) => !gapsOnly || isGap(req));
+  // The courses of another specialty that teach a "Cần tự học" skill, as "Name (CODE)".
+  const names = new Map(result.courses.map((course) => [course.code, course.name]));
+  const otherCourses = (req: CareerRequirementResult) => (result.skills.find((skill) => skill.key === req.skillKey)?.otherSpecialtyCourses ?? [])
+    .map((code) => (names.get(code) ? `${names.get(code)} (${code})` : code));
   return <Section id="scomp-career" title="Báo cáo chi tiết khoảng trống kỹ năng" description="Từng kỹ năng nghề yêu cầu: điểm hiện tại của bạn, ngưỡng cần đạt, mức thiếu hụt và trạng thái.">
     <label className="scomp-toggle"><input type="checkbox" checked={gapsOnly} onChange={(event) => setGapsOnly(event.target.checked)} />Chỉ kỹ năng chưa đạt</label>
     <div className="scomp-table-scroll" tabIndex={0} role="region" aria-labelledby="scomp-career-caption">
       <table className="scomp-table scomp-gap-table">
         <caption id="scomp-career-caption">Kỹ năng nghề {career.nameVi}: điểm hiện tại so với ngưỡng</caption>
         <thead><tr><th scope="col">Kỹ năng</th><th scope="col">Tính chất</th><th scope="col">Hiện tại</th><th scope="col">Ngưỡng</th><th scope="col">Chênh lệch</th><th scope="col">Trạng thái</th></tr></thead>
-        <tbody>{rows.map((req) => <GapRow key={req.requirementId} req={req} />)}
+        <tbody>{rows.map((req) => <GapRow key={req.requirementId} req={req} otherCourses={otherCourses(req)} />)}
           {!rows.length && <tr><td colSpan={6}>{career.requirements.length ? "Bạn đã đạt mọi kỹ năng có dữ liệu của nghề này." : "Nghề này chưa có yêu cầu kỹ năng trong danh mục nên chưa so sánh được."}</td></tr>}
         </tbody>
       </table>
@@ -586,6 +591,9 @@ const GAP_STATUS_WORDS: Record<CareerRequirementResult["status"], string> = { me
 function GapHistory({ result }: { result: AssessmentResult }) {
   const history = gapHistory(result);
   if (!history) return null;
+  const selfStudy = new Set(result.career!.requirements.filter(needsSelfStudy).map((req) => req.requirementId));
+  const statusWord = (status: CareerRequirementResult["status"], requirementId: string) =>
+    (status === "no_data" && selfStudy.has(requirementId) ? "Cần tự học" : GAP_STATUS_WORDS[status]);
   return <Section id="sgap-history" title="Theo dõi mức độ cải thiện kỹ năng" description={`Điểm từng kỹ năng của nghề ${result.career!.nameVi} vào cuối mỗi học kỳ đã có điểm. Xanh có dấu ✓ là đạt ngưỡng, đỏ là chưa đạt.`}>
     {history.state === "empty" ? <p className="scomp-meta">Bảng điểm chưa có học kỳ nào có điểm nên chưa theo dõi được.</p>
       : history.state === "outdated" ? <p className="scomp-meta">Kết quả này được tính trước khi có phần theo dõi kỹ năng nghề. Bấm “Đánh giá lại” để xem kỹ năng của bạn thay đổi qua từng học kỳ.</p>
@@ -603,20 +611,20 @@ function GapHistory({ result }: { result: AssessmentResult }) {
               <tbody>{history.rows.map((row) => <tr key={row.requirementId}>
                 <th scope="row"><span className="scomp-cell-title">{row.name}</span><small>{row.priorityLabel} · ngưỡng {formatScore(row.threshold)}</small></th>
                 {row.cells.map((cell) => <td key={cell.term} className="scomp-num">{cell.score === null
-                  ? <span className="scomp-zero" title={cell.status ? GAP_STATUS_WORDS[cell.status] : undefined}>—</span>
-                  : <span className={cell.status === "met" ? "sg-status-pass" : "sg-status-fail"} title={cell.status ? GAP_STATUS_WORDS[cell.status] : undefined}>{cell.score}{cell.status === "met" && " ✓"}</span>}</td>)}
+                  ? <span className="scomp-zero" title={cell.status ? statusWord(cell.status, row.requirementId) : undefined}>—</span>
+                  : <span className={cell.status === "met" ? "sg-status-pass" : "sg-status-fail"} title={cell.status ? statusWord(cell.status, row.requirementId) : undefined}>{cell.score}{cell.status === "met" && " ✓"}</span>}</td>)}
                 <td className="scomp-num">{row.change === null ? <span className="scomp-zero">—</span>
                   : <span className={row.change ? "scomp-gap-change" : "scomp-zero"}>{row.change > 0 ? `+${row.change}` : row.change < 0 ? `−${Math.abs(row.change)}` : "0"}</span>}</td>
               </tr>)}</tbody>
               <tfoot><tr><th scope="row">Kỹ năng đạt ngưỡng</th>{history.points.map((point) => <td key={point.term} className="scomp-num">{point.career!.met}/{point.career!.total}</td>)}<td /></tr></tfoot>
             </table>
           </div>
-          <p className="scomp-meta">“—”: học kỳ đó kỹ năng chưa có điểm (chưa học, sắp học hoặc chưa đủ dữ liệu); di chuột lên ô để xem trạng thái. “Thay đổi” là điểm hiện tại trừ điểm đầu tiên. Học lại ở học kỳ sau không làm đổi điểm của học kỳ trước.</p>
+          <p className="scomp-meta">“—”: học kỳ đó kỹ năng chưa có điểm (chưa học, sắp học, cần tự học hoặc chưa đủ dữ liệu); di chuột lên ô để xem trạng thái. “Thay đổi” là điểm hiện tại trừ điểm đầu tiên. Học lại ở học kỳ sau không làm đổi điểm của học kỳ trước.</p>
         </>}
   </Section>;
 }
 
-function GapRow({ req }: { req: CareerRequirementResult }) {
+function GapRow({ req, otherCourses }: { req: CareerRequirementResult; otherCourses: string[] }) {
   const status = gapStatusDisplay(req);
   const difference = scoreDifference(req);
   return <tr>
@@ -625,7 +633,9 @@ function GapRow({ req }: { req: CareerRequirementResult }) {
     <td data-label="Hiện tại"><span className="scomp-bullet"><ScoreBar score={req.score} level={req.level} threshold={req.threshold} /><strong>{formatScore(req.score)}</strong></span>{req.levelLabel && req.level !== "no_evidence" && <small>{req.levelLabel}</small>}</td>
     <td className="scomp-num" data-label="Ngưỡng">{formatScore(req.threshold)}</td>
     <td className="scomp-num" data-label="Chênh lệch">{difference === null ? "—" : difference > 0 ? `+${formatScore(difference)}` : formatScore(difference)}{req.deficitBandLabel && <small>{req.deficitBandLabel}</small>}</td>
-    <td data-label="Trạng thái"><StatusText {...status} />{req.status === "no_data" && <small>{req.noDataReason === "other_specialty" ? "Chỉ có trong học phần của chuyên ngành khác." : "Chương trình đào tạo chưa có học phần đo kỹ năng này — không phải điểm yếu."}</small>}</td>
+    <td data-label="Trạng thái"><StatusText {...status} />{req.status === "no_data" && <small>{req.noDataReason === "other_specialty"
+      ? `Chỉ có trong học phần của chuyên ngành khác${otherCourses.length ? `: ${otherCourses.join(", ")}` : ""}.`
+      : "Chương trình đào tạo chưa có học phần đo kỹ năng này — không phải điểm yếu."}</small>}</td>
   </tr>;
 }
 

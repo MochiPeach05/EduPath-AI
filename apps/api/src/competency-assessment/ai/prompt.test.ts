@@ -90,8 +90,8 @@ describe("buildAiInput", () => {
   };
 
   it("uses the spec system prompt verbatim plus the output description", () => {
-    expect(PROMPT_VERSION).toBe("comp-v9");
-    expect(input.promptVersion).toBe("comp-v9");
+    expect(PROMPT_VERSION).toBe("comp-v10");
+    expect(input.promptVersion).toBe("comp-v10");
     expect(input.think).toBe(true);
     expect(input.system).toBe(SYSTEM_PROMPT);
     expect(input.system.startsWith("Bạn là cố vấn học tập của EduPath AI, đồng hành cùng sinh viên ngành Công nghệ Thông tin, Trường Đại học Văn Lang.\n")).toBe(true);
@@ -146,6 +146,7 @@ describe("buildAiInput", () => {
     expect(user).toContain("S01 | Lập trình hướng đối tượng | nhóm G1 | thuộc nghề mục tiêu | điểm 88 | Giỏi");
     expect(user).toContain("S04 | Làm việc nhóm | nhóm G2 | ngoài nghề mục tiêu | Chưa có minh chứng");
     expect(user).toContain("S05 | Điện toán đám mây | Chưa đủ dữ liệu");
+    expect(user).not.toContain("Cần tự học (");
     expect(user).toContain("  - TST202 | Đảm bảo chất lượng phần mềm | 3 TC | chưa học | chưa đủ điều kiện: cần đạt trước Kiểm thử phần mềm cơ bản (TST201) | kế hoạch: học kỳ 2 năm học 2026–2027\n");
     expect(user).toContain("thiếu 30 (Thiếu nhiều)");
     expect(user).toContain("Ảnh hưởng: Điểm kỹ năng có thể thấp hơn thực tế.");
@@ -156,6 +157,13 @@ describe("buildAiInput", () => {
     expect(noCareer.user).toContain("Có thể nêu là cần cải thiện: S06, S07, S03\n");
   });
 
+  it("calls a career skill only another specialty's courses teach Cần tự học (comp-v10), like the page", () => {
+    const result = syntheticResult();
+    result.career!.requirements.find((item) => item.skillKey === "S05")!.noDataReason = "other_specialty";
+    expect(sectionOf(buildAiInput(result).user, "[4. NGHỀ MỤC TIÊU]")).toContain("| chưa có điểm | Cần tự học (chỉ có trong học phần của chuyên ngành khác)");
+    expect(sectionOf(input.user, "[4. NGHỀ MỤC TIÊU]")).toContain("| chưa có điểm | Chưa đủ dữ liệu");
+    expect(SYSTEM_PROMPT).toContain("Kỹ năng \"Cần tự học\" nghĩa là kỹ năng chỉ được dạy trong học phần của chuyên ngành khác");
+  });
   it("with a career, offers only its skills: below its threshold, or met and still below Giỏi (comp-v5; Thành thạo before comp-v9)", () => {
     const sixth = sectionOf(input.user, "[6. ");
     expect(sixth).toBe([

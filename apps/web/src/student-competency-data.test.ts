@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, confidentStrengths, countAxis, dataUsedLine, displayLevel, FIT_SCALE, fitLabelOf, fitLevelOf, fitScoreOf, fitStep, gapHistory, levelChart, levelSummary, levelText, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
-  gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isPreconditionError, PRIORITY_LABELS, levelStep, mapAiOutput, missingRequirements, missingRequirementsMessage, modelLabel, plansFor, skillGroupKeys,
+  careerSummaryText, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isPreconditionError, PRIORITY_LABELS, levelStep, mapAiOutput, missingRequirements, missingRequirementsMessage, modelLabel, needsSelfStudy, plansFor, skillGroupKeys,
   scoreDifference, shouldPoll, sortRequirements, termLabel, EMPTY_SKILL_FILTERS,
   careerThresholdsLine, chartLevelLabel, currentImprovements, LEVEL_SCALE, levelOfScore, withCurrentLevels,
 } from "./student-competency-data";
@@ -270,6 +270,16 @@ describe("career gaps", () => {
     expect(byStatus("upcoming")).toEqual({ tone: "neutral", glyph: "○", text: "Sắp học · HK261" });
     expect(byStatus("no_data")).toEqual({ tone: "neutral", glyph: "?", text: "Chưa đủ dữ liệu" });
     expect(gapStatusDisplay({ status: "not_studied", deficit: null, upcomingTerm: null, exemptOnly: false }).tone).toBe("unknown");
+  });
+  it("names a skill only another specialty's courses teach Cần tự học and counts it apart (user 2026-10-23)", () => {
+    const career = fixtureResult.career!;
+    const other = { ...reqs.find((req) => req.status === "no_data")!, noDataReason: "other_specialty" as const };
+    expect(gapStatusDisplay(other)).toEqual({ tone: "unknown", glyph: "!", text: "Cần tự học" });
+    expect(needsSelfStudy(other)).toBe(true);
+    expect(needsSelfStudy({ ...other, noDataReason: "not_measured" })).toBe(false);
+    expect(careerSummaryText(career)).toBe(career.summaryText);
+    expect(careerSummaryText({ ...career, requirements: career.requirements.map((req) => (req.status === "no_data" ? other : req)) }))
+      .toBe("Đạt 1/5 kỹ năng · 1 sắp học · 1 cần tự học · 0 chưa đủ dữ liệu");
   });
   it("sorts Bắt buộc first, then the largest shortfall", () => {
     expect(sortRequirements(reqs).map((req) => req.requirementId)).toEqual(["q2", "q1", "q3", "q4", "q5"]);

@@ -222,14 +222,32 @@ export function scoreDifference(req: Pick<CareerRequirementResult, "score" | "st
   // Met: whole points above the threshold, rounded down like the score (70 against 62,5 is +7, never below 0).
   return Math.max(0, Math.floor(req.score - req.threshold + 1e-9));
 }
-/** Glyph + text + colour of a career requirement. Green/red/amber only for met and gaps; never red for missing data. */
-export function gapStatusDisplay(req: Pick<CareerRequirementResult, "status" | "deficit" | "upcomingTerm" | "exemptOnly">): { tone: StatusTone; glyph: string; text: string } {
+/** A career skill only courses of another specialty teach: "Cần tự học" on the page (user 2026-10-23), outside the fit score. */
+export const needsSelfStudy = (req: Pick<CareerRequirementResult, "status"> & { noDataReason?: CareerRequirementResult["noDataReason"] }) =>
+  req.status === "no_data" && req.noDataReason === "other_specialty";
+
+/** The career's count line ("Đạt x/y kỹ năng · z sắp học · t chưa đủ dữ liệu") with its "Cần tự học" skills counted apart. */
+export function careerSummaryText(career: Pick<CareerResult, "summaryText" | "requirements">): string {
+  const selfStudy = career.requirements.filter(needsSelfStudy).length;
+  if (!selfStudy) return career.summaryText;
+  const count = (status: CareerRequirementResult["status"]) => career.requirements.filter((req) => req.status === status).length;
+  return `Đạt ${count("met")}/${career.requirements.length} kỹ năng · ${count("upcoming")} sắp học · ${selfStudy} cần tự học · ${count("no_data") - selfStudy} chưa đủ dữ liệu`;
+}
+
+/**
+ * Glyph + text + colour of a career requirement. Green/red/amber only for met and gaps; never red for missing data.
+ * A skill only another specialty's courses teach is "Cần tự học", not missing data.
+ */
+export function gapStatusDisplay(req: Pick<CareerRequirementResult, "status" | "deficit" | "upcomingTerm" | "exemptOnly">
+  & { noDataReason?: CareerRequirementResult["noDataReason"] }): { tone: StatusTone; glyph: string; text: string } {
   switch (req.status) {
     case "met": return { tone: "pass", glyph: "✓", text: req.exemptOnly ? "Đạt ngưỡng · miễn/công nhận" : "Đạt ngưỡng" };
     case "below": return { tone: "fail", glyph: "✗", text: deficitText(req.deficit) };
     case "not_studied": return { tone: "unknown", glyph: "!", text: "Chưa học" };
     case "upcoming": return { tone: "neutral", glyph: "○", text: req.upcomingTerm ? `Sắp học · ${req.upcomingTerm}` : "Sắp học" };
-    default: return { tone: "neutral", glyph: "?", text: "Chưa đủ dữ liệu" };
+    default: return needsSelfStudy(req)
+      ? { tone: "unknown", glyph: "!", text: "Cần tự học" }
+      : { tone: "neutral", glyph: "?", text: "Chưa đủ dữ liệu" };
   }
 }
 
