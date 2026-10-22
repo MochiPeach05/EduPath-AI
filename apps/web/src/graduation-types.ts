@@ -26,6 +26,8 @@ export interface GraduationData {
     id: string;
     groupId: string;
     code: string;
+    /** Other codes of the course (K26: old / new code); the transcript may show any of them. */
+    alternativeCodes?: string[];
     name: string;
     credits: number | null;
     conditionOnly: boolean;

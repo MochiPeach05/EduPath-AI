@@ -77,12 +77,17 @@ export function parseSheet(sheet: Sheet): GraduationData | null {
     sourceNotes: [],
   };
   let groupId = "";
+  const strayLabels: number[] = [],
+    repeated: string[] = [];
   for (let i = header + 1; i < rows.length; i++) {
     const r = rows[i]!,
       label = r
         .slice(0, 2)
         .find((c) => /^nhom (bat buoc|tu chon)/.test(fold(c)));
-    if (label) {
+    // K26 exports keep stale group names and numbers in a 1-pixel-wide column A, one row above the
+    // visible group row: a row with a course code and name is always a course.
+    const isCourse = Boolean(r[2] && r[4]);
+    if (label && !isCourse) {
       groupId = `row-${i + 1}`;
       data.groups.push({
         id: groupId,
@@ -93,33 +98,107 @@ export function parseSheet(sheet: Sheet): GraduationData | null {
         minimumCredits: number(r[10]),
         sourceRow: i + 1,
       });
-    } else if (r[2] && r[4]) {
+    } else if (isCourse) {
       if (!groupId)
         throw new GraduationError("course_without_group", 422, [
           sheet.sheet,
           `${i + 1}`,
         ]);
-      data.courses.push({
+      if (label) strayLabels.push(i + 1);
+      const [code, ...alternativeCodes] = courseCodes(r[2]!);
+      const course = {
         id: `row-${i + 1}`,
         groupId,
-        code: r[2],
-        name: r[4],
+        code: code!,
+        ...(alternativeCodes.length ? { alternativeCodes } : {}),
+        name: r[4]!,
         credits: number(r[10]),
-        conditionOnly: /\(\s*\*\s*\)/.test(r[4]),
+        conditionOnly: /\(\s*\*\s*\)/.test(r[4]!),
         sourceRow: i + 1,
-      });
+      };
+      // One code twice in a group (K26: DIT0210 with two new codes) is one course with every code.
+      const same = data.courses.find(
+        (c) =>
+          c.groupId === groupId &&
+          c.code.toUpperCase() === course.code.toUpperCase() &&
+          c.credits === course.credits &&
+          c.conditionOnly === course.conditionOnly,
+      );
+      if (same) {
+        const codes = uniqueCodes([...(same.alternativeCodes ?? []), ...alternativeCodes]);
+        if (codes.length) same.alternativeCodes = codes;
+        repeated.push(`${course.code} (dòng ${same.sourceRow} và ${i + 1})`);
+      } else data.courses.push(course);
     } else if (r[2] || (/^\d+$/.test(r[0] ?? "") && r[4]))
       throw new GraduationError("invalid_graduation_row", 422, [
         sheet.sheet,
         `${i + 1}`,
       ]);
   }
+  // A code that is another course's code, or that an earlier course already lists, is not an alternative.
+  const primaries = new Set(data.courses.map((c) => c.code.toUpperCase()));
+  const owners = new Map<string, string>(),
+    dropped: string[] = [];
+  for (const course of data.courses) {
+    if (!course.alternativeCodes) continue;
+    const kept = course.alternativeCodes.filter((code) => {
+      const key = code.toUpperCase(),
+        owner = owners.get(key);
+      if (primaries.has(key) || owner) {
+        dropped.push(`${code} ở ${course.code} (${owner ? `đã ghi cho ${owner}` : "là mã chính của học phần khác"})`);
+        return false;
+      }
+      owners.set(key, course.code);
+      return true;
+    });
+    if (kept.length) course.alternativeCodes = kept;
+    else delete course.alternativeCodes;
+  }
   if (rows.some((r) => r.slice(11).some((c) => c)))
     data.sourceNotes.push(
       "Các cột đánh dấu đã đạt và kết quả cá nhân không được dùng làm tiêu chuẩn xét tốt nghiệp.",
     );
+  const withAlternatives = data.courses.filter((c) => c.alternativeCodes).length;
+  if (withAlternatives)
+    data.sourceNotes.push(
+      `${withAlternatives} học phần ghi nhiều mã (mã cũ / mã mới): mã đầu là mã chính, các mã sau cũng được dùng khi đối chiếu bảng điểm.`,
+    );
+  if (strayLabels.length)
+    data.sourceNotes.push(
+      `Dòng ${strayLabels.join(", ")} vừa có tên nhóm vừa có học phần: đã đọc là học phần của nhóm trước, nhóm mới bắt đầu từ dòng chỉ có tên nhóm.`,
+    );
+  if (repeated.length)
+    data.sourceNotes.push(
+      `Mã ghi hai lần trong cùng nhóm được gộp thành một học phần: ${repeated.join("; ")}.`,
+    );
+  if (dropped.length)
+    data.sourceNotes.push(
+      `Đã bỏ mã thay thế trùng với học phần khác, hãy kiểm tra biểu mẫu: ${dropped.join("; ")}.`,
+    );
   if (!data.courses.length) throw new GraduationError("no_courses");
   return validateData(data);
+}
+
+/** Codes without repeats (case ignored), each in its first spelling. */
+const uniqueCodes = (codes: string[]) =>
+  codes.filter(
+    (code, index) =>
+      codes.findIndex((other) => other.toUpperCase() === code.toUpperCase()) === index,
+  );
+
+/**
+ * The codes of a "Mã MH" cell. K26 standards write a course's old and new codes ("DIT0091 / 71ITDS30103",
+ * "DIT0160 71ITSE41003"); digits after a code that ends in letters finish that code ("71ITSE 30403").
+ */
+export function courseCodes(cell: string): string[] {
+  const codes: string[] = [];
+  for (const token of cell.split(/[\s/,;]+/).filter(Boolean)) {
+    const last = codes[codes.length - 1];
+    if (last !== undefined && /^\d+$/.test(token) && /[A-Z]$/i.test(last))
+      codes[codes.length - 1] = last + token;
+    else codes.push(token);
+  }
+  return uniqueCodes(codes);
 }
 let busy = false;
 export async function parseGraduation(

@@ -148,12 +148,14 @@ export function courseState(attempts: readonly Attempt[]): TranscriptCourseState
 }
 
 /** Groups every attempt by code (including "Điểm bảo lưu") and decides one state per course. */
-export function transcriptCourses(data: TranscriptData): Map<string, TranscriptCourseRecord> {
+export function transcriptCourses(data: TranscriptData, aliases?: ReadonlyMap<string, string>): Map<string, TranscriptCourseRecord> {
   const attempts = new Map<string, Attempt[]>();
   for (const section of data.sections) {
     const term = termCode(section);
     for (const course of section.courses) {
-      const code = courseKey(course.code ?? "");
+      const printed = courseKey(course.code ?? "");
+      // A graduation standard's other code of a course (standardCodeAliases) joins that course's attempts.
+      const code = aliases?.get(printed) ?? printed;
       if (!code) continue;
       const letter = course.letter?.trim() ? course.letter.trim().toUpperCase() : null;
       const result = course.result?.trim() ? course.result.trim() : null;

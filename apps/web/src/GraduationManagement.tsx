@@ -525,7 +525,7 @@ function Conditions({
                   {items.map((c, index) => (
                     <tr key={c.id}>
                       <td className="cm-stt">{index + 1}</td>
-                      <td>{c.code}</td>
+                      <td>{[c.code, ...(c.alternativeCodes ?? [])].join(" / ")}</td>
                       <td>{c.name}</td>
                       <td>{fmt(c.credits)}</td>
                       <td>

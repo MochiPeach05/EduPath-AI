@@ -149,6 +149,24 @@ export type GraduationInputs = {
   conditionCodes: ReadonlySet<string>;
 };
 
+/**
+ * Transcript code → standard code for the other codes a standard writes for a course (K26:
+ * "DIT0091 / 71ITDS30103"), so a course taken under its new code counts for the standard's course.
+ * A code that is itself a course of the standard, or that two courses list, stays as it is.
+ */
+export function standardCodeAliases(standard: Pick<GraduationData, "courses"> | null): Map<string, string> {
+  const courses = standard?.courses ?? [];
+  const primaries = new Set(courses.map((course) => courseKey(course.code)));
+  const owners = new Map<string, Set<string>>();
+  for (const course of courses) {
+    for (const code of course.alternativeCodes ?? []) {
+      const key = courseKey(code);
+      if (key && !primaries.has(key)) owners.set(key, (owners.get(key) ?? new Set()).add(courseKey(course.code)));
+    }
+  }
+  return new Map([...owners].filter(([, set]) => set.size === 1).map(([key, set]) => [key, [...set][0]!]));
+}
+
 /** The graduation inputs from the standard, the cohort's CTĐT courses ([] when there is none) and the transcript. */
 export function graduationInputs(
   standard: Pick<GraduationData, "courses"> | null,
@@ -158,7 +176,7 @@ export function graduationInputs(
   const courses = uniqueCurriculumCourses(curriculumCourses);
   return {
     transcript,
-    records: transcriptCourses(transcript),
+    records: transcriptCourses(transcript, standardCodeAliases(standard)),
     programCredits: programCreditMap(standard, curriculumCreditMap(courses)),
     electives: deriveElectiveGroups(courses),
     conditionCodes: conditionOnlyCodes(standard, courses),

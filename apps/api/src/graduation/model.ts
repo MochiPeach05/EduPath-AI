@@ -42,6 +42,8 @@ export const graduationSchema = z
             id: short.min(1),
             groupId: short.min(1),
             code: short.min(1),
+            /** Other codes of the same course (K26 writes "DIT0091 / 71ITDS30103"); a transcript under any of them counts. */
+            alternativeCodes: z.array(short.min(1)).min(1).max(10).optional(),
             name: short.min(1),
             credits: z.number().min(0).max(50).nullable(),
             conditionOnly: z.boolean(),

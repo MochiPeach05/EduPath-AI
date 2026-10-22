@@ -15,6 +15,16 @@ Khóa nhận diện là **mã tiêu chuẩn + khối lớp** lấy từ nội du
 - Ngưỡng tín chỉ tích lũy, tín chỉ bắt buộc, tín chỉ nhóm tự chọn, tín chỉ tự chọn tự do và điểm trung bình tích lũy tối thiểu.
 - Từng nhóm bắt buộc/tự chọn với ngưỡng tín chỉ riêng; hai nhóm cùng nhãn `TC102` vẫn có định danh riêng theo dòng nguồn.
 - Mã, tên, tín chỉ và cờ môn điều kiện của từng môn. Mã môn K26 như `DIT0010` được giữ nguyên.
+- **Mã cũ / mã mới (K26, từ 23/10/2026).** Biểu mẫu K26 ghi nhiều mã cho một môn, ví dụ `DIT0091 / 71ITDS30103` hay `DIT0160 71ITSE41003`. Ô `DIT0530 / 71ITSE 30403` có số bị tách rời, được nối lại thành `71ITSE30403`.
+  - Mã đầu là mã chính (`code`, khớp CTĐT K26). Các mã sau lưu ở `alternativeCodes`.
+  - Khi xét tốt nghiệp, môn trong bảng điểm mang mã thay thế được tính cho mã chính (`standardCodeAliases`). Điều này áp dụng cả trên trang Tốt nghiệp lẫn phần tốt nghiệp của đánh giá năng lực. Phần kỹ năng không đổi.
+  - Mã thay thế bị bỏ, kèm ghi chú, khi nó trùng mã chính của môn khác hoặc đã được ghi cho một môn đứng trước. Ví dụ K26 ghi `71ITSE30403` cho cả DIT0110 và DIT0530, nên mã này chỉ được giữ cho DIT0110.
+  - Một mã ghi hai lần trong cùng nhóm với cùng số tín chỉ được gộp thành một môn mang mọi mã. Ví dụ K26: DIT0210 với 71ITNW30403 và 71ITNW40803. Nếu không gộp, cả tiêu chuẩn bị coi là trùng mã và mọi nhóm thành "chưa xác định".
+  - Trang quản trị hiện mã chính kèm mã thay thế.
+- **Cột A gần như ẩn (K26).** Ở hai file K26, cột A chỉ rộng 1 px. Cột này chứa STT lệch dòng và tên nhóm cũ nằm trên dòng học phần cuối của nhóm trước. Tên nhóm thật nằm ở ô gộp B:J của dòng kế tiếp.
+  - Từ 23/10/2026, dòng có mã và tên học phần luôn được đọc là học phần. Tên nhóm trên dòng đó bị bỏ qua, kèm ghi chú.
+  - Trước đó, mỗi nhóm tự chọn K26 bị tách làm hai. Nhóm giả lấy tín chỉ của một môn làm yêu cầu (ví dụ "Yêu cầu 2 tín chỉ"), và mỗi file mất 3 môn, trong đó có Vật lý đại cương 2.
+  - Tiêu chuẩn K26 đã lưu trước ngày này cần chạy **Cập nhật từ Excel** để đọc lại.
 - Môn có dấu `(*)` mang cờ `conditionOnly`: không tính tín chỉ tích lũy/GPA theo ghi chú biểu mẫu. Tín chỉ của môn vẫn được giữ, vì nhóm điều kiện có thể yêu cầu đủ số tín chỉ riêng.
 - Tín chỉ trống (ví dụ một số môn quốc phòng K27) được lưu `null`, không biến thành 0. Điểm trung bình giữ đúng ngưỡng trong nguồn.
 - **Mặc định đối chiếu theo hệ 4**, gồm tiêu chuẩn cũ chưa có thang điểm và file import không ghi rõ hệ điểm. Quản trị viên vẫn có thể chọn **Hệ 10** cho từng tiêu chuẩn; lựa chọn đã lưu được giữ nguyên. Form sửa thông tin chọn sẵn hệ 4, cùng ngưỡng điểm tối thiểu; hệ 4 không nhận ngưỡng lớn hơn 4. Import giữ hệ 10 khi nhãn nguồn ghi rõ. Thang điểm lưu trong JSON phiên bản và hiển thị ở cổng sinh viên, không cần đổi schema database.
@@ -113,7 +123,7 @@ Bộ đọc Excel dùng [SheetJS CE từ nguồn phân phối chính thức](htt
 
 ## Kiểm tra lại
 
-`npm run build` biên dịch API và web. Test `apps/api/src/graduation/parser.test.ts` luôn chạy các trường hợp dữ liệu giả lập; phần đối chiếu 9 file thật chỉ chạy khi có thư mục `output/graduation-audit/files` hoặc biến `GRADUATION_AUDIT_DIR` trỏ đến thư mục chứa các workbook nguồn. Thiếu nguồn riêng tư thì phần đối chiếu được bỏ qua.
+`npm run build` biên dịch API và web. Test `apps/api/src/graduation/parser.test.ts` luôn chạy các trường hợp dữ liệu giả lập; phần đối chiếu 9 file thật chỉ chạy khi có thư mục `output/graduation-audit/files` hoặc biến `GRADUATION_AUDIT_DIR` trỏ đến thư mục chứa các workbook nguồn. Thiếu nguồn riêng tư thì phần đối chiếu được bỏ qua. Trên máy người dùng, bản sao 9 workbook nằm ở `apps/api/data/Tieu chuan xet/` (chưa đưa lên GitHub vì có tên người học và cột kết quả cá nhân). Để chạy phần đối chiếu, vào `apps/api` rồi chạy `GRADUATION_AUDIT_DIR="data/Tieu chuan xet" npx vitest run src/graduation/parser.test.ts`. Từ 23/10/2026, mỗi file K26 cho 4 nhóm (bắt buộc 82, TC118 18, nhóm 30 tín chỉ, TC004 4) và 93 hoặc 95 môn; 13 tiêu chuẩn K27–K29 không đổi.
 
 Phần sinh viên có test riêng với dữ liệu tổng hợp: `apps/api/src/graduation/{resolve,evaluation,student-graduation,student-router}.test.ts` (chọn tiêu chuẩn, kết quả đối chiếu trùng số liệu với đánh giá năng lực, không đọc được tiêu chuẩn khác, `/:id` trả 404), `apps/api/src/competency-assessment/graduation.test.ts` (bộ máy chung, bảng ca `fixtures/graduation-cases.json`), `apps/web/src/student-graduation-data.test.ts` và `StudentGraduation.test.tsx`.
 

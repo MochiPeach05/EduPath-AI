@@ -5,7 +5,7 @@ import { deriveElectiveGroups, transcriptCourses } from "./course-state.js";
 import { syntheticCurriculum, syntheticStandards, syntheticTranscript, type TranscriptRow } from "./fixtures/synthetic-k29.js";
 import {
   assessGraduation, assessGraduationGpa, decide, electiveQuotas, graduationGroupLabels, graduationInputs, groupCode,
-  matchStandardElectiveGroup, programCreditMap, standardCourseCredits,
+  matchStandardElectiveGroup, programCreditMap, standardCodeAliases, standardCourseCredits,
 } from "./graduation.js";
 import type { CurriculumCourseInput, GraduationResolution, TriState } from "./types.js";
 
@@ -268,6 +268,41 @@ describe("E8: mandatory groups count courses, (*) included", () => {
     expect(evaluate(data, [["71ITBS10103", 3, 8, 3.5, "B+"]]).groups[0]).toMatchObject({ unit: "môn", lower: 1, upper: 1, required: 2, status: "fail", accumulatedCredits: 3 });
     expect(evaluate(data, [["71ITBS10103", 3, 8, 3.5, "B+"], ["71NAD110013", 3, 7, 3, "B"]]).groups[0])
       .toMatchObject({ unit: "môn", lower: 2, required: 2, status: "pass", accumulatedCredits: 3 });
+  });
+});
+
+describe("K26: other codes of a standard course (old / new code)", () => {
+  const k26 = () => {
+    const data = smallStandard([{ id: "BB", name: "Nhóm bắt buộc", kind: "mandatory", minimumCredits: 6 }], [
+      { groupId: "BB", code: "DIT0091", credits: 3 }, { groupId: "BB", code: "DIT0110", credits: 3 },
+    ]);
+    data.courses[0]!.alternativeCodes = ["71ITDS30103"];
+    data.courses[1]!.alternativeCodes = ["71itse30403"];
+    return data;
+  };
+
+  it("counts a course passed under its new code and joins the attempts of both codes", () => {
+    const rows: TranscriptRow[] = [["71ITDS30103", 3, 8, 3.5, "B+"], ["DIT0110", 3, 3, 0, "F"], ["71ITSE30403", 3, 7, 3, "B"]];
+    expect(evaluate(k26(), rows).groups[0]).toMatchObject({ lower: 2, upper: 2, required: 2, status: "pass", accumulatedCredits: 6 });
+    const records = graduationInputs(k26(), [], syntheticTranscript([{ year: "2024-2025", semester: "HK01", rows }])).records;
+    expect([...records.keys()].sort()).toEqual(["DIT0091", "DIT0110"]);
+    expect(records.get("DIT0110")).toMatchObject({ state: "passed", attempts: [{ code: "DIT0110" }, { code: "DIT0110" }] });
+  });
+
+  it("ignores a code two courses list or that is a course of the standard", () => {
+    const shared = k26();
+    shared.courses[1]!.alternativeCodes = ["71ITDS30103"];
+    expect(standardCodeAliases(shared)).toEqual(new Map());
+    expect(evaluate(shared, [["71ITDS30103", 3, 8, 3.5, "B+"]]).groups[0]).toMatchObject({ lower: 0, status: "fail" });
+    const primary = k26();
+    primary.courses[1]!.alternativeCodes = ["DIT0091"];
+    expect(standardCodeAliases(primary)).toEqual(new Map([["71ITDS30103", "DIT0091"]]));
+  });
+
+  it("keeps a standard without other codes as it was", () => {
+    expect(standardCodeAliases(smallStandard([{ id: "BB", name: "Nhóm bắt buộc", kind: "mandatory", minimumCredits: 3 }],
+      [{ groupId: "BB", code: "71ITBS10103", credits: 3 }])).size).toBe(0);
+    expect(standardCodeAliases(null).size).toBe(0);
   });
 });
 
