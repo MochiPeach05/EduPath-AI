@@ -21,9 +21,9 @@ const items = (html: string) => [...html.matchAll(/<li>([^<]*)<\/li>/g)].map((ma
 describe("competency row menus", () => {
   it("names the noun in every item", () => {
     expect(items(renderToStaticMarkup(createElement(CompetencyGroupsTab, { canManage: true, revision: 0, onSaved: () => {} }))))
-      .toEqual(["Xem chi tiết nhóm năng lực", "Chỉnh sửa nhóm năng lực", "Xóa nhóm năng lực"]);
+      .toEqual(["Xem chi tiết", "Chỉnh sửa nhóm năng lực", "Xóa nhóm năng lực"]);
     expect(items(renderToStaticMarkup(createElement(CompetencySkillsTab, { canManage: true, revision: 0, onSaved: () => {} }))))
-      .toEqual(["Xem chi tiết cấu hình năng lực", "Chỉnh sửa cấu hình năng lực", "Xóa cấu hình năng lực"]);
+      .toEqual(["Xem chi tiết", "Chỉnh sửa cấu hình năng lực", "Xóa cấu hình năng lực"]);
   });
 });
 
@@ -40,7 +40,7 @@ describe("course row menu (2026-10-20)", () => {
 
   it("creates links with their weights and deletes them with one item", () => {
     expect(items(render()))
-      .toEqual(["Xem chi tiết môn học", "Tạo liên kết kỹ năng (Thủ công)", "Tạo liên kết kỹ năng (AI)", "Chỉnh sửa liên kết và trọng số", "Xóa liên kết và trọng số"]);
+      .toEqual(["Xem chi tiết", "Tạo liên kết kỹ năng (Thủ công)", "Tạo liên kết kỹ năng (AI)", "Chỉnh sửa liên kết và trọng số", "Xóa liên kết và trọng số"]);
   });
 
   it("lists the shared courses with their cohorts and filters by cohort (Cấu hình môn học)", () => {

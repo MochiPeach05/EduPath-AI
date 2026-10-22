@@ -25,9 +25,9 @@ describe.each(pages)("%s page", (_name, add, Page, row) => {
 
   it("adds from the red button at the top right of the card, not from the row menu", () => {
     const html = render([row]);
-    // Every item is a verb plus the noun (user, 2026-10-17): "Thêm lĩnh vực" → "lĩnh vực".
+    // Every item is a verb plus the noun (user, 2026-10-17): "Thêm lĩnh vực" → "lĩnh vực". "Xem chi tiết" stands alone (user, 2026-10-22).
     const noun = add.replace(/^Thêm /, "");
-    expect([...html.matchAll(/<li>([^<]*)<\/li>/g)].map(match => match[1])).toEqual([`Xem chi tiết ${noun}`, `Chỉnh sửa ${noun}`, `Xóa ${noun}`]);
+    expect([...html.matchAll(/<li>([^<]*)<\/li>/g)].map(match => match[1])).toEqual(["Xem chi tiết", `Chỉnh sửa ${noun}`, `Xóa ${noun}`]);
     expect(html).toMatch(new RegExp(`<div class="career-list-heading"><div><h2>.*?</h2><p>[^<]*</p></div><button class="am-primary">.*?${add}</button></div>`, "s"));
     expect(html).toContain('<span class="am-count">1</span>');
   });
@@ -60,7 +60,7 @@ describe("Nghề nghiệp page", () => {
   it("adds from the red button at the top right of the card, not from the row menu", () => {
     const html = render([career]);
     expect([...html.matchAll(/<li>([^<]*)<\/li>/g)].map(match => match[1])).toEqual(
-      ["Xem chi tiết vị trí nghề nghiệp", "Chỉnh sửa vị trí nghề nghiệp", "Tạo liên kết kỹ năng", "Xóa vị trí nghề nghiệp"]);
+      ["Xem chi tiết", "Chỉnh sửa vị trí nghề nghiệp", "Tạo liên kết kỹ năng", "Xóa vị trí nghề nghiệp"]);
     expect(html).toMatch(/<div class="career-list-heading"><div><h2>.*?<\/h2><p>[^<]*<\/p><\/div><button class="am-primary">.*?Thêm vị trí nghề nghiệp<\/button><\/div>/s);
     expect(render([]).split("Thêm vị trí nghề nghiệp")).toHaveLength(2);
   });

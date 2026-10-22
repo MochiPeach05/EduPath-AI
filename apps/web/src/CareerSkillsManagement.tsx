@@ -40,7 +40,7 @@ export default function CareerSkillsManagement({ canManage }: { canManage: boole
             <td><strong>{skill.name}</strong></td>
             <td><div className="career-clip" title={skill.description || undefined}>{skill.description || <span className="career-empty">Chưa bổ sung</span>}</div></td>
             <td><ActionMenu label={`Thao tác với kỹ năng ${skill.name}`} items={[
-              { key: "detail", icon: "eye", label: "Xem chi tiết kỹ năng", onSelect: () => { setSelected(skill); setMode("detail"); } },
+              { key: "detail", icon: "eye", label: "Xem chi tiết", onSelect: () => { setSelected(skill); setMode("detail"); } },
               ...(canManage ? [
                 { key: "edit", icon: "edit", label: "Chỉnh sửa kỹ năng", onSelect: () => { setSelected(skill); setMode("edit"); } },
                 { key: "delete", icon: "trash", label: "Xóa kỹ năng", danger: true, onSelect: () => { setSelected(skill); setMode("delete"); } },

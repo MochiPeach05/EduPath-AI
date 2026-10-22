@@ -62,7 +62,7 @@ export function CompetencyCoursesTab({ canManage, revision, onSaved }: Props) {
           <td><span className={`comp-state comp-state-${course.status}`}>{statusLabels[course.status]}</span>{course.mergedFrom.length > 0 && <small className="comp-merged">Đã gộp cấu hình khác của {course.mergedFrom.join(", ")}; xem lịch sử.</small>}</td>
           <td>{course.skillCount} kỹ năng<strong>{percentage(course.totalWeight)}</strong>{course.status === "archived" && <small>Trọng số lưu trong lịch sử; không đóng góp.</small>}</td>
           <td><ActionMenu label={`Thao tác với ${course.code} · ${course.name}`} items={[
-            { key: "view", icon: "eye", label: "Xem chi tiết môn học", onSelect: () => open(course, "view") },
+            { key: "view", icon: "eye", label: "Xem chi tiết", onSelect: () => open(course, "view") },
             ...(canManage ? [
               { key: "links", icon: "link", label: "Tạo liên kết kỹ năng (Thủ công)", onSelect: () => open(course, "links") },
               { key: "aiLinks", icon: "spark", label: "Tạo liên kết kỹ năng (AI)", onSelect: () => open(course, "aiLinks") },

@@ -189,7 +189,7 @@ export default function GraduationManagement({
                             onClick={() => open(item.id)}
                           >
                             <Icon name="eye" />
-                            Xem chi tiết tiêu chuẩn
+                            Xem chi tiết
                           </button>
                         </td>
                       </tr>

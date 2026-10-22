@@ -133,7 +133,7 @@ export default function CareersManagement({
                           <ActionMenu
                             label={`Thao tác với ${c.nameVi}`}
                             items={[
-                              { key: "detail", icon: "eye", label: "Xem chi tiết vị trí nghề nghiệp", onSelect: () => setDetailId(c.id) },
+                              { key: "detail", icon: "eye", label: "Xem chi tiết", onSelect: () => setDetailId(c.id) },
                               ...(canManage ? [
                                 { key: "edit", icon: "edit", label: "Chỉnh sửa vị trí nghề nghiệp", onSelect: () => { setSelected(c); setMode("edit"); } },
                                 { key: "links", icon: "link", label: "Tạo liên kết kỹ năng", onSelect: () => setLinksCareerId(c.id) },

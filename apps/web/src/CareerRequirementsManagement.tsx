@@ -57,7 +57,7 @@ export default function CareerRequirementsManagement({ canManage, career, revisi
             <td><CareerWeightCell key={`${career.id}:${courseWeights.data?.revisionId ?? "loading"}:${item.skillId}`} state={courseWeights} skillId={item.skillId} skillName={item.skillName} /></td>
             <td>{item.isRequired ? "Bắt buộc" : "Ưu tiên"}</td>
             <td><ActionMenu label={`Thao tác với yêu cầu ${item.title}`} items={[
-              { key: "detail", icon: "eye", label: "Xem chi tiết yêu cầu nghề nghiệp", onSelect: () => { setSelected(item); setMode("detail"); } },
+              { key: "detail", icon: "eye", label: "Xem chi tiết", onSelect: () => { setSelected(item); setMode("detail"); } },
               ...(canManage ? [
                 { key: "edit", icon: "edit", label: item.skillId ? "Chỉnh sửa liên kết kỹ năng" : "Chỉnh sửa yêu cầu nghề nghiệp", onSelect: () => { setSelected(item); setKind(item.skillId ? "skill" : "other"); setMode("edit"); } },
                 { key: "delete", icon: "trash", label: item.skillId ? "Xóa liên kết kỹ năng" : "Xóa yêu cầu nghề nghiệp", danger: true, onSelect: () => { setSelected(item); setMode("delete"); } },

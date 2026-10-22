@@ -272,7 +272,7 @@ export default function PlansManagement({ canManage }: { canManage: boolean }) {
                           onClick={() => open(p.id)}
                         >
                           <Icon name="eye" />
-                          Xem chi tiết kế hoạch
+                          Xem chi tiết
                         </button>
                       </td>
                     </tr>
@@ -656,7 +656,7 @@ function PlanStructure({
                               className="am-outline"
                               onClick={() => onItem(i)}
                             >
-                              <Icon name="eye" /> Xem chi tiết học phần
+                              <Icon name="eye" /> Xem chi tiết
                             </button>
                           ) : (
                             <small>Dòng {i.sourceRow}</small>

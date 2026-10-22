@@ -283,7 +283,7 @@ export default function CurriculaManagement({
                           onClick={() => open(c.id)}
                         >
                           <Icon name="eye" />
-                          Xem chi tiết khung
+                          Xem chi tiết
                         </button>
                       </td>
                     </tr>
@@ -1086,7 +1086,7 @@ function Courses({
                               className="am-outline"
                               onClick={() => open(c)}
                             >
-                              <Icon name="eye" /> Xem chi tiết học phần
+                              <Icon name="eye" /> Xem chi tiết
                             </button>
                           </td>
                         </tr>

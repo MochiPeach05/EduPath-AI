@@ -41,7 +41,7 @@ export default function CareerFieldsManagement({ canManage }: { canManage: boole
             <td className="cm-stt">{field.code}</td><td><strong>{field.name}</strong></td>
             <td><div className="career-clip" title={field.description || undefined}>{field.description || <span className="career-empty">Chưa bổ sung</span>}</div></td>
             <td><ActionMenu label={`Thao tác với lĩnh vực ${field.name}`} items={[
-              { key: "detail", icon: "eye", label: "Xem chi tiết lĩnh vực", onSelect: () => { setSelected(field); setMode("detail"); } },
+              { key: "detail", icon: "eye", label: "Xem chi tiết", onSelect: () => { setSelected(field); setMode("detail"); } },
               ...(canManage ? [
                 { key: "edit", icon: "edit", label: "Chỉnh sửa lĩnh vực", onSelect: () => { setSelected(field); setMode("edit"); } },
                 { key: "delete", icon: "trash", label: "Xóa lĩnh vực", danger: true, onSelect: () => { setSelected(field); setMode("delete"); } },
