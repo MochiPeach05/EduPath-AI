@@ -29,6 +29,28 @@ Quản trị viên, Ban chủ nhiệm khoa, trưởng/phó bộ môn và giảng
 
 Migration `014_career_positions.sql` tạo danh mục và thêm liên kết từ hồ sơ; 20 vị trí chỉ khởi tạo một lần, không tự phục hồi vị trí đã xóa khi khởi động.
 
+## Thay đổi danh mục trên production
+
+- 23/10/2026 (sáng): khi dọn kỹ năng theo CTĐT, đã xóa ba nghề vì kỹ năng cốt lõi của chúng không có môn nào dạy: NN005 Kỹ sư DevOps, NN016 Lập trình viên trò chơi, NN020 Quản trị viên hệ thống (xem `docs/competency-management.md`). Sau lần dọn này còn 18 nghề trong 7 lĩnh vực.
+- 23/10/2026 (tối): theo yêu cầu "Kiểm tra coi Vị trí nghề nghiệp vậy đủ chưa nếu chưa đủ thì thêm vài nghề nữa dựa vào các kỹ năng tôi đã liên kết ở cấu hình môn học", script `output/career-add-2026-10-23/add-careers.mjs` thêm 8 nghề. Script có hai chế độ: `dry` chạy thử rồi hoàn tác, `apply` mới ghi và lưu bản sao lưu vào `output/supabase-backup-2026-10-23-career-add.json`.
+  - Mỗi nghề dựa trên các kỹ năng đã có môn dạy (cấu hình môn học đang áp dụng, trọng số lớn hơn 0) nhưng trước đó chưa nghề nào dùng.
+  - Kỹ năng gắn dấu * là Bắt buộc, còn lại là Ưu tiên. Mã nghề do hệ thống tự cấp; khi chạy thử, các nghề nhận mã NN023–NN030.
+
+| Nghề | English | Lĩnh vực | Kỹ năng (* bắt buộc) |
+| --- | --- | --- | --- |
+| Quản trị viên cơ sở dữ liệu | Database Administrator | Dữ liệu & Trí tuệ nhân tạo | Thiết kế cơ sở dữ liệu*, SQL*, Quản trị cơ sở dữ liệu SQL Server*, Lập trình với cơ sở dữ liệu, Bảo mật hệ thống thông tin |
+| Kỹ sư thị giác máy tính | Computer Vision Engineer | Dữ liệu & Trí tuệ nhân tạo | Xử lý ảnh và thị giác máy tính*, Deep learning*, Python*, Machine learning, Đánh giá mô hình, Thực nghiệm |
+| Kỹ sư IoT và hệ thống nhúng | IoT and Embedded Systems Engineer | Hạ tầng & Điện toán đám mây | Lập trình hệ thống nhúng và IoT (ESP32)*, Mạng máy tính*, TCP/IP, Linux, Python |
+| Quản lý dự án phần mềm | Software Project Manager | Nghiệp vụ & Thiết kế | Quản lý dự án phần mềm*, Vận dụng quy trình phát triển phần mềm*, Phân tích yêu cầu, Giao tiếp, Làm việc nhóm |
+| Chuyên viên thương mại điện tử và SEO | E-commerce and SEO Specialist | Nghiệp vụ & Thiết kế | Vận dụng thương mại điện tử*, Tối ưu hóa công cụ tìm kiếm (SEO)*, Phân tích dữ liệu, User research, Trực quan hóa dữ liệu |
+| Chuyên viên hệ thống thông tin quản lý | Management Information Systems Specialist | Nghiệp vụ & Thiết kế | Quản trị dữ liệu và thông tin số*, Thiết kế hệ hỗ trợ quyết định*, Phân tích yêu cầu, Thiết kế cơ sở dữ liệu, Phân tích dữ liệu |
+| Lập trình viên Java | Java Developer | Phát triển phần mềm | Lập trình Java*, Phát triển ứng dụng với Spring Boot*, Lập trình hướng đối tượng*, SQL, Lập trình với cơ sở dữ liệu, Git |
+| Kỹ sư bảo mật dữ liệu | Data Security Engineer | An toàn thông tin | Mã hóa và bảo mật dữ liệu*, Bảo mật hệ thống thông tin*, IAM, Vận dụng công nghệ chuỗi khối |
+
+  - Script cũng bổ sung cho hai nghề có sẵn chính kỹ năng mà tên nghề nói tới: NN001 Chuyên viên kiểm thử xâm nhập thêm **Kiểm thử xâm nhập** (bắt buộc, 9 môn dạy), NN003 Chuyên viên phân tích dữ liệu thêm **Phân tích dữ liệu** (ưu tiên, 14 môn dạy).
+  - Kết quả chạy thử trên production: từ 18 lên 26 nghề, mọi kỹ năng nghề yêu cầu đều có môn dạy.
+  - Không thêm lại nghề lập trình trò chơi (kỹ năng Phát triển trò chơi chỉ có 1 môn tự chọn của K26), nghề DevOps và nghề quản trị hệ thống (Linux chỉ có ở CTĐT K26–K28).
+
 ## Sử dụng
 
 Ba trang **Lĩnh vực**, **Kỹ năng** và **Nghề nghiệp** nằm trong nhóm **Quản lý nghề nghiệp** trên thanh bên, theo thứ tự thiết lập: lĩnh vực để phân nhóm vị trí, kỹ năng là danh mục dùng chung, rồi nghề nghiệp dùng cả hai. Liên kết kỹ năng được quản lý tại **Nghề nghiệp → Thao tác → Tạo liên kết kỹ năng**. Khung gợi ý cũ trên ba trang đã bỏ ngày 17/10/2026. Mọi mục trong menu **Thao tác** ghi động từ + danh từ (17/10/2026).
