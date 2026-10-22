@@ -1,9 +1,9 @@
 import { z } from "zod";
-import { TranscriptError, type TranscriptData, type TranscriptSection } from "./transcript-parser.js";
+import { COURSE_CODE_PATTERN, TranscriptError, type TranscriptData, type TranscriptSection } from "./transcript-parser.js";
 
 const text = z.string().max(2000);
 const courseSchema = z.object({
-  ordinal: z.number().int().min(1).max(1000), course_code: z.string().regex(/^\d{2}[A-Z]{2,10}\d{5,8}$/),
+  ordinal: z.number().int().min(1).max(1000), course_code: z.string().regex(COURSE_CODE_PATTERN),
   course_name: text.min(1), credits: z.number().int().min(0).max(30),
   score_10: z.number().min(0).max(10).nullable(), score_4: z.number().min(0).max(4).nullable(),
   // VT: vắng thi (absent from the exam), a failed attempt without a score.

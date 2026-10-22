@@ -75,11 +75,17 @@ export async function parseTranscript(pdf: Buffer): Promise<TranscriptData> {
   } finally { extracting = false; }
 }
 
-function parsePages(pages: Page[]): TranscriptData {
+/**
+ * A course code: the current format (71ITBS10103) or the old one that K26 courses and the GDTC courses of
+ * K27/K28 still carry (DIT0070, DGT0010). With the old one missing, a K26–K28 transcript was refused whole.
+ */
+export const COURSE_CODE_PATTERN = /^(?:\d{2}[A-Z]{2,10}\d{5,8}|[A-Z]{3}\d{4})$/;
+
+export function parsePages(pages: Page[]): TranscriptData {
   const sections: TranscriptSection[] = [];
   let active: TranscriptSection | undefined;
   let count = 0;
-  const codePattern = /^\d{2}[A-Z]{2,10}\d{5,8}$/;
+  const codePattern = COURSE_CODE_PATTERN;
   if (pages.some(page => !page.items.some(item => clean(item.text)))) throw new TranscriptError("scanned_pdf");
   const firstText = fold(lines(pages[0]?.items ?? []).map(l => l.text).join(" "));
   if (!["ma mon hoc", "ten mon hoc", "tin chi", "he 10", "he 4"].every(t => firstText.includes(t))) throw new TranscriptError("unsupported_layout");
