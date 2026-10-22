@@ -201,11 +201,15 @@ export function standardCodeAliases(standard: Pick<GraduationData, "courses"> | 
  * (standardCodeAliases), then, for each standard course not passed under its own codes, a passed
  * course with the same name (courseNameKey) under a code the standard does not list — a retake with a
  * later cohort (user 2026-10-23). Each such course is used once; a name the standard lists twice is
- * skipped. The second kind is returned as `transfers` too.
+ * skipped. The second kind is returned as `transfers` too, unless the code is a course of the student's own
+ * CTĐT (`curriculumCodes`): then the standard and the CTĐT only write the course differently (K26 standard
+ * DQP0061, K26 CTĐT DQP0060) and no transfer is needed.
  */
-export function graduationCodeAliases(standard: Pick<GraduationData, "courses"> | null, transcript: TranscriptData): {
-  aliases: Map<string, string>; transfers: CreditTransfer[];
-} {
+export function graduationCodeAliases(
+  standard: Pick<GraduationData, "courses"> | null,
+  transcript: TranscriptData,
+  curriculumCodes: ReadonlySet<string> = new Set(),
+): { aliases: Map<string, string>; transfers: CreditTransfer[] } {
   const aliases = standardCodeAliases(standard);
   const courses = standard?.courses ?? [];
   if (!courses.length) return { aliases, transfers: [] };
@@ -238,7 +242,7 @@ export function graduationCodeAliases(standard: Pick<GraduationData, "courses"> 
     if (!via) continue;
     used.add(via);
     aliases.set(via, code);
-    transfers.push({ code, name: course.name, viaCode: via, viaName: names.get(via) ?? "" });
+    if (!curriculumCodes.has(via)) transfers.push({ code, name: course.name, viaCode: via, viaName: names.get(via) ?? "" });
   }
   return { aliases, transfers };
 }
@@ -250,7 +254,7 @@ export function graduationInputs(
   transcript: TranscriptData,
 ): GraduationInputs {
   const courses = uniqueCurriculumCourses(curriculumCourses);
-  const { aliases, transfers } = graduationCodeAliases(standard, transcript);
+  const { aliases, transfers } = graduationCodeAliases(standard, transcript, new Set(courses.map((course) => courseKey(course.code))));
   return {
     transcript,
     records: transcriptCourses(transcript, aliases),

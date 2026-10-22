@@ -91,6 +91,7 @@ Router chỉ đọc `apps/api/src/graduation/student-router.ts`. Dữ liệu đ�
   - Học phần của tiêu chuẩn chưa đạt theo mã của nó (kể cả mã thay thế) được tính là đạt nếu bảng điểm có một học phần **đã đạt** cùng tên, mang mã mà tiêu chuẩn không liệt kê.
   - Tên được coi là giống nhau khi gần như trùng (`courseNameKey`): bỏ qua dấu, hoa thường, phần trong ngoặc, dấu câu, thứ tự từ, các từ "và/của/cho/với/trong/theo", và viết tắt "CNTT", "IoT"/"Internet vạn vật" (= "Mạng kết nối vạn vật"). Số thì phải giống: "Anh văn 1" khác "Anh văn 2", "Lập trình Web" khác "Lập trình Web nâng cao".
   - Mỗi học phần trên bảng điểm chỉ dùng một lần. Tên mà tiêu chuẩn ghi cho hai học phần thì bỏ qua.
+  - Nếu mã khác đó là học phần trong CTĐT của chính khóa sinh viên, thì tiêu chuẩn và CTĐT chỉ ghi khác mã cho cùng một môn: vẫn tính đạt nhưng không yêu cầu chuyển điểm. Ví dụ tiêu chuẩn K26 ghi Giáo dục quốc phòng 4 là DQP0061, còn CTĐT K26 ghi DQP0060. Phát hiện khi chạy thử bảng điểm giả K26 ngày 23/10/2026.
   - `graduationCodeAliases` gộp các lần học của học phần thay thế vào học phần của tiêu chuẩn, chỉ trong phần xét tốt nghiệp, ở trang này lẫn trang đánh giá năng lực.
   - Kết quả có thêm `creditTransfers`, `transferFrom` trên dòng học phần và cảnh báo `credit_transfer_needed`; cả ba chỉ có khi có trường hợp này, nên dấu vân tay lời khuyên AI của sinh viên khác không đổi.
   - Trang đặt việc "Làm thủ tục chuyển điểm …" lên đầu mục Việc cần làm: nếu không chuyển điểm, nhà trường vẫn tính là còn nợ môn. Lời khuyên AI cũng nhận danh sách này ở mục cảnh báo dữ liệu.

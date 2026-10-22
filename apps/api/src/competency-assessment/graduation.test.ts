@@ -354,6 +354,15 @@ describe("retakes with a later cohort: same name, another code (2026-10-23)", ()
     expect(graduationInputs(once, [], named([["71ITIS30103", 3, 7, 3, "B"]], { "71ITIS30103": "Cơ sở dữ liệu" })).transfers).toEqual([]);
   });
 
+  it("counts the CTĐT's own spelling of a standard course without a transfer (K26: standard DQP0061, CTĐT DQP0060)", () => {
+    const data = standard([["DQP0061", "Giáo dục quốc phòng 4 (TH) (*)"]]);
+    const transcript = named([["DQP0060", 3, 8, 3.5, "B+"]], { DQP0060: "Giáo dục quốc phòng 4 (*)" });
+    const own = graduationInputs(data, [ctdt("DQP0060", 0)], transcript);
+    expect(own.transfers).toEqual([]);
+    expect(own.records.get("DQP0061")).toMatchObject({ state: "passed" });
+    expect(graduationInputs(data, [], transcript).transfers).toMatchObject([{ code: "DQP0061", viaCode: "DQP0060" }]);
+  });
+
   it("matches nearly identical names but keeps numbers and modifiers apart", () => {
     const same = [
       ["Học máy và ứng dụng", "Học máy ứng dụng"],

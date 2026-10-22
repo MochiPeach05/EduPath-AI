@@ -704,7 +704,7 @@ function assess(inputs: AssessmentInputs): Assessment {
   const curriculumCredits = new Map([...table.values()].map((row) => [row.code, row.credits]));
   // The standard's other codes of a course (K26 "DIT0091 / 71ITDS30103") and same-name retakes under
   // another code count only for graduation.
-  const { aliases: codeAliases, transfers } = graduationCodeAliases(standardData, transcript);
+  const { aliases: codeAliases, transfers } = graduationCodeAliases(standardData, transcript, new Set(table.keys()));
   const graduation = assessGraduation({
     resolution: inputs.graduation.resolution, standard: graduationStandard, transcript, transfers,
     records: codeAliases.size ? transcriptCourses(transcript, codeAliases) : records,
