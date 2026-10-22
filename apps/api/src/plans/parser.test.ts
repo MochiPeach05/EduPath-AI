@@ -138,3 +138,43 @@ describe("official training-plan workbooks", () => {
     )).toBe(true);
   });
 });
+
+describe("older Faculty templates (K26–K28, 2026-10-23)", () => {
+  const read = async (file: string) => readWorkbook(await readFile(new URL(`../../data/${file}`, import.meta.url)));
+  it("reads YYS term codes and the headings of each term", async () => {
+    const [k26, k27, k28] = await Promise.all([
+      read("plans/Ke hoach giảng dạy CNTT K26.xlsx"),
+      // The K27 framework workbook carries its plan on the visible "KH & TT" sheet.
+      read("curricula/Khung CTĐT K27 CNTT (Gởi SV-CVHT).xlsx"),
+      read("plans/Ke hoach giảng dạy CNTT K28.xlsx"),
+    ]);
+    for (const [data, cohort, total, items, sheet] of [
+      [k26, 26, 130, 75, "Thực tế ĐT"],
+      [k27, 27, 127, 90, "KH & TT"],
+      [k28, 28, 126, 71, "KH & TT"],
+    ] as const) {
+      expect(data).toMatchObject({
+        name: `KẾ HOẠCH ĐÀO TẠO NGÀNH CÔNG NGHỆ THÔNG TIN - KHÓA ${cohort}`, major: "CÔNG NGHỆ THÔNG TIN",
+        cohortCode: `K${cohort}`, admissionYear: 1994 + cohort, totalCredits: total,
+      });
+      expect(data.items).toHaveLength(items);
+      expect(new Set(data.items.map((item) => item.sourceSheet))).toEqual(new Set([sheet]));
+      for (const item of data.items) {
+        expect(itemSchema.safeParse(item).success).toBe(true);
+        expect(data.terms.find((term) => term.code === item.termCode)).toMatchObject({ semester: item.semester, studyYear: item.studyYear });
+      }
+    }
+    // "221" is the first term of K28 (2022); the K26 plan starts at "201".
+    expect(k28.terms.map((term) => term.code)).toEqual(["HK221", "HK222", "HK223", "HK231", "HK232", "HK233", "HK241", "HK242", "HK243", "HK251"]);
+    expect(k26.terms[0]).toEqual({ code: "HK201", semester: 1, studyYear: 1, sourceCredits: null });
+    expect(k28.items.find((item) => item.code === "71ITSE30503")).toMatchObject({ termCode: "HK231", studyYear: 2, semester: 1, credits: 3, type: "BB" });
+    // A heading without a term code belongs to the term of the next course of the same program term (HK4 = HK231).
+    expect(k28.sections[0]).toMatchObject({ termCode: "HK231", label: "Các học phần bắt buộc học chung", kind: "note" });
+    expect(k28.sections.some((section) => section.label === "Chuyên ngành CNPM" && section.kind === "specialty")).toBe(true);
+    expect(k26.items.find((item) => item.code === "DQP0021")?.type).toBe("BBKTL");
+  });
+
+  it("does not take a framework for a plan", async () => {
+    await expect(read("curricula/Khung CTĐT K28 CNTT (Gởi SV-CVHT).xlsx")).rejects.toThrow("unsupported_plan_template");
+  });
+});

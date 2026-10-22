@@ -38,6 +38,19 @@ npm run db:seed-curricula --workspace @edupath/api
 
 Lệnh đọc `apps/api/.env` theo cơ chế workspace hiện có; kiểm tra môi trường mục tiêu trước khi chạy. Lệnh chỉ thêm khung còn thiếu, không ghi đè phiên bản đã sửa, không tạo trùng và không mở lại khung đã khóa.
 
+## Mẫu khung CTĐT cũ (K26–K28, từ 23/10/2026)
+
+Theo yêu cầu "những khóa cũ thì code hiện tại nó chưa có định dạng đó", importer nhận thêm mẫu "PHÂN BỐ KIẾN THỨC TRONG CTĐT KHÓA … - NGÀNH …" của các khóa cũ (`apps/api/src/curricula/legacy.ts`). Các tệp gốc nằm trong `apps/api/data/curricula/` với tên gốc: `Khung CTĐT K26 CNTT (Gởi SV).xlsx` (85 học phần, 130 TC), `Khung CTĐT K27 CNTT (Gởi SV-CVHT).xlsx` (84 học phần, 127 TC), `Khung CTĐT K28 CNTT (Gởi SV-CVHT).xlsx` (71 học phần, 126 TC).
+
+- Mẫu 2025 (K29–K31) vẫn đọc như trước. Chỉ khi tệp không có trang tính đúng mẫu 2025 thì mới đọc theo mẫu cũ.
+- Chỉ đọc **trang tính đang hiện**. Tệp K28 còn giấu khung K27 và một mẫu khung ngành Ngôn ngữ Anh; trước đây importer chọn nhầm trang ẩn này nên báo "Thiếu ngành, khóa hoặc tổng tín chỉ".
+- Cột được tìm theo tên tiêu đề vì mỗi khóa đặt cột khác nhau: "Mã học phần" hoặc "Mã học phần mới", "Tên học phần (Tiếng Việt)", "Số tín chỉ"/"TC", LT/TH/ĐA/TT ở dòng tiêu đề thứ hai, "Bắt buộc/Tự chọn", "ĐK tiên quyết", "ĐK học trước", "Ghi chú", "HK tổ chức". Mã cũ như `DCT0080` (K26) được giữ nguyên.
+- Khóa lấy từ "KHÓA 28" hoặc "K26" trong tiêu đề hay tên trang tính. Ngành lấy từ "NGÀNH …", nếu không có thì tên trang tính hoặc tiêu đề ghi "CNTT" là ngành Công nghệ thông tin. Tổng tín chỉ là số của cả chương trình ghi phía trên tiêu đề cột (60–400). Tên lưu thống nhất là "KHUNG CHƯƠNG TRÌNH ĐÀO TẠO NGÀNH … KHÓA …"; tiêu đề gốc ghi vào ghi chú.
+- "HK tổ chức" dạng YYS: 221 là năm học 2022–2023, học kỳ 1, tức năm 1 HK1 của K28.
+- Khối kiến thức và chuyên ngành lấy từ dòng tiêu đề nhóm, dùng đúng giá trị của mẫu 2025: "GDQP-GDTC" là "Giáo dục thể chất và giáo dục quốc phòng" (môn điều kiện), "Kiến thức cơ sở nhóm ngành" là "Kiến thức cơ sở khối ngành", "2.3.1 Chuyên ngành Công nghệ Phần mềm: …" cho chuyên ngành "Công nghệ Phần mềm", "Các môn tự chọn chuyên ngành" là "Tự chọn Chuyên ngành". Chuyên ngành cũ "An ninh Mạng và IoT", "Tin học Quản trị" được giữ tên; trang năng lực coi là học phần chung kèm cảnh báo.
+- "BB/KTL" ghi thành `BBKTL` như mẫu 2025.
+- Khóa nhỏ nhất được nhận là K20 (trước là K27).
+
 ## Các điểm cần rà soát trong nguồn
 
 - K29: ô tổng khối `#REF!`, các dòng chuyên đề tốt nghiệp bị lệch cột và một số lịch học chưa xác định.

@@ -1,5 +1,6 @@
 import { Worker } from "node:worker_threads";
 import { courseCode } from "./course-codes.js";
+import { MIN_COHORT, readLegacyCurriculum, visibleSheets } from "./legacy.js";
 import {
   CurriculumError,
   courseSchema,
@@ -77,15 +78,23 @@ export async function readWorkbook(buffer: Buffer): Promise<CurriculumData> {
     throw new CurriculumError("workbook_too_large");
   const candidates: { sheet: import("exceljs").Worksheet; header: number }[] =
     [];
+  const visible = visibleSheets(workbook);
   for (const sheet of workbook.worksheets) {
     if (sheet.rowCount > 2000 || sheet.columnCount > 150)
       throw new CurriculumError("workbook_too_large");
+    // Hidden sheets hold other templates (a K28 workbook hides a Ngôn ngữ Anh framework).
+    if (!visible.includes(sheet)) continue;
     for (let n = 1; n <= Math.min(40, sheet.rowCount); n++)
       if (
         fold(value(sheet.getCell(n, 2))) === "ma hoc phan" &&
         fold(value(sheet.getCell(n, 3))).includes("ten hoc phan")
       )
         candidates.push({ sheet, header: n });
+  }
+  // No 2025-template sheet: an older template (K26–K28), read by its header names.
+  if (!candidates.length) {
+    const legacy = readLegacyCurriculum(workbook, value);
+    if (legacy) return rebuild(legacy);
   }
   if (candidates.length !== 1)
     throw new CurriculumError("unsupported_curriculum_template");
@@ -104,7 +113,7 @@ export async function readWorkbook(buffer: Buffer): Promise<CurriculumData> {
     !cohort ||
     !major ||
     !total ||
-    Number(cohort[1]) < 27 ||
+    Number(cohort[1]) < MIN_COHORT ||
     Number(cohort[1]) > 99
   )
     throw new CurriculumError("missing_curriculum_metadata");

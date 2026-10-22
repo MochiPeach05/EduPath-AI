@@ -306,3 +306,48 @@ describe("real faculty curriculum workbooks", () => {
     expect(() => checkArchive(file)).toThrow("workbook_too_large");
   });
 });
+
+describe("older Faculty templates (K26–K28, 2026-10-23)", () => {
+  const read = async (file: string) => readWorkbook(await readFile(new URL(`../../data/curricula/${file}`, import.meta.url)));
+  it("reads each cohort's framework by its header names, with the 2025 template's values", async () => {
+    const [k26, k27, k28] = await Promise.all([
+      read("Khung CTĐT K26 CNTT (Gởi SV).xlsx"),
+      read("Khung CTĐT K27 CNTT (Gởi SV-CVHT).xlsx"),
+      read("Khung CTĐT K28 CNTT (Gởi SV-CVHT).xlsx"),
+    ]);
+    for (const [data, cohort, total, courses, sheet] of [
+      [k26, 26, 130, 85, "K26 CNTT"],
+      [k27, 27, 127, 84, "K27 CNTT (Năm 4)"],
+      [k28, 28, 126, 71, "Khung CTĐT K28 CNTT (Năm 3)"],
+    ] as const) {
+      expect(data).toMatchObject({
+        name: `KHUNG CHƯƠNG TRÌNH ĐÀO TẠO NGÀNH CÔNG NGHỆ THÔNG TIN KHÓA ${cohort}`, major: "CÔNG NGHỆ THÔNG TIN",
+        cohortCode: `K${cohort}`, admissionYear: 1994 + cohort, totalCredits: total,
+      });
+      expect(identity(data)).toBe(`cong nghe thong tin:K${cohort}`);
+      expect(data.courses).toHaveLength(courses);
+      // Hidden sheets are never read: the K28 workbook also hides a K27 framework and a Ngôn ngữ Anh template.
+      expect(new Set(data.courses.map((course) => course.sourceSheet))).toEqual(new Set([sheet]));
+      for (const course of data.courses) expect(courseSchema.safeParse(course).success).toBe(true);
+    }
+    const course = (data: CurriculumData, code: string) => data.courses.find((item) => item.code === code)!;
+    // "HK tổ chức" 231 is the second study year of K28 (2022), semester 1; LT/TH/TT sit under "Số tiết/giờ".
+    expect(course(k28, "71ITSE30503")).toMatchObject({
+      name: "Lập trình ứng dụng Web", credits: 3, type: "BB", block: "Kiến thức cơ sở ngành", specialty: "",
+      studyYear: 2, semester: 1, hours: { lecture: 30, practice: 30, project: null, internship: 0 }, prior: "Cơ sở lập trình",
+    });
+    expect(course(k28, "71NAD110013").block).toBe("Giáo dục thể chất và giáo dục quốc phòng");
+    // Specialty headings ("2.3.1 Chuyên ngành Công nghệ Phần mềm: 18 tín chỉ BB") give the specialty names.
+    expect([...new Set(k28.courses.map((item) => item.specialty))].sort()).toEqual(["", "Công nghệ Dữ liệu", "Công nghệ Phần mềm", "Trí tuệ Nhân tạo", "Tự chọn Chuyên ngành"]);
+    expect([...new Set(k27.courses.map((item) => item.specialty))]).toContain("Tin học Quản trị");
+    // K26 keeps its own codes and English names; "BB/KTL" is written BBKTL as in the 2025 template.
+    expect(course(k26, "DQP0021")).toMatchObject({ type: "BBKTL", block: "Giáo dục thể chất và giáo dục quốc phòng", studyYear: 1, semester: 1 });
+    expect(course(k26, "DIT0010").englishName).toBe("Introduction to Information Technology");
+    expect(k26.warnings[0]!.message).toContain("Mẫu khung CTĐT cũ");
+  });
+
+  it("does not take a training plan or a hidden template for a framework", async () => {
+    await expect(readWorkbook(await readFile(new URL("../../data/plans/Ke hoach giảng dạy CNTT K28.xlsx", import.meta.url))))
+      .rejects.toThrow("unsupported_curriculum_template");
+  });
+});

@@ -20,6 +20,14 @@ Parser đọc sheet có tiêu đề mã/tên học phần đúng mẫu kế ho�
 
 Các công thức Excel được đọc từ kết quả đã lưu trong file, không gọi nguồn liên kết bên ngoài. File không có dữ liệu cần thiết hoặc lỗi công thức ở tên môn sẽ bị từ chối. Giới hạn upload 5 MB; có kiểm tra kích thước giải nén và thời gian parse.
 
+Mẫu kế hoạch cũ (K26–K28, từ 23/10/2026, `apps/api/src/plans/legacy.ts`):
+
+- Nhận "KẾ HOẠCH ĐÀO TẠO NGÀNH … - KHÓA 28" và "KẾ HOẠCH ĐÀO TẠO THỰC TẾ - KHÓA 26 IT". Tệp: `Ke hoach giảng dạy CNTT K26.xlsx` (75 dòng, 10 kỳ, 130 TC) và `Ke hoach giảng dạy CNTT K28.xlsx` (71 dòng, 10 kỳ, 126 TC) trong `apps/api/data/plans/`. Kế hoạch K27 nằm ở trang "KH & TT" của tệp khung K27 (90 dòng), nên chọn chính tệp khung K27 khi nhập kế hoạch.
+- Cột tìm theo tên tiêu đề như khung cũ. Hai cột "Học kỳ"/"Phân bổ học kỳ" ghi học kỳ của chương trình ("HK4" hoặc "4") và mã YYS ("231"). Kỳ của mỗi môn lấy từ mã YYS.
+- Dòng tiêu đề nhóm như "Các học phần bắt buộc học chung", "Chọn 1 trong 3 môn sau", "Chuyên ngành CNPM" nằm ở cột STT hoặc cột mã. Dòng không có mã YYS thuộc học kỳ của môn kế tiếp trong cùng học kỳ chương trình.
+- Không đọc tín chỉ từng học kỳ của mẫu cũ, vì các cột "Số TC/HK", "Tổng số TC HK" lệch nhãn giữa các khóa; tổng tín chỉ của kế hoạch vẫn đọc từ phía trên tiêu đề.
+- Chỉ đọc trang tính đang hiện: tệp khung K28 giấu một kế hoạch K27 nên không nhận là kế hoạch.
+
 Các điểm cần rà soát:
 
 - K29 có GDTC thiếu tín chỉ/loại môn và một mã rơi vào phần chữ ký. Dòng chữ ký không được nhập thành môn.

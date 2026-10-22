@@ -1,6 +1,22 @@
 import { Worker } from "node:worker_threads";
+import { MIN_COHORT, visibleSheets } from "../curricula/legacy.js";
 import { checkArchive } from "../curricula/parser.js";
+import { readLegacyPlan } from "./legacy.js";
 import { PlanError, fold, reviewPlan, type PlanData } from "./model.js";
+
+/** Choice counts ("chọn 1 trong 3") are kept as written: a different number of rows is only a warning. */
+function finish(data: PlanData) {
+  for (const s of data.sections) {
+    const count = s.label.match(/trong\s*(\d+)/i)?.[1];
+    const actual = data.items.filter((i) => i.sectionId === s.id).length;
+    if (count && actual !== Number(count))
+      data.sourceWarnings.push({
+        row: s.sourceRow,
+        message: `Nhóm “${s.label}” có ${actual} dòng môn, khác số ${count} ghi trong tiêu đề.`,
+      });
+  }
+  return reviewPlan(data);
+}
 
 export async function readWorkbook(buffer: Buffer): Promise<PlanData> {
   checkArchive(buffer);
@@ -27,9 +43,12 @@ export async function readWorkbook(buffer: Buffer): Promise<PlanData> {
     throw new PlanError("workbook_too_large");
   const candidates: { sheet: import("exceljs").Worksheet; header: number }[] =
     [];
+  const visible = visibleSheets(workbook);
   for (const sheet of workbook.worksheets) {
     if (sheet.rowCount > 2000 || sheet.columnCount > 150)
       throw new PlanError("workbook_too_large");
+    // Hidden sheets hold other templates (a K28 curriculum workbook hides a K27 plan).
+    if (!visible.includes(sheet)) continue;
     for (let r = 1; r <= Math.min(40, sheet.rowCount); r++) {
       if (
         fold(value(sheet.getCell(r, 4))) === "ma hoc phan" &&
@@ -40,6 +59,11 @@ export async function readWorkbook(buffer: Buffer): Promise<PlanData> {
       }
     }
   }
+  // No 2025-template sheet: an older template (K26–K28), read by its header names.
+  if (!candidates.length) {
+    const legacy = readLegacyPlan(workbook, value);
+    if (legacy) return finish(legacy);
+  }
   if (candidates.length !== 1) throw new PlanError("unsupported_plan_template");
   const { sheet, header } = candidates[0]!;
   const title =
@@ -47,7 +71,7 @@ export async function readWorkbook(buffer: Buffer): Promise<PlanData> {
       value(sheet.getCell(r + 1, 1)),
     ).find((t) => /KẾ HOẠCH.*KHÓA\s*\d+/i.test(t)) ?? "";
   const match = title.match(/KẾ HOẠCH.*?NGÀNH\s+(.+?)\s*[-–]?\s*KHÓA\s*(\d+)/i);
-  if (!match || Number(match[2]) < 27 || Number(match[2]) > 99)
+  if (!match || Number(match[2]) < MIN_COHORT || Number(match[2]) > 99)
     throw new PlanError("missing_plan_metadata");
   const data: PlanData = {
     schemaVersion: 1,
@@ -227,16 +251,7 @@ export async function readWorkbook(buffer: Buffer): Promise<PlanData> {
       "Tệp có công thức tham chiếu workbook ngoài. Dùng kết quả đã lưu trong Excel; không tự tải hoặc tính lại nguồn ngoài. Ô trống giữ là chưa xác định.",
     );
   // Preserve rule text; do not silently interpret inconsistent choice counts.
-  for (const s of data.sections) {
-    const count = s.label.match(/trong\s*(\d+)/i)?.[1];
-    const actual = data.items.filter((i) => i.sectionId === s.id).length;
-    if (count && actual !== Number(count))
-      warn(
-        s.sourceRow,
-        `Nhóm “${s.label}” có ${actual} dòng môn, khác số ${count} ghi trong tiêu đề.`,
-      );
-  }
-  return reviewPlan(data);
+  return finish(data);
 }
 let busy = false;
 export async function parsePlan(buffer: Buffer): Promise<PlanData> {
