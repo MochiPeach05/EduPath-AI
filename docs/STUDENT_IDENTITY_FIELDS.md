@@ -11,3 +11,12 @@ Nếu MSSV đã thuộc danh tính khác, không gộp tài khoản và không g
 API hồ sơ trả tên đã tách, khóa và lớp. Danh sách và hộp thoại chi tiết cùng hiển thị các trường này; tìm kiếm hỗ trợ khóa/lớp và bộ lọc năm nhập học dùng dữ liệu đã lưu.
 
 Đã áp dụng migration trên PostgreSQL local. Không chạy build hoặc test theo yêu cầu. Supabase cần áp dụng migration khi Render triển khai với `DATABASE_AUTO_MIGRATE=true`.
+
+## Tên tài khoản K26 (từ 23/10/2026, migration 044)
+
+Theo yêu cầu "Sửa lại cái cách tách tên từ tên sinh viên lấy khóa với lớp của riêng k26 nó đang dùng cách khác", hàm `edupath_fill_student_identity` đọc thêm dạng tên của K26: `207CT12345 - Họ Tên - K26T-IT11`. Mã sinh viên có chữ (`207CT…`, `207LH…`). Lớp bắt đầu bằng khóa và có gạch nối, ví dụ `K26T-IT11`, `K26D-LH07`, `K26DB-IT1`.
+
+- Tên dạng này cho MSSV `207CT12345`, khóa `K26`, lớp là phần sau số khóa (`T-IT11`, `D-LH07`, `DB-IT1`), năm nhập học 2020 (khóa + 1994 như trước).
+- Dạng của K27 trở đi giữ nguyên. Mức khóa nhỏ nhất hạ từ K27 xuống K20.
+- Quy tắc điền giữ như migration 005: chỉ điền ô còn trống, không gán MSSV đang thuộc tài khoản khác. Migration chạy lại cho mọi tài khoản đã có, nên sinh viên K26 đã đăng nhập trước đó được điền khóa và lớp ngay khi triển khai.
+- Kiểm tra: `node scripts/verify-student-identity.mjs` chạy toàn bộ migration trong schema tạm của PostgreSQL local. Script dùng tên và mã giả, kiểm tra dạng K29, ba dạng K26, tên sai dạng, việc giữ ô đã có và MSSV trùng.
