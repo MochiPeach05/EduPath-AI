@@ -16,7 +16,7 @@ API hồ sơ trả tên đã tách, khóa và lớp. Danh sách và hộp thoạ
 
 Theo yêu cầu "Sửa lại cái cách tách tên từ tên sinh viên lấy khóa với lớp của riêng k26 nó đang dùng cách khác", hàm `edupath_fill_student_identity` đọc thêm dạng tên của K26: `207CT12345 - Họ Tên - K26T-IT11`. Mã sinh viên có chữ (`207CT…`, `207LH…`). Lớp bắt đầu bằng khóa và có gạch nối, ví dụ `K26T-IT11`, `K26D-LH07`, `K26DB-IT1`.
 
-- Tên dạng này cho MSSV `207CT12345`, khóa `K26`, lớp là phần sau số khóa (`T-IT11`, `D-LH07`, `DB-IT1`), năm nhập học 2020 (khóa + 1994 như trước).
+- Tên dạng này cho MSSV `207CT12345`, khóa `K26`, lớp là phần **sau dấu gạch** (`IT11`, `LH07`, `IT1`), năm nhập học 2020 (khóa + 1994 như trước). Chữ trước dấu gạch (T, D, DB trong `K26T`, `K26D`, `K26DB`) thuộc phần khóa, không thuộc lớp. Khóa vẫn lưu `K26` vì CTĐT, kế hoạch và tiêu chuẩn tốt nghiệp đều tra theo `K26`, giống như `71K29CNTT08` cho khóa `K29`. Migration 044 lúc đầu ghi lớp cả phần chữ khóa (`T-IT11`). Migration 045 (yêu cầu "trước dấu - là chữ T như K26T thì nó vẫn là khóa học chỉ sau dấu - mới là lớp học") sửa hàm và đổi các lớp đã lỡ ghi như vậy.
 - Dạng của K27 trở đi giữ nguyên. Mức khóa nhỏ nhất hạ từ K27 xuống K20.
 - Quy tắc điền giữ như migration 005: chỉ điền ô còn trống, không gán MSSV đang thuộc tài khoản khác. Migration chạy lại cho mọi tài khoản đã có, nên sinh viên K26 đã đăng nhập trước đó được điền khóa và lớp ngay khi triển khai.
 - Kiểm tra: `node scripts/verify-student-identity.mjs` chạy toàn bộ migration trong schema tạm của PostgreSQL local. Script dùng tên và mã giả, kiểm tra dạng K29, ba dạng K26, tên sai dạng, việc giữ ô đã có và MSSV trùng.
