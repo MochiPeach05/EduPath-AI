@@ -34,7 +34,7 @@ Migration `014_career_positions.sql` tạo danh mục và thêm liên kết từ
 - 23/10/2026 (sáng): khi dọn kỹ năng theo CTĐT, đã xóa ba nghề vì kỹ năng cốt lõi của chúng không có môn nào dạy: NN005 Kỹ sư DevOps, NN016 Lập trình viên trò chơi, NN020 Quản trị viên hệ thống (xem `docs/competency-management.md`). Sau lần dọn này còn 18 nghề trong 7 lĩnh vực.
 - 23/10/2026 (tối): theo yêu cầu "Kiểm tra coi Vị trí nghề nghiệp vậy đủ chưa nếu chưa đủ thì thêm vài nghề nữa dựa vào các kỹ năng tôi đã liên kết ở cấu hình môn học", script `output/career-add-2026-10-23/add-careers.mjs` thêm 8 nghề. Script có hai chế độ: `dry` chạy thử rồi hoàn tác, `apply` mới ghi và lưu bản sao lưu vào `output/supabase-backup-2026-10-23-career-add.json`.
   - Mỗi nghề dựa trên các kỹ năng đã có môn dạy (cấu hình môn học đang áp dụng, trọng số lớn hơn 0) nhưng trước đó chưa nghề nào dùng.
-  - Kỹ năng gắn dấu * là Bắt buộc, còn lại là Ưu tiên. Mã nghề do hệ thống tự cấp; khi chạy thử, các nghề nhận mã NN023–NN030.
+  - Kỹ năng gắn dấu * là Bắt buộc, còn lại là Ưu tiên. Mã nghề do hệ thống tự cấp. Người dùng đã chạy `apply` cùng ngày, các nghề nhận mã NN031–NN038. Các số NN023–NN030 đã bị lần chạy thử dùng mất, vì bộ đếm mã (sequence) không quay lại khi giao dịch hoàn tác; mã nghề không sửa hay dùng lại được, nên để nguyên.
 
 | Nghề | English | Lĩnh vực | Kỹ năng (* bắt buộc) |
 | --- | --- | --- | --- |
@@ -48,7 +48,7 @@ Migration `014_career_positions.sql` tạo danh mục và thêm liên kết từ
 | Kỹ sư bảo mật dữ liệu | Data Security Engineer | An toàn thông tin | Mã hóa và bảo mật dữ liệu*, Bảo mật hệ thống thông tin*, IAM, Vận dụng công nghệ chuỗi khối |
 
   - Script cũng bổ sung cho hai nghề có sẵn chính kỹ năng mà tên nghề nói tới: NN001 Chuyên viên kiểm thử xâm nhập thêm **Kiểm thử xâm nhập** (bắt buộc, 9 môn dạy), NN003 Chuyên viên phân tích dữ liệu thêm **Phân tích dữ liệu** (ưu tiên, 14 môn dạy).
-  - Kết quả chạy thử trên production: từ 18 lên 26 nghề, mọi kỹ năng nghề yêu cầu đều có môn dạy.
+  - Kết quả trên production: từ 18 lên 26 nghề, mọi kỹ năng nghề yêu cầu đều có môn dạy.
   - Không thêm lại nghề lập trình trò chơi (kỹ năng Phát triển trò chơi chỉ có 1 môn tự chọn của K26), nghề DevOps và nghề quản trị hệ thống (Linux chỉ có ở CTĐT K26–K28).
 
 ## Sử dụng
