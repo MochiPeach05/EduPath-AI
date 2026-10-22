@@ -80,7 +80,9 @@ export default function StudentPlans() {
           <p className="sc-muted">
             {selected?.cohortCode === list.data.profileCohort
               ? "Kế hoạch cùng khóa tuyển sinh của bạn."
-              : "Bạn có thể chọn kế hoạch của khóa khác để tham khảo."}{" "}
+              : list.data.profileCohort && !list.data.items.some((item) => item.cohortCode === list.data!.profileCohort)
+                ? `Chưa có kế hoạch đào tạo của khóa ${list.data.profileCohort}. Bạn có thể chọn kế hoạch của khóa khác để tham khảo.`
+                : "Bạn có thể chọn kế hoạch của khóa khác để tham khảo."}{" "}
             Đây là kế hoạch giảng dạy, không phải danh sách môn bạn đã đăng ký.
           </p>
         )}
