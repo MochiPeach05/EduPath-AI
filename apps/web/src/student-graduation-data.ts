@@ -545,12 +545,12 @@ export function suggestionItems(evaluation: GraduationEvaluation): SuggestionIte
   if (transfers.length) {
     items.push({
       key: "credit-transfer",
-      text: `Làm thủ tục chuyển điểm ${formatNumber(transfers.length)} học phần bạn đã học trả nợ với khóa sau (cùng tên nhưng khác mã). Trang này đang tạm tính các học phần đó là đã đạt; nếu không chuyển điểm, nhà trường vẫn tính là bạn còn nợ môn.`,
+      text: `Làm thủ tục chuyển điểm ${formatNumber(transfers.length)} học phần bạn đã học trả nợ với khóa sau. Trang này đang tính các học phần đó là đã đạt; nếu không chuyển điểm, nhà trường vẫn tính là bạn còn nợ môn.`,
       coursesLabel: null,
       courses: transfers.map((transfer, index) => ({
         key: `transfer:${transfer.code}:${index}`, code: transfer.code, name: transfer.name, credits: transfer.credits,
         glyph: "⇄", state: "Cần chuyển điểm", tone: "info",
-        detail: `đã đạt ở mã ${transfer.viaCode}${transfer.viaName ? ` (${transfer.viaName})` : ""}`,
+        detail: `đã học trả nợ (mã ${transfer.viaCode})`,
       })),
       note: "Liên hệ Phòng Đào tạo hoặc cố vấn học tập để làm thủ tục chuyển điểm.",
     });
@@ -651,7 +651,7 @@ export function warningNotes(evaluation: Pick<GraduationEvaluation, "warnings">)
       case "standard_ambiguous_codes":
         return { code: warning.code, text: "Tiêu chuẩn có mã học phần trùng hoặc thiếu nên một số nhóm chưa đối chiếu được. Khoa sẽ rà soát lại tiêu chuẩn." };
       case "credit_transfer_needed":
-        return { code: warning.code, text: `${formatNumber(warning.count ?? 0)} học phần trong tiêu chuẩn được tính là đạt nhờ học phần cùng tên nhưng khác mã mà bạn đã học trả nợ với khóa sau. Bạn cần làm thủ tục chuyển điểm các học phần này; nếu không, nhà trường vẫn tính là còn nợ môn.` };
+        return { code: warning.code, text: `${formatNumber(warning.count ?? 0)} học phần bạn đã học trả nợ với khóa sau được tính là đã đạt. Bạn cần làm thủ tục chuyển điểm các học phần này; nếu không, nhà trường vẫn tính là còn nợ môn.` };
       default:
         return { code: String(warning.code), text: "Dữ liệu bảng điểm có điểm cần kiểm tra lại." };
     }

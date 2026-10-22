@@ -336,11 +336,13 @@ describe("suggestions", () => {
     const items = suggestionItems(transfers);
     expect(items.map((item) => item.key)).toEqual(["credit-transfer"]);
     expect(items[0]).toMatchObject({
-      text: "Làm thủ tục chuyển điểm 1 học phần bạn đã học trả nợ với khóa sau (cùng tên nhưng khác mã). Trang này đang tạm tính các học phần đó là đã đạt; nếu không chuyển điểm, nhà trường vẫn tính là bạn còn nợ môn.",
-      courses: [{ code: "DIT0070", name: "Cơ sở dữ liệu", credits: 3, state: "Cần chuyển điểm", detail: "đã đạt ở mã 71ITIS30103 (Cơ sở dữ liệu)" }],
+      text: "Làm thủ tục chuyển điểm 1 học phần bạn đã học trả nợ với khóa sau. Trang này đang tính các học phần đó là đã đạt; nếu không chuyển điểm, nhà trường vẫn tính là bạn còn nợ môn.",
+      courses: [{ code: "DIT0070", name: "Cơ sở dữ liệu", credits: 3, state: "Cần chuyển điểm", detail: "đã học trả nợ (mã 71ITIS30103)" }],
       note: "Liên hệ Phòng Đào tạo hoặc cố vấn học tập để làm thủ tục chuyển điểm.",
     });
-    expect(warningNotes(transfers)[0]!.text).toContain("Bạn cần làm thủ tục chuyển điểm các học phần này");
+    expect(warningNotes(transfers)[0]!.text).toBe("1 học phần bạn đã học trả nợ với khóa sau được tính là đã đạt. Bạn cần làm thủ tục chuyển điểm các học phần này; nếu không, nhà trường vẫn tính là còn nợ môn.");
+    // To the student a retake is the same course: no "same name, another code" wording.
+    expect(JSON.stringify([items, warningNotes(transfers)])).not.toMatch(/cùng tên|khác mã/);
   });
 });
 

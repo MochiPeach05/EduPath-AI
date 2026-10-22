@@ -345,7 +345,7 @@ function CourseRow({ course, options }: { course: CourseView; options: TableOpti
   const state = row ? COURSE_STATES[row.state] : null;
   return <tr>
     <td className="sg-code-cell">{course.code}</td>
-    <td className="sg-name-cell">{course.name}{course.conditionOnly && <small>Môn điều kiện (*): cần đạt nhưng không tính tín chỉ tích lũy, điểm trung bình</small>}{row?.transferFrom && <small>Đã đạt ở mã {row.transferFrom} (học trả nợ với khóa sau); cần làm thủ tục chuyển điểm</small>}</td>
+    <td className="sg-name-cell">{course.name}{course.conditionOnly && <small>Môn điều kiện (*): cần đạt nhưng không tính tín chỉ tích lũy, điểm trung bình</small>}{row?.transferFrom && <small>Đã học trả nợ với khóa sau (mã {row.transferFrom}); cần làm thủ tục chuyển điểm</small>}</td>
     {options.showGroup && <td className="sg-group-cell">{course.groupTitle}</td>}
     <td className="sg-num" data-label="TC">{formatNumber(course.credits)}</td>
     {options.hasResults && <>

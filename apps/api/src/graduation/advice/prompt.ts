@@ -244,7 +244,7 @@ function warningText(warning: GraduationWarning): string {
     case "standard_ambiguous_codes":
       return "Tiêu chuẩn xét tốt nghiệp có mã học phần trùng hoặc thiếu nên một số nhóm chưa xác định được.";
     case "credit_transfer_needed":
-      return `${warning.count ?? "Một số"} học phần được tính là đạt nhờ học phần cùng tên nhưng khác mã (học trả nợ với khóa sau). ` +
+      return `${warning.count ?? "Một số"} học phần sinh viên đã học trả nợ với khóa sau và đã đạt. ` +
         "Hãy nhắc sinh viên làm thủ tục chuyển điểm các học phần này với Phòng Đào tạo; nếu không, nhà trường vẫn tính là còn nợ môn.";
   }
 }
@@ -379,8 +379,8 @@ function renderGraduationDataBlock(facts: AdviceFacts, list: readonly Condition[
   if (!evaluation.warnings.length) push("Không có.");
   for (const warning of evaluation.warnings) push(`- ${warningText(warning)}`);
   for (const transfer of evaluation.creditTransfers ?? []) {
-    push(`${SUB}- ${sanitizeText(transfer.code, 40)} ${sanitizeText(transfer.name)}: đã đạt ở mã ${sanitizeText(transfer.viaCode, 40)}` +
-      `${transfer.viaName ? ` (${sanitizeText(transfer.viaName)})` : ""} — cần làm thủ tục chuyển điểm`);
+    push(`${SUB}- ${sanitizeText(transfer.code, 40)} ${sanitizeText(transfer.name)}: đã học trả nợ (mã ${sanitizeText(transfer.viaCode, 40)})` +
+      " — cần làm thủ tục chuyển điểm");
   }
 
   push("", "=== KẾT THÚC DỮ LIỆU ===", "", "Hãy viết lời khuyên về điều kiện xét tốt nghiệp cho bạn sinh viên này theo đúng cấu trúc JSON đã mô tả.");
