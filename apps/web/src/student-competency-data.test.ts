@@ -3,9 +3,51 @@ import {
   aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, confidentStrengths, countAxis, dataUsedLine, displayLevel, FIT_SCALE, fitLabelOf, fitLevelOf, fitPercent, gapHistory, levelChart, levelSummary, levelText, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
   gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isPreconditionError, PRIORITY_LABELS, levelStep, mapAiOutput, missingRequirements, missingRequirementsMessage, modelLabel, plansFor, skillGroupKeys,
   scoreDifference, shouldPoll, sortRequirements, termLabel, EMPTY_SKILL_FILTERS,
+  careerThresholdsLine, chartLevelLabel, currentImprovements, LEVEL_SCALE, levelOfScore, withCurrentLevels,
 } from "./student-competency-data";
 import { fixtureAiOutput, fixtureAssessment, fixtureResult } from "./student-competency.fixture";
 import type { CareerRequirementResult } from "./competency-assessment-types";
+
+describe("levels named like the transcript's classification (comp-calc-v10, user 2026-10-22)", () => {
+  it("reads a score as the transcript's 4-point classification × 25: Xuất sắc 90, Giỏi 80, Khá 62,5, Trung bình 50, Yếu", () => {
+    expect([90, 89.99, 82, 80, 79.99, 62.5, 62.49, 50, 49.99, 0].map(levelOfScore)).toEqual([
+      "excellent", "proficient", "proficient", "proficient", "good", "good", "basic", "basic", "needs_work", "needs_work",
+    ]);
+    expect(LEVEL_SCALE.map((item) => `${item.label} ${item.range}`)).toEqual([
+      "Xuất sắc từ 90", "Giỏi 80 đến dưới 90", "Khá 62,5 đến dưới 80", "Trung bình 50 đến dưới 62,5", "Yếu dưới 50",
+    ]);
+    // Shown whole and rounded down, except from 62,5 to 63: one decimal, so a Khá score never reads 62.
+    expect([82.4, 62.97, 62.5, 62.49, 63].map(formatScore)).toEqual(["82", "62,9", "62,5", "62", "63"]);
+    // Sắp học, Chưa có điểm and Miễn/công nhận are not levels: they stay named in the chart, not in the scale.
+    expect(["upcoming", "no_score", "exempt"].map((code) => chartLevelLabel(code as "upcoming"))).toEqual(["Sắp học", "Chưa có điểm", "Miễn/công nhận"]);
+    expect(levelStep("excellent")).toBe(5);
+  });
+  it("re-reads a result stored on the old scale: 82 was Khá, it is Giỏi", () => {
+    const old = { ...fixtureResult, overall: { ...fixtureResult.overall, score: 82, level: "good" as const, levelLabel: "Khá" } };
+    const result = withCurrentLevels(old);
+    expect([result.overall.level, result.overall.levelLabel]).toEqual(["proficient", "Giỏi"]);
+    expect(result.skills.filter((skill) => skill.score !== null).map((skill) => `${skill.key} ${skill.levelLabel}`)).toEqual([
+      "S01 Xuất sắc", "S02 Giỏi", "S03 Khá", "S04 Khá", "S06 Khá",
+    ]);
+    // Skills and groups without a score keep their state; the history, plans and career rows are re-read too.
+    expect(result.skills.find((skill) => skill.key === "S05")!.level).toBe("exempt");
+    expect(result.groups.map((group) => group.levelLabel)).toEqual(["Khá", "Miễn/công nhận"]);
+    expect(result.history!.map((point) => point.overall.levelLabel)).toEqual(["Khá", "Khá", "Khá", "Giỏi", "Khá"]);
+    expect(result.skillPlans!.map((plan) => plan.levelLabel)).toEqual(["Trung bình", "Yếu"]);
+    expect(result.career!.requirements.map((req) => req.levelLabel)).toEqual(["Xuất sắc", "Khá", "Khá", "Chưa có minh chứng", null]);
+    expect(withCurrentLevels(result)).toEqual(result);
+    // "Cần củng cố" follows the scale too: Giải thuật (64) was below the old Khá (70), it is Khá now.
+    expect(fixtureResult.highlights.improvements).toEqual(["S04"]);
+    expect(currentImprovements(result)).toEqual([]);
+    expect(currentImprovements({ ...result, skills: result.skills.map((skill) => skill.key === "S04" ? { ...skill, score: 61 } : skill) })).toEqual(["S04"]);
+  });
+  it("names the career thresholds from the result: Ưu tiên 62,5 is Khá, Bắt buộc 80 Giỏi; an older 70/85 has no level", () => {
+    const career = fixtureResult.career!;
+    const at = (preferred: number, required: number) => ({ requirements: career.requirements.map((req) => ({ ...req, threshold: req.isRequired ? required : preferred })) });
+    expect(careerThresholdsLine(at(62.5, 80))).toBe("Ngưỡng đạt: kỹ năng Ưu tiên từ 62,5 (mức Khá), kỹ năng Bắt buộc từ 80 (mức Giỏi).");
+    expect(careerThresholdsLine(at(70, 85))).toBe("Ngưỡng đạt: kỹ năng Ưu tiên từ 70, kỹ năng Bắt buộc từ 85.");
+  });
+});
 
 describe("skills without a score: Sắp học or Chưa có điểm (2026-10-21)", () => {
   const s07 = fixtureResult.skills.find((skill) => skill.key === "S07")!;
@@ -113,7 +155,7 @@ describe("level chart", () => {
   it("stacks each group's skills by level on one axis, counted like the group line", () => {
     const { axis, bars } = levelChart(fixtureResult);
     expect(axis.max).toBe(5);
-    // G1: S01, S02 Thành thạo · S03 Khá · S04 Cơ bản · S07 Sắp học; S08 is outside the student's choices.
+    // G1 as stored (before comp-calc-v10): S01, S02 proficient · S03 good · S04 basic · S07 Sắp học; S08 is outside the student's choices.
     const [g1, g2] = bars;
     expect(g1!.total).toBe(5);
     expect(g1!.segments.map((segment) => [segment.level, segment.count, segment.start, segment.end])).toEqual([
@@ -307,8 +349,8 @@ describe("cleanKeyText", () => {
   it("drops a key written next to its own name instead of repeating the name", () => {
     // Regression: "(API - S12)" used to become "(API - API)".
     expect(cleanKeyText("Khả năng tích hợp (API - S12) của bạn rất tốt.", names)).toBe("Khả năng tích hợp (API) của bạn rất tốt.");
-    expect(cleanKeyText("API (S12) đạt mức Thành thạo.", names)).toBe("API đạt mức Thành thạo.");
-    expect(cleanKeyText("S12 - API đạt mức Thành thạo.", names)).toBe("API đạt mức Thành thạo.");
+    expect(cleanKeyText("API (S12) đạt mức Giỏi.", names)).toBe("API đạt mức Giỏi.");
+    expect(cleanKeyText("S12 - API đạt mức Giỏi.", names)).toBe("API đạt mức Giỏi.");
     expect(cleanKeyText("Ôn (S12: API) và S12 (API).", names)).toBe("Ôn (API) và API.");
     expect(cleanKeyText("Kiểm thử phần mềm (S03), Lập trình C# (S07).", names)).toBe("Kiểm thử phần mềm, Lập trình C#.");
     expect(cleanKeyText("Nhóm Chuyên môn (G1) và nhóm G2 - Kỹ năng mềm.", names)).toBe("Nhóm Chuyên môn và nhóm Kỹ năng mềm.");

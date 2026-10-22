@@ -96,14 +96,35 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
     const html = withAi("completed");
     expect(html).not.toContain("Chi tiết kỹ năng");
     expect(html).toContain("Kết quả này cho biết gì?");
-    // G1: S01, S02 Thành thạo · S03 Khá · S04 Cơ bản · S07 Sắp học (S08 is outside the student's choices).
-    expect(html).toContain('aria-label="2 kỹ năng Thành thạo trong nhóm Kiến thức chuyên môn"');
-    expect(html).toContain('aria-label="1 kỹ năng Cơ bản trong nhóm Kiến thức chuyên môn"');
+    // G1, read on the comp-calc-v10 scale from a result stored before it: S01 (91) Xuất sắc · S02 (86) Giỏi ·
+    // S03 (75) and S04 (64) Khá · S07 Sắp học (S08 is outside the student's choices).
+    expect(html).toContain('aria-label="1 kỹ năng Xuất sắc trong nhóm Kiến thức chuyên môn"');
+    expect(html).toContain('aria-label="1 kỹ năng Giỏi trong nhóm Kiến thức chuyên môn"');
+    expect(html).toContain('aria-label="2 kỹ năng Khá trong nhóm Kiến thức chuyên môn"');
+    expect(html).not.toContain("Thành thạo");
+    expect(html).not.toContain("Cơ bản");
     expect(html).toContain('aria-label="1 kỹ năng Sắp học trong nhóm Kiến thức chuyên môn"');
     // The engine's "Chưa có minh chứng" is never shown: split into Sắp học / Chưa có điểm (2026-10-21).
     expect(html).not.toContain("Chưa có minh chứng");
     expect(withAi("completed", "gap")).not.toContain("Chưa có minh chứng");
     expect(html).toContain("Điểm nhóm 79 · Khá");
+  });
+  it("lists only the five levels in Thang mức năng lực and reads an old 82 as Giỏi (user, 2026-10-22)", () => {
+    const html = withAi("completed");
+    const legend = html.slice(html.indexOf("<summary>Thang mức năng lực</summary>"), html.indexOf("</details>", html.indexOf("<summary>Thang mức năng lực</summary>")));
+    expect([...legend.matchAll(/<\/span>([^<]+)<\/span><span class="scomp-legend-range">([^<]+)<\/span>/g)].map((match) => `${match[1]} ${match[2]}`)).toEqual([
+      "Xuất sắc từ 90", "Giỏi 80 đến dưới 90", "Khá 62,5 đến dưới 80", "Trung bình 50 đến dưới 62,5", "Yếu dưới 50",
+    ]);
+    expect(legend).toContain("Cùng ngưỡng xếp loại học lực trên bảng điểm (điểm hệ 4 × 25): 3,6 → 90 · 3,2 → 80 · 2,5 → 62,5 · 2,0 → 50.");
+    for (const state of ["Sắp học", "Chưa có điểm", "Miễn/công nhận"]) expect(legend).not.toContain(state);
+    // The student's case: a result stored with 82 · Khá before comp-calc-v10 now reads Giỏi.
+    const assessment = fixtureAssessment("completed");
+    const old = { ...assessment, result: { ...assessment.result, overall: { ...assessment.result.overall, score: 82, level: "good" as const, levelLabel: "Khá" } } };
+    const overview = render({ assessment: old, aiEnabled: true, workerOnline: true });
+    const card = overview.slice(overview.indexOf("scomp-score-card"), overview.indexOf("scomp-groups"));
+    expect(card).toContain("<strong>82</strong>");
+    expect(card).toMatch(/scomp-level scomp-level-4">.*<\/span>Giỏi<\/span>/);
+    expect(card).toContain("Kết quả các học phần liên quan tốt; nắm vững phần lớn nội dung.");
   });
   it("draws the proficiency table as one stacked bar per group with a tooltip on every segment", () => {
     const html = withAi("completed");
@@ -113,42 +134,43 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
     expect(section).toContain("<span>Điểm nhóm 79</span>");
     expect(section).toContain(">5 kỹ năng</span>");
     // Segments in scale order, each a button that names the group, the count and the share.
-    expect([...section.matchAll(/class="scomp-chart-seg scomp-chart-(\w+)/g)].map((match) => match[1])).toEqual(["proficient", "good", "basic", "upcoming", "exempt"]);
-    expect(section).toContain('aria-label="Kiến thức chuyên môn: 2 kỹ năng Thành thạo, 40% số kỹ năng của nhóm. Bấm để xem các kỹ năng này."');
-    expect(section).toContain("left:0%;width:40%");
+    expect([...section.matchAll(/class="scomp-chart-seg scomp-chart-(\w+)/g)].map((match) => match[1])).toEqual(["excellent", "proficient", "good", "upcoming", "exempt"]);
+    expect(section).toContain('aria-label="Kiến thức chuyên môn: 1 kỹ năng Xuất sắc, 20% số kỹ năng của nhóm. Bấm để xem các kỹ năng này."');
+    expect(section).toContain("left:0%;width:20%");
     // The tooltip gives the full picture: count, level, group share, the level's range and the skills with their scores.
     const tip = section.slice(section.indexOf("scomp-chart-tip"), section.indexOf("Bấm để xem danh sách"));
-    expect(tip).toContain("<strong>2 kỹ năng</strong><span>Thành thạo</span>");
-    expect(tip).toContain("Kiến thức chuyên môn · 40% số kỹ năng của nhóm");
-    expect(tip).toContain("Điểm kỹ năng từ 85");
+    expect(tip).toContain("<strong>1 kỹ năng</strong><span>Xuất sắc</span>");
+    expect(tip).toContain("Kiến thức chuyên môn · 20% số kỹ năng của nhóm");
+    expect(tip).toContain("Điểm kỹ năng từ 90");
     expect(tip).toContain("<span>Lập trình web</span><b>91</b>");
-    expect(tip).toContain("<span>Lập trình hướng đối tượng</span><b>86</b>");
+    expect(section).toContain("Điểm kỹ năng 80 đến dưới 90");
+    expect(section).toContain("<span>Lập trình hướng đối tượng</span><b>86</b>");
     expect(section).toContain("Đang học hoặc chưa học tới học phần đo các kỹ năng này — không phải điểm yếu");
     // Legend for every level present, axis ticks, and the table as a collapsed twin.
     expect([...section.matchAll(/<li><i class="scomp-chart-key scomp-chart-\w+" aria-hidden="true"><\/i>([^<]+)<\/li>/g)].map((match) => match[1]))
-      .toEqual(["Thành thạo", "Khá", "Cơ bản", "Cần củng cố", "Sắp học", "Miễn/công nhận"]);
+      .toEqual(["Xuất sắc", "Giỏi", "Khá", "Trung bình", "Yếu", "Sắp học", "Miễn/công nhận"]);
     expect([...section.matchAll(/<span style="left:[\d.]+%">(\d+)<\/span>/g)].map((match) => match[1])).toEqual(["0", "1", "2", "3", "4", "5"]);
     expect(section).toMatch(/<details class="scomp-legend scomp-chart-table"><summary>Xem dạng bảng<\/summary>/);
   });
   it("draws every skill as a score bar on 0–100 with a tooltip and keeps the evidence behind a click", () => {
     const html = withAi("completed");
     const list = html.slice(html.indexOf('id="scomp-skill-list"'));
-    // Lập trình web: 91 → Thành thạo bar at 91%, its score at the tip.
+    // Lập trình web: 91 → Xuất sắc bar at 91%, its score at the tip.
     const row = list.slice(list.indexOf('scomp-skill-name">Lập trình web'), list.indexOf("Học phần minh chứng của Lập trình web"));
-    expect(row).toContain('class="scomp-skill-bar scomp-chart-proficient" style="width:91%"');
+    expect(row).toContain('class="scomp-skill-bar scomp-chart-excellent" style="width:91%"');
     expect(row).toContain('<span class="scomp-skill-score" style="left:calc(91% + 6px)">91</span>');
-    expect(row).toContain('<span class="sr-only">Thành thạo · Độ tin cậy trung bình · độ phủ 50%</span>');
+    expect(row).toContain('<span class="sr-only">Xuất sắc · Độ tin cậy trung bình · độ phủ 50%</span>');
     // The tooltip: score and level first, then the skill, confidence and its evidence courses with their results.
-    expect(row).toContain("<strong>91 điểm</strong><span>Thành thạo</span>");
+    expect(row).toContain("<strong>91 điểm</strong><span>Xuất sắc</span>");
     expect(row).toContain("Lập trình web · kỹ năng của nghề mục tiêu");
     expect(row).toContain("<span>Độ tin cậy trung bình · độ phủ 50%</span>");
     expect(row).toContain("<span>Lập trình web (TST104)</span><b>9,1 · A+</b>");
     expect(row).toContain("Bấm để xem học phần minh chứng");
     // The opened row repeats the facts, so nothing is only in the tooltip.
-    expect(row).toContain('<p class="scomp-meta">91 điểm · Thành thạo · Độ tin cậy trung bình · độ phủ 50%</p>');
+    expect(row).toContain('<p class="scomp-meta">91 điểm · Xuất sắc · Độ tin cậy trung bình · độ phủ 50%</p>');
     // A skill without a score has no bar but says why; the axis marks the level thresholds.
     expect(list).toContain('<span class="scomp-skill-none">Sắp học</span>');
-    expect(list).toContain('<span style="left:50%">50</span><span style="left:70%">70</span><span style="left:85%">85</span>');
+    expect(list).toContain('<span style="left:50%">50</span><span style="left:62.5%">62,5</span><span style="left:80%">80</span><span style="left:90%">90</span>');
   });
   it("follows the competency term by term, grouped by school year (STU-COMP-07)", () => {
     const html = withAi("completed");
@@ -157,7 +179,7 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
     expect(section).toContain("Điểm năng lực tổng tăng từ 68 (học kỳ 1 năm học 2023–2024) lên 79 (học kỳ 2 năm học 2025–2026). Cao nhất là 81 vào học kỳ 2 năm học 2024–2025.");
     // One row group per school year, its end-of-year score in the header.
     expect([...section.matchAll(/Năm học (\d{4}–\d{4})<span>Cuối năm: (\d+) · (\S+)<\/span>/g)].map((match) => match.slice(1).join(" "))).toEqual([
-      "2023–2024 72 Khá", "2024–2025 81 Khá", "2025–2026 79 Khá",
+      "2023–2024 72 Khá", "2024–2025 81 Giỏi", "2025–2026 79 Khá",
     ]);
     // Group columns follow the result's groups; a group without a score shows a dash.
     expect(section).toContain('<th scope="col" class="scomp-num">Kiến thức chuyên môn</th><th scope="col" class="scomp-num">Kỹ năng bổ trợ</th>');
@@ -359,17 +381,17 @@ describe("StudentCompetency — Khoảng trống kỹ năng", () => {
     expect(html).toContain("Không có học phần nào trong chương trình đào tạo của bạn để đăng ký cho kỹ năng này.");
     expect(html).toContain("Đóng gói ứng dụng web của bạn bằng Docker.");
   });
-  it("advises only on the target career's skills: raising its met skills to Thành thạo", () => {
+  it("advises only on the target career's skills: raising its met skills to Giỏi", () => {
     const assessment = fixtureAssessment("completed");
     const deepen = [
-      { ...fixtureResult.skillPlans![0]!, skillKey: "S01", name: "Lập trình web", level: "good" as const, levelLabel: "Khá", score: 80, careerSkill: true, purpose: "deepen" as const },
+      { ...fixtureResult.skillPlans![0]!, skillKey: "S01", name: "Lập trình web", level: "good" as const, levelLabel: "Khá", score: 76, careerSkill: true, purpose: "deepen" as const },
       { ...fixtureResult.skillPlans![1]!, skillKey: "S03", name: "Git", level: "good" as const, levelLabel: "Khá", score: 78, careerSkill: true, purpose: "deepen" as const },
     ];
     const html = render({ assessment: { ...assessment, result: { ...fixtureResult, skillPlans: deepen } }, aiEnabled: true, workerOnline: true }, { view: "gap" });
-    const plans = html.slice(html.indexOf("Nâng kỹ năng của nghề lên mức Thành thạo"), html.indexOf("Kỹ năng cần tự học (CTĐT chưa đo)"));
-    expect(plans).toContain("Kỹ năng nghề Lập trình viên web bạn đã đạt ngưỡng nhưng chưa đạt mức Thành thạo (từ 85)");
+    const plans = html.slice(html.indexOf("Nâng kỹ năng của nghề lên mức Giỏi"), html.indexOf("Kỹ năng cần tự học (CTĐT chưa đo)"));
+    expect(plans).toContain("Kỹ năng nghề Lập trình viên web bạn đã đạt ngưỡng nhưng chưa đạt mức Giỏi (từ 80)");
     expect(plans).toContain("Kỹ năng: Lập trình web");
-    expect(plans).toContain("Khá · 80");
+    expect(plans).toContain("Khá · 76");
     expect(plans).toContain("Bạn đã học hết học phần đo kỹ năng này trong chương trình; hãy làm một dự án nhỏ gắn với nghề");
     expect(html).not.toContain("Kỹ năng cần củng cố (dưới mức Khá)");
     // Weak skills outside the career (plans of an older result) are never advised on once a career is chosen.
@@ -385,7 +407,7 @@ describe("StudentCompetency — Khoảng trống kỹ năng", () => {
     const html = render({ assessment: { ...assessment, result: { ...assessment.result, career: null } }, aiEnabled: true, workerOnline: true }, { view: "gap" });
     const plans = html.slice(html.indexOf("Kỹ năng cần củng cố (dưới mức Khá)"), html.indexOf("Kỹ năng cần tự học (CTĐT chưa đo)"));
     expect(plans).toContain("Kỹ năng: Sử dụng tiếng Anh");
-    expect(plans).toContain("Cơ bản · 61");
+    expect(plans).toContain("Trung bình · 61");
     expect(plans).toMatch(/scomp-plan-action">Học cải thiện<\/span><strong>Tiếng Anh 2<\/strong>/);
     expect(plans).toContain("✓</span> Đã học, đạt · điểm 5,8 (C)");
     expect(plans).toMatch(/scomp-plan-action">Học mới<\/span><strong>Tiếng Anh chuyên ngành<\/strong>/);

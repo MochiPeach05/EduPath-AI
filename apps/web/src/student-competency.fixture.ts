@@ -20,7 +20,9 @@ const courses: CourseFact[] = [
 ];
 
 type SkillSeed = [key: string, name: string, group: "G1" | "G2", score: number | null, level: SkillResult["level"], evidence: [code: string, weight: number][], extra?: Partial<SkillResult>];
-const levelLabels: Record<SkillResult["level"], string> = { proficient: "Thành thạo", good: "Khá", basic: "Cơ bản", needs_work: "Cần củng cố", no_evidence: "Chưa có minh chứng", exempt: "Miễn/công nhận" };
+// Stored like a result computed before comp-calc-v10 (Thành thạo ≥ 85 …): the page re-reads every level
+// from the score (withCurrentLevels), so S01 (91) shows Xuất sắc and S02 (86,2) Giỏi.
+const levelLabels: Record<SkillResult["level"], string> = { excellent: "Xuất sắc", proficient: "Thành thạo", good: "Khá", basic: "Cơ bản", needs_work: "Cần củng cố", no_evidence: "Chưa có minh chứng", exempt: "Miễn/công nhận" };
 const seeds: SkillSeed[] = [
   ["S01", "Lập trình web", "G1", 91, "proficient", [["TST104", 0.6], ["TST101", 0.2]], { careerSkill: true }],
   ["S02", "Lập trình hướng đối tượng", "G1", 86.2, "proficient", [["TST101", 0.5]]],

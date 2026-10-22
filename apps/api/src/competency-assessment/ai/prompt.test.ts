@@ -68,6 +68,11 @@ describe("formatting helpers", () => {
     expect(formatScore(84.999)).toBe("84");
     expect(formatScore(85)).toBe("85");
     expect(formatScore(0)).toBe("0");
+    // Khá starts at 62,5 (comp-calc-v10): that band keeps one decimal, so a Khá score never reads 62.
+    expect(formatScore(62.5)).toBe("62,5");
+    expect(formatScore(62.97)).toBe("62,9");
+    expect(formatScore(62.49)).toBe("62");
+    expect(formatScore(63)).toBe("63");
     expect(formatDeficit(9.44)).toBe("10");
     expect(formatDeficit(30)).toBe("30");
     expect(formatDeficit(0.2)).toBe("1");
@@ -85,8 +90,8 @@ describe("buildAiInput", () => {
   };
 
   it("uses the spec system prompt verbatim plus the output description", () => {
-    expect(PROMPT_VERSION).toBe("comp-v8");
-    expect(input.promptVersion).toBe("comp-v8");
+    expect(PROMPT_VERSION).toBe("comp-v9");
+    expect(input.promptVersion).toBe("comp-v9");
     expect(input.think).toBe(true);
     expect(input.system).toBe(SYSTEM_PROMPT);
     expect(input.system.startsWith("Bạn là cố vấn học tập của EduPath AI, đồng hành cùng sinh viên ngành Công nghệ Thông tin, Trường Đại học Văn Lang.\n")).toBe(true);
@@ -113,13 +118,13 @@ describe("buildAiInput", () => {
     expect(system).toContain('11. Nếu học phần "chưa đủ điều kiện", nói rõ cần đạt học phần tiên quyết nào trước.');
     expect(system).toContain('Học phần đã đạt thì nói "học cải thiện" hoặc "ôn lại", không nói "học mới".');
     expect(system).toContain("12. Khi sinh viên đã chọn nghề mục tiêu, improvements và nextSteps chỉ nói về kỹ năng của nghề đó (mục [4] và [6]). Không khuyên học lại, học cải thiện hay ôn lại cho kỹ năng không thuộc nghề mục tiêu (ví dụ kỹ năng mạng khi nghề là kỹ sư phần mềm).");
-    expect(system).toContain("13. Khi mọi kỹ năng của nghề đã đạt ngưỡng: khuyên nâng các kỹ năng nghề chưa đạt mức Thành thạo bằng học phần trong mục [6], hoặc một sản phẩm, dự án cụ thể gắn với nghề khi không còn học phần.");
+    expect(system).toContain("13. Khi mọi kỹ năng của nghề đã đạt ngưỡng: khuyên nâng các kỹ năng nghề chưa đạt mức Giỏi bằng học phần trong mục [6], hoặc một sản phẩm, dự án cụ thể gắn với nghề khi không còn học phần.");
     expect(system).toContain("14. groupInsights cho nhóm dưới mức Khá: nêu tên 1–2 kỹ năng thấp nhất của nhóm; nếu kỹ năng đó không thuộc nghề mục tiêu thì nói rõ là ngoài yêu cầu của nghề và không đề xuất học lại hay học cải thiện;");
     expect(system).toContain("15. Không nhận xét về điều kiện xét tốt nghiệp (trang Điều kiện xét tốt nghiệp đã có kết quả và lời khuyên riêng); progress chỉ nói về tiến độ so với kế hoạch đào tạo.");
     expect(system).toContain("- summary: 2–3 câu tổng quan, tối đa 600 ký tự; nếu đã chọn nghề, nêu tình trạng so với nghề mục tiêu;");
     expect(system).toContain("về điểm mạnh, ưu tiên kỹ năng của nghề mục tiêu;");
     expect(system).toContain("courses: tối đa 2 mục { courseCode: mã trong danh sách của đúng kỹ năng đó ở mục [6]");
-    expect(system).toContain("(khi đã chọn nghề, đó chỉ là kỹ năng của nghề: dưới ngưỡng, hoặc đã đạt ngưỡng nhưng chưa Thành thạo)");
+    expect(system).toContain("(khi đã chọn nghề, đó chỉ là kỹ năng của nghề: dưới ngưỡng, hoặc đã đạt ngưỡng nhưng chưa đạt mức Giỏi)");
     expect(system).toContain("- progress: tối đa 500 ký tự, chỉ về tiến độ so với kế hoạch đào tạo (mục [8]); không nhận xét về xét tốt nghiệp.");
     expect(system).not.toContain("kế hoạch đào tạo và xét tốt nghiệp");
   });
@@ -138,7 +143,7 @@ describe("buildAiInput", () => {
       expect(sections.map((section) => user.indexOf(section))).toEqual(sections.map((section) => user.indexOf(section)).sort((a, b) => a - b));
     }
     const user = input.user;
-    expect(user).toContain("S01 | Lập trình hướng đối tượng | nhóm G1 | thuộc nghề mục tiêu | điểm 88 | Thành thạo");
+    expect(user).toContain("S01 | Lập trình hướng đối tượng | nhóm G1 | thuộc nghề mục tiêu | điểm 88 | Giỏi");
     expect(user).toContain("S04 | Làm việc nhóm | nhóm G2 | ngoài nghề mục tiêu | Chưa có minh chứng");
     expect(user).toContain("S05 | Điện toán đám mây | Chưa đủ dữ liệu");
     expect(user).toContain("  - TST202 | Đảm bảo chất lượng phần mềm | 3 TC | chưa học | chưa đủ điều kiện: cần đạt trước Kiểm thử phần mềm cơ bản (TST201) | kế hoạch: học kỳ 2 năm học 2026–2027\n");
@@ -146,16 +151,16 @@ describe("buildAiInput", () => {
     expect(user).toContain("Ảnh hưởng: Điểm kỹ năng có thể thấp hơn thực tế.");
     expect(user).toContain("Có thể nêu là điểm mạnh: S01\n");
     expect(user).toContain("Có thể nêu là cần cải thiện: S02, S03\n");
-    expect(noCareer.user).toContain("S01 | Lập trình hướng đối tượng | nhóm G1 | điểm 88 | Thành thạo");
+    expect(noCareer.user).toContain("S01 | Lập trình hướng đối tượng | nhóm G1 | điểm 88 | Giỏi");
     expect(noCareer.user).toContain("Có thể nêu là điểm mạnh: S01, S02\n");
     expect(noCareer.user).toContain("Có thể nêu là cần cải thiện: S06, S07, S03\n");
   });
 
-  it("with a career, offers only its skills: below its threshold, or met and still below Thành thạo (comp-v5)", () => {
+  it("with a career, offers only its skills: below its threshold, or met and still below Giỏi (comp-v5; Thành thạo before comp-v9)", () => {
     const sixth = sectionOf(input.user, "[6. ");
     expect(sixth).toBe([
       "[6. KỸ NĂNG CỦA NGHỀ MỤC TIÊU CẦN CẢI THIỆN HOẶC NÂNG LÊN VÀ HỌC PHẦN GỢI Ý] (dùng cho improvements; chỉ chọn học phần trong danh sách của đúng kỹ năng)",
-      "S02 Cơ sở dữ liệu (kỹ năng của nghề mục tiêu đã đạt ngưỡng, có thể nâng lên mức Thành thạo):",
+      "S02 Cơ sở dữ liệu (kỹ năng của nghề mục tiêu đã đạt ngưỡng, có thể nâng lên mức Giỏi):",
       "  - TST240 | Hệ quản trị cơ sở dữ liệu | 3 TC | chưa học | đủ điều kiện đăng ký | kế hoạch: học kỳ 1 năm học 2026–2027",
       "  - TST130 | Nhập môn cơ sở dữ liệu | 3 TC | đã đạt, điểm 6,8 (C+) – có thể học cải thiện",
       "S03 Kiểm thử phần mềm (kỹ năng của nghề mục tiêu dưới ngưỡng):",
@@ -166,7 +171,7 @@ describe("buildAiInput", () => {
     for (const text of ["S06 |", "S07 |", "TST120", "TST310"]) expect(input.user).not.toContain(text);
     const selfStudy = syntheticResult();
     selfStudy.skillPlans[0] = { ...selfStudy.skillPlans[0]!, take: [], improve: [], selfStudy: true };
-    expect(buildAiInput(selfStudy).user).toContain("S02 Cơ sở dữ liệu (kỹ năng của nghề mục tiêu đã đạt ngưỡng, có thể nâng lên mức Thành thạo):\n" +
+    expect(buildAiInput(selfStudy).user).toContain("S02 Cơ sở dữ liệu (kỹ năng của nghề mục tiêu đã đạt ngưỡng, có thể nâng lên mức Giỏi):\n" +
       "  (không còn học phần phù hợp; gợi ý một sản phẩm hoặc dự án cụ thể gắn với nghề mục tiêu để kiểm chứng)\n");
     const none = syntheticResult();
     none.skillPlans = [];
@@ -211,11 +216,11 @@ describe("buildAiInput", () => {
   });
 
   it("names the weakest skills of each group below Khá and, with a career, whether each belongs to it", () => {
-    expect(input.user).toContain("G2 | Kỹ năng bổ trợ | điểm 55 | Cơ bản | tin cậy Thấp | 1/2 kỹ năng có minh chứng\n" +
+    expect(input.user).toContain("G2 | Kỹ năng bổ trợ | điểm 55 | Trung bình | tin cậy Thấp | 1/2 kỹ năng có minh chứng\n" +
       "  kỹ năng thấp nhất của nhóm: S03 Kiểm thử phần mềm (điểm 55, thuộc nghề mục tiêu); S06 Mạng máy tính (điểm 65, ngoài nghề mục tiêu)\n");
     expect(noCareer.user).toContain("  kỹ năng thấp nhất của nhóm: S03 Kiểm thử phần mềm (điểm 55); S06 Mạng máy tính (điểm 65)\n");
-    // G1 is at Khá: no line, although Sử dụng tiếng Anh (61) belongs to it.
-    expect(input.user).toContain("G1 | Kỹ thuật phần mềm | điểm 80 | Khá | tin cậy Trung bình | 2/2 kỹ năng có minh chứng\nG2 |");
+    // G1 is at Giỏi: no line, although Sử dụng tiếng Anh (61) belongs to it.
+    expect(input.user).toContain("G1 | Kỹ thuật phần mềm | điểm 80 | Giỏi | tin cậy Trung bình | 2/2 kỹ năng có minh chứng\nG2 |");
   });
 
   it("does not list thesis replacements off that path as courses to come (comp-calc-v7)", () => {
@@ -304,8 +309,8 @@ describe("buildAiInput", () => {
     result.career!.requirements[2] = { ...result.career!.requirements[2]!, score: 75.56, deficit: 9.44 };
     const user = buildAiInput(result).user;
     expect(user).toContain("Điểm tổng: 83 | Khá");
-    expect(user).toContain("G1 | Kỹ thuật phần mềm | điểm 89 | Khá");
-    expect(user).toContain("S01 | Lập trình hướng đối tượng | nhóm G1 | thuộc nghề mục tiêu | điểm 93 | Thành thạo | tin cậy Trung bình | độ phủ 46%");
+    expect(user).toContain("G1 | Kỹ thuật phần mềm | điểm 89 | Giỏi");
+    expect(user).toContain("S01 | Lập trình hướng đối tượng | nhóm G1 | thuộc nghề mục tiêu | điểm 93 | Giỏi | tin cậy Trung bình | độ phủ 46%");
     expect(user).toContain("ngưỡng 85 | điểm 75 | Thấp hơn ngưỡng | thiếu 10 (Thiếu nhiều)");
     for (const shown of [83.92, 89.56, 93.44, 75.56, 9.44, 45.67]) expect(numbersIn(user)).not.toContain(shown);
     // Course scores stay on the 10-point scale with up to two decimals, like the page.
@@ -364,7 +369,7 @@ describe("buildPromptContext", () => {
     expect(context.improvementKeys).toEqual(["S02", "S03"]);
     expect(context.strengthKeys).toEqual(["S01"]);
     const user = buildAiInput(result).user;
-    expect(user).toContain("S06 | Mạng máy tính | nhóm G2 | ngoài nghề mục tiêu | điểm 65 | Cơ bản");
+    expect(user).toContain("S06 | Mạng máy tính | nhóm G2 | ngoài nghề mục tiêu | điểm 65 | Trung bình");
     expect(user).not.toContain("TST310");
   });
 

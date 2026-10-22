@@ -85,11 +85,19 @@ export function aiErrorMessage(code: string | null | undefined): string {
 
 const integer = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 });
 const decimal = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 });
+const oneDecimal = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 });
 /**
  * Scores are classified unrounded by the engine and shown as whole numbers rounded DOWN,
  * so a shown score never crosses a level or threshold it has not reached (84,6 shows 84, not 85).
+ * Khá starts at 62,5 (comp-calc-v10): from there to 63 one decimal is kept (62,7), so a Khá score
+ * never reads 62 and the bound itself reads 62,5.
  */
-export const formatScore = (value: number | null | undefined) => value === null || value === undefined ? "—" : integer.format(Math.floor(value + 1e-9));
+export const formatScore = (value: number | null | undefined) => {
+  if (value === null || value === undefined) return "—";
+  const whole = Math.floor(value + 1e-9);
+  const reached = Object.values(LEVEL_THRESHOLDS).some((bound) => whole < bound && value + 1e-9 >= bound);
+  return reached ? oneDecimal.format(Math.floor(value * 10 + 1e-9) / 10) : integer.format(whole);
+};
 export const formatNumber = (value: number | null | undefined) => value === null || value === undefined ? "—" : decimal.format(value);
 export const formatPercent = (share: number | null | undefined) => share === null || share === undefined ? "—" : `${integer.format(share * 100)}%`;
 export function formatDateTime(iso: string | null | undefined): string {
@@ -108,9 +116,46 @@ export function termLabel(term: string | null | undefined): string {
 
 /* ----------------------------------------------------------------- levels */
 
-/** Blue ramp steps (1 = Cơ bản dưới … 4 = Thành thạo); 0 = no fill (no score / exempt). */
-export function levelStep(level: LevelCode | DisplayLevel | null | undefined): 0 | 1 | 2 | 3 | 4 {
+/**
+ * Levels named and bounded like the transcript's classification (user, 2026-10-22: "3.2 thì ở đây 80đ
+ * thì nó phải là mức giỏi rồi, 3.6 … là xuất sắc, còn 2.8 là khá"): VLU prints hệ 4 = hệ 10 × 0,4, so
+ * a 0–100 score is the 4-point average × 25 and the bounds are 3,6 · 3,2 · 2,5 · 2,0 × 25. Mirrors the
+ * API's LEVEL_THRESHOLDS (comp-calc-v10); before it the levels were Thành thạo ≥ 85, Khá ≥ 70, Cơ bản ≥ 50, Cần củng cố.
+ */
+export const LEVEL_THRESHOLDS = { excellent: 90, proficient: 80, good: 62.5, basic: 50 } as const;
+export type ScoredLevel = "excellent" | "proficient" | "good" | "basic" | "needs_work";
+export const LEVEL_LABELS: Record<ScoredLevel, string> = { excellent: "Xuất sắc", proficient: "Giỏi", good: "Khá", basic: "Trung bình", needs_work: "Yếu" };
+/** The level of a stored score (rounded down to 2 decimals, so it never passes a bound the unrounded score has not). */
+export function levelOfScore(score: number): ScoredLevel {
+  const t = LEVEL_THRESHOLDS;
+  return score >= t.excellent ? "excellent" : score >= t.proficient ? "proficient" : score >= t.good ? "good" : score >= t.basic ? "basic" : "needs_work";
+}
+const releveled = <T extends { score: number | null; level: LevelCode | null; levelLabel: string | null }>(item: T): T => {
+  if (item.score === null) return item;
+  const level = levelOfScore(item.score);
+  return { ...item, level, levelLabel: LEVEL_LABELS[level] };
+};
+/**
+ * The result with every score read on the current scale, so a result stored before comp-calc-v10
+ * shows the new levels too. Its career thresholds and plans stay as they were computed until the
+ * student runs the assessment again.
+ */
+export function withCurrentLevels(result: AssessmentResult): AssessmentResult {
+  return {
+    ...result,
+    overall: releveled(result.overall),
+    groups: result.groups.map(releveled),
+    skills: result.skills.map(releveled),
+    career: result.career && { ...result.career, requirements: result.career.requirements.map(releveled) },
+    ...(result.skillPlans ? { skillPlans: result.skillPlans.map(releveled) } : {}),
+    ...(result.history ? { history: result.history.map((point) => ({ ...point, overall: releveled(point.overall), groups: point.groups.map(releveled) })) } : {}),
+  };
+}
+
+/** Blue ramp steps (1 = Yếu … 5 = Xuất sắc); 0 = no fill (no score / exempt). */
+export function levelStep(level: LevelCode | DisplayLevel | null | undefined): 0 | 1 | 2 | 3 | 4 | 5 {
   switch (level) {
+    case "excellent": return 5;
     case "proficient": return 4;
     case "good": return 3;
     case "basic": return 2;
@@ -133,14 +178,19 @@ export function displayLevel(skill: Pick<SkillResult, "level" | "status" | "evid
   return skill.evidenceCourses.some((row) => row.role === "studied") ? "no_score" : "upcoming";
 }
 
-export const LEVEL_SCALE: readonly { code: DisplayLevel; label: string; range: string; text: string }[] = [
-  { code: "proficient", label: "Thành thạo", range: "từ 85", text: "Kết quả các học phần liên quan rất tốt và ổn định." },
-  { code: "good", label: "Khá", range: "70 đến dưới 85", text: "Nắm chắc phần lớn nội dung; có thể nâng lên bằng dự án thực tế." },
-  { code: "basic", label: "Cơ bản", range: "50 đến dưới 70", text: "Đã có nền tảng, nên củng cố thêm để dùng tự tin hơn." },
-  { code: "needs_work", label: "Cần củng cố", range: "dưới 50", text: "Kết quả các học phần liên quan còn thấp; nên ôn lại hoặc học cải thiện." },
-  { code: "upcoming", label: "Sắp học", range: "chưa học", text: "Bạn đang học hoặc chưa học tới học phần đo kỹ năng này (kể cả môn tự chọn chưa chọn) — không phải điểm yếu." },
-  { code: "no_score", label: "Chưa có điểm", range: "đã học", text: "Bạn đã học học phần liên quan nhưng bảng điểm chưa có điểm số, nên chưa đánh giá được." },
-  { code: "exempt", label: "Miễn/công nhận", range: "MT", text: "Học phần được miễn hoặc công nhận nên không có điểm để tính." },
+/** "Thang mức năng lực": the five levels only (user, 2026-10-22: Sắp học, Chưa có điểm and Miễn/công nhận left out). */
+export const LEVEL_SCALE: readonly { code: ScoredLevel; label: string; range: string; text: string }[] = [
+  { code: "excellent", label: LEVEL_LABELS.excellent, range: "từ 90", text: "Kết quả các học phần liên quan rất cao và ổn định." },
+  { code: "proficient", label: LEVEL_LABELS.proficient, range: "80 đến dưới 90", text: "Kết quả các học phần liên quan tốt; nắm vững phần lớn nội dung." },
+  { code: "good", label: LEVEL_LABELS.good, range: "62,5 đến dưới 80", text: "Nắm chắc phần lớn nội dung; có thể nâng lên bằng dự án thực tế." },
+  { code: "basic", label: LEVEL_LABELS.basic, range: "50 đến dưới 62,5", text: "Đã có nền tảng, nên củng cố thêm để dùng tự tin hơn." },
+  { code: "needs_work", label: LEVEL_LABELS.needs_work, range: "dưới 50", text: "Kết quả các học phần liên quan còn thấp; nên ôn lại hoặc học cải thiện." },
+];
+/** The skills without a score, shown beside the levels in the chart and the filter (not weaknesses). */
+export const UNSCORED_STATES: readonly { code: "upcoming" | "no_score" | "exempt"; label: string }[] = [
+  { code: "upcoming", label: "Sắp học" },
+  { code: "no_score", label: "Chưa có điểm" },
+  { code: "exempt", label: "Miễn/công nhận" },
 ];
 
 /** A group's or the overall level label: with no evidence it reads "Chưa có điểm", like its "—" score. */
@@ -169,7 +219,8 @@ export function deficitText(deficit: number | null): string {
 export function scoreDifference(req: Pick<CareerRequirementResult, "score" | "status" | "deficit" | "threshold">): number | null {
   if (req.score === null || req.status === "upcoming" || req.status === "no_data") return null;
   if (req.status === "below" && req.deficit !== null) return -deficitPoints(req.deficit);
-  return Math.floor(req.score + 1e-9) - req.threshold;
+  // Met: whole points above the threshold, rounded down like the score (70 against 62,5 is +7, never below 0).
+  return Math.max(0, Math.floor(req.score - req.threshold + 1e-9));
 }
 /** Glyph + text + colour of a career requirement. Green/red/amber only for met and gaps; never red for missing data. */
 export function gapStatusDisplay(req: Pick<CareerRequirementResult, "status" | "deficit" | "upcomingTerm" | "exemptOnly">): { tone: StatusTone; glyph: string; text: string } {
@@ -247,7 +298,7 @@ export function courseStanding(course: Pick<SupportCourse, "state" | "score10" |
 }
 
 /**
- * The course plans that fit the result: with a target career, only its met skills below Thành thạo
+ * The course plans that fit the result: with a target career, only its met skills below Giỏi (Thành thạo before comp-calc-v10)
  * ("deepen", comp-calc-v7); without one, the skills below Khá ("strengthen"; v6 plans have no purpose
  * and are of that kind). Weak skills outside the chosen career are never advised on.
  */
@@ -352,7 +403,7 @@ export function gapHistory(result: Pick<AssessmentResult, "career" | "history">)
 /* ---------------------------------------------------- proficiency summary */
 
 /** The level columns of the proficiency table, best first; "Sắp học" and "Chưa có điểm" last (not weaknesses). */
-export const LEVEL_COLUMNS = ["proficient", "good", "basic", "needs_work", "upcoming", "no_score"] as const satisfies readonly DisplayLevel[];
+export const LEVEL_COLUMNS = ["excellent", "proficient", "good", "basic", "needs_work", "upcoming", "no_score"] as const satisfies readonly DisplayLevel[];
 type LevelRow = {
   key: string; name: string; score: number | null; level: LevelCode; levelLabel: string;
   /** Skills of the group counted like the group line: condition-only and not-applicable skills left out. */
@@ -373,11 +424,27 @@ export function levelSummary(result: Pick<AssessmentResult, "groups" | "skills">
   });
 }
 
+/**
+ * "Ngưỡng đạt: …" of the gap page, read from the stored thresholds: a result computed before
+ * comp-calc-v10 still says Ưu tiên 70 and Bắt buộc 85 (no level starts there) until the student runs it again.
+ */
+export function careerThresholdsLine(career: Pick<CareerResult, "requirements">): string {
+  const of = (required: boolean, fallback: number) => career.requirements.find((req) => req.isRequired === required)?.threshold ?? fallback;
+  const named = (value: number) => {
+    const level = LEVEL_SCALE.find((item) => item.code !== "needs_work" && LEVEL_THRESHOLDS[item.code] === value);
+    return level ? ` (mức ${level.label})` : "";
+  };
+  const preferred = of(false, LEVEL_THRESHOLDS.good), required = of(true, LEVEL_THRESHOLDS.proficient);
+  return `Ngưỡng đạt: kỹ năng Ưu tiên từ ${formatScore(preferred)}${named(preferred)}, kỹ năng Bắt buộc từ ${formatScore(required)}${named(required)}.`;
+}
+
 /* ------------------------------------------------- level chart ("Bảng phân tích mức độ thành thạo") */
 
-/** Segment order of each group's bar: the four levels from the top down, then "Sắp học", "Chưa có điểm" and exempt (no score). */
+/** Segment order of each group's bar: the five levels from the top down, then "Sắp học", "Chưa có điểm" and exempt (no score). */
 export const CHART_LEVELS = [...LEVEL_COLUMNS, "exempt"] as const satisfies readonly DisplayLevel[];
 export type ChartLevel = (typeof CHART_LEVELS)[number];
+/** The name of a level or of an unscored state in the chart and its legend. */
+export const chartLevelLabel = (level: ChartLevel): string => [...LEVEL_SCALE, ...UNSCORED_STATES].find((item) => item.code === level)?.label ?? level;
 export type LevelSegment = {
   level: ChartLevel; label: string; count: number;
   /** Part of the group's skills. */
@@ -405,7 +472,6 @@ export function countAxis(largest: number): { max: number; ticks: number[] } {
 export function levelChart(result: Pick<AssessmentResult, "groups" | "skills">): { axis: { max: number; ticks: number[] }; bars: LevelBar[] } {
   const rows = result.groups.map((group) => ({ group, skills: result.skills.filter((skill) => countedInGroup(skill, group.key)) }));
   const axis = countAxis(Math.max(0, ...rows.map((row) => row.skills.length)));
-  const label = (level: ChartLevel) => LEVEL_SCALE.find((item) => item.code === level)?.label ?? level;
   const bars = rows.map(({ group, skills }) => {
     let offset = 0;
     const segments = CHART_LEVELS.flatMap((level): LevelSegment[] => {
@@ -414,7 +480,7 @@ export function levelChart(result: Pick<AssessmentResult, "groups" | "skills">):
       if (!members.length) return [];
       const start = offset / axis.max;
       offset += members.length;
-      return [{ level, label: label(level), count: members.length, share: members.length / skills.length, start, end: offset / axis.max, skills: members }];
+      return [{ level, label: chartLevelLabel(level), count: members.length, share: members.length / skills.length, start, end: offset / axis.max, skills: members }];
     });
     return { key: group.key, name: group.name, score: group.score, level: group.level, levelLabel: group.levelLabel, total: skills.length, segments };
   });
@@ -516,6 +582,14 @@ export function aiStateCopy(status: AiStatus, workerOnline: boolean, aiEnabled: 
 export function confidentStrengths(result: Pick<AssessmentResult, "highlights" | "skills">): string[] {
   const confident = new Set(result.skills.filter((skill) => skill.confidence === "medium" || skill.confidence === "high").map((skill) => skill.key));
   return result.highlights.strengths.filter((key) => confident.has(key));
+}
+/**
+ * "Cần củng cố": the result's improvements still below Khá on the current scale. A result stored
+ * before comp-calc-v10 listed skills below 70; one at 64 is Khá now (62,5) and is no longer shown.
+ */
+export function currentImprovements(result: Pick<AssessmentResult, "highlights" | "skills">): string[] {
+  const below = new Set(result.skills.filter((skill) => skill.score !== null && skill.score < LEVEL_THRESHOLDS.good).map((skill) => skill.key));
+  return result.highlights.improvements.filter((key) => below.has(key));
 }
 
 /** Comments written with Gemma's thinking mode: prompt comp-v7 and later. */

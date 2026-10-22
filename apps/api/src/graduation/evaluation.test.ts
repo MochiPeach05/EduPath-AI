@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { calculateAssessment } from "../competency-assessment/calculate.js";
-import { CALC_VERSION } from "../competency-assessment/constants.js";
+import { GRADUATION_CALC_VERSION } from "../competency-assessment/constants.js";
 import {
   syntheticCurriculum, syntheticInputs, syntheticStandards, syntheticStudentTerms, syntheticTranscript, type TranscriptTerm,
 } from "../competency-assessment/fixtures/synthetic-k29.js";
@@ -62,7 +62,7 @@ describe("evaluation = the competency engine's numbers (D1, D2)", () => {
   };
 
   it("gives the same groups, printed credits and GPA as calculateAssessment", () => {
-    expect(compare(syntheticInputs())).toMatchObject({ calcVersion: CALC_VERSION, credits: { source: "printed" }, gpa: { source: "printed" } });
+    expect(compare(syntheticInputs())).toMatchObject({ calcVersion: GRADUATION_CALC_VERSION, credits: { source: "printed" }, gpa: { source: "printed" } });
   });
 
   it("gives the same estimates when nothing is printed", () => {

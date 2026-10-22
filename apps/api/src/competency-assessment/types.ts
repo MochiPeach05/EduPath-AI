@@ -210,7 +210,8 @@ export type AssessmentInputs = {
 /* Result: JSON-serializable; everything the page and the AI prompt need.   */
 /* ------------------------------------------------------------------------ */
 
-export type LevelCode = "proficient" | "good" | "basic" | "needs_work" | "no_evidence" | "exempt";
+/** Xuất sắc, Giỏi, Khá, Trung bình, Yếu (comp-calc-v10; "excellent" is new, the other codes were renamed only in labels). */
+export type LevelCode = "excellent" | "proficient" | "good" | "basic" | "needs_work" | "no_evidence" | "exempt";
 export type Confidence = "low" | "medium" | "high";
 /** Per-course state shared by score, coverage, gaps, suggestions, progress and graduation. */
 export type CourseState = "passed" | "failed" | "exempt" | "graded_unknown" | "in_progress" | "not_taken" | "not_in_curriculum";
@@ -495,7 +496,7 @@ export type SelfStudyItem = {
 
 /**
  * What to study for one scored skill that is not a career gap (comp-calc-v6). With a career, one of
- * its met skills below Thành thạo ("deepen", comp-calc-v7); without one, a skill below Khá
+ * its met skills below Giỏi ("deepen", comp-calc-v7; Thành thạo before v10); without one, a skill below Khá
  * ("strengthen"). Career gaps (below/not studied/upcoming) keep their courses in CareerRequirementResult.
  */
 export type SkillPlan = {
@@ -676,7 +677,7 @@ export type AssessmentResult = {
   selfStudy: SelfStudyItem[];
   /**
    * Course plans, condition-only skills excluded, weakest first like highlights.improvements, at most
-   * MAX_SKILL_PLANS (comp-calc-v6; absent before). With a career only its met skills below Thành thạo
+   * MAX_SKILL_PLANS (comp-calc-v6; absent before). With a career only its met skills below Giỏi (Thành thạo before v10)
    * ("deepen", v7); without one the scored skills below Khá ("strengthen").
    */
   skillPlans: SkillPlan[];

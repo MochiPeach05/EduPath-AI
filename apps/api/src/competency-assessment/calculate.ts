@@ -25,7 +25,7 @@ import type {
 /* ----------------------------- labels ----------------------------- */
 
 const LEVEL_LABELS: Record<LevelCode, string> = {
-  proficient: "Thành thạo", good: "Khá", basic: "Cơ bản", needs_work: "Cần củng cố",
+  excellent: "Xuất sắc", proficient: "Giỏi", good: "Khá", basic: "Trung bình", needs_work: "Yếu",
   no_evidence: "Chưa có minh chứng", exempt: "Miễn/công nhận",
 };
 const CONFIDENCE_LABELS: Record<Confidence, string> = { low: "Thấp", medium: "Trung bình", high: "Cao" };
@@ -65,8 +65,8 @@ export const floorScore = (value: number) => Math.floor(value * 100 + 1e-9) / 10
 /** Level from an unrounded 0–100 score. */
 export function levelOf(score: number | null, exemptOnly = false): LevelCode {
   if (score === null) return exemptOnly ? "exempt" : "no_evidence";
-  return score >= LEVEL_THRESHOLDS.proficient ? "proficient" : score >= LEVEL_THRESHOLDS.good ? "good"
-    : score >= LEVEL_THRESHOLDS.basic ? "basic" : "needs_work";
+  return score >= LEVEL_THRESHOLDS.excellent ? "excellent" : score >= LEVEL_THRESHOLDS.proficient ? "proficient"
+    : score >= LEVEL_THRESHOLDS.good ? "good" : score >= LEVEL_THRESHOLDS.basic ? "basic" : "needs_work";
 }
 
 const coverageBand = (coverage: number): Confidence =>
@@ -537,7 +537,7 @@ function assess(inputs: AssessmentInputs): Assessment {
       state: row.state, score10: row.score10, letter: row.letter, ...eligibility, eligibilityLabel: ELIGIBILITY_LABELS[eligibility.eligibility],
       term: row.plannedTerm, termSource: row.plannedTermSource, termLabel: row.plannedTerm ?? "Chưa xếp lịch", electiveGroup: row.electiveCode,
       reason: kind === "improve" && row.score10 !== null
-        ? `Đã đạt nhưng điểm học phần ${vn(row.score10 * 10)}/100 thấp hơn ngưỡng ${threshold}`
+        ? `Đã đạt nhưng điểm học phần ${vn(row.score10 * 10)}/100 thấp hơn ngưỡng ${vn(threshold)}`
         : `${vn(row.credits)} tín chỉ × trọng số ${vn(weight)} cho kỹ năng này`,
     };
   };
@@ -790,7 +790,7 @@ function assess(inputs: AssessmentInputs): Assessment {
   // score high (MLOps 94 from a single 15% link) and must not be shown as a strength.
   const strengths = ranked.filter((skill) => !belowGood(skill) && isStrengthConfidence(skill.confidence)).slice(0, HIGHLIGHT_COUNT).map((skill) => skill.key);
   const improvements = ranked.filter(belowGood).sort(weakestFirst).slice(0, HIGHLIGHT_COUNT).map((skill) => skill.key);
-  // Course plans (comp-calc-v6). With a career (v7) only its met skills below Thành thạo, to deepen:
+  // Course plans (comp-calc-v6). With a career (v7) only its met skills below Giỏi (v10; Thành thạo before), to deepen:
   // the other weak skills get none, and career gaps keep their own courses. Without one, every
   // scored skill below Khá, to strengthen. Improve courses are the real drags (below Khá) either way.
   const careerRows = careerResult?.requirements ?? [];

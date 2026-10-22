@@ -10,8 +10,8 @@ describe("cleanKeyText", () => {
     // Regression: "(API - S12)" was shown as "(API - API)".
     expect(cleanKeyText("Khả năng phát triển dịch vụ và tích hợp (API - S12) của bạn rất tốt.", names))
       .toBe("Khả năng phát triển dịch vụ và tích hợp (API) của bạn rất tốt.");
-    expect(cleanKeyText("API (S12) đạt mức Thành thạo.", names)).toBe("API đạt mức Thành thạo.");
-    expect(cleanKeyText("S12 - API đạt mức Thành thạo.", names)).toBe("API đạt mức Thành thạo.");
+    expect(cleanKeyText("API (S12) đạt mức Giỏi.", names)).toBe("API đạt mức Giỏi.");
+    expect(cleanKeyText("S12 - API đạt mức Giỏi.", names)).toBe("API đạt mức Giỏi.");
     expect(cleanKeyText("Ôn (S12: API), (S12) API và S12 (API).", names)).toBe("Ôn (API), API và API.");
     expect(cleanKeyText("Lập trình C# (S07) và api, S12.", names)).toBe("Lập trình C# và api.");
   });

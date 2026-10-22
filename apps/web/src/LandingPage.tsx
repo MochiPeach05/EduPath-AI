@@ -88,9 +88,9 @@ function FeaturePreview({ selected, active }: { selected: number; active: boolea
           <p>Kỹ năng trên hành trình trở thành lập trình viên.</p>
           <div className="lp-skills">
             {[
-              { label: "Tư duy lập trình", level: "Nền tảng tốt", value: 82 },
-              { label: "Phát triển giao diện", level: "Đang phát triển", value: 66 },
-              { label: "Cơ sở dữ liệu", level: "Cần củng cố", value: 44 }
+              { label: "Tư duy lập trình", level: "Giỏi", value: 82 },
+              { label: "Phát triển giao diện", level: "Trung bình", value: 66 },
+              { label: "Cơ sở dữ liệu", level: "Yếu", value: 44 }
             ].map((skill) => (
               <div className="lp-skill" key={skill.label}>
                 <div>

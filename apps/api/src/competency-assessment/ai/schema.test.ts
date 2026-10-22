@@ -31,7 +31,7 @@ describe("buildOutputSchema", () => {
   it("restricts keys to this job's enums", () => {
     expect(get(schema, "properties", "groupInsights", "items", "properties", "groupKey", "enum")).toEqual(["G1", "G2"]);
     // Strengths and improvements have their own enums (comp-v2): S03 is below its career threshold and
-    // S02 (met, below Thành thạo) is to deepen, so neither is a strength (comp-v5).
+    // S02 (met, still to deepen) is to deepen, so neither is a strength (comp-v5).
     expect(get(schema, "properties", "strengths", "items", "properties", "skillKey", "enum")).toEqual(["S01"]);
     expect(get(schema, "properties", "strengths", "maxItems")).toBe(1);
     const improvements = get(schema, "properties", "improvements", "items", "anyOf") as unknown[];

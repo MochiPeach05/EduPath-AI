@@ -19,7 +19,8 @@ export function specialtyLabel(code: string | null | undefined): string {
 /** Result types of the engine; GraduationResolution is the only input type the result uses. */
 type GraduationResolution = "specialty" | "general" | "specialty_unset" | "not_found" | "ambiguous";
 
-export type LevelCode = "proficient" | "good" | "basic" | "needs_work" | "no_evidence" | "exempt";
+/** Xuất sắc, Giỏi, Khá, Trung bình, Yếu (comp-calc-v10; "excellent" is new, the other codes only changed labels). */
+export type LevelCode = "excellent" | "proficient" | "good" | "basic" | "needs_work" | "no_evidence" | "exempt";
 export type Confidence = "low" | "medium" | "high";
 /** Per-course state shared by score, coverage, gaps, suggestions, progress and graduation. */
 export type CourseState = "passed" | "failed" | "exempt" | "graded_unknown" | "in_progress" | "not_taken" | "not_in_curriculum";
@@ -302,7 +303,7 @@ export type SelfStudyItem = {
 /**
  * What to do for one skill: courses to take (with prerequisites checked) or to retake for a better
  * grade, or self-study when no course is left. comp-calc-v6: skills below Khá that are not career
- * gaps. comp-calc-v7: with a target career only its met skills below Thành thạo ("deepen"); without
+ * gaps. comp-calc-v7: with a target career only its met skills below Giỏi ("deepen"; Thành thạo before v10); without
  * one, the skills below Khá ("strengthen").
  */
 export type SkillPlan = {

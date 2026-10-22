@@ -1,4 +1,4 @@
-import { CALC_VERSION } from "../competency-assessment/constants.js";
+import { GRADUATION_CALC_VERSION } from "../competency-assessment/constants.js";
 import {
   courseKey, currentTermCode, estimateProgramCredits, isConditionOnly, isPassedState, printedCumulativeCredits,
 } from "../competency-assessment/course-state.js";
@@ -202,7 +202,7 @@ export function evaluateGraduation(input: GraduationEvaluationInput): Graduation
   if (standardCodesAmbiguous(data)) warnings.push({ code: "standard_ambiguous_codes" });
 
   return {
-    calcVersion: CALC_VERSION,
+    calcVersion: GRADUATION_CALC_VERSION,
     status: result.status,
     groupStatus: result.groupStatus,
     needsImprovement: result.needsImprovement,

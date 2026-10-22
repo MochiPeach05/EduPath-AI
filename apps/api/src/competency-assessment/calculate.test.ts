@@ -72,13 +72,18 @@ describe("formula helpers (spec §7.3, §7.5, §7.6)", () => {
     expect(floorScore(85)).toBe(85);
     expect(floorScore(70.1)).toBe(70.1);
     expect(floorScore(72.375)).toBe(72.37);
-    expect(levelOf(84.996)).toBe("good");
+    expect(floorScore(89.996)).toBe(89.99);
+    expect(levelOf(89.996)).toBe("proficient");
   });
 
   it("classifies levels on unrounded scores", () => {
-    expect(levelOf(84.999)).toBe("good");
-    expect(levelOf(85)).toBe("proficient");
-    expect(levelOf(69.99)).toBe("basic");
+    // comp-calc-v10: the transcript's 4-point classification × 25 (user, 2026-10-22).
+    expect(levelOf(90)).toBe("excellent");
+    expect(levelOf(89.999)).toBe("proficient");
+    expect(levelOf(80)).toBe("proficient");
+    expect(levelOf(79.999)).toBe("good");
+    expect(levelOf(62.5)).toBe("good");
+    expect(levelOf(62.49)).toBe("basic");
     expect(levelOf(49.99)).toBe("needs_work");
     expect(levelOf(null)).toBe("no_evidence");
     expect(levelOf(null, true)).toBe("exempt");
@@ -321,17 +326,17 @@ describe("career gaps and fit (spec §7.5–§7.7)", () => {
   const result = calculateAssessment(inputs);
   const row = (name: string) => result.career!.requirements.find((item) => item.title === name)!;
 
-  it("gives each of the five statuses with thresholds 85/70 and deficit bands", () => {
-    expect(row("Kiểm thử phần mềm")).toMatchObject({ status: "met", threshold: 85, coefficient: 2, priorityLabel: "Bắt buộc", fitCredit: 1 });
-    expect(row("Lập trình di động")).toMatchObject({ status: "below", threshold: 70, score: 56, deficit: 14, deficitBand: "moderate", deficitBandLabel: "Thiếu vừa" });
-    expect(row("Học máy nhập môn")).toMatchObject({ status: "below", deficit: 38, deficitBand: "large" });
+  it("gives each of the five statuses with thresholds 80/62,5 and deficit bands", () => {
+    expect(row("Kiểm thử phần mềm")).toMatchObject({ status: "met", threshold: 80, coefficient: 2, priorityLabel: "Bắt buộc", fitCredit: 1 });
+    expect(row("Lập trình di động")).toMatchObject({ status: "below", threshold: 62.5, score: 56, deficit: 6.5, deficitBand: "moderate", deficitBandLabel: "Thiếu vừa" });
+    expect(row("Học máy nhập môn")).toMatchObject({ status: "below", deficit: 33, deficitBand: "large" });
     expect(row("Thuyết trình")).toMatchObject({ status: "upcoming", statusLabel: "Sắp học", upcomingTerm: "HK253", fitCredit: null });
     expect(row("Phân tích dữ liệu lớn")).toMatchObject({ status: "not_studied", deficitBand: "not_studied", fitCredit: 0, selfStudy: true });
     expect(row("Docker")).toMatchObject({ status: "no_data", noDataReason: "not_measured", fitCredit: null, selfStudy: true });
   });
 
   it("computes the non-saturating fit index, the data share and the count lines", () => {
-    const fit = (2 * 1 + 1 * 0.5 * (56 - 40) / 30 + 2 * 0.5 * (47 - 40) / 45 + 0) / 6;
+    const fit = (2 * 1 + 1 * 0.5 * (56 - 40) / 22.5 + 2 * 0.5 * (47 - 40) / 40 + 0) / 6;
     expect(result.career!.fit).toBeCloseTo(fit, 4);
     expect(result.career).toMatchObject({
       fitCode: "average", fitLabel: "Trung bình", dataShare: 0.75,
@@ -368,7 +373,7 @@ describe("career gaps and fit (spec §7.5–§7.7)", () => {
 
   it("suggests improving passed courses below the threshold and lists self-study skills", () => {
     expect(row("Học máy nhập môn").improveCourses.map((course) => [course.code, course.kind, course.reason])).toEqual([
-      ["71ITAI40103", "improve", "Đã đạt nhưng điểm học phần 47/100 thấp hơn ngưỡng 85"],
+      ["71ITAI40103", "improve", "Đã đạt nhưng điểm học phần 47/100 thấp hơn ngưỡng 80"],
     ]);
     expect(row("Lập trình di động").supportCourses).toEqual([]);
     expect(result.selfStudy.map((item) => [item.name, item.reason])).toEqual([
@@ -450,7 +455,7 @@ describe("skill plans (comp-calc-v6, purpose since v7)", () => {
   it("without a career: strengthens the skills below Khá, weakest first, with their low passed courses to improve", () => {
     const result = calculateAssessment(syntheticInputs({ career: null }));
     expect(result.skillPlans.map((item) => [item.name, item.score, item.level, item.levelLabel, item.purpose, item.careerSkill, item.selfStudy])).toEqual([
-      ["Học máy nhập môn", 47, "needs_work", "Cần củng cố", "strengthen", false, false], ["Lập trình di động", 56, "basic", "Cơ bản", "strengthen", false, false],
+      ["Học máy nhập môn", 47, "needs_work", "Yếu", "strengthen", false, false], ["Lập trình di động", 56, "basic", "Trung bình", "strengthen", false, false],
     ]);
     expect(result.skillPlans.map((item) => item.skillKey)).toEqual(result.highlights.improvements);
     const mobile = plan(result, "Lập trình di động");
@@ -459,7 +464,7 @@ describe("skill plans (comp-calc-v6, purpose since v7)", () => {
     expect(mobile.take).toEqual([]);
     expect(mobile.improve).toEqual([expect.objectContaining({
       code: "71ITSE30603", kind: "improve", state: "passed", score10: 5.6, letter: "C", eligibility: "eligible",
-      reason: "Đã đạt nhưng điểm học phần 56/100 thấp hơn ngưỡng 70",
+      reason: "Đã đạt nhưng điểm học phần 56/100 thấp hơn ngưỡng 62,5",
     })]);
     // The other specialty's course (71ITAI40803) is never one to take.
     expect(plan(result, "Học máy nhập môn")).toMatchObject({ take: [], improve: [{ code: "71ITAI40103", score10: 4.7 }] });
@@ -482,16 +487,17 @@ describe("skill plans (comp-calc-v6, purpose since v7)", () => {
     });
   });
 
-  it("with a career: only deepens its met skills below Thành thạo, never the other weak skills (comp-calc-v7)", () => {
+  it("with a career: only deepens its met skills below Giỏi, never the other weak skills (comp-calc-v7, v10)", () => {
     const result = calculateAssessment(syntheticInputs());
-    // Phát triển web 72 and Lập trình cơ bản 72,37 are met (Ưu tiên, 70) but not Thành thạo; Kiểm thử phần mềm 88 needs nothing.
+    // Phát triển web 72 and Lập trình cơ bản 72,37 are met (Ưu tiên, 62,5) but below Giỏi; Kiểm thử phần mềm 88 needs nothing.
     // Học máy nhập môn 47 and Lập trình di động 56 are not in the career: no plan, although they stay improvement highlights.
     expect(result.skillPlans.map((item) => [item.name, item.score, item.purpose, item.careerSkill, item.selfStudy])).toEqual([
-      ["Phát triển web", 72, "deepen", true, true], ["Lập trình cơ bản", 72.37, "deepen", true, false],
+      ["Phát triển web", 72, "deepen", true, true], ["Lập trình cơ bản", 72.37, "deepen", true, true],
     ]);
     expect(result.highlights.improvements.map((key) => result.skillDirectory.find((item) => item.key === key)!.name)).toEqual(["Học máy nhập môn", "Lập trình di động"]);
-    // Improve courses are still only the real drags (below Khá); its other courses score 7,8 and 7,2.
-    expect(plan(result, "Lập trình cơ bản")).toMatchObject({ take: [], improve: [{ code: "71ITBS10203", score10: 6.6, reason: "Đã đạt nhưng điểm học phần 66/100 thấp hơn ngưỡng 70" }] });
+    // Improve courses are still only the real drags (below Khá): its courses score 7,8, 7,2 and 6,6, all at
+    // Khá since comp-calc-v10 (62,5; 6,6 was below the old 70), so it is self-study with a product.
+    expect(plan(result, "Lập trình cơ bản")).toMatchObject({ take: [], improve: [], selfStudy: true });
     // Its web framework course is an option of the full TC309 quota: self-study with a product.
     expect(plan(result, "Phát triển web")).toMatchObject({ take: [], improve: [] });
     // Courses still to take, the thesis included (it is no replacement).
@@ -577,8 +583,8 @@ describe("thesis replacement courses are never suggested off that path (comp-cal
     const registered = run(withRows(6, [["71ITGR40203", 3]]));
     expect(registered.excludedThesisReplacements).toEqual([]);
     expect(presenting(registered)).toEqual(["71ITGR40203", "71ITGR40206", "71ITIS30403", "71ITIN40304"]);
-    // A passed replacement meets Thuyết trình (80): the plan to deepen it may name the other replacement.
-    const passed = run(withRows(5, [["71ITIS30403", 3, 8, 3.5, "B+"]]));
+    // A passed replacement meets Thuyết trình (75, below Giỏi): the plan to deepen it may name the other replacement.
+    const passed = run(withRows(5, [["71ITIS30403", 3, 7.5, 3, "B"]]));
     expect(passed.excludedThesisReplacements).toEqual([]);
     expect(passed.skillPlans.map((item) => [item.name, item.purpose, item.take.map((course) => course.code)])).toEqual([
       ["Thuyết trình", "deepen", ["71ITGR40203", "71ITGR40206", "71ITIN40304"]],

@@ -39,8 +39,8 @@ const skill = (key: string, name: string, groupKey: string, score: number | null
   scope: "Thiết kế và hiện thực ứng dụng mức cơ bản; chưa xác nhận công cụ cụ thể.",
   status: score === null ? "no_evidence" : "scored", notApplicableReason: null, denominator: 3, conditionOnly: false,
   careerSkill: false, evidenceCourses: score === null ? [] : [{ code: "TST101", weight: 0.5, contribution: 1.5, share: 0.5, role: "score" }],
-  otherSpecialtyCourses: [], score, level: score === null ? "no_evidence" : score >= 85 ? "proficient" : score >= 70 ? "good" : "basic",
-  levelLabel: score === null ? "Chưa có minh chứng" : score >= 85 ? "Thành thạo" : score >= 70 ? "Khá" : "Cơ bản",
+  otherSpecialtyCourses: [], score, level: score === null ? "no_evidence" : score >= 90 ? "excellent" : score >= 80 ? "proficient" : score >= 70 ? "good" : "basic",
+  levelLabel: score === null ? "Chưa có minh chứng" : score >= 90 ? "Xuất sắc" : score >= 80 ? "Giỏi" : score >= 70 ? "Khá" : "Trung bình",
   confidence: score === null ? null : "medium", confidenceLabel: score === null ? null : "Trung bình",
   coverage: score === null ? null : 0.45, evidence: score === null ? 0 : 1.5, ...extra
 });
@@ -64,9 +64,9 @@ const requirement = (skillKey: string | null, title: string, extra: Partial<Care
 });
 
 /**
- * The career's (S01–S03, S05) and other skills (S04, S06, S07), as comp-calc-v7 computes them: with the
- * career, one plan deepens the met Cơ sở dữ liệu (72,5 < 85); with `career: false`, plans strengthen the
- * three skills below Khá instead.
+ * The career's (S01–S03, S05) and other skills (S04, S06, S07), as comp-calc-v7 computed them (Bắt buộc 85;
+ * the levels are named like comp-calc-v10): with the career, one plan deepens the met Cơ sở dữ liệu
+ * (72,5 < 85); with `career: false`, plans strengthen the three skills below Khá instead.
  */
 export function syntheticResult(options: { career?: boolean } = {}): AssessmentResult {
   const withCareer = options.career ?? true;
@@ -120,8 +120,8 @@ export function syntheticResult(options: { career?: boolean } = {}): AssessmentR
       groupsWithScore: 2, basis: { skillsWithEvidence: 3, applicableSkills: 4, evidenceCourses: 9 }
     },
     groups: [
-      { key: "G1", id: "group-G1", name: "Kỹ thuật phần mềm", score: 80.5, level: "good", levelLabel: "Khá", confidence: "medium", confidenceLabel: "Trung bình", coverage: 0.5, evidence: 3, skillCount: 2, skillsWithEvidence: 2 },
-      { key: "G2", id: "group-G2", name: "Kỹ năng bổ trợ", score: 55, level: "basic", levelLabel: "Cơ bản", confidence: "low", confidenceLabel: "Thấp", coverage: 0.2, evidence: 1.5, skillCount: 2, skillsWithEvidence: 1 }
+      { key: "G1", id: "group-G1", name: "Kỹ thuật phần mềm", score: 80.5, level: "proficient", levelLabel: "Giỏi", confidence: "medium", confidenceLabel: "Trung bình", coverage: 0.5, evidence: 3, skillCount: 2, skillsWithEvidence: 2 },
+      { key: "G2", id: "group-G2", name: "Kỹ năng bổ trợ", score: 55, level: "basic", levelLabel: "Trung bình", confidence: "low", confidenceLabel: "Thấp", coverage: 0.2, evidence: 1.5, skillCount: 2, skillsWithEvidence: 1 }
     ],
     // The prompt never sends the history (STU-COMP-07).
     history: [],
@@ -154,7 +154,7 @@ export function syntheticResult(options: { career?: boolean } = {}): AssessmentR
       skillKey: "S05", skillId: "skill-S05", name: "Điện toán đám mây", reason: "not_measured", reasonLabel: "CTĐT chưa đo kỹ năng này",
       requirementTitle: "Điện toán đám mây", isRequired: false, status: "no_data", relatedSkillKeys: [], otherSpecialtyCourses: []
     }] : [],
-    // Weakest first. With the career only its met skill below Thành thạo; Sử dụng tiếng Anh has no course left.
+    // Weakest first. With the career only its met skill to deepen; Sử dụng tiếng Anh has no course left.
     skillPlans: withCareer
       ? [plan(database, "deepen", [support("TST240", "Hệ quản trị cơ sở dữ liệu", { weight: 1, contribution: 3 })], [
         support("TST130", "Nhập môn cơ sở dữ liệu", {

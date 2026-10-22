@@ -17,7 +17,7 @@ const valid = (): AiOutput => ({
     },
     {
       skillKey: "S02", priority: "medium", courses: [{ courseCode: "TST130", reason: "Đã đạt 6,8 (C+), có thể học cải thiện." }],
-      comment: "Cơ sở dữ liệu đạt 72, đã qua ngưỡng của nghề; học cải thiện Nhập môn cơ sở dữ liệu để nâng lên mức Thành thạo."
+      comment: "Cơ sở dữ liệu đạt 72, đã qua ngưỡng của nghề; học cải thiện Nhập môn cơ sở dữ liệu để nâng lên mức Giỏi."
     }
   ],
   careerFit: { comment: "Bạn đạt 2/4 kỹ năng của nghề, mức Phù hợp." },

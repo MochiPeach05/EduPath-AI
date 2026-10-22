@@ -7,6 +7,8 @@
   --scomp-l2: #6e93d0;
   --scomp-l3: #3f6cb4;
   --scomp-l4: #1c4182;
+  /* Xuất sắc (comp-calc-v10): one step darker on the same hue; the 5-step ramp passes the dataviz ordinal check. */
+  --scomp-l5: #0c285a;
   --scomp-track: #eef1f5;
   --scomp-neutral: #5f6b7a;
   /* Charts: "Sắp học"/"Chưa có điểm" and exempt neutrals (checked against --scomp-l1 for colour-blind separation), hairline grid, baseline. */
@@ -65,6 +67,7 @@
 .scomp-page .scomp-level-2 .scomp-pips i.is-on { background: var(--scomp-l2); }
 .scomp-page .scomp-level-3 .scomp-pips i.is-on { background: var(--scomp-l3); }
 .scomp-page .scomp-level-4 .scomp-pips i.is-on { background: var(--scomp-l4); }
+.scomp-page .scomp-level-5 .scomp-pips i.is-on { background: var(--scomp-l5); }
 .scomp-page .scomp-confidence { color: var(--sw-muted); font-size: 12px; }
 
 /* Bars on the shared 0–100 scale */
@@ -76,6 +79,7 @@
 .scomp-page .scomp-fill-2 { background: var(--scomp-l2); }
 .scomp-page .scomp-fill-3 { background: var(--scomp-l3); }
 .scomp-page .scomp-fill-4 { background: var(--scomp-l4); }
+.scomp-page .scomp-fill-5 { background: var(--scomp-l5); }
 .scomp-page .scomp-bar-tick { position: absolute; top: -2px; bottom: -2px; width: 1px; background: rgb(36 43 57 / 18%); z-index: 1; }
 .scomp-page .scomp-bar-threshold { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: var(--sw-ink); z-index: 2; }
 
@@ -245,6 +249,7 @@
 .scomp-page .scomp-chart-legend li { display: inline-flex; align-items: center; gap: 7px; }
 .scomp-page .scomp-chart-legend .scomp-chart-key { width: 12px; height: 12px; border-radius: 3px; }
 .scomp-page .scomp-chart-key { display: inline-block; flex: none; background: var(--scomp-chart-color); }
+.scomp-page .scomp-chart-excellent { --scomp-chart-color: var(--scomp-l5); }
 .scomp-page .scomp-chart-proficient { --scomp-chart-color: var(--scomp-l4); }
 .scomp-page .scomp-chart-good { --scomp-chart-color: var(--scomp-l3); }
 .scomp-page .scomp-chart-basic { --scomp-chart-color: var(--scomp-l2); }
@@ -265,7 +270,7 @@
 .scomp-page .scomp-chart-fill { position: absolute; top: 50%; left: 0; right: 2px; height: 22px; display: grid; place-items: center; background: var(--scomp-chart-color); transform: translateY(-50%); transition: filter .15s; }
 .scomp-page .scomp-chart-seg.is-last .scomp-chart-fill { right: 0; border-radius: 0 4px 4px 0; }
 .scomp-page .scomp-chart-value { color: var(--sw-ink, #1d2433); font-size: 12px; font-weight: 700; line-height: 1; }
-.scomp-page .scomp-chart-proficient .scomp-chart-value, .scomp-page .scomp-chart-good .scomp-chart-value { color: #fff; }
+.scomp-page .scomp-chart-excellent .scomp-chart-value, .scomp-page .scomp-chart-proficient .scomp-chart-value, .scomp-page .scomp-chart-good .scomp-chart-value { color: #fff; }
 .scomp-page .scomp-chart-seg:hover, .scomp-page .scomp-chart-seg:focus-visible { z-index: 3; }
 .scomp-page .scomp-chart-seg:hover .scomp-chart-fill, .scomp-page .scomp-chart-seg:focus-visible .scomp-chart-fill { filter: brightness(1.12) saturate(1.1); }
 .scomp-page .scomp-chart-seg:focus-visible { outline: 2px solid var(--scomp-l4); outline-offset: 1px; border-radius: 4px; }

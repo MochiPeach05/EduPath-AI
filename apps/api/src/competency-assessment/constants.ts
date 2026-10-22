@@ -22,18 +22,37 @@ import type { Confidence, FitCode } from "./types.js";
 /** v7: with a career, plans only deepen its met skills below Thành thạo; thesis replacement courses are never suggested off that path. */
 /** v8: history gives the overall and group competency as the transcript stood at the end of each graded term (STU-COMP-07). */
 /** v9: every history point also holds the target career's skills (score and status) at that term (STU-GAP-07). */
-export const CALC_VERSION = "comp-calc-v9";
+/**
+ * v10: five levels named and bounded like the transcript's classification (user, 2026-10-22: "3.2 thì
+ * ở đây 80đ thì nó phải là mức giỏi rồi, 3.6 … là xuất sắc, còn 2.8 là khá"): Xuất sắc ≥ 90, Giỏi ≥ 80,
+ * Khá ≥ 62,5, Trung bình ≥ 50, Yếu below (was Thành thạo ≥ 85, Khá ≥ 70, Cơ bản ≥ 50, Cần củng cố).
+ * "Bắt buộc" needs Giỏi (80, was 85), "Ưu tiên" Khá (62,5, was 70); strengths, improvements and the
+ * plans without a career use Khá too, and a career's met skills below Giỏi are deepened.
+ */
+export const CALC_VERSION = "comp-calc-v10";
+/**
+ * The graduation evaluation uses no skill level, so it keeps the version of its last change:
+ * comp-calc-v10 changed only levels and must not re-date every student's graduation advice.
+ */
+export const GRADUATION_CALC_VERSION = "comp-calc-v9";
 
-/** Skill, group and overall levels (0–100 scale), classified on unrounded values. */
-export const LEVEL_THRESHOLDS = { proficient: 85, good: 70, basic: 50 } as const;
+/**
+ * Skill, group and overall levels (0–100 scale), classified on unrounded values. The 0–100 score is the
+ * 10-point course score × 10 and VLU prints hệ 4 = hệ 10 × 0,4, so a score is the 4-point average × 25
+ * and the bounds are the transcript's "Xếp loại" on the 4-point scale (Thông tư 08/2021): Xuất sắc 3,6 ·
+ * Giỏi 3,2 · Khá 2,5 · Trung bình 2,0. Yếu also covers Kém (below 1,0). Khá is the one bound that is not
+ * a whole number: a score between 62,5 and 63 is shown with one decimal (prompt formatScore, web formatScore).
+ * Mirrored in apps/web/src/student-competency-data.ts (levelOfScore).
+ */
+export const LEVEL_THRESHOLDS = { excellent: 90, proficient: 80, good: 62.5, basic: 50 } as const;
 
 /** Confidence = min(coverage band, evidence band). */
 export const COVERAGE_BANDS = { medium: 0.3, high: 0.7 } as const;
 /** Evidence amount is Σ(credits × weight) of the studied courses (MT included). */
 export const EVIDENCE_BANDS = { medium: 1, high: 2.5 } as const;
 
-/** Career requirement thresholds: "Ưu tiên" needs level Khá, "Bắt buộc" needs Thành thạo. */
-export const CAREER_THRESHOLDS = { required: 85, preferred: 70 } as const;
+/** Career requirement thresholds: "Ưu tiên" needs level Khá, "Bắt buộc" needs Giỏi (v10; Khá 70 and Thành thạo 85 before). */
+export const CAREER_THRESHOLDS = { required: LEVEL_THRESHOLDS.proficient, preferred: LEVEL_THRESHOLDS.good } as const;
 export const CAREER_COEFFICIENTS = { required: 2, preferred: 1 } as const;
 
 /** A 'below' requirement earns at most this much, scaled from FIT_BELOW_FLOOR up to the threshold. */

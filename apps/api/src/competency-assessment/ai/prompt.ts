@@ -14,7 +14,7 @@ import type {
   SkillResult,
   SupportCourse
 } from "../types.js";
-import { FIT_LABELS, fitCodeOf, isStrengthConfidence } from "../constants.js";
+import { FIT_LABELS, fitCodeOf, isStrengthConfidence, LEVEL_THRESHOLDS } from "../constants.js";
 import { AI_OUTPUT_LIMITS as L, buildOutputSchema, type JsonSchema, type OutputSchemaContext } from "./schema.js";
 
 /**
@@ -27,8 +27,10 @@ import { AI_OUTPUT_LIMITS as L, buildOutputSchema, type JsonSchema, type OutputS
  * comp-v6: the skill groups are called "nhóm năng lực", like the pages (terminology of 2026-10-17).
  * comp-v7: Gemma's thinking mode is on: the model reasons over the data before it writes (user, 2026-10-18).
  * comp-v8: only skills with at least medium confidence may be named strengths (user, 2026-10-21), like the page.
+ * comp-v9: levels are named like the transcript (Xuất sắc, Giỏi, Khá, Trung bình, Yếu; comp-calc-v10), and a
+ * career's met skills are deepened up to Giỏi, the level "Bắt buộc" needs (Thành thạo before).
  */
-export const PROMPT_VERSION = "comp-v8";
+export const PROMPT_VERSION = "comp-v9";
 
 /** Gemma reasons before it writes the comment; the worker sends it to Ollama as think:true. */
 const AI_THINK = true;
@@ -96,10 +98,13 @@ export function formatNumber(value: number, digits = 2): string {
 }
 /**
  * A 100-point score (skill, group, overall, career threshold) exactly as the page shows it:
- * a whole number rounded down (web formatScore), so 83,92 is sent as 83.
+ * a whole number rounded down (web formatScore), so 83,92 is sent as 83, and 62,5–63 as 62,5–62,9.
  */
 export function formatScore(value: number): string {
-  return String(Math.floor(value + 1e-9));
+  const whole = Math.floor(value + 1e-9);
+  // Khá starts at 62,5 (comp-calc-v10): a score from there to 63 keeps one decimal, so it never reads below its level.
+  const reached = Object.values(LEVEL_THRESHOLDS).some((bound) => whole < bound && value + 1e-9 >= bound);
+  return reached ? String(Math.floor(value * 10 + 1e-9) / 10).replace(".", ",") : String(whole);
 }
 /** A career deficit as the page shows it: whole points rounded up, at least 1 (web deficitPoints). */
 export function formatDeficit(deficit: number): string {
@@ -137,7 +142,7 @@ Lời khuyên cụ thể (bắt buộc):
 10. Mỗi mục improvements và mỗi bước nextSteps phải nêu tên một học phần cụ thể (học mới, học lại, học cải thiện hoặc ôn lại nội dung của học phần đã học) lấy từ danh sách gợi ý của đúng kỹ năng đó; chỉ khi kỹ năng không có học phần nào mới gợi ý tự học kèm một sản phẩm cụ thể để kiểm chứng.
 11. Nếu học phần "chưa đủ điều kiện", nói rõ cần đạt học phần tiên quyết nào trước. Học phần "chưa đạt" thì nói "học lại". Học phần đã đạt thì nói "học cải thiện" hoặc "ôn lại", không nói "học mới".
 12. Khi sinh viên đã chọn nghề mục tiêu, improvements và nextSteps chỉ nói về kỹ năng của nghề đó (mục [4] và [6]). Không khuyên học lại, học cải thiện hay ôn lại cho kỹ năng không thuộc nghề mục tiêu (ví dụ kỹ năng mạng khi nghề là kỹ sư phần mềm).
-13. Khi mọi kỹ năng của nghề đã đạt ngưỡng: khuyên nâng các kỹ năng nghề chưa đạt mức Thành thạo bằng học phần trong mục [6], hoặc một sản phẩm, dự án cụ thể gắn với nghề khi không còn học phần.
+13. Khi mọi kỹ năng của nghề đã đạt ngưỡng: khuyên nâng các kỹ năng nghề chưa đạt mức Giỏi bằng học phần trong mục [6], hoặc một sản phẩm, dự án cụ thể gắn với nghề khi không còn học phần.
 14. groupInsights cho nhóm dưới mức Khá: nêu tên 1–2 kỹ năng thấp nhất của nhóm; nếu kỹ năng đó không thuộc nghề mục tiêu thì nói rõ là ngoài yêu cầu của nghề và không đề xuất học lại hay học cải thiện; nếu thuộc nghề mục tiêu, hoặc sinh viên chưa chọn nghề, thì nêu học phần nên làm.
 15. Không nhận xét về điều kiện xét tốt nghiệp (trang Điều kiện xét tốt nghiệp đã có kết quả và lời khuyên riêng); progress chỉ nói về tiến độ so với kế hoạch đào tạo.
 
@@ -154,7 +159,7 @@ const OUTPUT_DESCRIPTION = `Cấu trúc JSON (giới hạn tính theo số ký t
 - summary: 2–3 câu tổng quan, tối đa ${L.summary} ký tự; nếu đã chọn nghề, nêu tình trạng so với nghề mục tiêu; không lặp chi tiết sẽ nói ở careerFit, gaps hay nextSteps.
 - groupInsights: tối đa ${L.groupInsights} mục { groupKey: khóa nhóm G…, comment: tối đa ${L.groupComment} ký tự } cho các nhóm năng lực đáng chú ý; nhóm dưới mức Khá thì nêu tên kỹ năng ở dòng "kỹ năng thấp nhất của nhóm" (mục [2]); kỹ năng thuộc nghề mục tiêu (hoặc khi chưa chọn nghề) thì nêu học phần nên làm, kỹ năng ngoài nghề mục tiêu thì chỉ nói là ngoài yêu cầu của nghề.
 - strengths: tối đa ${L.strengths} mục { skillKey: khóa kỹ năng S…, comment: tối đa ${L.skillComment} ký tự } về điểm mạnh, ưu tiên kỹ năng của nghề mục tiêu; chỉ chọn kỹ năng ở dòng "Có thể nêu là điểm mạnh" của mục [3]; minh chứng chỉ là học phần đã học, không lấy học phần đang học hay sắp học.
-- improvements: tối đa ${L.improvements} mục { skillKey, priority: "high" (cần làm sớm) | "medium" (nên làm) | "low" (có thể để sau), courses: tối đa ${L.improvementCourses} mục { courseCode: mã trong danh sách của đúng kỹ năng đó ở mục [6], reason: tối đa ${L.courseReason} ký tự, chỉ dựa trên dòng của học phần đó (học mới, học lại hay học cải thiện, điều kiện, học kỳ) }, comment: tối đa ${L.skillComment} ký tự, nói rõ bạn nên làm gì với học phần đã chọn } về kỹ năng nên cải thiện hoặc nâng lên; chỉ chọn kỹ năng ở dòng "Có thể nêu là cần cải thiện" của mục [3] (khi đã chọn nghề, đó chỉ là kỹ năng của nghề: dưới ngưỡng, hoặc đã đạt ngưỡng nhưng chưa Thành thạo); kỹ năng không có học phần thì để courses rỗng và gợi ý tự học hoặc một sản phẩm, dự án cụ thể để kiểm chứng.
+- improvements: tối đa ${L.improvements} mục { skillKey, priority: "high" (cần làm sớm) | "medium" (nên làm) | "low" (có thể để sau), courses: tối đa ${L.improvementCourses} mục { courseCode: mã trong danh sách của đúng kỹ năng đó ở mục [6], reason: tối đa ${L.courseReason} ký tự, chỉ dựa trên dòng của học phần đó (học mới, học lại hay học cải thiện, điều kiện, học kỳ) }, comment: tối đa ${L.skillComment} ký tự, nói rõ bạn nên làm gì với học phần đã chọn } về kỹ năng nên cải thiện hoặc nâng lên; chỉ chọn kỹ năng ở dòng "Có thể nêu là cần cải thiện" của mục [3] (khi đã chọn nghề, đó chỉ là kỹ năng của nghề: dưới ngưỡng, hoặc đã đạt ngưỡng nhưng chưa đạt mức Giỏi); kỹ năng không có học phần thì để courses rỗng và gợi ý tự học hoặc một sản phẩm, dự án cụ thể để kiểm chứng.
 - careerFit: { comment: tối đa ${L.careerFit} ký tự } về mức phù hợp với nghề mục tiêu; chép đúng tính chất Bắt buộc hay Ưu tiên của từng kỹ năng như mục [4]; chỉ nêu mức phù hợp bằng chữ, không đưa ra chỉ số hay phần trăm phù hợp; nếu chưa chọn nghề, nói ngắn gọn và gợi ý chọn nghề.
 - gaps: tối đa ${L.gaps} mục, chỉ cho kỹ năng trong mục "Ứng viên khoảng trống": { skillKey, priority, explanation: tối đa ${L.gapExplanation} ký tự, courses: tối đa ${L.gapCourses} mục { courseCode: mã trong danh sách của đúng kỹ năng đó, reason: tối đa ${L.courseReason} ký tự, chỉ dựa trên dòng của học phần đó trong mục [5] (học mới, học lại hay học cải thiện, điều kiện, học kỳ) }, selfStudy: tối đa ${L.selfStudy} gợi ý tự học, mỗi gợi ý tối đa ${L.selfStudyItem} ký tự }.
 - progress: tối đa ${L.progress} ký tự, chỉ về tiến độ so với kế hoạch đào tạo (mục [8]); không nhận xét về xét tốt nghiệp.
@@ -308,7 +313,7 @@ function strengthAndImprovementKeys(result: AssessmentResult, selected: readonly
   for (const key of selected) {
     const skill = skills.get(key);
     if (!skill || skill.status !== "scored" || skill.score === null || skill.conditionOnly) continue;
-    const goodLevel = skill.level === "good" || skill.level === "proficient";
+    const goodLevel = skill.level === "good" || skill.level === "proficient" || skill.level === "excellent";
     if (below.has(key) || planned.has(key)) improvementKeys.push(key);
     else if (goodLevel && !notStudied.has(key) && isStrengthConfidence(skill.confidence)) strengthKeys.push(key);
     else if (!goodLevel && !result.career && plans === null) improvementKeys.push(key);
@@ -551,7 +556,7 @@ function renderDataBlock(result: AssessmentResult, context: PromptContext = buil
   const deepen = new Set((promptPlans(result) ?? []).filter((plan) => purposeOf(plan) === "deepen").map((plan) => plan.skillKey));
   for (const key of context.improvementKeys) {
     const purpose = gapCourses.has(key) ? "kỹ năng của nghề mục tiêu dưới ngưỡng"
-      : deepen.has(key) ? "kỹ năng của nghề mục tiêu đã đạt ngưỡng, có thể nâng lên mức Thành thạo" : "dưới mức Khá";
+      : deepen.has(key) ? "kỹ năng của nghề mục tiêu đã đạt ngưỡng, có thể nâng lên mức Giỏi" : "dưới mức Khá";
     push(`${key} ${skillName(key)} (${purpose}):`);
     const codes = allowed.get(key) ?? [];
     const list = (options.get(key) ?? []).filter((course) => codes.includes(course.code));
