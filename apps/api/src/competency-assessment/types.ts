@@ -676,7 +676,7 @@ export type AssessmentResult = {
   career: CareerResult | null;
   /** Candidate courses of all career gaps, merged by course. */
   courseSuggestions: CourseSuggestion[];
-  /** "Kỹ năng cần tự học (CTĐT chưa đo)". */
+  /** "Kỹ năng cần tự học": skills the CTĐT does not measure or only another specialty teaches. */
   selfStudy: SelfStudyItem[];
   /**
    * Course plans, condition-only skills excluded, weakest first like highlights.improvements, at most

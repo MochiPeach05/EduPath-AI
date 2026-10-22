@@ -706,7 +706,7 @@ function CoursesSection({ result, ai }: { result: AssessmentResult; ai: MappedAi
       {improve.length ? <><p className="scomp-meta">Học phần bạn đã đạt nhưng điểm thấp hơn ngưỡng của kỹ năng nghề. Có thể đăng ký học cải thiện theo quy chế của trường.</p><ol className="scomp-course-list">{improve.map((course) => <CourseCard key={course.code} course={course} result={result} />)}</ol></> : <p className="scomp-meta">Không có học phần nào cần học cải thiện.</p>}
     </>}
     {plans.length > 0 && <SkillPlans plans={plans} career={result.career?.nameVi ?? null} />}
-    <h3 className="scomp-subtitle">Kỹ năng cần tự học (CTĐT chưa đo)</h3>
+    <h3 className="scomp-subtitle">Kỹ năng cần tự học</h3>
     {result.selfStudy.length ? <ul className="scomp-selfstudy">{result.selfStudy.map((item) => {
       const related = item.relatedSkillKeys.map((key) => skillName(result, key)).filter(Boolean);
       const tips = aiTips.get(item.skillKey) ?? [];

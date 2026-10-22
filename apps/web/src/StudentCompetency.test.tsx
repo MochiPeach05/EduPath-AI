@@ -386,7 +386,7 @@ describe("StudentCompetency — Khoảng trống kỹ năng", () => {
     expect(html).toContain("Cần học trước Công nghệ phần mềm (TST109)");
     expect(html).toContain("Học cải thiện");
     expect(html).toContain("✓</span> Đã học, đạt · điểm 6,4 (C+)");
-    expect(html).toContain("Kỹ năng cần tự học (CTĐT chưa đo)");
+    expect(html).toContain(">Kỹ năng cần tự học</h3>");
     expect(html).toContain("Kỹ năng: Docker");
     expect(html).toContain("Không có học phần nào trong chương trình đào tạo của bạn để đăng ký cho kỹ năng này.");
     expect(html).toContain("Đóng gói ứng dụng web của bạn bằng Docker.");
@@ -398,7 +398,7 @@ describe("StudentCompetency — Khoảng trống kỹ năng", () => {
       { ...fixtureResult.skillPlans![1]!, skillKey: "S03", name: "Git", level: "good" as const, levelLabel: "Khá", score: 78, careerSkill: true, purpose: "deepen" as const },
     ];
     const html = render({ assessment: { ...assessment, result: { ...fixtureResult, skillPlans: deepen } }, aiEnabled: true, workerOnline: true }, { view: "gap" });
-    const plans = html.slice(html.indexOf("Nâng kỹ năng của nghề lên mức Giỏi"), html.indexOf("Kỹ năng cần tự học (CTĐT chưa đo)"));
+    const plans = html.slice(html.indexOf("Nâng kỹ năng của nghề lên mức Giỏi"), html.indexOf(">Kỹ năng cần tự học</h3>"));
     expect(plans).toContain("Kỹ năng nghề Lập trình viên web bạn đã đạt ngưỡng nhưng chưa đạt mức Giỏi (từ 80)");
     expect(plans).toContain("Kỹ năng: Lập trình web");
     expect(plans).toContain("Khá · 76");
@@ -415,7 +415,7 @@ describe("StudentCompetency — Khoảng trống kỹ năng", () => {
   it("without a target career, gives each weak skill its courses: retake, take with prerequisites checked, or self-study", () => {
     const assessment = fixtureAssessment("completed");
     const html = render({ assessment: { ...assessment, result: { ...assessment.result, career: null } }, aiEnabled: true, workerOnline: true }, { view: "gap" });
-    const plans = html.slice(html.indexOf("Kỹ năng cần củng cố (dưới mức Khá)"), html.indexOf("Kỹ năng cần tự học (CTĐT chưa đo)"));
+    const plans = html.slice(html.indexOf("Kỹ năng cần củng cố (dưới mức Khá)"), html.indexOf(">Kỹ năng cần tự học</h3>"));
     expect(plans).toContain("Kỹ năng: Sử dụng tiếng Anh");
     expect(plans).toContain("Trung bình · 61");
     expect(plans).toMatch(/scomp-plan-action">Học cải thiện<\/span><strong>Tiếng Anh 2<\/strong>/);
