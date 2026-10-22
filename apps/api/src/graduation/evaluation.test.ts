@@ -337,3 +337,20 @@ describe("data warnings", () => {
     expect(group).toMatchObject({ lower: 3, upper: 6, required: 6, remaining: 3, status: "unknown" });
   });
 });
+
+describe("retake with a later cohort under another code (2026-10-23)", () => {
+  it("counts it, marks the row and lists it for a credit transfer; other evaluations stay as they were", () => {
+    const standard = oneGroup([["DIT0070", 3], ["DCT0080", 3]]);
+    standard.data.courses[0]!.name = "Cơ sở dữ liệu";
+    const transcript = syntheticTranscript([{ year: "2024-2025", semester: "HK01", rows: [["71ITIS30103", 3, 7, 3, "B"], ["DCT0080", 3, 8, 3.5, "B+"]] }]);
+    transcript.sections[0]!.courses[0]!.name = "Cơ sở dữ liệu";
+    const evaluation = run({ standard, transcript, curriculum: [] });
+    expect(evaluation.creditTransfers).toEqual([{ code: "DIT0070", name: "Cơ sở dữ liệu", viaCode: "71ITIS30103", viaName: "Cơ sở dữ liệu", credits: 3 }]);
+    expect(evaluation.warnings).toContainEqual({ code: "credit_transfer_needed", count: 1 });
+    expect(evaluation.groups[0]!.courses[0]).toMatchObject({ code: "DIT0070", state: "passed", transferFrom: "71ITIS30103" });
+    expect(evaluation.groups[0]!.status).toBe("pass");
+    const usual = run();
+    expect("creditTransfers" in usual).toBe(false);
+    expect(usual.groups.flatMap((group) => group.courses).some((course) => "transferFrom" in course)).toBe(false);
+  });
+});

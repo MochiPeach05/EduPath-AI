@@ -540,6 +540,21 @@ function thesisSuggestion(group: GraduationGroupEvaluation, option: ThesisOption
  */
 export function suggestionItems(evaluation: GraduationEvaluation): SuggestionItem[] {
   const items: SuggestionItem[] = [];
+  // A course passed under another code with the same name still counts as owed until its grade is transferred.
+  const transfers = evaluation.creditTransfers ?? [];
+  if (transfers.length) {
+    items.push({
+      key: "credit-transfer",
+      text: `Làm thủ tục chuyển điểm ${formatNumber(transfers.length)} học phần bạn đã học trả nợ với khóa sau (cùng tên nhưng khác mã). Trang này đang tạm tính các học phần đó là đã đạt; nếu không chuyển điểm, nhà trường vẫn tính là bạn còn nợ môn.`,
+      coursesLabel: null,
+      courses: transfers.map((transfer, index) => ({
+        key: `transfer:${transfer.code}:${index}`, code: transfer.code, name: transfer.name, credits: transfer.credits,
+        glyph: "⇄", state: "Cần chuyển điểm", tone: "info",
+        detail: `đã đạt ở mã ${transfer.viaCode}${transfer.viaName ? ` (${transfer.viaName})` : ""}`,
+      })),
+      note: "Liên hệ Phòng Đào tạo hoặc cố vấn học tập để làm thủ tục chuyển điểm.",
+    });
+  }
   for (const group of evaluation.groups) {
     if (group.status !== "fail") continue;
     const title = groupInSentence(groupTitle(group));
@@ -635,6 +650,8 @@ export function warningNotes(evaluation: Pick<GraduationEvaluation, "warnings">)
         return { code: warning.code, text: "Bảng điểm được đọc bằng nhận dạng ảnh (OCR) và còn chỗ cần kiểm tra. Hãy đối chiếu kết quả với PDF gốc." };
       case "standard_ambiguous_codes":
         return { code: warning.code, text: "Tiêu chuẩn có mã học phần trùng hoặc thiếu nên một số nhóm chưa đối chiếu được. Khoa sẽ rà soát lại tiêu chuẩn." };
+      case "credit_transfer_needed":
+        return { code: warning.code, text: `${formatNumber(warning.count ?? 0)} học phần trong tiêu chuẩn được tính là đạt nhờ học phần cùng tên nhưng khác mã mà bạn đã học trả nợ với khóa sau. Bạn cần làm thủ tục chuyển điểm các học phần này; nếu không, nhà trường vẫn tính là còn nợ môn.` };
       default:
         return { code: String(warning.code), text: "Dữ liệu bảng điểm có điểm cần kiểm tra lại." };
     }

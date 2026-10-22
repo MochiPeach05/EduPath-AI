@@ -31,6 +31,8 @@ export interface GraduationCourseRow {
   letter: string | null;
   /** Selected attempt HKyyS; null for "Điểm bảo lưu" or not taken. */
   term: string | null;
+  /** Passed only under this other code with the same name (a retake with a later cohort): needs a credit transfer. */
+  transferFrom?: string;
 }
 
 export interface GraduationGroupEvaluation {
@@ -61,7 +63,8 @@ export interface GraduationGroupEvaluation {
 }
 
 type GraduationWarningCode =
-  | "results_inferred" | "credits_mismatch" | "printed_credits_unreadable" | "ocr_needs_review" | "standard_ambiguous_codes";
+  | "results_inferred" | "credits_mismatch" | "printed_credits_unreadable" | "ocr_needs_review" | "standard_ambiguous_codes"
+  | "credit_transfer_needed";
 
 export interface GraduationWarning {
   code: GraduationWarningCode;
@@ -106,6 +109,8 @@ export interface GraduationEvaluation {
   inProgress: GraduationCourseRow[];
   /** Standard courses graded with an unreadable result (max 20). */
   unknownResults: GraduationCourseRow[];
+  /** Standard courses passed only under another code with the same name (retake with a later cohort); absent when none. */
+  creditTransfers?: { code: string; name: string; viaCode: string; viaName: string; credits: number | null }[];
   warnings: GraduationWarning[];
 }
 

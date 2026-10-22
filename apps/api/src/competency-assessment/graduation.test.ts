@@ -4,7 +4,7 @@ import type { GraduationData } from "../graduation/model.js";
 import { deriveElectiveGroups, transcriptCourses } from "./course-state.js";
 import { syntheticCurriculum, syntheticStandards, syntheticTranscript, type TranscriptRow } from "./fixtures/synthetic-k29.js";
 import {
-  assessGraduation, assessGraduationGpa, decide, electiveQuotas, graduationGroupLabels, graduationInputs, groupCode,
+  assessGraduation, assessGraduationGpa, courseNameKey, decide, electiveQuotas, graduationGroupLabels, graduationInputs, groupCode,
   matchStandardElectiveGroup, programCreditMap, standardCodeAliases, standardCourseCredits,
 } from "./graduation.js";
 import type { CurriculumCourseInput, GraduationResolution, TriState } from "./types.js";
@@ -303,6 +303,71 @@ describe("K26: other codes of a standard course (old / new code)", () => {
     expect(standardCodeAliases(smallStandard([{ id: "BB", name: "Nhóm bắt buộc", kind: "mandatory", minimumCredits: 3 }],
       [{ groupId: "BB", code: "71ITBS10103", credits: 3 }])).size).toBe(0);
     expect(standardCodeAliases(null).size).toBe(0);
+  });
+});
+
+describe("retakes with a later cohort: same name, another code (2026-10-23)", () => {
+  /** One graded term whose courses carry these names (the synthetic transcript names every course alike). */
+  const named = (rows: TranscriptRow[], names: Record<string, string>) => {
+    const transcript = syntheticTranscript([{ year: "2024-2025", semester: "HK01", rows }]);
+    for (const section of transcript.sections) for (const course of section.courses) course.name = names[course.code] ?? `Môn ${course.code}`;
+    return transcript;
+  };
+  const standard = (names: [code: string, name: string][]) => {
+    const data = smallStandard([{ id: "BB", name: "Nhóm bắt buộc", kind: "mandatory", minimumCredits: 9 }],
+      names.map(([code]) => ({ groupId: "BB", code, credits: 3 })));
+    names.forEach(([, name], index) => { data.courses[index]!.name = name; });
+    return data;
+  };
+  const k26 = () => standard([["DIT0070", "Cơ sở dữ liệu"], ["DCT0080", "Triết học Mác - Lênin"], ["DTA0015", "Anh văn 1 (AV1)"]]);
+  const judge = (data: GraduationData, transcript: ReturnType<typeof named>) =>
+    assessGraduation({ resolution: "general", standard: { id: "s", revisionId: "r", version: 1, data }, ...graduationInputs(data, [], transcript) });
+
+  it("counts a passed same-name course under another code and lists it for a credit transfer", () => {
+    const transcript = named([["DIT0070", 3, 3, 0, "F"], ["71ITIS30103", 3, 7, 3, "B"], ["71POLP10013", 3, 8, 3.5, "B+"], ["DTA0015", 3, 7, 3, "B"]],
+      { DIT0070: "Cơ sở dữ liệu", "71ITIS30103": "Cơ sở dữ liệu", "71POLP10013": "Triết học Mác-Lênin", DTA0015: "Anh văn 1" });
+    const inputs = graduationInputs(k26(), [], transcript);
+    expect(inputs.transfers).toEqual([
+      { code: "DIT0070", name: "Cơ sở dữ liệu", viaCode: "71ITIS30103", viaName: "Cơ sở dữ liệu" },
+      { code: "DCT0080", name: "Triết học Mác - Lênin", viaCode: "71POLP10013", viaName: "Triết học Mác-Lênin" },
+    ]);
+    expect(inputs.records.get("DIT0070")).toMatchObject({ state: "passed", attempts: [{ code: "DIT0070" }, { code: "DIT0070" }] });
+    expect(judge(k26(), transcript).groups[0]).toMatchObject({ lower: 3, required: 3, status: "pass" });
+  });
+
+  it("needs no transfer for the same code under a slightly different name", () => {
+    const data = standard([["71POLP10013", "Triết học Mác Lênin"], ["71ITAI41203", "Học máy và ứng dụng"]]);
+    const transcript = named([["71POLP10013", 3, 8, 3.5, "B+"], ["71ITAI41203", 3, 7, 3, "B"]],
+      { "71POLP10013": "Triết học Mác-Lênin", "71ITAI41203": "Học máy ứng dụng" });
+    expect(graduationInputs(data, [], transcript).transfers).toEqual([]);
+    expect(judge(data, transcript).groups[0]).toMatchObject({ lower: 2, required: 2, status: "pass" });
+  });
+
+  it("never uses a failed course, a course of the standard, a name the standard lists twice, or one course twice", () => {
+    const failed = named([["71ITIS30103", 3, 3, 0, "F"]], { "71ITIS30103": "Cơ sở dữ liệu" });
+    expect(graduationInputs(k26(), [], failed).transfers).toEqual([]);
+    const own = standard([["DIT0070", "Cơ sở dữ liệu"], ["71ITIS30103", "Cơ sở dữ liệu nâng cao"]]);
+    expect(graduationInputs(own, [], named([["71ITIS30103", 3, 7, 3, "B"]], { "71ITIS30103": "Cơ sở dữ liệu" })).transfers).toEqual([]);
+    const twice = standard([["DIT0070", "Cơ sở dữ liệu"], ["DIT0071", "Cơ sở dữ liệu"]]);
+    expect(graduationInputs(twice, [], named([["71ITIS30103", 3, 7, 3, "B"]], { "71ITIS30103": "Cơ sở dữ liệu" })).transfers).toEqual([]);
+    const once = standard([["DIT0070", "Cơ sở dữ liệu"], ["DIT0080", "Cơ sở dữ liệu (Databases)"]]);
+    expect(graduationInputs(once, [], named([["71ITIS30103", 3, 7, 3, "B"]], { "71ITIS30103": "Cơ sở dữ liệu" })).transfers).toEqual([]);
+  });
+
+  it("matches nearly identical names but keeps numbers and modifiers apart", () => {
+    const same = [
+      ["Học máy và ứng dụng", "Học máy ứng dụng"],
+      ["Quản lý Dự án CNTT", "Quản lý dự án Công nghệ Thông tin"],
+      ["Lập trình Hệ thống nhúng và IOT", "Lập trình Hệ thống nhúng và Mạng kết nối vạn vật"],
+      ["Lập trình Hệ thống nhúng và Internet vạn vật", "Lập trình hệ thống nhúng và mạng kết nối vạn vật"],
+      ["Mã hóa dữ liệu và Khối chuỗi (Blockchain)", "Mã hóa dữ liệu và chuỗi khối (Block chain)"],
+      ["Khoá luận tốt nghiệp", "Khóa luận Tốt nghiệp"],
+      ["Anh văn 1 (AV1)", "Anh Văn 1"],
+    ];
+    for (const [left, right] of same) expect(courseNameKey(left!), left).toBe(courseNameKey(right!));
+    for (const [left, right] of [["Anh văn 1", "Anh văn 2"], ["Lập trình Web", "Lập trình Web nâng cao"], ["Giáo dục thể chất 1", "Giáo dục thể chất 2"]])
+      expect(courseNameKey(left!)).not.toBe(courseNameKey(right!));
+    expect(courseNameKey("(*)")).toBe("");
   });
 });
 

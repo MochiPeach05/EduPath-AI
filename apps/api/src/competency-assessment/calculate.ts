@@ -10,7 +10,7 @@ import {
   electiveCodeOf, hasScore, isAttemptedState, isConditionOnly, isPassedState, isStudiedState, termCode, type TranscriptCourseRecord,
   transcriptCourses, uniqueCurriculumCourses,
 } from "./course-state.js";
-import { assessGraduation, electiveQuotas, programCreditMap, standardCodeAliases } from "./graduation.js";
+import { assessGraduation, electiveQuotas, graduationCodeAliases, programCreditMap } from "./graduation.js";
 import { physicalEducationGroupsFor, planProgress, type PlanCourseInfo } from "./plan-progress.js";
 import {
   classifyCurriculumSpecialty, type CurriculumSpecialtyClass, fold, specialtyBlocks, specialtyConflict, specialtyCounts,
@@ -702,10 +702,11 @@ function assess(inputs: AssessmentInputs): Assessment {
 
   /* ---- 10. graduation (§7.9): the graduation page's engine, inputs built like graduationInputs() ---- */
   const curriculumCredits = new Map([...table.values()].map((row) => [row.code, row.credits]));
-  // The standard's other codes of a course (K26 "DIT0091 / 71ITDS30103") count only for graduation.
-  const codeAliases = standardCodeAliases(standardData);
+  // The standard's other codes of a course (K26 "DIT0091 / 71ITDS30103") and same-name retakes under
+  // another code count only for graduation.
+  const { aliases: codeAliases, transfers } = graduationCodeAliases(standardData, transcript);
   const graduation = assessGraduation({
-    resolution: inputs.graduation.resolution, standard: graduationStandard, transcript,
+    resolution: inputs.graduation.resolution, standard: graduationStandard, transcript, transfers,
     records: codeAliases.size ? transcriptCourses(transcript, codeAliases) : records,
     programCredits: programCreditMap(standardData, curriculumCredits), electives, conditionCodes,
   });

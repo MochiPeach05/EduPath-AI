@@ -328,6 +328,20 @@ describe("suggestions", () => {
     const noCandidates = suggestionItems(evaluation({ status: "fail", gpa: { actual: 1.9, required: 2, scale: 4, status: "fail", source: "printed", reason: "", remaining: 0.1 } }));
     expect(noCandidates[0]).toMatchObject({ key: "gpa", coursesLabel: null, note: "Hãy trao đổi với cố vấn học tập để chọn học phần học cải thiện." });
   });
+  it("asks first for a credit transfer of the courses passed under another code (2026-10-23)", () => {
+    const transfers = evaluation({
+      creditTransfers: [{ code: "DIT0070", name: "Cơ sở dữ liệu", viaCode: "71ITIS30103", viaName: "Cơ sở dữ liệu", credits: 3 }],
+      warnings: [{ code: "credit_transfer_needed", count: 1 }],
+    });
+    const items = suggestionItems(transfers);
+    expect(items.map((item) => item.key)).toEqual(["credit-transfer"]);
+    expect(items[0]).toMatchObject({
+      text: "Làm thủ tục chuyển điểm 1 học phần bạn đã học trả nợ với khóa sau (cùng tên nhưng khác mã). Trang này đang tạm tính các học phần đó là đã đạt; nếu không chuyển điểm, nhà trường vẫn tính là bạn còn nợ môn.",
+      courses: [{ code: "DIT0070", name: "Cơ sở dữ liệu", credits: 3, state: "Cần chuyển điểm", detail: "đã đạt ở mã 71ITIS30103 (Cơ sở dữ liệu)" }],
+      note: "Liên hệ Phòng Đào tạo hoặc cố vấn học tập để làm thủ tục chuyển điểm.",
+    });
+    expect(warningNotes(transfers)[0]!.text).toContain("Bạn cần làm thủ tục chuyển điểm các học phần này");
+  });
 });
 
 describe("competency page summary", () => {

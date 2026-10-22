@@ -37,6 +37,8 @@ export interface GraduationCourseRow {
   letter: string | null;
   /** Selected attempt HKyyS; null for "Điểm bảo lưu" or not taken. */
   term: string | null;
+  /** Passed only under this other code with the same name (a retake with a later cohort): needs a credit transfer. */
+  transferFrom?: string;
 }
 
 export interface GraduationGroupEvaluation {
@@ -67,7 +69,8 @@ export interface GraduationGroupEvaluation {
 }
 
 export type GraduationWarningCode =
-  | "results_inferred" | "credits_mismatch" | "printed_credits_unreadable" | "ocr_needs_review" | "standard_ambiguous_codes";
+  | "results_inferred" | "credits_mismatch" | "printed_credits_unreadable" | "ocr_needs_review" | "standard_ambiguous_codes"
+  | "credit_transfer_needed";
 
 export interface GraduationWarning {
   code: GraduationWarningCode;
@@ -114,6 +117,11 @@ export interface GraduationEvaluation {
   inProgress: GraduationCourseRow[];
   /** Standard courses graded with an unreadable result (max MAX_LISTED_COURSES). */
   unknownResults: GraduationCourseRow[];
+  /**
+   * Standard courses passed only under another code with the same name (a retake with a later cohort).
+   * They count as passed; the student still has to have the grades transferred. Absent when there is none.
+   */
+  creditTransfers?: { code: string; name: string; viaCode: string; viaName: string; credits: number | null }[];
   warnings: GraduationWarning[];
 }
 
@@ -140,6 +148,7 @@ export function evaluateGraduation(input: GraduationEvaluationInput): Graduation
   const core = graduationInputs(data, input.curriculumCourses, transcript);
   const { records, programCredits, conditionCodes } = core;
   const result = assessGraduationStandard(data, core);
+  const transferOf = new Map(core.transfers.map((transfer) => [transfer.code, transfer.viaCode]));
 
   const row = (course: StandardCourse): GraduationCourseRow => {
     const code = courseKey(course.code);
@@ -152,6 +161,7 @@ export function evaluateGraduation(input: GraduationEvaluationInput): Graduation
       state: record?.state ?? "not_taken", inferred: record?.inferred ?? false, attempts: record?.attempts.length ?? 0,
       score10: selected && !exempt ? selected.score10 : null, score4: selected && !exempt ? selected.score4 : null,
       letter: selected?.letter ?? null, term: selected?.termCode ?? null,
+      ...(transferOf.has(code) ? { transferFrom: transferOf.get(code)! } : {}),
     };
   };
   const rows = data.courses.map(row);
@@ -200,6 +210,8 @@ export function evaluateGraduation(input: GraduationEvaluationInput): Graduation
   if (printedValue !== null && Number.isNaN(printedValue)) warnings.push({ code: "printed_credits_unreadable" });
   if (transcript.ocr?.needsReview) warnings.push({ code: "ocr_needs_review" });
   if (standardCodesAmbiguous(data)) warnings.push({ code: "standard_ambiguous_codes" });
+  if (core.transfers.length) warnings.push({ code: "credit_transfer_needed", count: core.transfers.length });
+  const credit = new Map(distinct.map((item) => [item.code, item.credits]));
 
   return {
     calcVersion: GRADUATION_CALC_VERSION,
@@ -214,6 +226,9 @@ export function evaluateGraduation(input: GraduationEvaluationInput): Graduation
     improvementCandidates: gpa.status === "fail" && gpa.required !== null ? improvementCandidates(data, core, gpa.required, gpa.scale) : [],
     inProgress: distinct.filter((item) => item.state === "in_progress").slice(0, MAX_LISTED_COURSES),
     unknownResults: distinct.filter((item) => item.state === "graded_unknown").slice(0, MAX_LISTED_COURSES),
+    ...(core.transfers.length
+      ? { creditTransfers: core.transfers.map((transfer) => ({ ...transfer, credits: credit.get(transfer.code) ?? null })) }
+      : {}),
     warnings,
   };
 }

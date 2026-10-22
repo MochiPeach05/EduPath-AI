@@ -6,6 +6,7 @@ import {
   latestResultSection, printedCumulativeCredits, printedSummaryNumber, transcriptCourses, uniqueCurriculumCourses,
   type Attempt, type ElectiveGroup, type TranscriptCourseRecord,
 } from "./course-state.js";
+import { fold } from "./specialty.js";
 import type {
   CurriculumCourseInput, GraduationCredits, GraduationGpa, GraduationGroupCheck, GraduationResolution, GraduationStandardInput,
   GraduationSummary, TriState,
@@ -147,7 +148,35 @@ export type GraduationInputs = {
   /** CTĐT elective groups (curriculumElectiveCode). */
   electives: readonly ElectiveGroup[];
   conditionCodes: ReadonlySet<string>;
+  /** Standard courses counted as passed through a same-name course under another code (graduationCodeAliases). */
+  transfers: CreditTransfer[];
 };
+
+/**
+ * A standard course passed only under another code with the same name: a retake with a later cohort
+ * ("học trả nợ với khóa sau"). It counts as passed, but the school still lists the course as owed until
+ * the student has the grade transferred ("làm thủ tục chuyển điểm").
+ */
+export type CreditTransfer = { code: string; name: string; viaCode: string; viaName: string };
+
+/** Phrases different cohorts write differently ("Quản lý Dự án CNTT", "… Internet vạn vật", "… và IOT"). */
+const NAME_PHRASES: readonly [RegExp, string][] = [
+  [/\bcntt\b/g, "cong nghe thong tin"],
+  [/\b(?:internet van vat|iots?)\b/g, "mang ket noi van vat"],
+];
+/** Words that do not tell two courses apart ("Học máy và ứng dụng" is "Học máy ứng dụng"). */
+const NAME_FILLERS = new Set(["va", "cua", "cho", "voi", "trong", "theo"]);
+
+/**
+ * A course name for comparing courses of different cohorts, so nearly identical names match (user
+ * 2026-10-23): accents, case, "(…)", punctuation, word order, fillers like "và" and the abbreviations
+ * above are ignored; numbers are kept ("Anh văn 1" is not "Anh văn 2").
+ */
+export function courseNameKey(name: string): string {
+  let text = fold(name.replace(/\([^)]*\)/g, " ")).replace(/[^a-z0-9]+/g, " ");
+  for (const [pattern, phrase] of NAME_PHRASES) text = text.replace(pattern, phrase);
+  return [...new Set(text.split(" ").filter((word) => word && !NAME_FILLERS.has(word)))].sort().join(" ");
+}
 
 /**
  * Transcript code → standard code for the other codes a standard writes for a course (K26:
@@ -167,6 +196,53 @@ export function standardCodeAliases(standard: Pick<GraduationData, "courses"> | 
   return new Map([...owners].filter(([, set]) => set.size === 1).map(([key, set]) => [key, [...set][0]!]));
 }
 
+/**
+ * Every transcript code → standard code map of the graduation check: the standard's other codes
+ * (standardCodeAliases), then, for each standard course not passed under its own codes, a passed
+ * course with the same name (courseNameKey) under a code the standard does not list — a retake with a
+ * later cohort (user 2026-10-23). Each such course is used once; a name the standard lists twice is
+ * skipped. The second kind is returned as `transfers` too.
+ */
+export function graduationCodeAliases(standard: Pick<GraduationData, "courses"> | null, transcript: TranscriptData): {
+  aliases: Map<string, string>; transfers: CreditTransfer[];
+} {
+  const aliases = standardCodeAliases(standard);
+  const courses = standard?.courses ?? [];
+  if (!courses.length) return { aliases, transfers: [] };
+  const records = transcriptCourses(transcript, aliases);
+  const known = new Set(courses.flatMap((course) => [course.code, ...(course.alternativeCodes ?? [])].map(courseKey)));
+  const names = new Map<string, string>();
+  for (const section of transcript.sections) {
+    for (const course of section.courses) {
+      const printed = courseKey(course.code ?? "");
+      const code = aliases.get(printed) ?? printed;
+      if (code && course.name?.trim() && !names.has(code)) names.set(code, course.name.trim());
+    }
+  }
+  const passedByName = new Map<string, string[]>();
+  for (const [code, record] of records) {
+    const name = courseNameKey(names.get(code) ?? "");
+    if (name && !known.has(code) && isPassedState(record.state)) passedByName.set(name, [...(passedByName.get(name) ?? []), code]);
+  }
+  const standardNames = new Map<string, number>();
+  for (const course of courses) {
+    const name = courseNameKey(course.name);
+    if (name) standardNames.set(name, (standardNames.get(name) ?? 0) + 1);
+  }
+  const transfers: CreditTransfer[] = [];
+  const used = new Set<string>();
+  for (const course of courses) {
+    const code = courseKey(course.code), name = courseNameKey(course.name);
+    if (!name || standardNames.get(name) !== 1 || isPassedState(records.get(code)?.state ?? "not_taken")) continue;
+    const via = (passedByName.get(name) ?? []).filter((candidate) => !used.has(candidate)).sort()[0];
+    if (!via) continue;
+    used.add(via);
+    aliases.set(via, code);
+    transfers.push({ code, name: course.name, viaCode: via, viaName: names.get(via) ?? "" });
+  }
+  return { aliases, transfers };
+}
+
 /** The graduation inputs from the standard, the cohort's CTĐT courses ([] when there is none) and the transcript. */
 export function graduationInputs(
   standard: Pick<GraduationData, "courses"> | null,
@@ -174,12 +250,14 @@ export function graduationInputs(
   transcript: TranscriptData,
 ): GraduationInputs {
   const courses = uniqueCurriculumCourses(curriculumCourses);
+  const { aliases, transfers } = graduationCodeAliases(standard, transcript);
   return {
     transcript,
-    records: transcriptCourses(transcript, standardCodeAliases(standard)),
+    records: transcriptCourses(transcript, aliases),
     programCredits: programCreditMap(standard, curriculumCreditMap(courses)),
     electives: deriveElectiveGroups(courses),
     conditionCodes: conditionOnlyCodes(standard, courses),
+    transfers,
   };
 }
 

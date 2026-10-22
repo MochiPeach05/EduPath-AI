@@ -362,9 +362,10 @@ describe("the note under a failing total-credits condition", () => {
     const evaluation = structuredClone(base.evaluation);
     for (const group of evaluation.groups) Object.assign(group, { status: "pass", remaining: null });
     expect(credits({ ...base, evaluation })).toHaveLength(1);
-    // A missing mandatory course without a credit in the standard, the CTĐT or the transcript.
+    // A missing mandatory course without a credit in the standard, the CTĐT or the transcript (named apart from the
+    // synthetic transcript's "Học phần tổng hợp", which would read as a retake under another code).
     const unknown = syntheticGraduation({ standard: (data) => ({
-      ...data, courses: [...data.courses, { id: "c-row-10-71ITXX49903", groupId: "row-10", code: "71ITXX49903", name: "Học phần tổng hợp", credits: null, conditionOnly: false, sourceRow: 400 }],
+      ...data, courses: [...data.courses, { id: "c-row-10-71ITXX49903", groupId: "row-10", code: "71ITXX49903", name: "Học phần chưa có tín chỉ", credits: null, conditionOnly: false, sourceRow: 400 }],
     }) });
     expect(unknown.evaluation.groups[0]).toMatchObject({ status: "fail", remaining: 3 });
     expect(credits(unknown)).toHaveLength(1);
