@@ -170,6 +170,7 @@ describe("standard", () => {
     expect(items[3]!.known).toBe(false);
     expect(standardMeta(response())).toBe("Khóa K29 · Chuyên ngành Công nghệ phần mềm");
     expect(standardMeta(response({ resolution: "general", profile: { cohortCode: "K27", specialty: null } }))).toBe("Khóa K27 · Tiêu chuẩn chung của khóa");
+    expect(standardMeta(response({ resolution: "general", profile: { cohortCode: "K28", specialty: "KCN" } }))).toBe("Khóa K28 · Không theo chuyên ngành");
     expect(profileLine({ cohortCode: null, specialty: null })).toBe("Khóa trong tài khoản: chưa có · Chuyên ngành trong hồ sơ: Chưa xác định");
   });
   it("explains every unresolved standard without naming another cohort", () => {

@@ -38,7 +38,7 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
       careerGoal: z.string().trim().max(2000).nullable().optional(),
       careerPositionId: z.uuid().nullable().optional(),
       currentSemester: z.number().int().min(1).max(3).nullable().optional(),
-      specialty: z.enum(["CNPM", "CNDL", "TTNT", "ANM"]).nullable().optional()
+      specialty: z.enum(["CNPM", "CNDL", "TTNT", "ANM", "KCN"]).nullable().optional()
     }).strict().safeParse(req.body);
     if (!input.success) { res.status(400).json({ error: "invalid_profile" }); return; }
     const client = await pool!.connect();
@@ -59,7 +59,8 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
         }
         await client.query("UPDATE student_profiles SET career_position_id=$2 WHERE user_id=$1", [req.session.user!.userId, selected]);
       }
-      // Absent keeps the specialty, null clears it ("Chưa xác định"). An ninh Mạng và IoTs is offered to K27 only.
+      // Absent keeps the specialty, null clears it ("Chưa xác định"). An ninh Mạng và IoTs is offered to K27 only,
+      // "Không theo chuyên ngành" to K28 and earlier (specialtyOffered).
       if (input.data.specialty !== undefined) {
         if (input.data.specialty) {
           const cohort = await client.query<{ cohort_code: string | null }>("SELECT cohort_code FROM student_profiles WHERE user_id=$1", [req.session.user!.userId]);

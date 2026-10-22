@@ -14,7 +14,7 @@ import { assessGraduation, electiveQuotas, programCreditMap, standardCodeAliases
 import { physicalEducationGroupsFor, planProgress, type PlanCourseInfo } from "./plan-progress.js";
 import {
   classifyCurriculumSpecialty, type CurriculumSpecialtyClass, fold, specialtyBlocks, specialtyConflict, specialtyCounts,
-  specialtyLabel, suggestSpecialty,
+  specialtyHasCourses, specialtyLabel, suggestSpecialty,
 } from "./specialty.js";
 import type {
   AssessmentInputs, AssessmentResult, AssessmentWarning, AttemptOutcome, CareerRequirementResult, CareerResult, Confidence,
@@ -259,8 +259,11 @@ function assess(inputs: AssessmentInputs): Assessment {
     const code = courseKey(item.code);
     if (code && !planTerms.has(code)) planTerms.set(code, item.termCode);
   }
-  // A specialty standard's course list also decides applicability (§7.8); a general one does not.
-  const standardCodes = new Set(inputs.graduation.resolution === "specialty" ? (standardData?.courses ?? []).map((course) => courseKey(course.code)) : []);
+  // A specialty standard's course list also decides applicability (§7.8); a general one does not, unless the
+  // student chose "Không theo chuyên ngành", whose standard is the general one (its electives span the specialties).
+  const declaredStandard = inputs.graduation.resolution === "specialty"
+    || (specialty !== null && !specialtyHasCourses(specialty) && inputs.graduation.resolution === "general");
+  const standardCodes = new Set(declaredStandard ? (standardData?.courses ?? []).map((course) => courseKey(course.code)) : []);
   const unknownSpecialtyValues = new Set<string>();
   const table = new Map<string, Row>();
   for (const course of curriculumCourses) {
@@ -754,7 +757,7 @@ function assess(inputs: AssessmentInputs): Assessment {
     warn("specialty_value_unknown", "CTĐT có giá trị chuyên ngành chưa nhận diện được.",
       "Các học phần này được coi là học phần chung.", [...unknownSpecialtyValues].sort(compareText));
   }
-  if (specialty && ![...table.values()].some((row) => row.specialty.kind === "specialty" && row.specialty.code === specialty)) {
+  if (specialty && specialtyHasCourses(specialty) && ![...table.values()].some((row) => row.specialty.kind === "specialty" && row.specialty.code === specialty)) {
     warn("specialty_not_in_curriculum", `CTĐT khóa ${inputs.student.cohortCode} không có học phần riêng của chuyên ngành ${specialtyLabel(specialty)}.`,
       "Chỉ các học phần chung và học phần bạn đã học được dùng để đánh giá.");
   }

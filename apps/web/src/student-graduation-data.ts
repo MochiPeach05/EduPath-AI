@@ -181,7 +181,9 @@ export function standardMetaParts(data: Pick<StudentGraduationResponse, "profile
   if (!standard) return [];
   return [
     { label: "Khóa", value: data.profile.cohortCode ?? standard.cohortCode },
-    data.resolution === "general" || !data.profile.specialty
+    data.profile.specialty === "KCN"
+      ? { label: null, value: "Không theo chuyên ngành" }
+      : data.resolution === "general" || !data.profile.specialty
       ? { label: null, value: "Tiêu chuẩn chung của khóa" }
       : { label: "Chuyên ngành", value: specialtyLabel(data.profile.specialty) },
   ];

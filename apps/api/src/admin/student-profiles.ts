@@ -20,7 +20,7 @@ interface StudentProfileSummary {
 }
 export interface StudentProfileDetail extends StudentProfileSummary {
   /** student_profiles.specialty; null = "Chưa xác định". */
-  specialty?: "CNPM" | "CNDL" | "TTNT" | "ANM" | null;
+  specialty?: "CNPM" | "CNDL" | "TTNT" | "ANM" | "KCN" | null;
   careerPositionId?: string | null;
   careerPosition?: { id: string; nameVi: string; nameEn: string; deletedAt: string | null } | null;
   interests: string | null;

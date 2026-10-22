@@ -13,8 +13,8 @@ type SpecialtyInfo = {
   curriculumName: string;
   /** Training-plan section label (display only; applicability never uses it). */
   planSectionLabel: string;
-  /** Cohorts whose students can choose it; every cohort when absent. */
-  cohorts?: readonly string[];
+  /** Cohorts (K numbers, inclusive) whose students can choose it; every cohort when absent. */
+  cohorts?: { from?: number; to?: number };
 };
 
 /** Specialty mapping (spec §4). The web keeps a copy of the labels. */
@@ -23,7 +23,10 @@ export const SPECIALTIES: readonly SpecialtyInfo[] = [
   { code: "CNDL", label: "Công nghệ dữ liệu", programCode: "7480201-02", curriculumName: "cong nghe du lieu", planSectionLabel: "Chuyên ngành CNDL" },
   { code: "TTNT", label: "Trí tuệ nhân tạo", programCode: "7480201-04", curriculumName: "tri tue nhan tao", planSectionLabel: "Chuyên ngành Trí tuệ Nhân tạo" },
   // K27 only (2026-10-23): the K27 standard 71K27CNTT_7480201-01 and the K27 CTĐT courses "An ninh Mạng và IoT".
-  { code: "ANM", label: "An ninh Mạng và IoTs", programCode: "7480201-01", curriculumName: "an ninh mang va iot", planSectionLabel: "Chuyên ngành An ninh Mạng và IoT", cohorts: ["K27"] },
+  { code: "ANM", label: "An ninh Mạng và IoTs", programCode: "7480201-01", curriculumName: "an ninh mang va iot", planSectionLabel: "Chuyên ngành An ninh Mạng và IoT", cohorts: { from: 27, to: 27 } },
+  // K28 and earlier (2026-10-23): no program code and no courses of its own; the student takes the
+  // cohort's general standard (the "không chuyên ngành" files) and its course list.
+  { code: "KCN", label: "Không theo chuyên ngành", programCode: "", curriculumName: "", planSectionLabel: "", cohorts: { to: 28 } },
 ];
 
 export const isSpecialtyCode = (value: unknown): value is SpecialtyCode =>
@@ -32,11 +35,17 @@ export const isSpecialtyCode = (value: unknown): value is SpecialtyCode =>
 export const specialtyLabel = (code: SpecialtyCode | null): string | null =>
   SPECIALTIES.find((item) => item.code === code)?.label ?? null;
 
-/** Whether a student of the cohort can choose the specialty (An ninh Mạng và IoTs: K27 only). */
+/** Whether a student of the cohort can choose it (An ninh Mạng và IoTs: K27; Không theo chuyên ngành: K28 and earlier). */
 export function specialtyOffered(code: SpecialtyCode, cohortCode: string | null | undefined): boolean {
   const item = SPECIALTIES.find((entry) => entry.code === code);
-  return Boolean(item) && (!item!.cohorts || item!.cohorts.includes((cohortCode ?? "").trim().toUpperCase()));
+  if (!item) return false;
+  if (!item.cohorts) return true;
+  const cohort = Number(/^K(\d{2,3})$/.exec((cohortCode ?? "").trim().toUpperCase())?.[1] ?? Number.NaN);
+  return cohort >= (item.cohorts.from ?? 0) && cohort <= (item.cohorts.to ?? Number.POSITIVE_INFINITY);
 }
+
+/** A specialty with courses of its own in the CTĐT; "Không theo chuyên ngành" has none. */
+export const specialtyHasCourses = (code: SpecialtyCode): boolean => Boolean(SPECIALTIES.find((item) => item.code === code)?.curriculumName);
 
 /** Folded curriculum specialty values that mean "học phần chung". */
 const COMMON_SPECIALTY_VALUES: readonly string[] = ["", "0", "tu chon chuyen nganh", "hoc phan thay the do an tot nghiep"];
@@ -54,7 +63,7 @@ export type CurriculumSpecialtyClass =
 export function classifyCurriculumSpecialty(raw: string, cohortCode?: string | null): CurriculumSpecialtyClass {
   const value = fold(raw);
   if (COMMON_SPECIALTY_VALUES.includes(value) || value.startsWith("hoc phan thay the")) return { kind: "common", known: true };
-  const match = SPECIALTIES.find((item) => specialtyOffered(item.code, cohortCode) &&
+  const match = SPECIALTIES.find((item) => item.curriculumName && specialtyOffered(item.code, cohortCode) &&
     (value === item.curriculumName || value === fold(item.code) || value.includes(item.curriculumName)));
   return match ? { kind: "specialty", code: match.code } : { kind: "common", known: false };
 }
@@ -63,6 +72,7 @@ export function classifyCurriculumSpecialty(raw: string, cohortCode?: string | n
 function specialtyAtStart(text: string): SpecialtyCode | null {
   const value = fold(text).replace(/^[\s:.,;()-]+/, "");
   const match = SPECIALTIES.find((item) => {
+    if (!item.curriculumName) return false;
     const short = fold(item.code);
     return value.startsWith(item.curriculumName) || value === short || new RegExp(`^${short}(?![a-z0-9])`).test(value);
   });
@@ -74,7 +84,7 @@ export function standardSpecialty(data: { specialty: string; classBlock: string;
   const text = `${data.specialty} ${data.classBlock} ${data.standardCode}`;
   const codes = [...text.matchAll(/(?<!\d)(\d{7}-\d{2})(?!\d)/g)].map((match) => match[1]!);
   if (!codes.length) return null;
-  return SPECIALTIES.find((item) => codes.includes(item.programCode))?.code ?? "other";
+  return SPECIALTIES.find((item) => item.programCode && codes.includes(item.programCode))?.code ?? "other";
 }
 
 /**
@@ -129,7 +139,7 @@ type SpecialtyCounts = Record<SpecialtyCode, number>;
 
 /** Passed (or MT) mandatory specialty courses per specialty. */
 export function specialtyCounts(courses: readonly { type: string; specialty: CurriculumSpecialtyClass; passed: boolean }[]): SpecialtyCounts {
-  const counts: SpecialtyCounts = { CNPM: 0, CNDL: 0, TTNT: 0, ANM: 0 };
+  const counts: SpecialtyCounts = { CNPM: 0, CNDL: 0, TTNT: 0, ANM: 0, KCN: 0 };
   for (const course of courses) {
     if (course.passed && course.specialty.kind === "specialty" && /^BB/i.test(course.type.trim())) counts[course.specialty.code]++;
   }
@@ -145,8 +155,12 @@ export function suggestSpecialty(counts: SpecialtyCounts): SpecialtySuggestion |
   return { code: item.code, label: item.label, passedCount, text: `Gợi ý: ${item.label} (${passedCount} học phần chuyên ngành đã học)` };
 }
 
-/** Another specialty with at least as many passed mandatory courses as the declared one. */
+/**
+ * Another specialty with at least as many passed mandatory courses as the declared one. None for
+ * "Không theo chuyên ngành": its students take specialty courses as electives.
+ */
 export function specialtyConflict(declared: SpecialtyCode, counts: SpecialtyCounts): { code: SpecialtyCode; count: number } | null {
+  if (!specialtyHasCourses(declared)) return null;
   const others = SPECIALTIES.filter((item) => item.code !== declared && counts[item.code] > 0 && counts[item.code] >= counts[declared])
     .sort((a, b) => counts[b.code] - counts[a.code] || (a.code < b.code ? -1 : 1));
   const other = others[0];

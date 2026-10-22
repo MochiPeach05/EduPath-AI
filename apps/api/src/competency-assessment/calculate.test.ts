@@ -741,6 +741,25 @@ describe("data warnings (spec §7.10)", () => {
     expect(anm.warnings.map((warning) => warning.code)).not.toContain("specialty_not_in_curriculum");
   });
 
+  it("gives a K28 student 'Không theo chuyên ngành' the general standard's course list (2026-10-23)", () => {
+    // A CNDL elective the general standard lists (71ITDS49903) next to one it does not (71ITDS40303), both not taken.
+    const base = syntheticInputs({ specialty: "CNPM" });
+    base.curriculum.courses.push({ code: "71ITDS49903", name: "Môn tự chọn CNDL", credits: 3, type: "TC309", block: "", specialty: "Công nghệ Dữ liệu", semester: 1, studyYear: 4 });
+    const original = base.graduation.standard!;
+    const standard = { ...original, data: { ...original.data, courses: [...original.data.courses,
+      { id: "kcn", groupId: original.data.courses[0]!.groupId, code: "71ITDS49903", name: "Môn tự chọn CNDL", credits: 3, conditionOnly: false, sourceRow: 999 }] } };
+    const run = (specialty: SpecialtyCode | null) => calculateAssessment({ ...base, student: { ...base.student, cohortCode: "K28", specialty },
+      graduation: { resolution: "general", standard } });
+    const kcn = run("KCN"), unset = run(null);
+    const codes = kcn.warnings.map((warning) => warning.code);
+    expect(codes).not.toContain("specialty_not_in_curriculum");
+    expect(codes).not.toContain("specialty_conflict");
+    expect(kcn.courses.find((course) => course.code === "71ITDS49903")).toMatchObject({ specialty: "CNDL", state: "not_taken", applicable: true });
+    expect(kcn.courses.find((course) => course.code === "71ITDS40303")).toMatchObject({ specialty: "CNDL", state: "not_taken", applicable: false });
+    // "Chưa xác định" still uses the general standard only as a fallback: its electives do not apply.
+    expect(unset.courses.find((course) => course.code === "71ITDS49903")).toMatchObject({ applicable: false });
+  });
+
   it("reports a credit mismatch when printed results need no inference", () => {
     const terms = mapTerms((row) => [row[0], row[1], row[2] ?? null, row[3] ?? null, row[4] ?? null, row[4] === "F" ? "Không đạt" : row[2] !== undefined && row[4] !== "MT" ? "Đạt" : null]);
     terms[5]!.summaries = [["Tổng số tín chỉ tích lũy", "30"]];

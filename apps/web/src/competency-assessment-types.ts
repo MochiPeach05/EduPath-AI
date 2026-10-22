@@ -3,20 +3,25 @@
 // with the engine: the page only reads these shapes, it never recomputes them.
 
 /** student_profiles.specialty. null = "Chưa xác định". */
-export type SpecialtyCode = "CNPM" | "CNDL" | "TTNT" | "ANM";
+export type SpecialtyCode = "CNPM" | "CNDL" | "TTNT" | "ANM" | "KCN";
 
-/** Labels copied from the engine's specialty mapping (spec §4); `cohorts` limits who can choose it (absent: everyone). */
-export const SPECIALTIES: readonly { code: SpecialtyCode; label: string; cohorts?: readonly string[] }[] = [
+/**
+ * Labels copied from the engine's specialty mapping (spec §4); `cohorts` (K numbers, inclusive) limits who can
+ * choose it, absent for everyone.
+ */
+export const SPECIALTIES: readonly { code: SpecialtyCode; label: string; cohorts?: { from?: number; to?: number } }[] = [
   { code: "CNPM", label: "Công nghệ phần mềm" },
   { code: "CNDL", label: "Công nghệ dữ liệu" },
   { code: "TTNT", label: "Trí tuệ nhân tạo" },
-  { code: "ANM", label: "An ninh Mạng và IoTs", cohorts: ["K27"] },
+  { code: "ANM", label: "An ninh Mạng và IoTs", cohorts: { from: 27, to: 27 } },
+  { code: "KCN", label: "Không theo chuyên ngành", cohorts: { to: 28 } },
 ];
 
-/** The specialties a student of the cohort can choose (An ninh Mạng và IoTs: K27 only). */
+/** The choices of a student of the cohort (An ninh Mạng và IoTs: K27; Không theo chuyên ngành: K28 and earlier). */
 export function specialtiesFor(cohortCode: string | null | undefined) {
-  const cohort = (cohortCode ?? "").trim().toUpperCase();
-  return SPECIALTIES.filter((item) => !item.cohorts || item.cohorts.includes(cohort));
+  const cohort = Number(/^K(\d{2,3})$/.exec((cohortCode ?? "").trim().toUpperCase())?.[1] ?? Number.NaN);
+  return SPECIALTIES.filter((item) => !item.cohorts
+    || (cohort >= (item.cohorts.from ?? 0) && cohort <= (item.cohorts.to ?? Number.POSITIVE_INFINITY)));
 }
 
 export function specialtyLabel(code: string | null | undefined): string {

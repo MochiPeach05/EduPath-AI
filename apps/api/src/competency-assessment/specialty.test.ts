@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   classifyCurriculumSpecialty, isSpecialtyCode, resolveGraduationStandard, SPECIALTIES, specialtyBlocks, specialtyConflict,
-  specialtyCounts, specialtyLabel, specialtyOffered, standardSpecialty, suggestSpecialty,
+  specialtyCounts, specialtyHasCourses, specialtyLabel, specialtyOffered, standardSpecialty, suggestSpecialty,
 } from "./specialty.js";
 import type { SpecialtyCode } from "./types.js";
 
@@ -12,7 +12,9 @@ describe("specialty mapping (spec §4)", () => {
       ["CNDL", "Công nghệ dữ liệu", "7480201-02", "cong nghe du lieu", "Chuyên ngành CNDL"],
       ["TTNT", "Trí tuệ nhân tạo", "7480201-04", "tri tue nhan tao", "Chuyên ngành Trí tuệ Nhân tạo"],
       ["ANM", "An ninh Mạng và IoTs", "7480201-01", "an ninh mang va iot", "Chuyên ngành An ninh Mạng và IoT"],
+      ["KCN", "Không theo chuyên ngành", "", "", ""],
     ]);
+    expect(SPECIALTIES.filter((item) => specialtyHasCourses(item.code)).map((item) => item.code)).toEqual(["CNPM", "CNDL", "TTNT", "ANM"]);
     expect(isSpecialtyCode("CNPM")).toBe(true);
     expect(isSpecialtyCode("ANM")).toBe(true);
     expect(isSpecialtyCode("THQT")).toBe(false);
@@ -24,6 +26,14 @@ describe("specialty mapping (spec §4)", () => {
     expect(specialtyOffered("ANM", " k27 ")).toBe(true);
     for (const cohort of ["K26", "K28", "K29", "", null, undefined]) expect(specialtyOffered("ANM", cohort)).toBe(false);
     for (const cohort of ["K27", "K29", null]) expect(specialtyOffered("CNPM", cohort)).toBe(true);
+  });
+
+  it("offers Không theo chuyên ngành to K28 and earlier, which have a standard without specialty", () => {
+    for (const cohort of ["K28", "k28", "K27", "K26", "K20"]) expect(specialtyOffered("KCN", cohort)).toBe(true);
+    for (const cohort of ["K29", "K32", "", "KX", null, undefined]) expect(specialtyOffered("KCN", cohort)).toBe(false);
+    expect(classifyCurriculumSpecialty("Không theo chuyên ngành", "K28")).toEqual({ kind: "common", known: false });
+    expect(classifyCurriculumSpecialty("KCN", "K28")).toEqual({ kind: "common", known: false });
+    expect(specialtyBlocks("SV chuyên ngành KCN\n[71ITSE41003] Nhập môn")?.size).toBe(0);
   });
 
   it("classifies 'học phần chung' values as common, including '0' and the thesis replacement", () => {
@@ -97,6 +107,11 @@ describe("graduation standard resolution", () => {
     expect(pick(k27, "CNPM")).toEqual({ code: "71K27CNTT_7480201-03_TN04", resolution: "specialty" });
     expect(pick(k27, null)).toEqual({ code: "71K27CNTT_TN04", resolution: "general" });
   });
+
+  it("gives Không theo chuyên ngành the cohort's general standard, never a specialty one", () => {
+    expect(pick([general, ...k29], "KCN")).toEqual({ code: "71K28CNTT_TiendohoctapQC1423", resolution: "general" });
+    expect(pick(k29, "KCN")).toEqual({ code: null, resolution: "not_found" });
+  });
 });
 
 describe("'SV chuyên ngành' prerequisite blocks (71ITGR40203/40303)", () => {
@@ -121,13 +136,13 @@ describe("specialty suggestion and conflict", () => {
 
   it("suggests the only specialty with passed mandatory courses", () => {
     const counts = specialtyCounts([course("BB", "CNPM", true), course("BB", "CNPM", true), course("BB", "CNDL", false), course("TC309", "TTNT", true), course("BB", null, true)]);
-    expect(counts).toEqual({ CNPM: 2, CNDL: 0, TTNT: 0, ANM: 0 });
+    expect(counts).toEqual({ CNPM: 2, CNDL: 0, TTNT: 0, ANM: 0, KCN: 0 });
     expect(suggestSpecialty(counts)).toEqual({ code: "CNPM", label: "Công nghệ phần mềm", passedCount: 2, text: "Gợi ý: Công nghệ phần mềm (2 học phần chuyên ngành đã học)" });
   });
 
   it("does not suggest when courses of two specialties are passed, or none", () => {
-    expect(suggestSpecialty({ CNPM: 1, CNDL: 1, TTNT: 0, ANM: 0 })).toBeNull();
-    expect(suggestSpecialty({ CNPM: 0, CNDL: 0, TTNT: 0, ANM: 0 })).toBeNull();
+    expect(suggestSpecialty({ CNPM: 1, CNDL: 1, TTNT: 0, ANM: 0, KCN: 0 })).toBeNull();
+    expect(suggestSpecialty({ CNPM: 0, CNDL: 0, TTNT: 0, ANM: 0, KCN: 0 })).toBeNull();
   });
 
   it("suggests An ninh Mạng và IoTs from the K27 ANM courses", () => {
@@ -136,9 +151,11 @@ describe("specialty suggestion and conflict", () => {
   });
 
   it("flags a declared specialty contradicted by the passed courses", () => {
-    expect(specialtyConflict("CNDL", { CNPM: 4, CNDL: 0, TTNT: 0, ANM: 0 })).toEqual({ code: "CNPM", count: 4 });
-    expect(specialtyConflict("CNPM", { CNPM: 4, CNDL: 1, TTNT: 0, ANM: 0 })).toBeNull();
-    expect(specialtyConflict("CNPM", { CNPM: 0, CNDL: 0, TTNT: 0, ANM: 0 })).toBeNull();
-    expect(specialtyConflict("CNPM", { CNPM: 1, CNDL: 0, TTNT: 0, ANM: 3 })).toEqual({ code: "ANM", count: 3 });
+    expect(specialtyConflict("CNDL", { CNPM: 4, CNDL: 0, TTNT: 0, ANM: 0, KCN: 0 })).toEqual({ code: "CNPM", count: 4 });
+    expect(specialtyConflict("CNPM", { CNPM: 4, CNDL: 1, TTNT: 0, ANM: 0, KCN: 0 })).toBeNull();
+    expect(specialtyConflict("CNPM", { CNPM: 0, CNDL: 0, TTNT: 0, ANM: 0, KCN: 0 })).toBeNull();
+    expect(specialtyConflict("CNPM", { CNPM: 1, CNDL: 0, TTNT: 0, ANM: 3, KCN: 0 })).toEqual({ code: "ANM", count: 3 });
+    // Students without a specialty take specialty courses as electives.
+    expect(specialtyConflict("KCN", { CNPM: 4, CNDL: 2, TTNT: 0, ANM: 0, KCN: 0 })).toBeNull();
   });
 });

@@ -32,7 +32,7 @@ Phần "Xét tốt nghiệp (tham khảo)" của trang `#competency` **không** 
 | Khoảng trống so với nghề, mức phù hợp, học phần hỗ trợ, tự học | `calculate.ts` |
 | Tiến độ theo KHĐT | `plan-progress.ts` |
 | Xét tốt nghiệp (cận dưới/cận trên) | `graduation.ts`, dùng chung với trang Điều kiện xét tốt nghiệp qua `apps/api/src/graduation/evaluation.ts`; chọn tiêu chuẩn bằng `apps/api/src/graduation/resolve.ts`; bảng ca `fixtures/graduation-cases.json` |
-| Chuyên ngành sinh viên (CNPM/CNDL/TTNT; ANM An ninh Mạng và IoTs chỉ cho K27 từ 23/10/2026: học phần CTĐT K27 ghi "An ninh Mạng và IoT" là học phần chuyên ngành ANM, ở khóa khác giá trị này vẫn coi là học phần chung kèm cảnh báo) | migration 028, 042, `PATCH /api/student/profile`, `specialty.ts` (`specialtyOffered`, `classifyCurriculumSpecialty(value, cohort)`) |
+| Chuyên ngành sinh viên (CNPM/CNDL/TTNT; ANM An ninh Mạng và IoTs chỉ cho K27 từ 23/10/2026: học phần CTĐT K27 ghi "An ninh Mạng và IoT" là học phần chuyên ngành ANM, ở khóa khác giá trị này vẫn coi là học phần chung kèm cảnh báo; KCN Không theo chuyên ngành cho K28 trở về trước: luôn dùng tiêu chuẩn chung của khóa, danh sách môn của tiêu chuẩn đó quyết định học phần áp dụng, không có cảnh báo lệch chuyên ngành) | migration 028, 042, 043, `PATCH /api/student/profile`, `specialty.ts` (`specialtyOffered`, `specialtyHasCourses`, `classifyCurriculumSpecialty(value, cohort)`) |
 | Nhận xét AI | `ai/*`, `apps/api/src/ai-worker/*`, `services/ai/` |
 | Lời khuyên xét tốt nghiệp (AI, trang `#graduation`) | `apps/api/src/graduation/advice/*`, cùng worker; xem `docs/graduation-advice.md` |
 
