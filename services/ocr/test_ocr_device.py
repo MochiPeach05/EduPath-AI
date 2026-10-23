@@ -172,6 +172,102 @@ class AdapterRuleTests(TestCase):
             self.assertFalse(test_ocr.native_rows(SummaryPage(scanned=True))[1])
 
 
+class OldCourseCodeTests(TestCase):
+    """K26 courses and the GDTC courses of K27/K28 carry the old code format (synthetic rows, no student data)."""
+
+    def test_old_codes_are_course_rows_and_condition_courses_leave_the_gpa_check(self):
+        import test_ocr
+
+        rows = [
+            ["Năm học: 2020-2021 - Học kỳ: HK01", None, None, None, None, None, None, None],
+            ["1", "DIT0010", "Nhập môn lập trình", "3", "7.6", "3.00", "B", "Đạt"],
+            ["2", "DGT0010", "Giáo dục thể chất 1 (*)", "1", "8.0", "3.50", "B+", "Đạt"],
+            ["3", "71ITBS10103", "Nhập môn công nghệ thông tin", "3", "6.4", "2.00", "C", "Đạt"],
+            ["- Số tín chỉ đạt học kỳ: 6\n- Điểm TB học kỳ (Hệ 4): 2.50", None, None, None, "- Tổng số tín chỉ tích lũy: 6", None, None, None],
+        ]
+        courses, summaries, unparsed = test_ocr.parse_pages([AdapterRuleTests.page(rows)], {})
+        self.assertEqual(unparsed, [])
+        self.assertEqual([(c["course_code"], c["issues"]) for c in courses], [("DIT0010", []), ("DGT0010", []), ("71ITBS10103", [])])
+        # GDTC (DGT…) stays out of the semester GPA, as 71PE… does: (3 × 3.00 + 3 × 2.00) / 6 = 2.50.
+        [semester] = test_ocr.parse_semesters(summaries, courses)
+        self.assertEqual(semester["computed_from_courses"], {"semester_gpa_4": 2.5, "semester_credits_passed": 6})
+        self.assertEqual(semester["issues"], [])
+
+    def test_a_page_with_old_codes_counts_them_against_its_table_rows(self):
+        import test_ocr
+
+        rows = [["1", "DIT0070", "Cơ sở dữ liệu", "3", "7.8", "3.00", "B", "Đạt"],
+                ["2", "DGT0020", "Giáo dục thể chất 2 (*)", "1", "8.2", "3.50", "B+", "Đạt"]]
+
+        class Table:
+            bbox = (0, 0, 1, 1)
+
+            @staticmethod
+            def extract():
+                return [list(row) for row in rows]
+
+        class Page:
+            @staticmethod
+            def get_text():
+                return "".join(" ".join(row) + "\n" for row in rows)
+
+            @staticmethod
+            def find_tables():
+                return SimpleNamespace(tables=[Table()])
+
+        with patch.object(test_ocr, "is_scanned", return_value=False):
+            _rows, usable, expected = test_ocr.native_rows(Page())
+        self.assertTrue(usable)
+        self.assertEqual(expected, Counter({"DIT0070": 1, "DGT0020": 1}))
+
+
+class ServerRuleTests(TestCase):
+    """worker.server_error follows apps/api/src/student/ocr-adapter.ts (synthetic rows, no student data)."""
+
+    @staticmethod
+    def result(rows):
+        import test_ocr
+
+        courses, summaries, unparsed = test_ocr.parse_pages([AdapterRuleTests.page(rows)], {})
+        return {"schema_version": "1.1", "adapter": "vlu_8_columns", "course_count": len(courses), "needs_review": False,
+                "pages": [{"page": 1, "method": "pdf_text", "warnings": []}], "courses": courses,
+                "semesters": test_ocr.parse_semesters(summaries, courses), "summaries": summaries, "unparsed_rows": unparsed}
+
+    HEADER = ["Năm học: 2020-2021 - Học kỳ: HK01"]
+
+    def test_old_codes_import(self):
+        import worker
+
+        rows = [self.HEADER, ["1", "DIT0070", "Cơ sở dữ liệu", "3", "7.8", "3.00", "B", "Đạt"]]
+        self.assertIsNone(worker.server_error(self.result(rows)))
+
+    def test_an_unknown_mark_is_refused_and_logged_as_printed(self):
+        import worker
+
+        result = self.result([self.HEADER, ["1", "DIT0070", "Cơ sở dữ liệu", "3", "", "", "P", "Đạt"]])
+        self.assertEqual(worker.server_error(result), "invalid_ocr_result")
+        count, values = worker.schema_problems(result)
+        self.assertEqual((dict(count), values), ({"letter_grade": 1}, {"letter_grade": {"P"}}))
+
+    def test_a_flagged_row_is_refused_as_unreadable_grades(self):
+        import worker
+
+        rows = [self.HEADER, ["1", "DIT0070", "Cơ sở dữ liệu", "3", "7,8x", "3.00", "B", "Đạt"]]
+        self.assertEqual(worker.server_error(self.result(rows)), "unreadable_grades")
+
+    def test_a_row_before_any_term_is_refused_as_invalid(self):
+        import worker
+
+        count, values = worker.schema_problems(self.result([["1", "DIT0070", "Cơ sở dữ liệu", "3", "7.8", "3.00", "B", "Đạt"]]))
+        self.assertEqual(values, {"section": {"unknown"}})
+
+    def test_masked_values_keep_only_the_form(self):
+        import worker
+
+        self.assertEqual(worker.mask("71ITBS1O103"), "99AAAA9A999")
+        self.assertEqual(worker.mask("Lê Văn 9,5"), "Aa Aaa 9,9")
+
+
 if __name__ == "__main__":
     import unittest
 

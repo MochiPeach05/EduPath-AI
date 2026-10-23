@@ -21,7 +21,10 @@ import unicodedata
 import pymupdf
 
 ROOT = Path(__file__).resolve().parent
-CODE = re.compile(r'\b\d{2}[A-Z]{2,10}\d{5,8}\b')
+# A course code: the current format (71ITBS10103) or the old one of K26 courses and the K27/K28 GDTC courses
+# (DIT0070, DGT0010), as the server's COURSE_CODE_PATTERN. With only the current one, every old-code row was
+# flagged and the server refused the whole K26–K28 transcript (unreadable_grades).
+CODE = re.compile(r'\b(?:\d{2}[A-Z]{2,10}\d{5,8}|[A-Z]{3}\d{4})\b')
 # Best model of training/BAO_CAO_OCR.md; 150 DPI was the most stable setting in pipeline tuning.
 DEFAULT_REC_MODEL = ROOT / 'models/f3'
 DEFAULT_DPI = {'ppocr': 150, 'vl': 300}
@@ -34,8 +37,9 @@ FAIL_LETTERS = {'F', ABSENT_LETTER}
 LETTERS = PASS_LETTERS | FAIL_LETTERS | {'MT'}
 RESULT_MARKS = {'✓': 'passed', '✗': 'failed'}  # written into the result cell by ppocr_table.result_mark
 RESULT_WORDS = {'dat': 'passed', 'dau': 'passed', 'khong dat': 'failed', 'rot': 'failed', 'truot': 'failed'}
-# Conditional courses (national defence, physical education) are excluded from the semester GPA.
-CONDITIONAL_PREFIXES = ('71NAD', '71PE')
+# Conditional courses (national defence, physical education) are excluded from the semester GPA,
+# under the current codes and the old ones (DQP…, DGT…).
+CONDITIONAL_PREFIXES = ('71NAD', '71PE', 'DQP', 'DGT')
 RANKS = {'xuat sac': ('Xuất sắc', 'excellent'), 'gioi': ('Giỏi', 'very_good'), 'kha': ('Khá', 'good'),
          'trung binh': ('Trung bình', 'average'), 'yeu': ('Yếu', 'weak'), 'kem': ('Kém', 'poor'),
          # A term that is still running is printed "KXL" (không xếp loại).
