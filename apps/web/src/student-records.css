@@ -601,6 +601,19 @@
     font-weight: 600;
 }
 
+/* A row saved as printed although something in it did not fit a known form (2026-10-23). */
+.sr-row-review td {
+    background: #fff7e8;
+}
+
+.sr-review-reasons {
+    display: block;
+    margin-top: 2px;
+    font-size: 11px;
+    line-height: 1.4;
+    color: #704900;
+}
+
 .sr-review {
     padding: 16px 20px;
     margin-block: 16px;

@@ -7,7 +7,6 @@ from datetime import datetime
 import json
 import os
 from pathlib import Path
-import re
 import subprocess
 import shutil
 import sys
@@ -20,9 +19,6 @@ from urllib.request import Request, urlopen, build_opener, HTTPRedirectHandler
 
 ROOT=Path(__file__).resolve().parent
 LOG=ROOT/'logs'/'transcripts.jsonl'
-# The server's rules for a result (apps/api/src/student/ocr-adapter.ts, mapOcrTranscript); keep both in step.
-SERVER_CODE=re.compile(r'[0-9]{2}[A-Z]{2,10}[0-9]{5,8}|[A-Z]{3}[0-9]{4}')
-SERVER_LETTERS={'A+','A','B+','B','C+','C','D+','D','F','MT','VT'}
 
 def read_config():
     env=ROOT/'.env'
@@ -59,63 +55,56 @@ def mask(value):
     return ''.join('9' if c.isdigit() else ('A' if c.isupper() else 'a') if c.isalpha() else c for c in str(value))[:16]
 
 def schema_problems(d):
-    """Fields that break the server's result schema (it answers invalid_ocr_result): counts, masked values."""
+    """Fields that break the worker's contract with the server (apps/api/src/student/ocr-adapter.ts; keep both in step):
+    the server answers invalid_ocr_result. Since 2026-10-23 the values of a row (codes, marks, cells that are not
+    numbers) are not checked: the server keeps them as printed and marks the row for review."""
     count,values=Counter(),{}
     def bad(field,value=None):
         count[field]+=1
         if value is not None: values.setdefault(field,set()).add(value)
     integer=lambda v,low,high: isinstance(v,int) and not isinstance(v,bool) and low<=v<=high
-    text=lambda v,low=0: isinstance(v,str) and low<=len(v)<=2000
+    number=lambda v,high: isinstance(v,(int,float)) and not isinstance(v,bool) and 0<=v<=high
+    text=lambda v,high=2000: isinstance(v,str) and len(v)<=high
     if d.get('schema_version')!='1.1' or d.get('adapter')!='vlu_8_columns': bad('version')
-    if not integer(d.get('course_count'),1,1000): bad('course_count')
+    if not integer(d.get('course_count'),0,1000): bad('course_count')
     courses,pages,summaries=d.get('courses') or [],d.get('pages') or [],d.get('summaries') or []
-    if not 1<=len(courses)<=1000: bad('courses')
+    if len(courses)>1000: bad('courses')
     for c in courses:
-        if not integer(c.get('ordinal'),1,1000): bad('ordinal',mask(c.get('ordinal')))
-        if not (isinstance(c.get('course_code'),str) and SERVER_CODE.fullmatch(c['course_code'])): bad('course_code',mask(c.get('course_code')))
-        if not text(c.get('course_name'),1): bad('course_name')
-        if not integer(c.get('credits'),0,30): bad('credits',mask(((c.get('raw_cells') or [])+['']*4)[3] or ''))
+        if not integer(c.get('ordinal'),0,100000): bad('ordinal',mask(c.get('ordinal')))
+        if not text(c.get('course_code'),200): bad('course_code',mask(c.get('course_code')))
+        if not text(c.get('course_name')): bad('course_name')
+        if c.get('credits') is not None and not number(c['credits'],1000): bad('credits',mask(c['credits']))
         for field,high in (('score_10',10),('score_4',4)):
-            v=c.get(field)
-            if v is not None and not (isinstance(v,(int,float)) and not isinstance(v,bool) and 0<=v<=high): bad(field)
-        letter=c.get('letter_grade')
-        # A mark the server does not know is kept as printed when short (P, CT…); anything longer is masked.
-        if letter is not None and letter not in SERVER_LETTERS: bad('letter_grade',letter if len(letter)<=4 and not re.search(r'\d',letter) else mask(letter))
+            if c.get(field) is not None and not number(c[field],high): bad(field)
+        if c.get('letter_grade') is not None and not text(c['letter_grade'],50): bad('letter_grade')
         if c.get('result') not in (None,'passed','failed'): bad('result')
+        if c.get('result_raw') is not None and not text(c['result_raw'],200): bad('result_raw')
         if not integer(c.get('source_page'),1,20): bad('source_page')
-        year=c.get('academic_year')
-        if year is not None and not (isinstance(year,str) and re.fullmatch(r'[0-9]{4}-[0-9]{4}',year)): bad('academic_year',mask(year))
-        if c.get('semester') not in (None,'HK01','HK02','HK03'): bad('semester',mask(c.get('semester')))
-        if c.get('section') not in ('semester','credit_transfer'): bad('section',str(c.get('section')))
+        for field in ('academic_year','semester'):
+            if c.get(field) is not None and not text(c[field],50): bad(field,mask(c[field]))
+        if c.get('section') not in ('semester','credit_transfer','unknown'): bad('section',str(c.get('section')))
         if not isinstance(c.get('needs_review'),bool): bad('needs_review')
         if not (isinstance(c.get('issues'),list) and len(c['issues'])<=100 and all(text(i) for i in c['issues'])): bad('issues')
+        cells=c.get('raw_cells')
+        if cells is not None and not (isinstance(cells,list) and len(cells)<=20 and all(x is None or text(x) for x in cells)): bad('raw_cells')
     if not isinstance(d.get('needs_review'),bool): bad('needs_review')
     if not 1<=len(pages)<=20 or any(not integer(p.get('page'),1,20) or p.get('method') not in ('pdf_text','ppocr')
             or not isinstance(p.get('warnings'),list) or len(p['warnings'])>100 for p in pages): bad('pages')
     if len(summaries)>200: bad('summaries',f'{len(summaries)} rows')
     for s in summaries:
         cells=s.get('raw_cells')
-        if not (isinstance(cells,list) and len(cells)<=20 and all(x is None or text(x) for x in cells)) \
-                or any(s.get(k) is not None and not text(s.get(k)) for k in ('academic_year','semester')): bad('summaries')
+        if not (isinstance(cells,list) and len(cells)<=20 and all(x is None or text(x) for x in cells))                 or any(s.get(k) is not None and not text(s.get(k)) for k in ('academic_year','semester')): bad('summaries')
     if len(d.get('semesters') or [])>100: bad('semesters')
-    if len(d.get('unparsed_rows') or [])>1000: bad('unparsed_rows')
+    unparsed=d.get('unparsed_rows') or []
+    if len(unparsed)>1000 or any(not isinstance(r,dict) or (r.get('source_page') is not None and not integer(r['source_page'],1,20)) for r in unparsed): bad('unparsed_rows')
     return count,values
 
 def server_error(d):
-    """The error the server answers for this result, in its order of checks; None when it imports."""
+    """The error the server answers for this result; None when it saves it (rows with issues are marked for review)."""
     if schema_problems(d)[0]: return 'invalid_ocr_result'
     courses,pages=d['courses'],d['pages']
-    if d['unparsed_rows'] or d['course_count']!=len(courses) or any(p['page']!=i+1 for i,p in enumerate(pages)): return 'unreadable_rows'
-    sections={}
-    for c in courses:
-        transfer,year,semester=c['section']=='credit_transfer',c['academic_year'],c['semester']
-        if c['issues'] or (c['score_10'] is None)!=(c['score_4'] is None): return 'unreadable_grades'
-        if c['source_page']>len(pages): return 'invalid_ocr_result'
-        if (year is not None or semester is not None) if transfer else (not year or not semester or int(year[5:])!=int(year[:4])+1): return 'missing_semester'
-        ordinals=sections.setdefault('transfer' if transfer else f'{year}-{semester}',set())
-        if c['ordinal'] in ordinals: return 'duplicate_rows'
-        ordinals.add(c['ordinal'])
-    if any((f"{s['academic_year']}-{s['semester']}" if s['academic_year'] else 'transfer') not in sections for s in d['summaries']): return 'missing_semester'
+    if d['course_count']!=len(courses) or any(p['page']!=i+1 for i,p in enumerate(pages)) or any(c['source_page']>len(pages) for c in courses): return 'invalid_ocr_result'
+    if not courses: return 'unsupported_layout'
     return None
 
 def log_result(started,result):
@@ -128,7 +117,7 @@ def log_result(started,result):
             d=result['result']; count,values=schema_problems(d)
             entry.update(server=server_error(d),courses=d['course_count'],pages=[[p['method'],p['warnings']] for p in d['pages']],
                 schema={k:{'count':n,'values':sorted(values.get(k,()))[:10]} for k,n in count.items()},
-                issues=dict(Counter(i for c in d['courses'] for i in c['issues'])),
+                review_rows=sum(1 for c in d['courses'] if c['issues']),issues=dict(Counter(i for c in d['courses'] for i in c['issues'])),
                 unparsed=[[mask(cell or '') for cell in row['raw_cells']] for row in d['unparsed_rows'][:20]])
         LOG.parent.mkdir(exist_ok=True)
         with LOG.open('a',encoding='utf-8') as file: file.write(json.dumps(entry,ensure_ascii=False)+'\n')

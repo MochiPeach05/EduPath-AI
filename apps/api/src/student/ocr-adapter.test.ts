@@ -9,7 +9,7 @@ const fixture = () => ({
   pages: [{ page: 1, method: "ppocr", warnings: ["ocr_requires_visual_review"] }],
   courses: [{
     ordinal: 1, course_code: "71ENG01000", course_name: "Tiếng Anh", credits: 3, score_10: 6, score_4: 2.4, letter_grade: "C", result: "passed", source_page: 1,
-    academic_year: "2023-2024", semester: "HK01", section: "semester", needs_review: true, issues: []
+    academic_year: "2023-2024", semester: "HK01", section: "semester", needs_review: true, issues: [] as string[]
   }],
   summaries: [{ academic_year: "2023-2024", semester: "HK01", raw_cells: [null, "- Điểm TB học kỳ (Hệ 4): 2.4"] }], semesters: [{ semester_gpa_4: 2.4 }], unparsed_rows: []
 });
@@ -25,16 +25,54 @@ describe("OCR result boundary", () => {
     Object.assign(f.courses[0]!, { score_10: null, score_4: null, letter_grade: "VT", result: "failed" });
     expect(mapOcrTranscript(f).sections[0]?.courses[0]).toMatchObject({ score10: null, score4: null, letter: "VT", result: "Không đạt" });
   });
-  it.each(["count", "missing_row", "score", "semester", "duplicate", "issue", "page"])("rejects %s rather than saving partial/corrupt data", kind => {
+  it.each(["count", "score", "page", "type"])("rejects a result that breaks the worker contract (%s)", kind => {
     const f = fixture();
     if (kind === 'count') f.course_count = 2;
-    if (kind === 'missing_row') (f.unparsed_rows as unknown[]).push({ cells: [] });
     if (kind === 'score') f.courses[0]!.score_10 = 11;
-    if (kind === 'semester') f.courses[0]!.semester = "HK04";
-    if (kind === 'duplicate') { f.courses.push({ ...f.courses[0]! }); f.course_count = 2; }
-    if (kind === 'issue') (f.courses[0]!.issues as string[]).push("incomplete_scores");
     if (kind === 'page') f.courses[0]!.source_page = 2;
-    expect(() => mapOcrTranscript(f)).toThrow();
+    if (kind === 'type') (f.courses[0] as Record<string, unknown>).ordinal = "1";
+    expect(() => mapOcrTranscript(f)).toThrow("invalid_ocr_result");
+  });
+  it("refuses a result without any course row: the frame was not found", () => {
+    const f = fixture();
+    f.courses = []; f.course_count = 0;
+    expect(() => mapOcrTranscript(f)).toThrow("unsupported_layout");
+  });
+  // 2026-10-23 (user): same frame, new codes, names or marks → save everything, mark it for review.
+  it("keeps rows that do not fit a known form and marks them for review", () => {
+    const f = fixture();
+    const row = (ordinal: number, changes: Record<string, unknown>) => ({ ...f.courses[0]!, ordinal, issues: [] as string[], ...changes }) as typeof f.courses[number];
+    f.courses = [
+      row(1, { course_code: "DIT00701", issues: ["invalid_course_code"] }),
+      row(2, { letter_grade: "P", result: null, result_raw: "Miễn", score_10: null, score_4: null, issues: ["unrecognized_letter_grade", "unrecognized_result"] }),
+      row(3, { credits: null, score_10: null, issues: ["missing_credits", "invalid_score_10", "incomplete_scores"], raw_cells: ["3", "71ENG01001", "Tiếng Anh 2", "", "8,5x", "3.2", "B", "✓"] }),
+      row(3, {}),
+    ];
+    f.course_count = 4;
+    const data = mapOcrTranscript(f);
+    const courses = data.sections[0]!.courses;
+    expect(courses.map(c => [c.code, c.letter, c.result, c.credits, c.score10])).toEqual([
+      ["DIT00701", "C", "Đạt", 3, 6], ["71ENG01000", "P", "Miễn", 3, null], ["71ENG01000", "C", "Đạt", 0, null], ["71ENG01000", "C", "Đạt", 3, 6]]);
+    expect(courses.map(c => c.review)).toEqual([["invalid_course_code"], ["unrecognized_letter_grade", "unrecognized_result"],
+      ["missing_credits", "invalid_score_10", "incomplete_scores"], ["duplicate_row"]]);
+    expect(courses[2]!.printed).toEqual({ credits: "", score10: "8,5x" });
+    expect(courses[0]!.printed).toBeUndefined();
+    expect(data.warnings.some(w => w.startsWith("Có 4 dòng có mã môn, ký hiệu"))).toBe(true);
+  });
+  it("keeps rows of an unknown or unusual term and reports rows it could not read", () => {
+    const f = fixture();
+    f.courses.push({ ...f.courses[0]!, ordinal: 2, academic_year: null as unknown as string, semester: null as unknown as string, section: "unknown" },
+      { ...f.courses[0]!, ordinal: 1, semester: "HK04" });
+    f.course_count = 3;
+    (f.unparsed_rows as unknown[]).push({ source_page: 1, raw_cells: ["", "", "Ghi chú"] });
+    const data = mapOcrTranscript(f);
+    expect(data.sections.map(s => [s.id, s.label, s.courses.length])).toEqual([["2023-2024-HK01", "2023-2024 · HK01", 1], ["unknown", "Chưa rõ học kỳ", 1], ["2023-2024-HK04", "2023-2024 · HK04", 1]]);
+    expect(data.sections[1]!.courses[0]!.review).toEqual(["missing_semester_context"]);
+    expect(data.sections[2]!.courses[0]!.review).toEqual(["unusual_term"]);
+    expect(data.warnings.at(-1)).toBe("Có 1 dòng trong PDF không đọc được thành dòng môn học (không có số thứ tự) nên chưa được lưu; hãy đối chiếu với PDF gốc. (trang 1)");
+  });
+  it("leaves a row it read normally without a review mark", () => {
+    expect(mapOcrTranscript(fixture()).sections[0]!.courses[0]!.review).toBeUndefined();
   });
   it("does not require a school email or student identity in the PDF", () => expect(mapOcrTranscript(fixture()).courseCount).toBe(1));
   it("rejects missing/wrong worker keys before parsing JSON or touching DB", async () => {

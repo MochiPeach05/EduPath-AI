@@ -241,25 +241,34 @@ class ServerRuleTests(TestCase):
         rows = [self.HEADER, ["1", "DIT0070", "Cơ sở dữ liệu", "3", "7.8", "3.00", "B", "Đạt"]]
         self.assertIsNone(worker.server_error(self.result(rows)))
 
-    def test_an_unknown_mark_is_refused_and_logged_as_printed(self):
+    def test_an_unknown_mark_is_kept_for_review(self):
         import worker
 
         result = self.result([self.HEADER, ["1", "DIT0070", "Cơ sở dữ liệu", "3", "", "", "P", "Đạt"]])
-        self.assertEqual(worker.server_error(result), "invalid_ocr_result")
-        count, values = worker.schema_problems(result)
-        self.assertEqual((dict(count), values), ({"letter_grade": 1}, {"letter_grade": {"P"}}))
+        self.assertIsNone(worker.server_error(result))
+        self.assertEqual(result["courses"][0]["issues"], ["unrecognized_letter_grade"])
 
-    def test_a_flagged_row_is_refused_as_unreadable_grades(self):
+    def test_a_new_code_or_a_cell_that_is_not_a_number_is_kept_for_review(self):
         import worker
 
-        rows = [self.HEADER, ["1", "DIT0070", "Cơ sở dữ liệu", "3", "7,8x", "3.00", "B", "Đạt"]]
-        self.assertEqual(worker.server_error(self.result(rows)), "unreadable_grades")
+        rows = [self.HEADER, ["1", "DIT00701", "Môn mã mới", "3", "7,8x", "3.00", "B", "Đạt"]]
+        result = self.result(rows)
+        self.assertIsNone(worker.server_error(result))
+        self.assertEqual(result["courses"][0]["issues"], ["invalid_course_code", "invalid_score_10", "incomplete_scores"])
 
-    def test_a_row_before_any_term_is_refused_as_invalid(self):
+    def test_a_row_before_any_term_is_kept(self):
         import worker
 
-        count, values = worker.schema_problems(self.result([["1", "DIT0070", "Cơ sở dữ liệu", "3", "7.8", "3.00", "B", "Đạt"]]))
-        self.assertEqual(values, {"section": {"unknown"}})
+        result = self.result([["1", "DIT0070", "Cơ sở dữ liệu", "3", "7.8", "3.00", "B", "Đạt"]])
+        self.assertEqual((dict(worker.schema_problems(result)[0]), worker.server_error(result)), ({}, None))
+
+    def test_a_broken_contract_or_no_course_row_is_refused(self):
+        import worker
+
+        result = self.result([self.HEADER, ["1", "DIT0070", "Cơ sở dữ liệu", "3", "7.8", "3.00", "B", "Đạt"]])
+        self.assertEqual(worker.server_error({**result, "course_count": 2}), "invalid_ocr_result")
+        self.assertEqual(worker.server_error({**result, "courses": [{**result["courses"][0], "ordinal": "1"}]}), "invalid_ocr_result")
+        self.assertEqual(worker.server_error({**result, "courses": [], "course_count": 0}), "unsupported_layout")
 
     def test_masked_values_keep_only_the_form(self):
         import worker

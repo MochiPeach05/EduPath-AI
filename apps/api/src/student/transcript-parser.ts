@@ -5,8 +5,25 @@ export class TranscriptError extends Error {
 }
 type Item = { text: string; x: number; y: number; width: number };
 type Page = { page: number; items: Item[] };
-export type TranscriptCourse = { ordinal: number; code: string; name: string; credits: number; score10: number | null; score4: number | null; letter: string | null; result: string | null; conditional: boolean; sourcePage: number };
+export type TranscriptCourse = {
+  ordinal: number; code: string; name: string; credits: number; score10: number | null; score4: number | null; letter: string | null; result: string | null; conditional: boolean; sourcePage: number;
+  /**
+   * What in this row did not fit a known form (2026-10-23): a code of another format, an unknown grade mark, a cell that is
+   * not a number… The row is kept as printed and marked for review instead of refusing the transcript. Codes as the OCR
+   * worker's issues (invalid_course_code, unrecognized_letter_grade, invalid_score_10 …), labels in the web's REVIEW_LABELS.
+   */
+  review?: string[];
+  /** Printed text of a cell that could not be read as a number; its value above is 0 (credits) or null (scores). */
+  printed?: { credits?: string; score10?: string; score4?: string };
+};
 export type TranscriptSection = { id: string; academicYear: string | null; semester: string | null; label: string; courses: TranscriptCourse[]; summaries: { label: string; value: string | null }[] };
+/** Rows found before any term heading (2026-10-23): kept in their own section instead of refusing the transcript. */
+export const UNKNOWN_TERM_SECTION = { id: "unknown", academicYear: null, semester: null, label: "Chưa rõ học kỳ" } as const;
+/** The letter marks the pages know (pass, fail, VT absent, MT exempt); another printed mark is kept and marked for review. */
+export const KNOWN_LETTER = /^(A\+?|B\+?|C\+?|D\+?|F|MT|VT)$/;
+/** One warning for the rows marked for review, shown with the transcript. */
+export const reviewWarning = (rows: number) =>
+  `Có ${rows} dòng có mã môn, ký hiệu hoặc ô khác dạng thường gặp. Hệ thống vẫn lưu đúng như in trên PDF và đánh dấu các dòng này; hãy đối chiếu với PDF gốc.`;
 export type TranscriptData = { schemaVersion: 1; parserVersion: "vlu-native-1" | "vlu-ocr-1.1"; pageCount: number; courseCount: number; sections: TranscriptSection[]; warnings: string[]; ocr?: { needsReview: boolean; pages: { page: number; method: string; warnings: string[] }[]; semesters: Record<string, unknown>[] } };
 const clean = (s: string) => s.normalize("NFC").replace(/\s+/g, " ").trim();
 const fold = (s: string) => clean(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/đ/g, "d");
@@ -28,12 +45,12 @@ function lines(items: Item[]) {
   for (const line of result) line.text = join(line.items);
   return result;
 }
-function numeric(value: string, max: number, required = false): number | null {
-  if (!value && !required) return null;
-  if (!/^\d+(?:[.,]\d+)?$/.test(value)) throw new TranscriptError("unreadable_grades");
+/** A printed number up to max; "" is null and anything else is "bad" (kept as printed by the caller). */
+function numeric(value: string, max: number): number | null | "bad" {
+  if (!value) return null;
+  if (!/^\d+(?:[.,]\d+)?$/.test(value)) return "bad";
   const n = Number(value.replace(",", "."));
-  if (!Number.isFinite(n) || n > max) throw new TranscriptError("unreadable_grades");
-  return n;
+  return Number.isFinite(n) && n <= max ? n : "bad";
 }
 
 // PDF extraction runs off the API thread and is terminated after 25 seconds.
@@ -80,28 +97,40 @@ export async function parseTranscript(pdf: Buffer): Promise<TranscriptData> {
  * K27/K28 still carry (DIT0070, DGT0010). With the old one missing, a K26–K28 transcript was refused whole.
  */
 export const COURSE_CODE_PATTERN = /^(?:\d{2}[A-Z]{2,10}\d{5,8}|[A-Z]{3}\d{4})$/;
+/** Rows of the PDF that are not numbered course rows; they are reported with the transcript, not saved. */
+export const skippedRowsWarning = (rows: number) =>
+  `Có ${rows} dòng trong PDF không đọc được thành dòng môn học (không có số thứ tự) nên chưa được lưu; hãy đối chiếu với PDF gốc.`;
+/** A term heading the pages can place: consecutive years and HK01–HK03. */
+export const usualTerm = (academicYear: string | null, semester: string | null) => {
+  const years = /^(\d{4})-(\d{4})$/.exec(academicYear ?? "");
+  return Boolean(years && Number(years[2]) === Number(years[1]) + 1 && /^HK0[1-3]$/.test(semester ?? ""));
+};
 
+/**
+ * Reads the VLU transcript. Only the frame can refuse it (no text layer, no 8-column header, no course row): since
+ * 2026-10-23 every numbered row inside is kept as printed, and what does not fit a known form is marked for review
+ * (TranscriptCourse.review) instead of refusing the whole transcript.
+ */
 export function parsePages(pages: Page[]): TranscriptData {
   const sections: TranscriptSection[] = [];
   let active: TranscriptSection | undefined;
-  let count = 0;
-  const codePattern = COURSE_CODE_PATTERN;
+  let count = 0, reviewed = 0, skipped = 0;
   if (pages.some(page => !page.items.some(item => clean(item.text)))) throw new TranscriptError("scanned_pdf");
   const firstText = fold(lines(pages[0]?.items ?? []).map(l => l.text).join(" "));
   if (!["ma mon hoc", "ten mon hoc", "tin chi", "he 10", "he 4"].every(t => firstText.includes(t))) throw new TranscriptError("unsupported_layout");
   for (const page of pages) {
     const pageLines = lines(page.items);
     if (!pageLines.length) throw new TranscriptError("scanned_pdf");
-    const anchors = pageLines.filter(l => l.items.some(i => codePattern.test(clean(i.text)) && i.x > 60 && i.x < 155));
-    // Refuse unrecognized numbered rows instead of silently dropping courses.
+    // A course row is a line numbered in the STT column, whatever its code looks like. A known code on a line
+    // without a number is reported (skippedRowsWarning), not guessed.
     const numbered = pageLines.filter(l => /^\d+$/.test(join(l.items.filter(i => i.x >= 28 && i.x < 61))));
-    if (numbered.length !== anchors.length) throw new TranscriptError("unreadable_rows");
-    const events = pageLines.filter(l => /\d{4}\s*-\s*\d{4}.*HK\s*\d+/i.test(l.text) || fold(l.text).includes("diem bao luu") || l.text.startsWith("-") || anchors.includes(l));
+    skipped += pageLines.filter(l => !numbered.includes(l) && l.items.some(i => COURSE_CODE_PATTERN.test(clean(i.text)) && i.x > 60 && i.x < 155)).length;
+    const heading = (l: { text: string }) => /\d{4}\s*-\s*\d{4}.*HK\s*\d+/i.test(l.text) || fold(l.text).includes("diem bao luu");
+    const events = pageLines.filter(l => numbered.includes(l) || heading(l) || l.text.startsWith("-"));
     for (let index = 0; index < events.length; index++) {
       const line = events[index]!;
-      const context = line.text.match(/(\d{4})\s*-\s*(\d{4}).*HK\s*(\d+)/i);
-      if (context || fold(line.text).includes("diem bao luu")) {
-        if (context && (Number(context[2]) !== Number(context[1]) + 1 || Number(context[3]) < 1 || Number(context[3]) > 3)) throw new TranscriptError("unsupported_layout");
+      const context = numbered.includes(line) ? null : line.text.match(/(\d{4})\s*-\s*(\d{4}).*HK\s*(\d+)/i);
+      if (context || (!numbered.includes(line) && heading(line))) {
         const academicYear = context ? `${context[1]}-${context[2]}` : null;
         const semester = context ? `HK${context[3]!.padStart(2, "0")}` : null;
         const id = context ? `${academicYear}-${semester}` : "transfer";
@@ -116,26 +145,52 @@ export function parsePages(pages: Page[]): TranscriptData {
         }
         continue;
       }
-      if (!active) throw new TranscriptError("missing_semester");
       const top = Math.max(line.y - 24, index ? (events[index - 1]!.y + line.y) / 2 : 32);
       const bottom = Math.min(line.y + 24, index + 1 < events.length ? (events[index + 1]!.y + line.y) / 2 : 757);
       const rowItems = page.items.filter(i => i.y > top && i.y < bottom);
       const bounds = [28, 61, 156, 323, 384, 424, 464, 528, 585];
       const cells = bounds.slice(0, -1).map((left, col) => lines(rowItems.filter(i => i.x >= left && i.x < bounds[col + 1]!)).map(l => l.text).join(" ").trim());
-      if (!codePattern.test(cells[1]!) || !/^\d+$/.test(cells[0]!) || !cells[2] || cells.some(c => c.includes("\ufffd"))) throw new TranscriptError("unreadable_rows");
-      const credits = numeric(cells[3]!, 30, true)!;
-      if (!Number.isInteger(credits)) throw new TranscriptError("unreadable_grades");
+      // A number with neither a code nor a name (a page number, a stray digit) is not a course row.
+      if (!cells[1] && !cells[2]) { skipped++; continue; }
+      const review: string[] = [], printed: NonNullable<TranscriptCourse["printed"]> = {};
+      if (!active) {
+        active = sections.find(s => s.id === UNKNOWN_TERM_SECTION.id);
+        if (!active) { active = { ...UNKNOWN_TERM_SECTION, courses: [], summaries: [] }; sections.push(active); }
+      }
+      if (active.id === UNKNOWN_TERM_SECTION.id) review.push("missing_semester_context");
+      else if (active.academicYear !== null && !usualTerm(active.academicYear, active.semester)) review.push("unusual_term");
+      if (!cells[1]) review.push("missing_course_code"); else if (!COURSE_CODE_PATTERN.test(cells[1])) review.push("invalid_course_code");
+      if (!cells[2]) review.push("missing_course_name");
+      if (cells.some(c => c.includes("\ufffd"))) review.push("unreadable_characters");
+      const credits = numeric(cells[3]!, 30);
+      const wholeCredits = typeof credits === "number" && Number.isInteger(credits);
+      if (!wholeCredits) { review.push(credits === null ? "missing_credits" : "invalid_credits"); printed.credits = cells[3]!; }
       const letter = cells[6] || null;
       // "VT" (vắng thi) fills the score columns too: a failed attempt without a score.
       const absent = letter === "VT", blank = (cell: string) => absent && (cell === "" || cell === "VT");
-      const score10 = blank(cells[4]!) ? null : numeric(cells[4]!, 10), score4 = blank(cells[5]!) ? null : numeric(cells[5]!, 4);
-      if (letter && !/^(A\+?|B\+?|C\+?|D\+?|F|MT|VT)$/.test(letter)) throw new TranscriptError("unreadable_grades");
-      if ((score10 === null) !== (score4 === null)) throw new TranscriptError("unreadable_grades");
-      if (active.courses.some(c => c.ordinal === Number(cells[0]))) throw new TranscriptError("duplicate_rows");
-      active.courses.push({ ordinal: Number(cells[0]), code: cells[1]!, name: cells[2]!, credits, score10, score4, letter, result: cells[7] || null, conditional: cells[2]!.includes("*"), sourcePage: page.page });
+      const score = (cell: string, max: number, field: "score10" | "score4") => {
+        if (blank(cell)) return null;
+        const value = numeric(cell, max);
+        if (value !== "bad") return value;
+        review.push(field === "score10" ? "invalid_score_10" : "invalid_score_4");
+        printed[field] = cell;
+        return null;
+      };
+      const score10 = score(cells[4]!, 10, "score10"), score4 = score(cells[5]!, 4, "score4");
+      if (letter && !KNOWN_LETTER.test(letter)) review.push("unrecognized_letter_grade");
+      if ((score10 === null) !== (score4 === null)) review.push("incomplete_scores");
+      if (active.courses.some(c => c.ordinal === Number(cells[0]))) review.push("duplicate_row");
+      const course: TranscriptCourse = { ordinal: Number(cells[0]), code: cells[1]!, name: cells[2]!, credits: wholeCredits ? credits : 0, score10, score4, letter, result: cells[7] || null, conditional: cells[2]!.includes("*"), sourcePage: page.page };
+      if (review.length) { course.review = review; reviewed++; }
+      if (Object.keys(printed).length) course.printed = printed;
+      active.courses.push(course);
       count++;
     }
   }
-  if (!count || count > 1000 || sections.some(s => !s.courses.length)) throw new TranscriptError("unreadable_rows");
-  return { schemaVersion: 1, parserVersion: "vlu-native-1", pageCount: pages.length, courseCount: count, sections, warnings: ["Bảng điểm do sinh viên tải lên; chưa được nhà trường xác minh.", "Ô Kết quả chỉ có biểu tượng (không có lớp chữ) được đọc là trống; khi ô Kết quả trống, Đạt/Không đạt được xác định theo điểm chữ chính thức: A+ đến D là Đạt, F là Không đạt."] };
+  if (!count) throw new TranscriptError("unsupported_layout");
+  if (count > 1000) throw new TranscriptError("unreadable_rows");
+  const warnings = ["Bảng điểm do sinh viên tải lên; chưa được nhà trường xác minh.", "Ô Kết quả chỉ có biểu tượng (không có lớp chữ) được đọc là trống; khi ô Kết quả trống, Đạt/Không đạt được xác định theo điểm chữ chính thức: A+ đến D là Đạt, F là Không đạt."];
+  if (reviewed) warnings.push(reviewWarning(reviewed));
+  if (skipped) warnings.push(skippedRowsWarning(skipped));
+  return { schemaVersion: 1, parserVersion: "vlu-native-1", pageCount: pages.length, courseCount: count, sections: sections.filter(s => s.courses.length), warnings };
 }

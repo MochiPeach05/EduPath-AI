@@ -24,6 +24,25 @@ export const PASS_LETTERS: readonly string[] = ["A+", "A", "B+", "B", "C+", "C",
 /** Failing letter grades: F and VT (vắng thi, absent from the exam: printed without a score). */
 export const FAIL_LETTERS: readonly string[] = ["F", "VT"];
 export const isFailLetter = (letter: string | null | undefined) => FAIL_LETTERS.includes(letter?.trim().toUpperCase() ?? "");
+
+/**
+ * Why a transcript row is marked for review (TranscriptCourse.review, 2026-10-23): the row was saved as printed although
+ * something in it did not fit a known form. Codes come from the OCR worker and the server; an unknown code reads generic.
+ */
+const REVIEW_LABELS: Record<string, string> = {
+  invalid_course_code: "mã môn khác dạng thường gặp", missing_course_code: "thiếu mã môn", missing_course_name: "thiếu tên môn",
+  suspicious_course_name: "tên môn có ký tự lạ", unreadable_characters: "có ký tự không đọc được",
+  missing_credits: "chưa đọc được tín chỉ", invalid_credits: "tín chỉ không phải số nguyên",
+  invalid_score_10: "điểm hệ 10 không phải số", invalid_score_4: "điểm hệ 4 không phải số", incomplete_scores: "thiếu điểm hệ 10 hoặc hệ 4",
+  missing_letter_grade: "thiếu điểm chữ", unrecognized_letter_grade: "ký hiệu điểm chữ lạ",
+  unrecognized_result: "kết quả lạ", result_conflicts_with_grade: "kết quả không khớp điểm chữ", missing_result: "thiếu kết quả",
+  unexpected_column_count: "số cột khác mẫu", missing_semester_context: "chưa rõ học kỳ", unusual_term: "học kỳ ghi khác thường",
+  duplicate_row: "trùng số thứ tự trong học kỳ", course_not_in_catalog: "mã chưa có trong danh mục",
+};
+export const reviewLabels = (codes: readonly string[] | undefined): string[] =>
+  [...new Set((codes ?? []).map((code) => REVIEW_LABELS[code] ?? "ô khác dạng thường gặp"))];
+/** Transcript warnings that report rows (marked or skipped); the native parser's fixed notes are not among them. */
+export const isRowWarning = (warning: string) => /^Có \d+ dòng/.test(warning);
 export const INFERRED_RESULT_NOTE = "suy ra từ điểm chữ";
 
 const key = (code: string) => code.trim().toUpperCase();

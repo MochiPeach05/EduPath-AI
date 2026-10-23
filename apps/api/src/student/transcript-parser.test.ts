@@ -24,9 +24,29 @@ describe("native transcript parser", () => {
     expect(data.sections[0]!.summaries).toEqual([{ label: "Điểm trung bình tích lũy hệ 4", value: "3,40" }]);
   });
 
-  it("still refuses a numbered row without a course code", () => {
-    const items = [...header, term("Năm học 2020-2021 - HK1", 120), ...row(140, 1, "AB123", "Môn lạ", 3, "7.5", "3.0", "B", "Đạt")];
-    expect(() => parsePages([{ page: 1, items }])).toThrow("unreadable_rows");
+  // 2026-10-23 (user): the frame is the same → keep every numbered row as printed and mark what looks new.
+  it("keeps numbered rows with a new code, an unknown mark or a cell that is not a number, marked for review", () => {
+    const items = [...header, term("Năm học 2020-2021 - HK1", 120),
+      ...row(140, 1, "AB123", "Môn mã mới", 3, "7.5", "3.0", "B", "Đạt"),
+      ...row(160, 2, "DIT0070", "Cơ sở dữ liệu", 3, "", "", "P", "Miễn"),
+      ...row(180, 3, "DIT0080", "Mạng máy tính", 3, "8,5x", "3.0", "B", "Đạt"),
+      ...row(200, 3, "DIT0090", "Hệ điều hành", 3, "7.0", "3.0", "B", "Đạt")];
+    const data = parsePages([{ page: 1, items }]);
+    const courses = data.sections[0]!.courses;
+    expect(courses.map((c) => [c.code, c.letter, c.result, c.score10, c.review ?? null])).toEqual([
+      ["AB123", "B", "Đạt", 7.5, ["invalid_course_code"]],
+      ["DIT0070", "P", "Miễn", null, ["unrecognized_letter_grade"]],
+      ["DIT0080", "B", "Đạt", null, ["invalid_score_10", "incomplete_scores"]],
+      ["DIT0090", "B", "Đạt", 7, ["duplicate_row"]]]);
+    expect(courses[2]!.printed).toEqual({ score10: "8,5x" });
+    expect(data.warnings.at(-1)).toMatch(/^Có 4 dòng có mã môn, ký hiệu/);
+  });
+
+  it("keeps rows before any term heading in a section of their own, and refuses a page without course rows", () => {
+    const items = [...header, ...row(140, 1, "DIT0070", "Cơ sở dữ liệu", 3, "7.5", "3.0", "B", "Đạt")];
+    const data = parsePages([{ page: 1, items }]);
+    expect(data.sections.map((s) => [s.id, s.label, s.courses[0]!.review])).toEqual([["unknown", "Chưa rõ học kỳ", ["missing_semester_context"]]]);
+    expect(() => parsePages([{ page: 1, items: [...header, term("Năm học 2020-2021 - HK1", 120)] }])).toThrow("unsupported_layout");
   });
 
   it("knows both code formats and nothing else", () => {

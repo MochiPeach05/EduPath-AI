@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Transcript } from "./StudentTranscript";
 import {
-  FAIL_LETTERS, PASS_LETTERS, attemptOutcome, isFailLetter, transcriptCreditCheck, transcriptOutcomes, transcriptResults,
+  FAIL_LETTERS, PASS_LETTERS, attemptOutcome, isFailLetter, isRowWarning, reviewLabels, transcriptCreditCheck, transcriptOutcomes, transcriptResults,
 } from "./transcript-results";
 
 type Attempt = { code: string; result: string | null; letter?: string | null; score10?: number | null };
@@ -251,5 +251,26 @@ describe("printed cumulative credit check", () => {
     expect(transcriptCreditCheck(transcriptOf(conflicting)).status).toBe("unavailable");
     expect(transcriptCreditCheck(transcriptOf(term("2024-2025-HK01", [row("71XXIT10003", 3, "A")], "ba")))
       .status).toBe("unavailable");
+  });
+});
+
+describe("rows marked for review (2026-10-23)", () => {
+  it("names each reason in plain words, once, and a reason it does not know generically", () => {
+    expect(reviewLabels(["invalid_course_code", "unrecognized_letter_grade", "invalid_score_10", "incomplete_scores", "invalid_score_10"]))
+      .toEqual(["mã môn khác dạng thường gặp", "ký hiệu điểm chữ lạ", "điểm hệ 10 không phải số", "thiếu điểm hệ 10 hoặc hệ 4"]);
+    expect(reviewLabels(["something_new"])).toEqual(["ô khác dạng thường gặp"]);
+    expect(reviewLabels(undefined)).toEqual([]);
+  });
+
+  it("tells row warnings from the fixed notes of a text-layer import", () => {
+    expect(isRowWarning("Có 3 dòng có mã môn, ký hiệu hoặc ô khác dạng thường gặp. Hệ thống vẫn lưu đúng như in trên PDF và đánh dấu các dòng này; hãy đối chiếu với PDF gốc.")).toBe(true);
+    expect(isRowWarning("Có 1 dòng trong PDF không đọc được thành dòng môn học (không có số thứ tự) nên chưa được lưu; hãy đối chiếu với PDF gốc.")).toBe(true);
+    expect(isRowWarning("Bảng điểm do sinh viên tải lên; chưa được nhà trường xác minh.")).toBe(false);
+  });
+
+  it("decides a row with an unknown mark from its printed result, else leaves it undecided", () => {
+    expect(attemptOutcome({ code: "DIT0070", result: "Đạt", letter: "P" }).status).toBe("pass");
+    expect(attemptOutcome({ code: "DIT0070", result: null, letter: "P" }).status).toBe("unknown");
+    expect(attemptOutcome({ code: "DIT0070", result: "Miễn", letter: "P" }).status).toBe("unknown");
   });
 });
