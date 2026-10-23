@@ -16,6 +16,7 @@ import type { Store } from "express-session";
 import helmet from "helmet";
 import type { DatabasePool } from "./db/pool.js";
 import { createStudentDataRouter } from "./student/router.js";
+import { createStudyPlanRouter } from "./study-plan/router.js";
 import { createCompetencyAssessmentRouter } from "./competency-assessment/router.js";
 import { createCompetencyAiQueue } from "./competency-assessment/ai/queue.js";
 import { PROMPT_VERSION } from "./competency-assessment/ai/prompt.js";
@@ -191,6 +192,7 @@ export function createApp({
   app.use("/api/student/graduation/advice", createGraduationAdviceRouter(databasePool, config.webOrigin, { enabled: graduationAdviceEnabled }));
   app.use("/api/student/graduation", createStudentGraduationRouter(databasePool));
   app.use("/api/student/curricula", createStudentCurriculaRouter(databasePool));
+  app.use("/api/student/study-plan", createStudyPlanRouter(databasePool, config.webOrigin));
   // AI comments are queued only when AI_WORKER_KEY is configured; otherwise ai_status is 'disabled'.
   app.use("/api/student/competency-assessments", createCompetencyAssessmentRouter(databasePool, config.webOrigin,
     createCompetencyAiQueue({ enabled: Boolean(config.aiWorkerKey) }), { promptVersion: PROMPT_VERSION }));
