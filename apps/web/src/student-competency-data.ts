@@ -197,6 +197,12 @@ export const UNSCORED_STATES: readonly { code: "upcoming" | "no_score" | "exempt
 export const levelText = (level: LevelCode | DisplayLevel | null | undefined, label: string | null | undefined): string =>
   level === "no_evidence" || !label ? "Chưa có điểm" : label;
 
+/** comp-calc-v12 (2026-10-23): the overall pools every skill like a group score; earlier results averaged the groups. */
+export function overallIsPooled(calcVersion: string | null | undefined): boolean {
+  const version = Number(/^comp-calc-v(\d+)$/.exec(calcVersion ?? "")?.[1]);
+  return !Number.isFinite(version) || version >= 12;
+}
+
 /** One sentence that explains what the overall level means. */
 export function levelSentence(level: LevelCode | null | undefined): string {
   return LEVEL_SCALE.find((item) => item.code === level)?.text ?? "Chưa đủ dữ liệu để xếp mức.";

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, confidentStrengths, countAxis, dataUsedLine, displayLevel, FIT_SCALE, fitLabelOf, fitLevelOf, fitScoreOf, fitStep, gapHistory, levelChart, levelSummary, levelText, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
+  aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, confidentStrengths, countAxis, dataUsedLine, displayLevel, FIT_SCALE, fitLabelOf, fitLevelOf, fitScoreOf, fitStep, gapHistory, levelChart, levelSummary, levelText, overallIsPooled, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
   careerSummaryText, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isPreconditionError, PRIORITY_LABELS, levelStep, mapAiOutput, missingRequirements, missingRequirementsMessage, modelLabel, needsSelfStudy, plansFor, skillGroupKeys,
   scoreDifference, shouldPoll, sortRequirements, termLabel, EMPTY_SKILL_FILTERS,
   careerThresholdsLine, chartLevelLabel, currentImprovements, LEVEL_SCALE, levelOfScore, withCurrentLevels,
@@ -427,5 +427,14 @@ describe("mapAiOutput", () => {
     expect(mapped.strengths).toEqual([]);
     expect(mapped.improvements).toEqual([]);
     expect(mapped.careerFit).toBe("");
+  });
+});
+
+describe("overall method", () => {
+  it("tells a pooled overall (comp-calc-v12) from the mean of the groups before", () => {
+    expect(overallIsPooled("comp-calc-v12")).toBe(true);
+    expect(overallIsPooled("comp-calc-v13")).toBe(true);
+    expect(overallIsPooled("comp-calc-v11")).toBe(false);
+    expect(overallIsPooled("comp-calc-v9")).toBe(false);
   });
 });

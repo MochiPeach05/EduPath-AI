@@ -124,7 +124,7 @@ export type ScoreSummary = {
 };
 
 export type OverallResult = ScoreSummary & {
-  /** Number of groups that have a score (overall = their mean). */
+  /** Number of groups that have a score (the overall was their mean before comp-calc-v12). */
   groupsWithScore: number;
   /** "Dựa trên x/y kỹ năng có minh chứng từ n học phần". */
   basis: { skillsWithEvidence: number; applicableSkills: number; evidenceCourses: number };

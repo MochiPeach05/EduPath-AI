@@ -7,7 +7,7 @@ import { specialtyLabel, type AiStatus, type AssessmentResult, type AssessmentSt
 import {
   CHART_LEVELS, COMPETENCY_API, CONFIDENCE_LABELS, COURSE_STATE_LABELS, EMPTY_SKILL_FILTERS, FIT_LABELS, FIT_SCALE, LEVEL_COLUMNS, LEVEL_LABELS, LEVEL_SCALE, LEVEL_THRESHOLDS, PRECONDITION_COPY, PRIORITY_LABELS, UNSCORED_STATES,
   aiErrorMessage, aiReasoned, aiStateCopy, bucketSkills, canRegenerate, careerSkillKeys, careerThresholdsLine, chartLevelLabel, confidentStrengths, currentImprovements, courseStanding, dataUsedLine, displayLevel, eligibilityDisplay, errorMessage, filterSkills, fitLevelOf, fitScoreOf, fitStep, formatDateTime,
-  careerSummaryText, formatNumber, formatPercent, formatScore, gapHistory, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isPreconditionError, levelChart, levelSentence, levelStep, levelSummary, levelText, mapAiOutput, missingRequirements, skillGroupKeys, missingRequirementsMessage, modelLabel, needsSelfStudy,
+  careerSummaryText, formatNumber, formatPercent, formatScore, gapHistory, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isPreconditionError, levelChart, levelSentence, levelStep, overallIsPooled, levelSummary, levelText, mapAiOutput, missingRequirements, skillGroupKeys, missingRequirementsMessage, modelLabel, needsSelfStudy,
   plansFor, scoreDifference, shouldPoll, skillName, sortRequirements, withCurrentLevels, type ChartLevel, type DisplayLevel, type FitLevel, type LevelBar, type LevelSegment, type MappedAiOutput, type PreconditionError, type SkillFilters, type StatusTone,
 } from "./student-competency-data";
 import { readGraduation } from "./student-graduation-api";
@@ -154,7 +154,9 @@ function Overview({ result }: { result: AssessmentResult }) {
         <p className="scomp-big"><strong>{formatScore(overall.score)}</strong><span>/100</span></p>
         <p className="scomp-score-tags"><LevelBadge level={overall.level} label={overall.levelLabel} />{overall.confidence && <span className="scomp-confidence">{CONFIDENCE_LABELS[overall.confidence]}</span>}</p>
         <p className="scomp-prose">{levelSentence(overall.level)}</p>
-        <p className="scomp-meta">Dựa trên {overall.basis.skillsWithEvidence.toLocaleString("vi-VN")}/{overall.basis.applicableSkills.toLocaleString("vi-VN")} kỹ năng có minh chứng từ {overall.basis.evidenceCourses.toLocaleString("vi-VN")} học phần. Điểm tổng là trung bình của {overall.groupsWithScore.toLocaleString("vi-VN")} nhóm có dữ liệu.</p>
+        <p className="scomp-meta">Dựa trên {overall.basis.skillsWithEvidence.toLocaleString("vi-VN")}/{overall.basis.applicableSkills.toLocaleString("vi-VN")} kỹ năng có minh chứng từ {overall.basis.evidenceCourses.toLocaleString("vi-VN")} học phần.{overallIsPooled(result.meta.calcVersion)
+          ? " Điểm tổng gộp tất cả các kỹ năng đó, tính cùng cách với điểm nhóm."
+          : ` Điểm tổng của kết quả này là trung bình của ${overall.groupsWithScore.toLocaleString("vi-VN")} nhóm (cách tính cũ); bấm “Đánh giá lại” để tính theo cách mới, gộp tất cả kỹ năng như điểm nhóm.`}</p>
       </div>
       <div className="scomp-groups">
         <h3>Theo nhóm năng lực</h3>

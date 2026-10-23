@@ -8,6 +8,18 @@ import {
 } from "./fixtures/synthetic-k29.js";
 import type { AssessmentInputs, AssessmentResult, CareerInput, HistoryPoint, SpecialtyCode } from "./types.js";
 
+/** The overall rebuilt from a result: every skill once, Σ score × credits × weight / Σ credits × weight (comp-calc-v12). */
+const pooledOverall = (result: AssessmentResult) => {
+  const courses = new Map(result.courses.map((course) => [course.code, course]));
+  let num = 0, den = 0;
+  for (const skill of result.skills) for (const row of skill.evidenceCourses) {
+    const course = courses.get(row.code)!;
+    if (course.conditionOnly || course.score10 === null) continue;
+    num += course.score10 * row.contribution;
+    den += row.contribution;
+  }
+  return floorScore(snapScore(10 * num / den));
+};
 const byName = (result: AssessmentResult, name: string) => {
   const skill = result.skills.find((item) => item.name === name);
   if (!skill) throw new Error(`skill ${name} missing`);
@@ -53,7 +65,7 @@ describe("a skill in several competency groups (2026-10-22)", () => {
     expect(groupOf(after, other.id).evidence).toBeGreaterThan(groupOf(before, other.id).evidence);
     expect(groupOf(after, moved.groupId)).toEqual(groupOf(before, moved.groupId));
     expect(after.overall.basis).toEqual(before.overall.basis);
-    expect([after.overall.coverage, after.overall.evidence]).toEqual([before.overall.coverage, before.overall.evidence]);
+    expect([after.overall.score, after.overall.coverage, after.overall.evidence]).toEqual([before.overall.score, before.overall.coverage, before.overall.evidence]);
     expect(after.skills.filter((item) => item.skillId !== moved.skillId).every((item) => item.groupKeys.join() === item.groupKey)).toBe(true);
   });
 
@@ -208,8 +220,7 @@ describe("calculateAssessment on the synthetic CNPM student", () => {
     const foundation = result.groups.find((group) => group.name === "Kiến thức nền tảng")!;
     expect(foundation).toMatchObject({ score: 80.28, skillCount: 1, skillsWithEvidence: 1 });
     expect(byName(result, "Kiến thức quốc phòng")).toMatchObject({ conditionOnly: true, score: 70 });
-    const mean = result.groups.reduce((sum, group) => sum + group.score!, 0) / result.groups.length;
-    expect(result.overall.score).toBeCloseTo(mean, 1);
+    expect(result.overall.score).toBe(pooledOverall(result));
     expect(result.overall).toMatchObject({ groupsWithScore: 3, basis: { skillsWithEvidence: 9, applicableSkills: 10, evidenceCourses: 9 } });
     const conditionKeys = result.skills.filter((skill) => skill.conditionOnly).map((skill) => skill.key);
     expect(conditionKeys).toHaveLength(2);
@@ -220,6 +231,20 @@ describe("calculateAssessment on the synthetic CNPM student", () => {
       expect(result.promptSelection.topSkillKeys).not.toContain(key);
       expect(result.promptSelection.bottomSkillKeys).not.toContain(key);
     }
+  });
+
+  it("pools every skill for the overall, so a group with little weight no longer counts for a third (comp-calc-v12)", () => {
+    const base = syntheticInputs();
+    const top = [...result.groups].filter((group) => group.score !== null).sort((a, b) => b.score! - a.score!)[0]!;
+    const inTop = new Set(result.skills.filter((skill) => skill.groupId === top.id).map((skill) => skill.skillId));
+    const light = calculateAssessment({ ...base, weights: { ...base.weights,
+      links: base.weights.links.map((link) => (inTop.has(link.skillId) ? { ...link, weight: link.weight / 10 } : link)) } });
+    const meanOfGroups = (item: AssessmentResult) => item.groups.reduce((sum, group) => sum + group.score!, 0) / item.groups.length;
+    // A tenth of the weight leaves that group's score and the mean of the groups as they were; the pooled overall drops.
+    expect(light.groups.find((group) => group.id === top.id)!.score).toBe(top.score);
+    expect(meanOfGroups(light)).toBeCloseTo(meanOfGroups(result), 6);
+    expect(light.overall.score).toBe(pooledOverall(light));
+    expect(light.overall.score!).toBeLessThan(result.overall.score!);
   });
 
   it("counts group skills with the overall rule: not-applicable and condition-only skills are left out", () => {

@@ -457,7 +457,7 @@ function assess(inputs: AssessmentInputs): Assessment {
     const confidence = score !== null || exp.exempt > 0 ? confidenceOf(coverage, exp.num) : null;
     return { score, coverage, level, confidence };
   };
-  // A skill in several groups enters each group's score, but the overall coverage and evidence once.
+  // A skill in several groups enters each group's score, but the overall score, coverage and evidence once.
   const totalExposure = emptyExposure();
   for (const skill of work) addExposure(totalExposure, skill.nonCondition);
   const groupResults: (GroupResult & { rawScore: number | null })[] = groupOrder.map((group) => {
@@ -476,8 +476,10 @@ function assess(inputs: AssessmentInputs): Assessment {
     };
   });
   const scoredGroups = groupResults.filter((group) => group.rawScore !== null);
-  const overallScore = scoredGroups.length ? snapScore(scoredGroups.reduce((sum, group) => sum + group.rawScore!, 0) / scoredGroups.length) : null;
+  // comp-calc-v12 (user, 2026-10-23): every skill once, pooled by credits × weight like a group, not the mean of the
+  // groups. A K30 transcript "Trung bình" (2,45) read Khá 62,8: Kỹ năng mềm, 8% of the weight, counted for a third.
   const overallSummary = summary(totalExposure);
+  const overallScore = overallSummary.score;
   const overallLevel = levelOf(overallScore, totalExposure.exempt > 0);
   const overallConfidence = overallScore !== null || totalExposure.exempt > 0 ? overallSummary.confidence : null;
   const countedSkills = work.filter((skill) => !skill.conditionOnly);

@@ -32,8 +32,10 @@ import type { Confidence, FitCode, GapStatus } from "./types.js";
 /**
  * v11: the career fit is a 0–100 "điểm phù hợp" (fitScoreOf; user, 2026-10-22: "Sao lại 100% tròn nhỉ
  * tại vì nó chỉ chấm 92 điểm và sửa lại thành đơn vị điểm"), its level on the competency bounds.
+ * v12: the overall pools every skill once by credits × weight, like a group score, instead of the mean of the
+ * groups (user, 2026-10-23): a small group (Kỹ năng mềm, 8% of the weight) no longer counts for a third.
  */
-export const CALC_VERSION = "comp-calc-v11";
+export const CALC_VERSION = "comp-calc-v12";
 /**
  * The graduation evaluation uses no skill level, so it keeps the version of its last change:
  * comp-calc-v10 changed only levels and must not re-date every student's graduation advice.
