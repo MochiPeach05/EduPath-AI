@@ -9,13 +9,34 @@ export const needsPlanning = (course: Pick<StudyPlanCourse, "state">) => !isPass
 export const plannable = (context: Pick<StudyPlanContext, "specialty">, course: Pick<StudyPlanCourse, "applicable" | "specialtyName">) =>
   course.applicable && (context.specialty !== null || course.specialtyName === null);
 
+/**
+ * The first term from `earliest` on to plan a course in: its own-plan term, else the first term a plan opens it. Past the
+ * last term the plans cover (`offeringUntil`), plans repeat every year, so a term of a semester the plans open it in. With
+ * no plan at all, the CTĐT term when it is ahead. Else `earliest` (the course is outside the plans: few classes).
+ */
+export function targetTerm(course: Pick<StudyPlanCourse, "planTerm" | "offeredTerms" | "standardTerm">, earliest: string, offeringUntil: string | null): string {
+  const ahead = (term: string | null): term is string => term !== null && termIndex(term) >= termIndex(earliest);
+  if (ahead(course.planTerm)) return course.planTerm;
+  const offered = course.offeredTerms.find(ahead);
+  if (offered) return offered;
+  if (offeringUntil && course.offeredTerms.length) {
+    const semesters = new Set(course.offeredTerms.map((term) => term.slice(4)));
+    let term = termIndex(earliest) > termIndex(offeringUntil) ? earliest : nextTerm(offeringUntil);
+    for (let guard = 0; guard < 3; term = nextTerm(term), guard++) if (semesters.has(term.slice(4))) return term;
+  }
+  if (!offeringUntil && ahead(course.standardTerm)) return course.standardTerm;
+  return earliest;
+}
+
 /** Credits counted against the term limits: condition-only courses (GDTC/GDQP) stay out, as in accumulated credits. */
 export const limitCredits = (course: Pick<StudyPlanCourse, "credits" | "conditional">) => (course.conditional ? 0 : course.credits);
 
 /**
- * "Xếp theo kế hoạch đào tạo" (STU-PLAN-04 until the AI suggestion exists): every remaining applicable course goes to its
- * CTĐT term, or to the next term when that term is over, after the terms of its unfinished prerequisites and without
- * passing the credit limit. What to plan: with a graduation standard, its groups (every mandatory course, and options of
+ * "Xếp theo kế hoạch đào tạo" (STU-PLAN-04 until the AI suggestion exists). The school opens classes mostly by the training
+ * plans (kế hoạch đào tạo) of the cohorts, so a remaining course goes to (user, 2026-10-24), see targetTerm: its term in
+ * the student's own plan when that is still ahead; else the next term some cohort's plan opens it (a retake, a late course,
+ * K27 without a plan). Always after the terms of its unfinished prerequisites and without passing the credit limit (a
+ * full term passes to the next candidate). What to plan: with a graduation standard, its groups (every mandatory course, and options of
  * an elective group in CTĐT order until its credits are met), since the standard decides graduation; without one, the
  * CTĐT's mandatory courses and the CTĐT elective groups that state their credits. The student can swap the options. A
  * student without a specialty only gets the common courses. Sessions start unplaced: the week is the student's to arrange.
@@ -52,16 +73,18 @@ export function suggestStudyPlan(context: StudyPlanContext): StudyPlanData {
   const max = context.limits?.max ?? Number.POSITIVE_INFINITY;
   const used = (term: string) => (terms.get(term) ?? []).reduce((sum, course) => sum + limitCredits(course), 0);
   for (const course of chosen) {
-    let term = course.standardTerm && termIndex(course.standardTerm) > termIndex(first) ? course.standardTerm : first;
     // After every unfinished prerequisite or prior course placed earlier in this plan.
+    let earliest = first;
     for (const code of [...course.prerequisites, ...course.prior]) {
       const before = placedTerm.get(code);
-      if (before && termIndex(before) >= termIndex(term)) term = nextTerm(before);
+      if (before && termIndex(before) >= termIndex(earliest)) earliest = nextTerm(before);
     }
+    let term = targetTerm(course, earliest, context.offeringUntil);
     for (let guard = 0; guard < MAX_TERMS * 3; guard++) {
       const fits = used(term) + limitCredits(course) <= max || !(terms.get(term)?.length);
       if (fits && (terms.get(term)?.length ?? 0) < MAX_COURSES_PER_TERM) break;
-      term = nextTerm(term);
+      const later = targetTerm(course, nextTerm(term), context.offeringUntil);
+      term = termIndex(later) > termIndex(term) ? later : nextTerm(term);
     }
     if (termIndex(term) - termIndex(first) >= MAX_TERMS) continue;
     terms.set(term, [...(terms.get(term) ?? []), course]);

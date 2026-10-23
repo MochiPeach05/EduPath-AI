@@ -41,6 +41,13 @@ export type StudyPlanCourse = {
   inProgressTerm: string | null;
   /** A course of the graduation standard that the CTĐT lists neither by code nor by name (K26: DTA0620). */
   onlyInStandard: boolean;
+  /** HKyyS of the course in the student's own cohort's training plan (kế hoạch đào tạo), else null. */
+  planTerm: string | null;
+  /**
+   * Terms in which a training plan of any cohort opens the course, by code or by name (K26's old codes): the school opens
+   * classes mostly by these plans, and courses outside them rarely (user, 2026-10-24).
+   */
+  offeredTerms: string[];
 };
 
 export type StudyPlanContext = {
@@ -63,6 +70,8 @@ export type StudyPlanContext = {
    * often states no credits; the standard does). `passed` counts what is certainly done today.
    */
   graduation: { standardName: string; groups: StudyPlanGraduationGroup[] } | null;
+  /** The last term any training plan covers; later terms have no plan to compare with (null without plans). */
+  offeringUntil: string | null;
 };
 
 export type StudyPlanGraduationGroup = {
@@ -87,6 +96,13 @@ async function readCurriculum(db: Db, cohortCode: string): Promise<CurriculumDat
   return rows.length === 1 ? rows[0]!.data : null;
 }
 
+/** Items of every active training plan (kế hoạch đào tạo): which course each cohort's plan opens in which term. */
+async function readPlanOfferings(db: Db) {
+  return (await db.query<{ cohort_code: string; code: string; name: string; term_code: string }>(
+    `SELECT tp.cohort_code,i.code,i.name,i.term_code FROM training_plans tp JOIN training_plan_items i ON i.revision_id=tp.current_revision
+     WHERE tp.is_active ORDER BY tp.cohort_code,i.position`)).rows;
+}
+
 /** Reads everything the roadmap needs for one student with plain SELECTs (the caller holds a snapshot). */
 export async function readStudyPlanFacts(db: Db, userId: string, now = new Date()): Promise<StudyPlanFacts> {
   const profileRow = (await db.query<{ cohort_code: string | null; specialty: string | null }>(
@@ -96,6 +112,11 @@ export async function readStudyPlanFacts(db: Db, userId: string, now = new Date(
   const transcript = (await db.query<{ data: TranscriptData }>("SELECT parsed_data AS data FROM student_transcripts WHERE user_id=$1", [userId])).rows[0]?.data ?? null;
   const curriculum = cohortCode ? await readCurriculum(db, cohortCode) : null;
   const { standard } = await resolveStudentStandard(db, { cohortCode, specialty });
+  const offerings = await readPlanOfferings(db);
+  const termsOf = (rows: typeof offerings) => [...new Set(rows.map((row) => row.term_code))].sort((a, b) => termIndex(a) - termIndex(b));
+  // A course matches a plan row by code, or by name when cohorts carry different codes for it.
+  const planRows = (code: string, name: string) => offerings.filter((row) => courseKey(row.code) === code || fold(row.name) === fold(name));
+  const planTermOf = (code: string, name: string) => termsOf(planRows(code, name).filter((row) => normalizeCohortCode(row.cohort_code) === cohortCode))[0] ?? null;
   const cohortNumber = Number(/^K(\d{2})$/.exec(cohortCode ?? "")?.[1]);
   // The CTĐT's intake year, else the cohort's as the student identity reads it (K29 → 2023).
   const admissionYear = curriculum?.admissionYear ?? (Number.isInteger(cohortNumber) ? cohortNumber + 1994 : null);
@@ -125,7 +146,7 @@ export async function readStudyPlanFacts(db: Db, userId: string, now = new Date(
       sessions: sessionKinds(course.hours), prerequisites: relationsOf(code, "prerequisite"), prior: relationsOf(code, "prior"),
       state: record?.state ?? "not_taken",
       inProgressTerm: record?.state === "in_progress" && running.length ? running.sort((a, b) => termIndex(b) - termIndex(a))[0]! : null,
-      onlyInStandard: false,
+      onlyInStandard: false, planTerm: planTermOf(code, course.name), offeredTerms: termsOf(planRows(code, course.name)),
     };
   });
   // The standard can require a course the CTĐT does not list; a same-name CTĐT course is the same course (9a0e8b1).
@@ -139,6 +160,7 @@ export async function readStudyPlanFacts(db: Db, userId: string, now = new Date(
       code, name: item.name, credits: item.credits ?? 0, type: group.kind === "mandatory" ? "BB" : "", kind: group.kind === "mandatory" ? "mandatory" : "elective",
       group: null, conditional: item.conditionOnly, applicable: true, specialtyName: null, standardTerm: null, sessions: ["LT"], prerequisites: [], prior: [],
       state: record?.state ?? "not_taken", inProgressTerm: null, onlyInStandard: true,
+      planTerm: planTermOf(code, item.name), offeredTerms: termsOf(planRows(code, item.name)),
     });
   }
   const graduation = standard ? {
@@ -159,6 +181,7 @@ export async function readStudyPlanFacts(db: Db, userId: string, now = new Date(
       limits: creditLimits(totalCredits, standardTerms.length), courses,
       electiveGroups: inputs.electives.map((group) => ({ code: group.code, requiredCredits: group.requiredCredits, courseCodes: group.courseCodes })),
       graduation,
+      offeringUntil: termsOf(offerings).at(-1) ?? null,
     },
     standard, transcript, curriculumCourses,
   };
