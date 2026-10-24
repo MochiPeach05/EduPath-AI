@@ -12,6 +12,8 @@ const termCode = z.string().regex(/^HK\d{2}[123]$/);
 
 export const studyPlanSchema = z.object({
   schemaVersion: z.literal(1),
+  /** The AI roadmap whose proposal the plan has taken in (prefill.ts readAiProposal); null or absent before any. */
+  roadmapId: z.uuid().nullable().optional(),
   terms: z.array(z.object({
     code: termCode,
     // Unknown keys (the old "sessions") are stripped.

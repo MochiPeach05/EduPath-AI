@@ -6,6 +6,7 @@ import { syntheticCurriculum, syntheticPlan, syntheticStandards, syntheticStuden
 import type { DatabasePool } from "../db/pool.js";
 import { readStudyPlanFacts } from "./context.js";
 import { calendarTermCode, creditLimits, nextTerm, studyPlanSchema, termIndex, termLabel, type StudyPlanData } from "./model.js";
+import { prefillPlan, readAiProposal } from "./prefill.js";
 import { plannedTranscript, projectGraduation } from "./projection.js";
 import { createStudyPlanRouter } from "./router.js";
 
@@ -28,7 +29,8 @@ function curriculumData() {
   };
 }
 
-type Options = { specialty?: string | null; standards?: boolean; transcript?: boolean; active?: boolean };
+type Roadmap = { id: string; facts: unknown; output: unknown; completed_at: Date };
+type Options = { specialty?: string | null; standards?: boolean; transcript?: boolean; active?: boolean; roadmap?: Roadmap };
 function fakeDb(options: Options = {}) {
   const saved: { version: string; data: unknown; updated_at: Date }[] = [];
   const standards = options.standards === false ? [] : syntheticStandards().map((item) => ({ id: item.id, revision_id: item.revisionId, version: item.version, data: item.data }));
@@ -45,6 +47,7 @@ function fakeDb(options: Options = {}) {
       return rows([...k29, { cohort_code: "K30", code: "71ITIN40304", name: "Đồ án thực tập", term_code: "HK262" }]);
     }
     if (sql.startsWith("SELECT version,data,updated_at FROM stu_study_plans")) return rows(saved.slice(-1));
+    if (sql.includes("FROM stu_roadmaps WHERE user_id=$1 AND status='completed'")) return rows(options.roadmap ? [options.roadmap] : []);
     if (sql.startsWith("INSERT INTO stu_study_plans")) {
       saved.push({ version: String(params[1]), data: JSON.parse(String(params[2])), updated_at: today });
       return rows([{ version: params[1], updated_at: today }]);
@@ -115,6 +118,52 @@ describe("study plan context", () => {
   });
 });
 
+describe("where the plan starts", () => {
+  it("fills the mandatory courses still ahead in the terms of the cohort's training plan, never a late one", async () => {
+    const { context } = await facts();
+    // Calendar term HK261: the internship of HK253 is late and left out; nothing mandatory of the plan is still ahead.
+    expect(prefillPlan(context)).toEqual({ schemaVersion: 1, terms: [] });
+    // Earlier in the program (calendar term HK243), the HK253 internship is ahead and lands in HK253.
+    const early = { ...context, currentTerm: "HK243" };
+    expect(prefillPlan(early).terms.map((term) => [term.code, term.courses.map((course) => course.code)])).toContainEqual(["HK253", ["71ITIN40304"]]);
+    expect(prefillPlan(early).terms.flatMap((term) => term.courses.map((course) => course.code))).not.toContain("71ITSE30803");
+  });
+
+  it("proposes the courses of the newest AI roadmap once, in the term it prepares, a chuyên đề with its pair", async () => {
+    const roadmap: Roadmap = {
+      id: "99999999-9999-4999-8999-999999999999", completed_at: new Date("2026-10-24T10:00:00Z"),
+      facts: { nextTerm: "HK262", study: [{ code: "71ITSE41203", source: "running" }], choices: [
+        { thesis: { thesis: { code: "71ITGR40206" }, topics: [{ code: "71ITGR40203" }, { code: "71ITGR40303" }] } }] },
+      output: { study: [{ code: "71ITSE41203" }, { code: "71ITIN40304" }, { code: "71ITGR40203" }], improve: [{ code: "71ITAI40103" }] },
+    };
+    const db = fakeDb({ roadmap });
+    const loaded = await readStudyPlanFacts(db as never, studentId, today);
+    const proposal = await readAiProposal(db as never, studentId, loaded.context, null);
+    // The running course stays out; Chuyên đề 1 brings Chuyên đề 2 only when the CTĐT has it (the synthetic one has not).
+    expect(proposal).toMatchObject({ roadmapId: roadmap.id, term: "HK262" });
+    const codes = proposal!.courses.map((course) => course.code);
+    expect(codes).toEqual(expect.arrayContaining(["71ITIN40304", "71ITGR40203"]));
+    expect(codes).not.toContain("71ITSE41203");
+    // The K30 plan opens the internship in HK262 itself.
+    expect(proposal!.courses.find((course) => course.code === "71ITIN40304")?.term).toBe("HK262");
+    expect(await readAiProposal(db as never, studentId, loaded.context, roadmap.id)).toBeNull();
+  });
+
+  it("moves a proposed course to the next term within a year that a training plan opens it in", async () => {
+    const roadmap: Roadmap = {
+      id: "99999999-9999-4999-8999-999999999999", completed_at: new Date("2026-10-24T10:00:00Z"),
+      facts: { nextTerm: "HK262", study: [], choices: [] }, output: { study: [{ code: "SUMMER" }, { code: "ANY" }, { code: "RARE" }], improve: [] },
+    };
+    const db = { query: vi.fn(async () => ({ rowCount: 1, rows: [roadmap] })) };
+    const course = (code: string, offeredTerms: string[]) => ({ code, state: "not_taken", offeredTerms });
+    const context = { currentTerm: "HK261", offeringUntil: "HK263", courses: [course("SUMMER", ["HK253"]), course("ANY", []), course("RARE", ["HK252"])] };
+    // Plans open SUMMER in HK3 only (of an earlier year); nothing says when ANY is opened; RARE is an HK2 course whose
+    // term no plan opens within a year, so it stays in the HK2 the roadmap prepares.
+    expect((await readAiProposal(db as never, studentId, context as never, null))!.courses)
+      .toEqual([{ code: "SUMMER", term: "HK263" }, { code: "ANY", term: "HK262" }, { code: "RARE", term: "HK262" }]);
+  });
+});
+
 describe("graduation projection", () => {
   /** What a student could plan: the internship and the thesis next term. */
   const manualPlan: StudyPlanData = { schemaVersion: 1, terms: [{ code: "HK262", courses: [{ code: "71ITIN40304" }, { code: "71ITGR40206" }] }] };
@@ -159,6 +208,8 @@ describe("study plan API", () => {
   it("returns the context without the transcript or the standard, no plan yet, and the projection", async () => {
     const response = await request(setup().app).get("/plan").expect(200);
     expect(response.body.plan).toBeNull();
+    expect(response.body.suggested).toEqual({ schemaVersion: 1, terms: [] });
+    expect(response.body.aiProposal).toBeNull();
     expect(response.body.context.courses.length).toBeGreaterThan(10);
     expect(response.body).not.toHaveProperty("transcript");
     expect(response.body.context).not.toHaveProperty("standard");

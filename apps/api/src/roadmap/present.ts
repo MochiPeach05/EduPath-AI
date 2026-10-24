@@ -33,6 +33,8 @@ export type RoadmapView = {
   careerName: string | null;
   specialtyLabel: string | null;
   summary: string | null;
+  /** Key advice points (roadmap-v3), empty before. */
+  advice: string[];
   study: RoadmapStudyView[];
   choices: RoadmapChoice[];
   improve: RoadmapImproveView[];
@@ -93,6 +95,7 @@ export function presentRoadmap(row: RoadmapRow, today: string): RoadmapView {
     careerName: facts.careerName,
     specialtyLabel: facts.specialtyLabel,
     summary: output?.summary ?? null,
+    advice: output?.advice ?? [],
     study,
     choices: facts.choices,
     improve,

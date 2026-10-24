@@ -7,8 +7,12 @@ import type { RoadmapFacts } from "./facts.js";
 import { ROADMAP_LIMITS as L, buildRoadmapSchema } from "./schema.js";
 import { dateText } from "./window.js";
 
-/** v2 (2026-10-24): the term being studied is named, its planned courses not registered are late, then the next term. */
-export const ROADMAP_PROMPT_VERSION = "roadmap-v2";
+/**
+ * v2 (2026-10-24): the term being studied is named, its planned courses not registered are late, then the next term.
+ * v3 (2026-10-24, user): key advice points with the pace to graduate on time, the thesis group done one way only, no
+ * improvement of English courses, and always something to learn next.
+ */
+export const ROADMAP_PROMPT_VERSION = "roadmap-v3";
 /**
  * Gemma reasons before it writes (the user prefers slow and right). num_predict covers thinking and answer: the longest
  * answer the limits allow is about 4k tokens, the data block stays under 4k, so both fit the 16384 context of every kind.
@@ -31,6 +35,8 @@ export type RoadmapAiInput = {
   keys: {
     courses: { code: string; name: string }[]; improve: { code: string; name: string }[]; skills: { key: string; name: string }[]; months: number;
     names: { code: string; name: string }[];
+    /** The thesis group of each choice: the thesis course or both chuyên đề courses, never a mix. */
+    thesis: { thesis: string | null; topics: string[] }[];
   };
 };
 
@@ -41,11 +47,13 @@ Nguyên tắc dữ liệu (bắt buộc):
 1. Chỉ nhắc học phần có trong dữ liệu và chỉ gợi ý kỹ năng có trong danh sách kỹ năng nghề cần bổ sung; dùng đúng mã học phần (code) và khóa kỹ năng (key) đã cho. Không bịa tên hay mã học phần, lịch mở lớp, giảng viên, tên khóa học, chứng chỉ, trang web hay đường link.
 2. Không tự tính hay đặt thêm con số (điểm, tín chỉ, số giờ, phần trăm); khi nhắc số liệu, chép đúng như trong dữ liệu.
 3. Không hứa hẹn kết quả: lộ trình chỉ để tham khảo; nhắc bạn trao đổi với cố vấn học tập và xem lịch đăng ký học phần của trường trước khi đăng ký.
-4. "Học lại" là học phần chưa đạt (F hoặc VT) phải học lại; "học cải thiện" là học phần đạt điểm D hoặc D+ có thể học lại để nâng điểm.
+4. "Học lại" là học phần chưa đạt (F hoặc VT) phải học lại; "học cải thiện" là học phần đạt điểm D hoặc D+ có thể học lại để nâng điểm. Không đề xuất học cải thiện các học phần Anh văn.
 5. Gọi học kỳ và ngày bằng chữ đúng như trong dữ liệu; không viết mã học kỳ dạng HK251.
+6. Nhóm có Đồ án tốt nghiệp (khóa luận) chỉ hoàn thành theo MỘT trong hai cách: học Đồ án tốt nghiệp, hoặc học cả Chuyên đề tốt nghiệp 1 và Chuyên đề tốt nghiệp 2. Không ghép chuyên đề với học phần khác; khi gợi ý cách chuyên đề thì đưa cả hai chuyên đề vào study.
 
 Nội dung:
-- summary: 1–3 câu nêu trọng tâm của 3 tháng tới.
+- summary: 2–4 câu nhận định tình hình học tập và trọng tâm 3 tháng tới. Nếu bạn đã đủ điều kiện tốt nghiệp hoặc đã đạt các kỹ năng của nghề, vẫn phải mở hướng học tiếp, theo ý: hiện tại theo bảng điểm bạn đã hoàn thành tốt các học phần; tuy nhiên, để nâng từ mức hiện có lên mức cao hơn, bạn nên bổ sung những kiến thức, kỹ năng cụ thể để nâng cấp bản thân và mở rộng cơ hội nghề nghiệp.
+- advice: 3–6 lời khuyên chính, mỗi lời khuyên 1–2 câu cụ thể dựa trên dữ liệu, gồm: tiến độ tốt nghiệp (tín chỉ còn thiếu, số học kỳ còn lại theo chương trình, số tín chỉ cần trung bình mỗi học kỳ để tốt nghiệp đúng hạn; nếu chương trình không còn học kỳ nào thì nói rõ cần ưu tiên gì để tốt nghiệp sớm nhất); điểm trung bình so với yêu cầu; học phần cần ưu tiên (trễ, học lại, nhóm tự chọn, đồ án hoặc chuyên đề tốt nghiệp); kỹ năng nghề cần nâng; nên học gì để làm việc thực tế tốt hơn và tăng cơ hội việc làm, thu nhập. Không bao giờ chỉ nói rằng bạn đã ổn hay không cần học thêm.
 - study: học phần nên học hoặc hoàn thành trong thời gian lộ trình, theo thứ tự ưu tiên: học phần đang học (hoàn thành tốt), học phần trễ so với kế hoạch (kể cả học phần kế hoạch xếp vào học kỳ đang học mà bạn chưa đăng ký), rồi học phần theo kế hoạch của học kỳ tiếp theo cần chuẩn bị đăng ký. Với nhóm lựa chọn có thể gợi ý một học phần trong danh sách lựa chọn, ưu tiên học phần giúp kỹ năng của nghề mục tiêu. Mỗi mục một lời khuyên ngắn có lý do.
 - improve: học phần cần học lại hoặc nên học cải thiện: học lại trước, rồi học phần giúp kỹ năng của nghề mục tiêu.
 - skills: kỹ năng nên tự học, ưu tiên kỹ năng bắt buộc của nghề và kỹ năng chương trình đào tạo chưa dạy (cần tự học). Mỗi kỹ năng: vì sao cần với nghề mục tiêu (why); các bước học cụ thể (steps): nội dung kiến thức cần nắm, bài tập hoặc dự án nhỏ nên tự làm, không nêu tên trang web, khóa học hay tài liệu cụ thể; kết quả mong đợi sau 3 tháng (outcome).
@@ -59,6 +67,7 @@ Văn phong:
 
 Chỉ trả về một đối tượng JSON đúng cấu trúc sau, không thêm bất kỳ văn bản nào bên ngoài JSON:
 - summary: tối đa ${L.summary} ký tự.
+- advice: từ ${L.adviceMin} đến ${L.adviceMax} mục, mỗi mục tối đa ${L.adviceItem} ký tự.
 - study: tối đa ${L.studyMax} mục { code, advice }, advice tối đa ${L.advice} ký tự, mỗi học phần tối đa một mục.
 - improve: tối đa ${L.improveMax} mục { code, advice }, advice tối đa ${L.advice} ký tự.
 - skills: tối đa ${L.skillsMax} mục { key, why, steps, outcome }; why tối đa ${L.why} ký tự, từ ${L.stepsMin} đến ${L.stepsMax} steps, mỗi step tối đa ${L.step} ký tự, outcome tối đa ${L.outcome} ký tự.
@@ -99,10 +108,15 @@ export function renderRoadmapDataBlock(facts: RoadmapFacts): string {
   if (next.length) push(`Theo kế hoạch ${facts.nextTerm ? termText(facts.nextTerm) : "học kỳ tiếp theo"} (học kỳ tiếp theo, cần chuẩn bị đăng ký):`);
   for (const item of next) push(`- ${code(item.code)} ${sanitizeText(item.name)} (${credits(item.credits)})${helps(item.careerSkills)}`);
   if (facts.choices.length) push("Nhóm lựa chọn còn thiếu:");
+  const option = (item: { code: string; name: string; credits: number | null }) => `${code(item.code)} ${sanitizeText(item.name)} (${credits(item.credits)})`;
   for (const choice of facts.choices) {
     const when = choice.source === "late" ? `trễ so với kế hoạch ở ${termText(choice.termCode)}` : `theo kế hoạch ${choice.termCode ? termText(choice.termCode) : "học kỳ tiếp theo"}`;
-    const options = choice.options.length
-      ? `; chọn trong: ${choice.options.slice(0, MAX_CHOICE_OPTIONS).map((option) => `${code(option.code)} ${sanitizeText(option.name)} (${credits(option.credits)})`).join("; ")}` : "";
+    const thesis = choice.thesis;
+    const options = thesis
+      ? thesis.thesis
+        ? `; chỉ chọn MỘT cách: (1) ${option(thesis.thesis)}${thesis.topics.length ? `; (2) cả ${thesis.topics.map(option).join(" và ")}` : ""}`
+        : `; đang theo cách chuyên đề: học ${thesis.topics.map(option).join(" và ")}`
+      : choice.options.length ? `; chọn trong: ${choice.options.slice(0, MAX_CHOICE_OPTIONS).map(option).join("; ")}` : "";
     push(`- "${sanitizeText(choice.label)}" (${when}): còn thiếu ${sanitizeText(choice.need, 20)}${options}`);
   }
 
@@ -124,6 +138,23 @@ export function renderRoadmapDataBlock(facts: RoadmapFacts): string {
 
   push("", "[7. TIẾN ĐỘ XÉT TỐT NGHIỆP]");
   push(`Kết quả tham khảo: ${sanitizeText(facts.graduation.statusLabel, 80)}`);
+  const pace = facts.pace;
+  if (pace) {
+    if (pace.creditsDone !== null && pace.creditsRequired !== null) {
+      push(`Tín chỉ tích lũy: ${formatNumber(pace.creditsDone)}/${formatNumber(pace.creditsRequired)} (còn thiếu ${formatNumber(pace.creditsLeft ?? 0)} TC)`);
+    }
+    if (pace.gpa !== null) push(`Điểm trung bình tích lũy: ${formatNumber(pace.gpa)} trên thang ${pace.gpaScale}${pace.gpaRequired !== null ? ` (yêu cầu tối thiểu ${formatNumber(pace.gpaRequired)})` : ""}`);
+    if (pace.openGroups.length) {
+      push(`Nhóm học phần chưa đủ: ${pace.openGroups.map((group) => `${sanitizeText(group.label)}: ${group.done === null ? "?" : formatNumber(group.done)}/${group.required === null ? "?" : formatNumber(group.required)} ${group.unit === "TC" ? "TC" : "môn"}`).join("; ")}`);
+    }
+    if (pace.termsLeft.length) {
+      push(`Học kỳ còn lại theo chương trình sau học kỳ đang học: ${pace.termsLeft.length} học kỳ, từ ${termText(pace.termsLeft[0])} đến ${termText(pace.termsLeft.at(-1))}.`);
+      if (pace.creditsPerTerm !== null && (pace.creditsLeft ?? 0) > 0) push(`Để tốt nghiệp đúng hạn cần trung bình khoảng ${formatNumber(pace.creditsPerTerm)} TC mỗi học kỳ còn lại.`);
+    } else {
+      push(`Chương trình không còn học kỳ nào theo kế hoạch sau học kỳ đang học${pace.lastTerm ? ` (học kỳ cuối theo chương trình: ${termText(pace.lastTerm)})` : ""}.`);
+    }
+    if (pace.lateCount) push(`Số mục trễ so với kế hoạch đào tạo: ${pace.lateCount}`);
+  }
   push("", "=== KẾT THÚC DỮ LIỆU ===", "", "Hãy viết lộ trình học tập 3 tháng cho bạn sinh viên này theo đúng cấu trúc JSON đã mô tả.");
   return lines.join("\n");
 }
@@ -136,6 +167,8 @@ export function buildRoadmapInput(facts: RoadmapFacts): RoadmapAiInput {
   for (const item of facts.improve) names.set(item.code, item.name);
   for (const skill of facts.skills) for (const item of skill.courses) names.set(item.code, item.name);
   const keys = {
+    thesis: facts.choices.filter((choice) => choice.thesis)
+      .map((choice) => ({ thesis: choice.thesis!.thesis?.code ?? null, topics: choice.thesis!.topics.map((item) => item.code) })),
     courses: [...courses].map(([code, name]) => ({ code, name })),
     improve: facts.improve.map((item) => ({ code: item.code, name: item.name })),
     skills: facts.skills.map((skill) => ({ key: skill.key, name: skill.name })),

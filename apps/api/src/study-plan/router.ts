@@ -6,6 +6,7 @@ import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
 import { readStudyPlanFacts, type StudyPlanFacts } from "./context.js";
 import { studyPlanSchema, type StudyPlanData } from "./model.js";
+import { prefillPlan, readAiProposal } from "./prefill.js";
 import { projectGraduation } from "./projection.js";
 
 class StudyPlanError extends Error {
@@ -37,12 +38,21 @@ async function readSaved(db: Pick<PoolClient, "query">, userId: string, lock = f
   return { version: row.version, data: parsed.success ? parsed.data : { schemaVersion: 1, terms: [] }, updatedAt: new Date(row.updated_at).toISOString() };
 }
 
-/** What the page receives: the context (no transcript, no standard data), the saved plan and the projection. */
-const view = (facts: StudyPlanFacts, plan: Saved | null) => ({
-  context: facts.context,
-  plan,
-  projection: projectGraduation(facts, plan?.data ?? { schemaVersion: 1, terms: [] }),
-});
+/**
+ * What the page receives: the context (no transcript, no standard data), the saved plan, the plan a student without one
+ * starts from (the training plan's mandatory courses ahead), the AI roadmap's proposal not taken in yet, and the
+ * projection of the plan in use.
+ */
+async function view(db: Pick<PoolClient, "query">, userId: string, facts: StudyPlanFacts, plan: Saved | null) {
+  const suggested = plan ? null : prefillPlan(facts.context);
+  return {
+    context: facts.context,
+    plan,
+    suggested,
+    aiProposal: await readAiProposal(db, userId, facts.context, plan?.data.roadmapId ?? null),
+    projection: projectGraduation(facts, plan?.data ?? suggested ?? { schemaVersion: 1, terms: [] }),
+  };
+}
 
 /**
  * "Lộ trình học tập" API (user 2026-10-24, after Stellic), mounted at /api/student/study-plan: what "Theo dõi tiến độ" and
@@ -65,7 +75,7 @@ export function createStudyPlanRouter(pool: DatabasePool | undefined, webOrigin:
 
   router.get("/", async (req, res) => {
     const userId = req.session.user!.userId;
-    res.json(await inTransaction(pool!, true, async (client) => view(await readStudyPlanFacts(client, userId, now()), await readSaved(client, userId))));
+    res.json(await inTransaction(pool!, true, async (client) => view(client, userId, await readStudyPlanFacts(client, userId, now()), await readSaved(client, userId))));
   });
 
   /** Saves the whole plan; `version` is the one the page loaded (null for the first save), else 409 plan_changed. */

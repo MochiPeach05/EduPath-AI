@@ -120,7 +120,7 @@
 .rm-track { display: grid; gap: 20px; min-width: 0; }
 .rm-track-head { display: grid; gap: 16px; }
 .rm-track-title { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.rm-track-title h2, .rm-audit h2, .rm-legend h2 { margin: 0; font-size: 20px; }
+.rm-track-title h2, .rm-audit > h2 { margin: 0; font-size: 20px; }
 .rm-track-title p { margin: 4px 0 0; color: var(--sw-muted); font-size: 13px; }
 .rm-segmented { display: inline-flex; padding: 3px; border: 1px solid var(--sw-border); border-radius: 8px; background: #f5f6f8; }
 .rm-segmented button { padding: 6px 14px; border: 0; border-radius: 6px; background: none; color: #4a5465; font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
@@ -164,8 +164,14 @@
 .rm-unmatched p { margin: 0; color: var(--sw-muted); font-size: 13px; }
 .rm-unmatched .rm-req-row { border-top-color: #f6dde1; }
 
-/* ---- Tổng quan về các ký hiệu ---- */
-.rm-legend { display: grid; gap: 12px; }
+/* ---- Ý nghĩa các ký hiệu (folded into Theo dõi tiến độ) ---- */
+.rm-advice-list { display: grid; gap: 6px; margin: 10px 0 0; padding-left: 20px; font-size: 14px; line-height: 1.65; }
+.rm-legend { display: grid; gap: 12px; padding: 12px 14px; border: 1px solid var(--sw-border); border-radius: 10px; background: #fafbfc; }
+.rm-legend > summary { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; cursor: pointer; list-style: none; }
+.rm-legend > summary::-webkit-details-marker { display: none; }
+.rm-legend > summary h2 { margin: 0; font-size: 15px; }
+.rm-legend > summary span { color: var(--sw-red); font-size: 12px; font-weight: 600; }
+.rm-legend[open] > summary span { visibility: hidden; }
 .rm-legend p { margin: 0; color: var(--sw-muted); font-size: 14px; line-height: 1.6; }
 .rm-legend h3 { margin: 8px 0 0; font-size: 15px; }
 .rm-legend-table { width: 100%; border-collapse: collapse; font-size: 14px; }
@@ -179,6 +185,9 @@
 .rm-planner-head h2 { margin: 0; font-size: 20px; }
 .rm-planner-head p { margin: 4px 0 0; max-width: 760px; color: var(--sw-muted); font-size: 13px; line-height: 1.6; }
 .rm-save { margin: 0; font-size: 12px; color: var(--sw-muted); }
+.rm-origin { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 10px 14px; border: 1px solid #f2dc8c; border-radius: 8px; background: #fffbea; color: #5c4a10; font-size: 13px; line-height: 1.6; }
+.rm-origin-empty { flex-wrap: wrap; align-items: center; justify-content: space-between; }
+.rm-origin-empty p { margin: 0; flex: 1 1 320px; }
 .rm-save-saved { color: #2e7d32; }
 .rm-save-error { color: #b42335; font-weight: 600; }
 .rm-planner { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }

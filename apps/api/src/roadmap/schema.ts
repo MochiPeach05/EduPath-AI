@@ -6,7 +6,10 @@ import type { JsonSchema } from "../competency-assessment/ai/schema.js";
 
 /** Output limits (characters / items), shared by the schema, the prompt and the validator. */
 export const ROADMAP_LIMITS = {
-  summary: 500,
+  summary: 600,
+  adviceMin: 3,
+  adviceMax: 6,
+  adviceItem: 300,
   studyMax: 8,
   improveMax: 5,
   advice: 240,
@@ -32,6 +35,7 @@ const choice = (values: readonly string[]): JsonSchema => ({ type: "string", enu
 export function buildRoadmapSchema(options: { studyCodes: readonly string[]; improveCodes: readonly string[]; skillKeys: readonly string[]; months: number }): JsonSchema {
   return object({
     summary: text(L.summary),
+    advice: list(text(L.adviceItem), L.adviceMin, L.adviceMax),
     study: list(object({ code: choice(options.studyCodes), advice: text(L.advice) }), 0, options.studyCodes.length ? L.studyMax : 0),
     improve: list(object({ code: choice(options.improveCodes), advice: text(L.advice) }), 0, options.improveCodes.length ? L.improveMax : 0),
     skills: list(object({ key: choice(options.skillKeys), why: text(L.why), steps: list(text(L.step), L.stepsMin, L.stepsMax), outcome: text(L.outcome) }),

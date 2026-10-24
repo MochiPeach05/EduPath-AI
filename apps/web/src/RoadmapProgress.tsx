@@ -4,8 +4,8 @@ import {
   type AuditMark, type AuditView, type StudyPlanContext, type StudyPlanData, type StudyPlanProjection,
 } from "./study-plan-data";
 
-// "Theo dõi tiến độ" and "Tổng quan về các ký hiệu" of #roadmap (user 2026-10-24, after Stellic's "Track your progress"
-// and "Symbols overview"): the program's requirements with every course's state, official or with the plan.
+// "Theo dõi tiến độ" of #roadmap (user 2026-10-24, after Stellic's "Track your progress" and "Symbols overview", the
+// symbols folded in as "Ý nghĩa các ký hiệu"): the program's requirements with every course's state, official or with the plan.
 
 /** One audit symbol (Stellic's legend), with a label for screen readers. */
 export function Mark({ kind, count }: { kind: AuditMark | "remaining" | "retake" | "not_counted" | "equivalent"; count?: number }) {
@@ -78,6 +78,7 @@ export function RoadmapTrack({ context, plan, projection }: { context: StudyPlan
 
     <section className="sw-panel rm-audit" aria-labelledby="rm-audit-title">
       <h2 id="rm-audit-title">Yêu cầu của chương trình</h2>
+      <RoadmapLegend />
       {!context.hasTranscript && <p className="rm-note">Bạn chưa nhập bảng điểm nên mọi học phần đều đang ở trạng thái còn thiếu. Nhập bảng điểm ở Hồ sơ để theo dõi tiến độ.</p>}
       {!groups.length && <p className="rm-empty">Chưa có tiêu chuẩn xét tốt nghiệp hay chương trình đào tạo cho khóa của bạn.</p>}
       <div className="rm-audit-groups">{groups.map((group) => <details key={group.id} className={`rm-req${group.complete ? " rm-req-done" : ""}`} open={!group.complete}>
@@ -109,6 +110,7 @@ export function RoadmapTrack({ context, plan, projection }: { context: StudyPlan
   </div>;
 }
 
+/** The symbols of the audit, folded under the requirements (user 2026-10-24: no tab of its own). */
 export function RoadmapLegend() {
   const rows: [Parameters<typeof Mark>[0], string, string][] = [
     [{ kind: "done" }, "Đã hoàn thành", "Học phần hoặc yêu cầu đã đạt. Giống nhau ở chế độ Chính thức và Theo kế hoạch."],
@@ -120,14 +122,14 @@ export function RoadmapLegend() {
     [{ kind: "not_counted" }, "Không được tính", "Đã học hoặc đăng ký nhưng không được tính cho yêu cầu nào; liệt kê ở mục Học phần không được tính cuối trang."],
     [{ kind: "equivalent" }, "Học phần tương đương", "Yêu cầu được tính qua một học phần tương đương: mã cũ của học phần, hoặc học phần cùng tên học với khóa sau."],
   ];
-  return <section className="sw-panel rm-legend" aria-labelledby="rm-legend-title">
-    <h2 id="rm-legend-title">Tổng quan về các ký hiệu</h2>
-    <p>Các ký hiệu dùng ở mục Theo dõi tiến độ và Lên kế hoạch.</p>
+  return <details className="rm-legend">
+    <summary><h2 id="rm-legend-title">Ý nghĩa các ký hiệu</h2><span>Xem bảng ký hiệu</span></summary>
+    <p>Các ký hiệu dùng ở Theo dõi tiến độ và Kế hoạch học kỳ.</p>
     <table className="rm-legend-table">
       <thead><tr><th scope="col">Ký hiệu</th><th scope="col">Tên</th><th scope="col">Ý nghĩa</th></tr></thead>
       <tbody>{rows.map(([mark, name, text]) => <tr key={name}><td><Mark {...mark} /></td><th scope="row">{name}</th><td>{text}</td></tr>)}</tbody>
     </table>
     <h3>Học phần không được tính</h3>
     <p>Cuối mục Theo dõi tiến độ là các học phần đã học hoặc đã đăng ký nhưng không thuộc yêu cầu nào của chương trình, ví dụ học phần của chuyên ngành khác hoặc học phần ngoài chương trình đào tạo. Học phần chưa đạt (F, VT) vẫn nằm trong yêu cầu của nó với ký hiệu Còn thiếu.</p>
-  </section>;
+  </details>;
 }

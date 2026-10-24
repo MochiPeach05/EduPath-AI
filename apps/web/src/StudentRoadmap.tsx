@@ -1,21 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import StudentAiRoadmap from "./StudentAiRoadmap";
-import { RoadmapLegend, RoadmapTrack } from "./RoadmapProgress";
+import { RoadmapTrack } from "./RoadmapProgress";
 import { RoadmapPlanner, type SaveState } from "./RoadmapPlanner";
 import {
-  STUDY_PLAN_API, planErrorMessage, withTerms, type StudyPlanData, type StudyPlanProjection, type StudyPlanResponse,
+  STUDY_PLAN_API, applyProposal, planErrorMessage, withTerms, type StudyPlanData, type StudyPlanProjection, type StudyPlanResponse,
 } from "./study-plan-data";
 import "./student-roadmap.css";
 
 // #roadmap "Lộ trình học tập" (user 2026-10-24: "Gần như áp dụng theo trang này làm nè cả giao diện luôn", OU's Stellic
-// student guide): Theo dõi tiến độ, Tổng quan về các ký hiệu, Lên kế hoạch (thủ công), Lên kế hoạch (AI). Stellic's
-// "Schedule term" (weekly timetable) and "Request to graduate" are left out at the user's request.
+// student guide): Theo dõi tiến độ (with the symbols folded in), Lộ trình AI, then Kế hoạch học kỳ, which starts from the
+// training plan and the AI's proposal for the student to adjust. Stellic's "Schedule term" (weekly timetable) and
+// "Request to graduate" are left out at the user's request.
 
 const TABS = [
   { id: "track", label: "Theo dõi tiến độ" },
-  { id: "legend", label: "Tổng quan về các ký hiệu" },
-  { id: "manual", label: "Lên kế hoạch (Thủ công)" },
-  { id: "ai", label: "Lên kế hoạch (AI)" },
+  { id: "ai", label: "Lộ trình AI đề xuất" },
+  { id: "manual", label: "Kế hoạch học kỳ" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
 const TAB_KEY = "edupath.roadmap.tab";
@@ -42,7 +42,14 @@ async function call<T>(init: RequestInit = {}): Promise<T> {
   return body as T;
 }
 
-/** The plan the page edits: loaded once, saved 0.7 s after the last change with the version it was loaded at. */
+/** Where the plan on screen came from, shown above the planner. */
+export type PlanOrigin = { kind: "prefill" } | { kind: "ai"; added: number; completedAt: string; term: string } | null;
+
+/**
+ * The plan the page edits: loaded when the page opens and again when a planning tab opens (an AI roadmap may have been
+ * written meanwhile), saved 0.7 s after the last change with the version it was loaded at. A student without a plan starts
+ * from the training plan's mandatory courses; the newest AI roadmap's proposal is taken in and saved at once.
+ */
 function useStudyPlan() {
   const [loaded, setLoaded] = useState<{ data: StudyPlanResponse | null; error: string | null }>({ data: null, error: null });
   const [plan, setPlan] = useState<StudyPlanData | null>(null);
@@ -53,6 +60,12 @@ function useStudyPlan() {
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const latest = useRef<StudyPlanData | null>(null);
   const saving = useRef(false);
+  const [origin, setOrigin] = useState<PlanOrigin>(null);
+  const [revision, setRevision] = useState(0);
+  const reload = useCallback(() => {
+    // Never over unsaved edits.
+    if (!saving.current && !latest.current) setRevision((value) => value + 1);
+  }, []);
 
   useEffect(() => {
     let alive = true;
@@ -60,11 +73,24 @@ function useStudyPlan() {
       if (!alive) return;
       version.current = data.plan?.version ?? null;
       setLoaded({ data, error: null });
-      setPlan(withTerms(data.context, data.plan?.data ?? null));
+      let next = withTerms(data.context, data.plan?.data ?? data.suggested ?? null);
+      if (data.aiProposal) {
+        const applied = applyProposal(next, data.aiProposal);
+        next = applied.plan;
+        setOrigin({ kind: "ai", added: applied.added, completedAt: data.aiProposal.completedAt, term: data.aiProposal.term });
+        // Saved at once, so the proposal is taken in only once.
+        latest.current = next;
+        timer.current = setTimeout(() => void save(), 0);
+      } else {
+        // The note of a proposal taken in earlier on this page stays.
+        setOrigin((previous) => data.plan ? (previous?.kind === "ai" ? previous : null) : data.suggested?.terms.length ? { kind: "prefill" } : null);
+      }
+      setPlan(next);
       setProjection(data.projection);
     }, (error: Error) => alive && setLoaded({ data: null, error: error.message }));
     return () => { alive = false; clearTimeout(timer.current); };
-  }, []);
+    // save is stable (useCallback without dependencies).
+  }, [revision]);
 
   const save = useCallback(async () => {
     if (saving.current || !latest.current) return;
@@ -97,14 +123,16 @@ function useStudyPlan() {
     timer.current = setTimeout(() => void save(), SAVE_DELAY_MS);
   }, [save]);
 
-  return { context: loaded.data?.context ?? null, error: loaded.error, plan, projection, change, saveState, saveError };
+  return { context: loaded.data?.context ?? null, error: loaded.error, plan, projection, change, saveState, saveError, origin, reload };
 }
 
 export default function StudentRoadmap() {
   const [tab, setTab] = useState<Tab>(storedTab);
   const study = useStudyPlan();
   const choose = (next: Tab) => {
+    if (next === tab) return;
     setTab(next);
+    if (next !== "ai") study.reload();
     try { window.localStorage.setItem(TAB_KEY, next); } catch { /* the tab is only a convenience */ }
   };
   const needsPlan = tab === "track" || tab === "manual";
@@ -114,12 +142,12 @@ export default function StudentRoadmap() {
         aria-controls="rm-tab-panel" className={tab === item.id ? "is-active" : undefined} onClick={() => choose(item.id)}>{item.label}</button>)}
     </nav>
     <div id="rm-tab-panel" role="tabpanel" aria-labelledby={`rm-tab-${tab}`} className="rm-tab-panel">
-      {tab === "legend" ? <RoadmapLegend />
-        : tab === "ai" ? <StudentAiRoadmap />
+      {tab === "ai" ? <StudentAiRoadmap />
           : needsPlan && study.error ? <section className="sw-panel rm-problem" role="alert"><strong>Chưa tải được dữ liệu lộ trình</strong><p>{study.error}</p></section>
             : !study.context || !study.plan ? <section className="sw-panel" aria-busy="true"><p role="status">Đang tải lộ trình học tập…</p></section>
               : tab === "track" ? <RoadmapTrack context={study.context} plan={study.plan} projection={study.projection} />
-                : <RoadmapPlanner context={study.context} plan={study.plan} onChange={study.change} saveState={study.saveState} saveError={study.saveError} />}
+                : <RoadmapPlanner context={study.context} plan={study.plan} onChange={study.change} saveState={study.saveState} saveError={study.saveError}
+                  origin={study.origin} onOpenAi={() => choose("ai")} />}
     </div>
   </div>;
 }

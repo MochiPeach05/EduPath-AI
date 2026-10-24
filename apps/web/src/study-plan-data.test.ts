@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  auditGroups, auditNote, creditProgress, moveCourse, offering, planIssues, poolSections, searchCourses, termLoad, withTerms,
+  applyProposal, auditGroups, auditNote, creditProgress, moveCourse, offering, planIssues, poolSections, searchCourses, termLoad, withTerms,
   type StudyPlanContext, type StudyPlanCourse, type StudyPlanData,
 } from "./study-plan-data";
 
@@ -68,6 +68,19 @@ describe("planning", () => {
     const moved = moveCourse(plan, "c", "HK271");
     expect(moved.terms.map((term) => [term.code, term.courses.map((item) => item.code)])).toEqual([["HK262", ["D"]], ["HK271", ["C"]]]);
     expect(moveCourse(moved, "D", null).terms.map((term) => term.courses.length)).toEqual([0, 1]);
+  });
+
+  it("takes in the AI roadmap's proposal once: new courses go to its term, planned ones stay where they are", () => {
+    const proposal = { roadmapId: "99999999-9999-4999-8999-999999999999", completedAt: "2026-10-24T10:00:00.000Z", term: "HK262",
+      courses: [{ code: "c", term: "HK262" }, { code: "E", term: "HK262" }] };
+    const { plan: next, added } = applyProposal(withTerms(context(), { ...plan, terms: [{ code: "HK263", courses: [{ code: "C" }] }] }), proposal);
+    expect(added).toBe(1);
+    expect(next.roadmapId).toBe(proposal.roadmapId);
+    expect(next.terms.map((term) => [term.code, term.courses.map((item) => item.code)])).toEqual([["HK261", []], ["HK262", ["E"]], ["HK263", ["C"]]]);
+    // A term the plan does not show yet is added in order; moving a course keeps the roadmap it came from.
+    const later = applyProposal(plan, { ...proposal, courses: [{ code: "E", term: "HK271" }] }).plan;
+    expect(later.terms.map((term) => term.code)).toEqual(["HK262", "HK271"]);
+    expect(moveCourse(later, "E", "HK262").roadmapId).toBe(proposal.roadmapId);
   });
 
   it("flags a prerequisite planned in the same term and a course no training plan opens in that term", () => {

@@ -14,6 +14,8 @@ import { ROADMAP_LIMITS as L } from "./schema.js";
 /** The cleaned roadmap stored in stu_roadmaps.ai_output (the router adds names and dates from the facts). */
 export type RoadmapOutput = {
   summary: string;
+  /** Key advice points (roadmap-v3); absent in a roadmap written before. */
+  advice?: string[];
   study: { code: string; advice: string }[];
   improve: { code: string; advice: string }[];
   skills: { key: string; why: string; steps: string[]; outcome: string | null }[];
@@ -27,6 +29,8 @@ export type RoadmapContext = {
   skills: ReadonlyMap<string, string>;
   /** Course code of the data block → name. */
   names: ReadonlyMap<string, string>;
+  /** The thesis groups: the thesis course or both chuyên đề courses. */
+  thesis: { thesis: string | null; topics: string[] }[];
   months: number;
   /** Every number of the data block, plus the HKyyS codes of the terms it writes in words. */
   numbers: ReadonlySet<number>;
@@ -42,6 +46,7 @@ const raw = z.string().max(4000);
 /** The shape only; lengths and counts are capped by the grammar and trimmed below. */
 const roadmapOutputSchema = z.object({
   summary: raw,
+  advice: z.array(raw).max(20).optional(),
   study: z.array(z.object({ code: z.string().max(64), advice: raw }).strict()).max(30),
   improve: z.array(z.object({ code: z.string().max(64), advice: raw }).strict()).max(30),
   skills: z.array(z.object({ key: z.string().max(16), why: raw, steps: z.array(raw).max(20), outcome: raw }).strict()).max(30),
@@ -70,11 +75,16 @@ export function roadmapContextFromAiInput(input: unknown): RoadmapContext | null
   if (!courses || !improve || !skills || typeof months !== "number" || !Number.isInteger(months) || months < 1) return null;
   const names = input.keys.names === undefined ? [] : pairs(input.keys.names, "code");
   if (!names) return null;
+  const thesis = Array.isArray(input.keys.thesis) ? input.keys.thesis.filter(isRecord).map((group) => ({
+    thesis: typeof group.thesis === "string" ? group.thesis : null,
+    topics: Array.isArray(group.topics) ? group.topics.filter((item): item is string => typeof item === "string") : [],
+  })) : [];
   return {
     courses: new Set(courses.map(([code]) => code)),
     improve: new Set(improve.map(([code]) => code)),
     skills: new Map(skills),
     names: new Map([...courses, ...improve, ...names]),
+    thesis,
     months,
     numbers: new Set([...numbersIn(input.user), ...termCodeNumbers(input.user)]),
     courseCodes: new Set(courseCodesIn(input.user)),
@@ -148,7 +158,17 @@ export function validateRoadmapOutput(output: unknown, context: RoadmapContext):
   const summary = cleanText(data.summary, L.summary, context);
   if (!summary) return { ok: false, reason: "summary", path: "summary" };
 
-  const study = cleanItems(data.study, context.courses, L.studyMax, context);
+  // The thesis group is done one way: the first way the model names wins, the courses of the other are dropped.
+  const way = new Map<number, "thesis" | "topics">();
+  const studyItems = data.study.filter((item) => {
+    const index = context.thesis.findIndex((group) => group.thesis === item.code || group.topics.includes(item.code));
+    if (index < 0) return true;
+    const kind = context.thesis[index]!.thesis === item.code ? "thesis" : "topics";
+    if (!way.has(index)) way.set(index, kind);
+    return way.get(index) === kind;
+  });
+  const study = cleanItems(studyItems, context.courses, L.studyMax, context);
+  const advice = (data.advice ?? []).map((item) => cleanText(item, L.adviceItem, context)).filter((item): item is string => Boolean(item)).slice(0, L.adviceMax);
   const improve = cleanItems(data.improve, context.improve, L.improveMax, context);
 
   const skills: RoadmapOutput["skills"] = [];
@@ -170,8 +190,8 @@ export function validateRoadmapOutput(output: unknown, context: RoadmapContext):
   }
   months.sort((a, b) => a.month - b.month);
 
-  const kept: RoadmapOutput = { summary, study, improve, skills: skills.slice(0, L.skillsMax), months };
+  const kept: RoadmapOutput = { summary, advice, study, improve, skills: skills.slice(0, L.skillsMax), months };
   if (!study.length && !improve.length && !kept.skills.length && !months.length) return { ok: false, reason: "empty", path: "" };
-  const returned = data.study.length + data.improve.length + data.skills.length + data.months.length;
-  return { ok: true, output: kept, dropped: returned - study.length - improve.length - kept.skills.length - months.length };
+  const returned = data.study.length + data.improve.length + data.skills.length + data.months.length + (data.advice?.length ?? 0);
+  return { ok: true, output: kept, dropped: returned - study.length - improve.length - kept.skills.length - months.length - advice.length };
 }

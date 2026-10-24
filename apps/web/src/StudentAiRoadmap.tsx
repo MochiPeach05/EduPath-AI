@@ -244,7 +244,11 @@ function RoadmapView({ roadmap, response, create, creating, createError }: {
       <AiState roadmap={roadmap} response={response} create={create} creating={creating} />
       {completed && roadmap.summary && <div className="rm-summary">
         <span className="rm-ai-icon" aria-hidden="true"><Icon name="spark" /></span>
-        <div><h3>Lời khuyên của cố vấn AI <span className="rm-ai-tag">AI</span></h3><p>{roadmap.summary}</p></div>
+        <div>
+          <h3>Lời khuyên của cố vấn AI <span className="rm-ai-tag">AI</span></h3>
+          <p>{roadmap.summary}</p>
+          {roadmap.advice.length > 0 && <ul className="rm-advice-list">{roadmap.advice.map((item, index) => <li key={index}>{item}</li>)}</ul>}
+        </div>
       </div>}
     </section>
     <StudySection roadmap={roadmap} />

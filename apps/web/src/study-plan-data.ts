@@ -4,7 +4,8 @@
 
 export type CourseState = "passed" | "exempt" | "failed" | "in_progress" | "graded_unknown" | "not_taken" | "not_in_curriculum";
 export type PlanTerm = { code: string; courses: { code: string }[] };
-export type StudyPlanData = { schemaVersion: 1; terms: PlanTerm[] };
+/** roadmapId: the AI roadmap whose proposal the plan has taken in. */
+export type StudyPlanData = { schemaVersion: 1; roadmapId?: string | null; terms: PlanTerm[] };
 export type TriState = "pass" | "fail" | "unknown";
 
 export type StudyPlanCourse = {
@@ -37,7 +38,12 @@ export type StudyPlanProjection = {
   openGroups: { label: string; kind: "mandatory" | "elective"; unit: "môn" | "TC"; required: number | null; now: number | null; withPlan: number | null; status: TriState }[];
 };
 export type Saved = { version: string; data: StudyPlanData; updatedAt: string };
-export type StudyPlanResponse = { context: StudyPlanContext; plan: Saved | null; projection: StudyPlanProjection | null };
+/** The courses of the newest AI roadmap not yet taken in: term is the one it prepares, each course has its own term. */
+export type AiProposal = { roadmapId: string; completedAt: string; term: string; courses: { code: string; term: string }[] };
+/** suggested: where a student without a plan starts (the training plan's mandatory courses ahead). */
+export type StudyPlanResponse = {
+  context: StudyPlanContext; plan: Saved | null; suggested: StudyPlanData | null; aiProposal: AiProposal | null; projection: StudyPlanProjection | null;
+};
 
 export const STUDY_PLAN_API = "/api/student/study-plan";
 export const MAX_TERMS = 15;
@@ -67,7 +73,29 @@ export function defaultTerms(context: Pick<StudyPlanContext, "currentTerm" | "st
 export function withTerms(context: Pick<StudyPlanContext, "currentTerm" | "standardTerms">, data: StudyPlanData | null): StudyPlanData {
   const terms = new Map((data?.terms ?? []).map((term) => [term.code, term]));
   for (const code of defaultTerms(context)) if (!terms.has(code)) terms.set(code, { code, courses: [] });
-  return { schemaVersion: 1, terms: [...terms.values()].sort((a, b) => termIndex(a.code) - termIndex(b.code)) };
+  return { schemaVersion: 1, roadmapId: data?.roadmapId ?? null, terms: [...terms.values()].sort((a, b) => termIndex(a.code) - termIndex(b.code)) };
+}
+
+/**
+ * The plan with the AI roadmap's proposal taken in: each proposed course not planned anywhere yet goes to its term (a
+ * new term only while the plan has room); the plan remembers the roadmap so the same proposal is never added twice.
+ * Returns the plan and how many courses were added.
+ */
+export function applyProposal(plan: StudyPlanData, proposal: AiProposal): { plan: StudyPlanData; added: number } {
+  const placed = plannedTerms(plan);
+  const terms = plan.terms.map((term) => ({ ...term, courses: [...term.courses] }));
+  let added = 0;
+  for (const item of proposal.courses) {
+    const code = item.code.toUpperCase();
+    if (placed.has(code)) continue;
+    let term = terms.find((entry) => entry.code === item.term);
+    if (!term && terms.length < MAX_TERMS) terms.push(term = { code: item.term, courses: [] });
+    if (!term) continue;
+    term.courses.push({ code });
+    placed.set(code, item.term);
+    added++;
+  }
+  return { added, plan: { ...plan, roadmapId: proposal.roadmapId, terms: terms.sort((a, b) => termIndex(a.code) - termIndex(b.code)) } };
 }
 
 /* ---------------------------------------------------------------- courses */

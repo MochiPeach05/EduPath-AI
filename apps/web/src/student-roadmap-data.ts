@@ -23,6 +23,8 @@ export type Roadmap = {
   id: string; assessmentId: string; status: RoadmapStatus; errorCode: string | null; createdAt: string; completedAt: string | null; model: string | null;
   window: { start: string; end: string; months: { index: number; start: string; end: string }[] };
   ended: boolean; careerName: string | null; specialtyLabel: string | null; summary: string | null;
+  /** Key advice points (roadmap-v3); empty for a roadmap written before. */
+  advice: string[];
   study: RoadmapStudy[]; choices: RoadmapChoice[]; improve: RoadmapImprove[]; skills: RoadmapSkill[]; months: RoadmapMonth[];
 };
 export type RoadmapResponse = {
@@ -46,6 +48,7 @@ export function normalizeRoadmap(value: unknown): Roadmap | null {
   return {
     ...roadmap,
     window: { ...roadmap.window, months: list(roadmap.window.months) },
+    advice: list<string>(roadmap.advice).filter((item) => typeof item === "string"),
     study: list<RoadmapStudy>(roadmap.study).map((item) => ({ ...item, careerSkills: list(item.careerSkills) })),
     choices: list<RoadmapChoice>(roadmap.choices).map((item) => ({ ...item, options: list(item.options) })),
     improve: list<RoadmapImprove>(roadmap.improve).map((item) => ({ ...item, careerSkills: list(item.careerSkills) })),

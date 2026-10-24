@@ -2,7 +2,9 @@
 // explains). Pure: read from one competency assessment result (it already holds the course states and grades, the
 // training-plan progress and the gaps to the target career) and the roadmap window. No names, student codes,
 // emails, classes or interests (the privacy policy of 2026-10-11 keeps interests away from the model).
-import type { AssessmentResult, CourseFact, GapStatus } from "../competency-assessment/types.js";
+import { fold } from "../competency-assessment/specialty.js";
+import type { AssessmentResult, CourseFact, GapStatus, PlanCourseRef } from "../competency-assessment/types.js";
+import { THESIS_NAME_PATTERN } from "../graduation/thesis.js";
 import type { RoadmapWindow } from "./window.js";
 
 /**
@@ -11,9 +13,17 @@ import type { RoadmapWindow } from "./window.js";
  * 3 months lead to.
  */
 export type RoadmapCourse = { code: string; name: string; credits: number; source: "running" | "late" | "next"; termCode: string | null; careerSkills: string[] };
-/** A choice of the training plan ("chọn n TC trong …") still open. */
-export type RoadmapChoice = { label: string; source: "next" | "late"; termCode: string | null; need: string; options: { code: string; name: string; credits: number | null }[] };
-/** F/VT: must be taken again; D, D+: worth improving (user, 2026-10-24). */
+export type RoadmapOption = { code: string; name: string; credits: number | null };
+/**
+ * A choice of the training plan ("chọn n TC trong …") still open. The thesis group (TC406, user 2026-10-24: "chuyên đề 1
+ * + chuyên đề 2 hoặc đồ án tốt nghiệp chớ ta") is done one way only: the thesis alone, or both "Chuyên đề tốt nghiệp"
+ * courses; its other courses are never offered, and once a chuyên đề is under way only the other one is.
+ */
+export type RoadmapChoice = {
+  label: string; source: "next" | "late"; termCode: string | null; need: string; options: RoadmapOption[];
+  thesis: { thesis: RoadmapOption | null; topics: RoadmapOption[] } | null;
+};
+/** F/VT: must be taken again; D, D+: worth improving (user, 2026-10-24), never an English course (Anh văn, user 2026-10-24). */
 export type RoadmapImprove = { code: string; name: string; credits: number; letter: string; score10: number | null; action: "retake" | "improve"; careerSkills: string[] };
 /** A skill of the target career to build up: a gap, one only self-study can cover, or a met one worth deepening. key: S01… (the prompt's key). */
 export type RoadmapSkill = {
@@ -38,6 +48,17 @@ export type RoadmapFacts = {
   improve: RoadmapImprove[];
   skills: RoadmapSkill[];
   graduation: { status: string; statusLabel: string };
+  /**
+   * How far graduation is (user 2026-10-24: a K30 student should hear how to keep pace to graduate on time): credits
+   * accumulated and required, the cumulative GPA and its minimum, the groups not complete, the terms the program still
+   * plans after the one being studied and the credits each of them needs on average.
+   */
+  pace: {
+    creditsDone: number | null; creditsRequired: number | null; creditsLeft: number | null;
+    gpa: number | null; gpaRequired: number | null; gpaScale: 4 | 10;
+    openGroups: { label: string; unit: "môn" | "TC"; done: number | null; required: number | null }[];
+    termsLeft: string[]; lastTerm: string | null; creditsPerTerm: number | null; lateCount: number;
+  };
 };
 
 /** Skills offered to the model: required first, the widest gaps first. */
@@ -45,6 +66,11 @@ export const MAX_ROADMAP_SKILLS = 10;
 /** Courses named per skill gap. */
 const MAX_SKILL_COURSES = 4;
 const IMPROVE_LETTERS = new Set(["D", "D+"]);
+/** English courses are never offered for improvement (user, 2026-10-24); a failed one is still a retake. */
+const isEnglish = (item: Pick<CourseFact, "code" | "name">) => /^71ENG/i.test(item.code) || /^(?:anh van|tieng anh)\b/.test(fold(item.name));
+const TOPIC_NAME_PATTERN = /\bchuyen de tot nghiep\b/;
+/** The levels in order, to name the next one a met skill can reach. */
+const LEVEL_LADDER = ["Yếu", "Trung bình", "Khá", "Giỏi", "Xuất sắc"];
 const RETAKE_LETTERS = new Set(["F", "VT"]);
 /** The order a gap is worth working on: below the threshold, not studied, only self-study, then still to come. */
 const STATUS_ORDER: Record<string, number> = { below: 0, not_studied: 1, no_data: 2, upcoming: 3, met: 4 };
@@ -63,7 +89,7 @@ export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult
 
   const improve: RoadmapImprove[] = (result.courses ?? [])
     .filter((item) => item.applicable && !item.conditionOnly && item.letter && (
-      (item.state === "failed" && RETAKE_LETTERS.has(item.letter)) || (item.state === "passed" && IMPROVE_LETTERS.has(item.letter))))
+      (item.state === "failed" && RETAKE_LETTERS.has(item.letter)) || (item.state === "passed" && IMPROVE_LETTERS.has(item.letter) && !isEnglish(item))))
     .map((item) => ({ code: item.code, name: item.name, credits: item.credits, letter: item.letter!, score10: item.score10,
       action: item.state === "failed" ? "retake" as const : "improve" as const, careerSkills: skillsOf(item.code) }))
     // Retakes first, then the lowest grades; courses that build career skills before the others.
@@ -81,21 +107,31 @@ export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult
   for (const item of result.courses ?? []) if (item.state === "in_progress" && item.applicable) add(item, "running", item.term);
   const choices: RoadmapChoice[] = [];
   const progress = result.progress;
+  // The options of a choice still to take; the thesis group keeps only the thesis or its chuyên đề courses.
+  const offered = (options: readonly PlanCourseRef[]): Pick<RoadmapChoice, "options" | "thesis"> => {
+    const open = (option: PlanCourseRef) => option.state !== "passed" && option.state !== "exempt";
+    const plain = ({ code, name, credits }: PlanCourseRef): RoadmapOption => ({ code, name, credits });
+    const thesis = options.find((option) => THESIS_NAME_PATTERN.test(fold(option.name)));
+    if (!thesis) return { options: options.filter(open).map(plain), thesis: null };
+    const topics = options.filter((option) => TOPIC_NAME_PATTERN.test(fold(option.name)));
+    // A chuyên đề under way (or passed) is the chuyên đề path: only the other one is left.
+    const started = topics.some((option) => option.state !== "not_taken" && option.state !== "failed" && option.state !== "not_in_curriculum");
+    const left = started ? topics.filter(open) : [...(open(thesis) ? [thesis] : []), ...topics.filter(open)];
+    return { options: left.map(plain), thesis: { thesis: started || !open(thesis) ? null : plain(thesis), topics: topics.filter(open).map(plain) } };
+  };
   // Before comp-calc-v13 the plan counted from the latest graded term, so its "next term" was the term being studied:
   // the courses it plans there and the student did not register are late, and the term after it is the next one.
   const legacy = Boolean(runningTerm && progress?.nextTerm === runningTerm);
   const upcoming = legacy ? "late" as const : "next" as const;
   for (const entry of progress?.late ?? []) {
     if (entry.kind === "course") add(entry, course.get(entry.code)?.state === "in_progress" ? "running" : "late", entry.termCode);
-    else if (entry.kind === "choice") choices.push({ label: entry.label, source: "late", termCode: entry.termCode, need: `${entry.missing} ${entry.unit === "credit" ? "TC" : "môn"}`,
-      options: entry.options.filter((option) => option.state !== "passed" && option.state !== "exempt").map(({ code, name, credits }) => ({ code, name, credits })) });
-    else choices.push({ label: entry.label, source: "late", termCode: entry.termCode, need: `${Math.max(0, entry.required - entry.passed)} môn`, options: [] });
+    else if (entry.kind === "choice") choices.push({ label: entry.label, source: "late", termCode: entry.termCode, need: `${entry.missing} ${entry.unit === "credit" ? "TC" : "môn"}`, ...offered(entry.options) });
+    else choices.push({ label: entry.label, source: "late", termCode: entry.termCode, need: `${Math.max(0, entry.required - entry.passed)} môn`, options: [], thesis: null });
   }
   for (const entry of progress?.next ?? []) {
     if (entry.kind === "course") add(entry, entry.state === "in_progress" ? "running" : upcoming, progress?.nextTerm ?? null);
-    else if (entry.kind === "choice") choices.push({ label: entry.label, source: upcoming, termCode: progress?.nextTerm ?? null, need: `${entry.remaining} ${entry.unit === "credit" ? "TC" : "môn"}`,
-      options: entry.options.filter((option) => option.state !== "passed" && option.state !== "exempt").map(({ code, name, credits }) => ({ code, name, credits })) });
-    else choices.push({ label: entry.label, source: upcoming, termCode: progress?.nextTerm ?? null, need: `${Math.max(0, entry.required - entry.passed)} môn`, options: [] });
+    else if (entry.kind === "choice") choices.push({ label: entry.label, source: upcoming, termCode: progress?.nextTerm ?? null, need: `${entry.remaining} ${entry.unit === "credit" ? "TC" : "môn"}`, ...offered(entry.options) });
+    else choices.push({ label: entry.label, source: upcoming, termCode: progress?.nextTerm ?? null, need: `${Math.max(0, entry.required - entry.passed)} môn`, options: [], thesis: null });
   }
   let nextTerm = progress?.nextTerm ?? null;
   if (legacy) {
@@ -124,6 +160,16 @@ export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult
       courses: own ? [] : (suggested.get(requirement.skillKey) ?? []).slice(0, MAX_SKILL_COURSES),
     });
   }
+  // Every student hears what to learn next (user 2026-10-24: "dù là bảng điểm tốt thì vẫn phải mở đường cho sv học
+  // tiếp"): with no gap left, each career skill is offered one level up.
+  if (!skills.length) for (const requirement of result.career?.requirements ?? []) {
+    if (!requirement.skillKey || requirement.status !== "met") continue;
+    const level = requirement.levelLabel ?? "Khá";
+    const next = LEVEL_LADDER[LEVEL_LADDER.indexOf(level) + 1];
+    skills.push({ skillKey: requirement.skillKey, name: requirement.skillName ?? requirement.title, kind: "deepen", status: "met",
+      statusLabel: next ? `Đã đạt mức ${level}: nâng lên mức ${next}` : `Đã đạt mức ${level}: mở rộng sang kiến thức nâng cao`,
+      isRequired: requirement.isRequired, score: requirement.score, threshold: requirement.threshold, courses: [] });
+  }
   for (const plan of result.skillPlans ?? []) {
     if (skills.some((item) => item.skillKey === plan.skillKey)) continue;
     const requirement = result.career?.requirements.find((item) => item.skillKey === plan.skillKey);
@@ -137,8 +183,25 @@ export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult
     .slice(0, MAX_ROADMAP_SKILLS)
     .map((item, index) => ({ key: `S${String(index + 1).padStart(2, "0")}`, ...item }));
 
+  // Terms the program still plans after the one being studied (the last planned term of an applicable course).
+  const from = runningTerm ?? result.progress?.currentTerm ?? result.transcript?.latestTerm ?? null;
+  const planned = [...new Set((result.courses ?? []).filter((item) => item.applicable && item.plannedTerm).map((item) => item.plannedTerm!))].sort();
+  const lastTerm = planned.at(-1) ?? null;
+  const termsLeft = planned.filter((term) => !from || term > from);
+  const credits = result.graduation?.credits ?? null;
+  const creditsLeft = credits?.lower !== null && credits?.lower !== undefined ? Math.max(0, credits.required - credits.lower) : null;
+  const pace: RoadmapFacts["pace"] = {
+    creditsDone: credits?.lower ?? null, creditsRequired: credits?.required ?? null, creditsLeft,
+    gpa: result.graduation?.gpa?.actual ?? null, gpaRequired: result.graduation?.gpa?.required ?? null, gpaScale: result.graduation?.gpa?.scale ?? 4,
+    openGroups: (result.graduation?.groups ?? []).filter((group) => group.status !== "pass")
+      .map((group) => ({ label: group.label, unit: group.unit, done: group.lower, required: group.required })),
+    termsLeft, lastTerm,
+    creditsPerTerm: creditsLeft !== null && termsLeft.length ? Math.ceil(creditsLeft / termsLeft.length) : null,
+    lateCount: result.progress?.lateCount ?? 0,
+  };
+
   return {
-    window, assessmentId, calcVersion: result.meta.calcVersion,
+    window, assessmentId, calcVersion: result.meta.calcVersion, pace,
     cohortCode: result.student.cohortCode, specialtyLabel: result.student.specialtyLabel, careerName: result.career?.nameVi ?? null,
     currentTerm: result.transcript?.latestTerm ?? null, runningTerm, nextTerm,
     study, choices, improve, skills: ordered,

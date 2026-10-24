@@ -1,4 +1,5 @@
 import { useMemo, useState, type DragEvent } from "react";
+import type { PlanOrigin } from "./StudentRoadmap";
 import { Icon } from "./student-icons";
 import { Mark } from "./RoadmapProgress";
 import {
@@ -6,7 +7,8 @@ import {
   termLabel, termLoad, type PlanIssue, type StudyPlanContext, type StudyPlanCourse, type StudyPlanData,
 } from "./study-plan-data";
 
-// "Lên kế hoạch cho con đường của bạn (Thủ công)" of #roadmap (user 2026-10-24, after Stellic's planner): the terms ahead,
+// "Kế hoạch học kỳ" of #roadmap (user 2026-10-24, after Stellic's planner; it starts from the training plan and the AI
+// roadmap's proposal, study-plan/prefill.ts): the terms ahead,
 // the courses still needed on the right ("Danh sách chờ") or found by search, placed by drag and drop or "Thêm vào";
 // missing prerequisites and courses no training plan opens in that term are flagged. No weekly schedule.
 
@@ -31,8 +33,11 @@ function CourseFacts({ course, names }: { course: StudyPlanCourse; names: Readon
   return <small className="rm-course-facts">{facts.join(" · ")}</small>;
 }
 
-export function RoadmapPlanner({ context, plan, onChange, saveState, saveError }: {
+const dateTime = (iso: string) => new Date(iso).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" });
+
+export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, origin, onOpenAi }: {
   context: StudyPlanContext; plan: StudyPlanData; onChange: (plan: StudyPlanData) => void; saveState: SaveState; saveError: string;
+  origin: PlanOrigin; onOpenAi: () => void;
 }) {
   const [side, setSide] = useState<"list" | "search">("list");
   const [query, setQuery] = useState("");
@@ -78,12 +83,20 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError }
   return <section className="sw-panel rm-planner-panel" aria-labelledby="rm-planner-title">
     <header className="rm-planner-head">
       <div>
-        <h2 id="rm-planner-title">Lên kế hoạch cho con đường của bạn</h2>
-        <p>Xếp các học phần còn thiếu vào từng học kỳ: kéo từ Danh sách chờ vào học kỳ, hoặc chọn học kỳ ở "Thêm vào" rồi bấm Thêm. Kế hoạch tự lưu và được tính ở chế độ Theo kế hoạch của mục Theo dõi tiến độ.</p>
+        <h2 id="rm-planner-title">Kế hoạch học kỳ</h2>
+        <p>Kế hoạch được điền sẵn các học phần bắt buộc theo kế hoạch đào tạo của khóa và các học phần lộ trình AI đề xuất. Bạn điều chỉnh bằng cách kéo học phần giữa các học kỳ, kéo từ Danh sách chờ vào, hoặc chọn học kỳ ở "Thêm vào" rồi bấm Thêm. Kế hoạch tự lưu và được tính ở chế độ Theo kế hoạch của mục Theo dõi tiến độ.</p>
       </div>
       <p className={`rm-save rm-save-${saveState}`} role="status">{saveState === "saving" ? "Đang lưu…" : saveState === "saved" ? "Đã lưu" : saveState === "dirty" ? "Có thay đổi chưa lưu" : saveState === "error" ? saveError || "Chưa lưu được" : ""}</p>
     </header>
     {!context.curriculum && <p className="rm-note">Chưa có chương trình đào tạo cho khóa của bạn nên chưa có danh sách học phần để lên kế hoạch.</p>}
+    {origin?.kind === "ai" && <p className="rm-origin"><Mark kind="planned" /> {origin.added
+      ? `Đã thêm ${origin.added} học phần do lộ trình AI đề xuất (lộ trình soạn lúc ${dateTime(origin.completedAt)}), từ ${termLabel(origin.term)} theo học kỳ kế hoạch đào tạo mở môn. Bạn điều chỉnh tiếp bên dưới.`
+      : `Các học phần lộ trình AI đề xuất (soạn lúc ${dateTime(origin.completedAt)}) đã có sẵn trong kế hoạch.`}</p>}
+    {origin?.kind === "prefill" && <p className="rm-origin"><Mark kind="planned" /> Kế hoạch được điền sẵn các học phần bắt buộc theo kế hoạch đào tạo của khóa. Khi bạn chỉnh sửa, kế hoạch sẽ được lưu.</p>}
+    {!plan.terms.some((term) => term.courses.length) && !runningIn(context, context.currentTerm).length && context.curriculum && <div className="rm-origin rm-origin-empty">
+      <p>Chưa có học phần nào được điền sẵn: các học phần còn lại của bạn đã trễ so với kế hoạch đào tạo, hoặc bạn chưa tạo lộ trình AI. Hãy tạo Lộ trình AI để được đề xuất, rồi điều chỉnh tại đây.</p>
+      <button type="button" className="sw-outline" onClick={onOpenAi}>Mở Lộ trình AI đề xuất</button>
+    </div>}
     <div className="rm-planner">
       <div className="rm-terms">
         {plan.terms.map((term) => {
