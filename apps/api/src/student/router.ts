@@ -9,6 +9,7 @@ import { parseTranscript, TranscriptError, type TranscriptData } from "./transcr
 import { enqueueTranscript, expireJobs, jobColumns, runAfterTranscriptImport, type TranscriptImportOptions } from "./transcript-jobs.js";
 import { activeConsentVersion, recordConsent, recordTranscriptConsent, TRANSCRIPT_POLICY_VERSION, withdrawConsent, withdrawTranscriptConsent } from "./consent.js";
 import { ACHIEVEMENTS_MAX, deleteSurvey, parseSurveyInput, readSurvey, saveSurvey, SURVEY_QUESTIONS } from "./survey.js";
+import { bothOrNeither, interestFields } from "./interests.js";
 import { deleteCompetencyData } from "../competency-assessment/repository.js";
 import { specialtyOffered } from "../competency-assessment/specialty.js";
 import { deleteGraduationAdvice } from "../graduation/advice/jobs.js";
@@ -39,8 +40,10 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
       careerGoal: z.string().trim().max(2000).nullable().optional(),
       careerPositionId: z.uuid().nullable().optional(),
       currentSemester: z.number().int().min(1).max(3).nullable().optional(),
-      specialty: z.enum(["CNPM", "CNDL", "TTNT", "ANM", "KCN"]).nullable().optional()
-    }).strict().safeParse(req.body);
+      specialty: z.enum(["CNPM", "CNDL", "TTNT", "ANM", "KCN"]).nullable().optional(),
+      // "Sở thích" as choices since 2026-10-24 (interests.ts); the free-text interests above stay for older pages.
+      ...interestFields,
+    }).strict().refine(bothOrNeither).safeParse(req.body);
     if (!input.success) { res.status(400).json({ error: "invalid_profile" }); return; }
     const client = await pool!.connect();
     try {
@@ -68,6 +71,11 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
           if (!specialtyOffered(input.data.specialty, cohort.rows[0]?.cohort_code)) throw new TranscriptError("specialty_unavailable", 409);
         }
         await client.query("UPDATE student_profiles SET specialty=$2 WHERE user_id=$1", [req.session.user!.userId, input.data.specialty]);
+      }
+      // The choices replace the free text, which is cleared.
+      if (input.data.interestTech && input.data.interestHobbies) {
+        await client.query("UPDATE student_profiles SET interest_tech=$2,interest_hobbies=$3,interests=NULL WHERE user_id=$1",
+          [req.session.user!.userId, input.data.interestTech, input.data.interestHobbies]);
       }
       await client.query("COMMIT");
       res.json({ saved: true });

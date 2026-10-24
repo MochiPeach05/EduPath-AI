@@ -3,10 +3,16 @@ import { Icon } from "./student-icons";
 import { type CareerSelection } from "./career-types";
 import StudentCareerExplorer from "./StudentCareerExplorer";
 import { specialtiesFor, specialtyLabel } from "./competency-assessment-types";
+import { INTEREST_HOBBIES, INTEREST_MAX, INTEREST_TECH, interestLabels, interestProblem, toggleInterest, type InterestOption } from "./profile-interests";
 import "./student-records.css";
+import "./profile-survey.css";
 type EditableStudentProfile = {
   className: string | null;
+  /** Free text written before 2026-10-24; saving the choices below clears it. */
   interests: string | null;
+  /** "Sở thích" as choices (profile-interests.ts); absent on older APIs. */
+  interestTech?: string[];
+  interestHobbies?: string[];
   careerGoal: string | null;
   careerPositionId?: string | null;
   careerPosition?: CareerSelection | null;
@@ -15,7 +21,7 @@ type EditableStudentProfile = {
   /** Decides which specialties are offered (An ninh Mạng và IoTs: K27 only). */
   cohortCode?: string | null;
 };
-async function updateProfile(input: { interests?: string; careerPositionId: string | null; specialty?: string | null }) {
+async function updateProfile(input: { careerPositionId: string | null; specialty?: string | null; interestTech?: string[]; interestHobbies?: string[] }) {
   const res = await fetch("/api/student/profile", {
     method: "PATCH",
     credentials: "include",
@@ -33,11 +39,30 @@ async function updateProfile(input: { interests?: string; careerPositionId: stri
         : res.status === 401
           ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
           : res.status === 400
-            ? "Thông tin chưa hợp lệ. Sở thích tối đa 2.000 ký tự."
+            ? "Thông tin chưa hợp lệ. Vui lòng kiểm tra lại các lựa chọn."
             : "Không lưu được hồ sơ. Vui lòng thử lại.",
     );
   }
 }
+/** One list of "Sở thích": checkbox chips like the survey's answers, 1 to INTEREST_MAX. */
+function InterestGroup({ name, legend, hint, options, value, error, onChange }: {
+  name: string; legend: string; hint: string; options: InterestOption[]; value: string[]; error: string; onChange: (value: string[]) => void;
+}) {
+  const full = value.length >= INTEREST_MAX;
+  return <fieldset className={`ps-question pi-group sr-wide${error ? " ps-invalid" : ""}`} data-field={name} aria-describedby={error ? `pi-error-${name}` : undefined}>
+    <legend><span>{legend}<span className="ps-required" aria-hidden="true">*</span></span></legend>
+    <p className="pi-hint">{hint} Đã chọn {value.length}/{INTEREST_MAX}.</p>
+    <div className="ps-options">{options.map((option) => {
+      const checked = value.includes(option.id);
+      return <label key={option.id} className={`ps-option${!checked && full ? " pi-full" : ""}`}>
+        <input type="checkbox" checked={checked} disabled={!checked && full} onChange={() => onChange(toggleInterest(value, option.id))} />
+        <span>{option.label}</span>
+      </label>;
+    })}</div>
+    {error && <p className="ps-field-error" id={`pi-error-${name}`}>{error}</p>}
+  </fieldset>;
+}
+
 export default function StudentProfileEditor({
   profile,
   onSaved,
@@ -47,10 +72,12 @@ export default function StudentProfileEditor({
 }) {
   const [editing, setEditing] = useState(false),
     [draft, setDraft] = useState({
-      interests: "",
       careerPositionId: "",
       specialty: "",
+      interestTech: [] as string[],
+      interestHobbies: [] as string[],
     });
+  const [attempted, setAttempted] = useState(false);
   const [busy, setBusy] = useState(false),
     [message, setMessage] = useState(""),
     [error, setError] = useState("");
@@ -60,10 +87,12 @@ export default function StudentProfileEditor({
   useEffect(() => {
     if (!editing) {
       setDraft({
-        interests: profile.interests ?? "",
         careerPositionId: profile.careerPositionId ?? "",
         specialty: profile.specialty ?? "",
+        interestTech: profile.interestTech ?? [],
+        interestHobbies: profile.interestHobbies ?? [],
       });
+      setAttempted(false);
       setDraftCareer(profile.careerPosition ?? null);
     }
   }, [profile, editing]);
@@ -81,15 +110,23 @@ export default function StudentProfileEditor({
       setBusy(false);
     }
   };
+  const techProblem = interestProblem("tech", draft.interestTech);
+  const hobbyProblem = interestProblem("hobbies", draft.interestHobbies);
   const save = async (event: FormEvent) => {
     event.preventDefault();
+    setAttempted(true);
+    setMessage("");
+    if (techProblem || hobbyProblem) {
+      (event.currentTarget as HTMLFormElement).querySelector<HTMLInputElement>(`[data-field="${techProblem ? "tech" : "hobbies"}"] input:not(:disabled)`)?.focus();
+      return;
+    }
     setBusy(true);
     setError("");
-    setMessage("");
     try {
-      const { specialty, ...rest } = draft;
+      const { specialty, interestTech, interestHobbies } = draft;
       await updateProfile({
-        ...rest,
+        interestTech,
+        interestHobbies,
         careerPositionId: draft.careerPositionId || null,
         // Sent only when changed: "absent" keeps the stored value.
         ...(supportsSpecialty && specialty !== (profile.specialty ?? "") ? { specialty: specialty || null } : {}),
@@ -156,18 +193,11 @@ export default function StudentProfileEditor({
               </select>
               <small>Cùng với khóa, dùng để chọn tiêu chuẩn xét tốt nghiệp của bạn và học phần chuyên ngành khi đánh giá năng lực.</small>
             </label>}
-            <label className="sr-wide">
-              Sở thích
-              <textarea
-                rows={3}
-                maxLength={2000}
-                value={draft.interests}
-                onChange={(e) =>
-                  setDraft({ ...draft, interests: e.target.value })
-                }
-                placeholder="Lĩnh vực công nghệ, hoạt động bạn quan tâm…"
-              />
-            </label>
+            {profile.interests?.trim() && !profile.interestTech?.length && <p className="sr-wide pi-legacy">Trước đây bạn đã ghi sở thích: “{profile.interests.trim()}”. Hãy chọn lại theo các danh sách dưới đây.</p>}
+            <InterestGroup name="tech" legend="Công nghệ bạn thích" hint="Chọn từ 1 đến 5 công nghệ." options={INTEREST_TECH} value={draft.interestTech}
+              error={attempted ? techProblem : ""} onChange={(interestTech) => setDraft({ ...draft, interestTech })} />
+            <InterestGroup name="hobbies" legend="Sở thích khi rảnh" hint="Chọn từ 1 đến 5 hoạt động." options={INTEREST_HOBBIES} value={draft.interestHobbies}
+              error={attempted ? hobbyProblem : ""} onChange={(interestHobbies) => setDraft({ ...draft, interestHobbies })} />
           </fieldset>
           <div className="sr-actions sr-form-actions">
             <button
@@ -216,8 +246,12 @@ export default function StudentProfileEditor({
             <dd>{specialtyLabel(profile.specialty)}</dd>
           </div>}
           <div>
-            <dt>Sở thích</dt>
-            <dd>{profile.interests || "Chưa cập nhật sở thích."}</dd>
+            <dt>Công nghệ bạn thích</dt>
+            <dd>{interestLabels(INTEREST_TECH, profile.interestTech).join(", ") || "Chưa chọn."}</dd>
+          </div>
+          <div>
+            <dt>Sở thích khi rảnh</dt>
+            <dd>{interestLabels(INTEREST_HOBBIES, profile.interestHobbies).join(", ") || "Chưa chọn."}</dd>
           </div>
         </dl>
       )}

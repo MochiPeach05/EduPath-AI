@@ -21,7 +21,14 @@ Mỗi câu chọn đúng một đáp án; cả 10 câu và câu thành tích đ�
 
 **Thành tích (cuộc thi, giải thưởng, danh hiệu, học bổng)**: Có/Không bắt buộc; chọn Có thì phải liệt kê (mỗi dòng một thành tích, tối đa 1.000 ký tự sau khi bỏ ký tự điều khiển, khoảng trắng đầu cuối và dòng trống). Chọn Không thì danh sách bị bỏ.
 
-Ô **Sở thích** (văn bản tự do về công nghệ, hoạt động quan tâm) giữ nguyên trong Thông tin cá nhân và vẫn không gửi cho AI.
+## Sở thích (chọn sẵn)
+
+Người dùng (24/10/2026, sau khảo sát): "Cái phần sở thích này cũng sẽ làm dạng các công nghệ, sở thích khi rảnh ... dạng radius, để tránh việc sv bỏ trống hoặc nhập bừa". Ô văn bản **Sở thích** trong Thông tin cá nhân được thay bằng hai nhóm ô chọn (giống nút chọn của khảo sát, mỗi nhóm bắt buộc chọn 1–5, vì một bạn thường thích nhiều công nghệ; đủ 5 thì các ô còn lại khóa):
+
+- **Công nghệ bạn thích** (`interest_tech`): Web front-end (HTML, CSS, JavaScript, React); Web back-end (Node.js, Java, .NET, PHP); Ứng dụng di động (Android, iOS, Flutter); Python, phân tích dữ liệu; Trí tuệ nhân tạo, học máy; Cơ sở dữ liệu (SQL, NoSQL); Cloud, DevOps (Docker, AWS); An ninh mạng; Mạng máy tính; Phát triển game (Unity, Unreal); Nhúng, IoT; Thiết kế UI/UX; Kiểm thử phần mềm; Blockchain.
+- **Sở thích khi rảnh** (`interest_hobbies`): Tự làm dự án, viết code; Đọc sách, tài liệu; Học khóa học trực tuyến; Thi lập trình, giải thuật; Chơi game; Thể thao, vận động; Âm nhạc; Vẽ, thiết kế, chụp ảnh; Viết blog, làm nội dung; Câu lạc bộ, tình nguyện; Du lịch, khám phá; Học ngoại ngữ.
+
+Migration `049_student_profile_interests.sql` thêm hai cột `TEXT[]` (tối đa 5 phần tử) vào `student_profiles`. `PATCH /api/student/profile` nhận `interestTech` và `interestHobbies` cùng lúc (mã trong `apps/api/src/student/interests.ts`, nhãn ở `apps/web/src/profile-interests.ts`, `interests.test.ts` giữ hai danh sách khớp nhau); khi lưu, văn bản sở thích cũ bị xóa. Bỏ trống thì báo "Vui lòng chọn ít nhất một công nghệ bạn thích." / "Vui lòng chọn ít nhất một sở thích khi rảnh.". Ai đã ghi sở thích bằng chữ trước đây thấy lại câu đó khi chỉnh sửa để chọn lại. Mục "Sở thích cá nhân" của hồ sơ (và `profileStatus = complete`) giờ tính theo hai danh sách này, không theo văn bản cũ. Sở thích vẫn **không** gửi cho AI (chính sách 2026-10-24 giữ nguyên).
 
 ## Lưu trữ, đồng ý và API
 

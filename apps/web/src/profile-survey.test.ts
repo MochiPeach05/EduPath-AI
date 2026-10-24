@@ -47,8 +47,9 @@ describe("required profile", () => {
     expect(requiredProfileItems(profile(), false).map((item) => [item.id, item.done])).toEqual([
       ["transcript", false], ["specialty", false], ["career", false], ["interests", false], ["survey", false],
     ]);
-    const complete = profile({ specialty: "CNPM", careerPositionId: "c1", interests: "Web", surveyUpdatedAt: "2026-10-24T10:00:00.000Z" });
+    const complete = profile({ specialty: "CNPM", careerPositionId: "c1", interestTech: ["ai_ml"], interestHobbies: ["reading"], surveyUpdatedAt: "2026-10-24T10:00:00.000Z" });
     expect(requiredProfileItems(complete, true).every((item) => item.done)).toBe(true);
-    expect(requiredProfileItems(profile({ interests: "   " }), true).find((item) => item.id === "interests")?.done).toBe(false);
+    // Free text written before the choices no longer counts.
+    expect(requiredProfileItems(profile({ interests: "Web" }), true).find((item) => item.id === "interests")?.done).toBe(false);
   });
 });

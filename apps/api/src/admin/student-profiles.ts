@@ -24,6 +24,8 @@ export interface StudentProfileDetail extends StudentProfileSummary {
   careerPositionId?: string | null;
   careerPosition?: { id: string; nameVi: string; nameEn: string; deletedAt: string | null } | null;
   interests: string | null;
+  /** "Sở thích" as choices (migration 049): option ids, labels in the web's profile-interests.ts. */
+  interestTech?: string[]; interestHobbies?: string[];
   /** When the profile survey was last saved (stu_profile_surveys); the answers stay with the student. */
   surveyUpdatedAt?: string | null;
   username: string | null; careerGoal: string | null;
@@ -36,9 +38,10 @@ export interface StudentProfileRepository {
   detail(actor: AuthenticatedUser, id: string): Promise<StudentProfileDetail>;
 }
 // Derive completion from saved data so profile edits and transcript deletion stay in sync. Since 2026-10-24 the
-// specialty and the profile survey count too (the student portal asks for both before its AI features).
+// specialty and the profile survey count too (the student portal asks for both before its AI features), and interests
+// are the chosen technologies and free-time interests (049), no longer the free text.
 const profileStatus = `CASE WHEN p.user_id IS NULL THEN 'missing'
-  WHEN NULLIF(btrim(p.interests), '') IS NOT NULL
+  WHEN cardinality(p.interest_tech) > 0 AND cardinality(p.interest_hobbies) > 0
     AND p.career_position_id IS NOT NULL
     AND p.specialty IS NOT NULL
     AND EXISTS (SELECT 1 FROM student_transcripts t WHERE t.user_id = p.user_id)
@@ -75,6 +78,7 @@ export class PostgresStudentProfileRepository implements StudentProfileRepositor
     const result = await this.pool.query<StudentProfileDetail>(`SELECT ${summaryColumns}, u.username,
       p.career_goal AS "careerGoal", p.career_position_id AS "careerPositionId", p.specialty,
       (SELECT json_build_object('id',c.id,'nameVi',c.name_vi,'nameEn',c.name_en,'deletedAt',c.deleted_at) FROM career_positions c WHERE c.id=p.career_position_id) AS "careerPosition", p.interests,
+      COALESCE(p.interest_tech,'{}') AS "interestTech", COALESCE(p.interest_hobbies,'{}') AS "interestHobbies",
       (SELECT s.updated_at FROM stu_profile_surveys s WHERE s.user_id=u.id) AS "surveyUpdatedAt", u.created_at AS "accountCreatedAt", u.first_login_at AS "firstLoginAt",
       u.last_login_at AS "lastLoginAt", p.created_at AS "profileCreatedAt", p.updated_at AS "profileUpdatedAt"
       FROM users u LEFT JOIN student_profiles p ON p.user_id = u.id

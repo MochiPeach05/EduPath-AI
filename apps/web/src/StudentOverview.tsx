@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import type { Transcript } from "./StudentTranscript";
 import { academicSections, latestResultSection, printedSemesterGpa } from "./student-overview-data";
 import { Icon } from "./student-icons";
+import { hasInterests } from "./profile-interests";
 import { isFailLetter } from "./transcript-results";
 
 export type StudentProfile = {
@@ -12,6 +13,8 @@ export type StudentProfile = {
   name: string; studentCode: string | null; cohortCode: string | null;
   className: string | null; cohortYear: number | null; currentSemester: number | null;
   email: string | null; careerGoal: string | null; interests: string | null; profileStatus: string;
+  /** "Sở thích" as choices since 2026-10-24 (profile-interests.ts). */
+  interestTech?: string[]; interestHobbies?: string[];
   /** When the profile survey ("Khảo sát định hướng") was saved; null when not yet. */
   surveyUpdatedAt?: string | null;
 };
@@ -25,7 +28,7 @@ export function requiredProfileItems(profile: StudentProfile | null, hasTranscri
     { id: "transcript", label: "Bảng điểm học tập", hint: "Tải bảng điểm PDF của bạn", done: hasTranscript },
     { id: "specialty", label: "Chuyên ngành", hint: "Chọn trong Thông tin cá nhân", done: Boolean(profile?.specialty) },
     { id: "career", label: "Nghề mục tiêu", hint: "Chọn vị trí nghề nghiệp mong muốn", done: Boolean(profile?.careerPositionId) },
-    { id: "interests", label: "Sở thích cá nhân", hint: "Công nghệ, hoạt động bạn quan tâm", done: Boolean(profile?.interests?.trim()) },
+    { id: "interests", label: "Sở thích cá nhân", hint: "Chọn công nghệ bạn thích và sở thích khi rảnh", done: hasInterests(profile) },
     { id: "survey", label: "Khảo sát định hướng", hint: "Trả lời câu hỏi và cho biết thành tích", done: Boolean(profile?.surveyUpdatedAt) },
   ];
 }

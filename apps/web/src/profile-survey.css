@@ -258,3 +258,45 @@
     flex: 1 1 100%;
   }
 }
+
+/* "Sở thích" choices inside Thông tin cá nhân (StudentProfileEditor InterestGroup): undo the editor's grid labels and
+   full-width inputs, which would otherwise apply to the chips. */
+.sr-form-fields .pi-group .ps-option {
+  display: inline-flex;
+  gap: 8px;
+  font-size: 13px;
+  color: #3b4456;
+}
+
+.sr-form-fields .pi-group .ps-option:has(input:checked) {
+  color: var(--sw-ink);
+}
+
+.sr-form-fields .pi-group .ps-option input {
+  width: 16px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 0;
+}
+
+.pi-group .ps-option.pi-full {
+  opacity: .5;
+  cursor: not-allowed;
+}
+
+.pi-hint {
+  margin: 6px 0 0;
+  color: var(--sw-muted);
+  font-size: 12px;
+}
+
+.pi-legacy {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #fffbea;
+  color: #5c4a10;
+  font-size: 12px;
+  line-height: 1.6;
+}
