@@ -5,7 +5,8 @@
 // workers that advertise the "career_skill_suggestion" kind and graduation advice
 // (graduation/advice/jobs.ts) to workers that advertise "graduation_advice", and AI proposals for
 // the courses of a CTĐT (competencies/ai/jobs.ts) to workers that advertise
-// "competency_course_suggestion_v2"; extend/complete find the id in any of the job tables.
+// "competency_course_suggestion_v2", and study roadmaps (roadmap/jobs.ts) to workers that advertise
+// "study_roadmap"; extend/complete find the id in any of the job tables.
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import express, { Router, type ErrorRequestHandler, type RequestHandler } from "express";
 import { z } from "zod";
@@ -28,6 +29,7 @@ import {
   createCourseSuggestionExpiry,
   extendCourseSuggestion
 } from "../../competencies/ai/jobs.js";
+import { claimRoadmap, completeRoadmap, createRoadmapExpiry, extendRoadmap } from "../../roadmap/jobs.js";
 import { cleanAiOutputKeys, keyNamesFrom } from "./key-cleanup.js";
 import { validateAiOutput, validationContextFromAiInput } from "./validate.js";
 import {
@@ -39,6 +41,7 @@ import {
   COMPETENCY_ASSESSMENT_KIND,
   COMPETENCY_COURSE_SUGGESTION_KIND,
   GRADUATION_ADVICE_KIND,
+  STUDY_ROADMAP_KIND,
   normalizeJobKinds,
   type AiJobKind
 } from "./worker-protocol.js";
@@ -114,6 +117,7 @@ export function createCompetencyWorkerRouter(pool: DatabasePool | undefined, aiW
   const careerHousekeeping = createCareerSuggestionExpiry();
   const graduationHousekeeping = createGraduationAdviceExpiry();
   const courseHousekeeping = createCourseSuggestionExpiry();
+  const roadmapHousekeeping = createRoadmapExpiry();
 
   const authenticate: RequestHandler = (req, res, next) => {
     res.setHeader("Cache-Control", "no-store");
@@ -168,6 +172,7 @@ export function createCompetencyWorkerRouter(pool: DatabasePool | undefined, aiW
     await careerHousekeeping(db);
     await graduationHousekeeping(db);
     await courseHousekeeping(db);
+    await roadmapHousekeeping(db);
     // Career suggestions first: an admin is waiting on the page and these jobs are rare.
     if (kinds.includes(CAREER_SKILL_SUGGESTION_KIND)) {
       const career = await claimCareerSuggestion(db, randomUUID());
@@ -178,6 +183,11 @@ export function createCompetencyWorkerRouter(pool: DatabasePool | undefined, aiW
     if (kinds.includes(GRADUATION_ADVICE_KIND)) {
       const advice = await claimGraduationAdvice(db, randomUUID());
       if (advice) { res.json({ job: workerJob(GRADUATION_ADVICE_KIND, advice) }); return; }
+    }
+    // Then study roadmaps: the student pressed "Tạo lộ trình" and waits on the page.
+    if (kinds.includes(STUDY_ROADMAP_KIND)) {
+      const roadmap = await claimRoadmap(db, randomUUID());
+      if (roadmap) { res.json({ job: workerJob(STUDY_ROADMAP_KIND, roadmap) }); return; }
     }
     if (kinds.includes(COMPETENCY_ASSESSMENT_KIND)) {
       const result = await db.query<{ id: string; leaseToken: string; aiInput: Record<string, unknown> }>(`WITH candidate AS (
@@ -213,7 +223,8 @@ export function createCompetencyWorkerRouter(pool: DatabasePool | undefined, aiW
         WHERE id=$1 AND status='processing' AND lease_token=$2 AND lease_until>now() RETURNING lease_until AS "leaseUntil"`,
       [id, body.data.leaseToken, AI_JOB_LEASE_MINUTES]);
     const leaseUntil = result.rows[0]?.leaseUntil ?? await extendCareerSuggestion(db, id, body.data.leaseToken)
-      ?? await extendGraduationAdvice(db, id, body.data.leaseToken) ?? await extendCourseSuggestion(db, id, body.data.leaseToken);
+      ?? await extendGraduationAdvice(db, id, body.data.leaseToken) ?? await extendCourseSuggestion(db, id, body.data.leaseToken)
+      ?? await extendRoadmap(db, id, body.data.leaseToken);
     if (!leaseUntil) throw new WorkerError("job_expired", 409);
     res.json({ leaseUntil: new Date(leaseUntil).toISOString() });
   });
@@ -235,10 +246,11 @@ export function createCompetencyWorkerRouter(pool: DatabasePool | undefined, aiW
         return;
       }
       if (!job) {
-        // Not a competency job: the id may be a career skill suggestion, a graduation advice or a course proposal.
+        // Not a competency job: the id may be a career skill suggestion, a graduation advice, a course proposal or a roadmap.
         const career = await completeCareerSuggestion(client, id, input);
         const graduation = career === "missing" ? await completeGraduationAdvice(client, id, input) : career;
-        const outcome = graduation === "missing" ? await completeCourseSuggestion(client, id, input) : graduation;
+        const course = graduation === "missing" ? await completeCourseSuggestion(client, id, input) : graduation;
+        const outcome = course === "missing" ? await completeRoadmap(client, id, input) : course;
         if (outcome !== "ok") throw new WorkerError("job_expired", 409);
         await client.query("COMMIT");
         res.json({ ok: true });

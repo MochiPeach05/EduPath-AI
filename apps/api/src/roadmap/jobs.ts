@@ -1,0 +1,227 @@
+// Study roadmap jobs. A stu_roadmaps row is both the AI worker job (kind "study_roadmap", handed out by
+// /api/worker/competency-assessments, whose router calls the claim/extend/complete functions below) and the stored
+// roadmap. The student asks for one on the page ("Tạo lộ trình", "Tạo lại"); it is built from the newest competency
+// assessment and goes with it (foreign key ON DELETE CASCADE: transcript replaced or deleted, consent withdrawn,
+// assessment pruned). One pending row per student; the newest MAX_ROADMAPS_PER_USER rows are kept.
+import { randomUUID } from "node:crypto";
+import type { PoolClient } from "pg";
+import {
+  AI_HOUSEKEEPING_INTERVAL_MS,
+  AI_JOB_LEASE_MINUTES,
+  AI_JOB_MAX_ATTEMPTS,
+  type WorkerCompletion,
+} from "../competency-assessment/ai/worker-protocol.js";
+import type { AssessmentResult } from "../competency-assessment/types.js";
+import type { DatabasePool } from "../db/pool.js";
+import { buildRoadmapFacts, type RoadmapFacts } from "./facts.js";
+import { buildRoadmapInput } from "./prompt.js";
+import { roadmapContextFromAiInput, validateRoadmapOutput, type RoadmapOutput } from "./validate.js";
+import { roadmapWindow } from "./window.js";
+
+/** Serializes the pending checks, the queue-size check and the inserts of concurrent requests. */
+const ROADMAP_QUEUE_LOCK = "edupath:study-roadmap";
+/** New work is refused while this many roadmaps of OTHER students are queued or processing. */
+const MAX_PENDING_ROADMAPS = 20;
+/** Rows kept per student (newest first); older finished rows are pruned on every insert. */
+const MAX_ROADMAPS_PER_USER = 5;
+/** At most one insert per student within this many seconds. */
+const ROADMAP_INSERT_INTERVAL_SECONDS = 30;
+
+type Db = Pick<DatabasePool, "query">;
+const PENDING = "('queued','processing')";
+
+export type RoadmapStatus = "queued" | "processing" | "completed" | "failed" | "cancelled";
+
+/** A stored row as the student routes read it. */
+export type RoadmapRow = {
+  id: string;
+  assessmentId: string;
+  status: RoadmapStatus;
+  errorCode: string | null;
+  createdAt: Date | string;
+  completedAt: Date | string | null;
+  model: string | null;
+  facts: RoadmapFacts;
+  output: RoadmapOutput | null;
+  /** Created within ROADMAP_INSERT_INTERVAL_SECONDS (database clock). */
+  recent: boolean;
+};
+
+export class RoadmapError extends Error {
+  constructor(readonly code: string, readonly status: number) {
+    super(code);
+    this.name = "RoadmapError";
+  }
+}
+
+const rowColumns = `id,assessment_id AS "assessmentId",status,error_code AS "errorCode",created_at AS "createdAt",completed_at AS "completedAt",
+  ai_model AS model,facts,ai_output AS output,created_at>now()-make_interval(secs => $2) AS recent`;
+
+/** Every roadmap row of the student, newest first (at most a handful: they are pruned on insert). */
+export async function readRoadmapRows(db: Db, userId: string): Promise<RoadmapRow[]> {
+  const result = await db.query<RoadmapRow>(
+    `SELECT ${rowColumns} FROM stu_roadmaps WHERE user_id=$1 ORDER BY created_at DESC,id DESC`, [userId, ROADMAP_INSERT_INTERVAL_SECONDS]);
+  return result.rows;
+}
+
+/** The newest roadmap of the student, or null (GET /). */
+export async function readNewestRoadmap(db: Db, userId: string): Promise<RoadmapRow | null> {
+  const result = await db.query<RoadmapRow>(
+    `SELECT ${rowColumns} FROM stu_roadmaps WHERE user_id=$1 ORDER BY created_at DESC,id DESC LIMIT 1`, [userId, ROADMAP_INSERT_INTERVAL_SECONDS]);
+  return result.rows[0] ?? null;
+}
+
+/** The newest assessment without its result (GET /): its id, its time and whether it has a target career. */
+export async function newestAssessmentInfo(db: Db, userId: string): Promise<{ id: string; createdAt: Date | string; hasCareer: boolean } | null> {
+  const result = await db.query<{ id: string; createdAt: Date | string; hasCareer: boolean }>(
+    `SELECT id,created_at AS "createdAt",jsonb_typeof(computed->'career')='object' AS "hasCareer" FROM stu_comp_assessments
+      WHERE user_id=$1 ORDER BY created_at DESC,id DESC LIMIT 1`, [userId]);
+  return result.rows[0] ?? null;
+}
+
+/** The newest competency assessment of the student: what a roadmap is built from. */
+export async function newestAssessment(db: Db, userId: string): Promise<{ id: string; createdAt: Date | string; computed: AssessmentResult } | null> {
+  const result = await db.query<{ id: string; createdAt: Date | string; computed: AssessmentResult }>(
+    `SELECT id,created_at AS "createdAt",computed FROM stu_comp_assessments WHERE user_id=$1 ORDER BY created_at DESC,id DESC LIMIT 1`, [userId]);
+  return result.rows[0] ?? null;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Housekeeping */
+
+/**
+ * Fails stuck roadmaps: queued for more than 24 hours, or processing with an expired lease after the last attempt
+ * (or older than 24 hours). ai_input is cleared with the failure.
+ */
+export async function expireRoadmaps(db: Db): Promise<void> {
+  await db.query(`UPDATE stu_roadmaps SET status='failed',error_code=$2,ai_input=NULL,lease_token=NULL,lease_until=NULL,
+      completed_at=now(),updated_at=now()
+    WHERE (status='queued' AND created_at<now()-interval '24 hours')
+      OR (status='processing' AND lease_until<now() AND (attempts>=$1 OR created_at<now()-interval '24 hours'))`,
+  [AI_JOB_MAX_ATTEMPTS, "worker_timeout"]);
+}
+
+/** Rate-limited expiry (at most once per interval per returned function), run from the worker and student routers. */
+export function createRoadmapExpiry(intervalMs: number = AI_HOUSEKEEPING_INTERVAL_MS) {
+  let last = Number.NEGATIVE_INFINITY;
+  return async (db: Db): Promise<boolean> => {
+    const now = Date.now();
+    if (now - last < intervalMs) return false;
+    last = now;
+    await expireRoadmaps(db);
+    return true;
+  };
+}
+
+/** Keeps the newest MAX_ROADMAPS_PER_USER rows of the student (a pending row is never pruned). */
+async function pruneRoadmaps(db: Db, userId: string): Promise<void> {
+  await db.query(`DELETE FROM stu_roadmaps WHERE user_id=$1 AND status NOT IN ${PENDING} AND id NOT IN (
+    SELECT id FROM stu_roadmaps WHERE user_id=$1 ORDER BY created_at DESC,id DESC LIMIT $2)`, [userId, MAX_ROADMAPS_PER_USER]);
+}
+
+/* ------------------------------------------------------------------------ */
+/* Queueing (student route) */
+
+type CreateOptions = {
+  /** Rate-limited housekeeping run inside the transaction (createRoadmapExpiry). */
+  expire?: (db: Db) => Promise<unknown>;
+  /** Test seam: the day the roadmap starts from. */
+  now?: Date;
+};
+
+/**
+ * "Tạo lộ trình" / "Tạo lại" (POST /api/student/roadmap), inside the caller's transaction. The student's row comes
+ * first (FOR KEY SHARE, the lock the insert's foreign key takes anyway), then the queue lock. A roadmap still being
+ * written for the newest assessment is returned as it is; otherwise one queued for an older assessment is cancelled
+ * and a new one is queued, unless the student queued one in the last 30 seconds (429 roadmap_too_frequent) or the
+ * queue is full (429 queue_full).
+ */
+export async function createRoadmap(client: PoolClient, userId: string, options: CreateOptions = {}): Promise<{ row: RoadmapRow; created: boolean }> {
+  const user = await client.query("SELECT id FROM users WHERE id=$1 AND is_active FOR KEY SHARE", [userId]);
+  if (!user.rowCount) throw new RoadmapError("account_unavailable", 403);
+  await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [ROADMAP_QUEUE_LOCK]);
+  if (options.expire) await options.expire(client);
+  const assessment = await newestAssessment(client, userId);
+  if (!assessment) throw new RoadmapError("assessment_required", 409);
+  const rows = await readRoadmapRows(client, userId);
+  const pending = rows.find((row) => row.status === "queued" || row.status === "processing");
+  if (pending?.assessmentId === assessment.id) return { row: pending, created: false };
+  if (rows[0]?.recent) throw new RoadmapError("roadmap_too_frequent", 429);
+  const others = await client.query<{ count: number }>(
+    `SELECT count(*)::int AS count FROM stu_roadmaps WHERE status IN ${PENDING} AND user_id<>$1`, [userId]);
+  if ((others.rows[0]?.count ?? 0) >= MAX_PENDING_ROADMAPS) throw new RoadmapError("queue_full", 429);
+
+  await client.query(`UPDATE stu_roadmaps SET status='cancelled',ai_input=NULL,lease_token=NULL,lease_until=NULL,completed_at=now(),updated_at=now()
+    WHERE user_id=$1 AND status IN ${PENDING}`, [userId]);
+  const window = roadmapWindow(options.now ?? new Date());
+  const facts = buildRoadmapFacts(assessment.id, assessment.computed, window);
+  const aiInput = buildRoadmapInput(facts);
+  const id = randomUUID();
+  const inserted = await client.query<{ createdAt: Date | string }>(
+    `INSERT INTO stu_roadmaps(id,user_id,assessment_id,window_start,window_end,facts,status,ai_input,prompt_version)
+      VALUES($1,$2,$3,$4,$5,$6::jsonb,'queued',$7::jsonb,$8) RETURNING created_at AS "createdAt"`,
+    [id, userId, assessment.id, window.start, window.end, JSON.stringify(facts), JSON.stringify(aiInput), aiInput.promptVersion]);
+  await pruneRoadmaps(client, userId);
+  return {
+    row: { id, assessmentId: assessment.id, status: "queued", errorCode: null, createdAt: inserted.rows[0]?.createdAt ?? new Date(),
+      completedAt: null, model: null, facts, output: null, recent: true },
+    created: true,
+  };
+}
+
+/* ------------------------------------------------------------------------ */
+/* Worker side (called by competency-assessment/ai/worker-router.ts) */
+
+/** Claims the oldest runnable roadmap (SKIP LOCKED, 15 minute lease, at most 2 attempts). */
+export async function claimRoadmap(db: Db, leaseToken: string): Promise<{ id: string; leaseToken: string; aiInput: Record<string, unknown> } | null> {
+  const result = await db.query<{ id: string; leaseToken: string; aiInput: Record<string, unknown> }>(`WITH candidate AS (
+      SELECT id FROM stu_roadmaps
+      WHERE ai_input IS NOT NULL AND (status='queued' OR (status='processing' AND lease_until<now() AND attempts<$2))
+      ORDER BY created_at, id FOR UPDATE SKIP LOCKED LIMIT 1)
+    UPDATE stu_roadmaps j SET status='processing',lease_token=$1,lease_until=now()+make_interval(mins => $3),attempts=j.attempts+1,updated_at=now()
+      FROM candidate c WHERE j.id=c.id RETURNING j.id,j.lease_token AS "leaseToken",j.ai_input AS "aiInput"`,
+  [leaseToken, AI_JOB_MAX_ATTEMPTS, AI_JOB_LEASE_MINUTES]);
+  return result.rows[0] ?? null;
+}
+
+/** Extends a live lease; null when the roadmap is not processing under this lease. */
+export async function extendRoadmap(db: Db, id: string, leaseToken: string): Promise<Date | null> {
+  const result = await db.query<{ leaseUntil: Date }>(
+    `UPDATE stu_roadmaps SET lease_until=now()+make_interval(mins => $3),updated_at=now()
+      WHERE id=$1 AND status='processing' AND lease_token=$2 AND lease_until>now() RETURNING lease_until AS "leaseUntil"`,
+    [id, leaseToken, AI_JOB_LEASE_MINUTES]);
+  return result.rows[0]?.leaseUntil ?? null;
+}
+
+type LockedRoadmap = { status: string; lease_token: string | null; valid: boolean | null; ai_input: Record<string, unknown> | null };
+
+/**
+ * Stores the worker's result inside the worker router's transaction. Returns 'missing' when no roadmap has this id,
+ * 'expired' for another or lost lease (a cancelled roadmap stays cancelled), and 'ok' when stored or already stored
+ * under the same lease. The output is validated and cleaned (validate.ts); ai_input is cleared either way.
+ */
+export async function completeRoadmap(client: PoolClient, id: string, input: WorkerCompletion): Promise<"ok" | "expired" | "missing"> {
+  const locked = await client.query<LockedRoadmap>(
+    "SELECT status,lease_token,lease_until>now() AS valid,ai_input FROM stu_roadmaps WHERE id=$1 FOR UPDATE", [id]);
+  const job = locked.rows[0];
+  if (!job) return "missing";
+  if ((job.status === "completed" || job.status === "failed") && job.lease_token === input.leaseToken) return "ok";
+  if (job.status !== "processing" || job.lease_token !== input.leaseToken || job.valid !== true) return "expired";
+
+  let errorCode: string | null = "error" in input ? input.error : null;
+  let output: RoadmapOutput | null = null;
+  if (!("error" in input)) {
+    const context = roadmapContextFromAiInput(job.ai_input);
+    const checked = context ? validateRoadmapOutput(input.output, context) : null;
+    if (checked?.ok) output = checked.output;
+    else errorCode = "invalid_ai_output";
+  }
+  const model = "error" in input ? null : input;
+  const promptVersion = typeof job.ai_input?.promptVersion === "string" ? job.ai_input.promptVersion : null;
+  await client.query(
+    `UPDATE stu_roadmaps SET status=$2,error_code=$3,ai_output=$4::jsonb,metrics=$5::jsonb,ai_model=$6,ai_model_digest=$7,
+      ollama_version=$8,prompt_version=COALESCE($9,prompt_version),ai_input=NULL,lease_until=NULL,completed_at=now(),updated_at=now() WHERE id=$1`,
+    [id, errorCode ? "failed" : "completed", errorCode, output ? JSON.stringify(output) : null,
+      model ? JSON.stringify(model.metrics) : null, model?.model ?? null, model?.digest || null, model?.ollamaVersion || null, promptVersion]);
+  return "ok";
+}

@@ -1,6 +1,6 @@
 # Worker AI (Ollama + Gemma 4 E4B)
 
-Worker này chạy trên máy cá nhân có GPU. Nó lấy job AI từ API EduPath, gọi Ollama ở chính máy này, rồi gửi kết quả về API. Có bốn loại job: nhận xét năng lực cho sinh viên (`competency_assessment`, xem `docs/competency-assessment.md`), đề xuất kỹ năng cho vị trí nghề nghiệp ở trang quản trị (`career_skill_suggestion`, xem `docs/career-ai-suggestions.md`), lời khuyên điều kiện xét tốt nghiệp cho sinh viên, tạo tự động khi sinh viên import bảng điểm hoặc mở trang Điều kiện xét tốt nghiệp (`graduation_advice`, xem `docs/graduation-advice.md`), và đề xuất liên kết kỹ năng, trọng số cho học phần ở mục Năng lực của trang quản trị (`competency_course_suggestion_v2`, chạy với chế độ suy luận của Gemma, xem `docs/competency-management.md`; worker lấy loại này sau cùng nên một lần chạy cho cả chương trình không làm sinh viên phải chờ). Dữ liệu chỉ đi giữa API và máy chạy worker; Ollama chỉ nghe trên `127.0.0.1`.
+Worker này chạy trên máy cá nhân có GPU. Nó lấy job AI từ API EduPath, gọi Ollama ở chính máy này, rồi gửi kết quả về API. Có năm loại job: nhận xét năng lực cho sinh viên (`competency_assessment`, xem `docs/competency-assessment.md`), đề xuất kỹ năng cho vị trí nghề nghiệp ở trang quản trị (`career_skill_suggestion`, xem `docs/career-ai-suggestions.md`), lời khuyên điều kiện xét tốt nghiệp cho sinh viên, tạo tự động khi sinh viên import bảng điểm hoặc mở trang Điều kiện xét tốt nghiệp (`graduation_advice`, xem `docs/graduation-advice.md`), và đề xuất liên kết kỹ năng, trọng số cho học phần ở mục Năng lực của trang quản trị (`competency_course_suggestion_v2`, chạy với chế độ suy luận của Gemma, xem `docs/competency-management.md`; worker lấy loại này sau cùng nên một lần chạy cho cả chương trình không làm sinh viên phải chờ), và lộ trình học tập 3 tháng khi sinh viên bấm "Tạo lộ trình" ở trang Lộ trình học tập (`study_roadmap`, chạy với chế độ suy luận, mỗi lộ trình khoảng 2–4 phút, xem `docs/study-roadmap.md`). Dữ liệu chỉ đi giữa API và máy chạy worker; Ollama chỉ nghe trên `127.0.0.1`.
 
 Mã nguồn nằm ở `apps/api/src/ai-worker/`. Cấu hình nằm ở `services/ai/.env` (không commit).
 
@@ -70,13 +70,14 @@ Worker ghi log dạng JSON, mỗi dòng một sự kiện (`job_claimed`, `gener
 - bản trước lời khuyên tốt nghiệp không báo `graduation_advice`: lời khuyên nằm chờ trong hàng đợi và trang Điều kiện xét tốt nghiệp của sinh viên hiện trạng thái "Máy AI đang chạy phiên bản cũ…" (API trả `worker.supportsAdvice: false`) cho tới khi worker được khởi động lại;
 - bản trước đề xuất kỹ năng không báo `career_skill_suggestion`: trang Nghề nghiệp báo worker chưa hỗ trợ và job đề xuất nằm chờ.
 - bản trước 17/10/2026 không báo `competency_course_suggestion_v2` (bản 16/10 báo loại cũ `competency_course_suggestion` và luôn tắt suy luận): mục Năng lực báo "Máy AI đang chạy phiên bản cũ…" và đề xuất liên kết, trọng số nằm chờ cho tới khi worker được khởi động lại. Từ bản này, việc của mục Năng lực chạy Gemma với chế độ suy luận (`think: true`), mỗi học phần khoảng 30 giây đến 2 phút.
+- bản trước 24/10/2026 không báo `study_roadmap`: lộ trình sinh viên vừa tạo nằm chờ và trang Lộ trình học tập hiện "Máy AI đang chạy phiên bản cũ…" (API trả `worker.supportsRoadmap: false`) cho tới khi worker được khởi động lại.
 
 Khởi động lại là đủ, không cần đổi `services/ai/.env`.
 
 Cách worker làm việc:
 - Khi khởi động, nạp model một lần với đúng `num_ctx` và `num_gpu` như job thật để job đầu không phải nạp lại.
 - Gửi heartbeat mỗi 20 giây khi Ollama sẵn sàng; trang của sinh viên dựa vào đó để báo "worker đang hoạt động".
-- Khi rảnh, hỏi job mới mỗi 5 giây; gặp lỗi mạng thì chờ 15 giây. Worker báo cho API các loại job nó làm được; API giao job theo thứ tự đề xuất kỹ năng (admin đang chờ trên trang) → lời khuyên tốt nghiệp (sinh viên có thể đang mở trang) → nhận xét năng lực.
+- Khi rảnh, hỏi job mới mỗi 5 giây; gặp lỗi mạng thì chờ 15 giây. Worker báo cho API các loại job nó làm được; API giao job theo thứ tự đề xuất kỹ năng (admin đang chờ trên trang) → lời khuyên tốt nghiệp (sinh viên có thể đang mở trang) → lộ trình học tập (sinh viên vừa bấm tạo) → nhận xét năng lực → đề xuất cho mục Năng lực.
 - Trong lúc sinh, gia hạn lease khoảng 3 phút một lần.
 - Nếu model trả về JSON hỏng, thử lại đúng 1 lần. Không thử lại khi bị cắt do hết `num_predict` (`ai_output_truncated`) hoặc quá thời gian (`ai_timeout`).
 

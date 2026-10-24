@@ -1,329 +1,296 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Icon } from "./student-icons";
+import { useLiveData } from "./use-live-data";
 import {
-  BLOCKS, DAYS, MAX_SESSIONS, MAX_TERMS, changeSessions, clashes, conditionIssues, creditProgress, dayLabel, defaultTerms, mergeSuggestion, moveCourse,
-  nextTerm, placeSession, poolSections, runningIn, termIndex, termLabel, termLoad,
-  type ConditionIssue, type StudyPlanContext, type StudyPlanCourse, type StudyPlanData, type StudyPlanProjection,
-} from "./study-plan-checks";
+  ROADMAP_API, ROADMAP_POLL_MS, choiceText, dateText, failureText, formatDateTime, helpsText, improveTag, isPending, modelLabel,
+  monthTitle, normalizeRoadmap, normalizeRoadmapResponse, normalizeRoadmapStatus, pendingCopy, requestErrorMessage, sentence, skillTags, studyTag,
+  type Roadmap, type RoadmapImprove, type RoadmapResponse, type RoadmapSkill, type RoadmapStatus, type RoadmapStudy,
+} from "./student-roadmap-data";
 import "./student-roadmap.css";
 
-// "Lộ trình học tập" (STU-PLAN-01–07, user 2026-10-23): a board of the remaining terms (drag courses from "Môn còn phải
-// học"), a weekly timetable per term (Thứ 2 … Chủ nhật × blocks of 3 periods) and the progress toward graduation.
+// #roadmap (user, 2026-10-24): a 3-month study roadmap that EduPath AI writes as an academic advisor — the courses to
+// take, the courses to improve and the skills of the target career to study on one's own — from the newest competency
+// assessment. What the system computed shows at once; the AI's advice and month plan fill in once they are written.
 
-type Saved = { version: string; data: StudyPlanData; updatedAt: string };
-type Loaded = { context: StudyPlanContext; plan: Saved | null; projection: StudyPlanProjection | null };
-/** What is being dragged, or picked to place by a click (touch and keyboard). */
-type Grab = { kind: "course"; code: string } | { kind: "session"; term: string; code: string; index: number };
-type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
-
-const DRAG_TYPE = "application/x-edupath-plan";
-const messages: Record<string, string> = {
-  plan_changed: "Lộ trình vừa được sửa ở một phiên khác. Hãy tải lại trang để xem bản mới nhất.",
-  invalid_plan: "Lộ trình chưa hợp lệ nên chưa được lưu. Hãy tải lại trang.",
-  plan_too_large: "Lộ trình quá lớn để lưu.",
-  curriculum_unavailable: "Chưa có chương trình đào tạo cho khóa của bạn nên chưa xếp được lộ trình.",
-  plan_not_found: "Chưa có lộ trình đã lưu để xuất.",
-  account_unavailable: "Tài khoản hiện không dùng được chức năng này.",
-  authentication_required: "Phiên đăng nhập hết hạn. Vui lòng đăng nhập lại.",
-  database_required: "Chưa kết nối được nơi lưu lộ trình. Vui lòng thử lại sau.",
-  invalid_origin: "Phiên thao tác không hợp lệ. Vui lòng tải lại trang.",
-};
-class RoadmapError extends Error {}
-async function call<T>(input: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(input, { credentials: "include", ...init, headers: init.body ? { "Content-Type": "application/json" } : undefined });
-  const body = await response.json().catch(() => ({})) as { error?: string };
-  if (!response.ok) throw new RoadmapError(messages[body.error ?? ""] ?? "Không xử lý được yêu cầu. Vui lòng thử lại.");
-  return body as T;
+async function readRoadmap(response: Response): Promise<RoadmapResponse> {
+  const data = await response.json().catch(() => null) as { error?: string } | null;
+  if (!response.ok) {
+    if (response.status === 401) window.dispatchEvent(new Event("edupath-session-expired"));
+    throw new Error(requestErrorMessage(data?.error));
+  }
+  return normalizeRoadmapResponse(data);
+}
+const getJson = (url: string, signal: AbortSignal) => fetch(url, { credentials: "include", cache: "no-store", signal });
+async function postRoadmap(): Promise<Roadmap | null> {
+  const response = await fetch(ROADMAP_API, {
+    method: "POST", credentials: "include", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}),
+  });
+  const data = await response.json().catch(() => ({})) as { error?: string; roadmap?: unknown };
+  if (!response.ok) {
+    if (response.status === 401) window.dispatchEvent(new Event("edupath-session-expired"));
+    throw new Error(requestErrorMessage(data.error));
+  }
+  return normalizeRoadmap(data.roadmap);
 }
 
-/** The saved plan, with the terms from today on (empty ones) the board always shows. */
-function withTerms(context: StudyPlanContext, data: StudyPlanData | null): StudyPlanData {
-  const terms = new Map((data?.terms ?? []).map((term) => [term.code, term]));
-  for (const code of defaultTerms(context)) if (!terms.has(code) && terms.size < MAX_TERMS) terms.set(code, { code, courses: [] });
-  return { schemaVersion: 1, terms: [...terms.values()].sort((a, b) => termIndex(a.code) - termIndex(b.code)) };
+/** The page data: the live GET, replaced by what POST and the status poll bring back. */
+function useRoadmap() {
+  const live = useLiveData(ROADMAP_API, 0, readRoadmap);
+  const [current, setCurrent] = useState<RoadmapResponse | null>(null);
+  useEffect(() => { if (live.data) setCurrent(live.data); }, [live.data]);
+  const response = current ?? live.data;
+
+  const roadmapId = response?.roadmap?.id ?? null, status = response?.roadmap?.status ?? null;
+  useEffect(() => {
+    if (!roadmapId || !isPending(status)) return;
+    const pending = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      try {
+        const now = normalizeRoadmapStatus(await (await getJson(`${ROADMAP_API}/status`, pending.signal)).json());
+        if (pending.signal.aborted) return;
+        if (now.id !== roadmapId || now.status !== status) {
+          const fresh = await readRoadmap(await getJson(ROADMAP_API, pending.signal));
+          if (pending.signal.aborted) return;
+          setCurrent(fresh);
+          if (fresh.roadmap?.id !== roadmapId || fresh.roadmap?.status !== status) return;
+        } else {
+          setCurrent((value) => value && (value.worker.online !== now.worker.online || value.worker.supportsRoadmap !== now.worker.supportsRoadmap)
+            ? { ...value, worker: now.worker } : value);
+        }
+      } catch { /* a failed poll keeps the last state; the next one tries again */ }
+      if (!pending.signal.aborted) timer = setTimeout(() => void poll(), ROADMAP_POLL_MS);
+    };
+    timer = setTimeout(() => void poll(), ROADMAP_POLL_MS);
+    return () => { pending.abort(); clearTimeout(timer); };
+  }, [roadmapId, status]);
+
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState("");
+  const create = () => {
+    setCreating(true); setCreateError("");
+    postRoadmap().then((roadmap) => {
+      if (roadmap) setCurrent((value) => value && { ...value, roadmap, stale: false });
+    }, (error: Error) => setCreateError(error.message)).finally(() => setCreating(false));
+  };
+
+  // Tell screen readers when the AI finishes or fails while the page is open.
+  const [announcement, setAnnouncement] = useState("");
+  const shown = useRef<RoadmapStatus | null>(null);
+  useEffect(() => {
+    const before = shown.current;
+    shown.current = status;
+    if (before && isPending(before) && status === "completed") setAnnouncement("EduPath AI đã soạn xong lộ trình học tập.");
+    if (before && isPending(before) && status === "failed") setAnnouncement("Chưa soạn được lộ trình học tập.");
+  }, [status]);
+
+  return { response, loading: live.loading && !response, error: response ? null : live.error, create, creating, createError, announcement };
 }
 
-const PALETTE = 8;
-const colorOf = (code: string) => [...code].reduce((sum, char) => sum + char.charCodeAt(0), 0) % PALETTE;
-const shortName = (name: string) => (name.length > 34 ? `${name.slice(0, 32)}…` : name);
-const readGrab = (event: DragEvent): Grab | null => {
-  try { return JSON.parse(event.dataTransfer.getData(DRAG_TYPE)) as Grab; } catch { return null; }
-};
+function Elapsed({ since }: { since: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => { const timer = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(timer); }, []);
+  const seconds = Math.max(0, Math.floor((now - new Date(since).getTime()) / 1000)) || 0;
+  return <span className="rm-elapsed"><span className="sr-only">Đã chạy </span>{String(Math.floor(seconds / 60)).padStart(2, "0")}:{String(seconds % 60).padStart(2, "0")}</span>;
+}
 
-function CourseCard({ course, issue, names, terms, term, locked, onMove, onGrab }: {
-  course: StudyPlanCourse; issue?: ConditionIssue; names: Map<string, string>; terms: string[]; term: string | null; locked?: boolean;
-  onMove?: (to: string | null) => void; onGrab?: (event: DragEvent) => void;
+/* ---------------------------------------------------------------- sections */
+
+function StudyItem({ item }: { item: RoadmapStudy }) {
+  const tag = studyTag(item);
+  return <li className={`rm-item${item.advice ? "" : " rm-item-plain"}`}>
+    <div className="rm-item-head">
+      <strong>{item.name}</strong>
+      <span className={`rm-tag rm-tag-${tag.tone}`}>{tag.text}</span>
+    </div>
+    <p className="rm-item-meta">{item.code}{item.credits !== null ? ` · ${item.credits} tín chỉ` : ""}</p>
+    {item.advice && <p className="rm-advice">{item.advice}</p>}
+    {!item.advice && item.careerSkills.length > 0 && <p className="rm-item-meta">{helpsText(item.careerSkills)}</p>}
+  </li>;
+}
+
+function StudySection({ roadmap }: { roadmap: Roadmap }) {
+  const picked = roadmap.study.filter((item) => item.advice);
+  const others = roadmap.study.filter((item) => !item.advice);
+  return <section className="sw-panel rm-section" aria-labelledby="rm-study">
+    <header className="rm-section-head"><span className="rm-section-icon" aria-hidden="true"><Icon name="book" /></span><div>
+      <h2 id="rm-study">Môn bạn cần học</h2>
+      <p>Học phần đang học, học phần trễ so với kế hoạch đào tạo và học phần theo kế hoạch của học kỳ tới, học kỳ sau.</p>
+    </div></header>
+    {!roadmap.study.length && !roadmap.choices.length && <p className="rm-empty">Không có học phần nào cần học thêm trong kế hoạch đào tạo của bạn.</p>}
+    {picked.length > 0 && <ul className="rm-items">{picked.map((item) => <StudyItem key={item.code} item={item} />)}</ul>}
+    {others.length > 0 && (picked.length > 0
+      ? <details className="rm-more"><summary>Các học phần khác trong kế hoạch ({others.length})</summary><ul className="rm-items rm-items-compact">{others.map((item) => <StudyItem key={item.code} item={item} />)}</ul></details>
+      : <ul className="rm-items rm-items-compact">{others.map((item) => <StudyItem key={item.code} item={item} />)}</ul>)}
+    {roadmap.choices.length > 0 && <div className="rm-choices">
+      <h3>Nhóm tự chọn còn thiếu</h3>
+      <ul>{roadmap.choices.map((choice, index) => <li key={`${choice.label}-${index}`}>{choiceText(choice)}</li>)}</ul>
+    </div>}
+  </section>;
+}
+
+function ImproveItem({ item }: { item: RoadmapImprove }) {
+  return <li className={`rm-item${item.advice ? "" : " rm-item-plain"}`}>
+    <div className="rm-item-head">
+      <strong>{item.name}</strong>
+      <span className={`rm-tag ${item.action === "retake" ? "rm-tag-retake" : "rm-tag-improve"}`}>{improveTag(item.action)}</span>
+    </div>
+    <p className="rm-item-meta">{item.code} · {item.credits} tín chỉ · điểm chữ {item.letter}</p>
+    {item.advice && <p className="rm-advice">{item.advice}</p>}
+    {!item.advice && item.careerSkills.length > 0 && <p className="rm-item-meta">{helpsText(item.careerSkills)}</p>}
+  </li>;
+}
+
+function ImproveSection({ roadmap }: { roadmap: Roadmap }) {
+  return <section className="sw-panel rm-section" aria-labelledby="rm-improve">
+    <header className="rm-section-head"><span className="rm-section-icon" aria-hidden="true"><Icon name="refresh" /></span><div>
+      <h2 id="rm-improve">Môn bạn cần cải thiện</h2>
+      <p>Học lại học phần chưa đạt (F, VT); học cải thiện học phần điểm D hoặc D+.</p>
+    </div></header>
+    {roadmap.improve.length
+      ? <ul className="rm-items">{roadmap.improve.map((item) => <ImproveItem key={item.code} item={item} />)}</ul>
+      : <p className="rm-empty">Bạn không có học phần nào cần học lại hay học cải thiện.</p>}
+  </section>;
+}
+
+function SkillItem({ skill }: { skill: RoadmapSkill }) {
+  return <li className="rm-skill">
+    <div className="rm-item-head">
+      <strong>{skill.name}</strong>
+      <span className="rm-tags">{skillTags(skill).map((tag) => <span key={tag} className={`rm-tag${tag === "Cần tự học" ? " rm-tag-self" : tag === "Bắt buộc" ? " rm-tag-required" : ""}`}>{tag}</span>)}</span>
+    </div>
+    <p className="rm-item-meta">{sentence(skill.statusLabel)}</p>
+    {skill.why && <p className="rm-advice">{skill.why}</p>}
+    {skill.steps.length > 0 && <div className="rm-skill-block"><h4>Cách học</h4><ol>{skill.steps.map((step, index) => <li key={index}>{step}</li>)}</ol></div>}
+    {skill.outcome && <div className="rm-skill-block"><h4>Sau 3 tháng</h4><p>{skill.outcome}</p></div>}
+    {skill.courses.length > 0 && <p className="rm-item-meta">Học phần trong chương trình giúp bổ sung: {skill.courses.map((course) => course.name).join(", ")}.</p>}
+  </li>;
+}
+
+function SkillsSection({ roadmap, completed }: { roadmap: Roadmap; completed: boolean }) {
+  const picked = roadmap.skills.filter((skill) => skill.picked);
+  const others = roadmap.skills.filter((skill) => !skill.picked);
+  return <section className="sw-panel rm-section" aria-labelledby="rm-skills">
+    <header className="rm-section-head"><span className="rm-section-icon" aria-hidden="true"><Icon name="target" /></span><div>
+      <h2 id="rm-skills">Kỹ năng, kiến thức nên bổ sung</h2>
+      <p>{roadmap.careerName ? `Để nâng cao trình độ và tăng khả năng làm việc ở vị trí ${roadmap.careerName}.` : "Để nâng cao trình độ và tăng khả năng làm việc."}</p>
+    </div></header>
+    {!roadmap.skills.length && <p className="rm-empty">Bạn đã đạt các kỹ năng của nghề mục tiêu theo kết quả hiện có.</p>}
+    {picked.length > 0 && <ul className="rm-skills">{picked.map((skill) => <SkillItem key={skill.key} skill={skill} />)}</ul>}
+    {others.length > 0 && (completed && picked.length
+      ? <p className="rm-others">Kỹ năng khác của nghề còn có thể bổ sung: {others.map((skill) => skill.name).join(", ")}.</p>
+      : <ul className="rm-items rm-items-compact">{others.map((skill) => <li key={skill.key} className="rm-item rm-item-plain">
+        <div className="rm-item-head"><strong>{skill.name}</strong><span className="rm-tags">{skillTags(skill).map((tag) => <span key={tag} className="rm-tag">{tag}</span>)}</span></div>
+        <p className="rm-item-meta">{sentence(skill.statusLabel)}</p>
+      </li>)}</ul>)}
+  </section>;
+}
+
+function MonthsSection({ roadmap }: { roadmap: Roadmap }) {
+  return <section className="sw-panel rm-section" aria-labelledby="rm-months">
+    <header className="rm-section-head"><span className="rm-section-icon" aria-hidden="true"><Icon name="clock" /></span><div>
+      <h2 id="rm-months">Kế hoạch theo tháng</h2>
+      <p>Cân đối giữa học trên lớp, cải thiện điểm và tự học kỹ năng.</p>
+    </div></header>
+    <ol className="rm-months">{roadmap.months.map((month) => <li key={month.month} className="rm-month">
+      <h3>{monthTitle(month)}</h3>
+      {month.focus && <p className="rm-month-focus">{month.focus}</p>}
+      {month.tasks.length ? <ul>{month.tasks.map((task, index) => <li key={index}>{task}</li>)}</ul> : <p className="rm-item-meta">Chưa có việc cụ thể cho tháng này.</p>}
+    </li>)}</ol>
+  </section>;
+}
+
+/* -------------------------------------------------------------------- page */
+
+function AiState({ roadmap, response, create, creating }: { roadmap: Roadmap; response: RoadmapResponse; create: () => void; creating: boolean }) {
+  if (roadmap.status === "queued" || roadmap.status === "processing") {
+    const copy = pendingCopy(roadmap.status, response.worker);
+    const moving = roadmap.status === "processing" || (response.worker.online && response.worker.supportsRoadmap);
+    return <div className={`rm-ai-state${moving ? " rm-ai-pending" : ""}`} aria-busy={moving}>
+      {moving && <span className="rm-spinner" aria-hidden="true" />}
+      <strong>{copy.title}</strong>
+      <p>{roadmap.status === "processing" && <><Elapsed since={roadmap.createdAt} /> · </>}{copy.text}</p>
+      <p>Trong lúc chờ, các học phần và kỹ năng do hệ thống tính sẵn đã hiện bên dưới.</p>
+    </div>;
+  }
+  if (roadmap.status === "failed" || roadmap.status === "cancelled") {
+    return <div className="rm-ai-state rm-ai-problem">
+      <strong>{roadmap.status === "failed" ? "Chưa soạn được lộ trình" : "Yêu cầu soạn lộ trình đã dừng"}</strong>
+      <p>{roadmap.status === "failed" ? `${failureText(roadmap.errorCode)} ` : ""}Các học phần và kỹ năng do hệ thống tính bên dưới vẫn dùng được.</p>
+      <div className="rm-actions"><button type="button" className="sw-outline" disabled={creating} onClick={create}><Icon name="refresh" />{creating ? "Đang gửi…" : "Thử lại"}</button></div>
+    </div>;
+  }
+  return null;
+}
+
+function RoadmapView({ roadmap, response, create, creating, createError }: {
+  roadmap: Roadmap; response: RoadmapResponse; create: () => void; creating: boolean; createError: string;
 }) {
-  const kind = course.kind === "mandatory" ? "Bắt buộc" : course.group ? `Tự chọn ${course.group}` : "Tự chọn";
-  const list = (codes: string[]) => codes.map((code) => names.get(code) ?? code).join(", ");
-  return <article className={`rm-card${locked ? " is-locked" : ""}${issue ? " has-issue" : ""}`} draggable={!locked} onDragStart={onGrab}
-    aria-label={`${course.name}, ${course.credits} tín chỉ${locked ? ", đang học" : ""}`}>
-    <div className="rm-card-head"><strong>{course.name}</strong><span className="rm-credits">{course.credits} TC</span></div>
-    <p className="rm-card-meta">{course.code} · {kind}{course.conditional ? " · (*) điều kiện" : ""}{course.sessions.length ? ` · ${course.sessions.join(" + ")}` : ""}</p>
-    {(course.state === "failed" || course.state === "graded_unknown" || locked || course.onlyInStandard) && <p className="rm-card-tags">
-      {locked && <span className="rm-tag rm-tag-running">Đang học</span>}
-      {course.onlyInStandard && <span className="rm-tag" title="Môn có trong tiêu chuẩn xét tốt nghiệp nhưng không có trong chương trình đào tạo">Theo tiêu chuẩn TN</span>}
-      {course.state === "failed" && <span className="rm-tag rm-tag-retake">Học lại</span>}
-      {course.state === "graded_unknown" && <span className="rm-tag">Chưa rõ kết quả</span>}</p>}
-    {issue && <p className="rm-card-issue" role="note">
-      {issue.prerequisites.length > 0 && <>Cần qua trước: {list(issue.prerequisites)}. </>}
-      {issue.prior.length > 0 && <>Cần học trước: {list(issue.prior)}.</>}</p>}
-    {!locked && onMove && <label className="rm-card-move"><span className="rm-visually-hidden">Học kỳ của {course.name}</span>
-      <select value={term ?? ""} onChange={(event) => onMove(event.target.value || null)}>
-        <option value="">{term ? "Bỏ khỏi lộ trình" : "Thêm vào học kỳ…"}</option>
-        {terms.map((code) => <option key={code} value={code}>{termLabel(code)}</option>)}
-      </select></label>}
-  </article>;
-}
-
-function Confirm({ title, children, action, busy, onConfirm, onClose }: { title: string; children: ReactNode; action: string; busy: boolean; onConfirm: () => void; onClose: () => void }) {
-  return <div className="rm-confirm" role="alertdialog" aria-labelledby="rm-confirm-title"><div><strong id="rm-confirm-title">{title}</strong><p>{children}</p></div>
-    <div className="rm-confirm-actions"><button className="sr-secondary" disabled={busy} onClick={onClose}>Hủy</button><button className="sw-primary" disabled={busy} onClick={onConfirm}>{action}</button></div></div>;
+  const completed = roadmap.status === "completed";
+  const pending = isPending(roadmap.status);
+  return <>
+    <section className="sw-panel rm-hero" aria-labelledby="rm-title">
+      <div className="rm-hero-head">
+        <div>
+          <p className="rm-eyebrow">Lộ trình 3 tháng</p>
+          <h2 id="rm-title">Từ {dateText(roadmap.window.start)} đến {dateText(roadmap.window.end)}</h2>
+          <p className="rm-hero-meta">{[roadmap.careerName && `Nghề mục tiêu: ${roadmap.careerName}`, roadmap.specialtyLabel && `Chuyên ngành: ${roadmap.specialtyLabel}`].filter(Boolean).join(" · ")}</p>
+        </div>
+        {!pending && <button type="button" className="sw-outline" disabled={creating} onClick={create}><Icon name="refresh" />{creating ? "Đang gửi…" : "Tạo lại"}</button>}
+      </div>
+      {createError && <p className="rm-error" role="alert">{createError}</p>}
+      {response.stale && <p className="rm-note">Kết quả Đánh giá năng lực của bạn đã thay đổi sau khi lộ trình này được soạn. Bấm Tạo lại để cập nhật theo kết quả mới.</p>}
+      {roadmap.ended && <p className="rm-note">Lộ trình này đã hết thời gian (đến {dateText(roadmap.window.end)}). Bấm Tạo lại để soạn lộ trình cho 3 tháng tiếp theo.</p>}
+      <AiState roadmap={roadmap} response={response} create={create} creating={creating} />
+      {completed && roadmap.summary && <div className="rm-summary">
+        <span className="rm-ai-icon" aria-hidden="true"><Icon name="spark" /></span>
+        <div><h3>Lời khuyên của cố vấn AI <span className="rm-ai-tag">AI</span></h3><p>{roadmap.summary}</p></div>
+      </div>}
+    </section>
+    <StudySection roadmap={roadmap} />
+    <ImproveSection roadmap={roadmap} />
+    <SkillsSection roadmap={roadmap} completed={completed} />
+    {completed && <MonthsSection roadmap={roadmap} />}
+    <p className="rm-footer">{completed
+      ? `Lộ trình do ${modelLabel(roadmap.model)} (chạy cục bộ) soạn lúc ${formatDateTime(roadmap.completedAt ?? roadmap.createdAt)} từ kết quả Đánh giá năng lực của bạn.`
+      : "Các học phần và kỹ năng trên do hệ thống tính từ kết quả Đánh giá năng lực của bạn."} Lộ trình chỉ để tham khảo: hãy trao đổi với cố vấn học tập và xem lịch đăng ký học phần của trường trước khi đăng ký.</p>
+  </>;
 }
 
 export default function StudentRoadmap() {
-  const [loaded, setLoaded] = useState<Loaded | null>(null);
-  const [loadError, setLoadError] = useState("");
-  const [plan, setPlan] = useState<StudyPlanData>({ schemaVersion: 1, terms: [] });
-  const [projection, setProjection] = useState<StudyPlanProjection | null>(null);
-  const [saveState, setSaveState] = useState<SaveState>("idle");
-  const [savedAt, setSavedAt] = useState<string | null>(null);
-  const [error, setError] = useState("");
-  const [week, setWeek] = useState<string | null>(null);
-  const [picked, setPicked] = useState<Grab | null>(null);
-  const [over, setOver] = useState<string | null>(null);
-  const [confirm, setConfirm] = useState<"suggest" | "delete" | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [search, setSearch] = useState("");
-  const version = useRef<string | null>(null);
-  const latest = useRef(plan);
-  const saving = useRef(false);
-  const dirty = useRef(false);
+  const { response, loading, error, create, creating, createError, announcement } = useRoadmap();
+  const live = <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcement}</p>;
+  if (loading) return <section className="sw-panel" aria-busy="true"><p role="status">Đang tải lộ trình học tập…</p></section>;
+  if (error || !response) return <section className="sw-panel rm-problem" role="alert"><strong>Chưa tải được lộ trình học tập</strong><p>{error ?? "Vui lòng thử lại sau."}</p></section>;
+  const { roadmap, assessment } = response;
 
-  const load = useCallback(async () => {
-    setLoadError("");
-    try {
-      const data = await call<Loaded>("/api/student/study-plan");
-      setLoaded(data);
-      const next = withTerms(data.context, data.plan?.data ?? null);
-      setPlan(next); latest.current = next;
-      version.current = data.plan?.version ?? null;
-      setSavedAt(data.plan?.updatedAt ?? null);
-      setProjection(data.projection);
-      setSaveState("idle"); setError("");
-    } catch (e) { setLoadError(e instanceof Error ? e.message : "Không tải được lộ trình."); }
-  }, []);
-  useEffect(() => { void load(); }, [load]);
+  if (!roadmap && !assessment) return <section className="sw-panel sw-empty rm-start">
+    <span className="rm-start-icon" aria-hidden="true"><Icon name="route" /></span>
+    <h2>Chưa có kết quả đánh giá năng lực</h2>
+    <p>Lộ trình học tập được soạn từ kết quả Đánh giá năng lực mới nhất của bạn. Hãy tạo kết quả đánh giá trước, rồi quay lại đây.</p>
+    <a className="sw-primary" href="#competency">Mở Đánh giá năng lực <Icon name="arrow" /></a>
+  </section>;
 
-  const save = useCallback(async () => {
-    if (saving.current) return;
-    saving.current = true; dirty.current = false; setSaveState("saving");
-    try {
-      const result = await call<{ plan: Saved; projection: StudyPlanProjection | null }>("/api/student/study-plan", { method: "PUT", body: JSON.stringify({ version: version.current, data: latest.current }) });
-      version.current = result.plan.version;
-      setSavedAt(result.plan.updatedAt); setProjection(result.projection);
-      setSaveState(dirty.current ? "dirty" : "saved");
-    } catch (e) {
-      setSaveState("error"); setError(e instanceof Error ? e.message : "Chưa lưu được lộ trình.");
-    } finally { saving.current = false; }
-  }, []);
-  // Saves 0,7 s after the last change; a change during a save saves again afterwards.
-  useEffect(() => {
-    if (saveState !== "dirty") return;
-    const timer = setTimeout(() => void save(), 700);
-    return () => clearTimeout(timer);
-  }, [plan, saveState, save]);
-  const edit = (next: StudyPlanData) => {
-    setPlan(next); latest.current = next; dirty.current = true;
-    if (saveState !== "error") setSaveState("dirty");
-  };
-
-  const context = loaded?.context;
-  const names = useMemo(() => new Map(context?.courses.map((course) => [course.code, course.name]) ?? []), [context]);
-  const byCode = useMemo(() => new Map(context?.courses.map((course) => [course.code, course]) ?? []), [context]);
-  const issues = useMemo(() => (context ? conditionIssues(context, plan) : new Map<string, ConditionIssue>()), [context, plan]);
-  const terms = plan.terms.map((term) => term.code);
-  const planned = plan.terms.filter((term) => term.courses.length);
-  const shownWeek = week && planned.some((term) => term.code === week) ? week
-    : planned.find((term) => context && termIndex(term.code) >= termIndex(context.currentTerm))?.code ?? planned[0]?.code ?? null;
-  const weekTerm = plan.terms.find((term) => term.code === shownWeek);
-  const clashing = useMemo(() => clashes(weekTerm), [weekTerm]);
-
-  if (loadError) return <section className="sw-panel"><div className="sr-error" role="alert">{loadError}<button onClick={() => void load()}>Thử lại</button></div></section>;
-  if (!loaded || !context) return <section className="sw-panel" aria-busy="true"><p role="status">Đang tải lộ trình học tập…</p></section>;
-  if (!context.curriculum) return <section className="sw-panel sw-empty"><h2>Chưa xếp được lộ trình</h2><p>{context.cohortCode
-    ? `Chưa có chương trình đào tạo của khóa ${context.cohortCode} trong hệ thống. Lộ trình sẽ mở khi khoa cập nhật chương trình đào tạo.`
-    : "Hệ thống chưa biết khóa học của bạn. Hãy kiểm tra Hồ sơ và bảng điểm."}</p></section>;
-
-  const move = (code: string, to: string | null) => { edit(moveCourse(plan, context, code, to)); setPicked(null); };
-  const grabCourse = (code: string) => (event: DragEvent) => { event.dataTransfer.setData(DRAG_TYPE, JSON.stringify({ kind: "course", code } satisfies Grab)); event.dataTransfer.effectAllowed = "move"; };
-  const grabSession = (grab: Extract<Grab, { kind: "session" }>) => (event: DragEvent) => { event.stopPropagation(); event.dataTransfer.setData(DRAG_TYPE, JSON.stringify(grab)); event.dataTransfer.effectAllowed = "move"; };
-  const allowDrop = (key: string) => (event: DragEvent) => { if (event.dataTransfer.types.includes(DRAG_TYPE)) { event.preventDefault(); setOver(key); } };
-  const dropOnTerm = (to: string | null) => (event: DragEvent) => {
-    event.preventDefault(); setOver(null);
-    const grab = readGrab(event);
-    if (grab?.kind === "course") move(grab.code, to);
-  };
-  const dropOnSlot = (day: number, block: number) => (event: DragEvent) => {
-    event.preventDefault(); setOver(null);
-    const grab = readGrab(event);
-    if (grab?.kind === "session" && shownWeek && grab.term === shownWeek) edit(placeSession(plan, shownWeek, grab.code, grab.index, { day, block }));
-  };
-  const clickSlot = (day: number, block: number) => {
-    if (picked?.kind === "session" && shownWeek && picked.term === shownWeek) { edit(placeSession(plan, shownWeek, picked.code, picked.index, { day, block })); setPicked(null); }
-  };
-  const addTerm = () => { const last = terms.at(-1) ?? context.currentTerm; if (terms.length < MAX_TERMS) edit({ ...plan, terms: [...plan.terms, { code: nextTerm(last), courses: [] }] }); };
-  const removeTerm = (code: string) => edit({ ...plan, terms: plan.terms.filter((term) => term.code !== code) });
-
-  const suggest = async () => {
-    setBusy(true); setError("");
-    try {
-      const result = await call<{ data: StudyPlanData; projection: StudyPlanProjection | null }>("/api/student/study-plan/suggest", { method: "POST" });
-      edit(withTerms(context, mergeSuggestion(plan, result.data)));
-      setConfirm(null);
-    } catch (e) { setError(e instanceof Error ? e.message : "Chưa xếp được lộ trình."); }
-    finally { setBusy(false); }
-  };
-  const remove = async () => {
-    setBusy(true); setError("");
-    try {
-      if (version.current) await call("/api/student/study-plan", { method: "DELETE", body: JSON.stringify({ version: version.current }) });
-      dirty.current = false; setConfirm(null);
-      await load();
-    } catch (e) { setError(e instanceof Error ? e.message : "Chưa xóa được lộ trình."); }
-    finally { setBusy(false); }
-  };
-
-  const sections = poolSections(context, plan);
-  const query = search.trim().toLocaleLowerCase("vi");
-  const matches = (course: StudyPlanCourse) => !query || `${course.code} ${course.name}`.toLocaleLowerCase("vi").includes(query);
-  const progress = creditProgress(context, plan);
-  const loads = new Map(plan.terms.map((term) => [term.code, termLoad(context, plan, term.code)]));
-  const overTerms = [...loads.values()].filter((load) => load.status === "over").length;
-  const hasCourses = planned.length > 0;
-  const percent = (value: number) => (progress.total ? `${Math.min(100, (value / progress.total) * 100)}%` : "0%");
-  const statusText = saveState === "saving" ? "Đang lưu…" : saveState === "dirty" ? "Chưa lưu…" : saveState === "error" ? "Chưa lưu được"
-    : savedAt ? `Đã lưu lúc ${new Date(savedAt).toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}` : "Chưa lưu";
-
-  return <div className="rm-page">
-    <section className="sw-panel rm-toolbar">
-      <div><h2>Lộ trình của bạn</h2><p className="sw-muted">{context.curriculum.name}{context.specialtyLabel ? ` · ${context.specialtyLabel}` : ""}. Kéo môn từ “Môn còn phải học” vào từng học kỳ, rồi xếp buổi học vào lịch tuần.</p></div>
-      <div className="rm-actions">
-        <span className={`rm-save rm-save-${saveState}`} role="status" aria-live="polite">{statusText}</span>
-        <button className="sw-outline" disabled={busy} onClick={() => (hasCourses ? setConfirm("suggest") : void suggest())}><Icon name="spark" />Xếp theo kế hoạch đào tạo</button>
-        <a className={`sw-outline${!version.current || saveState !== "saved" && saveState !== "idle" ? " is-disabled" : ""}`} href="/api/student/study-plan/export"
-          aria-disabled={!version.current || (saveState !== "saved" && saveState !== "idle")} onClick={(event) => { if (!version.current || (saveState !== "saved" && saveState !== "idle")) event.preventDefault(); }}>
-          <Icon name="download" />Xuất Excel</a>
-        <button className="sr-secondary sr-danger" disabled={busy || !hasCourses} onClick={() => setConfirm("delete")}><Icon name="trash" />Xóa lộ trình</button>
-      </div>
-      {confirm === "suggest" && <Confirm title="Xếp lại theo kế hoạch đào tạo?" action="Xếp lại" busy={busy} onConfirm={() => void suggest()} onClose={() => setConfirm(null)}>
-        Các môn còn thiếu sẽ được xếp lại theo học kỳ chuẩn của chương trình đào tạo, có tính môn tiên quyết và giới hạn tín chỉ. Môn đang ở đúng học kỳ được giữ nguyên lịch tuần.</Confirm>}
-      {confirm === "delete" && <Confirm title="Xóa lộ trình học tập?" action="Xóa lộ trình" busy={busy} onConfirm={() => void remove()} onClose={() => setConfirm(null)}>
-        Mọi môn đã xếp và lịch tuần sẽ bị xóa. Bảng điểm và hồ sơ của bạn không thay đổi.</Confirm>}
-      {error && <div className="sr-error" role="alert">{error}{saveState === "error" && <button onClick={() => void load()}>Tải lại</button>}</div>}
-      {!context.hasTranscript && <p className="rm-note" role="note">Bạn chưa import bảng điểm nên hệ thống chưa biết môn nào đã học. <a href="#profile">Import bảng điểm</a> để lộ trình chỉ còn các môn cần học.</p>}
-      {!context.specialty && <p className="rm-note" role="note">Bạn chưa chọn chuyên ngành: môn của mọi chuyên ngành đều hiện, và nút xếp theo kế hoạch chỉ xếp môn chung. <a href="#profile">Chọn chuyên ngành</a> trong hồ sơ.</p>}
-      {context.limits && <p className="sw-muted rm-limit-note">Mỗi học kỳ nên từ {context.limits.min} đến {context.limits.max} tín chỉ: 2/3 đến 3/2 mức trung bình {context.limits.average.toLocaleString("vi-VN")} TC/học kỳ của chương trình (Thông tư 08/2021). GDTC, GDQP không tính.</p>}
-    </section>
-
-    <div className="rm-board">
-      <aside className={`sw-panel rm-pool${over === "pool" ? " is-over" : ""}`} aria-label="Môn còn phải học" onDragOver={allowDrop("pool")} onDragLeave={() => setOver(null)} onDrop={dropOnTerm(null)}>
-        <h3>Môn còn phải học</h3>
-        <label className="rm-search"><span className="rm-visually-hidden">Tìm môn</span><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Tìm mã hoặc tên môn…" /></label>
-        {sections.every((section) => !section.courses.length) && <p className="sw-muted">Bạn đã xếp hoặc đã học hết các môn của chương trình.</p>}
-        {sections.map((section) => { const courses = section.courses.filter(matches); const folded = !query && (section.id === "other" || section.id === "other-ctdt" || Boolean(section.note?.startsWith("Đã đủ")));
-          return courses.length ? <details key={`${section.id}-${folded}`} className={`rm-pool-group${section.id === "other" ? " is-other" : ""}`} open={!folded}>
-            <summary><span>{section.title}</span>{section.note && <em>{section.note}</em>}<small>{courses.length} môn</small></summary>
-            {courses.map((course) => <CourseCard key={course.code} course={course} names={names} terms={terms} term={null} onMove={(to) => move(course.code, to)} onGrab={grabCourse(course.code)} />)}
-          </details> : null; })}
-      </aside>
-
-      <div className="rm-terms" role="list" aria-label="Các học kỳ">
-        {plan.terms.map((term, index) => {
-          const load = loads.get(term.code)!;
-          const running = runningIn(context, term.code).filter((course) => !term.courses.some((item) => item.code === course.code));
-          const past = termIndex(term.code) < termIndex(context.currentTerm);
-          const removable = !term.courses.length && !running.length && index === plan.terms.length - 1 && term.code !== context.currentTerm && plan.terms.length > 1;
-          return <section key={term.code} role="listitem" className={`rm-term${over === term.code ? " is-over" : ""}${past ? " is-past" : ""}`} aria-label={termLabel(term.code)}
-            onDragOver={allowDrop(term.code)} onDragLeave={() => setOver(null)} onDrop={dropOnTerm(term.code)}>
-            <header><div><h3>{termLabel(term.code)}</h3>{term.code === context.currentTerm && <span className="sw-tag">Học kỳ hiện tại</span>}{past && <span className="sw-tag">Đã qua</span>}</div>
-              <span className={`rm-load rm-load-${load.status}`}>{load.credits}{context.limits ? `/${context.limits.max}` : ""} TC</span></header>
-            {load.status === "over" && <p className="rm-term-warn">Vượt {context.limits!.max} TC tối đa của một học kỳ.</p>}
-            {load.status === "under" && <p className="rm-term-warn rm-term-low">Dưới {context.limits!.min} TC tối thiểu của học kỳ chính.</p>}
-            {past && term.courses.length > 0 && <p className="rm-term-warn">Học kỳ này đã qua: hãy chuyển các môn sang học kỳ sau.</p>}
-            {running.map((course) => <CourseCard key={course.code} course={course} names={names} terms={terms} term={term.code} locked />)}
-            {term.courses.map((item) => { const course = byCode.get(item.code.toUpperCase()); return course
-              ? <CourseCard key={item.code} course={course} issue={issues.get(course.code)} names={names} terms={terms} term={term.code} onMove={(to) => move(course.code, to)} onGrab={grabCourse(course.code)} />
-              : <article key={item.code} className="rm-card has-issue"><strong>{item.code}</strong><p className="rm-card-issue">Môn không còn trong chương trình đào tạo.</p>
-                <button className="sr-secondary" onClick={() => move(item.code, null)}>Bỏ khỏi lộ trình</button></article>; })}
-            {!term.courses.length && !running.length && <p className="rm-drop-hint">Kéo môn vào đây</p>}
-            {load.conditional > 0 && <p className="sw-muted rm-term-extra">+ {load.conditional} TC GDTC/GDQP</p>}
-            {removable && <button className="rm-link" onClick={() => removeTerm(term.code)}>Bỏ học kỳ này</button>}
-          </section>;
-        })}
-        {terms.length < MAX_TERMS && <div role="listitem" className="rm-add-term-item"><button className="rm-add-term" onClick={addTerm}><Icon name="plus" />Thêm học kỳ</button></div>}
-      </div>
-
-      <aside className="sw-panel rm-progress" aria-label="Tiến độ tốt nghiệp">
-        <h3>Tiến độ</h3>
-        <div className="rm-meter" aria-hidden="true"><span className="rm-meter-done" style={{ width: percent(progress.done) }} /><span className="rm-meter-running" style={{ width: percent(progress.running) }} /><span className="rm-meter-planned" style={{ width: percent(progress.planned) }} /></div>
-        <dl className="rm-figures">
-          <div><dt><i className="rm-dot rm-dot-done" />Đã đạt</dt><dd>{progress.done} TC</dd></div>
-          <div><dt><i className="rm-dot rm-dot-running" />Đang học</dt><dd>{progress.running} TC</dd></div>
-          <div><dt><i className="rm-dot rm-dot-planned" />Đã xếp</dt><dd>{progress.planned} TC</dd></div>
-          {progress.total !== null && <div className="rm-total"><dt>Chương trình</dt><dd>{progress.total} TC</dd></div>}
-        </dl>
-        {progress.total !== null && progress.done + progress.running + progress.planned < progress.total && <p className="rm-missing">Còn thiếu {progress.total - progress.done - progress.running - progress.planned} TC so với chương trình: hãy xếp thêm môn, nhất là môn tự chọn.</p>}
-        {projection ? <div className="rm-graduation">
-          <h4>Xét tốt nghiệp</h4>
-          <p className="sw-muted">{projection.standardName}</p>
-          {projection.withPlan === "pass"
-            ? <p className="rm-verdict rm-verdict-pass"><Icon name="check" />Học đạt hết lộ trình này là đủ các nhóm học phần để tốt nghiệp.</p>
-            : <><p className="rm-verdict">Học hết lộ trình này vẫn còn thiếu:</p><ul>{projection.openGroups.map((group) => <li key={group.label}>{group.label}: {group.withPlan ?? 0}/{group.required ?? "?"} {group.unit}</li>)}</ul></>}
-          <p className="sw-muted">Chưa tính điểm trung bình tích lũy và chứng chỉ. Cập nhật sau mỗi lần lưu.</p>
-        </div> : <p className="sw-muted">{context.hasTranscript ? "Chưa có tiêu chuẩn xét tốt nghiệp cho khóa và chuyên ngành của bạn, nên chỉ hiện số tín chỉ." : "Import bảng điểm để xem tiến độ xét tốt nghiệp."}</p>}
-        {(issues.size > 0 || overTerms > 0) && <div className="rm-warnings"><h4>Cần xem lại</h4><ul>
-          {issues.size > 0 && <li>{issues.size} môn chưa đủ điều kiện tiên quyết hoặc học trước.</li>}
-          {overTerms > 0 && <li>{overTerms} học kỳ vượt giới hạn tín chỉ.</li>}</ul></div>}
-      </aside>
-    </div>
-
-    <section className="sw-panel rm-week" aria-labelledby="rm-week-title">
-      <div className="sw-section-heading"><div><h2 id="rm-week-title">Lịch tuần</h2><p className="sw-muted">Kéo từng buổi (LT: lý thuyết, TH: thực hành) vào ô. Trên điện thoại, chạm vào buổi rồi chạm vào ô.</p></div></div>
-      {!planned.length ? <p className="sw-muted">Hãy xếp môn vào học kỳ trước, rồi xếp lịch tuần ở đây.</p> : <>
-        <div className="rm-week-tabs" role="tablist" aria-label="Học kỳ">{planned.map((term) => <button key={term.code} role="tab" aria-selected={term.code === shownWeek} onClick={() => { setWeek(term.code); setPicked(null); }}>{termLabel(term.code)}</button>)}</div>
-        {weekTerm && <div className="rm-week-layout">
-          <div className="rm-unplaced" onDragOver={allowDrop("unplaced")} onDragLeave={() => setOver(null)}
-            onDrop={(event) => { event.preventDefault(); setOver(null); const grab = readGrab(event); if (grab?.kind === "session" && grab.term === weekTerm.code) edit(placeSession(plan, weekTerm.code, grab.code, grab.index, null)); }}>
-            <h3>Chưa xếp lịch</h3>
-            {weekTerm.courses.map((item) => { const course = byCode.get(item.code.toUpperCase()); const open = item.sessions.map((session, index) => ({ session, index })).filter(({ session }) => session.day === null);
-              return <div key={item.code} className="rm-unplaced-course"><p><strong>{course?.name ?? item.code}</strong><span>{item.sessions.length ? `${item.sessions.length - open.length}/${item.sessions.length} buổi đã xếp` : "Không có buổi học trên lớp"}</span></p>
-                <div className="rm-chips">{open.map(({ session, index }) => { const grab = { kind: "session" as const, term: weekTerm.code, code: item.code, index };
-                  const active = picked?.kind === "session" && picked.code === item.code && picked.index === index && picked.term === weekTerm.code;
-                  return <span key={index} className={`rm-chip rm-color-${colorOf(item.code)}${active ? " is-picked" : ""}`} draggable onDragStart={grabSession(grab)}>
-                    <button className="rm-chip-main" aria-pressed={active} onClick={() => setPicked(active ? null : grab)}>{session.kind}</button>
-                    <button className="rm-chip-x" aria-label={`Bỏ buổi ${session.kind} của ${course?.name ?? item.code}`} onClick={() => edit(changeSessions(plan, weekTerm.code, item.code, { remove: index }))}><Icon name="close" /></button></span>; })}
-                  {item.sessions.length < MAX_SESSIONS && <button className="rm-chip-add" aria-label={`Thêm buổi cho ${course?.name ?? item.code}`} onClick={() => edit(changeSessions(plan, weekTerm.code, item.code, { add: true }))}><Icon name="plus" />Buổi</button>}</div></div>; })}
-            {picked?.kind === "session" && <p className="rm-pick-hint" role="status">Chọn một ô trong lịch để đặt buổi này.</p>}
-          </div>
-          <div className="rm-grid-scroll" tabIndex={0} role="region" aria-label={`Lịch tuần ${termLabel(weekTerm.code)}`}>
-            <table className="rm-grid"><thead><tr><th scope="col">Ca</th>{DAYS.map((day) => <th key={day} scope="col">{dayLabel(day)}</th>)}</tr></thead>
-              <tbody>{BLOCKS.map((block) => <tr key={block.block}><th scope="row"><strong>Ca {block.block}</strong><span>Tiết {block.periods}</span><span>{block.time}</span></th>
-                {DAYS.map((day) => { const here = weekTerm.courses.flatMap((item) => item.sessions.map((session, index) => ({ item, session, index })))
-                  .filter(({ session }) => session.day === day && session.block === block.block);
-                  const key = `${day}-${block.block}`; const clash = here.length > 1;
-                  return <td key={day} className={`${over === key ? "is-over" : ""}${clash ? " is-clash" : ""}${picked?.kind === "session" ? " is-target" : ""}`}
-                    onDragOver={allowDrop(key)} onDragLeave={() => setOver(null)} onDrop={dropOnSlot(day, block.block)} onClick={() => clickSlot(day, block.block)}
-                    tabIndex={picked?.kind === "session" ? 0 : -1} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); clickSlot(day, block.block); } }}
-                    aria-label={`${dayLabel(day)}, ca ${block.block}${here.length ? `: ${here.map(({ item, session }) => `${names.get(item.code.toUpperCase()) ?? item.code} ${session.kind}`).join(", ")}` : ""}`}>
-                    {here.map(({ item, session, index }) => <span key={`${item.code}-${index}`} className={`rm-slot rm-color-${colorOf(item.code)}${clashing.has(`${item.code}#${index}`) ? " is-clash" : ""}`}
-                      draggable onDragStart={grabSession({ kind: "session", term: weekTerm.code, code: item.code, index })} onClick={(event) => event.stopPropagation()}>
-                      <strong>{shortName(names.get(item.code.toUpperCase()) ?? item.code)}</strong><span>{session.kind} · {item.code}</span>
-                      <button aria-label={`Bỏ ${session.kind} của ${names.get(item.code.toUpperCase()) ?? item.code} khỏi ô`} onClick={() => edit(placeSession(plan, weekTerm.code, item.code, index, null))}><Icon name="close" /></button></span>)}
-                    {clash && <em className="rm-clash-note">Trùng lịch</em>}
-                  </td>; })}</tr>)}</tbody></table></div>
-        </div>}
+  if (!roadmap) return <section className="sw-panel rm-start">
+    {live}
+    <span className="rm-start-icon" aria-hidden="true"><Icon name="route" /></span>
+    <h2>Lộ trình học tập 3 tháng của bạn</h2>
+    <p>EduPath AI đóng vai cố vấn học tập, soạn cho bạn kế hoạch 3 tháng tới, tính từ hôm nay:</p>
+    <ul className="rm-start-list">
+      <li><Icon name="book" /><span><strong>Môn bạn cần học</strong> theo kế hoạch đào tạo: học phần đang học, học phần trễ và học phần của học kỳ tới.</span></li>
+      <li><Icon name="refresh" /><span><strong>Môn bạn cần cải thiện</strong>: học lại học phần chưa đạt, học cải thiện học phần điểm D, D+.</span></li>
+      <li><Icon name="target" /><span><strong>Kỹ năng, kiến thức nên tự học thêm</strong> để nâng cao trình độ và tăng khả năng làm việc ở nghề mục tiêu.</span></li>
+    </ul>
+    {!response.aiEnabled
+      ? <p className="rm-note">Lộ trình do EduPath AI soạn hiện chưa được bật.</p>
+      : <>
+        {assessment && !assessment.hasCareer && <p className="rm-note">Kết quả đánh giá của bạn chưa có nghề mục tiêu nên lộ trình sẽ chưa có phần kỹ năng nghề. Hãy chọn nghề mục tiêu trong Hồ sơ rồi đánh giá lại để có lộ trình đầy đủ.</p>}
+        {!response.worker.online && <p className="rm-note">Máy AI đang tạm nghỉ: yêu cầu của bạn sẽ được giữ trong hàng đợi và lộ trình sẽ được soạn khi máy hoạt động trở lại.</p>}
+        <div className="rm-actions"><button type="button" className="sw-primary" disabled={creating} onClick={create}><Icon name="spark" />{creating ? "Đang gửi…" : "Tạo lộ trình"}</button></div>
+        {createError && <p className="rm-error" role="alert">{createError}</p>}
       </>}
-    </section>
-  </div>;
+    <p className="rm-footer">Lộ trình dùng kết quả Đánh giá năng lực lúc {formatDateTime(assessment?.createdAt)}. Nếu bảng điểm vừa thay đổi, hãy tạo lại kết quả đánh giá trước.</p>
+  </section>;
+
+  return <div className="rm-page">{live}<RoadmapView roadmap={roadmap} response={response} create={create} creating={creating} createError={createError} /></div>;
 }

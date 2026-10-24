@@ -8,6 +8,8 @@ import { buildGraduationAdviceInput, GRADUATION_ADVICE_PROMPT_VERSION } from "..
 import { syntheticGraduation } from "../../graduation/advice/test-fixture.js";
 import { buildCourseAiInput, COURSE_AI_PROMPT_VERSIONS } from "../../competencies/ai/prompt.js";
 import { courseSource } from "../../competencies/ai/test-fixture.js";
+import { buildRoadmapInput, ROADMAP_PROMPT_VERSION } from "../../roadmap/prompt.js";
+import { syntheticRoadmapFacts } from "../../roadmap/test-fixture.js";
 import { buildAiInput } from "./prompt.js";
 import { syntheticResult, withCompV3Improvements } from "./test-fixture.js";
 import { createCompetencyAiExpiry, createCompetencyWorkerRouter, expireCompetencyAiJobs } from "./worker-router.js";
@@ -583,5 +585,78 @@ describe("competency course suggestion jobs", () => {
     const cancelled = setup(withCourse(courseRow({ status: "cancelled", lease_token: null })));
     await request(cancelled.app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success(output)).expect(409, { error: "job_expired" });
     expect(courseUpdate(cancelled.run)).toBeUndefined();
+  });
+});
+
+describe("study roadmap jobs", () => {
+  const ALL = ["competency_assessment", "career_skill_suggestion", "graduation_advice", "competency_course_suggestion_v2", "study_roadmap"];
+  const roadmapInput = buildRoadmapInput(syntheticRoadmapFacts());
+  const roadmapClaim = (s: string) => s.includes("UPDATE stu_roadmaps j SET status='processing'");
+  const adviceClaim = (s: string) => s.includes("UPDATE stu_grad_advice j SET status='processing'");
+  const competencyClaim = (s: string) => s.includes("UPDATE stu_comp_ai_jobs j SET status='processing'");
+  const queued = (which: { roadmap?: boolean; advice?: boolean; competency?: boolean }): Handler => (s) =>
+    roadmapClaim(s) && which.roadmap ? { rows: [{ id: JOB, leaseToken: LEASE, aiInput: roadmapInput }] }
+      : adviceClaim(s) && which.advice ? { rows: [{ id: JOB, leaseToken: LEASE, aiInput: buildGraduationAdviceInput(syntheticGraduation()) }] }
+        : competencyClaim(s) && which.competency ? { rows: [{ id: JOB, leaseToken: LEASE, aiInput }] } : undefined;
+  const claim = (app: express.Express, body?: object) => {
+    const req = request(app).post("/w/claim").set("Authorization", AUTH);
+    return (body === undefined ? req : req.send(body)).expect(200);
+  };
+  const roadmapRow = (extra: Row = {}): Row => ({ status: "processing", lease_token: LEASE, valid: true, ai_input: roadmapInput, ...extra });
+  /** The id is in none of the other job tables. */
+  const withRoadmap = (row: Row | null): Handler => (s) => (s.includes("FROM stu_roadmaps WHERE id=$1 FOR UPDATE") ? { rows: row ? [row] : [] } : undefined);
+  const roadmapUpdate = (run: ReturnType<typeof setup>["run"]) => run.mock.calls.find(([s]) => s.startsWith("UPDATE stu_roadmaps SET status=$2"));
+  const output = {
+    summary: "Ba tháng tới bạn tập trung học lại Cơ sở lập trình.",
+    study: [{ code: "71ITIS30203", advice: "Đăng ký sớm." }], improve: [], skills: [],
+    months: [{ month: "1", focus: "Bắt đầu.", tasks: ["Ôn tập."] }, { month: "2", focus: "Học lại.", tasks: ["Đăng ký."] }, { month: "3", focus: "Tự học.", tasks: ["Làm dự án."] }],
+  };
+
+  it("never gives a roadmap job to a worker that does not advertise the kind", async () => {
+    for (const body of [undefined, {}, { kinds: ALL.slice(0, 4) }]) {
+      const { app, sql } = setup(queued({ roadmap: true }));
+      expect((await claim(app, body)).body).toEqual({ job: null });
+      expect(sql().some(roadmapClaim)).toBe(false);
+    }
+  });
+
+  it("gives roadmaps after graduation advice and before competency jobs, with thinking and without the key maps", async () => {
+    const advice = setup(queued({ roadmap: true, advice: true }));
+    expect((await claim(advice.app, { kinds: ALL })).body.job.kind).toBe("graduation_advice");
+    expect(advice.sql().some(roadmapClaim)).toBe(false);
+
+    const roadmap = setup(queued({ roadmap: true, competency: true }));
+    const res = await claim(roadmap.app, { kinds: ALL });
+    expect(res.body.job).toEqual({ kind: "study_roadmap", id: JOB, leaseToken: LEASE, promptVersion: ROADMAP_PROMPT_VERSION,
+      system: roadmapInput.system, user: roadmapInput.user, schema: roadmapInput.schema, options: roadmapInput.options, think: true });
+    expect(JSON.stringify(res.body)).not.toMatch(/"keys"/);
+    expect(roadmap.sql().some(competencyClaim)).toBe(false);
+    const claimCall = roadmap.run.mock.calls.find(([s]) => roadmapClaim(s))!;
+    expect((claimCall[1] as unknown[]).slice(1)).toEqual([2, 15]);
+  });
+
+  it("expires stuck roadmaps in the claim housekeeping", async () => {
+    const { app, run } = setup();
+    await claim(app, {});
+    expect(run.mock.calls.some(([s]) => s.startsWith("UPDATE stu_roadmaps SET status='failed'"))).toBe(true);
+  });
+
+  it("extends and completes a roadmap after the other tables miss it", async () => {
+    const until = new Date("2026-10-24T10:00:00Z");
+    const extended = setup((s) => (s.startsWith("UPDATE stu_roadmaps SET lease_until") ? { rows: [{ leaseUntil: until }] } : undefined));
+    await request(extended.app).post(`/w/${JOB}/extend`).set("Authorization", AUTH).send({ leaseToken: LEASE }).expect(200, { leaseUntil: until.toISOString() });
+    expect(extended.run.mock.calls.map(([s]) => s.split(" ").slice(0, 2).join(" "))).toEqual(
+      ["UPDATE stu_comp_ai_jobs", "UPDATE career_ai_suggestions", "UPDATE stu_grad_advice", "UPDATE ad_comp_ai_suggestions", "UPDATE stu_roadmaps"]);
+
+    const { app, run, sql } = setup(withRoadmap(roadmapRow()));
+    await request(app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success(output)).expect(200, { ok: true });
+    const update = roadmapUpdate(run)!;
+    expect((update[1] as unknown[]).slice(0, 3)).toEqual([JOB, "completed", null]);
+    expect(sql().at(-1)).toBe("COMMIT");
+
+    const cancelled = setup(withRoadmap(roadmapRow({ status: "cancelled", lease_token: null })));
+    await request(cancelled.app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success(output)).expect(409, { error: "job_expired" });
+    expect(roadmapUpdate(cancelled.run)).toBeUndefined();
+    await request(setup().app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success(output)).expect(409, { error: "job_expired" });
   });
 });

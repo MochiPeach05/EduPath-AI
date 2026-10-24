@@ -11,6 +11,7 @@ import {
   parseCourseSuggestionOutput,
   parseGraduationAdviceOutput,
   parseJobOutput,
+  parseStudyRoadmapOutput,
   type FetchLike,
   type OllamaJob,
   type OllamaRuntime
@@ -330,6 +331,23 @@ describe("parseCourseSuggestionOutput", () => {
     for (const content of ["[]", "{}", JSON.stringify({ links: "x" }), JSON.stringify({ links: [1] }), JSON.stringify({ weights: [null] }),
       JSON.stringify({ links: [], newSkills: {} }), "not json"]) {
       expect(() => parseCourseSuggestionOutput(content)).toThrowError(expect.objectContaining({ code: "invalid_ai_output" }));
+    }
+  });
+});
+
+describe("parseStudyRoadmapOutput", () => {
+  const roadmap = { summary: "Tóm tắt.", study: [{ code: "A", advice: "x" }], improve: [], skills: [], months: [{ month: "1", focus: "x", tasks: ["y"] }] };
+
+  it("accepts a summary and four arrays of objects, and is the check of the study_roadmap kind", () => {
+    expect(parseStudyRoadmapOutput(JSON.stringify(roadmap))).toEqual(roadmap);
+    expect(parseJobOutput("study_roadmap", JSON.stringify(roadmap))).toEqual(roadmap);
+    expect(() => parseJobOutput("graduation_advice", JSON.stringify(roadmap))).toThrowError(expect.objectContaining({ code: "invalid_ai_output" }));
+  });
+
+  it("rejects anything else with invalid_ai_output", () => {
+    for (const content of ["[]", "{}", JSON.stringify({ ...roadmap, summary: " " }), JSON.stringify({ ...roadmap, months: "x" }),
+      JSON.stringify({ ...roadmap, skills: [null] }), JSON.stringify({ ...roadmap, study: undefined }), "not json"]) {
+      expect(() => parseStudyRoadmapOutput(content)).toThrowError(expect.objectContaining({ code: "invalid_ai_output" }));
     }
   });
 });
