@@ -49,8 +49,11 @@ import type { Confidence, FitCode, GapStatus } from "./types.js";
  * v15: "Sắp học" counts 0 too (user, 2026-10-25: "sắp học là 0 luôn đi"): the score is how ready the student is
  * now, so a career whose skills are mostly still to come can no longer score high on one or two met skills. Only
  * exempt-only skills (met without a score) wait; "Chưa đủ dữ liệu" as a level is left for careers without skills.
+ * v16: every skill without a score says whether a course of it is in progress or planned after the term being
+ * studied (SkillResult.upcoming/upcomingTerm), the rule of the career rows, so Đánh giá năng lực tells "Sắp học"
+ * from "Chưa học" like Khoảng trống kỹ năng (user, 2026-10-25, chose to align the pages).
  */
-export const CALC_VERSION = "comp-calc-v15";
+export const CALC_VERSION = "comp-calc-v16";
 /**
  * The graduation evaluation uses no skill level, so it keeps the version of its last change:
  * comp-calc-v10 changed only levels and must not re-date every student's graduation advice.

@@ -461,6 +461,9 @@ describe("career gaps and fit (spec §7.5–§7.7)", () => {
     expect(early.career!.requirements.map((item) => [item.title, item.status, item.upcomingTerm])).toEqual([
       ["Kiểm thử phần mềm", "upcoming", "HK243"], ["Lập trình C#", "not_studied", null], ["Phát triển web", "upcoming", "HK241"],
     ]);
+    // Đánh giá năng lực reads the same rule from the skill rows (v16): a course ahead or not, and its term.
+    expect(["Kiểm thử phần mềm", "Lập trình C#", "Phát triển web"].map((name) => [byName(early, name).upcoming, byName(early, name).upcomingTerm]))
+      .toEqual([[true, "HK243"], [false, null], [true, "HK241"]]);
     // Sắp học counts 0 (v15): nothing is scored yet, so the fit is 0 "Không phù hợp" rather than "Chưa đủ dữ liệu".
     expect(early.career).toMatchObject({ fitCode: "not_fit", fitScore: 0, fit: 0, dataShare: 1 });
     expect(early.progress!.late.map((entry) => ("code" in entry ? entry.code : entry.label))).toEqual(["71NAD110013", "71ITSE30103"]);

@@ -67,7 +67,7 @@ const SKILL_TICKS = [0, ...LEVEL_TICKS, 100];
 
 function LevelBadge({ level, label }: { level: LevelCode | DisplayLevel | null; label: string | null }) {
   const step = levelStep(level);
-  const none = level === "no_evidence" || level === "upcoming" || level === "no_score" || level === null;
+  const none = level === "no_evidence" || level === "upcoming" || level === "not_studied" || level === "no_score" || level === null;
   return <span className={`scomp-level scomp-level-${step}${none ? " scomp-level-none" : ""}`}>
     <span className="scomp-pips" aria-hidden="true">{[1, 2, 3, 4, 5].map((pip) => <i key={pip} className={pip <= step ? "is-on" : undefined} />)}</span>
     {levelText(level, label)}
@@ -234,13 +234,14 @@ function HistorySection({ result }: { result: AssessmentResult }) {
   </Section>;
 }
 
-const LEVEL_COLUMN_LABELS: Record<(typeof LEVEL_COLUMNS)[number], string> = { ...LEVEL_LABELS, upcoming: "Sắp học", no_score: "Chưa có điểm" };
+const LEVEL_COLUMN_LABELS: Record<(typeof LEVEL_COLUMNS)[number], string> = { ...LEVEL_LABELS, upcoming: "Sắp học", not_studied: "Chưa học", no_score: "Chưa có điểm" };
 
 const CHART_TIP_SKILLS = 5;
 const CHART_RANGES: Partial<Record<ChartLevel, string>> = Object.fromEntries(LEVEL_SCALE.map((level) => [level.code, level.range]));
 /** What the tooltip says about the level itself, after the count. */
 function segmentNote(segment: LevelSegment): string {
-  if (segment.level === "upcoming") return "Đang học hoặc chưa học tới học phần đo các kỹ năng này — không phải điểm yếu";
+  if (segment.level === "upcoming") return "Đang học hoặc sẽ học học phần đo các kỹ năng này ở học kỳ sau — không phải điểm yếu";
+  if (segment.level === "not_studied") return "Học phần đo các kỹ năng này đã qua học kỳ trong kế hoạch mà bạn chưa học, hoặc không có trong kế hoạch";
   if (segment.level === "no_score") return "Đã học học phần liên quan nhưng bảng điểm chưa có điểm số, nên chưa đánh giá được";
   if (segment.level === "exempt") return "Học phần được miễn hoặc công nhận nên không có điểm";
   return `Điểm kỹ năng ${CHART_RANGES[segment.level] ?? ""}`;
@@ -281,7 +282,7 @@ function ChartSegment({ bar, segment, last, scaleWidth, onSelect }: { bar: Level
 function LevelChart({ result, onSelect }: { result: AssessmentResult; onSelect: (group: string, level: ChartLevel) => void }) {
   const { axis, bars } = useMemo(() => levelChart(result), [result]);
   // "Chưa có điểm" and exempt are rare: in the legend only when a bar has them.
-  const levels = CHART_LEVELS.filter((level) => (level !== "exempt" && level !== "no_score") || bars.some((bar) => bar.segments.some((segment) => segment.level === level)));
+  const levels = CHART_LEVELS.filter((level) => (level !== "exempt" && level !== "no_score" && level !== "not_studied") || bars.some((bar) => bar.segments.some((segment) => segment.level === level)));
   const scaleRef = useRef<HTMLDivElement>(null);
   const [scaleWidth, setScaleWidth] = useState(0);
   useLayoutEffect(() => {
@@ -331,7 +332,7 @@ function SkillsSection({ result }: { result: AssessmentResult }) {
   // A segment of the chart (or a count in its table view) filters the list below to exactly those skills.
   const show = (group: string, level: string) => {
     setFilters({ ...EMPTY_SKILL_FILTERS, group, level });
-    setExpanded((current) => ({ ...current, [level === "upcoming" || level === "no_score" ? level : group]: true }));
+    setExpanded((current) => ({ ...current, [level === "upcoming" || level === "not_studied" || level === "no_score" ? level : group]: true }));
     scrollToSection("scomp-skill-list");
   };
   return <Section id="scomp-skills" title="Bảng phân tích mức độ thành thạo theo nhóm năng lực" description={`${result.skills.length.toLocaleString("vi-VN")} kỹ năng, chia theo nhóm. Mỗi kỹ năng được chấm theo thang 0–100 từ điểm các học phần minh chứng, theo trọng số học phần do Khoa cấu hình, rồi xếp vào một mức thành thạo.`}>
@@ -389,7 +390,10 @@ const courseScore = (course: AssessmentResult["courses"][number] | undefined) =>
 function noScoreText(skill: SkillResult): string {
   if (skill.status === "not_applicable") return "Ngoài lựa chọn học phần của bạn";
   if (skill.level === "exempt") return "Miễn/công nhận, không có điểm";
-  return displayLevel(skill) === "no_score" ? "Chưa có điểm" : "Sắp học";
+  const level = displayLevel(skill);
+  if (level === "no_score") return "Chưa có điểm";
+  if (level === "not_studied") return "Chưa học";
+  return skill.upcomingTerm ? `Sắp học · ${skill.upcomingTerm}` : "Sắp học";
 }
 
 function SkillRow({ skill, courses, groups }: { skill: SkillResult; courses: Map<string, AssessmentResult["courses"][number]>; groups: Map<string, AssessmentResult["groups"][number]> }) {

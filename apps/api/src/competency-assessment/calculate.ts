@@ -312,6 +312,14 @@ function assess(inputs: AssessmentInputs): Assessment {
     electiveStates.set(elective.code, { code: elective.code, quota, fill, rows, remaining: quota === null ? null : Math.max(0, quota - fill) });
   }
   const notChosen = (row: Row) => row.electiveCode !== null && electiveStates.get(row.electiveCode)?.remaining === 0 && !isAttemptedState(row.state);
+  // A course still ahead for the student: being studied, or planned after the term being studied (v13), not studied and
+  // not an unchosen elective. One rule for "Sắp học" on Đánh giá năng lực (SkillResult.upcoming, v16) and the career rows.
+  const isAhead = (row: Row) => !notChosen(row) && !isStudiedState(row.state)
+    && (row.state === "in_progress" || (row.plannedTerm !== null && (studyTerm === null || row.plannedTerm > studyTerm)));
+  /** The earliest term of the courses ahead: the attempt for one in progress, else the plan's. */
+  const aheadTerm = (rows: readonly Row[]): string | null => rows.filter(isAhead)
+    .map((row) => (row.state === "in_progress" ? row.attemptTerm ?? row.plannedTerm : row.plannedTerm))
+    .filter((term): term is string => term !== null).sort(compareCode)[0] ?? null;
   const quotaUnknownGroups = [...electiveStates.values()].filter((group) => group.quota === null && group.rows.length).map((group) => group.code).sort(compareCode);
   // comp-calc-v7, the graduation/thesis.ts rule: in an elective group whose quota one thesis course
   // ("Đồ án/Khóa luận tốt nghiệp") completes alone, the other courses replace the thesis. They are
@@ -443,6 +451,9 @@ function assess(inputs: AssessmentInputs): Assessment {
     const level = levelOf(skill.score, skill.status === "exempt_only");
     const confidence = hasEvidence ? confidenceOf(coverage, skill.all.num) : null;
     const group = groupsById.get(skill.groupId)!;
+    // Without a score: "Sắp học" when a course of the skill is ahead, "Chưa học" otherwise (v16).
+    const applicableRows = skill.links.filter((link) => link.row.applicable).map((link) => link.row);
+    const waiting = skill.status === "no_evidence";
     return {
       key: skill.key, skillId: skill.skillId, name: skill.name, groupKey: groupKey.get(skill.groupId)!, groupId: skill.groupId,
       groupName: group.name, groupKeys: groupOrder.filter((item) => skill.groupIds.includes(item.id)).map((item) => groupKey.get(item.id)!),
@@ -453,6 +464,7 @@ function assess(inputs: AssessmentInputs): Assessment {
       status: skill.status, notApplicableReason: skill.notApplicableReason, conditionOnly: skill.conditionOnly,
       careerSkill: careerSkillIds.has(skill.skillId), evidenceCourses: evidenceRows(skill),
       otherSpecialtyCourses: skill.links.filter((link) => !link.row.applicable).map((link) => link.row.code).sort(compareCode),
+      upcoming: waiting && applicableRows.some(isAhead), upcomingTerm: waiting ? aheadTerm(applicableRows) : null,
     };
   });
   // Rank on unrounded values; keys break ties.
@@ -595,15 +607,12 @@ function assess(inputs: AssessmentInputs): Assessment {
       else if (skill.score !== null) status = skill.score >= threshold ? "met" : "below";
       else if (skill.exempt) status = "met";
       else {
-        const pending = applicableLinks.map((link) => link.row).filter((row) => !notChosen(row) && !isStudiedState(row.state));
-        const future = (row: Row) => row.state === "in_progress" || (row.plannedTerm !== null && (studyTerm === null || row.plannedTerm > studyTerm));
         // v14: one course being studied or planned ahead is enough for "Sắp học"; an open option whose plan slot has
         // passed no longer turns it into "Chưa học" (K30: 71ITAI40303 in progress read "Chưa học").
-        const ahead = pending.filter(future);
-        if (ahead.length) {
+        const applicableRows = applicableLinks.map((link) => link.row);
+        if (applicableRows.some(isAhead)) {
           status = "upcoming";
-          upcomingTerm = ahead.map((row) => (row.state === "in_progress" ? row.attemptTerm ?? row.plannedTerm : row.plannedTerm))
-            .filter((term): term is string => term !== null).sort(compareCode)[0] ?? null;
+          upcomingTerm = aheadTerm(applicableRows);
         } else if (applicableLinks.every((link) => notChosen(link.row))) {
           // Only electives the student did not choose teach it (the group's credits are filled): "Cần tự học", like a skill
           // of another specialty, no longer "Chưa học" with no course to register (v14).

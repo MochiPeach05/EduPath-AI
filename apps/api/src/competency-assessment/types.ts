@@ -387,6 +387,12 @@ export type SkillResult = ScoreSummary & {
   evidenceCourses: SkillEvidenceRow[];
   /** Linked courses outside the applicable set (other specialty). */
   otherSpecialtyCourses: string[];
+  /**
+   * Without a score (no_evidence): a course of the skill is in progress or planned after the term being studied
+   * ("Sắp học"), else "Chưa học" (comp-calc-v16); absent in results stored before, which read "Sắp học".
+   */
+  upcoming?: boolean;
+  upcomingTerm?: string | null;
 };
 
 export type PrerequisiteGap = { code: string; name: string | null; kind: "prerequisite" | "prior" };

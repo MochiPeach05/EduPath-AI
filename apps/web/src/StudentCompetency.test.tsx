@@ -146,7 +146,7 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
     expect(tip).toContain("<span>Lập trình web</span><b>91</b>");
     expect(section).toContain("Điểm kỹ năng 80 đến dưới 90");
     expect(section).toContain("<span>Lập trình hướng đối tượng</span><b>86</b>");
-    expect(section).toContain("Đang học hoặc chưa học tới học phần đo các kỹ năng này — không phải điểm yếu");
+    expect(section).toContain("Đang học hoặc sẽ học học phần đo các kỹ năng này ở học kỳ sau — không phải điểm yếu");
     // Legend for every level present, axis ticks, and the table as a collapsed twin.
     expect([...section.matchAll(/<li><i class="scomp-chart-key scomp-chart-\w+" aria-hidden="true"><\/i>([^<]+)<\/li>/g)].map((match) => match[1]))
       .toEqual(["Xuất sắc", "Giỏi", "Khá", "Trung bình", "Yếu", "Sắp học", "Miễn/công nhận"]);

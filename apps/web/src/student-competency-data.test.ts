@@ -72,6 +72,18 @@ describe("skills without a score: Sắp học or Chưa có điểm (2026-10-21)"
     expect(filterSkills(studied.skills, { ...EMPTY_SKILL_FILTERS, level: "no_score" }).map((skill) => skill.key)).toEqual(["S07"]);
     expect(bucketSkills(studied, studied.skills).map((bucket) => [bucket.id, bucket.title])).toContainEqual(["no_score", "Chưa có điểm"]);
   });
+  it("says Chưa học when no course of the skill is ahead, like Khoảng trống kỹ năng (comp-calc-v16, 2026-10-25)", () => {
+    expect(displayLevel({ ...s07, upcoming: true })).toBe("upcoming");
+    expect(displayLevel({ ...s07, upcoming: false })).toBe("not_studied");
+    // Stored before v16 (no flag): still "Sắp học"; a course studied without a score stays "Chưa có điểm".
+    expect(displayLevel({ ...s07, upcoming: undefined })).toBe("upcoming");
+    expect(displayLevel({ ...withRole("studied"), upcoming: false })).toBe("no_score");
+    const late = { ...fixtureResult, skills: fixtureResult.skills.map((skill) => skill.key === "S07" ? { ...s07, upcoming: false, upcomingTerm: null } : skill) };
+    expect(levelSummary(late)[0]!.counts).toMatchObject({ upcoming: 0, not_studied: 1 });
+    expect(levelChart(late).bars[0]!.segments.find((segment) => segment.level === "not_studied")).toMatchObject({ label: "Chưa học", count: 1 });
+    expect(filterSkills(late.skills, { ...EMPTY_SKILL_FILTERS, level: "not_studied" }).map((skill) => skill.key)).toEqual(["S07"]);
+    expect(bucketSkills(late, late.skills).find((bucket) => bucket.id === "not_studied")).toMatchObject({ title: "Chưa học" });
+  });
   it("labels a group or the overall without evidence Chưa có điểm", () => {
     expect(levelText("no_evidence", "Chưa có minh chứng")).toBe("Chưa có điểm");
     expect(levelText("good", "Khá")).toBe("Khá");

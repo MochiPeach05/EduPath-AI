@@ -14,6 +14,9 @@
   /* Charts: "Sắp học"/"Chưa có điểm" and exempt neutrals (checked against --scomp-l1 for colour-blind separation), hairline grid, baseline. */
   --scomp-none: #7f8690;
   --scomp-exempt: #c3c8cf;
+  /* "Chưa học" (comp-calc-v16): the amber of "! Chưa học" on Khoảng trống kỹ năng; validated against --scomp-none
+     (normal ΔE 15,9, CVD ΔE 14,3) and ≥ 3:1 on the surface. */
+  --scomp-late: #c47f0e;
   --scomp-grid: #e8ebf0;
   --scomp-axis: #c3cad4;
   display: grid;
@@ -259,6 +262,7 @@
 .scomp-page .scomp-chart-needs_work { --scomp-chart-color: var(--scomp-l1); }
 .scomp-page .scomp-chart-no_evidence, .scomp-page .scomp-chart-upcoming, .scomp-page .scomp-chart-no_score { --scomp-chart-color: var(--scomp-none); }
 .scomp-page .scomp-chart-exempt { --scomp-chart-color: var(--scomp-exempt); }
+.scomp-page .scomp-chart-not_studied { --scomp-chart-color: var(--scomp-late); }
 /* "Chưa có điểm" shares the neutral of "Sắp học" and is told apart by a 135° hatch, not by another hue. */
 .scomp-page .scomp-chart-no_score .scomp-chart-fill, .scomp-page .scomp-chart-key.scomp-chart-no_score { background: repeating-linear-gradient(135deg, var(--scomp-none) 0 2px, var(--scomp-track) 2px 5px); }
 .scomp-page .scomp-chart-no_score .scomp-chart-value { padding: 2px 4px; border-radius: 3px; background: #fff; }
