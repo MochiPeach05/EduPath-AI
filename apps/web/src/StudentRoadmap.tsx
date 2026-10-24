@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import StudentAiRoadmap from "./StudentAiRoadmap";
 import { RoadmapTrack } from "./RoadmapProgress";
 import { RoadmapPlanner, type SaveState } from "./RoadmapPlanner";
@@ -126,7 +126,8 @@ function useStudyPlan() {
   return { context: loaded.data?.context ?? null, error: loaded.error, plan, projection, change, saveState, saveError, origin, reload };
 }
 
-export default function StudentRoadmap() {
+/** notice: shown under the tabs (the workspace's "Hồ sơ của bạn chưa đầy đủ"). */
+export default function StudentRoadmap({ notice }: { notice?: ReactNode }) {
   const [tab, setTab] = useState<Tab>(storedTab);
   const study = useStudyPlan();
   const choose = (next: Tab) => {
@@ -141,6 +142,7 @@ export default function StudentRoadmap() {
       {TABS.map((item) => <button key={item.id} type="button" role="tab" id={`rm-tab-${item.id}`} aria-selected={tab === item.id}
         aria-controls="rm-tab-panel" className={tab === item.id ? "is-active" : undefined} onClick={() => choose(item.id)}>{item.label}</button>)}
     </nav>
+    {notice}
     <div id="rm-tab-panel" role="tabpanel" aria-labelledby={`rm-tab-${tab}`} className="rm-tab-panel">
       {tab === "ai" ? <StudentAiRoadmap />
           : needsPlan && study.error ? <section className="sw-panel rm-problem" role="alert"><strong>Chưa tải được dữ liệu lộ trình</strong><p>{study.error}</p></section>

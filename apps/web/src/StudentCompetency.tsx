@@ -819,7 +819,8 @@ const HEADER_COPY: Record<CompetencyView, { title: string; resultTitle: string; 
   },
 };
 
-export default function StudentCompetency({ profile, view = "competency" }: { profile: Profile | null; view?: CompetencyView }) {
+/** notice: shown under the result panel (the workspace's "Hồ sơ của bạn chưa đầy đủ"). */
+export default function StudentCompetency({ profile, view = "competency", notice }: { profile: Profile | null; view?: CompetencyView; notice?: ReactNode }) {
   const [revision, setRevision] = useState(0);
   const live = useLiveData(`${COMPETENCY_API}/latest`, revision, readLatest);
   const transcript = useLiveData("/api/student/transcript", 0, readTranscriptPresence);
@@ -955,6 +956,7 @@ export default function StudentCompetency({ profile, view = "competency" }: { pr
       {error && <div className="sr-error" role="alert">{error}</div>}
       {live.error && !data && <div className="sr-error" role="alert">{live.error}<button type="button" onClick={() => setRevision((n) => n + 1)}>Thử lại</button></div>}
     </section>
+    {notice}
     {live.loading && !data && <section className="sw-panel scomp-section scomp-loading" aria-busy="true"><p>Đang tải kết quả đánh giá…</p><div /><div /><div /></section>}
     {blocked && <section className="sw-panel scomp-section" aria-labelledby="scomp-blocked-title"><div className="sw-empty scomp-empty"><span className="scomp-empty-icon" aria-hidden="true"><Icon name={blocked === "transcript_required" ? "document" : "info"} /></span><h3 id="scomp-blocked-title">{PRECONDITION_COPY[blocked].title}</h3><p>{PRECONDITION_COPY[blocked].text}</p>{PRECONDITION_COPY[blocked].action && <a className="sw-outline" href={PRECONDITION_COPY[blocked].action!.href}>{PRECONDITION_COPY[blocked].action!.label}</a>}</div></section>}
     {data && !assessment && !blocked && <section className="sw-panel scomp-section" aria-labelledby="scomp-intro-title"><div className="sw-empty scomp-empty">
