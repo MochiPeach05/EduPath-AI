@@ -7,7 +7,7 @@ import StudentProfileEditor from "./StudentProfileEditor";
 import StudentProfileSurvey from "./StudentProfileSurvey";
 import StudentTranscript from "./StudentTranscript";
 import StudentCurriculum from "./StudentCurriculum";
-import StudentOverview, { type StudentProfile } from "./StudentOverview";
+import StudentOverview, { requiredProfileItems, type StudentProfile } from "./StudentOverview";
 import { logout } from "./auth-api";
 import { Icon } from "./student-icons";
 import type { AuthenticatedUser } from "./types";
@@ -123,8 +123,14 @@ export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) 
   };
   // "Hồ sơ của bạn chưa đầy đủ" (user 2026-10-24: not at the top of the page, "để trên xấu quá"): under the result panel
   // of Đánh giá năng lực / Khoảng trống kỹ năng, under the tabs of Lộ trình học tập, under the heading elsewhere.
+  // Wording by the user (2026-10-24), followed by the items still missing.
+  const missingItems = profile ? requiredProfileItems(profile, profile.hasTranscript === true).filter((item) => !item.done) : [];
   const reminder = profile && profile.profileStatus !== "complete" ? <div className="sw-profile-reminder" role="note">
-    <Icon name="shield" /><p><strong>Hồ sơ của bạn chưa đầy đủ.</strong> EduPath AI cần bảng điểm, chuyên ngành, nghề mục tiêu và khảo sát định hướng (gồm công nghệ, sở thích) để hỗ trợ bạn đầy đủ.</p>
+    <Icon name="shield" />
+    <div className="sw-profile-reminder-body">
+      <p>Bạn vui lòng cung cấp đầy đủ các mục thông tin dưới đây để kết quả đánh giá được chính xác. Nếu có sự thay đổi, bạn có thể điều chỉnh lại các thông tin này trong tương lai.</p>
+      {missingItems.length > 0 && <ul className="sw-profile-missing" aria-label="Mục còn thiếu">{missingItems.map((item) => <li key={item.id}>{item.label}</li>)}</ul>}
+    </div>
     <button className="sw-outline" onClick={() => navigate("profile")}>Hoàn thành hồ sơ</button>
   </div> : null;
   const fields = { "Mã sinh viên": profile?.studentCode, "Khóa học": profile?.cohortCode, "Lớp học": profile?.className, "Năm nhập học": profile?.cohortYear, "Email": profile?.email ?? user.email };

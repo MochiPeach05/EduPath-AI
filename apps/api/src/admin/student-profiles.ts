@@ -29,6 +29,8 @@ export interface StudentProfileDetail extends StudentProfileSummary {
   surveyUpdatedAt?: string | null;
   /** The survey has the interest lists (survey-v2) and the student agreed to the current policy for it. */
   surveyComplete?: boolean;
+  /** A transcript is stored (the student pages list what the profile still lacks). */
+  hasTranscript?: boolean;
   username: string | null; careerGoal: string | null;
   accountCreatedAt: string; firstLoginAt: string; lastLoginAt: string;
   profileCreatedAt: string | null; profileUpdatedAt: string | null;
@@ -84,7 +86,8 @@ export class PostgresStudentProfileRepository implements StudentProfileRepositor
     const result = await this.pool.query<StudentProfileDetail>(`SELECT ${summaryColumns}, u.username,
       p.career_goal AS "careerGoal", p.career_position_id AS "careerPositionId", p.specialty,
       (SELECT json_build_object('id',c.id,'nameVi',c.name_vi,'nameEn',c.name_en,'deletedAt',c.deleted_at) FROM career_positions c WHERE c.id=p.career_position_id) AS "careerPosition", p.interests,
-      (SELECT s.updated_at FROM stu_profile_surveys s WHERE s.user_id=u.id) AS "surveyUpdatedAt", ${surveyComplete} AS "surveyComplete", u.created_at AS "accountCreatedAt", u.first_login_at AS "firstLoginAt",
+      (SELECT s.updated_at FROM stu_profile_surveys s WHERE s.user_id=u.id) AS "surveyUpdatedAt", ${surveyComplete} AS "surveyComplete",
+      EXISTS (SELECT 1 FROM student_transcripts t WHERE t.user_id = u.id) AS "hasTranscript", u.created_at AS "accountCreatedAt", u.first_login_at AS "firstLoginAt",
       u.last_login_at AS "lastLoginAt", p.created_at AS "profileCreatedAt", p.updated_at AS "profileUpdatedAt"
       FROM users u LEFT JOIN student_profiles p ON p.user_id = u.id
       WHERE (${studentScope} OR u.id = $2::uuid) AND u.id = $1`, [id, _actor.userId === id ? id : null]);

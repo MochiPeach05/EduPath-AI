@@ -16,6 +16,8 @@ export type StudentProfile = {
   surveyUpdatedAt?: string | null;
   /** The survey is complete (interests included) and agreed to under the current policy. */
   surveyComplete?: boolean;
+  /** A transcript is stored. */
+  hasTranscript?: boolean;
 };
 
 /**
@@ -34,7 +36,7 @@ export function requiredProfileItems(profile: StudentProfile | null, hasTranscri
 export default function StudentOverview({ profile, loading: profileLoading, navigate, identity }: {
   profile: StudentProfile | null; loading: boolean;
   navigate: (page: "profile" | "career" | "roadmap" | "competency") => void;
-  /** The student's identity strip, shown under the required-profile notice. */
+  /** The student's identity strip, shown above the required-profile notice (user 2026-10-24: under the account name). */
   identity: ReactNode;
 }) {
   const [transcript, setTranscript] = useState<Transcript | null>(null);
@@ -63,12 +65,13 @@ export default function StudentOverview({ profile, loading: profileLoading, navi
   const readyKnown = !loading && !profileLoading && !error && profile !== null;
   const missing = checklist.length - ready;
   return <div className="so-overview">
+    {identity}
     {readyKnown && missing > 0 && <section className="so-gate" aria-labelledby="so-gate-title">
       <span className="so-gate-icon" aria-hidden="true"><Icon name="shield" /></span>
       <div className="so-gate-body">
         <p className="so-gate-kicker">BẮT BUỘC TRƯỚC KHI SỬ DỤNG</p>
         <h2 id="so-gate-title">Hoàn thành Hồ sơ và bảng điểm để EduPath AI hỗ trợ bạn</h2>
-        <p>EduPath AI chỉ đánh giá năng lực, tìm khoảng trống kỹ năng và soạn lộ trình học tập cho bạn khi hồ sơ có đủ các mục dưới đây. Bạn còn {missing} mục chưa hoàn thành.</p>
+        <p>Bạn vui lòng cung cấp đầy đủ các mục thông tin dưới đây để kết quả đánh giá được chính xác. Nếu có sự thay đổi, bạn có thể điều chỉnh lại các thông tin này trong tương lai.</p>
         <ol className="so-gate-steps">{checklist.map((item, index) => <li key={item.id} className={item.done ? "is-done" : undefined}>
           <span className="so-gate-check" aria-hidden="true">{item.done ? <Icon name="check" /> : index + 1}</span>
           <span><strong>{item.label}</strong><small>{item.done ? "Đã hoàn thành" : item.hint}</small></span>
@@ -80,7 +83,6 @@ export default function StudentOverview({ profile, loading: profileLoading, navi
         <button className="sw-primary so-gate-button" onClick={() => navigate("profile")}>Hoàn thành hồ sơ ngay <Icon name="arrow" /></button>
       </div>
     </section>}
-    {identity}
     <div className="sw-section-heading"><h2>Không gian học tập của bạn</h2><span className="sw-muted">Mỗi bước nhỏ, một hướng đi rõ hơn</span></div>
     <div className="so-quick-grid">
       <article className="so-quick-card">

@@ -1039,8 +1039,9 @@
   overflow: hidden;
   border-radius: 14px;
   color: #fff;
-  background: linear-gradient(135deg, #b51639 0%, #911331 55%, #6c0e24 100%);
-  box-shadow: 0 14px 34px rgb(181 22 57 / 26%);
+  /* The site's main red (the active menu item), a touch brighter at the corner (user: "tươi hơn"). */
+  background: linear-gradient(120deg, #d3264e 0%, var(--sw-red) 55%, var(--sw-red) 100%);
+  box-shadow: 0 12px 28px rgb(181 22 57 / 22%);
 }
 
 .so-gate::after {
@@ -1217,11 +1218,34 @@
   color: var(--sw-red);
 }
 
-.sw-profile-reminder p {
+.sw-profile-reminder-body {
   flex: 1;
+  min-width: 0;
+}
+
+.sw-profile-reminder p {
   margin: 0;
   font-size: 13px;
   line-height: 1.6;
+}
+
+.sw-profile-missing {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sw-profile-missing li {
+  padding: 3px 10px;
+  border: 1px solid #f1c4cf;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--sw-red);
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .sw-profile-reminder .sw-outline {
