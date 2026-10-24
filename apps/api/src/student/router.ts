@@ -8,7 +8,7 @@ import { requireAuthentication } from "../middleware/authorization.js";
 import { parseTranscript, TranscriptError, type TranscriptData } from "./transcript-parser.js";
 import { enqueueTranscript, expireJobs, jobColumns, runAfterTranscriptImport, type TranscriptImportOptions } from "./transcript-jobs.js";
 import { activeConsentVersion, recordConsent, recordTranscriptConsent, TRANSCRIPT_POLICY_VERSION, withdrawConsent, withdrawTranscriptConsent } from "./consent.js";
-import { ACHIEVEMENTS_MAX, deleteSurvey, parseSurveyInput, readPreviousInterests, readSurvey, saveSurvey, SURVEY_QUESTIONS } from "./survey.js";
+import { ACHIEVEMENTS_MAX, deleteSurvey, parseSurveyInput, readPreviousInterests, readSurvey, saveSurvey, STRENGTHS_MAX, SURVEY_QUESTIONS } from "./survey.js";
 import { bothOrNeither, INTEREST_HOBBIES, INTEREST_MAX, INTEREST_TECH, interestFields } from "./interests.js";
 import { deleteCompetencyData } from "../competency-assessment/repository.js";
 import { specialtyOffered } from "../competency-assessment/specialty.js";
@@ -90,6 +90,7 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
     const survey = await readSurvey(pool!, userId);
     res.json({
       questions: SURVEY_QUESTIONS, interests: { tech: INTEREST_TECH, hobbies: INTEREST_HOBBIES, max: INTEREST_MAX }, achievementsMax: ACHIEVEMENTS_MAX,
+      strengthsMax: STRENGTHS_MAX,
       survey, previous: survey?.interestTech.length ? null : await readPreviousInterests(pool!, userId),
       consentVersion: await activeConsentVersion(pool!, userId, "profile_survey"),
     });

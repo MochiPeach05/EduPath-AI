@@ -1,5 +1,5 @@
-// "Công nghệ bạn thích" and "Sở thích khi rảnh" (user 2026-10-24: "làm dạng các công nghệ, sở thích khi rảnh ... để tránh
-// việc sv bỏ trống hoặc nhập bừa"), part of the profile survey since "áp dụng vào Khảo sát định hướng luôn" (survey-v2).
+// "Thế mạnh của bạn" and "Sở trường" (first "Công nghệ bạn thích", "Sở thích khi rảnh"; user 2026-10-24: "làm dạng các
+// công nghệ, sở thích khi rảnh ... để tránh việc sv bỏ trống hoặc nhập bừa"), part of the profile survey since survey-v2.
 // The options come from GET /api/student/survey (apps/api/src/student/interests.ts).
 
 export type InterestOption = { id: string; label: string };
@@ -16,4 +16,4 @@ export function toggleInterest(ids: readonly string[], id: string, max: number):
 
 /** The Vietnamese message of a list still empty, or "". */
 export const interestProblem = (kind: "tech" | "hobbies", ids: readonly string[]) =>
-  ids.length ? "" : kind === "tech" ? "Vui lòng chọn ít nhất một công nghệ bạn thích." : "Vui lòng chọn ít nhất một sở thích khi rảnh.";
+  ids.length ? "" : kind === "tech" ? "Vui lòng chọn ít nhất một công nghệ bạn thành thạo." : "Vui lòng chọn ít nhất một sở trường.";

@@ -13,8 +13,8 @@ describe("survey interest lists", () => {
   it("names the choices in list order and asks for at least one of each list", () => {
     expect(interestLabels(options, ["uiux", "ai_ml", "unknown"])).toEqual(["Trí tuệ nhân tạo, học máy", "Thiết kế UI/UX"]);
     expect(interestLabels(options, null)).toEqual([]);
-    expect(interestProblem("tech", [])).toBe("Vui lòng chọn ít nhất một công nghệ bạn thích.");
-    expect(interestProblem("hobbies", [])).toBe("Vui lòng chọn ít nhất một sở thích khi rảnh.");
+    expect(interestProblem("tech", [])).toBe("Vui lòng chọn ít nhất một công nghệ bạn thành thạo.");
+    expect(interestProblem("hobbies", [])).toBe("Vui lòng chọn ít nhất một sở trường.");
     expect(interestProblem("tech", ["ai_ml"])).toBe("");
   });
 });

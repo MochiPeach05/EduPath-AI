@@ -10,10 +10,14 @@ import { INTEREST_HOBBIES, INTEREST_HOBBY_IDS, INTEREST_TECH, INTEREST_TECH_IDS,
 // labels (policy 2026-10-24, consent purpose profile_survey, migration 048). survey-v2 (user, same day: "Công nghệ bạn
 // thích và Sở thích khi rảnh có áp dụng vào được Khảo sát định hướng luôn không", AI uses them, policy 2026-10-25) adds
 // the two interest lists (1 to 5 each, interests.ts, migration 050); a v1 survey is incomplete until saved again.
+// survey-v3 (user, same day): question 11 is "Thế mạnh của bạn" (the technologies, plus a required description of those
+// the student is proficient in, migration 051), question 12 "Sở trường"; a v2 survey is incomplete until saved again.
 
-export const SURVEY_VERSION = "survey-v2";
+export const SURVEY_VERSION = "survey-v3";
 /** Characters of the achievements list. */
 export const ACHIEVEMENTS_MAX = 1000;
+/** Characters of the description of the strengths. */
+export const STRENGTHS_MAX = 500;
 
 type SurveyQuestion = { id: string; label: string; options: readonly { id: string; label: string }[] };
 
@@ -30,7 +34,7 @@ export const SURVEY_QUESTIONS = [
   { id: "partTime", label: "Bạn có làm thêm không", options: [
     { id: "no", label: "Không" }, { id: "other", label: "Có, không liên quan CNTT" }, { id: "it", label: "Có, liên quan CNTT" }] },
   { id: "leadership", label: "Kinh nghiệm dẫn dắt nhóm", options: [
-    { id: "none", label: "Chưa từng" }, { id: "one", label: "1 dự án" }, { id: "few", label: "2–3 dự án" }, { id: "many", label: "Từ 4 dự án" }] },
+    { id: "none", label: "Chưa từng" }, { id: "one", label: "1 dự án" }, { id: "few", label: "2–3 dự án" }, { id: "many", label: "Trên 4 dự án" }] },
   { id: "projects", label: "Dự án ngoài môn học", options: [
     { id: "none", label: "Chưa có" }, { id: "some", label: "1–2 dự án" }, { id: "many", label: "Từ 3 dự án" }] },
   { id: "internship", label: "Thực tập", options: [
@@ -38,20 +42,23 @@ export const SURVEY_QUESTIONS = [
   { id: "selfStudy", label: "Thời gian tự học mỗi tuần", options: [
     { id: "low", label: "Dưới 5 giờ" }, { id: "medium", label: "5–10 giờ" }, { id: "high", label: "Trên 10 giờ" }] },
   { id: "english", label: "Tiếng Anh chuyên ngành", options: [
-    { id: "basic", label: "Đọc tài liệu còn khó" }, { id: "reading", label: "Đọc hiểu tốt" }, { id: "working", label: "Giao tiếp, làm việc được" }] },
+    { id: "basic", label: "Khó khăn trong việc đọc hiểu" }, { id: "reading", label: "Đọc hiểu tốt" }, { id: "working", label: "Giao tiếp, làm việc được" }] },
   { id: "field", label: "Lĩnh vực quan tâm nhất", options: [
     { id: "web", label: "Web" }, { id: "mobile", label: "Di động" }, { id: "data", label: "AI, dữ liệu" }, { id: "security", label: "An ninh mạng" },
     { id: "cloud", label: "Cloud, DevOps" }, { id: "game", label: "Game" }, { id: "embedded", label: "Nhúng, IoT" }, { id: "unsure", label: "Chưa xác định" }] },
 ] as const satisfies readonly SurveyQuestion[];
 
 export type SurveyAnswers = Record<string, string>;
+/** interestTech and strengths make "Thế mạnh của bạn", interestHobbies "Sở trường". */
 export type StudentSurvey = {
-  version: string; answers: SurveyAnswers; interestTech: string[]; interestHobbies: string[];
+  version: string; answers: SurveyAnswers; interestTech: string[]; strengths: string | null; interestHobbies: string[];
   hasAchievements: boolean; achievements: string | null; updatedAt: string;
   /** Every question of the current set is answered (a newer set may add questions). */
   complete: boolean;
 };
-export type SurveyInput = { answers: SurveyAnswers; interestTech: string[]; interestHobbies: string[]; hasAchievements: boolean; achievements: string | null };
+export type SurveyInput = {
+  answers: SurveyAnswers; interestTech: string[]; strengths: string; interestHobbies: string[]; hasAchievements: boolean; achievements: string | null;
+};
 
 const answersSchema = z.object(Object.fromEntries(SURVEY_QUESTIONS.map((question) =>
   [question.id, z.enum(question.options.map((option) => option.id) as [string, ...string[]])]))).strict();
@@ -63,35 +70,39 @@ export const cleanAchievements = (value: string) => value.normalize("NFC").repla
 const surveySchema = z.object({
   answers: answersSchema,
   interestTech: interestChoices(INTEREST_TECH_IDS),
+  strengths: z.string().max(STRENGTHS_MAX * 4),
   interestHobbies: interestChoices(INTEREST_HOBBY_IDS),
   hasAchievements: z.boolean(),
   achievements: z.string().max(ACHIEVEMENTS_MAX * 4).nullable().optional(),
 }).strict();
 
 /** PUT /api/student/survey body → the answers to store, or the error code to send (400). */
-export function parseSurveyInput(body: unknown): { value: SurveyInput } | { error: "invalid_survey" | "achievements_required" | "achievements_too_long" } {
+export function parseSurveyInput(body: unknown): { value: SurveyInput } | { error: "invalid_survey" | "strengths_required" | "strengths_too_long" | "achievements_required" | "achievements_too_long" } {
   const parsed = surveySchema.safeParse(body);
   if (!parsed.success) return { error: "invalid_survey" };
   const { answers, interestTech, interestHobbies, hasAchievements } = parsed.data;
-  if (!hasAchievements) return { value: { answers, interestTech, interestHobbies, hasAchievements, achievements: null } };
+  const strengths = cleanAchievements(parsed.data.strengths);
+  if (!strengths) return { error: "strengths_required" };
+  if (strengths.length > STRENGTHS_MAX) return { error: "strengths_too_long" };
+  if (!hasAchievements) return { value: { answers, interestTech, strengths, interestHobbies, hasAchievements, achievements: null } };
   const achievements = cleanAchievements(parsed.data.achievements ?? "");
   if (!achievements) return { error: "achievements_required" };
   if (achievements.length > ACHIEVEMENTS_MAX) return { error: "achievements_too_long" };
-  return { value: { answers, interestTech, interestHobbies, hasAchievements, achievements } };
+  return { value: { answers, interestTech, strengths, interestHobbies, hasAchievements, achievements } };
 }
 
-const isComplete = (row: Pick<StudentSurvey, "answers" | "interestTech" | "interestHobbies">) =>
+const isComplete = (row: Pick<StudentSurvey, "answers" | "interestTech" | "strengths" | "interestHobbies">) =>
   SURVEY_QUESTIONS.every((question) => question.options.some((option) => option.id === row.answers[question.id]))
-  && row.interestTech.length > 0 && row.interestHobbies.length > 0;
+  && row.interestTech.length > 0 && Boolean(row.strengths) && row.interestHobbies.length > 0;
 
 type SurveyRow = {
-  version: string; answers: SurveyAnswers; interest_tech: string[] | null; interest_hobbies: string[] | null;
+  version: string; answers: SurveyAnswers; interest_tech: string[] | null; strengths: string | null; interest_hobbies: string[] | null;
   has_achievements: boolean; achievements: string | null; updated_at: Date | string;
 };
-const surveyColumns = "survey_version AS version,answers,interest_tech,interest_hobbies,has_achievements,achievements,updated_at";
+const surveyColumns = "survey_version AS version,answers,interest_tech,strengths,interest_hobbies,has_achievements,achievements,updated_at";
 function fromRow(row: SurveyRow): StudentSurvey {
   const survey = {
-    version: row.version, answers: row.answers, interestTech: row.interest_tech ?? [], interestHobbies: row.interest_hobbies ?? [],
+    version: row.version, answers: row.answers, interestTech: row.interest_tech ?? [], strengths: row.strengths, interestHobbies: row.interest_hobbies ?? [],
     hasAchievements: row.has_achievements, achievements: row.achievements, updatedAt: new Date(row.updated_at).toISOString(),
   };
   return { ...survey, complete: isComplete(survey) };
@@ -107,11 +118,11 @@ export async function readSurvey(db: Pick<DatabasePool, "query"> | PoolClient, u
  * and the free text before that are cleared: the survey holds them now.
  */
 export async function saveSurvey(client: PoolClient, userId: string, input: SurveyInput): Promise<StudentSurvey> {
-  const result = await client.query<SurveyRow>(`INSERT INTO stu_profile_surveys(user_id,survey_version,answers,interest_tech,interest_hobbies,has_achievements,achievements)
-    VALUES($1,$2,$3::jsonb,$4,$5,$6,$7) ON CONFLICT(user_id) DO UPDATE SET survey_version=EXCLUDED.survey_version,answers=EXCLUDED.answers,
+  const result = await client.query<SurveyRow>(`INSERT INTO stu_profile_surveys(user_id,survey_version,answers,interest_tech,interest_hobbies,has_achievements,achievements,strengths)
+    VALUES($1,$2,$3::jsonb,$4,$5,$6,$7,$8) ON CONFLICT(user_id) DO UPDATE SET survey_version=EXCLUDED.survey_version,answers=EXCLUDED.answers,
     interest_tech=EXCLUDED.interest_tech,interest_hobbies=EXCLUDED.interest_hobbies,has_achievements=EXCLUDED.has_achievements,
-    achievements=EXCLUDED.achievements,updated_at=now() RETURNING ${surveyColumns}`,
-  [userId, SURVEY_VERSION, JSON.stringify(input.answers), input.interestTech, input.interestHobbies, input.hasAchievements, input.achievements]);
+    achievements=EXCLUDED.achievements,strengths=EXCLUDED.strengths,updated_at=now() RETURNING ${surveyColumns}`,
+  [userId, SURVEY_VERSION, JSON.stringify(input.answers), input.interestTech, input.interestHobbies, input.hasAchievements, input.achievements, input.strengths]);
   await client.query("UPDATE student_profiles SET interest_tech='{}',interest_hobbies='{}',interests=NULL WHERE user_id=$1", [userId]);
   return fromRow(result.rows[0]!);
 }
@@ -135,17 +146,18 @@ export async function deleteSurvey(client: PoolClient, userId: string): Promise<
 }
 
 /**
- * What the AI study roadmap reads: each answered question with the label of its answer, the labels of the technologies
- * and free-time interests, and the achievements list.
+ * What the AI study roadmap reads: each answered question with the label of its answer, the strengths (technologies by
+ * label and the student's description), the "sở trường" by label, and the achievements list.
  */
-export type SurveyFacts = { answers: { question: string; answer: string }[]; tech: string[]; hobbies: string[]; achievements: string | null };
-export function surveyFacts(survey: Pick<StudentSurvey, "answers" | "interestTech" | "interestHobbies" | "hasAchievements" | "achievements">): SurveyFacts {
+export type SurveyFacts = { answers: { question: string; answer: string }[]; tech: string[]; strengths: string | null; hobbies: string[]; achievements: string | null };
+export function surveyFacts(survey: Pick<StudentSurvey, "answers" | "interestTech" | "strengths" | "interestHobbies" | "hasAchievements" | "achievements">): SurveyFacts {
   return {
     answers: SURVEY_QUESTIONS.flatMap((question) => {
       const option = question.options.find((item) => item.id === survey.answers[question.id]);
       return option ? [{ question: question.label, answer: option.label }] : [];
     }),
     tech: interestLabels(INTEREST_TECH, survey.interestTech),
+    strengths: survey.strengths,
     hobbies: interestLabels(INTEREST_HOBBIES, survey.interestHobbies),
     achievements: survey.hasAchievements ? survey.achievements : null,
   };

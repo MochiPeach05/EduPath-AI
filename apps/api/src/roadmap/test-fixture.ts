@@ -48,6 +48,7 @@ export const syntheticSurveyRow = () => ({
     selfStudy: "medium", english: "reading", field: "web" },
   interest_tech: ["web_frontend", "ai_ml"],
   interest_hobbies: ["side_projects", "sports"],
+  strengths: "Thành thạo React và Node.js\nĐã làm 2 dự án web bán hàng",
   has_achievements: true,
   achievements: "Giải Ba cuộc thi lập trình cấp khoa 2025\nHọc bổng khuyến khích học tập",
   updated_at: new Date("2026-10-24T00:30:00Z"),

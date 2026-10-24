@@ -18,8 +18,8 @@ const student = {
 
 const answers = { goal: "study", environment: "both", company: "large", partTime: "no", leadership: "few", projects: "many",
   internship: "done", selfStudy: "high", english: "working", field: "data" };
-const interests = { interestTech: ["ai_ml", "python_data"], interestHobbies: ["reading"] };
-const savedRow = (extra: Record<string, unknown> = {}) => ({ version: "survey-v2", answers, interest_tech: interests.interestTech,
+const interests = { interestTech: ["ai_ml", "python_data"], strengths: "Python, pandas; đã làm 1 dự án phân tích dữ liệu", interestHobbies: ["reading"] };
+const savedRow = (extra: Record<string, unknown> = {}) => ({ version: "survey-v3", answers, interest_tech: interests.interestTech, strengths: interests.strengths,
   interest_hobbies: interests.interestHobbies, has_achievements: false, achievements: null, updated_at: new Date("2026-10-24T10:00:00Z"), ...extra });
 
 function setup(options: { consent?: string | null; survey?: boolean; row?: Record<string, unknown>; previous?: Record<string, unknown> } = {}) {
@@ -35,7 +35,7 @@ function setup(options: { consent?: string | null; survey?: boolean; row?: Recor
     if (sql.includes("SELECT id FROM users")) return { rowCount: 1, rows: [{ id: studentId }] };
     if (sql.startsWith("INSERT INTO stu_profile_surveys")) {
       return { rowCount: 1, rows: [savedRow({ answers: JSON.parse(String(params?.[2])), interest_tech: params?.[3], interest_hobbies: params?.[4],
-        has_achievements: params?.[5], achievements: params?.[6] })] };
+        has_achievements: params?.[5], achievements: params?.[6], strengths: params?.[7] })] };
     }
     if (sql.startsWith("DELETE FROM stu_profile_surveys")) return { rowCount: options.survey ? 1 : 0, rows: [] };
     return (await read(sql)) ?? { rowCount: 1, rows: [] };
@@ -70,6 +70,9 @@ describe("survey answers", () => {
       { answers, ...interests, interestTech: ["cooking"], hasAchievements: false }]) {
       expect(parseSurveyInput(body)).toEqual({ error: "invalid_survey" });
     }
+    expect(parseSurveyInput({ answers, ...interests, strengths: "  \n ", hasAchievements: false })).toEqual({ error: "strengths_required" });
+    expect(parseSurveyInput({ answers, ...interests, strengths: "x".repeat(501), hasAchievements: false })).toEqual({ error: "strengths_too_long" });
+    expect(parseSurveyInput({ answers, interestTech: ["ai_ml"], interestHobbies: ["reading"], hasAchievements: false })).toEqual({ error: "invalid_survey" });
     expect(parseSurveyInput({ answers, ...interests, hasAchievements: true, achievements: " \n  \n" })).toEqual({ error: "achievements_required" });
     expect(parseSurveyInput({ answers, ...interests, hasAchievements: true, achievements: "x".repeat(ACHIEVEMENTS_MAX + 1) })).toEqual({ error: "achievements_too_long" });
     expect(parseSurveyInput({ answers, ...interests, hasAchievements: true, achievements: "  Giải Nhì Hackathon khoa \r\n\r\n\u0007Học bổng HK1  " }))
@@ -83,6 +86,7 @@ describe("survey answers", () => {
     expect(facts.answers.at(-1)).toEqual({ question: "Lĩnh vực quan tâm nhất", answer: "AI, dữ liệu" });
     expect(facts.tech).toEqual(["Python, phân tích dữ liệu", "Trí tuệ nhân tạo, học máy"]);
     expect(facts.hobbies).toEqual(["Đọc sách, tài liệu"]);
+    expect(facts.strengths).toBe(interests.strengths);
     expect(facts.achievements).toBe("Giải Nhì Hackathon khoa");
     expect(surveyFacts({ answers, ...interests, hasAchievements: false, achievements: null }).achievements).toBeNull();
   });
@@ -95,7 +99,10 @@ describe("/student/survey", () => {
     expect(empty.body.questions).toHaveLength(10);
     expect([empty.body.interests.tech.length, empty.body.interests.hobbies.length, empty.body.interests.max]).toEqual([14, 12, 5]);
     const saved = await request(setup({ survey: true, consent: TRANSCRIPT_POLICY_VERSION }).app).get("/student/survey").expect(200);
-    expect(saved.body).toMatchObject({ survey: { version: "survey-v2", answers, ...interests, hasAchievements: false, complete: true }, previous: null, consentVersion: TRANSCRIPT_POLICY_VERSION });
+    expect(saved.body).toMatchObject({ survey: { version: "survey-v3", answers, ...interests, hasAchievements: false, complete: true }, previous: null, consentVersion: TRANSCRIPT_POLICY_VERSION });
+    // A survey saved before "Thế mạnh" had its description is incomplete.
+    const v2 = await request(setup({ survey: true, row: { version: "survey-v2", strengths: null } }).app).get("/student/survey").expect(200);
+    expect(v2.body.survey).toMatchObject({ version: "survey-v2", complete: false });
     // A survey saved before the interests joined it is incomplete.
     const older = await request(setup({ survey: true, row: { version: "survey-v1", interest_tech: [], interest_hobbies: [] } }).app).get("/student/survey").expect(200);
     expect(older.body.survey).toMatchObject({ version: "survey-v1", complete: false });

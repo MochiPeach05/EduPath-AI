@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-// "Công nghệ bạn thích" and "Sở thích khi rảnh" (user 2026-10-24: "làm dạng các công nghệ, sở thích khi rảnh ... để tránh
-// việc sv bỏ trống hoặc nhập bừa"): 1 to 5 of each. First kept in the profile (migration 049), then moved into the profile
+// "Thế mạnh của bạn" (first "Công nghệ bạn thích") and "Sở trường" (first "Sở thích khi rảnh") (user 2026-10-24: "làm
+// dạng các công nghệ, sở thích khi rảnh ... để tránh việc sv bỏ trống hoặc nhập bừa"): 1 to 5 of each. First kept in the profile (migration 049), then moved into the profile
 // survey ("áp dụng vào Khảo sát định hướng luôn", migration 050) so the AI study roadmap reads them (policy 2026-10-25).
 // The survey page renders the options GET /api/student/survey sends.
 

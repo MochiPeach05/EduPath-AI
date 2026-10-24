@@ -29,7 +29,7 @@ export function requiredProfileItems(profile: StudentProfile | null, hasTranscri
     { id: "transcript", label: "Bảng điểm học tập", hint: "Tải bảng điểm PDF của bạn", done: hasTranscript },
     { id: "specialty", label: "Chuyên ngành", hint: "Chọn trong Thông tin cá nhân", done: Boolean(profile?.specialty) },
     { id: "career", label: "Nghề mục tiêu", hint: "Chọn vị trí nghề nghiệp mong muốn", done: Boolean(profile?.careerPositionId) },
-    { id: "survey", label: "Khảo sát định hướng", hint: profile?.surveyUpdatedAt ? "Bổ sung công nghệ, sở thích và xác nhận lại" : "Câu hỏi, công nghệ, sở thích và thành tích", done: profile?.surveyComplete === true },
+    { id: "survey", label: "Khảo sát định hướng", hint: profile?.surveyUpdatedAt ? "Bổ sung thế mạnh, sở trường và xác nhận lại" : "Câu hỏi, thế mạnh, sở trường và thành tích", done: profile?.surveyComplete === true },
   ];
 }
 

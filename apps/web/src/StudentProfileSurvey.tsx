@@ -80,7 +80,7 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
   const { questions, survey, achievementsMax, interests } = data;
   const needsConsent = data.consentVersion !== policyVersion;
   const done = survey?.complete === true && !needsConsent;
-  const problems = surveyProblems(questions, draft, { needsConsent, consented, achievementsMax });
+  const problems = surveyProblems(questions, draft, { needsConsent, consented, achievementsMax, strengthsMax: data.strengthsMax });
   const shown = new Map<SurveyField, string>(attempted ? problems : []);
   const errorId = (field: SurveyField) => `ps-error-${field.replace(":", "-")}`;
   const fieldError = (field: SurveyField) => shown.has(field) ? <p className="ps-field-error" id={errorId(field)}>{shown.get(field)}</p> : null;
@@ -98,7 +98,7 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
     setError("");
     try {
       const body = {
-        answers: draft.answers, interestTech: draft.interestTech, interestHobbies: draft.interestHobbies,
+        answers: draft.answers, interestTech: draft.interestTech, strengths: draft.strengths, interestHobbies: draft.interestHobbies,
         hasAchievements: draft.hasAchievements, achievements: draft.hasAchievements ? draft.achievements : null,
       };
       const saved = await send<Pick<SurveyResponse, "survey" | "consentVersion">>({ method: "PUT", body: JSON.stringify(body), consent: needsConsent });
@@ -139,7 +139,7 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
     <div className="sw-section-heading">
       <div>
         <h2 id="ps-title">Khảo sát định hướng</h2>
-        <p className="sw-muted ps-intro">Trả lời {questions.length} câu hỏi ngắn, chọn công nghệ bạn thích, sở thích khi rảnh và cho biết thành tích của bạn. EduPath AI dùng các câu trả lời này để tư vấn lộ trình học tập sát với mục tiêu của bạn{done ? "." : "; cần hoàn thành trước khi tạo Lộ trình AI."}</p>
+        <p className="sw-muted ps-intro">Trả lời {questions.length} câu hỏi ngắn, cho biết thế mạnh, sở trường và thành tích của bạn. EduPath AI dùng các câu trả lời này để tư vấn lộ trình học tập sát với mục tiêu của bạn{done ? "." : "; cần hoàn thành trước khi tạo Lộ trình AI."}</p>
       </div>
       <span className={`sw-tag ${done ? "sw-tag-green" : "ps-tag-required"}`}>{done ? "Đã hoàn thành" : "Bắt buộc"}</span>
     </div>
@@ -163,12 +163,22 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
           })}
           {data.previous?.text && !survey?.interestTech.length && <li className="pi-legacy ps-wide">Trước đây bạn đã ghi sở thích: “{data.previous.text}”. Hãy chọn theo hai danh sách dưới đây.</li>}
           <li className="ps-wide">
-            <InterestGroup name="tech" number={questions.length + 1} legend="Công nghệ bạn thích" hint={`Chọn từ 1 đến ${interests.max} công nghệ.`}
+            <InterestGroup name="tech" number={questions.length + 1} legend="Thế mạnh của bạn" hint={`Chọn từ 1 đến ${interests.max} công nghệ bạn thành thạo, rồi mô tả ngắn bên dưới.`}
               options={interests.tech} max={interests.max} value={draft.interestTech} error={shown.get("tech") ?? ""}
-              onChange={(interestTech) => setDraft({ ...draft, interestTech })} />
+              onChange={(interestTech) => setDraft({ ...draft, interestTech })}>
+              <label className="ps-achievements" data-field="strengths">
+                <span>Mô tả công nghệ bạn thành thạo<span className="ps-required" aria-hidden="true">*</span></span>
+                <textarea rows={3} value={draft.strengths} aria-invalid={shown.has("strengths") || undefined}
+                  aria-describedby={`ps-strengths-hint${shown.has("strengths") ? ` ${errorId("strengths")}` : ""}`}
+                  placeholder="Ví dụ: Thành thạo React và Node.js, đã làm 2 dự án web bán hàng; dùng Git hằng ngày."
+                  onChange={(event) => setDraft({ ...draft, strengths: event.target.value })} />
+                <small id="ps-strengths-hint">Nêu công nghệ, mức độ và việc bạn đã làm với chúng. Không ghi họ tên hay thông tin của người khác. {draft.strengths.trim().length.toLocaleString("vi-VN")}/{data.strengthsMax.toLocaleString("vi-VN")} ký tự.</small>
+                {fieldError("strengths")}
+              </label>
+            </InterestGroup>
           </li>
           <li className="ps-wide">
-            <InterestGroup name="hobbies" number={questions.length + 2} legend="Sở thích khi rảnh" hint={`Chọn từ 1 đến ${interests.max} hoạt động.`}
+            <InterestGroup name="hobbies" number={questions.length + 2} legend="Sở trường" hint={`Chọn từ 1 đến ${interests.max} hoạt động bạn làm tốt hoặc hay làm.`}
               options={interests.hobbies} max={interests.max} value={draft.interestHobbies} error={shown.get("hobbies") ?? ""}
               onChange={(interestHobbies) => setDraft({ ...draft, interestHobbies })} />
           </li>
@@ -199,7 +209,7 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
           <label>
             <input type="checkbox" checked={consented} onChange={(event) => setConsented(event.target.checked)}
               aria-describedby={shown.has("consent") ? errorId("consent") : undefined} />
-            <span>Tôi đồng ý để EduPath AI dùng câu trả lời khảo sát (kể cả công nghệ bạn thích, sở thích khi rảnh) và thành tích của tôi để tư vấn lộ trình học tập bằng AI, theo <a href={surveyPolicyHref} target="_blank" rel="noreferrer">Chính sách bảo mật</a>.{survey ? " Chính sách vừa được cập nhật nên bạn cần xác nhận lại." : ""}</span>
+            <span>Tôi đồng ý để EduPath AI dùng câu trả lời khảo sát (kể cả thế mạnh, sở trường) và thành tích của tôi để tư vấn lộ trình học tập bằng AI, theo <a href={surveyPolicyHref} target="_blank" rel="noreferrer">Chính sách bảo mật</a>.{survey ? " Chính sách vừa được cập nhật nên bạn cần xác nhận lại." : ""}</span>
           </label>
           {fieldError("consent")}
         </div>}
@@ -214,8 +224,9 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
     </form> : survey && <>
       <dl className="ps-answers">
         {questions.map((question) => <div key={question.id}><dt>{question.label}</dt><dd>{answerLabel(question, survey.answers) ?? "Chưa trả lời"}</dd></div>)}
-        <div className="ps-answers-wide"><dt>Công nghệ bạn thích</dt><dd>{interestLabels(interests.tech, survey.interestTech).join(", ") || "Chưa chọn"}</dd></div>
-        <div className="ps-answers-wide"><dt>Sở thích khi rảnh</dt><dd>{interestLabels(interests.hobbies, survey.interestHobbies).join(", ") || "Chưa chọn"}</dd></div>
+        <div className="ps-answers-wide"><dt>Thế mạnh của bạn</dt><dd>{interestLabels(interests.tech, survey.interestTech).join(", ") || "Chưa chọn"}</dd></div>
+        <div className="ps-answers-wide"><dt>Mô tả thế mạnh</dt><dd className="ps-text">{survey.strengths || "Chưa mô tả"}</dd></div>
+        <div className="ps-answers-wide"><dt>Sở trường</dt><dd>{interestLabels(interests.hobbies, survey.interestHobbies).join(", ") || "Chưa chọn"}</dd></div>
         <div className="ps-answers-wide"><dt>Thành tích</dt><dd>{survey.hasAchievements && survey.achievements
           ? <ul>{survey.achievements.split("\n").map((line, index) => <li key={index}>{line}</li>)}</ul> : "Không có"}</dd></div>
       </dl>

@@ -49,7 +49,7 @@ function InterestTags({ career }: { career: GuidanceCareer }) {
   if (!matchesInterests(career)) return null;
   return <p className="cg-interest">
     <Icon name="spark" />
-    <span>{[career.interests.field && `Lĩnh vực bạn quan tâm: ${career.interests.field}`, career.interests.tech.length > 0 && `Công nghệ bạn thích: ${career.interests.tech.join(", ")}`]
+    <span>{[career.interests.field && `Lĩnh vực bạn quan tâm: ${career.interests.field}`, career.interests.tech.length > 0 && `Thế mạnh: ${career.interests.tech.join(", ")}`]
       .filter(Boolean).join(" · ")}</span>
   </p>;
 }
@@ -227,10 +227,10 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
           : <p className="cg-empty">Chưa đủ dữ liệu để gợi ý: các kỹ năng của nghề chưa được đo bằng học phần bạn đã học.</p>}
       </section>
       <section className="sw-panel cg-suggest-col" aria-labelledby="cg-liked-title">
-        <div className="cg-section-head"><div><h3 id="cg-liked-title">Hợp với sở thích của bạn</h3><p className="sw-muted">Theo lĩnh vực quan tâm và công nghệ bạn thích trong Khảo sát định hướng.</p></div></div>
-        {!data.surveyDone ? <div className="cg-empty"><p>Bạn chưa trả lời Khảo sát định hướng nên chưa có gợi ý theo sở thích.</p><a className="sw-outline" href="#profile">Làm khảo sát trong Hồ sơ</a></div>
+        <div className="cg-section-head"><div><h3 id="cg-liked-title">Hợp với sở thích và thế mạnh của bạn</h3><p className="sw-muted">Theo lĩnh vực quan tâm và thế mạnh (công nghệ bạn thành thạo) trong Khảo sát định hướng.</p></div></div>
+        {!data.surveyDone ? <div className="cg-empty"><p>Bạn chưa trả lời Khảo sát định hướng nên chưa có gợi ý theo sở thích và thế mạnh.</p><a className="sw-outline" href="#profile">Làm khảo sát trong Hồ sơ</a></div>
           : liked.length ? liked.map((career) => <SuggestionCard key={career.id} {...actionProps(career)} />)
-            : <p className="cg-empty">Chưa có nghề trong danh mục khớp với lĩnh vực và công nghệ bạn chọn. Bạn có thể xem tất cả nghề bên dưới.</p>}
+            : <p className="cg-empty">Chưa có nghề trong danh mục khớp với lĩnh vực quan tâm và thế mạnh bạn chọn. Bạn có thể xem tất cả nghề bên dưới.</p>}
       </section>
     </div>}
 
@@ -246,7 +246,7 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
         <label>Sắp xếp<select value={filters.sort} onChange={(event) => setFilters({ ...filters, sort: event.target.value as CareerFilters["sort"] })}>
           <option value="fit">Phù hợp nhất trước</option><option value="name">Tên A–Z</option>
         </select></label>
-        {data.surveyDone && <label className="cg-check"><input type="checkbox" checked={filters.interestOnly} onChange={(event) => setFilters({ ...filters, interestOnly: event.target.checked })} />Chỉ nghề hợp sở thích</label>}
+        {data.surveyDone && <label className="cg-check"><input type="checkbox" checked={filters.interestOnly} onChange={(event) => setFilters({ ...filters, interestOnly: event.target.checked })} />Chỉ nghề hợp sở thích, thế mạnh</label>}
       </div>
       <p className="sw-muted" role="status">{visible.length} nghề</p>
       <ul className="cg-list">{visible.map((career) => <li key={career.id} className={career.isTarget ? "is-target" : undefined}>

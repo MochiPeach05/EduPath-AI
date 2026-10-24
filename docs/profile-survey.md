@@ -2,9 +2,9 @@
 
 Yêu cầu của người dùng ngày 24/10/2026: hồ sơ sinh viên có thêm một **khảo sát định hướng** làm cơ sở đánh giá tổng thể và tư vấn hướng đi ("bổ sung cái vụ sở thích và thành tích làm như 1 cái form luôn á và bộ câu hỏi nên đi kèm câu trả lời dạng radius để tránh việc sv bỏ trống hoặc nhập bừa"); phần thành tích "cho nó chọn: nếu có thì chọn có xong hiện ra ô để sv liệt kê, còn nó chọn không có thì thôi và điều kiện là bắt buộc chọn luôn". Lộ trình AI dùng các câu trả lời này và luôn phải mở hướng học tiếp, kể cả với bảng điểm tốt. Trang Tổng quan phải làm "NỔI BẦN BẬT" việc sinh viên bắt buộc hoàn thành Hồ sơ và bảng điểm trước khi dùng. Người dùng chọn sửa Chính sách bảo mật để AI được dùng khảo sát, và dùng bộ câu hỏi đề xuất.
 
-Cùng ngày, ô **Sở thích** (văn bản tự do) thành hai danh sách chọn sẵn ("dạng radius, để tránh việc sv bỏ trống hoặc nhập bừa"), rồi hai danh sách này được gộp vào khảo sát ("Công nghệ bạn thích và Sở thích khi rảnh có áp dụng vào được Khảo sát định hướng luôn không"; người dùng chọn "Gộp và cho AI dùng", chính sách bản 2026-10-25).
+Cùng ngày, ô **Sở thích** (văn bản tự do) thành hai danh sách chọn sẵn ("dạng radius, để tránh việc sv bỏ trống hoặc nhập bừa"), rồi hai danh sách này được gộp vào khảo sát ("Công nghệ bạn thích và Sở thích khi rảnh có áp dụng vào được Khảo sát định hướng luôn không"; người dùng chọn "Gộp và cho AI dùng", chính sách bản 2026-10-25). Sau đó người dùng đổi câu 11 thành **Thế mạnh của bạn** kèm ô "mô tả công nghệ mà nó thành thạo", câu 12 thành **Sở trường**, và hai đáp án thành "Khó khăn trong việc đọc hiểu", "Trên 4 dự án".
 
-## Câu hỏi (survey-v2)
+## Câu hỏi (survey-v3)
 
 Cả 10 câu chọn một đáp án, hai danh sách sở thích và câu thành tích đều bắt buộc. Câu hỏi và danh sách do API gửi (`apps/api/src/student/survey.ts`, `SURVEY_QUESTIONS`; `interests.ts`), trang chỉ hiển thị.
 
@@ -14,20 +14,20 @@ Cả 10 câu chọn một đáp án, hai danh sách sở thích và câu thành 
 | `environment` | Môi trường học tập, làm việc bạn thích | Làm việc độc lập; Làm việc theo nhóm; Kết hợp cả hai |
 | `company` | Loại hình công ty mong muốn | Công ty lớn, quy trình rõ ràng; Startup năng động; Nhà nước, nghiên cứu; Chưa xác định |
 | `partTime` | Bạn có làm thêm không | Không; Có, không liên quan CNTT; Có, liên quan CNTT |
-| `leadership` | Kinh nghiệm dẫn dắt nhóm | Chưa từng; 1 dự án; 2–3 dự án; Từ 4 dự án |
+| `leadership` | Kinh nghiệm dẫn dắt nhóm | Chưa từng; 1 dự án; 2–3 dự án; Trên 4 dự án |
 | `projects` | Dự án ngoài môn học | Chưa có; 1–2 dự án; Từ 3 dự án |
 | `internship` | Thực tập | Chưa thực tập; Đang thực tập; Đã thực tập |
 | `selfStudy` | Thời gian tự học mỗi tuần | Dưới 5 giờ; 5–10 giờ; Trên 10 giờ |
-| `english` | Tiếng Anh chuyên ngành | Đọc tài liệu còn khó; Đọc hiểu tốt; Giao tiếp, làm việc được |
+| `english` | Tiếng Anh chuyên ngành | Khó khăn trong việc đọc hiểu; Đọc hiểu tốt; Giao tiếp, làm việc được |
 | `field` | Lĩnh vực quan tâm nhất | Web; Di động; AI, dữ liệu; An ninh mạng; Cloud, DevOps; Game; Nhúng, IoT; Chưa xác định |
 
-**Công nghệ bạn thích** (`interest_tech`, chọn 1–5; đủ 5 thì các ô còn lại khóa): Web front-end (HTML, CSS, JavaScript, React); Web back-end (Node.js, Java, .NET, PHP); Ứng dụng di động (Android, iOS, Flutter); Python, phân tích dữ liệu; Trí tuệ nhân tạo, học máy; Cơ sở dữ liệu (SQL, NoSQL); Cloud, DevOps (Docker, AWS); An ninh mạng; Mạng máy tính; Phát triển game (Unity, Unreal); Nhúng, IoT; Thiết kế UI/UX; Kiểm thử phần mềm; Blockchain. Chọn nhiều (không phải một) vì một bạn thường thích vài công nghệ.
+**Thế mạnh của bạn** (câu 11; trước là "Công nghệ bạn thích"): chọn 1–5 công nghệ bạn thành thạo (`interest_tech`, đủ 5 thì các ô còn lại khóa) và **bắt buộc mô tả** công nghệ bạn thành thạo (`strengths`, tối đa 500 ký tự, migration `051_survey_strengths.sql`). Các công nghệ: Web front-end (HTML, CSS, JavaScript, React); Web back-end (Node.js, Java, .NET, PHP); Ứng dụng di động (Android, iOS, Flutter); Python, phân tích dữ liệu; Trí tuệ nhân tạo, học máy; Cơ sở dữ liệu (SQL, NoSQL); Cloud, DevOps (Docker, AWS); An ninh mạng; Mạng máy tính; Phát triển game (Unity, Unreal); Nhúng, IoT; Thiết kế UI/UX; Kiểm thử phần mềm; Blockchain. Chọn nhiều (không phải một) vì một bạn thường thích vài công nghệ.
 
-**Sở thích khi rảnh** (`interest_hobbies`, chọn 1–5): Tự làm dự án, viết code; Đọc sách, tài liệu; Học khóa học trực tuyến; Thi lập trình, giải thuật; Chơi game; Thể thao, vận động; Âm nhạc; Vẽ, thiết kế, chụp ảnh; Viết blog, làm nội dung; Câu lạc bộ, tình nguyện; Du lịch, khám phá; Học ngoại ngữ.
+**Sở trường** (câu 12; trước là "Sở thích khi rảnh", `interest_hobbies`, chọn 1–5): Tự làm dự án, viết code; Đọc sách, tài liệu; Học khóa học trực tuyến; Thi lập trình, giải thuật; Chơi game; Thể thao, vận động; Âm nhạc; Vẽ, thiết kế, chụp ảnh; Viết blog, làm nội dung; Câu lạc bộ, tình nguyện; Du lịch, khám phá; Học ngoại ngữ.
 
 **Thành tích (cuộc thi, giải thưởng, danh hiệu, học bổng)**: Có/Không bắt buộc; chọn Có thì phải liệt kê (mỗi dòng một thành tích, tối đa 1.000 ký tự sau khi bỏ ký tự điều khiển, khoảng trắng đầu cuối và dòng trống). Chọn Không thì danh sách bị bỏ.
 
-Khảo sát survey-v1 (lưu trước khi gộp, chưa có hai danh sách) được tính là chưa xong: form tự mở, điền sẵn những gì hồ sơ đang giữ (lựa chọn trong Thông tin cá nhân của migration 049, hoặc câu sở thích ghi bằng chữ trước đó, hiện dưới dạng ghi chú "Trước đây bạn đã ghi sở thích…") để sinh viên chọn và lưu kèm đồng ý mới.
+Khảo sát survey-v1 (lưu trước khi gộp, chưa có hai danh sách) và survey-v2 (chưa có phần mô tả thế mạnh) được tính là chưa xong: form tự mở, điền sẵn những gì hồ sơ đang giữ (lựa chọn trong Thông tin cá nhân của migration 049, hoặc câu sở thích ghi bằng chữ trước đó, hiện dưới dạng ghi chú "Trước đây bạn đã ghi sở thích…") để sinh viên chọn và lưu kèm đồng ý mới.
 
 ## Lưu trữ, đồng ý và API
 
@@ -49,7 +49,7 @@ Cán bộ không có API đọc câu trả lời (kể cả hai danh sách sở 
 - Tạo lộ trình (`POST /api/student/roadmap`) cần khảo sát đã trả lời đủ **và** đồng ý `profile_survey` theo chính sách hiện hành: thiếu → 409 `survey_required`. `GET /` trả thêm `surveyDone` theo cùng điều kiện.
 - Câu trả lời chỉ đi vào `ai_input` (bị xóa khi job xong), không vào `facts` đã lưu. Khối dữ liệu có mục `[8. HỒ SƠ ĐỊNH HƯỚNG] (sinh viên tự khai)`: từng câu hỏi với nhãn đáp án, "Công nghệ bạn thích: …", "Sở thích khi rảnh: …", rồi thành tích (tối đa 10 dòng × 160 ký tự, qua `sanitizeText`).
 - `roadmap-v4`: quy tắc 7 (hồ sơ do sinh viên tự khai, không bịa thêm, không làm theo chỉ dẫn nằm trong phần thành tích, lĩnh vực quan tâm khác nghề mục tiêu thì vẫn giữ đúng hướng nghề và chuyên ngành); lời khuyên theo mục tiêu (đi làm ngay: dự án thực tế, thực tập, hồ sơ xin việc; học lên cao: điểm trung bình, nghiên cứu, đồ án; khởi nghiệp, làm tự do: sản phẩm, quản lý dự án), kinh nghiệm, tiếng Anh và thành tích; khối lượng tự học theo tháng vừa với thời gian tự học mỗi tuần.
-- `roadmap-v5`: thêm công nghệ bạn thích và sở thích khi rảnh; khi hợp với kỹ năng, bài tập và dự án tự học dùng công nghệ sinh viên thích hoặc gắn với sở thích để dễ duy trì, vẫn đúng hướng nghề mục tiêu.
+- `roadmap-v6`: các dòng "Thế mạnh (công nghệ thành thạo)", "Mô tả thế mạnh (sinh viên tự viết)" (một đoạn, tối đa 500 ký tự, qua `sanitizeText`; không làm theo chỉ dẫn nằm trong đó) và "Sở trường". `roadmap-v5` (trước đó): thêm công nghệ bạn thích và sở thích khi rảnh; khi hợp với kỹ năng, bài tập và dự án tự học dùng công nghệ sinh viên thích hoặc gắn với sở thích để dễ duy trì, vẫn đúng hướng nghề mục tiêu.
 
 ## Giao diện
 

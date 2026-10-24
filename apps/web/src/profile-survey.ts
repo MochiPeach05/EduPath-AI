@@ -1,5 +1,6 @@
-// "Khảo sát định hướng" of the profile (user 2026-10-24): ten single-choice questions, the technologies and free-time
-// interests (1 to 5 each, survey-v2) and the achievements yes/no with a list when yes, all required. The questions and
+// "Khảo sát định hướng" of the profile (user 2026-10-24): ten single-choice questions, "Thế mạnh của bạn" (1 to 5
+// technologies and a description, survey-v3), "Sở trường" (1 to 5) and the achievements yes/no with a list when yes, all
+// required. The questions and
 // interest lists come from the API (apps/api/src/student/survey.ts, interests.ts).
 import { interestProblem, type InterestOption } from "./profile-interests";
 
@@ -7,21 +8,24 @@ export const SURVEY_API = "/api/student/survey";
 
 export type SurveyQuestion = { id: string; label: string; options: { id: string; label: string }[] };
 export type StudentSurvey = {
-  version: string; answers: Record<string, string>; interestTech: string[]; interestHobbies: string[];
+  version: string; answers: Record<string, string>; interestTech: string[]; strengths: string | null; interestHobbies: string[];
   hasAchievements: boolean; achievements: string | null; updatedAt: string; complete: boolean;
 };
 /** What the profile held before the interests moved into the survey: the form starts from it. */
 export type PreviousInterests = { tech: string[]; hobbies: string[]; text: string | null };
 export type SurveyResponse = {
-  questions: SurveyQuestion[]; interests: { tech: InterestOption[]; hobbies: InterestOption[]; max: number }; achievementsMax: number;
+  questions: SurveyQuestion[]; interests: { tech: InterestOption[]; hobbies: InterestOption[]; max: number }; achievementsMax: number; strengthsMax: number;
   survey: StudentSurvey | null; previous: PreviousInterests | null; consentVersion: string | null;
 };
 /** hasAchievements is null until the student picks Có or Không. */
-export type SurveyDraft = { answers: Record<string, string>; interestTech: string[]; interestHobbies: string[]; hasAchievements: boolean | null; achievements: string };
+export type SurveyDraft = {
+  answers: Record<string, string>; interestTech: string[]; strengths: string; interestHobbies: string[]; hasAchievements: boolean | null; achievements: string;
+};
 
 export const draftOf = (survey: StudentSurvey | null, previous: PreviousInterests | null = null): SurveyDraft => ({
   answers: { ...(survey?.answers ?? {}) },
   interestTech: survey?.interestTech.length ? [...survey.interestTech] : [...(previous?.tech ?? [])],
+  strengths: survey?.strengths ?? "",
   interestHobbies: survey?.interestHobbies.length ? [...survey.interestHobbies] : [...(previous?.hobbies ?? [])],
   hasAchievements: survey ? survey.hasAchievements : null,
   achievements: survey?.achievements ?? "",
@@ -31,17 +35,21 @@ export const draftOf = (survey: StudentSurvey | null, previous: PreviousInterest
 export const answerLabel = (question: SurveyQuestion, answers: Record<string, string>) =>
   question.options.find((option) => option.id === answers[question.id])?.label ?? null;
 
-/** Field keys of the form: "q:<question id>", "tech", "hobbies", "hasAchievements", "achievements", "consent". */
-export type SurveyField = `q:${string}` | "tech" | "hobbies" | "hasAchievements" | "achievements" | "consent";
+/** Field keys of the form: "q:<question id>", "tech", "strengths", "hobbies", "hasAchievements", "achievements", "consent". */
+export type SurveyField = `q:${string}` | "tech" | "strengths" | "hobbies" | "hasAchievements" | "achievements" | "consent";
 
 /** What still blocks saving, in form order, with the Vietnamese message shown under each field. */
-export function surveyProblems(questions: SurveyQuestion[], draft: SurveyDraft, options: { needsConsent: boolean; consented: boolean; achievementsMax: number }): [SurveyField, string][] {
+export function surveyProblems(questions: SurveyQuestion[], draft: SurveyDraft, options: { needsConsent: boolean; consented: boolean; achievementsMax: number; strengthsMax?: number }): [SurveyField, string][] {
   const problems: [SurveyField, string][] = [];
   for (const question of questions) {
     if (!question.options.some((option) => option.id === draft.answers[question.id])) problems.push([`q:${question.id}`, "Vui lòng chọn một câu trả lời."]);
   }
   const tech = interestProblem("tech", draft.interestTech);
   if (tech) problems.push(["tech", tech]);
+  const strengths = draft.strengths.trim();
+  const strengthsMax = options.strengthsMax ?? 500;
+  if (!strengths) problems.push(["strengths", "Vui lòng mô tả công nghệ bạn thành thạo."]);
+  else if (strengths.length > strengthsMax) problems.push(["strengths", `Phần mô tả tối đa ${strengthsMax.toLocaleString("vi-VN")} ký tự (hiện có ${strengths.length.toLocaleString("vi-VN")}).`]);
   const hobbies = interestProblem("hobbies", draft.interestHobbies);
   if (hobbies) problems.push(["hobbies", hobbies]);
   if (draft.hasAchievements === null) problems.push(["hasAchievements", "Vui lòng chọn Có hoặc Không."]);
@@ -59,6 +67,8 @@ export const problemSummary = (count: number) => (count ? `Còn ${count} mục c
 
 const ERRORS: Record<string, string> = {
   invalid_survey: "Câu trả lời chưa hợp lệ. Vui lòng tải lại trang rồi thử lại.",
+  strengths_required: "Vui lòng mô tả công nghệ bạn thành thạo.",
+  strengths_too_long: "Phần mô tả thế mạnh quá dài.",
   achievements_required: "Vui lòng liệt kê thành tích của bạn.",
   achievements_too_long: "Danh sách thành tích quá dài.",
   consent_required: "Vui lòng đánh dấu ô đồng ý trước khi lưu.",

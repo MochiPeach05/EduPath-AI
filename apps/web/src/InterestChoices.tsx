@@ -1,9 +1,10 @@
+import type { ReactNode } from "react";
 import { toggleInterest, type InterestOption } from "./profile-interests";
 
-/** One interest list of the survey: checkbox chips like the survey's answers, 1 to max choices. */
-export function InterestGroup({ name, number, legend, hint, options, max, value, error, onChange }: {
+/** One interest list of the survey: checkbox chips like the survey's answers, 1 to max choices; children follow the chips. */
+export function InterestGroup({ name, number, legend, hint, options, max, value, error, onChange, children }: {
   name: string; number?: number; legend: string; hint: string; options: InterestOption[]; max: number; value: string[]; error: string;
-  onChange: (value: string[]) => void;
+  onChange: (value: string[]) => void; children?: ReactNode;
 }) {
   const full = value.length >= max;
   return <fieldset className={`ps-question pi-group${error ? " ps-invalid" : ""}`} data-field={name} aria-describedby={error ? `pi-error-${name}` : undefined}>
@@ -17,5 +18,6 @@ export function InterestGroup({ name, number, legend, hint, options, max, value,
       </label>;
     })}</div>
     {error && <p className="ps-field-error" id={`pi-error-${name}`}>{error}</p>}
+    {children}
   </fieldset>;
 }
