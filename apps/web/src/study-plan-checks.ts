@@ -14,9 +14,6 @@ export type StudyPlanCourse = {
   prerequisites: string[]; prior: string[]; state: CourseState; inProgressTerm: string | null;
   /** In the graduation standard but not in the CTĐT. */
   onlyInStandard?: boolean;
-  /** Own cohort's training-plan term, and every term some cohort's training plan opens the course (kế hoạch đào tạo). */
-  planTerm?: string | null;
-  offeredTerms?: string[];
 };
 export type StudyPlanGraduationGroup = { label: string; kind: "mandatory" | "elective"; unit: "môn" | "TC"; required: number | null; passed: number | null; courseCodes: string[] };
 export type StudyPlanContext = {
@@ -27,8 +24,6 @@ export type StudyPlanContext = {
   courses: StudyPlanCourse[];
   electiveGroups: { code: string; requiredCredits: number | null; courseCodes: string[] }[];
   graduation: { standardName: string; groups: StudyPlanGraduationGroup[] } | null;
-  /** Last term the training plans cover; null without plans. */
-  offeringUntil?: string | null;
 };
 export type TriState = "pass" | "fail" | "unknown";
 export type StudyPlanProjection = {
@@ -46,10 +41,6 @@ export const BLOCKS = [
   { block: 4, periods: "10–12", time: "15:35–18:00" },
   { block: 5, periods: "13–15", time: "18:05–20:20" },
 ] as const;
-/** Periods 1–15 with their start times (the school's period times); a block spans three of them. */
-export const PERIODS = [
-  "07:00", "07:50", "08:40", "09:35", "10:25", "11:15", "13:00", "13:50", "14:40", "15:35", "16:25", "17:15", "18:05", "18:50", "19:35",
-].map((start, index) => ({ period: index + 1, start, block: Math.floor(index / 3) + 1 }));
 export const MAX_TERMS = 15;
 export const MAX_SESSIONS = 6;
 
@@ -188,23 +179,6 @@ export function poolSections(context: StudyPlanContext, plan: StudyPlanData): Po
   return sections;
 }
 
-export type Offering = "plan" | "likely" | "outside" | "unknown";
-/**
- * Whether classes of a course open in a term (user, 2026-10-24: the school opens classes mostly by the training plans,
- * few outside them): "plan" when a cohort's plan opens it then; "likely" past the plans' last term when the plans open it
- * in that semester (plans repeat every year); "outside" when the plans cover the term without it; "unknown" without plans.
- */
-export function offering(context: Pick<StudyPlanContext, "offeringUntil">, course: Pick<StudyPlanCourse, "offeredTerms">, term: string): Offering {
-  const terms = course.offeredTerms ?? [];
-  if (terms.includes(term)) return "plan";
-  if (!context.offeringUntil) return "unknown";
-  if (termIndex(term) > termIndex(context.offeringUntil)) return terms.some((item) => item.endsWith(term.slice(4))) ? "likely" : terms.length ? "outside" : "unknown";
-  return "outside";
-}
-export const OFFERING_LABELS: Record<Offering, string | null> = {
-  plan: "Có lớp theo kế hoạch", likely: "Thường mở học kỳ này", outside: "Ngoài kế hoạch: ít lớp", unknown: null,
-};
-
 /** A copy of the plan with a course moved to a term (null: back to the pool), creating the term when needed. */
 export function moveCourse(plan: StudyPlanData, context: Pick<StudyPlanContext, "courses">, code: string, to: string | null): StudyPlanData {
   const key = code.toUpperCase();
@@ -243,27 +217,4 @@ export function changeSessions(plan: StudyPlanData, term: string, code: string, 
 export function mergeSuggestion(current: StudyPlanData, suggested: StudyPlanData): StudyPlanData {
   const before = new Map(current.terms.flatMap((term) => term.courses.map((course) => [`${term.code}:${course.code.toUpperCase()}`, course] as const)));
   return { ...suggested, terms: suggested.terms.map((term) => ({ ...term, courses: term.courses.map((course) => before.get(`${term.code}:${course.code.toUpperCase()}`) ?? course) })) };
-}
-
-/**
- * A course dropped on a slot of a term (the timetable is the main view, user 2026-10-24): the course joins the term when
- * it is not there yet (from the pool or another term), then its first unplaced session takes the slot; a course whose
- * sessions are all placed gets one more session. A course without sessions only joins the term.
- */
-export function addToSlot(plan: StudyPlanData, context: Pick<StudyPlanContext, "courses">, term: string, code: string, slot: { day: number; block: number }): StudyPlanData {
-  const key = code.toUpperCase();
-  let next = plan.terms.find((item) => item.code === term)?.courses.some((course) => course.code.toUpperCase() === key) ? plan : moveCourse(plan, context, key, term);
-  let course = next.terms.find((item) => item.code === term)!.courses.find((item) => item.code.toUpperCase() === key)!;
-  if (!course.sessions.length && !context.courses.find((item) => item.code === key)?.sessions.length) return next;
-  if (!course.sessions.some((session) => session.day === null)) {
-    next = changeSessions(next, term, course.code, { add: true });
-    course = next.terms.find((item) => item.code === term)!.courses.find((item) => item.code.toUpperCase() === key)!;
-  }
-  const index = course.sessions.findIndex((session) => session.day === null);
-  return index < 0 ? next : placeSession(next, term, course.code, index, slot);
-}
-
-/** Prerequisites and prior courses a course would miss if it were planned in a term (hint on the pool's cards). */
-export function issuesIfIn(context: Pick<StudyPlanContext, "courses">, plan: StudyPlanData, code: string, term: string): ConditionIssue | undefined {
-  return conditionIssues(context, moveCourse(plan, context, code, term)).get(code.toUpperCase());
 }

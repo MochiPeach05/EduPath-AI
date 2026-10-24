@@ -2,13 +2,13 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "../auth/types.js";
-import { syntheticCurriculum, syntheticPlan, syntheticStandards, syntheticStudentTerms, syntheticTranscript } from "../competency-assessment/fixtures/synthetic-k29.js";
+import { syntheticCurriculum, syntheticStandards, syntheticStudentTerms, syntheticTranscript } from "../competency-assessment/fixtures/synthetic-k29.js";
 import type { DatabasePool } from "../db/pool.js";
 import { readStudyPlanFacts, type StudyPlanContext } from "./context.js";
 import { creditLimits, currentTermCode, nextTerm, sessionKinds, studyPlanSchema, termIndex, termLabel } from "./model.js";
 import { plannedTranscript, projectGraduation } from "./projection.js";
 import { createStudyPlanRouter } from "./router.js";
-import { suggestStudyPlan, targetTerm } from "./suggest.js";
+import { suggestStudyPlan } from "./suggest.js";
 
 // Synthetic K29 rows only (fixtures/synthetic-k29.json); no real student data.
 const studentId = "11111111-1111-4111-8111-111111111111";
@@ -29,13 +29,7 @@ function curriculumData() {
   };
 }
 
-/** The synthetic K29 training plan, and a K30 plan that opens 71ITIN40304 in HK263 (a later cohort's term). */
-const planRows = () => [
-  ...syntheticPlan().data.items.map((item) => ({ cohort_code: "K29", code: item.code, name: item.name, term_code: item.termCode })),
-  { cohort_code: "K30", code: "71ITIN40304", name: "Đồ án thực tập", term_code: "HK263" },
-];
-
-type Options = { specialty?: string | null; standards?: boolean; transcript?: boolean; active?: boolean; plans?: boolean };
+type Options = { specialty?: string | null; standards?: boolean; transcript?: boolean; active?: boolean };
 function fakeDb(options: Options = {}) {
   const saved: { version: string; data: unknown; updated_at: Date }[] = [];
   const standards = options.standards === false ? [] : syntheticStandards().map((item) => ({ id: item.id, revision_id: item.revisionId, version: item.version, data: item.data }));
@@ -47,7 +41,6 @@ function fakeDb(options: Options = {}) {
     if (sql.includes("FROM student_transcripts")) return rows(options.transcript === false ? [] : [{ data: syntheticTranscript(syntheticStudentTerms()) }]);
     if (sql.includes("FROM curricula")) return rows(params[0] === "K29" ? [{ data: curriculumData() }] : []);
     if (sql.includes("FROM graduation_standards")) return rows(standards);
-    if (sql.includes("FROM training_plans")) return rows(options.plans === false ? [] : planRows());
     if (sql.startsWith("SELECT version,data,updated_at FROM stu_study_plans")) return rows(saved.slice(-1));
     if (sql.startsWith("INSERT INTO stu_study_plans")) {
       saved.push({ version: String(params[1]), data: JSON.parse(String(params[2])), updated_at: today });
@@ -105,31 +98,14 @@ describe("study plan context", () => {
     expect(byCode.get("71ITDS40303")).toMatchObject({ applicable: false, specialtyName: "Công nghệ Dữ liệu" });
     expect(byCode.get("71PEBA10052")).toMatchObject({ conditional: true, kind: "elective", group: "TC102" });
     expect(context.graduation?.groups.map((group) => [group.label, group.unit, group.required, group.passed])).toContainEqual(["Nhóm tự chọn TC306", "TC", 6, 0]);
-    // Training plans: the own cohort's term, and every term a plan opens the course in.
-    expect(byCode.get("71ITIN40304")).toMatchObject({ planTerm: "HK253", offeredTerms: ["HK253", "HK263"] });
-    expect(context.offeringUntil).toBe("HK263");
   });
 });
 
 describe("Xếp theo kế hoạch đào tạo", () => {
-  it("plans what the standard still needs in the terms the training plans open the courses", async () => {
-    // 71ITIN40304 (own plan HK253, over) goes to K30's HK263; 71ITGR40206 (own plan HK261) to the next HK1 past the plans.
+  it("plans every remaining mandatory course and the electives the graduation standard still needs, from the next term", async () => {
     const plan = suggestStudyPlan((await facts()).context);
-    expect(plan.terms.map((term) => [term.code, term.courses.map((course) => course.code)])).toEqual([["HK262", []], ["HK263", ["71ITIN40304"]], ["HK271", ["71ITGR40206"]]]);
-    expect(plan.terms[1]!.courses[0]!.sessions).toEqual([{ kind: "LT", day: null, block: null }, { kind: "TH", day: null, block: null }]);
-    // Without any training plan, the next term.
-    expect(suggestStudyPlan((await facts({ plans: false })).context).terms.map((term) => [term.code, term.courses.map((course) => course.code)]))
-      .toEqual([["HK262", ["71ITIN40304", "71ITGR40206"]]]);
-  });
-
-  it("picks the own-plan term, else a term a plan opens the course, else a term of its semester past the plans", () => {
-    const course = (planTerm: string | null, offeredTerms: string[], standardTerm: string | null = null) => ({ planTerm, offeredTerms, standardTerm });
-    expect(targetTerm(course("HK271", ["HK262", "HK271"]), "HK262", "HK281")).toBe("HK271");
-    expect(targetTerm(course("HK251", ["HK251", "HK263", "HK273"]), "HK262", "HK281")).toBe("HK263");
-    expect(targetTerm(course("HK242", ["HK242", "HK252"]), "HK262", "HK263")).toBe("HK272");
-    expect(targetTerm(course(null, [], "HK271"), "HK262", null)).toBe("HK271");
-    expect(targetTerm(course(null, [], "HK231"), "HK262", null)).toBe("HK262");
-    expect(targetTerm(course(null, [], "HK271"), "HK262", "HK281")).toBe("HK262");
+    expect(plan.terms.map((term) => [term.code, term.courses.map((course) => course.code)])).toEqual([["HK262", ["71ITIN40304", "71ITGR40206"]]]);
+    expect(plan.terms[0]!.courses[0]!.sessions).toEqual([{ kind: "LT", day: null, block: null }, { kind: "TH", day: null, block: null }]);
   });
 
   it("without a standard only fills the CTĐT groups that state their credits; without a specialty only common courses", async () => {
@@ -145,11 +121,10 @@ describe("Xếp theo kế hoạch đào tạo", () => {
     const course = (code: string, standardTerm: string, prerequisites: string[] = []) => ({
       code, name: code, credits: 3, type: "BB", kind: "mandatory" as const, group: null, conditional: false, applicable: true, specialtyName: null,
       standardTerm, sessions: [], prerequisites, prior: [], state: "not_taken" as const, inProgressTerm: null, onlyInStandard: false,
-      planTerm: null, offeredTerms: [],
     });
     const context: StudyPlanContext = {
       cohortCode: "K29", specialty: "CNPM", specialtyLabel: null, curriculum: { name: "CTĐT", totalCredits: 12 }, hasTranscript: true,
-      currentTerm: "HK261", admissionYear: 2023, standardTerms: [], limits: { average: 3, min: 2, max: 4 }, electiveGroups: [], graduation: null, offeringUntil: null,
+      currentTerm: "HK261", admissionYear: 2023, standardTerms: [], limits: { average: 3, min: 2, max: 4 }, electiveGroups: [], graduation: null,
       courses: [course("A", "HK231"), course("B", "HK231"), course("C", "HK271", ["A"]), course("D", "HK262", ["B"])],
     };
     // Max 4 credits: one 3-credit course per term. D waits for B (HK263); C's own term HK271 is then full.
