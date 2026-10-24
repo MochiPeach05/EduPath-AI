@@ -12,8 +12,8 @@ Cả 10 câu chọn một đáp án, hai danh sách sở thích và câu thành 
 |---|---|---|
 | `goal` | Mục tiêu sau tốt nghiệp | Đi làm ngay; Học lên cao (thạc sĩ, nghiên cứu); Khởi nghiệp hoặc làm tự do; Chưa xác định |
 | `environment` | Môi trường học tập, làm việc bạn thích | Làm việc độc lập; Làm việc theo nhóm; Kết hợp cả hai |
-| `company` | Loại hình công ty mong muốn | Công ty lớn, quy trình rõ ràng; Startup năng động; Nhà nước, nghiên cứu; Chưa xác định |
-| `partTime` | Bạn có làm thêm không | Không; Có, không liên quan CNTT; Có, liên quan CNTT |
+| `company` | Nơi làm việc mong muốn | Công ty lớn, quy trình rõ ràng; Startup năng động; Cơ quan nhà nước, viện nghiên cứu; Chưa xác định |
+| `partTime` | Đi làm thêm | Không; Có, không liên quan CNTT; Có, liên quan CNTT |
 | `leadership` | Kinh nghiệm dẫn dắt nhóm | Chưa từng; 1 dự án; 2–3 dự án; Trên 4 dự án |
 | `projects` | Dự án ngoài môn học | Chưa có; 1–2 dự án; Từ 3 dự án |
 | `internship` | Thực tập | Chưa thực tập; Đang thực tập; Đã thực tập |

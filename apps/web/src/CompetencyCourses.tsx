@@ -31,7 +31,7 @@ export function CompetencyCoursesTab({ canManage, revision, onSaved }: Props) {
   const close = () => setSelected(null);
   const saved = () => { close(); onSaved(); };
   function open(course: CompetencyCourse, next: Mode) { setSelected(course); setMode(next); }
-  const scope = filters.cohort ? `các môn của ${filters.cohort}` : "các môn học";
+  const scope = filters.cohort ? `môn học nào của ${filters.cohort}` : "môn học nào";
 
   return <div className="comp-section-stack">
     <section className="cm-panel comp-summary"><Status {...summary} />{summary.data && <>
@@ -41,7 +41,7 @@ export function CompetencyCoursesTab({ canManage, revision, onSaved }: Props) {
         <div><span>Chưa cấu hình</span><strong>{summary.data.missingCount}</strong><small>{summary.data.archivedCount} cấu hình đã lưu trữ</small></div>
         <div><span>Kỹ năng chưa đóng góp</span><strong>{summary.data.unlinkedSkillCount}</strong><small>Có cấu hình năng lực</small></div>
       </div>
-      {summary.data.courseCount > 0 && summary.data.activeCount === 0 && summary.data.draftCount === 0 && <p className="comp-empty-config" role="status">Chưa có {scope} nào có cấu hình đang sử dụng. Có thể chạy AI cho các môn chưa có liên kết hoặc tạo liên kết kỹ năng kèm trọng số cho từng môn.</p>}
+      {summary.data.courseCount > 0 && summary.data.activeCount === 0 && summary.data.draftCount === 0 && <p className="comp-empty-config" role="status">Chưa có {scope} có cấu hình đang áp dụng hoặc bản nháp. Có thể chạy AI cho các môn chưa có liên kết hoặc tạo liên kết kỹ năng kèm trọng số cho từng môn.</p>}
       {summary.data.warnings.length > 0 && <details className="cm-warning"><summary>{summary.data.warnings.length} cảnh báo cần rà soát</summary><ul>{summary.data.warnings.map((warning, index) => <li key={`${warning.code}-${index}`}>{warning.courseCode && <strong>{warning.courseCode}: </strong>}{warning.message}</li>)}</ul></details>}
     </>}</section>
     <CompetencyBulkAi cohort={filters.cohort} canManage={canManage} revision={revision} onSaved={onSaved} />
@@ -153,7 +153,7 @@ function ManualLinks({ detail, canManage, close, saved, busy, setBusy }: StepPro
     finally { setBusy(false); }
   }
   return <div className="cm-form">
-    <p className="comp-hint">Chọn kỹ năng môn học này rèn luyện rồi nhập trọng số cho mọi kỹ năng của môn. Áp dụng cần tổng đúng 100%; bản nháp được lưu dù tổng chưa đủ. Môn học đã có {current.links.length} kỹ năng liên kết.</p>
+    <p className="comp-hint">Chọn kỹ năng môn học này rèn luyện rồi nhập trọng số cho mọi kỹ năng của môn. Để áp dụng, tổng phải đúng 100%; bản nháp vẫn lưu được khi tổng chưa đủ. Môn học đã có {current.links.length} kỹ năng liên kết.</p>
     <Status {...skills} />
     <div className="cm-filters comp-pick-filters">
       <label className="cm-search">Tìm kỹ năng<input maxLength={200} value={term} onChange={(event) => setTerm(event.target.value)} placeholder="Tên kỹ năng…" /></label>
@@ -215,7 +215,7 @@ function RemoveLinks({ detail, canManage, close, saved, busy, setBusy }: StepPro
       {current.links.map((link) => <label key={link.skillId} className="cm-check"><input type="checkbox" checked={removed.includes(link.skillId)}
         onChange={() => setRemoved((previous) => previous.includes(link.skillId) ? previous.filter((id) => id !== link.skillId) : [...previous, link.skillId])} /><span>{link.skillName}<small> · {percentage(link.weight)}</small></span></label>)}
     </fieldset>
-    {all ? <p className="cm-warning" role="alert">Môn học sẽ không còn kỹ năng nào, chuyển về Bản nháp và không được tính vào đánh giá năng lực của mọi khóa có môn này cho đến khi tạo liên kết kỹ năng lại.</p>
+    {all ? <p className="cm-warning" role="alert">Môn học sẽ không còn kỹ năng nào, chuyển về Bản nháp và không được tính vào đánh giá năng lực của mọi khóa có môn này cho đến khi tạo lại liên kết kỹ năng.</p>
       : toDraft && <p className="cm-warning" role="alert">Sau khi xóa, tổng trọng số không còn 100% nên môn học chuyển về Bản nháp và tạm không được tính vào đánh giá năng lực. Hãy dùng Tạo liên kết kỹ năng hoặc Chỉnh sửa liên kết và trọng số để chia lại 100% rồi áp dụng.</p>}
     <label className="cm-check"><input type="checkbox" checked={confirmed} disabled={busy || !removed.length} onChange={(event) => setConfirmed(event.target.checked)} /><span>Tôi xác nhận xóa liên kết và trọng số của {removed.length} kỹ năng khỏi {current.courseCode}.</span></label>
     {error && <p className="admin-error cm-prewrap" role="alert">{error}</p>}
@@ -254,9 +254,9 @@ function CourseConfiguration({ initial, canManage, startEditing, close, saved, b
   }
 
   return <div className="cm-form">
-    <p><span className={`comp-state comp-state-${current.status}`}>{statusLabels[current.status]}</span>{current.status === "archived" && <span className="comp-hint"> Cấu hình đã lưu trữ, không đóng góp vào năng lực. Chọn chỉnh sửa để tạo trạng thái mới.</span>}</p>
+    <p><span className={`comp-state comp-state-${current.status}`}>{statusLabels[current.status]}</span>{current.status === "archived" && <span className="comp-hint"> Cấu hình đã lưu trữ, không đóng góp vào năng lực. Chọn Chỉnh sửa cấu hình môn học để tạo cấu hình mới.</span>}</p>
     {current.mergedFrom.length > 0 && <p className="cm-warning">Khi chuyển sang cấu hình dùng chung, cấu hình khác của {current.mergedFrom.join(", ")} đã được thay bằng cấu hình này. Xem Lịch sử cấu hình để đối chiếu; ghi chú này mất sau lần lưu tiếp theo.</p>}
-    {editing && <><p className="comp-hint">Nhập phần trăm cho toàn bộ danh sách. Áp dụng cần ít nhất một kỹ năng, tổng 100% và mọi kỹ năng đang hoạt động. Trọng số 0% được giữ nhưng không đóng góp.</p><Status {...skills} /></>}
+    {editing && <><p className="comp-hint">Nhập phần trăm cho toàn bộ danh sách. Để áp dụng, cần ít nhất một kỹ năng, tổng 100% và mọi kỹ năng đều đang sử dụng. Trọng số 0% được giữ nhưng không đóng góp.</p><Status {...skills} /></>}
     <fieldset className="cm-fields" disabled={busy || !editing}>
       <div className="comp-allocation-list">
         {rows.map((row, index) => {

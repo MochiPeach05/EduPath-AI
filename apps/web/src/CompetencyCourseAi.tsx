@@ -37,7 +37,7 @@ export default function CompetencyCourseAi({ course, close, saved }: Props) {
           <div>
             <h3>{course.code} · {course.name}</h3>
             <p>AI đọc tên, mô tả, khối kiến thức và số giờ của môn học cùng các kỹ năng đã có cấu hình năng lực (gồm cả kỹ năng nghề nghiệp chưa có môn học đo), đề xuất những kỹ năng môn học rèn luyện và chia 100% trọng số cho các kỹ năng của môn học{course.skillCount ? `, kể cả ${course.skillCount} kỹ năng đã liên kết` : ""}. Bạn xem, sửa rồi lưu bản nháp hoặc áp dụng.</p>
-            <p className="cai-muted">AI chỉ nhận dữ liệu chương trình đào tạo, không nhận dữ liệu sinh viên. Kết quả chỉ là gợi ý: bạn chọn, sửa rồi mới lưu.</p>
+            <p className="cai-muted">AI chỉ nhận dữ liệu chương trình đào tạo, không nhận dữ liệu sinh viên. Kết quả chỉ là gợi ý.</p>
           </div>
         </div>
         <WorkerLine line={worker} loading={statusLoading} />
@@ -100,8 +100,8 @@ function LinksReview({ suggestion, course, busy, setBusy, createError, canCreate
   };
   const proposed = suggestion.items.filter((item) => !item.alreadyLinked).length;
   return <>
-    <ReviewHead suggestion={suggestion} heading={suggestion.items.length ? `AI đề xuất ${proposed.toLocaleString("vi-VN")} kỹ năng mới và trọng số cho ${course.code}` : `Chưa có kỹ năng phù hợp cho ${course.code}`}
-      text={suggestion.items.length ? "Bỏ chọn kỹ năng không phù hợp, chọn nhóm năng lực cho kỹ năng chưa có cấu hình năng lực và sửa phần trăm nếu cần. Kỹ năng đã liên kết luôn được giữ. Áp dụng cần tổng đúng 100%; bản nháp được lưu dù tổng chưa đủ." : NO_MATCHING_SKILL_MESSAGE} />
+    <ReviewHead suggestion={suggestion} heading={suggestion.items.length ? `AI đề xuất thêm ${proposed.toLocaleString("vi-VN")} kỹ năng và trọng số cho ${course.code}` : `Chưa có kỹ năng phù hợp cho ${course.code}`}
+      text={suggestion.items.length ? "Bỏ chọn kỹ năng không phù hợp, chọn nhóm năng lực cho kỹ năng chưa có cấu hình năng lực và sửa phần trăm nếu cần. Kỹ năng đã liên kết luôn được giữ. Để áp dụng, tổng phải đúng 100%; bản nháp vẫn lưu được khi tổng chưa đủ." : NO_MATCHING_SKILL_MESSAGE} />
     {suggestion.stale && <p className="cm-warning" role="alert">Liên kết kỹ năng của môn học đã thay đổi sau khi AI đề xuất. Hãy tạo lại đề xuất.</p>}
     {!suggestion.items.length && <p className="cai-muted">Bổ sung kỹ năng ở Cấu hình năng lực rồi tạo lại đề xuất, hoặc tạo liên kết thủ công.</p>}
     <Status {...groups} />
@@ -125,13 +125,13 @@ function LinksReview({ suggestion, course, busy, setBusy, createError, canCreate
             <option value="">Chọn nhóm</option>{options.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
           </select></label>
         </fieldset>}
-        {!row.hasProfile && !row.alreadyLinked && <p className="cai-similar">{row.isNewSkill ? "Khi lưu, kỹ năng mới được thêm vào mục Kỹ năng của Nghề nghiệp và được tạo cấu hình năng lực." : "Kỹ năng này đang được nghề nghiệp yêu cầu nhưng chưa có môn học đo. Khi lưu, kỹ năng được tạo cấu hình năng lực."}</p>}
+        {!row.hasProfile && !row.alreadyLinked && <p className="cai-similar">{row.isNewSkill ? "Khi lưu, kỹ năng mới được thêm vào mục Kỹ năng (Quản lý nghề nghiệp) và được tạo cấu hình năng lực." : "Kỹ năng này đang được nghề nghiệp yêu cầu nhưng chưa có môn học đo. Khi lưu, kỹ năng được tạo cấu hình năng lực."}</p>}
         {row.reason && <p className="cai-reason">Lý do AI đề xuất: {row.reason}</p>}
         {rowErrors.length > 0 && <ul className="cai-row-errors" role="alert">{rowErrors.map((message) => <li key={message}>{message}</li>)}</ul>}
       </li>;
     })}</ul>}
     {rows.length > 0 && <>
-      <p className="cai-summary" aria-live="polite">{course.code} sẽ có {check.selected.toLocaleString("vi-VN")} kỹ năng ({check.added.toLocaleString("vi-VN")} kỹ năng mới)</p>
+      <p className="cai-summary" aria-live="polite">{course.code} sẽ có {check.selected.toLocaleString("vi-VN")} kỹ năng (thêm {check.added.toLocaleString("vi-VN")} kỹ năng)</p>
       <div className={`comp-weight-total${check.canActivate ? " comp-weight-valid" : ""}`} role="status"><span>Tổng trọng số</span><strong>{percentage(check.total / 100)} / 100%</strong></div>
     </>}
     {(error || createError) && <p className="admin-error cm-prewrap" role="alert">{error || createError}</p>}

@@ -63,7 +63,7 @@ export default function StudentCareerExplorer({ selectedId, initialCareerId, onS
         <button type="button" className="sr-secondary" disabled={saving} onClick={() => { setSaveError(""); setDetailId(""); }}><Icon name="back" />Trở về danh sách</button>
         <CareerDetail key={detailId} id={detailId} selectedId={selectedId} saving={saving} saveError={saveError} onSelect={career => void selectCareer(career)} onClose={onClose} />
       </> : <>
-        <p>Chọn một vị trí trong danh sách rồi bấm Lưu mục tiêu để đặt mục tiêu nghề nghiệp. Bạn có thể xem yêu cầu để tìm hiểu thêm trước khi chọn.</p>
+        <p>Chọn một vị trí trong danh sách rồi bấm Lưu mục tiêu. Bạn có thể xem yêu cầu để tìm hiểu thêm trước khi chọn.</p>
         <details className="sr-career-fields">
           <summary>Lĩnh vực nghề nghiệp</summary>
           {fields.data && <div className="sr-career-field-grid">{fields.data.items.map(field => <article key={field.id}>
@@ -123,7 +123,7 @@ function CareerDetail({ id, selectedId, saving, saveError, onSelect, onClose }: 
         </table></div> : <p>Chưa có yêu cầu hoặc kỹ năng được cập nhật cho vị trí này.</p>}
       </section>
       {saveError && <p className="sr-error" role="alert">{saveError}</p>}
-      <p className="sw-muted">Bấm chọn để lưu ngay mục tiêu nghề nghiệp. Sở thích của bạn được giữ nguyên.</p>
+      <p className="sw-muted">Bấm Chọn nghề mục tiêu để lưu ngay.</p>
     </>}
     <div className="sr-actions sr-form-actions">
       <button type="button" className="sr-secondary" disabled={saving} onClick={onClose}><Icon name="close" />Hủy</button>

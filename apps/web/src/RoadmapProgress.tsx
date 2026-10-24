@@ -72,14 +72,14 @@ export function RoadmapTrack({ context, plan, projection }: { context: StudyPlan
       <ProgressBar done={credits.done} running={credits.running} planned={view === "planned" ? credits.planned : 0} total={credits.total} />
       <p className="rm-view-note">{view === "official"
         ? "Chính thức: chỉ tính học phần đã có kết quả và học phần đang học theo bảng điểm."
-        : "Theo kế hoạch: tính thêm mọi học phần bạn đã xếp ở mục Lên kế hoạch, như thể bạn sẽ học đạt."}
+        : "Theo kế hoạch: tính thêm mọi học phần bạn đã xếp ở mục Kế hoạch học kỳ, như thể bạn sẽ học đạt."}
         {view === "planned" && projection && ` Nếu học đạt hết kế hoạch: ${projection.withPlan === "pass" ? "đủ các nhóm học phần của tiêu chuẩn xét tốt nghiệp" : `còn ${projection.openGroups.length} nhóm học phần chưa đủ`}.`}</p>
     </section>
 
     <section className="sw-panel rm-audit" aria-labelledby="rm-audit-title">
       <h2 id="rm-audit-title">Yêu cầu của chương trình</h2>
       <RoadmapLegend />
-      {!context.hasTranscript && <p className="rm-note">Bạn chưa nhập bảng điểm nên mọi học phần đều đang ở trạng thái còn thiếu. Nhập bảng điểm ở Hồ sơ để theo dõi tiến độ.</p>}
+      {!context.hasTranscript && <p className="rm-note">Bạn chưa nhập bảng điểm nên mọi học phần đều đang ở trạng thái còn thiếu. Nhập bảng điểm ở Hồ sơ và bảng điểm để theo dõi tiến độ.</p>}
       {!groups.length && <p className="rm-empty">Chưa có tiêu chuẩn xét tốt nghiệp hay chương trình đào tạo cho khóa của bạn.</p>}
       <div className="rm-audit-groups">{groups.map((group) => <details key={group.id} className={`rm-req${group.complete ? " rm-req-done" : ""}`} open={!group.complete}>
         <summary>
@@ -119,8 +119,8 @@ export function RoadmapLegend() {
     [{ kind: "planned" }, "Đã lên kế hoạch", "Học phần đã có trong kế hoạch; sẽ được tính khi bạn học đạt. Chỉ thấy ở chế độ Theo kế hoạch."],
     [{ kind: "remaining", count: 3 }, "Số còn thiếu", "Số học phần (hoặc số tín chỉ với nhóm tự chọn) còn thiếu để đủ yêu cầu."],
     [{ kind: "retake" }, "Học nhiều lần", "Học phần đã học hơn một lần (học lại, học cải thiện) nhưng chỉ được tính một lần."],
-    [{ kind: "not_counted" }, "Không được tính", "Đã học hoặc đăng ký nhưng không được tính cho yêu cầu nào; liệt kê ở mục Học phần không được tính cuối trang."],
-    [{ kind: "equivalent" }, "Học phần tương đương", "Yêu cầu được tính qua một học phần tương đương: mã cũ của học phần, hoặc học phần cùng tên học với khóa sau."],
+    [{ kind: "not_counted" }, "Không được tính", "Đã học hoặc đăng ký nhưng không được tính cho yêu cầu nào; được liệt kê ở mục Học phần không được tính ở cuối trang."],
+    [{ kind: "equivalent" }, "Học phần tương đương", "Yêu cầu được tính qua một học phần tương đương: mã cũ của học phần, hoặc học phần bạn đã học trả nợ với khóa sau."],
   ];
   return <details className="rm-legend">
     <summary><h2 id="rm-legend-title">Ý nghĩa các ký hiệu</h2><span>Xem bảng ký hiệu</span></summary>
@@ -130,6 +130,6 @@ export function RoadmapLegend() {
       <tbody>{rows.map(([mark, name, text]) => <tr key={name}><td><Mark {...mark} /></td><th scope="row">{name}</th><td>{text}</td></tr>)}</tbody>
     </table>
     <h3>Học phần không được tính</h3>
-    <p>Cuối mục Theo dõi tiến độ là các học phần đã học hoặc đã đăng ký nhưng không thuộc yêu cầu nào của chương trình, ví dụ học phần của chuyên ngành khác hoặc học phần ngoài chương trình đào tạo. Học phần chưa đạt (F, VT) vẫn nằm trong yêu cầu của nó với ký hiệu Còn thiếu.</p>
+    <p>Cuối mục Theo dõi tiến độ là các học phần đã học hoặc đã đăng ký nhưng không thuộc yêu cầu nào của chương trình, ví dụ học phần của chuyên ngành khác hoặc học phần ngoài chương trình đào tạo. Học phần chưa đạt (F, VT) vẫn nằm trong yêu cầu tương ứng, với ký hiệu Còn thiếu.</p>
   </details>;
 }

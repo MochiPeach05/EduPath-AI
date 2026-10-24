@@ -36,13 +36,13 @@ const messages: Record<string, string> = {
     "Dữ liệu liên kết đã thay đổi. Hãy xem trước lại rồi xác nhận lưu.",
   plan_identity_mismatch:
     "Tệp thay thế phải cùng ngành và khóa với kế hoạch đang mở.",
-  review_warnings: "Hãy đọc và xác nhận các ghi chú trước khi lưu.",
-  workbook_too_large: "Tệp vượt giới hạn 5 MB hoặc quá nhiều dữ liệu.",
+  review_warnings: "Hãy đọc và xác nhận các cảnh báo trước khi lưu.",
+  workbook_too_large: "Tệp vượt giới hạn 5 MB hoặc có quá nhiều dữ liệu.",
   no_courses: "Không tìm thấy môn học trong kế hoạch.",
   import_busy: "Hệ thống đang đọc một tệp khác. Vui lòng thử lại sau.",
   import_timeout: "Đọc Excel quá lâu. Hãy thử lại với tệp theo mẫu.",
   insufficient_role: "Chỉ quản trị viên được chỉnh sửa kế hoạch.",
-  authentication_required: "Phiên đăng nhập đã hết. Hãy đăng nhập lại.",
+  authentication_required: "Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.",
   invalid_origin: "Không xác nhận được yêu cầu. Hãy tải lại trang.",
   invalid_filename: "Tên tệp không hợp lệ.",
   not_found: "Không tìm thấy kế hoạch hoặc dòng môn học.",
@@ -250,7 +250,7 @@ export default function PlansManagement({ canManage }: { canManage: boolean }) {
                         </small>
                         {p.warningCount > 0 && (
                           <small className="cm-warning-text">
-                            {p.warningCount} ghi chú cần rà soát
+                            {p.warningCount} cảnh báo cần rà soát
                           </small>
                         )}
                       </td>
@@ -799,7 +799,7 @@ function ImportPlan({
                 onChange={(e) => setConfirmed(e.target.checked)}
               />
               <span>
-                Tôi đã rà soát dữ liệu và các ghi chú, đồng ý lưu kế hoạch này.
+                Tôi đã rà soát dữ liệu và các cảnh báo, đồng ý lưu kế hoạch này.
               </span>
             </label>
             <div className="cm-actions cm-dialog-actions">
@@ -933,7 +933,7 @@ function StatusEditor({
       <div className="cm-dialog-body">
         <p>
           {plan.isActive
-            ? "Kế hoạch sẽ chuyển sang đã khóa, được giữ lại để tra cứu lịch sử."
+            ? "Kế hoạch sẽ chuyển sang trạng thái Đã khóa và được giữ lại để tra cứu lịch sử."
             : "Kế hoạch sẽ được đánh dấu đang mở để tiếp tục áp dụng."}
         </p>
         <strong>{plan.data.name}</strong>

@@ -94,8 +94,8 @@ describe("evaluateGraduation on the synthetic CNPM student", () => {
     // A repeated name stays as stored in `name`; only `label` tells the two TC102 groups apart.
     expect(evaluation.groups.map((group) => [group.id, group.name, group.label, group.code, group.curriculumElectiveCode])).toEqual([
       ["row-10", "Học phần bắt buộc", "Học phần bắt buộc", null, null],
-      ["row-60", "Nhóm tự chọn TC102", "Nhóm tự chọn TC102 · 2 học phần, gồm 71PEKC10062", "TC102", "TC002"],
-      ["row-64", "Nhóm tự chọn TC102", "Nhóm tự chọn TC102 · 2 học phần, gồm 71PEBA10052", "TC102", "TC102"],
+      ["row-60", "Nhóm tự chọn TC102", "Nhóm tự chọn TC102 · 2 học phần, trong đó có 71PEKC10062", "TC102", "TC002"],
+      ["row-64", "Nhóm tự chọn TC102", "Nhóm tự chọn TC102 · 2 học phần, trong đó có 71PEBA10052", "TC102", "TC102"],
       ["row-79", "Nhóm tự chọn TC209", "Nhóm tự chọn TC209", "TC209", "TC309"],
       ["row-92", "Nhóm tự chọn TC306", "Nhóm tự chọn TC306", "TC306", "TC406"],
     ]);

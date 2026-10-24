@@ -156,7 +156,7 @@ describe("GET /api/student/graduation", () => {
       expect(response.body.standard).not.toHaveProperty(key);
       expect(response.body).not.toHaveProperty(key);
     }
-    expect(response.body.evaluation.groups.map((group: { label: string }) => group.label)).toContain("Nhóm tự chọn TC102 · 2 học phần, gồm 71PEKC10062");
+    expect(response.body.evaluation.groups.map((group: { label: string }) => group.label)).toContain("Nhóm tự chọn TC102 · 2 học phần, trong đó có 71PEKC10062");
     expect(release).toHaveBeenCalledTimes(1);
   });
 

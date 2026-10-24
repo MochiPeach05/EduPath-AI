@@ -15,21 +15,21 @@ const errorMessages: Record<string, string> = {
   callback_failed:
     "Không thể hoàn tất đăng nhập. Hãy kiểm tra quyền tài khoản và thử lại.",
   staff_portal_only:
-    "Cán bộ/ Giảng viên vui lòng chuyển sang trang Quản trị để đăng nhập và bắt đầu sử dụng.",
+    "Cán bộ/Giảng viên vui lòng chuyển sang trang Quản trị để đăng nhập và bắt đầu sử dụng.",
   admin_portal_only:
     "Tài khoản của bạn thuộc cổng Quản trị. Vui lòng chuyển sang trang Quản trị để đăng nhập và bắt đầu sử dụng."
 };
 
 const loginLinks = [
-  { targetId: "/gioi-thieu", label: "Giới thiệu" },
+  { targetId: "/gioi-thieu", label: "Về EduPath AI" },
   { targetId: "/tinh-nang", label: "Tính năng" },
-  { targetId: "/huong-dan", label: "Hướng dẫn" }
+  { targetId: "/huong-dan", label: "Cách hoạt động" }
 ];
 
 function getAuthError(): { message: string; portalRestricted: boolean } | null {
   const code = new URLSearchParams(window.location.search).get("authError");
   return code ? {
-    message: errorMessages[code] ?? "Đăng nhập không thành công.",
+    message: errorMessages[code] ?? "Đã xảy ra lỗi khi đăng nhập. Vui lòng thử lại.",
     portalRestricted: code === "staff_portal_only" || code === "admin_portal_only"
   } : null;
 }
@@ -91,7 +91,7 @@ function LoginPage({ error, portalRestricted }: { error: string | null; portalRe
         <a
           className="login-brand"
           href="/"
-          aria-label="EduPath AI - Về trang tổng quan"
+          aria-label="EduPath AI — Trang chủ"
         >
           <EduPathBrand />
         </a>
@@ -166,7 +166,7 @@ function LoginPage({ error, portalRestricted }: { error: string | null; portalRe
             </p>
           </section>}
           <p id="login-security" className="sr-only">
-            EduPath AI không nhận hoặc lưu mật khẩu Microsoft của bạn.
+            EduPath AI không nhận và không lưu mật khẩu Microsoft của bạn.
           </p>
 
           <div className="student-badge">
@@ -186,7 +186,7 @@ function LoginPage({ error, portalRestricted }: { error: string | null; portalRe
               Hệ thống đánh giá năng lực và tư vấn lộ trình học tập dành cho sinh viên
               Công nghệ Thông tin.
             </p>
-            <small>© 2026 · Bản Quyền Thuộc Khoa Công nghệ Thông tin · Trường Đại Học Văn Lang.</small>
+            <small>© 2026 · Bản quyền thuộc Khoa Công nghệ Thông tin · Trường Đại học Văn Lang.</small>
           </section>
 
           <nav className="footer-column footer-links" aria-label="Liên kết nhanh">
@@ -264,7 +264,7 @@ function StaffPortalNotice() {
               disabled={busy}
               onClick={() => { setBusy(true); void logout().catch(() => setBusy(false)); }}
             >
-              {busy ? "Đang đăng xuất…" : "Đăng xuất khỏi EduPath"}
+              {busy ? "Đang đăng xuất…" : "Đăng xuất khỏi EduPath AI"}
             </button>
           </p>
         </section>
@@ -282,7 +282,7 @@ function AuthenticatedApp({ isLoginRoute }: { isLoginRoute: boolean }) {
       setAuth(await getCurrentUser());
       setLoadError(null);
     } catch {
-      setLoadError("Không thể kết nối đến máy chủ EduPath API.");
+      setLoadError("Không thể kết nối đến máy chủ EduPath AI. Vui lòng thử lại sau.");
       setAuth({ authenticated: false });
     }
   }, []);

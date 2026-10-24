@@ -71,7 +71,7 @@ function CareerActions({ career, compared, compareFull, saving, onDetail, onComp
     </label>
     {career.isTarget
       ? <span className="cg-target-tag"><Icon name="check" />Nghề mục tiêu của bạn</span>
-      : <button type="button" className="sw-outline cg-choose" disabled={saving} onClick={onChoose}>{saving ? "Đang lưu…" : "Chọn làm mục tiêu"}</button>}
+      : <button type="button" className="sw-outline cg-choose" disabled={saving} onClick={onChoose}>{saving ? "Đang lưu…" : "Chọn nghề mục tiêu"}</button>}
   </div>;
 }
 
@@ -109,7 +109,7 @@ function DetailDialog({ career, saving, onChoose, onClose }: { career: GuidanceC
       <h3>Yêu cầu kỹ năng và mức hiện tại của bạn</h3>
       {career.requirements.length ? <div className="cg-table-scroll" tabIndex={0} role="region" aria-label={`Yêu cầu của ${career.nameVi}`}>
         <table className="cg-table">
-          <thead><tr><th scope="col">Kỹ năng</th><th scope="col">Tính chất</th><th scope="col">Bạn hiện tại</th></tr></thead>
+          <thead><tr><th scope="col">Kỹ năng</th><th scope="col">Tính chất</th><th scope="col">Mức hiện tại của bạn</th></tr></thead>
           <tbody>{career.requirements.map((row, index) => <tr key={`${row.title}-${index}`}>
             <td><strong>{requirementName(row)}</strong>{row.skillName && row.title !== row.skillName && <small>{row.title}</small>}</td>
             <td>{row.isRequired ? "Bắt buộc" : "Ưu tiên"}</td>
@@ -117,12 +117,12 @@ function DetailDialog({ career, saving, onChoose, onClose }: { career: GuidanceC
           </tr>)}</tbody>
         </table>
       </div> : <p>Khoa chưa cập nhật yêu cầu kỹ năng cho nghề này.</p>}
-      {missing.length > 0 && <p className="cg-note">Để phù hợp hơn với nghề này, bạn nên nâng các kỹ năng: {missing.join(", ")}. Học phần nên học cho từng kỹ năng có ở trang Khoảng trống kỹ năng sau khi bạn chọn nghề này làm mục tiêu và đánh giá lại.</p>}
+      {missing.length > 0 && <p className="cg-note">Để phù hợp hơn với nghề này, bạn nên bổ sung các kỹ năng: {missing.join(", ")}. Các học phần nên học cho từng kỹ năng sẽ hiện ở trang Khoảng trống kỹ năng sau khi bạn chọn nghề này làm mục tiêu và đánh giá lại.</p>}
     </div>
     <footer className="sr-actions sr-form-actions">
       <button type="button" className="sr-secondary" onClick={onClose}><Icon name="close" />Đóng</button>
       {career.isTarget ? <span className="cg-target-tag"><Icon name="check" />Nghề mục tiêu của bạn</span>
-        : <button type="button" className="sw-primary" disabled={saving} onClick={onChoose}><Icon name="check" />{saving ? "Đang lưu…" : "Chọn làm nghề mục tiêu"}</button>}
+        : <button type="button" className="sw-primary" disabled={saving} onClick={onChoose}><Icon name="check" />{saving ? "Đang lưu…" : "Chọn nghề mục tiêu"}</button>}
     </footer>
   </dialog>;
 }
@@ -204,15 +204,15 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
     <section className="sw-panel cg-header" aria-labelledby="cg-title">
       <div>
         <h2 id="cg-title">Định hướng nghề nghiệp của bạn</h2>
-        <p className="cg-lead">EduPath so sánh năng lực hiện tại của bạn, tính từ bảng điểm, với yêu cầu kỹ năng của {careers.length} nghề trong danh mục của Khoa, và đối chiếu với Khảo sát định hướng của bạn. Mức phù hợp được tính cùng cách với trang Khoảng trống kỹ năng; kết quả chỉ để tham khảo.</p>
+        <p className="cg-lead">EduPath AI so sánh năng lực hiện tại của bạn, tính từ bảng điểm, với yêu cầu kỹ năng của {careers.length} nghề trong danh mục của Khoa, và đối chiếu với Khảo sát định hướng của bạn. Mức phù hợp được tính giống như ở trang Khoảng trống kỹ năng; kết quả chỉ để tham khảo.</p>
       </div>
       <div className="cg-current">
         <span className="cg-kicker">Nghề mục tiêu hiện tại</span>
         {target ? <div className="cg-current-body">
           <strong>{target.nameVi}</strong><span className="cg-en">{target.nameEn}</span>
           <div className="cg-card-meta"><FitScore career={target} /><FitBadge career={target} /></div>
-          <a className="sw-text-link" href="#skill-gap">Xem khoảng trống kỹ năng <Icon name="arrow" /></a>
-        </div> : <p className="cg-current-empty">Bạn chưa chọn nghề mục tiêu. Hãy xem các gợi ý bên dưới rồi bấm Chọn làm mục tiêu.</p>}
+          <a className="sw-text-link" href="#skill-gap">Xem Khoảng trống kỹ năng <Icon name="arrow" /></a>
+        </div> : <p className="cg-current-empty">Bạn chưa chọn nghề mục tiêu. Hãy xem các gợi ý bên dưới rồi bấm Chọn nghề mục tiêu.</p>}
       </div>
       {data.blocked && <div className="cg-note cg-note-warn" role="note"><p>{blockedText(data.blocked)} Bạn vẫn xem được danh mục nghề và yêu cầu của từng nghề.</p>
         {blockedInProfile(data.blocked) && <a className="sw-outline" href="#profile">Mở Hồ sơ và bảng điểm</a>}</div>}
@@ -228,7 +228,7 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
       </section>
       <section className="sw-panel cg-suggest-col" aria-labelledby="cg-liked-title">
         <div className="cg-section-head"><div><h3 id="cg-liked-title">Hợp với sở thích và thế mạnh của bạn</h3><p className="sw-muted">Theo lĩnh vực quan tâm và thế mạnh (công nghệ bạn thành thạo) trong Khảo sát định hướng.</p></div></div>
-        {!data.surveyDone ? <div className="cg-empty"><p>Bạn chưa trả lời Khảo sát định hướng nên chưa có gợi ý theo sở thích và thế mạnh.</p><a className="sw-outline" href="#profile">Làm khảo sát trong Hồ sơ</a></div>
+        {!data.surveyDone ? <div className="cg-empty"><p>Bạn chưa trả lời Khảo sát định hướng nên chưa có gợi ý theo sở thích và thế mạnh.</p><a className="sw-outline" href="#profile">Làm khảo sát ở Hồ sơ và bảng điểm</a></div>
           : liked.length ? liked.map((career) => <SuggestionCard key={career.id} {...actionProps(career)} />)
             : <p className="cg-empty">Chưa có nghề trong danh mục khớp với lĩnh vực quan tâm và thế mạnh bạn chọn. Bạn có thể xem tất cả nghề bên dưới.</p>}
       </section>

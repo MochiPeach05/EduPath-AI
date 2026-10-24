@@ -10,10 +10,10 @@ Theo nguyên tắc chung của đề tài, **hệ thống tính**: mức phù h�
 - **Gợi ý**: hai cột, mỗi cột tối đa 3 nghề:
   - *Phù hợp nhất với năng lực hiện tại*: mức phù hợp cao nhất (bỏ nghề "Chưa đủ dữ liệu").
   - *Hợp với sở thích và thế mạnh của bạn*: nghề khớp **Lĩnh vực quan tâm nhất** và **Thế mạnh của bạn** (công nghệ thành thạo) trong Khảo sát định hướng (khớp lĩnh vực trước, rồi nhiều công nghệ hơn, rồi mức phù hợp). Chưa làm khảo sát thì mời làm khảo sát.
-- **Tất cả nghề nghiệp**: tìm theo tên (không dấu), lọc lĩnh vực, sắp xếp "Phù hợp nhất trước" hoặc "Tên A–Z", "Chỉ nghề hợp sở thích". Mỗi dòng: tên Việt/Anh, lĩnh vực, điểm phù hợp /100, mức (thang 5 bậc như Khoảng trống kỹ năng), "Đạt x/y kỹ năng", thanh điểm, dòng "Lĩnh vực bạn quan tâm / Công nghệ bạn thích" khi khớp; nút **Xem chi tiết**, ô **So sánh**, **Chọn làm mục tiêu** (hoặc nhãn "Nghề mục tiêu của bạn").
+- **Tất cả nghề nghiệp**: tìm theo tên (không dấu), lọc lĩnh vực, sắp xếp "Phù hợp nhất trước" hoặc "Tên A–Z", "Chỉ nghề hợp sở thích". Mỗi dòng: tên Việt/Anh, lĩnh vực, điểm phù hợp /100, mức (thang 5 bậc như Khoảng trống kỹ năng), "Đạt x/y kỹ năng", thanh điểm, dòng "Lĩnh vực bạn quan tâm / Công nghệ bạn thích" khi khớp; nút **Xem chi tiết**, ô **So sánh**, **Chọn nghề mục tiêu** (hoặc nhãn "Nghề mục tiêu của bạn").
 - **Xem chi tiết** (hộp thoại): mô tả nghề, từng yêu cầu (kỹ năng, Bắt buộc/Ưu tiên) với mức hiện tại của bạn (Đạt, Thiếu N điểm, Chưa học, Sắp học · học kỳ, Chưa đủ dữ liệu) và các kỹ năng nên nâng.
 - **So sánh nghề nghiệp**: chọn 2–3 nghề (thanh dưới cùng cho biết đã chọn những nghề nào), bảng theo cột: lĩnh vực, mức phù hợp, kỹ năng đạt, phần khớp khảo sát, rồi mỗi kỹ năng mà ít nhất một nghề yêu cầu (kỹ năng chung nhiều nghề lên trước) với trạng thái của bạn hoặc "Không yêu cầu".
-- **Chọn làm mục tiêu**: lưu ngay bằng `PATCH /api/student/profile { careerPositionId }` (như hộp Khám phá nghề nghiệp của Hồ sơ), rồi nhắc bấm **Đánh giá lại** ở Đánh giá năng lực để Khoảng trống kỹ năng và Lộ trình học tập theo nghề mới. Hồ sơ trong khung trang được đọc lại.
+- **Chọn nghề mục tiêu**: lưu ngay bằng `PATCH /api/student/profile { careerPositionId }` (như hộp Khám phá nghề nghiệp của Hồ sơ), rồi nhắc bấm **Đánh giá lại** ở Đánh giá năng lực để Khoảng trống kỹ năng và Lộ trình học tập theo nghề mới. Hồ sơ trong khung trang được đọc lại.
 
 Thẻ "Định hướng của bạn" ở Tổng quan nay dẫn tới trang này.
 

@@ -62,7 +62,7 @@ export const courseTypeLabel = (type: string) =>
   type === "BB"
     ? "Bắt buộc"
     : type === "BBKTL"
-      ? "Bắt buộc · BBKTL"
+      ? "Bắt buộc · không tích lũy"
       : type.startsWith("TC")
         ? `Tự chọn · ${type}`
         : type;

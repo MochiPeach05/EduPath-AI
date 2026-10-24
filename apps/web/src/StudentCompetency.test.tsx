@@ -116,7 +116,7 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
     expect([...legend.matchAll(/<\/span>([^<]+)<\/span><span class="scomp-legend-range">([^<]+)<\/span>/g)].map((match) => `${match[1]} ${match[2]}`)).toEqual([
       "Xuất sắc từ 90", "Giỏi 80 đến dưới 90", "Khá 62,5 đến dưới 80", "Trung bình 50 đến dưới 62,5", "Yếu dưới 50",
     ]);
-    expect(legend).toContain("Cùng ngưỡng xếp loại học lực trên bảng điểm (điểm hệ 4 × 25): 3,6 → 90 · 3,2 → 80 · 2,5 → 62,5 · 2,0 → 50.");
+    expect(legend).toContain("Cùng ngưỡng với xếp loại học lực trên bảng điểm (điểm hệ 4 × 25): 3,6 → 90 · 3,2 → 80 · 2,5 → 62,5 · 2,0 → 50.");
     for (const state of ["Sắp học", "Chưa có điểm", "Miễn/công nhận"]) expect(legend).not.toContain(state);
     // The student's case: a result stored with 82 · Khá before comp-calc-v10 now reads Giỏi.
     const assessment = fixtureAssessment("completed");
@@ -399,7 +399,7 @@ describe("StudentCompetency — Khoảng trống kỹ năng", () => {
     ];
     const html = render({ assessment: { ...assessment, result: { ...fixtureResult, skillPlans: deepen } }, aiEnabled: true, workerOnline: true }, { view: "gap" });
     const plans = html.slice(html.indexOf("Nâng kỹ năng của nghề lên mức Giỏi"), html.indexOf(">Kỹ năng cần tự học</h3>"));
-    expect(plans).toContain("Kỹ năng nghề Lập trình viên web bạn đã đạt ngưỡng nhưng chưa đạt mức Giỏi (từ 80)");
+    expect(plans).toContain("Kỹ năng nghề Lập trình viên web mà bạn đã đạt ngưỡng nhưng chưa lên mức Giỏi (từ 80)");
     expect(plans).toContain("Kỹ năng: Lập trình web");
     expect(plans).toContain("Khá · 76");
     expect(plans).toContain("Bạn đã học hết học phần đo kỹ năng này trong chương trình; hãy làm một dự án nhỏ gắn với nghề");

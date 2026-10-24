@@ -19,11 +19,11 @@ export function isPreconditionError(code: string | null | undefined): code is Pr
 
 /** Title, explanation and next step for each precondition. */
 export const PRECONDITION_COPY: Record<PreconditionError, { title: string; text: string; action: { label: string; href: string } | null }> = {
-  transcript_required: { title: "Cần bảng điểm để bắt đầu", text: "EduPath tính năng lực từ kết quả các học phần bạn đã học. Hãy import bảng điểm PDF xuất từ cổng đào tạo, rồi quay lại đây.", action: { label: "Import bảng điểm", href: "#profile" } },
+  transcript_required: { title: "Cần bảng điểm để bắt đầu", text: "EduPath AI tính năng lực từ kết quả các học phần bạn đã học. Hãy import bảng điểm PDF xuất từ cổng đào tạo, rồi quay lại đây.", action: { label: "Import bảng điểm", href: "#profile" } },
   career_required: { title: "Cần chọn nghề mục tiêu", text: "Đánh giá năng lực cần đủ bảng điểm, nghề mục tiêu và chuyên ngành. Hãy chọn nghề mục tiêu trong hồ sơ, rồi quay lại đây.", action: { label: "Chọn nghề mục tiêu", href: "#profile" } },
   specialty_required: { title: "Cần chọn chuyên ngành", text: "Đánh giá năng lực cần đủ bảng điểm, nghề mục tiêu và chuyên ngành. Hãy chọn chuyên ngành trong hồ sơ, rồi quay lại đây.", action: { label: "Chọn chuyên ngành", href: "#profile" } },
   cohort_unknown: { title: "Hồ sơ chưa có khóa học", text: "Hệ thống cần biết bạn thuộc khóa nào để chọn đúng chương trình đào tạo. Thông tin khóa được đồng bộ từ tài khoản trường; nếu mục Khóa học trong hồ sơ còn trống, hãy liên hệ Khoa để được cập nhật.", action: { label: "Xem hồ sơ", href: "#profile" } },
-  curriculum_unavailable: { title: "Chưa có chương trình đào tạo cho khóa của bạn", text: "Khoa chưa công bố chương trình đào tạo đang áp dụng cho khóa này trên EduPath. Bạn có thể quay lại sau khi chương trình được cập nhật.", action: null },
+  curriculum_unavailable: { title: "Chưa có chương trình đào tạo cho khóa của bạn", text: "Khoa chưa công bố chương trình đào tạo đang áp dụng cho khóa này trên EduPath AI. Bạn có thể quay lại sau khi chương trình được cập nhật.", action: null },
   curriculum_ambiguous: { title: "Khóa của bạn đang có nhiều chương trình đào tạo", text: "Có hơn một chương trình đào tạo đang áp dụng cho khóa này nên hệ thống chưa chọn được bản đúng. Khoa sẽ rà soát lại; bạn chưa cần làm gì thêm.", action: null },
   competency_weights_unavailable: { title: "Khóa của bạn chưa có dữ liệu kỹ năng", text: "Để tính năng lực, mỗi học phần cần được Khoa gắn với các kỹ năng mà học phần đó rèn luyện. Chương trình của khóa bạn chưa có dữ liệu này, nên chưa thể đánh giá. Bảng điểm và hồ sơ của bạn vẫn được giữ nguyên; hãy quay lại khi Khoa cập nhật.", action: null },
 };
@@ -182,7 +182,7 @@ export function displayLevel(skill: Pick<SkillResult, "level" | "status" | "evid
 export const LEVEL_SCALE: readonly { code: ScoredLevel; label: string; range: string; text: string }[] = [
   { code: "excellent", label: LEVEL_LABELS.excellent, range: "từ 90", text: "Kết quả các học phần liên quan rất cao và ổn định." },
   { code: "proficient", label: LEVEL_LABELS.proficient, range: "80 đến dưới 90", text: "Kết quả các học phần liên quan tốt; nắm vững phần lớn nội dung." },
-  { code: "good", label: LEVEL_LABELS.good, range: "62,5 đến dưới 80", text: "Nắm chắc phần lớn nội dung; có thể nâng lên bằng dự án thực tế." },
+  { code: "good", label: LEVEL_LABELS.good, range: "62,5 đến dưới 80", text: "Nắm được phần lớn nội dung; có thể nâng lên bằng dự án thực tế." },
   { code: "basic", label: LEVEL_LABELS.basic, range: "50 đến dưới 62,5", text: "Đã có nền tảng, nên củng cố thêm để dùng tự tin hơn." },
   { code: "needs_work", label: LEVEL_LABELS.needs_work, range: "dưới 50", text: "Kết quả các học phần liên quan còn thấp; nên ôn lại hoặc học cải thiện." },
 ];
@@ -347,7 +347,7 @@ export function courseStanding(course: Pick<SupportCourse, "state" | "score10" |
     case "failed": return { tone: "fail", text: `Đã học, chưa đạt${score} — cần học lại` };
     case "exempt": return { tone: "pass", text: "Miễn/công nhận" };
     case "in_progress": return { tone: "neutral", text: "Đang học" };
-    case "graded_unknown": return { tone: "unknown", text: `Có điểm${score}, chưa rõ kết quả` };
+    case "graded_unknown": return { tone: "unknown", text: `Chưa rõ kết quả${score}` };
     default: return { tone: "neutral", text: "Chưa học" };
   }
 }
@@ -590,7 +590,7 @@ type SkillBucket = { id: string; title: string; note: string | null; skills: Ski
 export function bucketSkills(result: Pick<AssessmentResult, "groups">, skills: readonly SkillResult[], group = ""): SkillBucket[] {
   const buckets: SkillBucket[] = result.groups.map((group) => ({ id: group.key, title: group.name, note: null, skills: [] }));
   const condition: SkillBucket = { id: "condition", title: "Môn điều kiện (GDTC/GDQP)", note: "Không tính vào điểm nhóm và điểm tổng.", skills: [] };
-  const notApplicable: SkillBucket = { id: "not-applicable", title: "Ngoài lựa chọn học phần của bạn", note: "Chỉ có trong học phần của chuyên ngành khác hoặc nhóm tự chọn bạn không chọn.", skills: [] };
+  const notApplicable: SkillBucket = { id: "not-applicable", title: "Ngoài lựa chọn học phần của bạn", note: "Chỉ có trong học phần của chuyên ngành khác hoặc học phần tự chọn bạn không chọn.", skills: [] };
   const upcoming: SkillBucket = { id: "upcoming", title: "Sắp học", note: "Không phải điểm yếu — bạn đang học hoặc chưa học tới học phần đo kỹ năng này (kể cả môn tự chọn chưa chọn).", skills: [] };
   const noScore: SkillBucket = { id: "no_score", title: "Chưa có điểm", note: "Bạn đã học học phần liên quan nhưng bảng điểm chưa có điểm số, nên chưa đánh giá được.", skills: [] };
   for (const skill of skills) {
@@ -622,11 +622,11 @@ export function aiStateCopy(status: AiStatus, workerOnline: boolean, aiEnabled: 
     case "disabled": return aiEnabled
       ? { title: "Chưa có nhận xét cho lần đánh giá này", text: "Nhận xét AI vừa được bật. Bạn có thể tạo nhận xét cho kết quả hiện tại." }
       : { title: "Nhận xét AI chưa được bật", text: "Kết quả bên dưới do hệ thống tính và đã đầy đủ. Khi máy AI của nhóm phát triển hoạt động, bạn có thể nhận thêm lời nhận xét." };
-    case "deferred": return { title: "Hàng đợi AI đang đầy", text: "Kết quả tính toán đã sẵn sàng. Bấm tạo nhận xét sau ít phút để xếp hàng lại." };
+    case "deferred": return { title: "Hàng đợi AI đang đầy", text: "Kết quả tính toán đã sẵn sàng. Sau ít phút, bấm “Tạo lại nhận xét” để xếp hàng lại." };
     case "queued": return workerOnline
       ? { title: "Đang xếp hàng tạo nhận xét", text: "AI suy luận trước khi viết nên nhận xét thường mất 1–3 phút. Bạn có thể xem kết quả bên dưới trong lúc chờ." }
       : { title: "Đang chờ máy AI kết nối", text: "Yêu cầu đã được giữ trong hàng đợi và sẽ được xử lý khi máy AI kết nối lại." };
-    case "processing": return { title: "EduPath AI đang suy luận và viết nhận xét", text: "Mô hình suy luận trên kết quả đã tính rồi mới viết nhận xét, thường mất 1–3 phút. Bạn có thể rời trang và quay lại sau." };
+    case "processing": return { title: "EduPath AI đang suy luận và viết nhận xét", text: "Mô hình suy luận từ kết quả đã tính rồi mới viết nhận xét, thường mất 1–3 phút. Bạn có thể rời trang và quay lại sau." };
     case "failed": return { title: "Chưa tạo được nhận xét", text: "Kết quả tính toán không bị ảnh hưởng." };
     case "cancelled": return { title: "Đã hủy tạo nhận xét", text: "Bạn có thể tạo lại nhận xét bất cứ lúc nào." };
     default: return { title: "Nhận xét từ EduPath AI", text: "" };

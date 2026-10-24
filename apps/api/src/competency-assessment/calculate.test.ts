@@ -280,8 +280,8 @@ describe("calculateAssessment on the synthetic CNPM student", () => {
     // comp-calc-v5: the two "Nhóm tự chọn TC102" groups are told apart by size and first code.
     expect(result.graduation.groups.map((group) => [group.label, group.code, group.curriculumElectiveCode, group.status])).toEqual([
       ["Học phần bắt buộc", null, null, "fail"],
-      ["Nhóm tự chọn TC102 · 2 học phần, gồm 71PEKC10062", "TC102", "TC002", "pass"],
-      ["Nhóm tự chọn TC102 · 2 học phần, gồm 71PEBA10052", "TC102", "TC102", "pass"],
+      ["Nhóm tự chọn TC102 · 2 học phần, trong đó có 71PEKC10062", "TC102", "TC002", "pass"],
+      ["Nhóm tự chọn TC102 · 2 học phần, trong đó có 71PEBA10052", "TC102", "TC102", "pass"],
       ["Nhóm tự chọn TC209", "TC209", "TC309", "pass"], ["Nhóm tự chọn TC306", "TC306", "TC406", "fail"],
     ]);
   });

@@ -94,7 +94,7 @@ export default function StudentCurriculum() {
                 : !list.data.items.some(
                   (item) => item.cohortCode === list.data!.profileCohort,
                 )
-                  ? `Chưa có khung đang mở cho ${list.data.profileCohort}. Các khung khác chỉ dùng để tham khảo.`
+                  ? `Chưa có khung đang mở cho khóa ${list.data.profileCohort}. Các khung khác chỉ dùng để tham khảo.`
                   : sameCohort
                     ? `Khung cùng khóa ${list.data.profileCohort} trong hồ sơ của bạn. Hãy đối chiếu ngành học khi lựa chọn.`
                     : selected
@@ -256,7 +256,7 @@ function CurriculumContent({
             Tìm học phần
             <input
               type="search"
-              placeholder="Mã hoặc tên môn học…"
+              placeholder="Mã hoặc tên học phần…"
               value={draft.q}
               onChange={(e) => setDraft({ ...draft, q: e.target.value })}
             />

@@ -117,7 +117,7 @@ function ConsentDialog({ busy, onClose, onConfirm }: { busy: boolean; onClose: (
   return <dialog ref={modal.ref} className="sr-confirm-dialog scomp-dialog" aria-labelledby="scomp-consent-title" aria-describedby="scomp-consent-text" onCancel={modal.onCancel}>
     <h2 id="scomp-consent-title">Đồng ý đánh giá năng lực</h2>
     <div id="scomp-consent-text">
-      <p>EduPath sẽ dùng bảng điểm, khóa, chuyên ngành và nghề mục tiêu của bạn để tính điểm năng lực, khoảng trống kỹ năng và gợi ý học phần. Kết quả được lưu trong tài khoản của bạn (tối đa 20 lần gần nhất) đến khi bạn xóa.</p>
+      <p>EduPath AI sẽ dùng bảng điểm, khóa, chuyên ngành và nghề mục tiêu của bạn để tính điểm năng lực, khoảng trống kỹ năng và gợi ý học phần. Kết quả được lưu trong tài khoản của bạn (tối đa 20 lần gần nhất) đến khi bạn xóa.</p>
       <p>Nếu nhận xét AI được bật, mô hình chạy cục bộ trên máy của nhóm phát triển chỉ nhận mã, tên học phần, điểm và kết quả đã tính — không nhận họ tên, MSSV, email hay tệp PDF.</p>
     </div>
     <label className="sr-confirm scomp-consent-check"><input type="checkbox" checked={checked} disabled={busy} onChange={(event) => setChecked(event.target.checked)} /><span>Tôi đồng ý để EduPath AI xử lý dữ liệu học tập của tôi cho việc đánh giá năng lực theo <a href={competencyPolicyHref} target="_blank" rel="noreferrer">Chính sách bảo mật</a>.</span></label>
@@ -132,7 +132,7 @@ function DeleteDialog({ busy, error, onClose, onConfirm }: { busy: boolean; erro
   const modal = useModal(onClose, busy);
   return <dialog ref={modal.ref} className="sr-confirm-dialog scomp-dialog" aria-labelledby="scomp-delete-title" aria-busy={busy} onCancel={modal.onCancel}>
     <h2 id="scomp-delete-title">Xóa kết quả đánh giá</h2>
-    <p>Xóa toàn bộ kết quả đánh giá năng lực và nhận xét AI đã lưu, đồng thời rút lại đồng ý cho việc đánh giá? Bảng điểm và hồ sơ của bạn vẫn được giữ nguyên. Bạn có thể đánh giá lại bất cứ lúc nào.</p>
+    <p>Xóa toàn bộ kết quả đánh giá năng lực và nhận xét AI đã lưu, đồng thời rút lại sự đồng ý cho việc đánh giá? Bảng điểm và hồ sơ của bạn vẫn được giữ nguyên. Bạn có thể đánh giá lại bất cứ lúc nào.</p>
     {error && <p className="sr-error" role="alert">{error}</p>}
     <div className="sr-actions sr-form-actions">
       <button type="button" className="sr-secondary" disabled={busy} onClick={onClose} autoFocus>Hủy</button>
@@ -187,7 +187,7 @@ function Overview({ result }: { result: AssessmentResult }) {
     </div>}
     <details className="scomp-legend"><summary>Thang mức năng lực</summary>
       <ul>{LEVEL_SCALE.map((item) => <li key={item.code}><LevelBadge level={item.code} label={item.label} /><span className="scomp-legend-range">{item.range}</span><span>{item.text}</span></li>)}</ul>
-      <p className="scomp-meta">Cùng ngưỡng xếp loại học lực trên bảng điểm (điểm hệ 4 × 25): 3,6 → 90 · 3,2 → 80 · 2,5 → 62,5 · 2,0 → 50.</p>
+      <p className="scomp-meta">Cùng ngưỡng với xếp loại học lực trên bảng điểm (điểm hệ 4 × 25): 3,6 → 90 · 3,2 → 80 · 2,5 → 62,5 · 2,0 → 50.</p>
     </details>
   </Section>;
 }
@@ -198,7 +198,7 @@ function HistorySection({ result }: { result: AssessmentResult }) {
   const years = useMemo(() => historyYears(history ?? []), [history]);
   const sentence = history ? historySentence(history) : null;
   const columns = 5 + result.groups.length;
-  return <Section id="scomp-history" title="Theo dõi năng lực theo học kỳ" description="Điểm năng lực tính lũy kế đến cuối mỗi học kỳ, chỉ từ các học phần đã có kết quả đến học kỳ đó, theo cùng cách tính và trọng số hiện hành. Dùng để thấy năng lực của bạn thay đổi thế nào qua từng năm học.">
+  return <Section id="scomp-history" title="Theo dõi năng lực theo học kỳ" description="Điểm năng lực tính lũy kế đến cuối mỗi học kỳ, chỉ từ các học phần đã có kết quả đến học kỳ đó, theo cùng cách tính và trọng số hiện hành. Nhờ đó bạn thấy năng lực của mình thay đổi thế nào qua từng năm học.">
     {!history ? <p className="scomp-meta">Kết quả này được tính trước khi có phần theo dõi theo học kỳ. Bấm “Đánh giá lại” để xem năng lực của bạn qua từng năm, từng học kỳ.</p>
       : !history.length ? <p className="scomp-meta">Bảng điểm chưa có học kỳ nào có điểm nên chưa theo dõi được.</p> : <>
         {sentence && <p className="scomp-prose">{sentence}</p>}
@@ -229,7 +229,7 @@ function HistorySection({ result }: { result: AssessmentResult }) {
             </tbody>)}
           </table>
         </div>
-        <p className="scomp-meta">Điểm của học kỳ trước không thay đổi khi bạn học lại sau đó: mỗi dòng chỉ dùng kết quả có đến học kỳ đó. Học kỳ chưa có điểm (đang học) chưa có dòng.</p>
+        <p className="scomp-meta">Điểm của học kỳ trước không thay đổi khi bạn học lại sau đó: mỗi dòng chỉ dùng kết quả có đến học kỳ đó. Học kỳ đang học chưa có điểm nên chưa có trong bảng.</p>
       </>}
   </Section>;
 }
@@ -342,13 +342,13 @@ function SkillsSection({ result }: { result: AssessmentResult }) {
         <li><strong>Trung bình, Yếu:</strong> kỹ năng nên ôn lại hoặc học cải thiện; học phần cụ thể cho từng kỹ năng có ở trang <a className="sw-text-link" href="#skill-gap">Khoảng trống kỹ năng</a>.</li>
         <li><strong>Sắp học:</strong> bạn đang học hoặc chưa học tới học phần đo kỹ năng đó — không phải điểm yếu.</li>
         <li><strong>Chưa có điểm:</strong> bạn đã học học phần liên quan nhưng bảng điểm chưa có điểm số, nên chưa đánh giá được.</li>
-        <li><strong>Độ tin cậy:</strong> cho biết kết quả dựa trên bao nhiêu minh chứng; tin cậy thấp nghĩa là mới có ít học phần đo kỹ năng này.</li>
+        <li><strong>Độ tin cậy:</strong> cho biết kết quả dựa trên bao nhiêu minh chứng; độ tin cậy thấp nghĩa là mới có ít học phần đo kỹ năng này.</li>
       </ul>
     </div>
     <LevelChart result={result} onSelect={show} />
     <details className="scomp-legend scomp-chart-table"><summary>Xem dạng bảng</summary><div className="scomp-table-scroll" tabIndex={0} role="region" aria-labelledby="scomp-level-caption">
       <table className="scomp-table scomp-level-table">
-        <caption id="scomp-level-caption">Số kỹ năng ở từng mức thành thạo trong mỗi nhóm. Chọn một số để xem đúng các kỹ năng đó.</caption>
+        <caption id="scomp-level-caption">Số kỹ năng ở từng mức thành thạo trong mỗi nhóm. Bấm vào một con số để xem đúng các kỹ năng đó.</caption>
         <thead><tr><th scope="col">Nhóm năng lực</th><th scope="col" className="scomp-num">Điểm nhóm</th><th scope="col">Mức của nhóm</th>{LEVEL_COLUMNS.map((level) => <th key={level} scope="col" className="scomp-num">{LEVEL_COLUMN_LABELS[level]}</th>)}</tr></thead>
         <tbody>{summary.map((row) => <tr key={row.key}>
           <th scope="row">{row.name}<small>{row.total.toLocaleString("vi-VN")} kỹ năng</small></th>
@@ -366,10 +366,10 @@ function SkillsSection({ result }: { result: AssessmentResult }) {
       <label>Độ tin cậy<select value={filters.confidence} onChange={(event) => set({ confidence: event.target.value })}><option value="">Tất cả</option><option value="high">Cao</option><option value="medium">Trung bình</option><option value="low">Thấp</option></select></label>
       <label className="scomp-search">Tìm kỹ năng<input type="search" value={filters.search} onChange={(event) => set({ search: event.target.value })} placeholder="Tên kỹ năng hoặc mã học phần…" /></label>
       <label className="scomp-toggle"><input type="checkbox" checked={filters.careerOnly} onChange={(event) => set({ careerOnly: event.target.checked })} />Chỉ kỹ năng của nghề</label>
-      <label className="scomp-toggle"><input type="checkbox" checked={filters.needsWork} onChange={(event) => set({ needsWork: event.target.checked })} />Chỉ cần cải thiện</label>
+      <label className="scomp-toggle"><input type="checkbox" checked={filters.needsWork} onChange={(event) => set({ needsWork: event.target.checked })} />Chỉ kỹ năng cần củng cố</label>
       <button type="button" className="sr-secondary" onClick={() => setExpanded(Object.fromEntries(buckets.map((bucket) => [bucket.id, !allOpen])))}>{allOpen ? "Thu gọn tất cả" : "Mở rộng tất cả"}</button>
     </div>
-    <p className="scomp-meta">Mỗi thanh là điểm một kỹ năng trên thang 0–100; vạch 50 · 62,5 · 80 · 90 là ngưỡng Trung bình, Khá, Giỏi và Xuất sắc. Di chuột vào một dòng để xem chi tiết, bấm để xem học phần minh chứng.</p>
+    <p className="scomp-meta">Mỗi thanh là điểm của một kỹ năng trên thang 0–100; vạch 50 · 62,5 · 80 · 90 là ngưỡng Trung bình, Khá, Giỏi và Xuất sắc. Di chuột vào một dòng để xem chi tiết, bấm để xem học phần minh chứng.</p>
     <p className="scomp-meta" aria-live="polite">{filtered.length.toLocaleString("vi-VN")} kỹ năng phù hợp bộ lọc{filtering && <> · <button type="button" className="scomp-link-button" onClick={() => setFilters(EMPTY_SKILL_FILTERS)}>Xem tất cả kỹ năng</button></>}</p>
     {buckets.map((bucket) => { const group = groups.get(bucket.id); return <details key={bucket.id} className="scomp-bucket" open={isOpen(bucket.id)} onToggle={(event) => { const open = event.currentTarget.open; if (open !== isOpen(bucket.id)) setExpanded((current) => ({ ...current, [bucket.id]: open })); }}>
       <summary><strong>{bucket.title} ({bucket.skills.length.toLocaleString("vi-VN")})</strong>{group && group.score !== null && <span>Điểm nhóm {formatScore(group.score)} · {group.levelLabel}</span>}{bucket.note && <span>{bucket.note}</span>}</summary>
@@ -381,7 +381,7 @@ function SkillsSection({ result }: { result: AssessmentResult }) {
   </Section>;
 }
 
-const ROLE_NOTES: Partial<Record<SkillResult["evidenceCourses"][number]["role"], string>> = { planned: "Chưa học", not_chosen: "Không thuộc lựa chọn tự chọn của bạn", in_progress: "Đang học", exempt: "Miễn/công nhận", studied: "Đã học" };
+const ROLE_NOTES: Partial<Record<SkillResult["evidenceCourses"][number]["role"], string>> = { planned: "Chưa học", not_chosen: "Học phần tự chọn bạn không chọn", in_progress: "Đang học", exempt: "Miễn/công nhận", studied: "Đã học" };
 const TIP_COURSES = 3;
 const courseScore = (course: AssessmentResult["courses"][number] | undefined) => course?.score10 === null || course?.score10 === undefined
   ? (course?.letter ?? "—") : `${formatNumber(course.score10)}${course.letter ? ` · ${course.letter}` : ""}`;
@@ -396,7 +396,7 @@ function SkillRow({ skill, courses, groups }: { skill: SkillResult; courses: Map
   // A skill in several groups is listed under each one; its details name them all (2026-10-22).
   const groupNames = skillGroupKeys(skill).map((key) => groups.get(key)?.name).filter((name): name is string => Boolean(name));
   const score = skill.score === null ? null : Math.max(0, Math.min(100, skill.score));
-  const facts = `${skill.confidence ? CONFIDENCE_LABELS[skill.confidence] : "Chưa có độ tin cậy"} · độ phủ ${formatPercent(skill.coverage)}`;
+  const facts = `${skill.confidence ? CONFIDENCE_LABELS[skill.confidence] : "Chưa xác định độ tin cậy"} · độ phủ ${formatPercent(skill.coverage)}`;
   const moreCourses = skill.evidenceCourses.length - TIP_COURSES;
   return <li><details className="scomp-skill">
     <summary onPointerEnter={(event) => placeTip(event.currentTarget)} onFocus={(event) => placeTip(event.currentTarget)}>
@@ -423,7 +423,7 @@ function SkillRow({ skill, courses, groups }: { skill: SkillResult; courses: Map
       <p className="scomp-meta">{skill.score !== null ? `${formatScore(skill.score)} điểm · ${skill.levelLabel}` : noScoreText(skill)} · {facts}</p>
       {groupNames.length > 1 && <p className="scomp-meta">Thuộc các nhóm năng lực: {groupNames.join(", ")}. Điểm kỹ năng được tính vào từng nhóm.</p>}
       {skill.scope && <p className="scomp-prose"><strong>Phạm vi: </strong>{skill.scope}</p>}
-      {skill.status === "not_applicable" && <p className="scomp-meta">{skill.notApplicableReason === "other_specialty" ? "Kỹ năng này chỉ có trong học phần của chuyên ngành khác." : skill.notApplicableReason === "elective_not_chosen" ? "Kỹ năng này nằm trong nhóm tự chọn bạn đã chọn đủ bằng học phần khác — không thuộc lựa chọn tự chọn của bạn." : "Học phần đo kỹ năng này không có tín chỉ."}</p>}
+      {skill.status === "not_applicable" && <p className="scomp-meta">{skill.notApplicableReason === "other_specialty" ? "Kỹ năng này chỉ có trong học phần của chuyên ngành khác." : skill.notApplicableReason === "elective_not_chosen" ? "Kỹ năng này nằm trong nhóm tự chọn bạn đã chọn đủ bằng học phần khác." : "Học phần đo kỹ năng này không có tín chỉ."}</p>}
       <div className="scomp-table-scroll" tabIndex={0} role="region" aria-label={`Học phần minh chứng của ${skill.name}`}>
         <table className="scomp-table scomp-evidence">
           <caption>Học phần minh chứng của {skill.name}</caption>
@@ -454,7 +454,7 @@ function ProgressSection({ result }: { result: AssessmentResult }) {
   const progress = result.progress;
   const late = (progress?.lateCount ?? 0) > 0;
   return <Section id="scomp-progress" title="Tiến độ so với kế hoạch đào tạo">
-    {!progress ? <p className="scomp-meta">Chưa xác định được kế hoạch đào tạo áp dụng cho bạn nên chưa so sánh tiến độ. Xem cảnh báo dữ liệu bên dưới.</p> : <>
+    {!progress ? <p className="scomp-meta">Chưa xác định được kế hoạch đào tạo áp dụng cho bạn nên chưa so sánh được tiến độ.</p> : <>
       <p className={`scomp-plan-status ${late ? "scomp-plan-late" : "scomp-plan-ok"}`}>
         <span aria-hidden="true">{late ? "✗" : "✓"}</span>
         <span>{late ? `Chậm so với kế hoạch: ${progress.lateCount.toLocaleString("vi-VN")} học phần · ${formatNumber(progress.lateCredits)} TC chưa hoàn thành đúng học kỳ dự kiến.` : "Đúng kế hoạch: bạn đã hoàn thành mọi học phần theo kế hoạch đào tạo đến học kỳ hiện tại."}</span>
@@ -477,7 +477,7 @@ function ProgressSection({ result }: { result: AssessmentResult }) {
               : <><strong>{entry.label}</strong><small>Đã đạt {entry.passed}/{entry.required}</small></>}
         </li>)}</ul> : <p className="scomp-meta">Chưa có học phần nào theo kế hoạch cho học kỳ tới.</p>}</div>
       </div>
-      {progress.informationalSections.length > 0 && <details className="scomp-legend"><summary>Mục chỉ để tham khảo, không tính chậm ({progress.informationalSections.length})</summary><ul>{progress.informationalSections.map((section, index) => <li key={index}><strong>{section.label}</strong> · {section.termCode}<span>{section.options.map((option) => option.name).join(", ")}</span></li>)}</ul></details>}
+      {progress.informationalSections.length > 0 && <details className="scomp-legend"><summary>Mục chỉ để tham khảo, không tính là chậm ({progress.informationalSections.length})</summary><ul>{progress.informationalSections.map((section, index) => <li key={index}><strong>{section.label}</strong> · {section.termCode}<span>{section.options.map((option) => option.name).join(", ")}</span></li>)}</ul></details>}
     </>}
   </Section>;
 }
@@ -519,7 +519,7 @@ function GraduationSection() {
 function FitScale({ career }: { career: NonNullable<AssessmentResult["career"]> }) {
   const level = fitLevelOf(career);
   const own = level === "insufficient_data"
-    ? "Chưa tới một nửa yêu cầu của nghề có điểm để so sánh (phần lớn còn sắp học hoặc chương trình chưa đo), nên chưa xếp mức (Chưa đủ dữ liệu)." : null;
+    ? "Chưa tới một nửa yêu cầu của nghề có điểm để so sánh (phần lớn còn sắp học hoặc chương trình chưa có học phần đo), nên chưa xếp mức (Chưa đủ dữ liệu)." : null;
   return <details className="scomp-legend scomp-fit-legend"><summary>Thang mức phù hợp</summary>
     <ul>{FIT_SCALE.map((item) => <li key={item.code}>
       <span className="scomp-fit-scale-name"><FitBadge level={item.code} />{item.code === level && <span className="scomp-career-tag">Mức của bạn</span>}</span>
@@ -539,7 +539,7 @@ function GapSummary({ result }: { result: AssessmentResult }) {
   </Section>;
   const missing = sortRequirements(career.requirements).filter((req) => req.status === "below" || req.status === "not_studied" || needsSelfStudy(req));
   const level = fitLevelOf(career);
-  return <Section id="sgap-summary" title="Mức phù hợp với nghề mục tiêu" description={<>So với yêu cầu của nghề <strong>{career.nameVi}</strong> ({career.nameEn}).{career.deleted && " Nghề này đã ngừng sử dụng trong danh mục; bạn nên chọn nghề khác."}</>}>
+  return <Section id="sgap-summary" title="Mức phù hợp với nghề mục tiêu" description={<>So với yêu cầu của nghề <strong>{career.nameVi}</strong> ({career.nameEn}).{career.deleted && " Nghề này không còn trong danh mục; bạn nên chọn nghề khác."}</>}>
     <div className="scomp-fit-summary">
       <div className="scomp-fit-score"><span className="scomp-kicker">Mức phù hợp</span>
         {level !== "insufficient_data" && <p className="scomp-big"><strong>{formatScore(fitScoreOf(career.requirements))}</strong><span>/100</span></p>}
@@ -622,7 +622,7 @@ function GapHistory({ result }: { result: AssessmentResult }) {
               <tfoot><tr><th scope="row">Kỹ năng đạt ngưỡng</th>{history.points.map((point) => <td key={point.term} className="scomp-num">{point.career!.met}/{point.career!.total}</td>)}<td /></tr></tfoot>
             </table>
           </div>
-          <p className="scomp-meta">“—”: học kỳ đó kỹ năng chưa có điểm (chưa học, sắp học, cần tự học hoặc chưa đủ dữ liệu); di chuột lên ô để xem trạng thái. “Thay đổi” là điểm hiện tại trừ điểm đầu tiên. Học lại ở học kỳ sau không làm đổi điểm của học kỳ trước.</p>
+          <p className="scomp-meta">“—”: ở học kỳ đó, kỹ năng chưa có điểm (chưa học, sắp học, cần tự học hoặc chưa đủ dữ liệu); di chuột lên ô để xem trạng thái. “Thay đổi” là điểm hiện tại trừ điểm đầu tiên. Học lại ở học kỳ sau không làm đổi điểm của học kỳ trước.</p>
         </>}
   </Section>;
 }
@@ -657,7 +657,7 @@ function CourseCard({ course, result }: { course: CourseSuggestion; result: Asse
     </dl>
     <p className="scomp-course-reason">{course.reason}</p>
     {course.reviewNotes.length > 0 && <p className="scomp-meta">Cần xác nhận: {course.reviewNotes.join("; ")}</p>}
-    {helped.length > 0 && <p className="scomp-meta">Giúp kỹ năng: {helped.join(", ")}</p>}
+    {helped.length > 0 && <p className="scomp-meta">Giúp rèn kỹ năng: {helped.join(", ")}</p>}
   </li>;
 }
 
@@ -680,7 +680,7 @@ function SkillPlans({ plans, career }: { plans: SkillPlan[]; career: string | nu
   return <>
     <h3 className="scomp-subtitle">{deepen ? "Nâng kỹ năng của nghề lên mức Giỏi" : "Kỹ năng cần củng cố (dưới mức Khá)"}</h3>
     <p className="scomp-meta">{deepen
-      ? `Kỹ năng nghề ${career} bạn đã đạt ngưỡng nhưng chưa đạt mức Giỏi (từ 80), kèm học phần còn có thể học. Khi không còn học phần, hãy rèn thêm bằng một dự án gắn với nghề.`
+      ? `Kỹ năng nghề ${career} mà bạn đã đạt ngưỡng nhưng chưa lên mức Giỏi (từ 80), kèm học phần còn có thể học. Khi không còn học phần, hãy rèn thêm bằng một dự án gắn với nghề.`
       : "Kỹ năng ở mức Trung bình hoặc Yếu, kèm học phần cụ thể để học cải thiện hoặc học mới. Học phần đã đạt có thể đăng ký học cải thiện theo quy chế của trường."}</p>
     {plans.length ? <ul className="scomp-plan-cards">{plans.map((plan) => {
       const courses = [...plan.improve, ...plan.take];
@@ -691,7 +691,7 @@ function SkillPlans({ plans, career }: { plans: SkillPlan[]; career: string | nu
             ? "Bạn đã học hết học phần đo kỹ năng này trong chương trình; hãy làm một dự án nhỏ gắn với nghề để rèn thêm và có sản phẩm minh chứng."
             : "Không còn học phần nào trong chương trình của bạn để học thêm cho kỹ năng này; hãy tự học và làm một sản phẩm nhỏ để kiểm chứng."}</p>}
       </li>;
-    })}</ul> : <p className="scomp-meta">{deepen ? "Mọi kỹ năng của nghề đã đạt mức Giỏi hoặc còn là khoảng trống ở trên." : "Không có kỹ năng nào dưới mức Khá."}</p>}
+    })}</ul> : <p className="scomp-meta">{deepen ? "Mọi kỹ năng của nghề đã đạt mức Giỏi hoặc đã nằm trong phần khoảng trống ở trên." : "Không có kỹ năng nào dưới mức Khá."}</p>}
   </>;
 }
 
@@ -701,7 +701,7 @@ function CoursesSection({ result, ai }: { result: AssessmentResult; ai: MappedAi
   const aiTips = new Map((ai?.gaps ?? []).map((gap) => [gap.key, gap.selfStudy]));
   const courseNames = new Map(result.courses.map((course) => [course.code, course.name]));
   const plans = plansFor(result);
-  return <Section id="scomp-courses" title="Học phần nên ưu tiên và tự học" description={result.career ? `Học phần cụ thể cho các kỹ năng của nghề ${result.career.nameVi}: kỹ năng chưa đạt ngưỡng và kỹ năng có thể nâng lên mức Giỏi. Mỗi học phần ghi rõ bạn đã học chưa, điểm hiện tại và đã đủ điều kiện đăng ký chưa.` : "Chọn nghề mục tiêu để nhận gợi ý học phần theo khoảng trống kỹ năng."}>
+  return <Section id="scomp-courses" title="Học phần nên ưu tiên và kỹ năng cần tự học" description={result.career ? `Học phần cụ thể cho các kỹ năng của nghề ${result.career.nameVi}: kỹ năng chưa đạt ngưỡng và kỹ năng có thể nâng lên mức Giỏi. Mỗi học phần ghi rõ bạn đã học chưa, điểm hiện tại và đã đủ điều kiện đăng ký chưa.` : "Chọn nghề mục tiêu để nhận gợi ý học phần theo khoảng trống kỹ năng."}>
     {result.career && <>
       <h3 className="scomp-subtitle">Học phần nên học</h3>
       {take.length ? <ol className="scomp-course-list">{take.map((course) => <CourseCard key={course.code} course={course} result={result} />)}</ol> : <p className="scomp-meta">Không còn học phần nào cần học thêm cho các kỹ năng nghề chưa đạt.</p>}
@@ -772,7 +772,7 @@ function AiContent({ output }: { output: MappedAiOutput }) {
 function AiGapContent({ output, hasCareer, careerKeys }: { output: MappedAiOutput; hasCareer: boolean; careerKeys: Set<string> }) {
   const gapKeys = new Set(output.gaps.map((gap) => gap.key));
   const raise = output.improvements.filter((item) => careerKeys.has(item.key) && !gapKeys.has(item.key));
-  if (!output.careerFit && !output.gaps.length && !raise.length) return <p className="scomp-meta">{hasCareer ? "Nhận xét lần này không có phần riêng về khoảng trống kỹ năng. Kết quả tính toán bên dưới vẫn đầy đủ." : "Chọn nghề mục tiêu rồi đánh giá lại để nhận nhận xét về khoảng trống kỹ năng."}</p>;
+  if (!output.careerFit && !output.gaps.length && !raise.length) return <p className="scomp-meta">{hasCareer ? "Nhận xét lần này không có phần riêng về khoảng trống kỹ năng. Kết quả tính toán bên dưới vẫn đầy đủ." : "Chọn nghề mục tiêu rồi đánh giá lại để có nhận xét về khoảng trống kỹ năng."}</p>;
   return <div className="scomp-ai-body">
     {output.careerFit && <div className="scomp-ai-block"><h3>Với nghề mục tiêu</h3><p className="scomp-prose">{output.careerFit}</p></div>}
     {output.gaps.length > 0 && <div className="scomp-ai-block"><h3>Khoảng trống nên ưu tiên</h3><ul>{output.gaps.map((gap) => <li key={gap.key}>
@@ -922,7 +922,7 @@ export default function StudentCompetency({ profile, view = "competency", notice
       await send<{ deleted: boolean }>(`${COMPETENCY_API}`, jsonWrite("DELETE", { confirmed: true }));
       setDeleteOpen(false);
       setCurrent((value) => ({ assessment: null, aiEnabled: value?.aiEnabled ?? false, workerOnline: value?.workerOnline ?? false, consentVersion: null }));
-      setAnnouncement("Đã xóa kết quả đánh giá năng lực và rút lại đồng ý.");
+      setAnnouncement("Đã xóa kết quả đánh giá năng lực và rút lại sự đồng ý.");
     } catch (e) { setDeleteError((e as Error).message); }
     finally { setBusy(null); }
   };

@@ -60,7 +60,7 @@ describe("CompetencyCourseAi", () => {
       item({ index: 2, skillId: null, skillName: "Kiểm thử API", hasProfile: false, isNewSkill: true, percent: 10 }),
       item({ index: 3, skillId: "s-team", skillName: "Làm việc nhóm", alreadyLinked: true, percent: 20 }),
     ] }));
-    expect(html).toContain("AI đề xuất 3 kỹ năng mới và trọng số cho 71ITSE40103");
+    expect(html).toContain("AI đề xuất thêm 3 kỹ năng và trọng số cho 71ITSE40103");
     expect(html).toContain("Kỹ năng nghề chưa đo");
     expect(html).toContain("Kỹ năng mới");
     expect(html).toContain("Đã liên kết");
@@ -70,7 +70,7 @@ describe("CompetencyCourseAi", () => {
     expect(html).not.toContain('aria-label="Bỏ đề xuất Làm việc nhóm"');
     expect(html).toMatch(/<input type="number" min="0" max="100" step="any" disabled="" value="10"\/>/);
     // Kept: web 50 + Docker 20 + linked 20 = 90%: a draft only.
-    expect(html).toContain("71ITSE40103 sẽ có 3 kỹ năng (2 kỹ năng mới)");
+    expect(html).toContain("71ITSE40103 sẽ có 3 kỹ năng (thêm 2 kỹ năng)");
     expect(html).toMatch(/<div class="comp-weight-total" role="status"><span>Tổng trọng số<\/span><strong>90% \/ 100%<\/strong>/);
     expect(html).toMatch(/<button type="button" class="am-primary" disabled="">.*Lưu và áp dụng<\/button>/);
   });

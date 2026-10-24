@@ -12,7 +12,7 @@ export function assessAllocations(rows: AllocationInput[]) {
   const seen = new Set<string>();
   let total = 0;
   const errors: string[] = [];
-  if (rows.length > 200) errors.push("Mỗi học phần hỗ trợ tối đa 200 liên kết kỹ năng.");
+  if (rows.length > 200) errors.push("Mỗi môn học hỗ trợ tối đa 200 liên kết kỹ năng.");
   const links = rows.map((row, index) => {
     const amount = Number(row.percent);
     if (!row.skillId) errors.push(`Dòng ${index + 1}: chưa chọn kỹ năng.`);

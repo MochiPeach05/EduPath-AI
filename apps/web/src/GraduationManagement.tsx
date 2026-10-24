@@ -14,9 +14,9 @@ import { CheckedForm } from "./CheckedForm";
 const endpoint = "/api/admin/graduation";
 const errors: Record<string, string> = {
   invalid_workbook:
-    "Tệp không đúng biểu mẫu tiêu chuẩn xét tốt nghiệp. Chọn Excel (.xls, .xlsx) hoặc ZIP chứa các biểu mẫu.",
+    "Tệp không đúng biểu mẫu tiêu chuẩn xét tốt nghiệp. Chọn tệp Excel (.xls, .xlsx) hoặc ZIP chứa các biểu mẫu.",
   workbook_too_large:
-    "Tệp vượt giới hạn: tối đa 5 MB, 30 tệp trong ZIP và 50 sheet tiêu chuẩn.",
+    "Tệp vượt giới hạn: tối đa 5 MB, 30 tệp trong ZIP và 50 trang tính tiêu chuẩn.",
   invalid_graduation_metadata:
     "Biểu mẫu thiếu tên tiêu chuẩn, khối lớp hoặc ngành đào tạo.",
   invalid_graduation_columns:
@@ -31,7 +31,7 @@ const errors: Record<string, string> = {
   standard_exists:
     "Tiêu chuẩn đã tồn tại. Mở chi tiết và dùng Cập nhật tiêu chuẩn từ Excel để tạo phiên bản mới.",
   duplicate_selection:
-    "Các sheet được chọn trùng mã tiêu chuẩn và khối lớp. Chỉ chọn một bản cho mỗi tiêu chuẩn.",
+    "Các trang tính được chọn trùng mã tiêu chuẩn và khối lớp. Chỉ chọn một bản cho mỗi tiêu chuẩn.",
   standard_changed:
     "Tiêu chuẩn đã được cập nhật ở nơi khác. Đóng hộp thoại và tải lại trước khi lưu.",
   preview_required: "Tệp đã thay đổi. Vui lòng xem trước lại.",
@@ -300,7 +300,7 @@ function ImportDialog({
     >
       <div className="cm-dialog-body cm-form">
         <p>
-          Chọn Excel .xls, .xlsx hoặc ZIP, tối đa 5 MB.
+          Chọn tệp Excel (.xls, .xlsx) hoặc ZIP, tối đa 5 MB.
         </p>
         <label className="cm-upload">
           Biểu mẫu
@@ -321,7 +321,7 @@ function ImportDialog({
             <p>
               Chọn{" "}
               {current
-                ? "một sheet có cùng mã tiêu chuẩn và khối lớp"
+                ? "một trang tính có cùng mã tiêu chuẩn và khối lớp"
                 : "các tiêu chuẩn cần lưu"}
               . Bản trùng mã/khối lớp cần chọn riêng hoặc cập nhật qua trang chi
               tiết.
@@ -356,7 +356,7 @@ function ImportDialog({
                       <span>
                         <strong>{item.data.name}</strong>
                         <small>
-                          {item.data.sourceWorkbook} · Sheet{" "}
+                          {item.data.sourceWorkbook} · Trang tính{" "}
                           {item.data.sourceSheet}
                         </small>
                         {item.existingId && (
@@ -637,8 +637,8 @@ function Standard({
               )}
             </div>
             <p className="cm-help">
-              Nguồn: {data.data.sourceWorkbook} · Sheet {data.data.sourceSheet}.
-              Tệp tải xuống là nguồn gốc, chưa bao gồm chỉnh sửa trực tiếp.
+              Nguồn: {data.data.sourceWorkbook} · Trang tính {data.data.sourceSheet}.
+              Tệp tải xuống là tệp gốc, chưa bao gồm chỉnh sửa trực tiếp.
             </p>
           </section>
           <section className="cm-panel">
@@ -884,7 +884,7 @@ function EditDialog({
                 checked={course.conditionOnly}
                 onChange={(e) => setCourse({ conditionOnly: e.target.checked })}
               />
-              Môn điều kiện, không tính tín chỉ tích lũy và GPA
+              Môn điều kiện, không tính vào tín chỉ tích lũy và GPA
             </label>
           </>
         ) : (

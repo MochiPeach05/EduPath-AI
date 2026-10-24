@@ -115,7 +115,7 @@ function StudySection({ roadmap }: { roadmap: Roadmap }) {
   return <section className="sw-panel rm-section" aria-labelledby="rm-study">
     <header className="rm-section-head"><span className="rm-section-icon" aria-hidden="true"><Icon name="book" /></span><div>
       <h2 id="rm-study">Môn bạn cần học</h2>
-      <p>Học phần đang học, học phần trễ so với kế hoạch đào tạo (kể cả học phần kế hoạch xếp vào học kỳ đang học mà bạn chưa đăng ký) và học phần theo kế hoạch của học kỳ tới.</p>
+      <p>Học phần đang học, học phần trễ so với kế hoạch đào tạo (kể cả học phần được kế hoạch đào tạo xếp vào học kỳ đang học mà bạn chưa đăng ký) và học phần theo kế hoạch của học kỳ tới.</p>
     </div></header>
     {!roadmap.study.length && !roadmap.choices.length && <p className="rm-empty">Không có học phần nào cần học thêm trong kế hoạch đào tạo của bạn.</p>}
     {picked.length > 0 && <ul className="rm-items">{picked.map((item) => <StudyItem key={item.code} item={item} />)}</ul>}
@@ -205,8 +205,8 @@ function MonthsSection({ roadmap }: { roadmap: Roadmap }) {
 /** The AI advises from the profile survey (user 2026-10-24), so a roadmap needs it first. */
 function SurveyNeeded({ again = false }: { again?: boolean }) {
   return <div className="rm-survey-needed" role="note">
-    <p><strong>Cần hoàn thành Khảo sát định hướng{again ? " trước khi tạo lại" : ""}.</strong> EduPath AI dùng mục tiêu, kinh nghiệm, thời gian tự học và thành tích của bạn để lộ trình sát với bạn hơn. Khảo sát gồm các câu chọn đáp án có sẵn, chỉ mất vài phút.</p>
-    <a className="sw-primary" href="#profile">Làm khảo sát trong Hồ sơ <Icon name="arrow" /></a>
+    <p><strong>Cần hoàn thành Khảo sát định hướng{again ? " trước khi tạo lại" : ""}.</strong> EduPath AI dùng mục tiêu, kinh nghiệm, thời gian tự học và thành tích của bạn để lộ trình sát với bạn hơn. Khảo sát chủ yếu gồm các câu chọn đáp án có sẵn, chỉ mất vài phút.</p>
+    <a className="sw-primary" href="#profile">Làm khảo sát ở Hồ sơ và bảng điểm <Icon name="arrow" /></a>
   </div>;
 }
 
@@ -279,7 +279,7 @@ export default function StudentAiRoadmap() {
 
   if (!roadmap && !assessment) return <section className="sw-panel sw-empty rm-start">
     <span className="rm-start-icon" aria-hidden="true"><Icon name="route" /></span>
-    <h2>Chưa có kết quả đánh giá năng lực</h2>
+    <h2>Chưa có kết quả Đánh giá năng lực</h2>
     <p>Lộ trình học tập được soạn từ kết quả Đánh giá năng lực mới nhất của bạn. Hãy tạo kết quả đánh giá trước, rồi quay lại đây.</p>
     <a className="sw-primary" href="#competency">Mở Đánh giá năng lực <Icon name="arrow" /></a>
   </section>;
@@ -292,20 +292,20 @@ export default function StudentAiRoadmap() {
     <ul className="rm-start-list">
       <li><Icon name="book" /><span><strong>Môn bạn cần học</strong> theo kế hoạch đào tạo: học phần đang học, học phần trễ và học phần của học kỳ tới.</span></li>
       <li><Icon name="refresh" /><span><strong>Môn bạn cần cải thiện</strong>: học lại học phần chưa đạt, học cải thiện học phần điểm D, D+.</span></li>
-      <li><Icon name="target" /><span><strong>Kỹ năng, kiến thức nên tự học thêm</strong> để nâng cao trình độ và tăng khả năng làm việc ở nghề mục tiêu.</span></li>
-      <li><Icon name="spark" /><span><strong>Lời khuyên theo mục tiêu của bạn</strong>: tiến độ tốt nghiệp, học gì để làm thực tế tốt hơn, dựa trên kết quả đánh giá và khảo sát định hướng.</span></li>
+      <li><Icon name="target" /><span><strong>Kỹ năng, kiến thức nên bổ sung</strong> để nâng cao trình độ và tăng khả năng làm việc ở nghề mục tiêu.</span></li>
+      <li><Icon name="spark" /><span><strong>Lời khuyên theo mục tiêu của bạn</strong>: tiến độ tốt nghiệp, nên học gì để làm việc thực tế tốt hơn, dựa trên kết quả đánh giá và Khảo sát định hướng.</span></li>
     </ul>
     {!response.aiEnabled
       ? <p className="rm-note">Lộ trình do EduPath AI soạn hiện chưa được bật.</p>
       : <>
-        {assessment && !assessment.hasCareer && <p className="rm-note">Kết quả đánh giá của bạn chưa có nghề mục tiêu nên lộ trình sẽ chưa có phần kỹ năng nghề. Hãy chọn nghề mục tiêu trong Hồ sơ rồi đánh giá lại để có lộ trình đầy đủ.</p>}
+        {assessment && !assessment.hasCareer && <p className="rm-note">Kết quả đánh giá của bạn chưa có nghề mục tiêu nên lộ trình sẽ chưa có phần kỹ năng nghề. Hãy chọn nghề mục tiêu ở Hồ sơ và bảng điểm rồi đánh giá lại để có lộ trình đầy đủ.</p>}
         {!response.surveyDone ? <SurveyNeeded /> : <>
           {!response.worker.online && <p className="rm-note">Máy AI đang tạm nghỉ: yêu cầu của bạn sẽ được giữ trong hàng đợi và lộ trình sẽ được soạn khi máy hoạt động trở lại.</p>}
           <div className="rm-actions"><button type="button" className="sw-primary" disabled={creating} onClick={create}><Icon name="spark" />{creating ? "Đang gửi…" : "Tạo lộ trình"}</button></div>
         </>}
         {createError && <p className="rm-error" role="alert">{createError}</p>}
       </>}
-    <p className="rm-footer">Lộ trình dùng kết quả Đánh giá năng lực lúc {formatDateTime(assessment?.createdAt)}. Nếu bảng điểm vừa thay đổi, hãy tạo lại kết quả đánh giá trước.</p>
+    <p className="rm-footer">Lộ trình sẽ dùng kết quả Đánh giá năng lực tạo lúc {formatDateTime(assessment?.createdAt)}. Nếu bảng điểm vừa thay đổi, hãy tạo lại kết quả đánh giá trước.</p>
   </section>;
 
   return <div className="rm-page">{live}<RoadmapView roadmap={roadmap} response={response} create={create} creating={creating} createError={createError} /></div>;

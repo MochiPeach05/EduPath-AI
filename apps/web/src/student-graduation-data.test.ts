@@ -155,8 +155,8 @@ describe("labels", () => {
   it("labels repeated group names of a standard like the server does", () => {
     const labels = standardGroupLabels(standard());
     expect(labels.get("BB")).toBe("Nhóm bắt buộc");
-    expect(labels.get("A")).toBe("Nhóm tự chọn TC102 · 1 học phần, gồm 71ITAI40103");
-    expect(labels.get("B")).toBe("Nhóm tự chọn TC102 · 2 học phần, gồm 71ITDS40103");
+    expect(labels.get("A")).toBe("Nhóm tự chọn TC102 · 1 học phần, trong đó có 71ITAI40103");
+    expect(labels.get("B")).toBe("Nhóm tự chọn TC102 · 2 học phần, trong đó có 71ITDS40103");
   });
 });
 
@@ -165,13 +165,13 @@ describe("standard", () => {
     const items = standardThresholds(standard({ freeElectiveCredits: null }));
     expect(items.map((item) => `${item.label}: ${item.value}`)).toEqual([
       "Tín chỉ tích lũy tối thiểu: 138", "Tín chỉ bắt buộc: 120", "Tín chỉ nhóm tự chọn: 12", "Tín chỉ tự chọn tự do: Chưa xác định",
-      "Điểm TB tích lũy tối thiểu: 2,00 / 4",
+      "Điểm trung bình tích lũy tối thiểu: 2,00 / 4",
     ]);
     expect(items[3]!.known).toBe(false);
     expect(standardMeta(response())).toBe("Khóa K29 · Chuyên ngành Công nghệ phần mềm");
     expect(standardMeta(response({ resolution: "general", profile: { cohortCode: "K27", specialty: null } }))).toBe("Khóa K27 · Tiêu chuẩn chung của khóa");
     expect(standardMeta(response({ resolution: "general", profile: { cohortCode: "K28", specialty: "KCN" } }))).toBe("Khóa K28 · Không theo chuyên ngành");
-    expect(profileLine({ cohortCode: null, specialty: null })).toBe("Khóa trong tài khoản: chưa có · Chuyên ngành trong hồ sơ: Chưa xác định");
+    expect(profileLine({ cohortCode: null, specialty: null })).toBe("Khóa trong tài khoản: Chưa có · Chuyên ngành trong hồ sơ: Chưa xác định");
   });
   it("explains every unresolved standard without naming another cohort", () => {
     const base = { profile: { cohortCode: "K29", specialty: null }, specialtySuggestion: null } as const;
@@ -216,7 +216,7 @@ describe("verdict and conditions", () => {
     expect(items[1]).toMatchObject({ title: "Điểm trung bình tích lũy (hệ 4)", progress: "chưa có điểm các môn tính điểm trung bình hệ 4.", note: null });
     const noMinimum = conditionItems(evaluation({ gpa: { actual: 2.85, required: null, scale: 4, status: "unknown", source: "printed", reason: "Tiêu chuẩn chưa có điểm trung bình tối thiểu.", remaining: null } }));
     expect(noMinimum[1]).toMatchObject({ progress: "hiện 2,85", note: "tiêu chuẩn chưa có điểm trung bình tối thiểu." });
-    expect(verdictHeadline(evaluation({ status: "fail", groups: [] })).text).toBe("Hiện tại bạn chưa đủ điều kiện xét tốt nghiệp theo bảng điểm hiện tại.");
+    expect(verdictHeadline(evaluation({ status: "fail", groups: [] })).text).toBe("Hiện tại bạn chưa đủ điều kiện xét tốt nghiệp theo bảng điểm.");
   });
   it("describes each condition with its progress and shortfall", () => {
     const items = conditionItems(failing());
@@ -397,7 +397,7 @@ describe("course views", () => {
   it("builds groups from the standard alone before a transcript is imported", () => {
     const groups = groupViews(response({ evaluation: null, transcript: null }));
     expect(groups.map((item) => [item.title, item.achieved, item.required])).toEqual([
-      ["Nhóm bắt buộc", "—", "2 môn"], ["Nhóm tự chọn TC102 · 1 học phần, gồm 71ITAI40103", "—", "3 TC"], ["Nhóm tự chọn TC102 · 2 học phần, gồm 71ITDS40103", "—", "6 TC"],
+      ["Nhóm bắt buộc", "—", "2 môn"], ["Nhóm tự chọn TC102 · 1 học phần, trong đó có 71ITAI40103", "—", "3 TC"], ["Nhóm tự chọn TC102 · 2 học phần, trong đó có 71ITDS40103", "—", "6 TC"],
     ]);
     expect(groups[0]!.courses[0]).toMatchObject({ code: "71ITBS10103", row: null });
     expect(groupFacts(groups[0]!)).toBe("Bắt buộc · Yêu cầu: 2 môn — phải đạt tất cả học phần, kể cả môn điều kiện (*).");

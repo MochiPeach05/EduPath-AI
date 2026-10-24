@@ -45,7 +45,7 @@ export type StudentCareerDetail = Pick<Career, "id" | "code" | "nameVi" | "nameE
 };
 export const careerFailures: Record<string, string> = {
   requirement_changed: "Yêu cầu đã được cập nhật hoặc xóa. Đóng hộp thoại và tải lại trước khi lưu.",
-  requirement_exists: "Kỹ năng đã tồn tại",
+  requirement_exists: "Kỹ năng đã được liên kết với nghề này.",
   requirement_not_found: "Yêu cầu không còn trong danh mục.",
   invalid_requirement: "Thông tin chưa hợp lệ. Kiểm tra nghề nghiệp, nội dung, kỹ năng và tính chất yêu cầu.",
   skill_not_found: "Kỹ năng không còn trong danh mục. Hãy tải lại và chọn lại.",

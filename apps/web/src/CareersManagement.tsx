@@ -66,11 +66,11 @@ export default function CareersManagement({
               value={draft.q}
               maxLength={200}
               onChange={(e) => setDraft({ ...draft, q: e.target.value })}
-              placeholder="Tên tiếng Việt, English, mã hoặc kỹ năng…"
+              placeholder="Tên tiếng Việt, tên tiếng Anh, mã hoặc kỹ năng…"
             />
           </label>
           <label>
-            Nhóm lĩnh vực
+            Lĩnh vực
             <select
               value={draft.category}
               onChange={(e) => setDraft({ ...draft, category: e.target.value })}
@@ -127,7 +127,7 @@ export default function CareersManagement({
                         </td>
                         <td>{fieldNames.get(c.category) ?? c.categoryName ?? c.category}</td>
                         <td>
-                          {c.skills.slice(0, 3).join(" · ") || "Chưa bổ sung"}
+                          {c.skills.slice(0, 3).join(" · ") || "Chưa liên kết"}
                         </td>
                         <td>
                           <ActionMenu
@@ -304,7 +304,7 @@ function Editor({
             value={form.description}
             onChange={(e) => setForm({ ...form, description: e.target.value })}
           />
-          {current ? <div><strong>Kỹ năng liên kết</strong><p>{current.skills.join(" · ") || "Chưa liên kết kỹ năng."}</p><small>Quản lý yêu cầu và kỹ năng bằng mục Tạo liên kết kỹ năng trong menu Thao tác của vị trí.</small></div> : <p>Sau khi lưu, chọn Liên kết kỹ năng trong menu Thao tác của vị trí để thêm yêu cầu và liên kết kỹ năng.</p>}
+          {current ? <div><strong>Kỹ năng liên kết</strong><p>{current.skills.join(" · ") || "Chưa liên kết kỹ năng."}</p><small>Quản lý yêu cầu và kỹ năng bằng mục Tạo liên kết kỹ năng trong menu Thao tác của vị trí.</small></div> : <p>Sau khi lưu, chọn Tạo liên kết kỹ năng trong menu Thao tác của vị trí để thêm yêu cầu và liên kết kỹ năng.</p>}
         </fieldset>
         {error && (
           <p className="admin-error" role="alert">

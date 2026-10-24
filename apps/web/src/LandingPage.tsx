@@ -48,7 +48,7 @@ const features = [
     title: "Lộ trình học tập có định hướng",
     description:
       "Gợi ý môn học theo từng học kỳ, có xét đến chương trình đào tạo và môn tiên quyết để kế hoạch phù hợp với việc học tại trường.",
-    status: "Minh họa tính năng dự kiến của đồ án"
+    status: "Minh họa tính năng đang triển khai"
   },
   {
     id: "nghe-nghiep",
@@ -142,7 +142,7 @@ function FeaturePreview({ selected, active }: { selected: number; active: boolea
           <div className="lp-insight">
             <Icon name="route" />
             <p>
-              <strong>Đặt tính khả thi lên trước</strong>Lộ trình dự kiến được đối chiếu với môn
+              <strong>Đặt tính khả thi lên hàng đầu</strong>Lộ trình dự kiến được đối chiếu với môn
               tiên quyết của trường.
             </p>
           </div>
@@ -243,7 +243,7 @@ export default function LandingPage() {
           <nav
             className={`lp-navigation${menuOpen ? " is-open" : ""}`}
             id="landing-navigation"
-            aria-label="Điều hướng trang tổng quan"
+            aria-label="Điều hướng trang chủ"
           >
             <a href="/" aria-current="page" onClick={() => setMenuOpen(false)}>
               Trang chủ
@@ -358,7 +358,7 @@ export default function LandingPage() {
 
         <div className="lp-university-strip">
           <div className="lp-container">
-            <img src="/vlu-logo-horizontal.png" alt="Van Lang University" width="180" height="46" />
+            <img src="/vlu-logo-horizontal.png" alt="Trường Đại học Văn Lang" width="180" height="46" />
             <div>
               <strong>EduPath AI được xây dựng từ câu chuyện học tập của sinh viên.</strong>
               <span>Công nghệ Thông tin · Trường Đại học Văn Lang</span>
@@ -426,7 +426,7 @@ export default function LandingPage() {
                 </h2>
               </div>
               <p>
-                Ba nhóm tính năng định hướng phát triển của EduPath AI, cùng kết nối trong một hành
+                Ba nhóm tính năng chính của EduPath AI, cùng kết nối trong một hành
                 trình học tập.
               </p>
             </div>
@@ -505,14 +505,14 @@ export default function LandingPage() {
                 title: "Xây dựng lộ trình",
                 description:
                   "Tham khảo gợi ý môn học và kỹ năng cần bổ sung theo định hướng đã chọn.",
-                tag: "Tính năng dự kiến"
+                tag: "Đang triển khai"
               },
               {
                 icon: "target" as const,
                 title: "Theo dõi, điều chỉnh",
                 description:
                   "Cập nhật tiến bộ qua từng học kỳ và điều chỉnh kế hoạch khi mục tiêu thay đổi.",
-                tag: "Tính năng dự kiến"
+                tag: "Đang triển khai"
               }
             ].map((step, index) => (
               <li key={step.title}>

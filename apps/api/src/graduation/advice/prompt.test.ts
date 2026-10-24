@@ -88,8 +88,8 @@ describe("buildGraduationAdviceInput", () => {
   it("writes one line per condition with its key, vi-VN numbers and the shortfall, without the CTĐT elective code", () => {
     expect(section(input.user, "3. CÁC ĐIỀU KIỆN").slice(1)).toEqual([
       "[G1] Học phần bắt buộc (bắt buộc, tính theo số môn): đã đạt 8/10 môn — chưa đạt, còn thiếu 2 môn",
-      "[G2] Nhóm tự chọn TC102 · 2 học phần, gồm 71PEKC10062 (tự chọn, tính theo tín chỉ): đã đạt 2/2 TC — đạt",
-      "[G3] Nhóm tự chọn TC102 · 2 học phần, gồm 71PEBA10052 (tự chọn, tính theo tín chỉ): đã đạt 2/2 TC — đạt",
+      "[G2] Nhóm tự chọn TC102 · 2 học phần, trong đó có 71PEKC10062 (tự chọn, tính theo tín chỉ): đã đạt 2/2 TC — đạt",
+      "[G3] Nhóm tự chọn TC102 · 2 học phần, trong đó có 71PEBA10052 (tự chọn, tính theo tín chỉ): đã đạt 2/2 TC — đạt",
       "[G4] Nhóm tự chọn TC209 (tự chọn, tính theo tín chỉ): đã đạt 6/6 TC — đạt",
       "[G5] Nhóm tự chọn TC306 (tự chọn, tính theo tín chỉ): đã đạt 0/6 TC — chưa đạt, còn thiếu 6 TC",
       "[CREDITS] Tổng số tín chỉ tích lũy (theo bảng điểm): đã đạt 27/126 TC — chưa đạt, còn thiếu 99 TC",
@@ -202,8 +202,8 @@ describe("buildGraduationAdviceInput", () => {
   it("keeps the key map (group ids) out of everything the worker receives", () => {
     expect(input.keys).toEqual([
       { key: "G1", groupId: "row-10", label: "Học phần bắt buộc" },
-      { key: "G2", groupId: "row-60", label: "Nhóm tự chọn TC102 · 2 học phần, gồm 71PEKC10062" },
-      { key: "G3", groupId: "row-64", label: "Nhóm tự chọn TC102 · 2 học phần, gồm 71PEBA10052" },
+      { key: "G2", groupId: "row-60", label: "Nhóm tự chọn TC102 · 2 học phần, trong đó có 71PEKC10062" },
+      { key: "G3", groupId: "row-64", label: "Nhóm tự chọn TC102 · 2 học phần, trong đó có 71PEBA10052" },
       { key: "G4", groupId: "row-79", label: "Nhóm tự chọn TC209" },
       { key: "G5", groupId: "row-92", label: "Nhóm tự chọn TC306" },
       { key: "CREDITS", groupId: null, label: "Tổng số tín chỉ tích lũy" },

@@ -189,7 +189,7 @@ export function parsePages(pages: Page[]): TranscriptData {
   }
   if (!count) throw new TranscriptError("unsupported_layout");
   if (count > 1000) throw new TranscriptError("unreadable_rows");
-  const warnings = ["Bảng điểm do sinh viên tải lên; chưa được nhà trường xác minh.", "Ô Kết quả chỉ có biểu tượng (không có lớp chữ) được đọc là trống; khi ô Kết quả trống, Đạt/Không đạt được xác định theo điểm chữ chính thức: A+ đến D là Đạt, F là Không đạt."];
+  const warnings = ["Bảng điểm do sinh viên tải lên; chưa được nhà trường xác minh.", "Ô Kết quả chỉ có biểu tượng (không có chữ) được xem là trống; khi ô Kết quả trống, Đạt/Không đạt được xác định theo điểm chữ chính thức: A+ đến D là Đạt, F và VT là Không đạt."];
   if (reviewed) warnings.push(reviewWarning(reviewed));
   if (skipped) warnings.push(skippedRowsWarning(skipped));
   return { schemaVersion: 1, parserVersion: "vlu-native-1", pageCount: pages.length, courseCount: count, sections: sections.filter(s => s.courses.length), warnings };

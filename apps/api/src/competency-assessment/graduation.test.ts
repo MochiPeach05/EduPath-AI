@@ -126,8 +126,8 @@ describe("E1: group labels and codes", () => {
     const summary = evaluate(cnpm, []);
     expect(summary.groups.map((group) => [group.label, group.code, group.curriculumElectiveCode])).toEqual([
       ["Học phần bắt buộc", null, null],
-      ["Nhóm tự chọn TC102 · 2 học phần, gồm 71PEKC10062", "TC102", null],
-      ["Nhóm tự chọn TC102 · 2 học phần, gồm 71PEBA10052", "TC102", null],
+      ["Nhóm tự chọn TC102 · 2 học phần, trong đó có 71PEKC10062", "TC102", null],
+      ["Nhóm tự chọn TC102 · 2 học phần, trong đó có 71PEBA10052", "TC102", null],
       ["Nhóm tự chọn TC209", "TC209", null],
       ["Nhóm tự chọn TC306", "TC306", null],
     ]);
@@ -148,8 +148,8 @@ describe("E1: group labels and codes", () => {
       [{ groupId: "B", code: " 71pebb10052 ", credits: 2 }, { groupId: "A", code: "71PEKC10062", credits: 2 }, { groupId: "B", code: "71PEBA10052", credits: 2 }],
     );
     expect([...graduationGroupLabels(data).values()]).toEqual([
-      "Nhóm tự chọn TC102 · 1 học phần, gồm 71PEKC10062",
-      " Nhóm tự chọn TC102  · 2 học phần, gồm 71PEBB10052",
+      "Nhóm tự chọn TC102 · 1 học phần, trong đó có 71PEKC10062",
+      " Nhóm tự chọn TC102  · 2 học phần, trong đó có 71PEBB10052",
       "Nhóm tự chọn TC102 · 0 học phần",
     ]);
   });

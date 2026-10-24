@@ -50,8 +50,8 @@ function ChangeAccount({ account, mode, onClose, onSaved }: { account: Account; 
     void fetch(`/api/admin/accounts/${account.id}`, { method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...(mode === "role" ? { role } : { isActive: !account.isActive }), confirmed }) }).then(readResponse).then(onSaved).catch((err) => setError(err.message)).finally(() => setBusy(false));
   }}><p><strong>{account.name}</strong><br />{account.email ?? account.username}</p>{error && <p className="admin-error" role="alert" ref={errorRef} tabIndex={-1}>{error}</p>}
     {mode === "role" && <label>Vai trò mới<select value={role} disabled={busy} onChange={(e) => setRole(e.target.value as Account["role"])}>{Object.entries(roleLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>}
-    <p>Thao tác chỉ áp dụng trong EduPath, không thay đổi tài khoản Microsoft. Các phiên EduPath hiện tại của người dùng sẽ bị thu hồi; người dùng cần đăng nhập lại.</p>
-    <label className="cm-check"><input type="checkbox" required checked={confirmed} disabled={busy} onChange={(e) => setConfirmed(e.target.checked)} /><span>Tôi xác nhận {title.toLowerCase()} cho tài khoản này.</span></label>
+    <p>Thao tác chỉ áp dụng trong EduPath AI, không thay đổi tài khoản Microsoft. Các phiên EduPath AI hiện tại của người dùng sẽ bị thu hồi; người dùng cần đăng nhập lại.</p>
+    <label className="cm-check"><input type="checkbox" required checked={confirmed} disabled={busy} onChange={(e) => setConfirmed(e.target.checked)} /><span>Tôi xác nhận {mode === "role" ? "phân quyền theo vai trò cho tài khoản này" : account.isActive ? "khóa tài khoản này" : "mở khóa tài khoản này"}.</span></label>
     <div className="cm-actions cm-dialog-actions"><button className="am-outline" type="button" onClick={onClose} disabled={busy}><Icon name="close" /> Hủy</button><button className="am-primary" disabled={busy || (mode === "role" && role === account.role)}><Icon name={mode === "role" ? "save" : account.isActive ? "lock" : "unlock"} /> {busy ? "Đang lưu…" : mode === "role" ? "Lưu vai trò" : account.isActive ? "Xác nhận khóa" : "Xác nhận mở khóa"}</button></div>
   </CheckedForm></Modal>;
 }
@@ -79,7 +79,7 @@ export default function AccountsManagement({ actorId, canManage = false, canAssi
   if (filters.active) params.set("active", filters.active);
   const state = useData<AccountPage>(`/api/admin/accounts?${params}`, revision);
   function refreshed() { setRevision((n) => n + 1); }
-  return <><section className="am-card"><div className="am-card-heading"><div><h2>Tài khoản người dùng {state.data && <span className="am-count">{state.data.total}</span>}</h2><p>Tài khoản, phân quyền và lịch sử đăng nhập trong cùng một nơi.</p></div>{canAssignRoles && <button className="am-primary" onClick={() => setCreating(true)}><Icon name="add" />Tạo tài khoản quản trị</button>}</div>
+  return <><section className="am-card"><div className="am-card-heading"><div><h2>Tài khoản người dùng {state.data && <span className="am-count">{state.data.total}</span>}</h2><p>Tài khoản, phân quyền và lịch sử đăng nhập ở cùng một nơi.</p></div>{canAssignRoles && <button className="am-primary" onClick={() => setCreating(true)}><Icon name="add" />Tạo tài khoản quản trị</button>}</div>
     <div className="am-view-switch" role="group" aria-label="Chế độ xem"><button aria-pressed={tab === "accounts"} onClick={() => setTab("accounts")}>Tài khoản</button>{canManage && <button aria-pressed={tab === "history"} onClick={() => setTab("history")}>Lịch sử đăng nhập</button>}</div>
     {notice && <p className="am-notice" role="status">{notice}</p>}
     {tab === "history" ? <History /> : <><CheckedForm className="am-filters" onSubmit={(event) => { event.preventDefault(); flush(); }}>

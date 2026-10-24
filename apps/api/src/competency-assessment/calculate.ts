@@ -41,7 +41,7 @@ const ELIGIBILITY_LABELS: Record<Eligibility, string> = {
 const SELF_STUDY_REASON_LABELS: Record<SelfStudyReason, string> = {
   not_measured: "CTĐT chưa có học phần đo kỹ năng này",
   other_specialty: "Chỉ được dạy trong học phần của chuyên ngành khác",
-  elective_quota_used: "Thuộc nhóm tự chọn bạn đã chọn đủ tín chỉ",
+  elective_quota_used: "Thuộc nhóm tự chọn mà bạn đã chọn đủ tín chỉ",
   no_course_left: "Không còn học phần nào trong CTĐT để học thêm",
 };
 
@@ -767,7 +767,7 @@ function assess(inputs: AssessmentInputs): Assessment {
       "Một số kỹ năng có thể thiếu minh chứng hoặc điểm chưa phản ánh đầy đủ kết quả học tập.");
   }
   if (unknownSpecialtyValues.size) {
-    warn("specialty_value_unknown", "CTĐT có giá trị chuyên ngành chưa nhận diện được.",
+    warn("specialty_value_unknown", "Một số học phần trong CTĐT ghi chuyên ngành chưa nhận diện được.",
       "Các học phần này được coi là học phần chung.", [...unknownSpecialtyValues].sort(compareText));
   }
   if (specialty && specialtyHasCourses(specialty) && ![...table.values()].some((row) => row.specialty.kind === "specialty" && row.specialty.code === specialty)) {
@@ -777,12 +777,12 @@ function assess(inputs: AssessmentInputs): Assessment {
   const counts = specialtyCounts([...table.values()].map((row) => ({ type: row.type, specialty: row.specialty, passed: isPassedState(row.state) })));
   const conflict = specialty ? specialtyConflict(specialty, counts) : null;
   if (specialty && conflict) {
-    warn("specialty_conflict", `Chuyên ngành đã chọn (${specialtyLabel(specialty)}) khác với các học phần chuyên ngành bạn đã đạt (${specialtyLabel(conflict.code)}: ${conflict.count} học phần).`,
-      "Tập học phần áp dụng, tiêu chuẩn tốt nghiệp và tiến độ có thể không đúng; hãy kiểm tra lại chuyên ngành trong hồ sơ.");
+    warn("specialty_conflict", `Chuyên ngành bạn đã chọn (${specialtyLabel(specialty)}) khác với chuyên ngành của các học phần bạn đã đạt (${specialtyLabel(conflict.code)}: ${conflict.count} học phần).`,
+      "Danh sách học phần áp dụng, tiêu chuẩn xét tốt nghiệp và tiến độ có thể chưa đúng; hãy kiểm tra lại chuyên ngành trong hồ sơ.");
   }
   if (!graduationStandard) {
     warn("graduation_standard_unresolved", graduation.reason ?? "Chưa xác định được tiêu chuẩn xét tốt nghiệp.",
-      "Phần xét tốt nghiệp ở trạng thái chưa xác định; hạn mức nhóm tự chọn lấy theo CTĐT.");
+      "Phần xét tốt nghiệp chưa có kết quả; số tín chỉ phải chọn của các nhóm tự chọn lấy theo CTĐT.");
   }
   if (quotaUnknownGroups.length) {
     warn("elective_quota_unknown", `Chưa xác định được số tín chỉ phải chọn của nhóm tự chọn ${quotaUnknownGroups.join(", ")}.`,
@@ -795,7 +795,7 @@ function assess(inputs: AssessmentInputs): Assessment {
       "Không tính tiến độ so với kế hoạch; học kỳ của học phần lấy theo CTĐT.");
   }
   if (progress?.countMismatches.length) {
-    warn("plan_section_count_mismatch", "Một số nhóm lựa chọn trong kế hoạch đào tạo có số môn khác số ghi trên nhãn.",
+    warn("plan_section_count_mismatch", "Một số nhóm tự chọn trong kế hoạch đào tạo có số môn khác với số ghi trong tên nhóm.",
       "Tiến độ của các nhóm này dựa trên các môn thực có trong kế hoạch.",
       progress.countMismatches.map((item) => `${item.termCode}: “${item.label}” có ${item.actual} môn`));
   }

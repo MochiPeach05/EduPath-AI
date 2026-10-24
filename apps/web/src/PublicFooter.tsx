@@ -10,7 +10,7 @@ export default function PublicFooter({ home = false, portal }: { home?: boolean;
         <div className="lp-footer-main">
           <div>
             <EduPathBrand href="/" light />
-            <p>Hệ thống đánh giá năng lực và tư vấn lộ trình học tập cho sinh viên Công nghệ Thông tin với AI.</p>
+            <p>Hệ thống đánh giá năng lực và tư vấn lộ trình học tập bằng AI cho sinh viên Công nghệ Thông tin.</p>
           </div>
           <nav aria-label="Liên kết cuối trang">
             <h2>Khám phá</h2>
@@ -31,7 +31,7 @@ export default function PublicFooter({ home = false, portal }: { home?: boolean;
           </div>
         </div>
         <div className="lp-footer-bottom">
-          <span>© {new Date().getFullYear()} · Bản Quyền Thuộc Khoa Công nghệ Thông tin · Trường Đại Học Văn Lang.</span>
+          <span>© {new Date().getFullYear()} · Bản quyền thuộc Khoa Công nghệ Thông tin · Trường Đại học Văn Lang.</span>
           <span>AI đồng hành · Học tập bứt phá</span>
           <a href="#noi-dung">Về đầu trang <Icon name="arrowUp" /></a>
         </div>

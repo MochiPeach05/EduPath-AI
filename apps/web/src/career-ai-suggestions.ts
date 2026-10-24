@@ -124,7 +124,7 @@ export function workerLine(status: CareerAiStatus | null | undefined): { text: s
   if (!status) return { text: "Đang kiểm tra máy AI…", tone: "off", canCreate: false };
   if (!status.enabled) return { text: "Máy chủ chưa bật tính năng AI.", tone: "off", canCreate: false };
   if (status.worker.online && status.worker.supportsSuggestions) return { text: "Máy AI đang hoạt động", tone: "ok", canCreate: true };
-  if (status.worker.online) return { text: "Máy AI đang chạy phiên bản cũ. Khởi động lại worker AI để dùng tính năng này.", tone: "warn", canCreate: true };
+  if (status.worker.online) return { text: "Máy AI đang chạy phiên bản cũ. Khởi động lại máy AI để dùng tính năng này.", tone: "warn", canCreate: true };
   return { text: "Máy AI đang tắt. Đề xuất sẽ được xử lý khi máy AI bật lại.", tone: "warn", canCreate: true };
 }
 

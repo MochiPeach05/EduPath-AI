@@ -257,7 +257,7 @@ function Review({ suggestion, career, catalog, linked, linkedState, refreshLinke
     {suggestion.items.length > 0 && !rows.length && <p className="cai-empty">Bạn đã bỏ hết các đề xuất. Tạo lại đề xuất hoặc đóng hộp thoại.</p>}
     {rows.length > 0 && <p className="cai-summary" aria-live="polite">Đã chọn {check.selected.toLocaleString("vi-VN")}/{check.selectable.toLocaleString("vi-VN")} kỹ năng · {check.required.toLocaleString("vi-VN")} bắt buộc</p>}
     {confirming && <div className="cai-confirm" role="alertdialog" aria-label="Xác nhận tạo lại đề xuất">
-      <p>Tạo đề xuất mới sẽ bỏ các thay đổi bạn vừa chọn và chỉnh sửa trong danh sách này.</p>
+      <p>Tạo đề xuất mới sẽ bỏ mọi lựa chọn và chỉnh sửa bạn vừa thực hiện trong danh sách này.</p>
       <div className="cm-actions">
         <button type="button" className="am-outline" onClick={() => setConfirming(false)}>Giữ danh sách</button>
         <button type="button" className="am-primary" onClick={() => { setConfirming(false); regenerate(); }}>Tạo đề xuất mới</button>

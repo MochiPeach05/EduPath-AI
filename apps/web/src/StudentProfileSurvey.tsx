@@ -34,7 +34,7 @@ function DeleteSurveyDialog({ busy, error, onClose, onConfirm }: { busy: boolean
   }, []);
   return <dialog ref={dialog} className="sr-confirm-dialog" aria-labelledby="delete-survey-title" aria-busy={busy} onCancel={(event) => { event.preventDefault(); if (!busy) onClose(); }}>
     <h2 id="delete-survey-title">Xóa câu trả lời khảo sát</h2>
-    <p>Xóa toàn bộ câu trả lời khảo sát định hướng và thành tích? Các lộ trình AI đã tạo cũng bị xóa, và bạn cần làm lại khảo sát trước khi tạo lộ trình mới.</p>
+    <p>Xóa toàn bộ câu trả lời khảo sát định hướng và thành tích? Các lộ trình AI đã tạo cũng sẽ bị xóa, và bạn cần làm lại khảo sát trước khi tạo lộ trình mới.</p>
     {error && <p className="sr-error" role="alert">{error}</p>}
     <div className="sr-actions sr-form-actions">
       <button type="button" className="sr-secondary" disabled={busy} onClick={onClose} autoFocus>Hủy</button>
@@ -139,7 +139,7 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
     <div className="sw-section-heading">
       <div>
         <h2 id="ps-title">Khảo sát định hướng</h2>
-        <p className="sw-muted ps-intro">Trả lời {questions.length} câu hỏi ngắn, cho biết thế mạnh, sở trường và thành tích của bạn. EduPath AI dùng các câu trả lời này để tư vấn lộ trình học tập sát với mục tiêu của bạn{done ? "." : "; cần hoàn thành trước khi tạo Lộ trình AI."}</p>
+        <p className="sw-muted ps-intro">Trả lời {questions.length} câu hỏi ngắn, cho biết thế mạnh, sở trường và thành tích của bạn. EduPath AI dùng các câu trả lời này để tư vấn lộ trình học tập sát với mục tiêu của bạn{done ? "." : ". Bạn cần hoàn thành khảo sát trước khi tạo Lộ trình AI."}</p>
       </div>
       <span className={`sw-tag ${done ? "sw-tag-green" : "ps-tag-required"}`}>{done ? "Đã hoàn thành" : "Bắt buộc"}</span>
     </div>
@@ -209,7 +209,7 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
           <label>
             <input type="checkbox" checked={consented} onChange={(event) => setConsented(event.target.checked)}
               aria-describedby={shown.has("consent") ? errorId("consent") : undefined} />
-            <span>Tôi đồng ý để EduPath AI dùng câu trả lời khảo sát (kể cả thế mạnh, sở trường) và thành tích của tôi để tư vấn lộ trình học tập bằng AI, theo <a href={surveyPolicyHref} target="_blank" rel="noreferrer">Chính sách bảo mật</a>.{survey ? " Chính sách vừa được cập nhật nên bạn cần xác nhận lại." : ""}</span>
+            <span>Tôi đồng ý để EduPath AI dùng câu trả lời khảo sát (kể cả thế mạnh, sở trường) và thành tích của tôi để tư vấn lộ trình học tập bằng AI, theo <a href={surveyPolicyHref} target="_blank" rel="noreferrer">Chính sách bảo mật</a>.{survey ? " (Chính sách vừa được cập nhật, vui lòng xác nhận lại.)" : ""}</span>
           </label>
           {fieldError("consent")}
         </div>}

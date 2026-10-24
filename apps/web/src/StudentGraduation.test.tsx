@@ -147,7 +147,7 @@ describe("StudentGraduation standard", () => {
     expect(html).toContain("<h2 id=\"sg-standard-title\" class=\"sg-title\">Tiêu chuẩn xét tốt nghiệp K29 – Công nghệ phần mềm</h2>");
     expect(html).toContain('<ul class="sg-meta-tags"><li><span>Khóa</span> <strong>K29</strong></li><li><span>Chuyên ngành</span> <strong>Công nghệ phần mềm</strong></li></ul>');
     expect(html).not.toContain("Phiên bản");
-    for (const label of ["Tín chỉ tích lũy tối thiểu", "Tín chỉ bắt buộc", "Tín chỉ nhóm tự chọn", "Tín chỉ tự chọn tự do", "Điểm TB tích lũy tối thiểu"]) expect(html).toContain(label);
+    for (const label of ["Tín chỉ tích lũy tối thiểu", "Tín chỉ bắt buộc", "Tín chỉ nhóm tự chọn", "Tín chỉ tự chọn tự do", "Điểm trung bình tích lũy tối thiểu"]) expect(html).toContain(label);
     expect(html).toContain("2,00 / 4");
     expect(html).toContain("Sinh viên cần hoàn thành chứng chỉ ngoại ngữ theo quy định.");
     expect(html).toContain("Tiêu chuẩn được chọn tự động theo khóa trong tài khoản và chuyên ngành trong hồ sơ của bạn.");
@@ -160,7 +160,7 @@ describe("StudentGraduation standard", () => {
       render(ready(graduation({ standard: null, evaluation: null, ...overrides })), ready(adviceResponse({ fingerprint: null })));
     const noCohort = unresolved({ resolution: "cohort_unknown", profile: { cohortCode: null, specialty: null } });
     expect(noCohort).toContain("Hồ sơ chưa có khóa học");
-    expect(noCohort).toContain("<li><span>Khóa trong tài khoản:</span> <strong>chưa có</strong></li><li><span>Chuyên ngành trong hồ sơ:</span> <strong>Chưa xác định</strong></li>");
+    expect(noCohort).toContain("<li><span>Khóa trong tài khoản:</span> <strong>Chưa có</strong></li><li><span>Chuyên ngành trong hồ sơ:</span> <strong>Chưa xác định</strong></li>");
     expect(noCohort).toContain('href="#profile"');
     const unset = unresolved({ resolution: "specialty_unset", profile: { cohortCode: "K29", specialty: null }, specialtySuggestion: { code: "CNPM", label: "Công nghệ phần mềm", count: 4 } });
     expect(unset).toContain("Hãy chọn chuyên ngành trong hồ sơ");
@@ -343,7 +343,7 @@ describe("StudentGraduation comparison", () => {
     expect(html).toContain('<div id="sg-view-courses" class="sg-view" hidden="">');
     expect(html).toContain('<table class="sg-table sg-group-table">');
     expect(html).toContain('<table class="sg-table sg-course-table sg-course-table-wide">');
-    expect(html).toContain('<thead><tr><th scope="col">Nhóm</th><th scope="col">Đã có</th><th scope="col">Yêu cầu</th><th scope="col">Còn thiếu</th><th scope="col">Kết quả</th></tr></thead>');
+    expect(html).toContain('<thead><tr><th scope="col">Nhóm</th><th scope="col">Đã đạt</th><th scope="col">Yêu cầu</th><th scope="col">Còn thiếu</th><th scope="col">Kết quả</th></tr></thead>');
     expect(html).toContain('<thead><tr><th scope="col" class="sg-col-code">Mã</th><th scope="col">Tên học phần</th><th scope="col" class="sg-col-group">Nhóm</th><th scope="col" class="sg-col-credits sg-num">TC</th><th scope="col" class="sg-col-score">Điểm</th><th scope="col" class="sg-col-state">Trạng thái</th></tr></thead>');
     expect(html).toContain('<input type="search" placeholder="Mã hoặc tên học phần…" value=""/>');
     expect(html).toContain("<option value=\"open\">Chưa hoàn thành</option>");
@@ -368,7 +368,7 @@ describe("StudentGraduation comparison", () => {
     expect(html).toContain("<small>suy ra từ điểm chữ</small>");
     expect(html).toContain("<strong>3,5 / 4</strong><small>8,2 / 10 · B+</small>");
     expect(html).toContain("<strong>MT</strong><small>Miễn thi</small>");
-    expect(html).toContain("Môn điều kiện (*): cần đạt nhưng không tính tín chỉ tích lũy, điểm trung bình");
+    expect(html).toContain("Môn điều kiện (*): cần đạt nhưng không tính vào tín chỉ tích lũy và điểm trung bình");
     expect(html).toContain("Nên học lại để nâng điểm trung bình");
     expect(html).toContain("Có thể học cải thiện để nâng điểm trung bình");
   });

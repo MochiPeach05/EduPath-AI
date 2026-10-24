@@ -146,7 +146,7 @@ export function standardGroupLabels(standard: Pick<StudentGraduationStandard, "g
   return new Map(standard.groups.map((group) => {
     if ((names.get(group.name.trim()) ?? 0) < 2) return [group.id, group.name];
     const codes = standard.courses.filter((course) => course.groupId === group.id).map((course) => course.code.trim().toUpperCase());
-    return [group.id, `${group.name} · ${codes.length} học phần${codes[0] ? `, gồm ${codes[0]}` : ""}`];
+    return [group.id, `${group.name} · ${codes.length} học phần${codes[0] ? `, trong đó có ${codes[0]}` : ""}`];
   }));
 }
 
@@ -164,7 +164,7 @@ export function standardThresholds(standard: StudentGraduationStandard): Thresho
     credits("electiveCredits", "Tín chỉ nhóm tự chọn"),
     credits("freeElectiveCredits", "Tín chỉ tự chọn tự do"),
     {
-      key: "minimumGpa", label: "Điểm TB tích lũy tối thiểu", known: standard.minimumGpa !== null,
+      key: "minimumGpa", label: "Điểm trung bình tích lũy tối thiểu", known: standard.minimumGpa !== null,
       value: standard.minimumGpa === null ? "Chưa xác định" : `${formatGpa(standard.minimumGpa)} / ${standard.gpaScale}`,
     },
   ];
@@ -195,7 +195,7 @@ export function standardMeta(data: Pick<StudentGraduationResponse, "profile" | "
 /** The student's own identity used to pick the standard: "Khóa trong tài khoản: K29 · Chuyên ngành trong hồ sơ: Chưa xác định". */
 export function profileLineParts(profile: StudentGraduationResponse["profile"]): MetaPart[] {
   return [
-    { label: "Khóa trong tài khoản:", value: profile.cohortCode ?? "chưa có" },
+    { label: "Khóa trong tài khoản:", value: profile.cohortCode ?? "Chưa có" },
     { label: "Chuyên ngành trong hồ sơ:", value: specialtyLabel(profile.specialty) },
   ];
 }
@@ -389,7 +389,7 @@ export function verdictHeadline(evaluation: Pick<GraduationEvaluation, "status" 
       : "";
     return {
       tone: "fail", glyph: "✗",
-      text: parts.length ? `Hiện tại bạn chưa đủ điều kiện xét tốt nghiệp vì còn thiếu ${joinVi(parts)}.${total}` : "Hiện tại bạn chưa đủ điều kiện xét tốt nghiệp theo bảng điểm hiện tại.",
+      text: parts.length ? `Hiện tại bạn chưa đủ điều kiện xét tốt nghiệp vì còn thiếu ${joinVi(parts)}.${total}` : "Hiện tại bạn chưa đủ điều kiện xét tốt nghiệp theo bảng điểm.",
     };
   }
   const parts = items.filter((item) => item.status === "unknown" && item.undecided).map((item) => item.undecided!);
@@ -653,7 +653,7 @@ export function warningNotes(evaluation: Pick<GraduationEvaluation, "warnings">)
       case "credit_transfer_needed":
         return { code: warning.code, text: `${formatNumber(warning.count ?? 0)} học phần bạn đã học trả nợ với khóa sau được tính là đã đạt. Bạn cần làm thủ tục chuyển điểm các học phần này; nếu không, nhà trường vẫn tính là còn nợ môn.` };
       default:
-        return { code: String(warning.code), text: "Dữ liệu bảng điểm có điểm cần kiểm tra lại." };
+        return { code: String(warning.code), text: "Dữ liệu bảng điểm có chỗ cần kiểm tra lại." };
     }
   });
 }

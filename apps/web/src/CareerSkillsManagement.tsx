@@ -83,7 +83,7 @@ function SkillEditor({ current, close, saved }: { current: ManagedCareerSkill | 
       <fieldset className="cm-fields" disabled={busy}>
         <label><RequiredLabel>Tên kỹ năng</RequiredLabel><input required maxLength={100} value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} placeholder="Ví dụ: SQL, Docker, Phân tích dữ liệu" /></label>
         <DescriptionField label="Mô tả" maxWords={DESCRIPTION_MAX_WORDS} rows={4} maxLength={2000} value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} />
-        {current && <p>Đổi tên kỹ năng sẽ cập nhật tên trong mục Nghề nghiệp và mục Quản lý năng lực; các liên kết giữ nguyên ID.</p>}
+        {current && <p>Đổi tên kỹ năng sẽ cập nhật tên trong mục Nghề nghiệp và mục Quản lý năng lực; các liên kết vẫn được giữ nguyên.</p>}
       </fieldset>
       {error && <p className="admin-error" role="alert">{error}</p>}
       <div className="cm-actions cm-dialog-actions">
@@ -102,7 +102,7 @@ function SkillDelete({ current, close, saved }: { current: ManagedCareerSkill; c
     <div className="cm-dialog-body cm-form">
       <strong>{current.name}</strong>
       {current.careerCount > 0 && <p>Kỹ năng đang liên kết với {current.careerCount} vị trí nghề nghiệp. Vào mục Nghề nghiệp, mở menu Thao tác của từng vị trí → Tạo liên kết kỹ năng và xóa liên kết trước khi xóa.</p>}
-      {assessmentInUse && <p>Kỹ năng đang được dùng trong mục Quản lý năng lực. Hãy lưu trữ các cấu hình học phần đang áp dụng và xóa cấu hình năng lực của kỹ năng trước khi xóa kỹ năng dùng chung. Lịch sử vẫn được giữ nguyên.</p>}
+      {assessmentInUse && <p>Kỹ năng đang được dùng trong mục Quản lý năng lực. Hãy xóa liên kết của kỹ năng khỏi các cấu hình môn học đang áp dụng và xóa cấu hình năng lực của kỹ năng trước khi xóa kỹ năng dùng chung. Lịch sử vẫn được giữ nguyên.</p>}
       {!inUse && <p>Kỹ năng sẽ được xóa khỏi danh sách lựa chọn.</p>}
       {error && <p className="admin-error" role="alert">{error}</p>}
       <div className="cm-actions cm-dialog-actions">

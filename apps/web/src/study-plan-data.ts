@@ -289,7 +289,7 @@ export function poolSections(context: StudyPlanContext, plan: StudyPlanData): Po
   }
   const rest = own.filter((course) => !used.has(course.code));
   if (rest.length) sections.push(context.graduation
-    ? { id: "other-ctdt", title: "Môn khác trong CTĐT", note: "Tiêu chuẩn xét tốt nghiệp không yêu cầu", courses: rest }
+    ? { id: "other-ctdt", title: "Học phần khác trong CTĐT", note: "Tiêu chuẩn xét tốt nghiệp không yêu cầu", courses: rest }
     : { id: "electives", title: "Tự chọn khác", note: null, courses: rest });
   const other = context.courses.filter((course) => !course.applicable && open(course));
   if (other.length) sections.push({ id: "other", title: "Chuyên ngành khác", note: "Không tính cho chuyên ngành của bạn", courses: other });

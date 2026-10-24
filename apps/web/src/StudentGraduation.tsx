@@ -345,7 +345,7 @@ function CourseRow({ course, options }: { course: CourseView; options: TableOpti
   const state = row ? COURSE_STATES[row.state] : null;
   return <tr>
     <td className="sg-code-cell">{course.code}</td>
-    <td className="sg-name-cell">{course.name}{course.conditionOnly && <small>Môn điều kiện (*): cần đạt nhưng không tính tín chỉ tích lũy, điểm trung bình</small>}{row?.transferFrom && <small>Đã học trả nợ với khóa sau (mã {row.transferFrom}); cần làm thủ tục chuyển điểm</small>}</td>
+    <td className="sg-name-cell">{course.name}{course.conditionOnly && <small>Môn điều kiện (*): cần đạt nhưng không tính vào tín chỉ tích lũy và điểm trung bình</small>}{row?.transferFrom && <small>Đã học trả nợ với khóa sau (mã {row.transferFrom}); cần làm thủ tục chuyển điểm</small>}</td>
     {options.showGroup && <td className="sg-group-cell">{course.groupTitle}</td>}
     <td className="sg-num" data-label="TC">{formatNumber(course.credits)}</td>
     {options.hasResults && <>
@@ -387,7 +387,7 @@ function GroupTable({ groups, scale, hasResults }: { groups: GroupView[]; scale:
     <div className="sg-table-wrap sg-group-wrap">
       <table className="sg-table sg-group-table">
         <caption className="sr-only">Đối chiếu theo nhóm kiến thức</caption>
-        <thead><tr><th scope="col">Nhóm</th><th scope="col">Đã có</th><th scope="col">Yêu cầu</th><th scope="col">Còn thiếu</th><th scope="col">Kết quả</th></tr></thead>
+        <thead><tr><th scope="col">Nhóm</th><th scope="col">Đã đạt</th><th scope="col">Yêu cầu</th><th scope="col">Còn thiếu</th><th scope="col">Kết quả</th></tr></thead>
         {groups.map((group, index) => {
           const isOpen = Boolean(open[group.id]);
           const id = `sg-group-${index}`;
@@ -401,7 +401,7 @@ function GroupTable({ groups, scale, hasResults }: { groups: GroupView[]; scale:
                 </button>
                 <small>{group.kind === "mandatory" ? "Bắt buộc" : "Tự chọn"} · {formatNumber(group.courses.length)} học phần</small>
               </th>
-              <td data-label="Đã có">{group.achieved}
+              <td data-label="Đã đạt">{group.achieved}
                 {result && undecided > 0 && <small>+{formatNumber(undecided)} {result.unit} chưa rõ kết quả</small>}
                 {result?.kind === "mandatory" && result.accumulatedCredits !== null && <small>{formatNumber(result.accumulatedCredits)} TC tích lũy</small>}
               </td>

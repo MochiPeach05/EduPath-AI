@@ -152,11 +152,11 @@ export function CompetencyBulkAi({ cohort, canManage, revision, onSaved }: Props
     {canManage && <>
       {batch && batch.ready > 0 && <div className="comp-ai-apply">
         <label className="cm-check"><input type="checkbox" checked={confirmActive} disabled={busy !== null} onChange={(event) => setConfirmActive(event.target.checked)} />
-          <span>Tôi hiểu khi áp dụng, các môn này được tính ngay vào đánh giá năng lực của sinh viên mọi khóa có các môn đó.</span></label>
+          <span>Tôi hiểu rằng khi áp dụng, các môn này được tính ngay vào đánh giá năng lực của sinh viên mọi khóa có các môn đó.</span></label>
       </div>}
       {showDrafts && <div className="comp-ai-apply">
         <label className="cm-check"><input type="checkbox" checked={confirmDrafts} disabled={busy !== null} onChange={(event) => setConfirmDrafts(event.target.checked)} />
-          <span>Tôi hiểu khi áp dụng, {readyDrafts.toLocaleString("vi-VN")} môn đang ở bản nháp được tính ngay vào đánh giá năng lực của sinh viên mọi khóa có các môn đó.</span></label>
+          <span>Tôi hiểu rằng khi áp dụng, {readyDrafts.toLocaleString("vi-VN")} môn đang ở bản nháp được tính ngay vào đánh giá năng lực của sinh viên mọi khóa có các môn đó.</span></label>
         {drafts.length > readyDrafts && <p className="comp-hint">{(drafts.length - readyDrafts).toLocaleString("vi-VN")} bản nháp khác chưa có liên kết hoặc tổng trọng số chưa đủ 100% nên chưa áp dụng được; hãy hoàn thiện từng môn.</p>}
       </div>}
       <div className="cm-actions">
@@ -175,7 +175,7 @@ export function CompetencyBulkAi({ cohort, canManage, revision, onSaved }: Props
     </>}
     {clearing && <ClearCourses cohort={cohort} linked={linked} close={() => setClearing(false)} cleared={(count) => {
       setClearing(false);
-      setNotice(`Đã xóa liên kết và trọng số của ${count.toLocaleString("vi-VN")} môn học. Bấm "Chạy AI" để AI đề xuất lại.`);
+      setNotice(`Đã xóa liên kết và trọng số của ${count.toLocaleString("vi-VN")} môn học. Bấm “Chạy AI cho … môn chưa có liên kết” để AI đề xuất lại.`);
       onSaved();
     }} />}
   </section>;
@@ -207,9 +207,9 @@ export function ClearCourses({ cohort, linked, close, cleared }: { cohort: strin
         cleared(response.cleared);
       } catch (failure) { setError((failure as Error).message); setBusy(false); }
     }}>
-      <p>Toàn bộ liên kết kỹ năng và trọng số của <strong>{linked.toLocaleString("vi-VN")} môn học</strong>{cohort ? ` của ${cohort}` : ""} sẽ bị xóa; các môn về bản nháp trống.</p>
+      <p>Toàn bộ liên kết kỹ năng và trọng số của <strong>{linked.toLocaleString("vi-VN")} môn học</strong>{cohort ? ` thuộc ${cohort}` : ""} sẽ bị xóa; các môn chuyển về bản nháp trống.</p>
       <p className="cm-warning">Môn học dùng chung cho mọi khóa: sinh viên của mọi khóa có các môn này sẽ chưa có điểm năng lực từ các môn đó cho tới khi bạn lưu và áp dụng lại liên kết, trọng số. Lịch sử thay đổi của từng môn vẫn được giữ.</p>
-      <p className="comp-hint">Sau khi xóa, bấm "Chạy AI cho … môn chưa có liên kết" để AI đề xuất lại.</p>
+      <p className="comp-hint">Sau khi xóa, bấm “Chạy AI cho … môn chưa có liên kết” để AI đề xuất lại.</p>
       <label><RequiredLabel>Nhập {expected} để xác nhận</RequiredLabel><input ref={input} required value={code} maxLength={40} autoComplete="off" disabled={busy} onChange={(event) => { event.target.setCustomValidity(mismatchOf(event.target.value)); setCode(event.target.value); }} /></label>
       {error && <p className="admin-error cm-prewrap" role="alert">{error}</p>}
       <div className="cm-actions cm-dialog-actions">

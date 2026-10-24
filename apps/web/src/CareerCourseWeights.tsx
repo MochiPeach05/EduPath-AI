@@ -35,7 +35,7 @@ export function CareerWeightSelector({ state }: { state: WeightState }) {
     </label></div>
     <p>Trọng số là tỷ lệ đóng góp của từng học phần vào kỹ năng, theo đúng khóa và phiên bản chương trình đã chọn.</p>
     <Status {...remote} />
-    {selected && selected.activeCount === 0 && <p role="status">{selected.cohortCode} · Phiên bản {selected.version} chưa có cấu hình học phần nào đang áp dụng.</p>}
+    {selected && selected.activeCount === 0 && <p role="status">{selected.cohortCode} · Phiên bản {selected.version} chưa có cấu hình môn học nào đang áp dụng.</p>}
   </div>;
 }
 
@@ -56,7 +56,7 @@ export function CareerWeightCell({ state, skillId, skillName }: { state: WeightS
       <div className="cm-dialog-body career-weight-detail">
         <p><strong>{revisionLabel(selected)}</strong></p>
         {courses[0]?.scope && <p>Phạm vi kỹ năng: {courses[0].scope}</p>}
-        <p>Mỗi tỷ lệ thuộc phân bổ 100% của một học phần. Các tỷ lệ dưới đây không cộng thành trọng số của nghề nghiệp.</p>
+        <p>Mỗi tỷ lệ là phần của kỹ năng này trong 100% trọng số của học phần tương ứng. Các tỷ lệ dưới đây không cộng thành trọng số của nghề nghiệp.</p>
         <div className="cm-table-scroll"><table className="cm-table">
           <thead><tr><th className="cm-stt">STT</th><th>Mã học phần</th><th>Tên học phần</th><th>Trọng số</th></tr></thead>
           <tbody>{courses.map((course, index) => <tr key={course.courseCode}>

@@ -28,10 +28,10 @@ export const SURVEY_QUESTIONS = [
     { id: "business", label: "Khởi nghiệp hoặc làm tự do" }, { id: "unsure", label: "Chưa xác định" }] },
   { id: "environment", label: "Môi trường học tập, làm việc bạn thích", options: [
     { id: "alone", label: "Làm việc độc lập" }, { id: "team", label: "Làm việc theo nhóm" }, { id: "both", label: "Kết hợp cả hai" }] },
-  { id: "company", label: "Loại hình công ty mong muốn", options: [
+  { id: "company", label: "Nơi làm việc mong muốn", options: [
     { id: "large", label: "Công ty lớn, quy trình rõ ràng" }, { id: "startup", label: "Startup năng động" },
-    { id: "public", label: "Nhà nước, nghiên cứu" }, { id: "unsure", label: "Chưa xác định" }] },
-  { id: "partTime", label: "Bạn có làm thêm không", options: [
+    { id: "public", label: "Cơ quan nhà nước, viện nghiên cứu" }, { id: "unsure", label: "Chưa xác định" }] },
+  { id: "partTime", label: "Đi làm thêm", options: [
     { id: "no", label: "Không" }, { id: "other", label: "Có, không liên quan CNTT" }, { id: "it", label: "Có, liên quan CNTT" }] },
   { id: "leadership", label: "Kinh nghiệm dẫn dắt nhóm", options: [
     { id: "none", label: "Chưa từng" }, { id: "one", label: "1 dự án" }, { id: "few", label: "2–3 dự án" }, { id: "many", label: "Trên 4 dự án" }] },

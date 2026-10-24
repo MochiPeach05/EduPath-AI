@@ -39,7 +39,7 @@ describe("CompetencyBulkAi", () => {
     const drafts = render(null, [course("A", 2, "draft"), course("B", 3, "draft"), course("C", 0, "draft"), course("D", 0)]);
     expect(drafts).toContain("Áp dụng 2 bản nháp");
     expect(drafts).toMatch(/<button type="button" class="am-primary" disabled="">.*?Áp dụng 2 bản nháp<\/button>/s);
-    expect(drafts).toContain("Tôi hiểu khi áp dụng, 2 môn đang ở bản nháp được tính ngay vào đánh giá năng lực của sinh viên mọi khóa có các môn đó.");
+    expect(drafts).toContain("Tôi hiểu rằng khi áp dụng, 2 môn đang ở bản nháp được tính ngay vào đánh giá năng lực của sinh viên mọi khóa có các môn đó.");
     expect(drafts).toContain("1 bản nháp khác chưa có liên kết hoặc tổng trọng số chưa đủ 100%");
     expect(render(null)).not.toContain("bản nháp</button>");
   });

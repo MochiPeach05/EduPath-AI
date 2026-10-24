@@ -44,7 +44,7 @@ describe("CareerSkillAiSuggestions", () => {
   });
   it("disables creating when the server has AI switched off and explains an old worker", () => {
     expect(render(null, { status: { enabled: false, worker: { online: false, supportsSuggestions: false, seenAt: null } } })).toMatch(/Máy chủ chưa bật tính năng AI\.[\s\S]*<button type="button" class="am-primary" disabled="">/);
-    expect(render(null, { status: { enabled: true, worker: { online: true, supportsSuggestions: false, seenAt: null } } })).toContain("Khởi động lại worker AI để dùng tính năng này.");
+    expect(render(null, { status: { enabled: true, worker: { online: true, supportsSuggestions: false, seenAt: null } } })).toContain("Khởi động lại máy AI để dùng tính năng này.");
   });
   it("treats a cancelled suggestion as no suggestion", () => {
     expect(render(suggestion({ status: "cancelled" }))).toContain("Tạo đề xuất</button>");

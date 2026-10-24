@@ -27,7 +27,7 @@ const errors: Record<string, string> = {
   invalid_course_row:
     "Có dòng học phần thiếu tên hoặc sai mã. Hãy kiểm tra dòng được chỉ ra bên dưới.",
   invalid_course_credits:
-    "Có học phần có tín chỉ không hợp lệ. Hãy sửa trong Excel rồi nhập lại.",
+    "Có học phần mang số tín chỉ không hợp lệ. Hãy sửa trong Excel rồi nhập lại.",
   invalid_course_type:
     "Có học phần chưa xác định BB/TC. Hãy kiểm tra cột loại học phần.",
   duplicate_course:
@@ -47,7 +47,7 @@ const errors: Record<string, string> = {
   invalid_curriculum_input:
     "Thông tin chưa hợp lệ. Kiểm tra mã học phần, khối kiến thức, tín chỉ và học kỳ (1–3).",
   insufficient_role: "Chỉ quản trị viên được thay đổi khung CTĐT.",
-  authentication_required: "Phiên đăng nhập đã hết. Hãy đăng nhập lại.",
+  authentication_required: "Phiên đăng nhập đã hết hạn. Hãy đăng nhập lại.",
   invalid_origin: "Không xác nhận được nguồn yêu cầu. Hãy tải lại trang.",
   database_required: "Chưa kết nối được cơ sở dữ liệu.",
   conflicting_elective_credits:
@@ -73,7 +73,7 @@ function WarningList({ data }: { data: CurriculumData }) {
     <div className="cm-warning">
       <strong>{data.warnings.length} cảnh báo cần rà soát</strong>
       <p>
-        Giữ nguyên dữ liệu nguồn. Quan hệ chưa rõ sẽ cần được xác nhận trước khi
+        Giữ nguyên dữ liệu nguồn. Điều kiện học phần chưa rõ sẽ cần được xác nhận trước khi
         dùng để gợi ý lộ trình.
       </p>
       <ul>
@@ -490,7 +490,7 @@ function ImportDialog({
             )}
             {current && (
               <p>
-                Thao tác tạo phiên bản mới cho toàn bộ khung. Phiên bản hiện tại
+                Thao tác này sẽ tạo phiên bản mới cho toàn bộ khung. Phiên bản hiện tại
                 v{current.version} được giữ trong lịch sử.
               </p>
             )}
@@ -956,7 +956,7 @@ function Courses({
           />
         </label>
         <label>
-          Khối học phần
+          Khối kiến thức
           <select
             value={draft.block}
             onChange={(e) => setDraft({ ...draft, block: e.target.value })}
@@ -1576,7 +1576,7 @@ function CourseDialog({
                 </select>
               </label>
               <label>
-                Năm học dự kiến
+                Năm thứ (dự kiến)
                 <input
                   type="number"
                   min={1}

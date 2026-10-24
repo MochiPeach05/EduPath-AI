@@ -27,7 +27,7 @@ async function updateProfile(input: { careerPositionId: string | null; specialty
     if (res.status === 401) window.dispatchEvent(new Event("edupath-session-expired"));
     throw new Error(
       body.error === "career_unavailable"
-        ? "Vị trí vừa bị xóa khỏi danh mục. Hãy chọn vị trí khác hoặc bỏ chọn."
+        ? "Vị trí nghề nghiệp này vừa bị xóa khỏi danh mục. Hãy chọn vị trí khác hoặc bỏ chọn."
         : body.error === "specialty_unavailable"
           ? "Chuyên ngành này không áp dụng cho khóa của bạn. Hãy chọn chuyên ngành khác."
         : res.status === 401

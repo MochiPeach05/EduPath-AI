@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { PlanData, PlanItem } from "./plan-types";
-import { searchTerm } from "./student-curriculum-types";
+import { courseTypeLabel, searchTerm } from "./student-curriculum-types";
 import { useLiveData } from "./use-live-data";
 import type { Transcript } from "./StudentTranscript";
 import { INFERRED_RESULT_NOTE, transcriptOutcomes } from "./transcript-results";
@@ -50,7 +50,7 @@ export default function StudentPlans() {
           <p className="sc-eyebrow">KẾ HOẠCH ĐÀO TẠO</p>
           <h2>Tra cứu kế hoạch theo học kỳ</h2>
           <p className="sc-muted">
-            Xem các môn học dự kiến trong từng năm học, học kỳ của khóa tuyển
+            Xem các học phần dự kiến trong từng năm học, học kỳ của khóa tuyển
             sinh.
           </p>
         </div>
@@ -216,13 +216,13 @@ function PlanContents({ id }: { id: string }) {
                           {item.notes && <small>{item.notes}</small>}
                         </td>
                         <td>{item.credits ?? "—"}</td>
-                        <td>{item.type || "—"}</td>
+                        <td>{item.type ? courseTypeLabel(item.type) : "—"}</td>
                         <td>
                           {item.prerequisite && (
                             <div>Tiên quyết: {item.prerequisite}</div>
                           )}
                           {item.prior && <div>Học trước: {item.prior}</div>}
-                          {!item.prerequisite && !item.prior && "Chưa cung cấp"}
+                          {!item.prerequisite && !item.prior && "Không ghi trong kế hoạch"}
                         </td>
                         <td className="sc-result-cell">
                           {outcome && (
@@ -244,7 +244,7 @@ function PlanContents({ id }: { id: string }) {
             </div>
           );
         })}
-      {!rows.length && <p>Không có môn học phù hợp với bộ lọc.</p>}
+      {!rows.length && <p>Không có học phần phù hợp với bộ lọc.</p>}
     </section>
   );
 }

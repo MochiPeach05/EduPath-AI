@@ -178,5 +178,5 @@ export function joinVi(parts: readonly string[]): string {
   return `${parts.slice(0, -1).join(", ")} và ${parts[parts.length - 1]}`;
 }
 
-export const helpsText = (skills: readonly string[]) => (skills.length ? `Giúp kỹ năng ${joinVi(skills)}.` : "");
+export const helpsText = (skills: readonly string[]) => (skills.length ? `Giúp rèn kỹ năng ${joinVi(skills)}.` : "");
 export const sentence = (value: string) => capitalize(value.trim());

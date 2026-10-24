@@ -28,7 +28,7 @@ const GRADUATION_STATUS_LABELS: Record<TriState, string> = {
 const UNRESOLVED_REASONS: Record<GraduationResolution, string> = {
   specialty: "Chưa có tiêu chuẩn xét tốt nghiệp phù hợp với chuyên ngành của bạn.",
   general: "Chưa có tiêu chuẩn xét tốt nghiệp chung cho khóa của bạn.",
-  specialty_unset: "Khóa của bạn có tiêu chuẩn tốt nghiệp riêng cho từng chuyên ngành. Hãy chọn chuyên ngành trong hồ sơ để đối chiếu.",
+  specialty_unset: "Khóa của bạn có tiêu chuẩn xét tốt nghiệp riêng cho từng chuyên ngành. Hãy chọn chuyên ngành trong hồ sơ để đối chiếu.",
   not_found: "Chưa có tiêu chuẩn xét tốt nghiệp đang áp dụng cho khóa và chuyên ngành của bạn.",
   ambiguous: "Có nhiều tiêu chuẩn xét tốt nghiệp cùng phù hợp nên chưa chọn được tiêu chuẩn để đối chiếu.",
 };
@@ -102,7 +102,7 @@ export function graduationGroupLabels(standard: Pick<GraduationData, "groups" | 
   return new Map(standard.groups.map((group) => {
     if ((names.get(group.name.trim()) ?? 0) < 2) return [group.id, group.name];
     const codes = standardGroupCodes(standard, group.id);
-    return [group.id, `${group.name} · ${codes.length} học phần${codes[0] ? `, gồm ${codes[0]}` : ""}`];
+    return [group.id, `${group.name} · ${codes.length} học phần${codes[0] ? `, trong đó có ${codes[0]}` : ""}`];
   }));
 }
 
@@ -320,7 +320,7 @@ export function assessGraduationGpa(
     credits += best.credits;
     total += value * best.credits;
   }
-  if (!credits) return unknown(`Chưa có điểm các môn tính điểm trung bình hệ ${scale}.`);
+  if (!credits) return unknown(`Chưa có điểm của các môn được tính vào điểm trung bình hệ ${scale}.`);
   return result(total / credits, "calculated");
 }
 

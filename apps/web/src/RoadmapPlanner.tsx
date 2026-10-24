@@ -90,11 +90,11 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
     </header>
     {!context.curriculum && <p className="rm-note">Chưa có chương trình đào tạo cho khóa của bạn nên chưa có danh sách học phần để lên kế hoạch.</p>}
     {origin?.kind === "ai" && <p className="rm-origin"><Mark kind="planned" /> {origin.added
-      ? `Đã thêm ${origin.added} học phần do lộ trình AI đề xuất (lộ trình soạn lúc ${dateTime(origin.completedAt)}), từ ${termLabel(origin.term)} theo học kỳ kế hoạch đào tạo mở môn. Bạn điều chỉnh tiếp bên dưới.`
+      ? `Đã thêm ${origin.added} học phần do lộ trình AI đề xuất (lộ trình soạn lúc ${dateTime(origin.completedAt)}), xếp từ ${termLabel(origin.term)} trở đi, vào học kỳ mà kế hoạch đào tạo mở môn đó. Bạn điều chỉnh tiếp bên dưới.`
       : `Các học phần lộ trình AI đề xuất (soạn lúc ${dateTime(origin.completedAt)}) đã có sẵn trong kế hoạch.`}</p>}
-    {origin?.kind === "prefill" && <p className="rm-origin"><Mark kind="planned" /> Kế hoạch được điền sẵn các học phần bắt buộc theo kế hoạch đào tạo của khóa. Khi bạn chỉnh sửa, kế hoạch sẽ được lưu.</p>}
+    {origin?.kind === "prefill" && <p className="rm-origin"><Mark kind="planned" /> Đây là kế hoạch điền sẵn, sẽ được lưu khi bạn chỉnh sửa.</p>}
     {!plan.terms.some((term) => term.courses.length) && !runningIn(context, context.currentTerm).length && context.curriculum && <div className="rm-origin rm-origin-empty">
-      <p>Chưa có học phần nào được điền sẵn: các học phần còn lại của bạn đã trễ so với kế hoạch đào tạo, hoặc bạn chưa tạo lộ trình AI. Hãy tạo Lộ trình AI để được đề xuất, rồi điều chỉnh tại đây.</p>
+      <p>Chưa có học phần nào được điền sẵn: các học phần còn lại của bạn đã trễ so với kế hoạch đào tạo, hoặc bạn chưa tạo lộ trình AI. Hãy tạo lộ trình ở mục Lộ trình AI đề xuất, rồi điều chỉnh tại đây.</p>
       <button type="button" className="sw-outline" onClick={onOpenAi}>Mở Lộ trình AI đề xuất</button>
     </div>}
     <div className="rm-planner">
@@ -163,7 +163,7 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
           <label className="rm-search"><span className="sr-only">Tìm theo tên hoặc mã học phần</span>
             <input type="search" value={query} placeholder="Tên hoặc mã học phần" onChange={(event) => setQuery(event.target.value)} />
           </label>
-          {query.trim() && !found.length && <p className="rm-empty">Không có học phần phù hợp còn chưa học.</p>}
+          {query.trim() && !found.length && <p className="rm-empty">Không tìm thấy học phần phù hợp mà bạn chưa học và chưa có trong kế hoạch.</p>}
           <ul>{found.map(courseItem)}</ul>
         </div>}
         <p className="rm-side-hint">Thả học phần vào đây để bỏ khỏi kế hoạch.</p>
