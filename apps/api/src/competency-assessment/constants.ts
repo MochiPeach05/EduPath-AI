@@ -46,8 +46,11 @@ import type { Confidence, FitCode, GapStatus } from "./types.js";
  * "Cần tự học" (only another specialty teaches it) or "Chưa đủ dữ liệu" (no course measures it); only "Sắp học" waits
  * (user, 2026-10-24: "Tính đủ mọi kỹ năng", after a career with 0/4 skills met scored 50,6 because its two no-data
  * skills were left out). "Chưa đủ dữ liệu" as a level now means more than half of the coefficients are "Sắp học".
+ * v15: "Sắp học" counts 0 too (user, 2026-10-25: "sắp học là 0 luôn đi"): the score is how ready the student is
+ * now, so a career whose skills are mostly still to come can no longer score high on one or two met skills. Only
+ * exempt-only skills (met without a score) wait; "Chưa đủ dữ liệu" as a level is left for careers without skills.
  */
-export const CALC_VERSION = "comp-calc-v14";
+export const CALC_VERSION = "comp-calc-v15";
 /**
  * The graduation evaluation uses no skill level, so it keeps the version of its last change:
  * comp-calc-v10 changed only levels and must not re-date every student's graduation advice.
@@ -79,8 +82,8 @@ export const FIT_BELOW_FLOOR = 40;
 /**
  * "Điểm phù hợp" (comp-calc-v11, every skill counted since v14): the career's skills averaged like a score,
  * "Bắt buộc" counted twice (its coefficient). A met or below skill counts its score; a skill without a score
- * counts 0, whether not studied, "Cần tự học" or "Chưa đủ dữ liệu" (user, 2026-10-24: "Tính đủ mọi kỹ năng").
- * Only upcoming ("Sắp học") and exempt-only skills are left out; null when nothing is left. Rounded down to
+ * counts 0, whether not studied, "Cần tự học", "Chưa đủ dữ liệu" (user, 2026-10-24: "Tính đủ mọi kỹ năng") or
+ * "Sắp học" (v15, 2026-10-25). Only exempt-only skills are left out; null when nothing is left. Rounded down to
  * 2 decimals like the scores. It is read from the stored requirements, so the page and the AI prompt show
  * older results the same way. Before v11 the level came from `fit`, the share of requirement credit (all
  * met = 100% however high the scores). Mirrored in apps/web/src/student-competency-data.ts (fitScoreOf).
@@ -88,7 +91,7 @@ export const FIT_BELOW_FLOOR = 40;
 export function fitScoreOf(requirements: readonly { status: GapStatus; score: number | null; coefficient: number }[]): number | null {
   let sum = 0, weight = 0;
   for (const req of requirements) {
-    const value = req.status === "met" || req.status === "below" ? req.score : req.status === "not_studied" || req.status === "no_data" ? 0 : null;
+    const value = req.status === "met" || req.status === "below" ? req.score : 0;
     if (value === null) continue;
     sum += req.coefficient * value;
     weight += req.coefficient;
@@ -96,18 +99,18 @@ export function fitScoreOf(requirements: readonly { status: GapStatus; score: nu
   return weight > 0 ? Math.floor((sum / weight) * 100 + 1e-9) / 100 : null;
 }
 /**
- * Share of the coefficients that are not "Sắp học" (v14). Read from the requirements like fitScoreOf, so stored
- * results (whose dataShare was the share with a score before v14) show the same level. Mirrored in the web.
+ * Share of the coefficients the fit score counts: everything but exempt-only skills (v15; v14 left "Sắp học" out).
+ * Read from the requirements like fitScoreOf, so stored results show the same level. Mirrored in the web.
  */
-export function fitDataShareOf(requirements: readonly { status: GapStatus; coefficient: number }[]): number {
+export function fitDataShareOf(requirements: readonly { status: GapStatus; score: number | null; coefficient: number }[]): number {
   let total = 0, counted = 0;
   for (const req of requirements) {
     total += req.coefficient;
-    if (req.status !== "upcoming") counted += req.coefficient;
+    if (!(req.status === "met" && req.score === null)) counted += req.coefficient;
   }
   return total > 0 ? Math.round((counted / total) * 10000) / 10000 : 0;
 }
-/** Below this share (more than half of the coefficients still "Sắp học") the fit label is "Chưa đủ dữ liệu". */
+/** Below this share (more than half of the coefficients exempt-only, or no skill at all) the fit label is "Chưa đủ dữ liệu". */
 export const FIT_MIN_DATA_SHARE = 0.5;
 export const FIT_LABELS: Record<FitCode, string> = {
   very_fit: "Rất phù hợp", fit: "Phù hợp", average: "Trung bình", low_fit: "Ít phù hợp", not_fit: "Không phù hợp",

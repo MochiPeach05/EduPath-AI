@@ -128,20 +128,23 @@ describe("formula helpers (spec §7.3, §7.5, §7.6)", () => {
     expect([fitCodeOf(100, 0.49), fitCodeOf(100, 0.5), fitCodeOf(null, 1)]).toEqual(["insufficient_data", "very_fit", "insufficient_data"]);
   });
 
-  it("averages the career's skills into a 0–100 điểm phù hợp: Bắt buộc twice, 0 without a score, Sắp học waits (comp-calc-v11, v14)", () => {
+  it("averages the career's skills into a 0–100 điểm phù hợp: Bắt buộc twice, 0 without a score, Sắp học too (comp-calc-v11, v14, v15)", () => {
     const req = (status: "met" | "below" | "not_studied" | "upcoming" | "no_data", score: number | null, coefficient = 1) => ({ status, score, coefficient });
     // The student's case (2026-10-22): every measured skill met, scored 92 on average → 92, not 100%.
-    expect(fitScoreOf([req("met", 95, 2), req("met", 90), req("met", 89), req("upcoming", null)])).toBe(92.25);
+    expect(fitScoreOf([req("met", 95, 2), req("met", 90), req("met", 89)])).toBe(92.25);
+    // A Sắp học skill counts 0 (v15, 2026-10-25: "sắp học là 0 luôn đi"): 369 / 5.
+    expect(fitScoreOf([req("met", 95, 2), req("met", 90), req("met", 89), req("upcoming", null)])).toBe(73.8);
     // Not studied and no data both count 0 (v14: "Tính đủ mọi kỹ năng"): (2 × 90 + 50 + 0 + 0) / 5.
     expect(fitScoreOf([req("met", 90, 2), req("below", 50), req("not_studied", null), req("no_data", null)])).toBe(46);
     // The user's case (2026-10-24): 0/4 met, Bắt buộc 76 below, a Bắt buộc and an Ưu tiên without data, an Ưu tiên not
     // studied: 152 / 6 = 25,33 (it was 152 / 3 = 50,66 "Ít phù hợp" while the two no-data skills were left out).
     expect(fitScoreOf([req("below", 76, 2), req("no_data", null, 2), req("not_studied", null), req("no_data", null)])).toBe(25.33);
-    // The data share is what is not "Sắp học": more than half still upcoming reads "Chưa đủ dữ liệu".
-    expect(fitDataShareOf([req("met", 80, 2), req("upcoming", null, 2), req("no_data", null)])).toBe(0.6);
-    expect(fitDataShareOf([req("met", 80), req("upcoming", null, 2)])).toBe(0.3333);
-    // Exempt-only (met without a score) and upcoming are left out.
-    expect(fitScoreOf([req("met", null), req("upcoming", null)])).toBeNull();
+    // The data share is what the score counts: everything but exempt-only skills (v15).
+    expect(fitDataShareOf([req("met", 80, 2), req("upcoming", null, 2), req("no_data", null)])).toBe(1);
+    expect(fitDataShareOf([req("met", 80), req("met", null, 2)])).toBe(0.3333);
+    // Exempt-only (met without a score) is left out; Sắp học counts 0.
+    expect(fitScoreOf([req("met", null), req("upcoming", null)])).toBe(0);
+    expect(fitScoreOf([req("met", null)])).toBeNull();
     expect(fitScoreOf([req("met", 80), req("met", null, 2)])).toBe(80);
     expect(fitScoreOf([req("met", 71), req("below", 66.67)])).toBe(68.83);
   });
@@ -395,9 +398,9 @@ describe("career gaps and fit (spec §7.5–§7.7)", () => {
     const fit = (2 * 1 + 1 * 0.5 * (56 - 40) / 22.5 + 2 * 0.5 * (47 - 40) / 40) / 5;
     expect(result.career!.fit).toBeCloseTo(fit, 4);
     expect(result.career).toMatchObject({
-      // Điểm phù hợp (v14): (2 × 88 + 56 + 2 × 47 + 0 for Phân tích dữ liệu lớn, Cần tự học + 0 for Docker, no data) / 7;
-      // Thuyết trình (Sắp học) waits, so the data share is 7 / 8.
-      fitScore: 46.57, fitCode: "not_fit", fitLabel: "Không phù hợp", dataShare: 0.875,
+      // Điểm phù hợp (v15): (2 × 88 + 56 + 2 × 47 + 0 for Phân tích dữ liệu lớn, Cần tự học + 0 for Thuyết trình, Sắp
+      // học + 0 for Docker, no data) / 8; every skill counts, so the data share is 1.
+      fitScore: 40.75, fitCode: "not_fit", fitLabel: "Không phù hợp", dataShare: 1,
       summaryText: "Đạt 1/6 kỹ năng · 1 sắp học · 1 cần tự học · 1 chưa đủ dữ liệu", dataText: "4/6 kỹ năng có dữ liệu",
       counts: { total: 6, met: 1, below: 2, upcoming: 1, notStudied: 0, noData: 2, withData: 4 },
       weightedMeanScore: 65.2, weightedMeanCount: 3,
@@ -458,7 +461,8 @@ describe("career gaps and fit (spec §7.5–§7.7)", () => {
     expect(early.career!.requirements.map((item) => [item.title, item.status, item.upcomingTerm])).toEqual([
       ["Kiểm thử phần mềm", "upcoming", "HK243"], ["Lập trình C#", "not_studied", null], ["Phát triển web", "upcoming", "HK241"],
     ]);
-    expect(early.career).toMatchObject({ fitCode: "insufficient_data", fit: 0, dataShare: 0.25 });
+    // Sắp học counts 0 (v15): nothing is scored yet, so the fit is 0 "Không phù hợp" rather than "Chưa đủ dữ liệu".
+    expect(early.career).toMatchObject({ fitCode: "not_fit", fitScore: 0, fit: 0, dataShare: 1 });
     expect(early.progress!.late.map((entry) => ("code" in entry ? entry.code : entry.label))).toEqual(["71NAD110013", "71ITSE30103"]);
   });
 

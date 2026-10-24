@@ -280,14 +280,15 @@ export const isGap = (req: Pick<CareerRequirementResult, "status">) => req.statu
  * "Điểm phù hợp" 0–100 (comp-calc-v11, user 2026-10-22: "Sao lại 100% tròn nhỉ tại vì nó chỉ chấm 92
  * điểm và sửa lại thành đơn vị điểm"): the career's skills averaged like a score, Bắt buộc counted
  * twice; a met or below skill counts its score, a skill without a score 0 — not studied, "Cần tự học" or
- * "Chưa đủ dữ liệu" alike (comp-calc-v14, user 2026-10-24: "Tính đủ mọi kỹ năng"); only upcoming and
- * exempt-only skills are left out. Read from the stored requirements, so older results show it too.
+ * "Chưa đủ dữ liệu" alike (comp-calc-v14, user 2026-10-24: "Tính đủ mọi kỹ năng") and "Sắp học" too (v15,
+ * 2026-10-25: "sắp học là 0 luôn đi"); only exempt-only skills are left out. Read from the stored requirements,
+ * so older results show it too.
  * Mirrors the API's fitScoreOf (constants.ts).
  */
 export function fitScoreOf(requirements: readonly Pick<CareerRequirementResult, "status" | "score" | "coefficient">[]): number | null {
   let sum = 0, weight = 0;
   for (const req of requirements) {
-    const value = req.status === "met" || req.status === "below" ? req.score : req.status === "not_studied" || req.status === "no_data" ? 0 : null;
+    const value = req.status === "met" || req.status === "below" ? req.score : 0;
     if (value === null) continue;
     sum += req.coefficient * value;
     weight += req.coefficient;
@@ -297,17 +298,17 @@ export function fitScoreOf(requirements: readonly Pick<CareerRequirementResult, 
 /**
  * The fit level: the điểm phù hợp on the bounds of the competency levels (user, 2026-10-22: "Đồng bộ
  * cái mức phù hợp bên này thành tương tự của phần đánh giá năng lực"): Rất phù hợp ≥ 90, Phù hợp ≥ 80,
- * Trung bình ≥ 62,5, Ít phù hợp ≥ 50, Không phù hợp; "Chưa đủ dữ liệu" when more than half of the
- * coefficients are still "Sắp học" (v14). Same as the engine's fitCodeOf (FIT_MIN_DATA_SHARE); the share is
+ * Trung bình ≥ 62,5, Ít phù hợp ≥ 50, Không phù hợp; "Chưa đủ dữ liệu" when the career has no skill the score
+ * can count (v15). Same as the engine's fitCodeOf (FIT_MIN_DATA_SHARE); the share is
  * read from the requirements (fitDataShareOf), not the stored dataShare, so older results show the same level.
  */
 export type FitLevel = "very_fit" | "fit" | "average" | "low_fit" | "not_fit" | "insufficient_data";
-/** Share of the coefficients that are not "Sắp học" (v14). Mirrors the API's fitDataShareOf. */
-export function fitDataShareOf(requirements: readonly Pick<CareerRequirementResult, "status" | "coefficient">[]): number {
+/** Share of the coefficients the fit score counts: everything but exempt-only skills (v15). Mirrors the API's fitDataShareOf. */
+export function fitDataShareOf(requirements: readonly Pick<CareerRequirementResult, "status" | "score" | "coefficient">[]): number {
   let total = 0, counted = 0;
   for (const req of requirements) {
     total += req.coefficient;
-    if (req.status !== "upcoming") counted += req.coefficient;
+    if (!(req.status === "met" && req.score === null)) counted += req.coefficient;
   }
   return total > 0 ? Math.round((counted / total) * 10000) / 10000 : 0;
 }

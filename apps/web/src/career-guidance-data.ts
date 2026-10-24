@@ -77,7 +77,7 @@ export const missingSkills = (career: GuidanceCareer) => sortRequirements(comput
   .filter((row) => row.status === "below" || row.status === "not_studied" || row.status === "no_data").map(requirementName);
 /** How the điểm phù hợp is counted (comp-calc-v14), as "Thang mức phù hợp" of Khoảng trống kỹ năng says it. */
 export const FIT_RULE_TEXT = "Điểm phù hợp là trung bình điểm các kỹ năng của nghề, kỹ năng Bắt buộc tính gấp đôi kỹ năng Ưu tiên; "
-  + "kỹ năng chưa có điểm (chưa học, cần tự học, chưa đủ dữ liệu) tính 0 điểm, kỹ năng sắp học chưa được tính.";
+  + "kỹ năng chưa có điểm (chưa học, sắp học, cần tự học, chưa đủ dữ liệu) tính 0 điểm. Điểm sẽ tăng khi bạn học các học phần sắp học.";
 /** A requirement's score as Khoảng trống kỹ năng prints it ("—" without one). */
 export const requirementScoreText = (requirement: Pick<GuidanceRequirement, "score">) => (requirement.score === null ? "—" : formatScore(requirement.score));
 /** The count lines of Khoảng trống kỹ năng: "Đạt x/y kỹ năng · z sắp học · s cần tự học · t chưa đủ dữ liệu · u/y kỹ năng có dữ liệu". */

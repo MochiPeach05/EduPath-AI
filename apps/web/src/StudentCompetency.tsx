@@ -521,7 +521,7 @@ function GraduationSection() {
 function FitScale({ career }: { career: NonNullable<AssessmentResult["career"]> }) {
   const level = fitLevelOf(career);
   const own = level === "insufficient_data"
-    ? "Hơn một nửa yêu cầu của nghề còn sắp học nên chưa xếp mức (Chưa đủ dữ liệu)." : null;
+    ? "Nghề này chưa có kỹ năng nào tính được điểm nên chưa xếp mức (Chưa đủ dữ liệu)." : null;
   return <details className="scomp-legend scomp-fit-legend"><summary>Thang mức phù hợp</summary>
     <ul>{FIT_SCALE.map((item) => <li key={item.code}>
       <span className="scomp-fit-scale-name"><FitBadge level={item.code} />{item.code === level && <span className="scomp-career-tag">Mức của bạn</span>}</span>
@@ -530,7 +530,7 @@ function FitScale({ career }: { career: NonNullable<AssessmentResult["career"]> 
     </li>)}</ul>
     <p className="scomp-meta">Cùng ngưỡng với Thang mức năng lực ở trang Đánh giá năng lực.</p>
     {own && <p className="scomp-meta">{own}</p>}
-    <p className="scomp-meta">Cách tính điểm phù hợp: trung bình điểm các kỹ năng của nghề, kỹ năng Bắt buộc tính gấp đôi kỹ năng Ưu tiên; kỹ năng chưa có điểm (chưa học, cần tự học, chưa đủ dữ liệu) tính 0 điểm. Kỹ năng sắp học hoặc chỉ có học phần miễn/công nhận chưa được tính.</p>
+    <p className="scomp-meta">Cách tính điểm phù hợp: trung bình điểm các kỹ năng của nghề, kỹ năng Bắt buộc tính gấp đôi kỹ năng Ưu tiên; kỹ năng chưa có điểm (chưa học, sắp học, cần tự học, chưa đủ dữ liệu) tính 0 điểm. Kỹ năng chỉ có học phần miễn/công nhận chưa được tính.</p>
   </details>;
 }
 
@@ -563,7 +563,7 @@ function GapSummary({ result }: { result: AssessmentResult }) {
       </li>)}</ul>
         : <p className={career.requirements.length ? "scomp-meta sg-status-pass" : "scomp-meta"}>{career.requirements.length ? career.requirements.some((req) => req.status === "upcoming") ? "✓ Bạn đã đạt mọi kỹ năng của nghề này, trừ các kỹ năng sắp học." : "✓ Bạn đã đạt mọi kỹ năng của nghề này." : "Nghề này chưa có yêu cầu kỹ năng trong danh mục nên chưa so sánh được."}</p>}
     </div>
-    <p className="scomp-meta">{careerThresholdsLine(career)} Kỹ năng chưa có điểm (chưa học, cần tự học, chưa đủ dữ liệu) tính 0 điểm khi tính mức phù hợp; kỹ năng sắp học chưa được tính.</p>
+    <p className="scomp-meta">{careerThresholdsLine(career)} Kỹ năng chưa có điểm (chưa học, sắp học, cần tự học, chưa đủ dữ liệu) tính 0 điểm khi tính mức phù hợp; điểm sẽ tăng khi bạn học các học phần sắp học.</p>
     <FitScale career={career} />
   </Section>;
 }

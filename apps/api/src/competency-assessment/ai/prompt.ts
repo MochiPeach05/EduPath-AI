@@ -32,8 +32,9 @@ import { AI_OUTPUT_LIMITS as L, buildOutputSchema, type JsonSchema, type OutputS
  * comp-v10: a career skill only another specialty's courses teach reads "Cần tự học", like the page (user, 2026-10-23).
  * comp-v11: "Chưa đủ dữ liệu" and "Cần tự học" skills count 0 toward the fit (comp-calc-v14), still not a weakness;
  * "Cần tự học" also covers a skill only electives the student did not choose teach.
+ * comp-v12: "Sắp học" skills count 0 toward the fit too (comp-calc-v15).
  */
-export const PROMPT_VERSION = "comp-v11";
+export const PROMPT_VERSION = "comp-v12";
 
 /** Gemma reasons before it writes the comment; the worker sends it to Ollama as think:true. */
 const AI_THINK = true;
@@ -133,8 +134,8 @@ Hệ thống đã tính sẵn mọi con số từ bảng điểm, trọng số h
 Nguyên tắc dữ liệu (bắt buộc):
 1. Không tự tính, ước lượng hay làm tròn lại bất kỳ con số nào. Nếu nhắc đến số liệu, chép đúng từng chữ số như trong dữ liệu, không thêm chữ số thập phân (dữ liệu ghi "điểm 83" thì viết 83, không viết 83,5 hay 83,92).
 2. Chỉ nói về kỹ năng, nhóm năng lực, học phần, nghề nghiệp có trong dữ liệu. Khóa kỹ năng (S01…), khóa nhóm (G1…) và mã học phần chỉ dùng trong các trường skillKey, groupKey, courseCode; trong văn bản luôn gọi bằng tên. Chỉ chọn học phần trong danh sách gợi ý của đúng kỹ năng đó. Không bịa tên khóa học, chứng chỉ, đường link hay giảng viên.
-3. Kỹ năng "Chưa đủ dữ liệu" nghĩa là chương trình đào tạo chưa có học phần đo kỹ năng này; khi tính mức phù hợp với nghề, kỹ năng này và kỹ năng "Cần tự học" được tính 0 điểm vì chưa có điểm chứng minh. Không kết luận sinh viên yếu; hãy gợi ý cách tự học và tự kiểm chứng bằng sản phẩm cụ thể. Kỹ năng "Cần tự học" nghĩa là kỹ năng chỉ được dạy trong học phần của chuyên ngành khác hoặc trong học phần tự chọn sinh viên không chọn (nhóm tự chọn đã đủ tín chỉ), không nằm trong chương trình của sinh viên; cũng không kết luận sinh viên yếu mà gợi ý tự học như trên.
-4. "Chưa có minh chứng" nghĩa là sinh viên chưa học học phần liên quan; "Sắp học" nghĩa là học phần nằm ở học kỳ sau theo kế hoạch. Cả hai đều không phải học kém.
+3. Kỹ năng "Chưa đủ dữ liệu" nghĩa là chương trình đào tạo chưa có học phần đo kỹ năng này; khi tính mức phù hợp với nghề, kỹ năng này, kỹ năng "Cần tự học" và kỹ năng "Sắp học" được tính 0 điểm vì chưa có điểm chứng minh. Không kết luận sinh viên yếu; hãy gợi ý cách tự học và tự kiểm chứng bằng sản phẩm cụ thể. Kỹ năng "Cần tự học" nghĩa là kỹ năng chỉ được dạy trong học phần của chuyên ngành khác hoặc trong học phần tự chọn sinh viên không chọn (nhóm tự chọn đã đủ tín chỉ), không nằm trong chương trình của sinh viên; cũng không kết luận sinh viên yếu mà gợi ý tự học như trên.
+4. "Chưa có minh chứng" nghĩa là sinh viên chưa học học phần liên quan; "Sắp học" nghĩa là học phần nằm ở học kỳ sau theo kế hoạch; mức phù hợp sẽ tăng khi sinh viên học các học phần đó. Cả hai đều không phải học kém.
 5. Mỗi kỹ năng có "phạm vi" mô tả những gì học phần thực sự dạy. Không khẳng định sinh viên thành thạo công cụ mà phạm vi ghi là chưa xác nhận.
 6. Không phán xét con người, không so sánh với sinh viên khác, không hứa hẹn về kết quả tốt nghiệp hay việc làm. Kết quả xét tốt nghiệp chính thức do nhà trường công bố.
 7. Nếu có cảnh báo dữ liệu, nói ngắn gọn cảnh báo đó ảnh hưởng thế nào tới độ chính xác.

@@ -652,7 +652,7 @@ function assess(inputs: AssessmentInputs): Assessment {
       ? included.reduce((sum, row) => sum + row.coefficient * (fitCredit(row.status, workById.get(row.skillId ?? "")?.score ?? null, row.threshold) ?? 0), 0) / includedCoefficient
       : null;
     const fit = fitRaw === null ? null : round(fitRaw, 4);
-    // The share that is not "Sắp học" (v14): the fit score counts every other skill, 0 without a score.
+    // The share the fit score counts (v15): every skill but exempt-only ones, 0 without a score.
     const dataShare = fitDataShareOf(rows);
     // "Điểm phù hợp" (v11) from the stored rows: the page and the AI prompt derive the level from them too.
     const fitScore = fitScoreOf(rows);
