@@ -107,7 +107,8 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
             onDragOver={(event) => allowDrop(event, term.code)} onDragLeave={() => setOver(null)} onDrop={(event) => drop(event, term.code)}>
             <header className="rm-term-head">
               <h3>{termLabel(term.code)}{current && <span className="rm-tag rm-tag-running">Học kỳ hiện tại</span>}</h3>
-              <span className={`rm-load rm-load-${load.status}`}>{formatNumber(load.credits)} TC{load.status === "over" && context.limits ? ` · vượt ${context.limits.max}` : load.status === "under" && context.limits ? ` · dưới ${context.limits.min}` : ""}</span>
+              <span className={`rm-load rm-load-${load.status}`} title={load.conditional
+                ? `Gồm ${formatNumber(load.conditional)} TC môn điều kiện (Giáo dục thể chất, Giáo dục quốc phòng), không tính vào tín chỉ tích lũy.` : undefined}>{formatNumber(load.credits)} TC{load.status === "over" && context.limits ? ` · vượt ${context.limits.max}` : load.status === "under" && context.limits ? ` · dưới ${context.limits.min}` : ""}</span>
             </header>
             <ul className="rm-term-courses">
               {running.map((course) => <li key={course.code} className="rm-term-course is-locked">
@@ -121,7 +122,7 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
                   <Mark kind="planned" />
                   <div>
                     <strong>{course?.name ?? item.code}</strong><span className="rm-course-code">{item.code}</span>
-                    {course && <small className="rm-course-facts">{formatNumber(course.credits)} TC{course.state === "failed" ? " · học lại" : ""}</small>}
+                    {course && <small className="rm-course-facts">{formatNumber(course.credits)} TC{course.state === "failed" ? " · học lại" : ""}{course.conditional ? " · môn điều kiện" : ""}</small>}
                     {problems.map((text) => <small key={text} className="rm-issue"><Mark kind="not_counted" /> {text}</small>)}
                   </div>
                   <div className="rm-term-actions">

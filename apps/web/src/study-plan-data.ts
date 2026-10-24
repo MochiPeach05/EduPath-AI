@@ -103,9 +103,6 @@ export function applyProposal(plan: StudyPlanData, proposal: AiProposal): { plan
 export const isDone = (state: CourseState) => state === "passed" || state === "exempt";
 /** Still to plan: not done and not being studied. */
 export const needsPlanning = (course: Pick<StudyPlanCourse, "state">) => !isDone(course.state) && course.state !== "in_progress";
-/** Credits counted against the limits: GDTC/GDQP stay out, as in accumulated credits. */
-export const limitCredits = (course: Pick<StudyPlanCourse, "credits" | "conditional">) => (course.conditional ? 0 : course.credits);
-
 /** Term of each planned course (upper-case code). */
 export const plannedTerms = (plan: StudyPlanData) =>
   new Map(plan.terms.flatMap((term) => term.courses.map((course) => [course.code.toUpperCase(), term.code] as const)));
@@ -114,10 +111,13 @@ export const plannedTerms = (plan: StudyPlanData) =>
 export const runningIn = (context: Pick<StudyPlanContext, "courses">, term: string) =>
   context.courses.filter((course) => course.state === "in_progress" && course.inProgressTerm === term);
 
+/** conditional: the part of credits from GDTC/GDQP (môn điều kiện). */
 export type TermLoad = { credits: number; conditional: number; status: "over" | "under" | "ok" | "empty" };
 /**
- * Credits of a term (planned + being studied) against the limits. Below the minimum only warns in HK1/HK2 and not in
- * the last term with courses (TT 08/2021 sets the minimum for main terms; the last term may be light).
+ * Credits of a term (planned + being studied) against the limits. GDTC/GDQP count too (user 2026-10-24: a Futsal course
+ * of TC102 must raise the term's total): they stay out of accumulated credits but are registered and studied that term.
+ * Below the minimum only warns in HK1/HK2 and not in the last term with courses (TT 08/2021 sets the minimum for main
+ * terms; the last term may be light).
  */
 export function termLoad(context: Pick<StudyPlanContext, "courses" | "limits">, plan: StudyPlanData, term: string): TermLoad {
   const byCode = new Map(context.courses.map((course) => [course.code, course]));
@@ -125,7 +125,7 @@ export function termLoad(context: Pick<StudyPlanContext, "courses" | "limits">, 
   const courses = [...(plan.terms.find((item) => item.code === term)?.courses.map((course) => byCode.get(course.code.toUpperCase()))
     .filter((course): course is StudyPlanCourse => Boolean(course)) ?? []),
     ...runningIn(context, term).filter((course) => !placed.has(course.code))];
-  const credits = courses.reduce((sum, course) => sum + limitCredits(course), 0);
+  const credits = courses.reduce((sum, course) => sum + course.credits, 0);
   const conditional = courses.reduce((sum, course) => sum + (course.conditional ? course.credits : 0), 0);
   if (!courses.length) return { credits, conditional, status: "empty" };
   const limits = context.limits;

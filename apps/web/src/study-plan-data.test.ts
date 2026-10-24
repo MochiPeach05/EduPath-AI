@@ -100,6 +100,10 @@ describe("planning", () => {
     expect(termLoad(context(), plan, "HK262")).toEqual({ credits: 6, conditional: 0, status: "ok" });
     expect(termLoad(context(), plan, "HK261")).toEqual({ credits: 3, conditional: 0, status: "under" });
     expect(termLoad(context(), plan, "HK263").status).toBe("empty");
+    // A physical education course (môn điều kiện) raises the term's total too.
+    const withSport = context({ courses: [...context().courses, course("PE1", { credits: 2, conditional: true, group: "TC102" })] });
+    expect(termLoad(withSport, { schemaVersion: 1, terms: [{ code: "HK262", courses: [{ code: "C" }, { code: "D" }, { code: "PE1" }] }] }, "HK262"))
+      .toEqual({ credits: 8, conditional: 2, status: "over" });
   });
 
   it("lists the courses still needed by requirement, finds courses by name and sums the credits", () => {
