@@ -307,8 +307,20 @@ describe("calculateAssessment on the synthetic CNPM student", () => {
     expect(program.transcript.creditCheck).toMatchObject({ computed: 24, printed: null, status: "unavailable" });
   });
 
-  it("reports progress against the training plan", () => {
-    expect(result.progress).toMatchObject({ currentTerm: "HK243", nextTerm: "HK251", lateCount: 0, nextCount: 1 });
+  it("reports progress against the training plan from the term being studied (v13)", () => {
+    // Kiểm thử phần mềm is registered without grades in HK251: that term is being studied, HK252 comes next.
+    expect(result.progress).toMatchObject({ currentTerm: "HK251", nextTerm: "HK252", lateCount: 0, nextCount: 0 });
+    expect(result.transcript.latestTerm).toBe("HK243");
+  });
+
+  it("counts a course planned for the term being studied but not registered as late, and never as sắp học", () => {
+    const inputs = syntheticInputs();
+    const plan = inputs.plan.resolution === "found" ? inputs.plan.revision.data : null;
+    const item = plan!.items.find((entry) => entry.code === "71ITSE41203")!;
+    plan!.items.push({ ...item, id: "row-extra", position: 999, code: "71ITIN40304", name: "Đồ án thực tập", credits: 4, sectionId: null });
+    const progress = calculateAssessment(inputs).progress!;
+    expect(progress.late.map((entry) => (entry.kind === "course" ? [entry.code, entry.termCode] : null))).toEqual([["71ITIN40304", "HK251"]]);
+    expect(progress.next).toEqual([]);
   });
 
   it("lists unmeasured career skills for self-study with similar measured skills as context only", () => {

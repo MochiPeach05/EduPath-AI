@@ -6,7 +6,7 @@ import {
   MAX_SKILL_PLANS, MAX_SUPPORT_COURSES, MIN_WEIGHTED_COURSE_SHARE, SCOPE_MAX_LENGTH,
 } from "./constants.js";
 import {
-  academicSections, conditionOnlyCodes, courseKey, creditCrossCheck, currentTermCode, curriculumTermCode, deriveElectiveGroups,
+  academicSections, conditionOnlyCodes, courseKey, creditCrossCheck, currentTermCode, curriculumTermCode, studyTermCode, deriveElectiveGroups,
   electiveCodeOf, hasScore, isAttemptedState, isConditionOnly, isPassedState, isStudiedState, termCode, type TranscriptCourseRecord,
   transcriptCourses, uniqueCurriculumCourses,
 } from "./course-state.js";
@@ -253,6 +253,8 @@ function assess(inputs: AssessmentInputs): Assessment {
   const conditionCodes = conditionOnlyCodes(standardData, curriculumCourses);
   const records = transcriptCourses(transcript);
   const currentTerm = currentTermCode(transcript);
+  // The term being studied (v13): the plan progress and "sắp học" count from it, the results end at currentTerm.
+  const studyTerm = studyTermCode(transcript);
   const admissionYear = inputs.curriculum.admissionYear ?? planRevision?.data.admissionYear ?? null;
   const planTerms = new Map<string, string>();
   for (const item of [...(planRevision?.data.items ?? [])].sort((a, b) => compareCode(a.termCode, b.termCode) || a.position - b.position)) {
@@ -586,7 +588,7 @@ function assess(inputs: AssessmentInputs): Assessment {
       else if (skill.exempt) status = "met";
       else {
         const pending = applicableLinks.map((link) => link.row).filter((row) => !notChosen(row) && !isStudiedState(row.state));
-        const future = (row: Row) => row.state === "in_progress" || (row.plannedTerm !== null && (currentTerm === null || row.plannedTerm > currentTerm));
+        const future = (row: Row) => row.state === "in_progress" || (row.plannedTerm !== null && (studyTerm === null || row.plannedTerm > studyTerm));
         if (pending.length && pending.every(future)) {
           status = "upcoming";
           upcomingTerm = pending.map((row) => (row.state === "in_progress" ? row.attemptTerm ?? row.plannedTerm : row.plannedTerm))
@@ -699,7 +701,7 @@ function assess(inputs: AssessmentInputs): Assessment {
     }]));
     const peGroups = Object.values(planRevision.physicalEducationGroups ?? {}).some((codes) => codes.length)
       ? planRevision.physicalEducationGroups : physicalEducationGroupsFor(curriculumCourses);
-    progress = planProgress({ plan: planRevision.data, physicalEducationGroups: peGroups, currentTerm, courses: planCourses, quotas });
+    progress = planProgress({ plan: planRevision.data, physicalEducationGroups: peGroups, currentTerm: studyTerm, courses: planCourses, quotas });
   }
 
   /* ---- 10. graduation (§7.9): the graduation page's engine, inputs built like graduationInputs() ---- */

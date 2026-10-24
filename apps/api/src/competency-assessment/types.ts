@@ -539,7 +539,10 @@ export type NextEntry =
   | { kind: "physical_education"; label: string; required: number; passed: number };
 
 export type PlanProgressResult = {
-  /** Latest term with grades on the transcript (HKyyS). */
+  /**
+   * The term being studied (HKyyS): from comp-calc-v13 the first term after the latest graded one with registrations
+   * without grades, else the latest graded term; before v13 always the latest graded term.
+   */
   currentTerm: string | null;
   /** First plan term after currentTerm. */
   nextTerm: string | null;

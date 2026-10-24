@@ -115,7 +115,7 @@ function StudySection({ roadmap }: { roadmap: Roadmap }) {
   return <section className="sw-panel rm-section" aria-labelledby="rm-study">
     <header className="rm-section-head"><span className="rm-section-icon" aria-hidden="true"><Icon name="book" /></span><div>
       <h2 id="rm-study">Môn bạn cần học</h2>
-      <p>Học phần đang học, học phần trễ so với kế hoạch đào tạo và học phần theo kế hoạch của học kỳ tới, học kỳ sau.</p>
+      <p>Học phần đang học, học phần trễ so với kế hoạch đào tạo (kể cả học phần kế hoạch xếp vào học kỳ đang học mà bạn chưa đăng ký) và học phần theo kế hoạch của học kỳ tới.</p>
     </div></header>
     {!roadmap.study.length && !roadmap.choices.length && <p className="rm-empty">Không có học phần nào cần học thêm trong kế hoạch đào tạo của bạn.</p>}
     {picked.length > 0 && <ul className="rm-items">{picked.map((item) => <StudyItem key={item.code} item={item} />)}</ul>}

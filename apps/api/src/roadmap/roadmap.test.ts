@@ -37,14 +37,14 @@ describe("roadmapWindow", () => {
 describe("buildRoadmapFacts", () => {
   const facts = syntheticRoadmapFacts();
 
-  it("lists the courses to take: running, late, then the term after the running one", () => {
+  it("lists the courses to take: running in the term being studied, late, then the next term", () => {
     expect(facts.study.map((item) => [item.code, item.source, item.termCode])).toEqual([
-      ["71ITSE41203", "running", null],
+      ["71ITSE41203", "running", "HK251"],
       ["71ITIS30203", "late", "HK243"],
-      ["71ITIN40304", "following", "HK252"],
+      ["71ITIN40304", "next", "HK252"],
     ]);
     expect(facts.study[0]!.careerSkills).toEqual(["Kiểm thử phần mềm"]);
-    expect([facts.currentTerm, facts.nextTerm, facts.followingTerm]).toEqual(["HK243", "HK251", "HK252"]);
+    expect([facts.currentTerm, facts.runningTerm, facts.nextTerm]).toEqual(["HK243", "HK251", "HK252"]);
     // A choice keeps only the options still open.
     expect(facts.choices).toEqual([{
       label: "Nhóm tự chọn TC309: chọn 6 tín chỉ", source: "late", termCode: "HK243", need: "3 TC",
@@ -55,14 +55,18 @@ describe("buildRoadmapFacts", () => {
     }]);
   });
 
-  it("adds no term after the next one when nothing is running", () => {
+  it("reads an assessment before comp-calc-v13, whose next term was the term being studied", () => {
     const result = syntheticRoadmapResult();
-    const running = result.courses.find((item) => item.state === "in_progress")!;
-    Object.assign(running, { state: "not_taken" });
-    result.progress = { ...result.progress!, next: [] };
-    const quiet = buildRoadmapFacts(ROADMAP_ASSESSMENT, result, roadmapWindow(ROADMAP_NOW));
-    expect(quiet.followingTerm).toBeNull();
-    expect(quiet.study.map((item) => item.source)).toEqual(["late"]);
+    result.progress = { ...result.progress!, currentTerm: "HK243", nextTerm: "HK251", next: [
+      { kind: "course", code: "71ITSE41203", name: "Kiểm thử phần mềm", credits: 3, state: "in_progress" },
+      { kind: "course", code: "71ITSE30803", name: "Lập trình Web nâng cao với framework", credits: 3, state: "not_taken" },
+    ] };
+    const old = buildRoadmapFacts(ROADMAP_ASSESSMENT, result, roadmapWindow(ROADMAP_NOW));
+    // Planned for HK251, not registered: late. The plan's mandatory course of HK252 is next.
+    expect(old.study.map((item) => [item.code, item.source, item.termCode])).toEqual([
+      ["71ITSE41203", "running", "HK251"], ["71ITIS30203", "late", "HK243"], ["71ITSE30803", "late", "HK251"], ["71ITIN40304", "next", "HK252"],
+    ]);
+    expect([old.runningTerm, old.nextTerm]).toEqual(["HK251", "HK252"]);
   });
 
   it("lists F/VT as học lại and D, D+ as học cải thiện, retakes first, then the lowest grade", () => {
@@ -103,7 +107,9 @@ describe("buildRoadmapInput", () => {
     expect(input.user).toContain("Từ ngày 24/10/2026 đến ngày 23/01/2027.");
     expect(input.user).toContain("Tháng 2: từ 24/11/2026 đến 23/12/2026");
     expect(input.user).toContain("- 71ITBS10203 Cơ sở lập trình (3 TC): điểm 3,2 (F) — học lại; giúp kỹ năng nghề: Lập trình cơ bản");
-    expect(input.user).toContain("Theo kế hoạch học kỳ 2 năm học 2025–2026 (học kỳ sau, cần chuẩn bị đăng ký):");
+    expect(input.user).toContain("Theo kế hoạch học kỳ 2 năm học 2025–2026 (học kỳ tiếp theo, cần chuẩn bị đăng ký):");
+    expect(input.user).toContain("[3. HỌC PHẦN ĐANG HỌC] (học kỳ 1 năm học 2025–2026, chưa có kết quả)");
+    expect(input.user).toContain("học kỳ đang học: học kỳ 1 năm học 2025–2026; học kỳ tiếp theo theo kế hoạch đào tạo: học kỳ 2 năm học 2025–2026.");
     expect(input.user).toContain("- [S01] C#/C++ (Ưu tiên): CTĐT chưa có học phần đo kỹ năng này — cần tự học");
     for (const section of ["[1. HỒ SƠ]", "[2. THỜI GIAN CỦA LỘ TRÌNH]", "[3. HỌC PHẦN ĐANG HỌC]", "[4. HỌC PHẦN CẦN HỌC THEO KẾ HOẠCH ĐÀO TẠO]",
       "[5. HỌC PHẦN CẦN CẢI THIỆN]", "[6. KỸ NĂNG NGHỀ CẦN BỔ SUNG]", "[7. TIẾN ĐỘ XÉT TỐT NGHIỆP]"]) expect(input.user).toContain(section);
@@ -252,7 +258,7 @@ describe("presentRoadmap", () => {
     const view = presentRoadmap(row(), "2026-10-25");
     expect(view.study.map((item) => [item.code, item.source, item.advice])).toEqual([
       ["71ITSE30803", "choice", "Chọn môn này."], ["71ITIS30203", "late", "Đăng ký sớm."],
-      ["71ITSE41203", "running", null], ["71ITIN40304", "following", null],
+      ["71ITSE41203", "running", null], ["71ITIN40304", "next", null],
     ]);
     expect(view.study[0]!.choiceLabel).toBe("Nhóm tự chọn TC309: chọn 6 tín chỉ");
     expect(view.improve.map((item) => [item.code, item.advice])).toEqual([["71ITAI40103", "Học cải thiện."], ["71ITBS10203", null], ["71ITSE30603", null]]);

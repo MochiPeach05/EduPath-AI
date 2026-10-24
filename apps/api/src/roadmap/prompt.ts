@@ -7,7 +7,8 @@ import type { RoadmapFacts } from "./facts.js";
 import { ROADMAP_LIMITS as L, buildRoadmapSchema } from "./schema.js";
 import { dateText } from "./window.js";
 
-export const ROADMAP_PROMPT_VERSION = "roadmap-v1";
+/** v2 (2026-10-24): the term being studied is named, its planned courses not registered are late, then the next term. */
+export const ROADMAP_PROMPT_VERSION = "roadmap-v2";
 /**
  * Gemma reasons before it writes (the user prefers slow and right). num_predict covers thinking and answer: the longest
  * answer the limits allow is about 4k tokens, the data block stays under 4k, so both fit the 16384 context of every kind.
@@ -45,7 +46,7 @@ Nguyên tắc dữ liệu (bắt buộc):
 
 Nội dung:
 - summary: 1–3 câu nêu trọng tâm của 3 tháng tới.
-- study: học phần nên học hoặc hoàn thành trong thời gian lộ trình, theo thứ tự ưu tiên: học phần đang học (hoàn thành tốt), học phần trễ so với kế hoạch, học phần theo kế hoạch của học kỳ tiếp theo, rồi học phần của học kỳ sau cần chuẩn bị đăng ký. Với nhóm lựa chọn có thể gợi ý một học phần trong danh sách lựa chọn, ưu tiên học phần giúp kỹ năng của nghề mục tiêu. Mỗi mục một lời khuyên ngắn có lý do.
+- study: học phần nên học hoặc hoàn thành trong thời gian lộ trình, theo thứ tự ưu tiên: học phần đang học (hoàn thành tốt), học phần trễ so với kế hoạch (kể cả học phần kế hoạch xếp vào học kỳ đang học mà bạn chưa đăng ký), rồi học phần theo kế hoạch của học kỳ tiếp theo cần chuẩn bị đăng ký. Với nhóm lựa chọn có thể gợi ý một học phần trong danh sách lựa chọn, ưu tiên học phần giúp kỹ năng của nghề mục tiêu. Mỗi mục một lời khuyên ngắn có lý do.
 - improve: học phần cần học lại hoặc nên học cải thiện: học lại trước, rồi học phần giúp kỹ năng của nghề mục tiêu.
 - skills: kỹ năng nên tự học, ưu tiên kỹ năng bắt buộc của nghề và kỹ năng chương trình đào tạo chưa dạy (cần tự học). Mỗi kỹ năng: vì sao cần với nghề mục tiêu (why); các bước học cụ thể (steps): nội dung kiến thức cần nắm, bài tập hoặc dự án nhỏ nên tự làm, không nêu tên trang web, khóa học hay tài liệu cụ thể; kết quả mong đợi sau 3 tháng (outcome).
 - months: đúng 3 mục cho tháng 1, 2, 3 theo đúng ngày trong dữ liệu; mỗi tháng một trọng tâm (focus) và các việc cụ thể (tasks), cân đối giữa học trên lớp, cải thiện điểm và tự học kỹ năng.
@@ -82,9 +83,9 @@ export function renderRoadmapDataBlock(facts: RoadmapFacts): string {
   push("", "[2. THỜI GIAN CỦA LỘ TRÌNH]");
   push(`Từ ngày ${dateText(facts.window.start)} đến ngày ${dateText(facts.window.end)}.`);
   for (const month of facts.window.months) push(`Tháng ${month.index}: từ ${dateText(month.start)} đến ${dateText(month.end)}`);
-  push(`Học kỳ gần nhất có điểm: ${facts.currentTerm ? termText(facts.currentTerm) : "chưa có"}; học kỳ tiếp theo theo kế hoạch đào tạo: ${facts.nextTerm ? termText(facts.nextTerm) : "chưa xác định"}${facts.followingTerm ? ` (đang học); học kỳ sau đó: ${termText(facts.followingTerm)}` : ""}.`);
+  push(`Học kỳ gần nhất có điểm: ${facts.currentTerm ? termText(facts.currentTerm) : "chưa có"}; học kỳ đang học: ${facts.runningTerm ? termText(facts.runningTerm) : "không có học phần đang học"}; học kỳ tiếp theo theo kế hoạch đào tạo: ${facts.nextTerm ? termText(facts.nextTerm) : "chưa xác định"}.`);
 
-  push("", "[3. HỌC PHẦN ĐANG HỌC] (chưa có kết quả)");
+  push("", `[3. HỌC PHẦN ĐANG HỌC]${facts.runningTerm ? ` (${termText(facts.runningTerm)}, chưa có kết quả)` : " (chưa có kết quả)"}`);
   const running = facts.study.filter((item) => item.source === "running");
   if (!running.length) push("Không có.");
   for (const item of running) push(`- ${code(item.code)} ${sanitizeText(item.name)} (${credits(item.credits)})${helps(item.careerSkills)}`);
@@ -92,14 +93,11 @@ export function renderRoadmapDataBlock(facts: RoadmapFacts): string {
   push("", "[4. HỌC PHẦN CẦN HỌC THEO KẾ HOẠCH ĐÀO TẠO]");
   const late = facts.study.filter((item) => item.source === "late");
   const next = facts.study.filter((item) => item.source === "next");
-  const following = facts.study.filter((item) => item.source === "following");
-  if (!late.length && !next.length && !following.length && !facts.choices.length) push("Không có.");
+  if (!late.length && !next.length && !facts.choices.length) push("Không có.");
   if (late.length) push("Trễ so với kế hoạch:");
   for (const item of late) push(`- ${code(item.code)} ${sanitizeText(item.name)} (${credits(item.credits)}), theo kế hoạch ở ${termText(item.termCode)}${helps(item.careerSkills)}`);
-  if (next.length) push(`Theo kế hoạch ${facts.nextTerm ? termText(facts.nextTerm) : "học kỳ tiếp theo"}${facts.followingTerm ? " (học kỳ đang học), chưa đăng ký" : ""}:`);
+  if (next.length) push(`Theo kế hoạch ${facts.nextTerm ? termText(facts.nextTerm) : "học kỳ tiếp theo"} (học kỳ tiếp theo, cần chuẩn bị đăng ký):`);
   for (const item of next) push(`- ${code(item.code)} ${sanitizeText(item.name)} (${credits(item.credits)})${helps(item.careerSkills)}`);
-  if (following.length && facts.followingTerm) push(`Theo kế hoạch ${termText(facts.followingTerm)} (học kỳ sau, cần chuẩn bị đăng ký):`);
-  for (const item of following) push(`- ${code(item.code)} ${sanitizeText(item.name)} (${credits(item.credits)})${helps(item.careerSkills)}`);
   if (facts.choices.length) push("Nhóm lựa chọn còn thiếu:");
   for (const choice of facts.choices) {
     const when = choice.source === "late" ? `trễ so với kế hoạch ở ${termText(choice.termCode)}` : `theo kế hoạch ${choice.termCode ? termText(choice.termCode) : "học kỳ tiếp theo"}`;

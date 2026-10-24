@@ -203,6 +203,12 @@ export function overallIsPooled(calcVersion: string | null | undefined): boolean
   return !Number.isFinite(version) || version >= 12;
 }
 
+/** comp-calc-v13 (2026-10-24): the plan progress counts from the term being studied; earlier results from the latest graded term. */
+export function countsFromStudyTerm(calcVersion: string | null | undefined): boolean {
+  const version = Number(/^comp-calc-v(\d+)$/.exec(calcVersion ?? "")?.[1]);
+  return !Number.isFinite(version) || version >= 13;
+}
+
 /** One sentence that explains what the overall level means. */
 export function levelSentence(level: LevelCode | null | undefined): string {
   return LEVEL_SCALE.find((item) => item.code === level)?.text ?? "Chưa đủ dữ liệu để xếp mức.";

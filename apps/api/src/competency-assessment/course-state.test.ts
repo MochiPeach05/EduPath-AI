@@ -4,7 +4,8 @@ import type { TranscriptData } from "../student/transcript-parser.js";
 import { FAIL_LETTERS, PASS_LETTERS } from "./constants.js";
 import {
   attemptOutcome, conditionOnlyCodes, courseState, creditCrossCheck, currentTermCode, curriculumCreditMap, curriculumTermCode, deriveElectiveGroups,
-  electiveCodeOf, estimateProgramCredits, isConditionOnly, printedCumulativeCredits, selectAttempt, termCode, transcriptCourses, uniqueCurriculumCourses,
+  electiveCodeOf, estimateProgramCredits, isConditionOnly, printedCumulativeCredits, selectAttempt, studyTermCode, termCode, transcriptCourses,
+  uniqueCurriculumCourses,
 } from "./course-state.js";
 
 type ResultCase = { name: string; result: string | null; letter: string | null; expected: "pass" | "fail" | "unknown"; inferred: boolean };
@@ -72,6 +73,29 @@ describe("terms", () => {
     ]);
     expect(currentTermCode(data)).toBe("HK243");
     expect(currentTermCode(transcript([{ rows: [{ code: "AV0", score10: null, letter: "MT" }] }]))).toBeNull();
+  });
+
+  it("takes the first registration-only term after the latest graded one as the term being studied (v13)", () => {
+    const registered = { score10: null, score4: null, letter: null };
+    expect(studyTermCode(transcript([
+      { year: "2025-2026", semester: "HK03", rows: [{ code: "A1" }] },
+      { year: "2026-2027", semester: "HK01", rows: [{ code: "A2", ...registered }, { code: "A3", ...registered }] },
+    ]))).toBe("HK261");
+    // Two terms registered ahead: the first one is being studied.
+    expect(studyTermCode(transcript([
+      { year: "2025-2026", semester: "HK03", rows: [{ code: "A1" }] },
+      { year: "2026-2027", semester: "HK02", rows: [{ code: "A3", ...registered }] },
+      { year: "2026-2027", semester: "HK01", rows: [{ code: "A2", ...registered }] },
+    ]))).toBe("HK261");
+    // Without such a term, or with ungraded rows in the graded term itself, it is the latest graded term.
+    expect(studyTermCode(transcript([{ year: "2025-2026", semester: "HK03", rows: [{ code: "A1" }] }]))).toBe("HK253");
+    expect(studyTermCode(transcript([{ year: "2025-2026", semester: "HK03", rows: [{ code: "A1" }, { code: "A2", ...registered }] }]))).toBe("HK253");
+    // A term of VT/F letters only is graded, not being studied.
+    expect(studyTermCode(transcript([
+      { year: "2025-2026", semester: "HK03", rows: [{ code: "A1" }] },
+      { year: "2026-2027", semester: "HK01", rows: [{ code: "A2", score10: null, score4: null, letter: "VT" }] },
+    ]))).toBe("HK253");
+    expect(studyTermCode(transcript([{ year: "2026-2027", semester: "HK01", rows: [{ code: "A2", ...registered }] }]))).toBe("HK261");
   });
 });
 

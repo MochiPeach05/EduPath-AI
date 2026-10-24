@@ -65,6 +65,22 @@ export function latestResultSection(data: TranscriptData): TranscriptSection | u
   return [...sections].reverse().find(hasScore) ?? sections.at(-1);
 }
 
+/** A row without a score, letter or result: a registration of a term still being studied. */
+const isRegistration = (course: TranscriptSection["courses"][number]) =>
+  numeric(course.score10, 10) === null && numeric(course.score4, 4) === null && !course.letter?.trim() && !course.result?.trim();
+
+/**
+ * The term being studied (comp-calc-v13): the first term after the newest graded one that holds registrations
+ * without grades, else the newest graded term. The plan progress and the "sắp học" skills count from it; the
+ * results and the history still end at the newest graded term (currentTermCode).
+ */
+export function studyTermCode(data: TranscriptData): string | null {
+  const graded = currentTermCode(data);
+  const running = academicSections(data).filter((section) => section.courses.some(isRegistration)).map(termCode)
+    .filter((term): term is string => term !== null && (graded === null || term > graded));
+  return running[0] ?? graded;
+}
+
 /** "Học kỳ hiện tại": the newest term with grades as HKyyS. */
 export function currentTermCode(data: TranscriptData): string | null {
   const section = latestGradedSection(data);

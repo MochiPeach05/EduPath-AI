@@ -22,9 +22,10 @@ describe("labels", () => {
   it("tags the courses to take in plain words", () => {
     expect(termShort("HK261")).toBe("HK1 2026–2027");
     expect(studyTag({ source: "running", termCode: null, choiceLabel: null })).toEqual({ text: "Đang học", tone: "running" });
-    expect(studyTag({ source: "late", termCode: "HK243", choiceLabel: null }).text).toBe("Trễ kế hoạch HK3 2024–2025");
-    expect(studyTag({ source: "next", termCode: "HK261", choiceLabel: null }).text).toBe("Kế hoạch HK1 2026–2027");
-    expect(studyTag({ source: "following", termCode: "HK262", choiceLabel: null }).text).toBe("Học kỳ sau · HK2 2026–2027");
+    expect(studyTag({ source: "running", termCode: "HK261", choiceLabel: null }).text).toBe("Đang học · HK1 2026–2027");
+    expect(studyTag({ source: "late", termCode: "HK243", choiceLabel: null }).text).toBe("Trễ kế hoạch · HK3 2024–2025");
+    expect(studyTag({ source: "next", termCode: "HK262", choiceLabel: null }).text).toBe("Học kỳ tới · HK2 2026–2027");
+    expect(studyTag({ source: "following", termCode: "HK262", choiceLabel: null }).text).toBe("Học kỳ tới · HK2 2026–2027");
     expect(studyTag({ source: "choice", termCode: "HK243", choiceLabel: "Nhóm tự chọn TC309" }).text).toBe("Tự chọn: Nhóm tự chọn TC309");
     expect(skillTags({ isRequired: true, kind: "self_study" })).toEqual(["Bắt buộc", "Cần tự học"]);
     expect(skillTags({ isRequired: false, kind: "deepen" })).toEqual(["Ưu tiên", "Nâng cao"]);

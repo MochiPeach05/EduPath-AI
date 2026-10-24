@@ -83,7 +83,9 @@ type QuotaGroup = {
 
 /**
  * Progress against the training plan (spec §7.8):
- * - current term = latest graded term; an item is due when its term ≤ current term;
+ * - current term = the term being studied (studyTermCode: the term after the latest graded one with registrations
+ *   without grades, else the latest graded term); an item is due when its term ≤ current term, so a course planned
+ *   for the term being studied but not registered is late;
  * - GDTC slots (DGT0010/DGT0020, "GDTC1") count passed PE electives;
  * - "Chọn k …" sections need k courses; sections without k or "(Không tính vào tích lũy)" are never late;
  * - each passed course is allocated to one choice section only, earliest first, then same-group substitutes;

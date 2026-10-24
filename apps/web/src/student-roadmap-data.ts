@@ -100,11 +100,12 @@ const capitalize = (value: string) => value.charAt(0).toLocaleUpperCase("vi") + 
 /** The tag of a course to take. */
 export function studyTag(item: Pick<RoadmapStudy, "source" | "termCode" | "choiceLabel">): { text: string; tone: "running" | "late" | "next" | "following" | "choice" } {
   const term = termShort(item.termCode);
-  if (item.source === "running") return { text: "Đang học", tone: "running" };
-  if (item.source === "late") return { text: term ? `Trễ kế hoạch ${term}` : "Trễ kế hoạch", tone: "late" };
+  if (item.source === "running") return { text: term ? `Đang học · ${term}` : "Đang học", tone: "running" };
+  if (item.source === "late") return { text: term ? `Trễ kế hoạch · ${term}` : "Trễ kế hoạch", tone: "late" };
   if (item.source === "choice") return { text: item.choiceLabel ? `Tự chọn: ${item.choiceLabel}` : "Tự chọn", tone: "choice" };
-  if (item.source === "following") return { text: term ? `Học kỳ sau · ${term}` : "Học kỳ sau", tone: "following" };
-  return { text: term ? `Kế hoạch ${term}` : "Học kỳ tới", tone: "next" };
+  // Roadmaps written before 2026-10-24 (roadmap-v1) listed the term after the one being studied as "following".
+  if (item.source === "following") return { text: term ? `Học kỳ tới · ${term}` : "Học kỳ tới", tone: "next" };
+  return { text: term ? `Học kỳ tới · ${term}` : "Học kỳ tới", tone: "next" };
 }
 
 export const improveTag = (action: RoadmapImprove["action"]) => (action === "retake" ? "Học lại" : "Học cải thiện");

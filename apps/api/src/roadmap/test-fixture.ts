@@ -21,10 +21,11 @@ export function syntheticRoadmapResult(): AssessmentResult {
   // A failed mandatory course (học lại), a D one (học cải thiện) next to the D+ of the fixture.
   change("71ITBS10203", { state: "failed", outcome: "fail", letter: "F", score10: 3.2 });
   change("71ITSE30603", { letter: "D", score10: 4.2 });
-  // The internship planned for the term after the running one.
+  // The internship planned for the next term (HK252; HK251 is being studied).
   change("71ITIN40304", { plannedTerm: "HK252", plannedTermSource: "plan" });
   result.progress = {
     ...result.progress!,
+    next: [{ kind: "course", code: "71ITIN40304", name: "Đồ án thực tập", credits: 4, state: "not_taken" }],
     late: [
       { kind: "course", code: "71ITIS30203", name: "Hệ quản trị cơ sở dữ liệu", credits: 3, termCode: "HK243", state: "not_taken" },
       { kind: "choice", label: "Nhóm tự chọn TC309: chọn 6 tín chỉ", termCode: "HK243", required: 6, unit: "credit", missing: 3, missingCredits: 3, options: [

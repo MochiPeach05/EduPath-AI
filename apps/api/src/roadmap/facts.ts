@@ -6,13 +6,11 @@ import type { AssessmentResult, CourseFact, GapStatus } from "../competency-asse
 import type { RoadmapWindow } from "./window.js";
 
 /**
- * A course to take: being studied now, late against the training plan, planned for its next term, or (while courses are
- * running, so the next term is the one being studied) planned for the term after it, which the student registers for
- * within the 3 months.
+ * A course to take: being studied now (termCode: the term being studied), late against the training plan (also a
+ * course planned for the term being studied but not registered), or planned for the next term, the registration the
+ * 3 months lead to.
  */
-export type RoadmapCourse = {
-  code: string; name: string; credits: number; source: "running" | "late" | "next" | "following"; termCode: string | null; careerSkills: string[];
-};
+export type RoadmapCourse = { code: string; name: string; credits: number; source: "running" | "late" | "next"; termCode: string | null; careerSkills: string[] };
 /** A choice of the training plan ("chọn n TC trong …") still open. */
 export type RoadmapChoice = { label: string; source: "next" | "late"; termCode: string | null; need: string; options: { code: string; name: string; credits: number | null }[] };
 /** F/VT: must be taken again; D, D+: worth improving (user, 2026-10-24). */
@@ -31,10 +29,10 @@ export type RoadmapFacts = {
   cohortCode: string;
   specialtyLabel: string | null;
   careerName: string | null;
-  /** Latest graded term of the transcript, the next term of the training plan and the one after it (HKyyS). */
+  /** Latest graded term of the transcript, the term being studied (registrations without grades) and the plan's next term (HKyyS). */
   currentTerm: string | null;
+  runningTerm: string | null;
   nextTerm: string | null;
-  followingTerm: string | null;
   study: RoadmapCourse[];
   choices: RoadmapChoice[];
   improve: RoadmapImprove[];
@@ -78,9 +76,15 @@ export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult
     if (improving.has(fact.code) || study.some((item) => item.code === fact.code)) return;
     study.push({ code: fact.code, name: fact.name, credits: fact.credits, source, termCode, careerSkills: skillsOf(fact.code) });
   };
-  for (const item of result.courses ?? []) if (item.state === "in_progress" && item.applicable) add(item, "running", null);
+  // The term being studied: the first term of the courses registered without grades.
+  const runningTerm = (result.courses ?? []).filter((item) => item.state === "in_progress" && item.term).map((item) => item.term!).sort()[0] ?? null;
+  for (const item of result.courses ?? []) if (item.state === "in_progress" && item.applicable) add(item, "running", item.term);
   const choices: RoadmapChoice[] = [];
   const progress = result.progress;
+  // Before comp-calc-v13 the plan counted from the latest graded term, so its "next term" was the term being studied:
+  // the courses it plans there and the student did not register are late, and the term after it is the next one.
+  const legacy = Boolean(runningTerm && progress?.nextTerm === runningTerm);
+  const upcoming = legacy ? "late" as const : "next" as const;
   for (const entry of progress?.late ?? []) {
     if (entry.kind === "course") add(entry, course.get(entry.code)?.state === "in_progress" ? "running" : "late", entry.termCode);
     else if (entry.kind === "choice") choices.push({ label: entry.label, source: "late", termCode: entry.termCode, need: `${entry.missing} ${entry.unit === "credit" ? "TC" : "môn"}`,
@@ -88,21 +92,20 @@ export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult
     else choices.push({ label: entry.label, source: "late", termCode: entry.termCode, need: `${Math.max(0, entry.required - entry.passed)} môn`, options: [] });
   }
   for (const entry of progress?.next ?? []) {
-    if (entry.kind === "course") add(entry, entry.state === "in_progress" ? "running" : "next", progress?.nextTerm ?? null);
-    else if (entry.kind === "choice") choices.push({ label: entry.label, source: "next", termCode: progress?.nextTerm ?? null, need: `${entry.remaining} ${entry.unit === "credit" ? "TC" : "môn"}`,
+    if (entry.kind === "course") add(entry, entry.state === "in_progress" ? "running" : upcoming, progress?.nextTerm ?? null);
+    else if (entry.kind === "choice") choices.push({ label: entry.label, source: upcoming, termCode: progress?.nextTerm ?? null, need: `${entry.remaining} ${entry.unit === "credit" ? "TC" : "môn"}`,
       options: entry.options.filter((option) => option.state !== "passed" && option.state !== "exempt").map(({ code, name, credits }) => ({ code, name, credits })) });
-    else choices.push({ label: entry.label, source: "next", termCode: progress?.nextTerm ?? null, need: `${Math.max(0, entry.required - entry.passed)} môn`, options: [] });
+    else choices.push({ label: entry.label, source: upcoming, termCode: progress?.nextTerm ?? null, need: `${Math.max(0, entry.required - entry.passed)} môn`, options: [] });
   }
-  // Courses running means the next term is the one being studied: add the mandatory courses the plan puts in the term
-  // after it, the registration the 3 months lead to (electives stay with their choices).
-  const nextTerm = progress?.nextTerm ?? null;
-  const followingTerm = nextTerm && study.some((item) => item.source === "running")
-    ? (result.courses ?? []).filter((item) => item.plannedTermSource === "plan" && item.plannedTerm && item.plannedTerm > nextTerm)
-      .map((item) => item.plannedTerm!).sort()[0] ?? null
-    : null;
-  for (const item of result.courses ?? []) {
-    if (followingTerm && item.plannedTerm === followingTerm && item.plannedTermSource === "plan" && item.applicable && !item.conditionOnly
-      && !item.electiveGroup && item.state === "not_taken") add(item, "following", followingTerm);
+  let nextTerm = progress?.nextTerm ?? null;
+  if (legacy) {
+    // The mandatory courses the plan puts in the term after the one being studied (electives stay with their choices).
+    nextTerm = (result.courses ?? []).filter((item) => item.plannedTermSource === "plan" && item.plannedTerm && item.plannedTerm > runningTerm!)
+      .map((item) => item.plannedTerm!).sort()[0] ?? null;
+    for (const item of result.courses ?? []) {
+      if (nextTerm && item.plannedTerm === nextTerm && item.plannedTermSource === "plan" && item.applicable && !item.conditionOnly
+        && !item.electiveGroup && item.state === "not_taken") add(item, "next", nextTerm);
+    }
   }
 
   // Skills: the career's gaps (merged with "Cần tự học"), then met skills worth deepening.
@@ -137,7 +140,7 @@ export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult
   return {
     window, assessmentId, calcVersion: result.meta.calcVersion,
     cohortCode: result.student.cohortCode, specialtyLabel: result.student.specialtyLabel, careerName: result.career?.nameVi ?? null,
-    currentTerm: progress?.currentTerm ?? null, nextTerm, followingTerm,
+    currentTerm: result.transcript?.latestTerm ?? null, runningTerm, nextTerm,
     study, choices, improve, skills: ordered,
     graduation: { status: result.graduation.status, statusLabel: result.graduation.statusLabel },
   };

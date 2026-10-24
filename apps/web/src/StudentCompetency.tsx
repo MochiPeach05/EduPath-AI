@@ -7,7 +7,7 @@ import { specialtyLabel, type AiStatus, type AssessmentResult, type AssessmentSt
 import {
   CHART_LEVELS, COMPETENCY_API, CONFIDENCE_LABELS, COURSE_STATE_LABELS, EMPTY_SKILL_FILTERS, FIT_LABELS, FIT_SCALE, LEVEL_COLUMNS, LEVEL_LABELS, LEVEL_SCALE, LEVEL_THRESHOLDS, PRECONDITION_COPY, PRIORITY_LABELS, UNSCORED_STATES,
   aiErrorMessage, aiReasoned, aiStateCopy, bucketSkills, canRegenerate, careerSkillKeys, careerThresholdsLine, chartLevelLabel, confidentStrengths, currentImprovements, courseStanding, dataUsedLine, displayLevel, eligibilityDisplay, errorMessage, filterSkills, fitLevelOf, fitScoreOf, fitStep, formatDateTime,
-  careerSummaryText, formatNumber, formatPercent, formatScore, gapHistory, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isPreconditionError, levelChart, levelSentence, levelStep, overallIsPooled, levelSummary, levelText, mapAiOutput, missingRequirements, skillGroupKeys, missingRequirementsMessage, modelLabel, needsSelfStudy,
+  careerSummaryText, formatNumber, formatPercent, formatScore, gapHistory, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isPreconditionError, levelChart, levelSentence, levelStep, overallIsPooled, countsFromStudyTerm, levelSummary, levelText, mapAiOutput, missingRequirements, skillGroupKeys, missingRequirementsMessage, modelLabel, needsSelfStudy,
   plansFor, scoreDifference, shouldPoll, skillName, sortRequirements, withCurrentLevels, type ChartLevel, type DisplayLevel, type FitLevel, type LevelBar, type LevelSegment, type MappedAiOutput, type PreconditionError, type SkillFilters, type StatusTone,
 } from "./student-competency-data";
 import { readGraduation } from "./student-graduation-api";
@@ -459,6 +459,7 @@ function ProgressSection({ result }: { result: AssessmentResult }) {
         <span aria-hidden="true">{late ? "✗" : "✓"}</span>
         <span>{late ? `Chậm so với kế hoạch: ${progress.lateCount.toLocaleString("vi-VN")} học phần · ${formatNumber(progress.lateCredits)} TC chưa hoàn thành đúng học kỳ dự kiến.` : "Đúng kế hoạch: bạn đã hoàn thành mọi học phần theo kế hoạch đào tạo đến học kỳ hiện tại."}</span>
       </p>
+      {!countsFromStudyTerm(result.meta.calcVersion) && result.transcript.inProgress > 0 && <p className="scomp-meta">Kết quả này được tính khi hệ thống còn lấy học kỳ có điểm gần nhất làm học kỳ hiện tại, nên học kỳ bạn đang học bị ghi là học kỳ tới. Bấm “Đánh giá lại” để cập nhật.</p>}
       <dl className="sg-stats scomp-stats">
         <div><dt>Học kỳ hiện tại (suy từ bảng điểm)</dt><dd>{progress.currentTerm ?? "—"}</dd></div>
         <div><dt>Chậm so với kế hoạch</dt><dd className={late ? "sg-status-fail" : "sg-status-pass"}>{progress.lateCount.toLocaleString("vi-VN")} <small>học phần · {formatNumber(progress.lateCredits)} TC</small></dd></div>

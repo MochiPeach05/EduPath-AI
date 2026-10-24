@@ -35,7 +35,13 @@ import type { Confidence, FitCode, GapStatus } from "./types.js";
  * v12: the overall pools every skill once by credits × weight, like a group score, instead of the mean of the
  * groups (user, 2026-10-23): a small group (Kỹ năng mềm, 8% of the weight) no longer counts for a third.
  */
-export const CALC_VERSION = "comp-calc-v12";
+/**
+ * v13: the plan's "học kỳ hiện tại" is the term being studied, the first term after the latest graded one with
+ * registrations without grades (studyTermCode), not the latest graded term (user, 2026-10-24: "anh văn 7 và kỹ thuật
+ * lấy yêu cầu là HK1 2026-2027 rồi"). Its planned courses not registered are late, "học kỳ tới" is the term after
+ * it, and a career skill whose course was planned for it but not registered is no longer "sắp học".
+ */
+export const CALC_VERSION = "comp-calc-v13";
 /**
  * The graduation evaluation uses no skill level, so it keeps the version of its last change:
  * comp-calc-v10 changed only levels and must not re-date every student's graduation advice.
