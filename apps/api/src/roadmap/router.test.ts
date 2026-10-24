@@ -5,7 +5,7 @@ import type { AuthenticatedUser } from "../auth/types.js";
 import type { DatabasePool } from "../db/pool.js";
 import type { RoadmapRow } from "./jobs.js";
 import { createRoadmapRouter } from "./router.js";
-import { ROADMAP_ASSESSMENT, syntheticRoadmapFacts, syntheticRoadmapResult } from "./test-fixture.js";
+import { ROADMAP_ASSESSMENT, syntheticRoadmapFacts, syntheticRoadmapResult, syntheticSurveyRow } from "./test-fixture.js";
 
 // Synthetic K29 data only (fixtures/synthetic-k29.json plus invented grades); no real student record.
 const studentId = "11111111-1111-4111-8111-111111111111";
@@ -31,6 +31,7 @@ type Setup = {
   enabled?: boolean;
   rows?: RoadmapRow[];
   assessment?: boolean;
+  survey?: boolean;
   worker?: { online: boolean; kinds: string[] | null } | null;
 };
 
@@ -48,6 +49,7 @@ function setup(options: Setup = {}) {
       // GET / reads the summary only; POST / reads the result it builds from.
       return result([sql.includes('AS "hasCareer"') ? { id: ROADMAP_ASSESSMENT, createdAt, hasCareer: true } : { id: ROADMAP_ASSESSMENT, createdAt, computed: syntheticRoadmapResult() }]);
     }
+    if (sql.includes("FROM stu_profile_surveys WHERE user_id=$1")) return result(options.survey === false ? [] : [syntheticSurveyRow()]);
     if (sql.startsWith('SELECT id,status,error_code AS "errorCode" FROM stu_roadmaps')) {
       return result(rows.slice(0, 1).map((item) => ({ id: item.id, status: item.status, errorCode: item.errorCode })));
     }
@@ -90,7 +92,7 @@ describe("GET /", () => {
     expect(res.headers["cache-control"]).toBe("no-store");
     expect(res.body).toMatchObject({
       assessment: { id: ROADMAP_ASSESSMENT, createdAt: "2026-10-24T01:00:00.000Z", hasCareer: true },
-      stale: false, aiEnabled: true, worker: { online: true, supportsRoadmap: true },
+      stale: false, surveyDone: true, aiEnabled: true, worker: { online: true, supportsRoadmap: true },
       roadmap: { id: ROADMAP, status: "queued", summary: null, window: { start: "2026-10-24", end: "2027-01-23" } },
     });
     expect(res.body.roadmap.study.map((item: { code: string }) => item.code)).toEqual(["71ITSE41203", "71ITIS30203", "71ITIN40304"]);
@@ -101,6 +103,11 @@ describe("GET /", () => {
   it("marks a roadmap of an older assessment as stale, and answers with nothing to show", async () => {
     expect((await request(setup({ rows: [row({ assessmentId: OLD_ASSESSMENT })] }).app).get("/roadmap")).body.stale).toBe(true);
     expect((await request(setup({ assessment: false }).app).get("/roadmap")).body).toMatchObject({ roadmap: null, assessment: null, stale: false });
+  });
+
+  it("says whether the profile survey a new roadmap needs is answered", async () => {
+    expect((await request(setup({ survey: false }).app).get("/roadmap")).body.surveyDone).toBe(false);
+    await request(setup({ survey: false }).app).post("/roadmap").set("Origin", origin).send({}).expect(409, { error: "survey_required" });
   });
 
   it("says when the worker is offline or too old for roadmaps", async () => {

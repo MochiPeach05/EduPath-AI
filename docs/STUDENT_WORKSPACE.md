@@ -2,6 +2,7 @@
 
 Trang `/dashboard` dùng bố cục sidebar, thanh công cụ, ba thẻ truy cập nhanh, hồ sơ học tập và cột mục tiêu nghề nghiệp. Chỉ tham khảo cấu trúc giao diện từ ảnh người dùng cung cấp; nội dung được điều chỉnh theo chức năng EduPath.
 
+- Từ 24/10/2026, Tổng quan mở đầu bằng khối đỏ "Hoàn thành Hồ sơ và bảng điểm" khi hồ sơ còn thiếu, và các trang khác có dòng nhắc; xem `profile-survey.md`.
 - Tổng quan và hồ sơ hiển thị dữ liệu thật qua `GET /api/student/profile`. Endpoint yêu cầu Student và chỉ truy vấn ID lấy từ session, không nhận ID người khác từ trình duyệt. Phản hồi không cache.
 - Sidebar điều hướng qua hash, hỗ trợ Back/Forward và màn hình nhỏ. Tìm kiếm trên thanh công cụ tìm các chức năng trong sidebar.
 - Đăng xuất dùng luồng Microsoft hiện có và hiển thị lỗi nếu thất bại.

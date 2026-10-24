@@ -31,6 +31,8 @@ export type RoadmapResponse = {
   roadmap: Roadmap | null;
   assessment: { id: string; createdAt: string; hasCareer: boolean } | null;
   stale: boolean;
+  /** The profile survey is answered: a new roadmap needs it (an older API without the field counts as yes). */
+  surveyDone: boolean;
   aiEnabled: boolean;
   worker: { online: boolean; supportsRoadmap: boolean };
 };
@@ -61,7 +63,7 @@ export function normalizeRoadmapResponse(value: unknown): RoadmapResponse {
   const data = isRecord(value) ? value : {};
   const assessment = isRecord(data.assessment) && typeof data.assessment.id === "string"
     ? { id: data.assessment.id, createdAt: String(data.assessment.createdAt ?? ""), hasCareer: data.assessment.hasCareer === true } : null;
-  return { roadmap: normalizeRoadmap(data.roadmap), assessment, stale: data.stale === true, aiEnabled: data.aiEnabled === true, worker: worker(data.worker) };
+  return { roadmap: normalizeRoadmap(data.roadmap), assessment, stale: data.stale === true, surveyDone: data.surveyDone !== false, aiEnabled: data.aiEnabled === true, worker: worker(data.worker) };
 }
 
 export function normalizeRoadmapStatus(value: unknown): RoadmapStatusResponse {
@@ -125,6 +127,7 @@ export const choiceText = (choice: RoadmapChoice) =>
 
 const ERROR_MESSAGES: Record<string, string> = {
   assessment_required: "Bạn cần có kết quả Đánh giá năng lực trước khi tạo lộ trình.",
+  survey_required: "Bạn cần hoàn thành Khảo sát định hướng trong Hồ sơ và bảng điểm trước khi tạo lộ trình.",
   roadmap_too_frequent: "Bạn vừa tạo lộ trình. Vui lòng đợi khoảng nửa phút rồi thử lại.",
   queue_full: "Hàng đợi AI đang đầy. Vui lòng thử lại sau ít phút.",
   ai_disabled: "Lộ trình do EduPath AI soạn hiện chưa được bật.",

@@ -64,13 +64,13 @@ Dữ liệu sinh viên thật (bảng điểm, kết quả OCR) không bao giờ
 | `/api/auth` | `auth/` | Đăng nhập Microsoft Entra ID (MSAL), session, nhật ký đăng nhập | `SPRINT_2_ADMIN_AUTH.md` |
 | — | `users/` | Kho người dùng: PostgreSQL hoặc bộ nhớ (chế độ xem thử) | |
 | `/api/admin/accounts`, `/api/admin/students` | `admin/` | Tài khoản quản trị, phân quyền, khóa/mở; hồ sơ sinh viên | `ADMIN_GLOBAL_SCOPE.md`, `SPRINT_2_STUDENT_PROFILES.md` |
-| `/api/student` | `student/` | Hồ sơ, bảng điểm (PDF → OCR → JSON), đồng ý xử lý dữ liệu | `student-transcripts.md`, `STUDENT_WORKSPACE.md` |
+| `/api/student` | `student/` | Hồ sơ, khảo sát định hướng và thành tích (migration 048), bảng điểm (PDF → OCR → JSON), đồng ý xử lý dữ liệu | `student-transcripts.md`, `profile-survey.md`, `STUDENT_WORKSPACE.md` |
 | `/api/admin/curricula`, `/api/student/curricula` | `curricula/` | Chương trình đào tạo: nhập Excel, phiên bản, học phần, quan hệ tiên quyết | `curriculum-guide.md` |
 | `/api/admin/plans`, `/api/student/plans` | `plans/` | Kế hoạch đào tạo theo khóa | `training-plan-guide.md`, `student-plans.md` |
 | `/api/admin/graduation`, `/api/student/graduation` | `graduation/` | Tiêu chuẩn xét tốt nghiệp; đánh giá cho từng sinh viên (`evaluation.ts`, thuần) | `graduation-standards.md` |
 | `/api/student/graduation/advice` | `graduation/advice/` | Lời khuyên tốt nghiệp do AI viết, tự xếp hàng theo dấu vân tay dữ liệu | `graduation-advice.md` |
 | `/api/student/study-plan` | `study-plan/` | Lộ trình học tập (theo Stellic): theo dõi tiến độ theo tiêu chuẩn tốt nghiệp, kế hoạch học tập thủ công theo học kỳ, kiểm tra tiên quyết/học kỳ mở môn/giới hạn tín chỉ (migration 046) | `study-roadmap.md` |
-| `/api/student/roadmap` | `roadmap/` | Lộ trình học tập 3 tháng do AI soạn như cố vấn học tập: môn cần học, môn cần cải thiện, kỹ năng nên tự học (job `study_roadmap`, migration 047) | `study-roadmap.md` |
+| `/api/student/roadmap` | `roadmap/` | Lộ trình học tập 3 tháng do AI soạn như cố vấn học tập: môn cần học, môn cần cải thiện, kỹ năng nên tự học, lời khuyên theo khảo sát định hướng (job `study_roadmap`, migration 047) | `study-roadmap.md`, `profile-survey.md` |
 | `/api/admin/careers`, `/api/student/careers` | `careers/` | Lĩnh vực, kỹ năng (danh mục dùng chung), nghề nghiệp, yêu cầu kỹ năng | `career-positions.md` |
 | `/api/admin/careers/requirements/ai-suggestions` | `careers/ai-suggestions/` | AI đề xuất kỹ năng cho nghề nghiệp | `career-ai-suggestions.md` |
 | `/api/admin/competencies` | `competencies/` | Nhóm năng lực, cấu hình năng lực, cấu hình môn học (môn học dùng chung cho mọi khóa, migration 038; liên kết + trọng số) | `competency-management.md` |

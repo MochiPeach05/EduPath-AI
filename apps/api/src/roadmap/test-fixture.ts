@@ -40,3 +40,13 @@ export function syntheticRoadmapResult(): AssessmentResult {
 
 export const syntheticRoadmapFacts = (result: AssessmentResult = syntheticRoadmapResult()): RoadmapFacts =>
   buildRoadmapFacts(ROADMAP_ASSESSMENT, result, roadmapWindow(ROADMAP_NOW));
+
+/** An invented profile survey as stu_profile_surveys returns it (readSurvey). */
+export const syntheticSurveyRow = () => ({
+  version: "survey-v1",
+  answers: { goal: "work", environment: "team", company: "startup", partTime: "it", leadership: "one", projects: "some", internship: "none",
+    selfStudy: "medium", english: "reading", field: "web" },
+  has_achievements: true,
+  achievements: "Giải Ba cuộc thi lập trình cấp khoa 2025\nHọc bổng khuyến khích học tập",
+  updated_at: new Date("2026-10-24T00:30:00Z"),
+});

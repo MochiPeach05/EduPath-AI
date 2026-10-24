@@ -1,8 +1,9 @@
 import type { PoolClient } from "pg";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { claimRoadmap, completeRoadmap, createRoadmap, createRoadmapExpiry, expireRoadmaps, extendRoadmap, RoadmapError, type RoadmapRow } from "./jobs.js";
+import { surveyFacts } from "../student/survey.js";
 import { buildRoadmapInput, ROADMAP_PROMPT_VERSION } from "./prompt.js";
-import { ROADMAP_ASSESSMENT, ROADMAP_NOW, syntheticRoadmapFacts, syntheticRoadmapResult } from "./test-fixture.js";
+import { ROADMAP_ASSESSMENT, ROADMAP_NOW, syntheticRoadmapFacts, syntheticRoadmapResult, syntheticSurveyRow } from "./test-fixture.js";
 
 // Synthetic K29 data only (fixtures/synthetic-k29.json plus invented grades); no real student record.
 const USER = "11111111-1111-4111-8111-111111111111";
@@ -11,14 +12,15 @@ const LEASE = "55555555-5555-4555-8555-555555555555";
 const OTHER_LEASE = "66666666-6666-4666-8666-666666666666";
 const OLD_ASSESSMENT = "77777777-7777-4777-8777-777777777777";
 const facts = syntheticRoadmapFacts();
-const aiInput = buildRoadmapInput(facts);
+const survey = syntheticSurveyRow();
+const aiInput = buildRoadmapInput(facts, surveyFacts({ answers: survey.answers, hasAchievements: survey.has_achievements, achievements: survey.achievements }));
 
 const row = (extra: Partial<RoadmapRow> = {}): RoadmapRow => ({
   id: ROADMAP, assessmentId: ROADMAP_ASSESSMENT, status: "completed", errorCode: null, createdAt: new Date("2026-10-24T02:00:00Z"),
   completedAt: new Date("2026-10-24T02:03:00Z"), model: "gemma4:e4b", facts, output: null, recent: false, ...extra,
 });
 
-type State = { rows?: RoadmapRow[]; othersPending?: number; active?: boolean; assessment?: boolean };
+type State = { rows?: RoadmapRow[]; othersPending?: number; active?: boolean; assessment?: boolean; survey?: boolean };
 
 function fakeClient(state: State = {}) {
   const query = vi.fn(async (sql: string, _params?: unknown[]) => {
@@ -27,6 +29,7 @@ function fakeClient(state: State = {}) {
       return state.assessment === false ? { rowCount: 0, rows: [] }
         : { rowCount: 1, rows: [{ id: ROADMAP_ASSESSMENT, createdAt: new Date("2026-10-24T01:00:00Z"), computed: syntheticRoadmapResult() }] };
     }
+    if (sql.includes("FROM stu_profile_surveys WHERE user_id=$1")) return state.survey === false ? { rowCount: 0, rows: [] } : { rowCount: 1, rows: [survey] };
     if (sql.includes("FROM stu_roadmaps WHERE user_id=$1 ORDER BY created_at DESC,id DESC")) return { rowCount: state.rows?.length ?? 0, rows: state.rows ?? [] };
     if (sql.includes("count(*)::int AS count FROM stu_roadmaps")) return { rowCount: 1, rows: [{ count: state.othersPending ?? 0 }] };
     if (sql.startsWith("INSERT INTO stu_roadmaps")) return { rowCount: 1, rows: [{ createdAt: new Date("2026-10-24T03:00:00Z") }] };
@@ -87,8 +90,23 @@ describe("createRoadmap", () => {
     expect((await createRoadmap(fakeClient({ rows: [row()], othersPending: 19 }).client, USER, { now: ROADMAP_NOW })).created).toBe(true);
   });
 
-  it("needs an assessment and an active account", async () => {
+  it("passes the profile survey to the AI only, never into the stored facts", async () => {
+    const { client, calls } = fakeClient();
+    await createRoadmap(client, USER, { now: ROADMAP_NOW });
+    const params = calls().find(([text]) => text.startsWith("INSERT INTO stu_roadmaps"))![1] as unknown[];
+    const user = (JSON.parse(params[6] as string) as { user: string }).user;
+    expect(user).toContain("[8. HỒ SƠ ĐỊNH HƯỚNG] (sinh viên tự khai)");
+    expect(user).toContain("- Mục tiêu sau tốt nghiệp: Đi làm ngay");
+    expect(user).toContain("- Thời gian tự học mỗi tuần: 5–10 giờ");
+    expect(user).toContain("  + Giải Ba cuộc thi lập trình cấp khoa 2025\n  + Học bổng khuyến khích học tập");
+    expect(params[5] as string).not.toContain("Giải Ba");
+  });
+
+  it("needs an assessment, the answered profile survey and an active account", async () => {
     await expect(createRoadmap(fakeClient({ assessment: false }).client, USER)).rejects.toMatchObject({ code: "assessment_required", status: 409 });
+    const noSurvey = fakeClient({ survey: false });
+    await expect(createRoadmap(noSurvey.client, USER)).rejects.toMatchObject({ code: "survey_required", status: 409 });
+    expect(writes(noSurvey.sql())).toEqual([]);
     const inactive = fakeClient({ active: false });
     await expect(createRoadmap(inactive.client, USER)).rejects.toMatchObject({ code: "account_unavailable", status: 403 });
     expect(inactive.sql()).toHaveLength(1);

@@ -7,7 +7,8 @@ import type { AuthenticatedUser } from "../auth/types.js";
 import { requireAuthentication } from "../middleware/authorization.js";
 import { parseTranscript, TranscriptError, type TranscriptData } from "./transcript-parser.js";
 import { enqueueTranscript, expireJobs, jobColumns, runAfterTranscriptImport, type TranscriptImportOptions } from "./transcript-jobs.js";
-import { recordTranscriptConsent, TRANSCRIPT_POLICY_VERSION, withdrawTranscriptConsent } from "./consent.js";
+import { activeConsentVersion, recordConsent, recordTranscriptConsent, TRANSCRIPT_POLICY_VERSION, withdrawConsent, withdrawTranscriptConsent } from "./consent.js";
+import { ACHIEVEMENTS_MAX, deleteSurvey, parseSurveyInput, readSurvey, saveSurvey, SURVEY_QUESTIONS } from "./survey.js";
 import { deleteCompetencyData } from "../competency-assessment/repository.js";
 import { specialtyOffered } from "../competency-assessment/specialty.js";
 import { deleteGraduationAdvice } from "../graduation/advice/jobs.js";
@@ -70,6 +71,47 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
       }
       await client.query("COMMIT");
       res.json({ saved: true });
+    } catch (error) { await client.query("ROLLBACK"); throw error; }
+    finally { client.release(); }
+  });
+
+  // "Khảo sát định hướng": the questions, the stored answers and the policy version the student agreed to for them.
+  router.get("/survey", async (req, res) => {
+    const userId = req.session.user!.userId;
+    res.json({ questions: SURVEY_QUESTIONS, achievementsMax: ACHIEVEMENTS_MAX, survey: await readSurvey(pool!, userId),
+      consentVersion: await activeConsentVersion(pool!, userId, "profile_survey") });
+  });
+  // Saving needs consent to the current policy: given with this request (X-Consent-Policy-Version) or already active.
+  router.put("/survey", async (req, res) => {
+    const input = parseSurveyInput(req.body);
+    if ("error" in input) { res.status(400).json({ error: input.error }); return; }
+    const consentVersion = req.get("x-consent-policy-version");
+    if (consentVersion && consentVersion !== TRANSCRIPT_POLICY_VERSION) { res.status(409).json({ error: "policy_outdated" }); return; }
+    const userId = req.session.user!.userId;
+    const client = await pool!.connect();
+    try {
+      await client.query("BEGIN");
+      await lockStudent(client, req.session.user!);
+      if (consentVersion) await recordConsent(client, userId, "profile_survey");
+      else if (await activeConsentVersion(client, userId, "profile_survey") !== TRANSCRIPT_POLICY_VERSION) throw new TranscriptError("consent_required", 400);
+      const survey = await saveSurvey(client, userId, input.value);
+      await client.query("COMMIT");
+      res.json({ survey, consentVersion: TRANSCRIPT_POLICY_VERSION });
+    } catch (error) { await client.query("ROLLBACK"); throw error; }
+    finally { client.release(); }
+  });
+  // "Xóa câu trả lời": withdraws the consent; the AI roadmaps go too (deleteSurvey).
+  router.delete("/survey", async (req, res) => {
+    if (!z.object({ confirmed: z.literal(true) }).strict().safeParse(req.body).success) { res.status(400).json({ error: "invalid_input" }); return; }
+    const userId = req.session.user!.userId;
+    const client = await pool!.connect();
+    try {
+      await client.query("BEGIN");
+      await lockStudent(client, req.session.user!);
+      const deleted = await deleteSurvey(client, userId);
+      await withdrawConsent(client, userId, "profile_survey");
+      await client.query("COMMIT");
+      res.json({ deleted });
     } catch (error) { await client.query("ROLLBACK"); throw error; }
     finally { client.release(); }
   });

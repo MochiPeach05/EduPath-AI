@@ -12,7 +12,9 @@ describe("normalizeRoadmapResponse", () => {
     expect(data.roadmap).toMatchObject({ window: { months: [] }, study: [{ code: "A", careerSkills: [] }], choices: [], improve: [], months: [],
       skills: [{ key: "S01", courses: [], steps: [] }] });
     expect(data).toMatchObject({ stale: true, aiEnabled: true, worker: { online: true, supportsRoadmap: false }, assessment: { id: "a1", hasCareer: true } });
-    expect(normalizeRoadmapResponse(null)).toEqual({ roadmap: null, assessment: null, stale: false, aiEnabled: false, worker: { online: false, supportsRoadmap: false } });
+    // An API without surveyDone (before the profile survey) never blocks "Tạo lộ trình".
+    expect(normalizeRoadmapResponse(null)).toEqual({ roadmap: null, assessment: null, stale: false, surveyDone: true, aiEnabled: false, worker: { online: false, supportsRoadmap: false } });
+    expect(normalizeRoadmapResponse({ surveyDone: false }).surveyDone).toBe(false);
     expect(normalizeRoadmapResponse({ roadmap: { id: 1 } }).roadmap).toBeNull();
     expect(normalizeRoadmapStatus({ id: "r1", status: "processing" })).toEqual({ id: "r1", status: "processing", errorCode: null, worker: { online: false, supportsRoadmap: false } });
   });

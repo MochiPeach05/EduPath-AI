@@ -43,6 +43,7 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
     question: "EduPath AI dùng AI vào việc gì?",
     answer: [
       "EduPath AI dùng mô hình ngôn ngữ Gemma 4 E4B để viết nhận xét học tập trong trang Đánh giá năng lực. Nhận xét giúp bạn hiểu kết quả của mình: điểm mạnh nằm ở đâu, kỹ năng nào còn thiếu so với nghề mục tiêu, nên ưu tiên học phần nào trong danh sách hệ thống gợi ý và nên tự học thêm những gì.",
+      "Mô hình cũng soạn Lộ trình học tập 3 tháng trong trang Lộ trình học tập: học phần nên học, học phần cần cải thiện, kỹ năng nên tự học và lời khuyên theo mục tiêu của bạn, dựa trên kết quả đánh giá năng lực và Khảo sát định hướng trong hồ sơ. Các học phần được đề xuất được thêm vào Kế hoạch học kỳ để bạn điều chỉnh.",
       "Mọi con số như điểm kỹ năng, mức năng lực, khoảng trống kỹ năng và mức phù hợp nghề đều do hệ thống tính theo trọng số học phần mà Khoa cấu hình, không do AI đưa ra. Mô hình chạy cục bộ trên một máy tính do nhóm phát triển EduPath AI quản lý, nên dữ liệu của bạn không được gửi tới dịch vụ AI đám mây nào."
     ],
     note: "Nhận xét do AI viết chỉ để tham khảo và có thể chưa chính xác. Hãy đối chiếu với số liệu trên trang và trao đổi với giảng viên hoặc cố vấn học tập trước khi quyết định."
@@ -127,7 +128,15 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
       "Để viết nhận xét, mô hình chỉ nhận mã và tên học phần theo chương trình đào tạo, điểm của bạn ở các học phần đó, khóa, chuyên ngành, nghề mục tiêu và các kết quả hệ thống đã tính như điểm kỹ năng, khoảng trống và học phần gợi ý.",
       "Mô hình không nhận họ tên, mã số sinh viên, email, lớp, sở thích hay tệp PDF bảng điểm của bạn. Mô hình chạy cục bộ trên máy tính do nhóm phát triển EduPath AI quản lý, nhận yêu cầu qua một kênh có xác thực, và dữ liệu không được gửi tới dịch vụ AI đám mây nào."
     ],
-    note: "Dữ liệu gửi cho mô hình được xóa sau khi xử lý xong; chỉ nhận xét được lưu lại cùng kết quả đánh giá. Chi tiết xem mục Đánh giá năng lực và AI trong Chính sách bảo mật."
+    note: "Khi soạn Lộ trình AI, mô hình nhận thêm câu trả lời Khảo sát định hướng và danh sách thành tích bạn liệt kê. Dữ liệu gửi cho mô hình được xóa sau khi xử lý xong; chỉ nhận xét và lộ trình được lưu lại. Chi tiết xem mục Đánh giá năng lực và AI, mục Khảo sát và lộ trình AI trong Chính sách bảo mật."
+  },
+  {
+    question: "Vì sao tôi phải làm Khảo sát định hướng?",
+    answer: [
+      "Bảng điểm chỉ cho biết bạn đã học những gì. Khảo sát định hướng cho EduPath AI biết bạn muốn đi đâu: mục tiêu sau tốt nghiệp, môi trường làm việc bạn thích, kinh nghiệm làm thêm, dẫn dắt nhóm, dự án, thực tập, thời gian tự học, tiếng Anh chuyên ngành, lĩnh vực quan tâm và thành tích. Nhờ đó lộ trình AI đưa ra lời khuyên sát với bạn hơn, kể cả khi bảng điểm đã tốt.",
+      "Khảo sát gồm các câu chọn đáp án có sẵn và một câu Có/Không về thành tích; nếu chọn Có, bạn liệt kê thành tích, mỗi dòng một thành tích. Bạn cần hoàn thành khảo sát trước khi tạo Lộ trình AI."
+    ],
+    note: "Bạn có thể sửa câu trả lời bất cứ lúc nào bằng Chỉnh sửa khảo sát, hoặc xóa bằng Xóa câu trả lời trong Hồ sơ và bảng điểm."
   },
   {
     question: "Nhận xét từ AI có thay thế tư vấn của giảng viên không?",
@@ -156,6 +165,7 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
     question: "Tôi có thể chỉnh sửa hoặc xóa dữ liệu đã nhập không?",
     answer: [
       "Bạn có thể mở Thông tin cá nhân, chọn Chỉnh sửa thông tin để cập nhật Sở thích, Chuyên ngành và Vị trí nghề nghiệp mong muốn, rồi bấm Lưu thay đổi. Lớp học và các thông tin định danh lấy từ tài khoản trường chỉ để xem.",
+      "Với Khảo sát định hướng, bấm Chỉnh sửa khảo sát để đổi câu trả lời, hoặc Xóa câu trả lời để xóa toàn bộ câu trả lời và thành tích; các lộ trình AI đã tạo cũng bị xóa theo.",
       "Để xóa bảng điểm, mở Hồ sơ và bảng điểm, bấm Xóa bảng điểm và xác nhận. Việc này xóa PDF, toàn bộ dữ liệu môn học đã import và các kết quả đánh giá năng lực; thông tin cá nhân vẫn được giữ lại. Sau đó bạn có thể tải một bảng điểm mới lên."
     ],
     note: `Sau khi xóa bảng điểm, cột Kết quả và phần xét tốt nghiệp sẽ không còn dấu đạt hoặc chưa đạt cho đến khi bạn import lại. Nếu muốn xóa toàn bộ tài khoản EduPath AI hoặc nhận bản sao dữ liệu của mình, hãy gửi email đến ${supportEmail}.`
@@ -202,16 +212,19 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
   }
 ];
 
-// Students consent to this policy version when importing a transcript or requesting a competency
-// assessment; the API rejects any other version. Must equal TRANSCRIPT_POLICY_VERSION in
-// apps/api/src/student/consent.ts.
-export const policyVersion = "2026-10-11";
+// Students consent to this policy version when importing a transcript, requesting a competency
+// assessment or saving the profile survey; the API rejects any other version. Must equal
+// TRANSCRIPT_POLICY_VERSION in apps/api/src/student/consent.ts.
+export const policyVersion = "2026-10-24";
 export const policyUpdatedAt = policyVersion.split("-").reverse().join("/");
 
 // Privacy category that explains competency assessment and the AI commentary. The consent dialog on
 // the competency page links here; PublicInformationPage renders privacy categories as #bao-mat-<id>.
 export const competencyPolicyCategoryId = "danh-gia-nang-luc";
 export const competencyPolicyHref = `${publicInformationLinks[0].href}#bao-mat-${competencyPolicyCategoryId}`;
+// Privacy category of the profile survey and the AI study roadmap; the survey's consent box links here.
+export const surveyPolicyCategoryId = "khao-sat-lo-trinh";
+export const surveyPolicyHref = `${publicInformationLinks[0].href}#bao-mat-${surveyPolicyCategoryId}`;
 
 // A string renders as a paragraph; a string array renders as a bullet list.
 type InformationSection = { title: string; paragraphs: (string | string[])[] };
@@ -238,9 +251,10 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
             paragraphs: [[
               "Bạn đăng nhập bằng tài khoản Microsoft của trường. EduPath AI không biết và không lưu mật khẩu của bạn.",
               "Chỉ bạn xem được bảng điểm, điểm từng môn và kết quả đánh giá năng lực của mình.",
-              "Sở thích, chuyên ngành, mục tiêu nghề nghiệp và bảng điểm do bạn tự nguyện cung cấp, và bạn có thể sửa hoặc xóa bất cứ lúc nào.",
+              "Sở thích, chuyên ngành, mục tiêu nghề nghiệp, khảo sát định hướng, thành tích và bảng điểm do bạn tự cung cấp, và bạn có thể sửa hoặc xóa bất cứ lúc nào.",
               "Đánh giá năng lực chỉ chạy khi bạn yêu cầu và đồng ý. Điểm và mức năng lực do hệ thống tính; AI chỉ viết nhận xét để bạn tham khảo.",
-              "Mô hình AI viết nhận xét chạy cục bộ, không nhận họ tên, mã số sinh viên, email, lớp hay tệp PDF bảng điểm của bạn, và dữ liệu không được gửi tới dịch vụ AI đám mây.",
+              "Lộ trình học tập 3 tháng do AI soạn dùng kết quả đánh giá năng lực, câu trả lời khảo sát định hướng và thành tích bạn liệt kê, khi bạn yêu cầu và đã đồng ý.",
+              "Mô hình AI chạy cục bộ, không nhận họ tên, mã số sinh viên, email, lớp hay tệp PDF bảng điểm của bạn, và dữ liệu không được gửi tới dịch vụ AI đám mây.",
               "EduPath AI không bán dữ liệu, không hiển thị quảng cáo và không theo dõi bạn trên các trang web khác.",
               "Dữ liệu được lưu trên dịch vụ lưu trữ đám mây, máy chủ có thể đặt ngoài Việt Nam."
             ]]
@@ -267,9 +281,12 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
             paragraphs: [
               [
                 "Sở thích, chuyên ngành và vị trí nghề nghiệp mong muốn mà bạn nhập hoặc chọn trong hồ sơ.",
-                "Bảng điểm PDF bạn tải lên, cùng các thông tin đọc được từ đó: môn học, số tín chỉ, điểm, kết quả và học kỳ."
+                "Câu trả lời khảo sát định hướng: mục tiêu sau tốt nghiệp, môi trường học tập và làm việc bạn thích, loại hình công ty mong muốn, việc làm thêm, kinh nghiệm dẫn dắt nhóm, dự án ngoài môn học, thực tập, thời gian tự học mỗi tuần, tiếng Anh chuyên ngành và lĩnh vực quan tâm nhất (chọn trong các câu trả lời có sẵn).",
+                "Thành tích bạn liệt kê, như cuộc thi, giải thưởng, danh hiệu hay học bổng.",
+                "Bảng điểm PDF bạn tải lên, cùng các thông tin đọc được từ đó: môn học, số tín chỉ, điểm, kết quả và học kỳ.",
+                "Kế hoạch học kỳ bạn lập trên trang Lộ trình học tập."
               ],
-              "Các thông tin này không bắt buộc. Khi chưa tải bảng điểm lên, bạn vẫn dùng được các chức năng khác, chỉ chưa thấy kết quả đạt hay chưa đạt của từng môn và chưa dùng được Đánh giá năng lực."
+              "Bạn quyết định có cung cấp các thông tin này hay không. Các chức năng tư vấn cần chúng: chưa có bảng điểm, chuyên ngành và nghề mục tiêu thì chưa dùng được Đánh giá năng lực; chưa làm khảo sát định hướng thì chưa tạo được Lộ trình AI. Các chức năng tra cứu khác vẫn dùng được."
             ]
           },
           {
@@ -277,10 +294,14 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
             paragraphs: ["Mỗi lần bạn đánh giá năng lực, EduPath AI tạo và lưu một kết quả đánh giá từ bảng điểm và hồ sơ của bạn, gồm điểm và mức của từng kỹ năng, nhóm kỹ năng, mức phù hợp với nghề mục tiêu, các khoảng trống kỹ năng, học phần nên ưu tiên, tiến độ so với kế hoạch đào tạo và điều kiện xét tốt nghiệp, cùng nhận xét do AI viết nếu có."]
           },
           {
+            title: "Thông tin được tạo khi bạn lập lộ trình học tập",
+            paragraphs: ["Mỗi lần bạn tạo Lộ trình AI, EduPath AI lưu một lộ trình 3 tháng gồm học phần nên học, học phần cần cải thiện, kỹ năng nên tự học, kế hoạch theo tháng và lời khuyên do AI viết. Các học phần AI đề xuất được thêm vào Kế hoạch học kỳ của bạn để bạn điều chỉnh."]
+          },
+          {
             title: "Thông tin ghi nhận khi bạn sử dụng",
             paragraphs: [[
               "Thời điểm và kết quả các lần đăng nhập, để bảo vệ tài khoản và hỗ trợ bạn khi gặp sự cố đăng nhập.",
-              "Thời điểm bạn đồng ý hoặc rút lại sự đồng ý cho việc xử lý bảng điểm và cho việc đánh giá năng lực, cùng phiên bản chính sách bạn đã đồng ý."
+              "Thời điểm bạn đồng ý hoặc rút lại sự đồng ý cho việc xử lý bảng điểm, cho việc đánh giá năng lực và cho việc dùng khảo sát định hướng, cùng phiên bản chính sách bạn đã đồng ý."
             ]]
           },
           {
@@ -292,7 +313,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
                 "Số căn cước, số điện thoại, địa chỉ nhà hay thông tin tài khoản ngân hàng.",
                 "Thông tin sức khỏe, tôn giáo, quan điểm chính trị hay vị trí của bạn."
               ],
-              "Vì vậy, bạn cũng không nên ghi những thông tin này vào ô Sở thích."
+              "Vì vậy, bạn cũng không nên ghi những thông tin này vào ô Sở thích hay ô Thành tích."
             ]
           }
         ]
@@ -310,6 +331,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
               "Giúp bạn tìm hiểu các vị trí nghề nghiệp và lưu mục tiêu của mình.",
               "Đánh giá năng lực và phân tích khoảng trống kỹ năng so với nghề mục tiêu, khi bạn yêu cầu.",
               "Tạo nhận xét học tập bằng AI cho kết quả đánh giá năng lực của bạn.",
+              "Soạn lộ trình học tập 3 tháng bằng AI và đề xuất học phần cho Kế hoạch học kỳ, dựa trên kết quả đánh giá năng lực, khảo sát định hướng và thành tích của bạn, khi bạn yêu cầu.",
               "Giúp Khoa hỗ trợ, tư vấn học tập và quản lý đào tạo.",
               "Bảo vệ tài khoản và xử lý khi có sự cố."
             ]]
@@ -317,11 +339,12 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
           {
             title: "Sự đồng ý của bạn",
             paragraphs: [
-              "Thông tin từ tài khoản trường là cần thiết để bạn đăng nhập và sử dụng EduPath AI. Sở thích, chuyên ngành, mục tiêu nghề nghiệp và bảng điểm chỉ được xử lý khi chính bạn nhập hoặc tải lên.",
+              "Thông tin từ tài khoản trường là cần thiết để bạn đăng nhập và sử dụng EduPath AI. Sở thích, chuyên ngành, mục tiêu nghề nghiệp, khảo sát định hướng, thành tích và bảng điểm chỉ được xử lý khi chính bạn nhập hoặc tải lên.",
               "Trước khi tải bảng điểm lên, bạn cần tích ô xác nhận đây là bảng điểm của mình và đồng ý để EduPath AI xử lý bảng điểm theo chính sách này. Ô này không được chọn sẵn; nếu bạn không tích, bảng điểm sẽ không được tải lên.",
               "Đánh giá năng lực cần một sự đồng ý riêng. Lần đầu bạn bấm Đánh giá năng lực, EduPath AI sẽ hỏi bạn có đồng ý cho việc đánh giá năng lực và tạo nhận xét bằng AI theo chính sách này hay không; nếu bạn không đồng ý, việc đánh giá sẽ không được thực hiện. Chi tiết xem mục Đánh giá năng lực và AI.",
-              "EduPath AI lưu lại thời điểm bạn đồng ý và phiên bản chính sách bạn đã đồng ý, để làm bằng chứng theo quy định của pháp luật. Khi chính sách được cập nhật, bạn sẽ được đề nghị đồng ý lại ở lần tải bảng điểm hoặc lần đánh giá năng lực tiếp theo.",
-              "Bạn có thể rút lại sự đồng ý bất cứ lúc nào bằng cách xóa bảng điểm hoặc xóa thông tin đã nhập. Với đánh giá năng lực, bạn rút lại sự đồng ý ngay trên trang Đánh giá năng lực, và toàn bộ kết quả đánh giá sẽ bị xóa. Thời điểm rút lại cũng được ghi nhận. Việc rút lại không ảnh hưởng đến tính hợp pháp của việc xử lý đã diễn ra trước đó."
+              "Khảo sát định hướng cũng cần một sự đồng ý riêng: khi lưu khảo sát, bạn tích ô đồng ý để EduPath AI dùng câu trả lời và thành tích của bạn cho việc tư vấn lộ trình học tập bằng AI. Ô này không được chọn sẵn; nếu bạn không tích, khảo sát sẽ không được lưu. Chi tiết xem mục Khảo sát và lộ trình AI.",
+              "EduPath AI lưu lại thời điểm bạn đồng ý và phiên bản chính sách bạn đã đồng ý, để làm bằng chứng theo quy định của pháp luật. Khi chính sách được cập nhật, bạn sẽ được đề nghị đồng ý lại ở lần tải bảng điểm, lần đánh giá năng lực hoặc lần lưu khảo sát tiếp theo.",
+              "Bạn có thể rút lại sự đồng ý bất cứ lúc nào bằng cách xóa bảng điểm hoặc xóa thông tin đã nhập. Với đánh giá năng lực, bạn rút lại sự đồng ý ngay trên trang Đánh giá năng lực, và toàn bộ kết quả đánh giá sẽ bị xóa. Với khảo sát định hướng, bạn bấm Xóa câu trả lời trong Hồ sơ và bảng điểm; câu trả lời, thành tích và các lộ trình AI đã tạo sẽ bị xóa. Thời điểm rút lại cũng được ghi nhận. Việc rút lại không ảnh hưởng đến tính hợp pháp của việc xử lý đã diễn ra trước đó."
             ]
           },
           {
@@ -330,7 +353,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
               "Không bán, cho thuê hay trao đổi dữ liệu cá nhân của bạn.",
               "Không dùng dữ liệu của bạn để quảng cáo.",
               "Không gửi bảng điểm hay dữ liệu học tập của bạn tới dịch vụ AI đám mây hay đơn vị nào bên ngoài để đọc hoặc phân tích.",
-              "Không đưa họ tên, mã số sinh viên, email, lớp hay tệp PDF bảng điểm của bạn vào dữ liệu gửi cho mô hình AI viết nhận xét.",
+              "Không đưa họ tên, mã số sinh viên, email, lớp hay tệp PDF bảng điểm của bạn vào dữ liệu gửi cho mô hình AI.",
               "Không dùng dữ liệu của bạn cho mục đích khác khi chưa thông báo cho bạn."
             ]]
           }
@@ -407,7 +430,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
                 "Khóa, chuyên ngành và nghề mục tiêu của bạn.",
                 "Các kết quả hệ thống đã tính, như điểm và mức kỹ năng, khoảng trống, học phần gợi ý, tiến độ học tập và cảnh báo dữ liệu."
               ],
-              "Mô hình không nhận họ tên, mã số sinh viên, email, lớp, sở thích hay tệp PDF bảng điểm của bạn."
+              "Mô hình không nhận họ tên, mã số sinh viên, email, lớp, sở thích hay tệp PDF bảng điểm của bạn. Lộ trình AI nhận thêm câu trả lời khảo sát định hướng và thành tích, xem mục Khảo sát và lộ trình AI."
             ]
           },
           {
@@ -432,14 +455,49 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
         ]
       },
       {
+        id: surveyPolicyCategoryId,
+        label: "Khảo sát và lộ trình AI",
+        sections: [
+          {
+            title: "Khảo sát định hướng dùng để làm gì?",
+            paragraphs: [
+              "Khảo sát định hướng trong Hồ sơ và bảng điểm gồm các câu hỏi có câu trả lời chọn sẵn về mục tiêu sau tốt nghiệp, môi trường làm việc, kinh nghiệm, thời gian tự học, tiếng Anh chuyên ngành và lĩnh vực quan tâm, cùng câu hỏi bạn có thành tích hay không (nếu có, bạn liệt kê). EduPath AI dùng các câu trả lời này để lộ trình học tập do AI soạn sát với mục tiêu và hoàn cảnh của bạn.",
+              "Bạn cần hoàn thành khảo sát trước khi tạo Lộ trình AI. Khi liệt kê thành tích, đừng ghi họ tên, mã số sinh viên, số điện thoại hay thông tin của người khác."
+            ]
+          },
+          {
+            title: "Lộ trình AI dùng những dữ liệu nào?",
+            paragraphs: [
+              "Khi bạn bấm Tạo lộ trình, mô hình Gemma 4 E4B chạy cục bộ soạn lộ trình 3 tháng từ:",
+              [
+                "Kết quả đánh giá năng lực mới nhất của bạn: mã và tên học phần, điểm, học phần cần học, cần cải thiện, kỹ năng nghề còn thiếu, tiến độ học tập và xét tốt nghiệp.",
+                "Khóa, chuyên ngành và nghề mục tiêu của bạn.",
+                "Câu trả lời khảo sát định hướng và danh sách thành tích bạn đã liệt kê."
+              ],
+              "Danh sách học phần và kỹ năng do hệ thống tính; AI chọn ưu tiên và viết lời khuyên. Mô hình không nhận họ tên, mã số sinh viên, email, lớp, sở thích hay tệp PDF bảng điểm của bạn. Lộ trình chỉ để tham khảo; hãy trao đổi với cố vấn học tập và xem lịch đăng ký học phần của trường trước khi đăng ký."
+            ]
+          },
+          {
+            title: "Lưu và xóa",
+            paragraphs: [[
+              "Chỉ bạn xem được câu trả lời khảo sát, thành tích, kế hoạch học kỳ và lộ trình của mình. Cán bộ quản lý chỉ thấy hồ sơ của bạn đã đầy đủ hay chưa.",
+              "Câu trả lời khảo sát và thành tích được giữ đến khi bạn xóa hoặc khi tài khoản được xóa. Bấm Xóa câu trả lời trong Hồ sơ và bảng điểm để xóa chúng; các lộ trình AI đã tạo cũng bị xóa.",
+              "Mỗi tài khoản giữ tối đa 5 lộ trình AI gần nhất. Lộ trình đi cùng kết quả đánh giá năng lực tạo ra nó và bị xóa khi kết quả đó bị xóa.",
+              "Dữ liệu gửi cho mô hình AI được xóa sau khi soạn xong, kể cả khi việc soạn bị lỗi hoặc bị hủy.",
+              "Kế hoạch học kỳ được giữ đến khi bạn xóa hoặc khi tài khoản được xóa."
+            ]]
+          }
+        ]
+      },
+      {
         id: "chia-se",
         label: "Chia sẻ thông tin",
         sections: [
           {
             title: "Ai có thể xem thông tin của bạn?",
             paragraphs: [
-              "Bạn xem được toàn bộ thông tin của mình. Sinh viên khác không xem được hồ sơ, bảng điểm hay kết quả đánh giá năng lực của bạn.",
-              "Trong nhà trường, chỉ cán bộ, giảng viên có nhiệm vụ liên quan mới được xem những thông tin hồ sơ cần thiết để hỗ trợ học tập và quản lý đào tạo, không bao gồm điểm số và kết quả đánh giá năng lực của bạn, và không được chia sẻ ra ngoài."
+              "Bạn xem được toàn bộ thông tin của mình. Sinh viên khác không xem được hồ sơ, bảng điểm, kết quả đánh giá năng lực, khảo sát định hướng hay lộ trình của bạn.",
+              "Trong nhà trường, chỉ cán bộ, giảng viên có nhiệm vụ liên quan mới được xem những thông tin hồ sơ cần thiết để hỗ trợ học tập và quản lý đào tạo, không bao gồm điểm số, kết quả đánh giá năng lực, câu trả lời khảo sát, thành tích và lộ trình của bạn, và không được chia sẻ ra ngoài."
             ]
           },
           {
@@ -455,7 +513,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
           },
           {
             title: "Máy tạo nhận xét AI",
-            paragraphs: ["Nhận xét AI được tạo trên một máy tính do nhóm phát triển EduPath AI quản lý, bằng mô hình chạy ngay trên máy đó. Máy này chỉ nhận phần dữ liệu nêu ở mục Đánh giá năng lực và AI, không nhận họ tên, mã số sinh viên, email hay lớp của bạn, và không gửi dữ liệu tới dịch vụ AI đám mây."]
+            paragraphs: ["Nhận xét và lộ trình AI được tạo trên một máy tính do nhóm phát triển EduPath AI quản lý, bằng mô hình chạy ngay trên máy đó. Máy này chỉ nhận phần dữ liệu nêu ở mục Đánh giá năng lực và AI và mục Khảo sát và lộ trình AI, không nhận họ tên, mã số sinh viên, email hay lớp của bạn, và không gửi dữ liệu tới dịch vụ AI đám mây."]
           },
           {
             title: "Khi pháp luật yêu cầu",
@@ -471,7 +529,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
             title: "Dữ liệu được lưu ở đâu?",
             paragraphs: [
               "Dữ liệu của bạn được lưu trên dịch vụ lưu trữ đám mây, và máy chủ có thể đặt ngoài lãnh thổ Việt Nam. Dù dữ liệu được lưu ở đâu, các cam kết và quyền của bạn trong chính sách này vẫn được giữ nguyên.",
-              "Riêng phần dữ liệu dùng để tạo nhận xét AI được xử lý trên máy tính do nhóm phát triển EduPath AI quản lý và được xóa sau khi xử lý xong."
+              "Riêng phần dữ liệu dùng để tạo nhận xét và lộ trình AI được xử lý trên máy tính do nhóm phát triển EduPath AI quản lý và được xóa sau khi xử lý xong."
             ]
           },
           {
@@ -481,6 +539,8 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
                 "Thông tin hồ sơ: trong thời gian tài khoản EduPath AI của bạn còn tồn tại.",
                 "Bảng điểm: đến khi bạn xóa, thay bằng bản mới hoặc khi tài khoản được xóa.",
                 "Kết quả đánh giá năng lực và nhận xét AI: đến khi bạn xóa hoặc thay bảng điểm, rút lại sự đồng ý cho đánh giá năng lực hoặc khi tài khoản được xóa; mỗi tài khoản giữ tối đa 20 lần đánh giá gần nhất.",
+                "Câu trả lời khảo sát định hướng và thành tích: đến khi bạn xóa hoặc khi tài khoản được xóa.",
+                "Lộ trình AI: tối đa 5 lộ trình gần nhất, bị xóa cùng kết quả đánh giá năng lực tạo ra nó hoặc khi bạn xóa câu trả lời khảo sát; kế hoạch học kỳ: đến khi bạn xóa hoặc khi tài khoản được xóa.",
                 "Dữ liệu gửi cho mô hình AI: được xóa sau khi xử lý xong.",
                 "Lịch sử đăng nhập và lịch sử đồng ý: trong thời gian tài khoản còn tồn tại."
               ],
@@ -526,6 +586,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
             paragraphs: [[
               "Xem hồ sơ và bảng điểm tại Hồ sơ và bảng điểm.",
               "Sửa sở thích, chọn chuyên ngành hoặc đổi mục tiêu nghề nghiệp trong Thông tin cá nhân.",
+              "Sửa hoặc xóa câu trả lời khảo sát định hướng và thành tích trong Khảo sát định hướng.",
               "Thay bảng điểm bằng bản mới hoặc bấm Xóa bảng điểm.",
               "Xem kết quả đánh giá năng lực, hoặc rút lại sự đồng ý để xóa toàn bộ kết quả đánh giá, tại trang Đánh giá năng lực.",
               "Bấm Đăng xuất để kết thúc phiên đăng nhập trên thiết bị."
@@ -538,7 +599,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
               [
                 "Sửa họ tên, mã số sinh viên, khóa hoặc lớp bị sai.",
                 "Nhận bản sao dữ liệu EduPath AI đang lưu về bạn.",
-                "Xóa tài khoản cùng toàn bộ hồ sơ, bảng điểm, kết quả đánh giá năng lực và lịch sử liên quan.",
+                "Xóa tài khoản cùng toàn bộ hồ sơ, bảng điểm, kết quả đánh giá năng lực, khảo sát, lộ trình và lịch sử liên quan.",
                 "Hạn chế hoặc phản đối việc xử lý dữ liệu."
               ],
               "Hãy gửi từ email trường và ghi rõ họ tên, mã số sinh viên cùng nội dung yêu cầu. Yêu cầu của bạn được xử lý trong thời hạn pháp luật quy định; nếu chưa thể thực hiện, nhà trường sẽ cho bạn biết lý do."
@@ -570,7 +631,8 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
             paragraphs: [
               "Chính sách có thể được cập nhật khi EduPath AI thay đổi chức năng hoặc khi quy định pháp luật thay đổi. Nội dung mới được đăng tại trang này cùng ngày cập nhật.",
               "Nếu thay đổi ảnh hưởng đến cách dữ liệu của bạn được sử dụng, chẳng hạn khi có tính năng AI mới, bạn sẽ được hỏi ý kiến trước khi dữ liệu của mình được xử lý theo cách mới.",
-              "Bản cập nhật ngày 11/10/2026 bổ sung tính năng Đánh giá năng lực, nhận xét học tập bằng AI và thông tin chuyên ngành trong hồ sơ."
+              "Bản cập nhật ngày 11/10/2026 bổ sung tính năng Đánh giá năng lực, nhận xét học tập bằng AI và thông tin chuyên ngành trong hồ sơ.",
+              "Bản cập nhật ngày 24/10/2026 bổ sung trang Lộ trình học tập (kế hoạch học kỳ và lộ trình 3 tháng do AI soạn), khảo sát định hướng và thành tích trong hồ sơ, và việc mô hình AI dùng các câu trả lời này để tư vấn lộ trình."
             ]
           }
         ]

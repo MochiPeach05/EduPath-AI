@@ -1,7 +1,7 @@
 // Student API of the study roadmap, mounted at /api/student/roadmap. GET / reads the newest roadmap with the newest
 // competency assessment (a roadmap built from an older one is "stale"), GET /status is the cheap poll while the AI
 // writes, POST / creates one ("Tạo lộ trình", "Tạo lại"). No consent header: a roadmap is built only from an
-// assessment the student already consented to, and goes with it.
+// assessment and a profile survey the student already consented to, and goes with them.
 import { Router, type ErrorRequestHandler } from "express";
 import type { PoolClient } from "pg";
 import { z } from "zod";
@@ -9,6 +9,7 @@ import { WORKER_ONLINE_SECONDS } from "../competency-assessment/ai/queue.js";
 import { STUDY_ROADMAP_KIND } from "../competency-assessment/ai/worker-protocol.js";
 import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
+import { readSurvey } from "../student/survey.js";
 import { createRoadmap, createRoadmapExpiry, newestAssessmentInfo, readNewestRoadmap, RoadmapError, type RoadmapStatus } from "./jobs.js";
 import { presentRoadmap } from "./present.js";
 import { roadmapWindow } from "./window.js";
@@ -72,10 +73,12 @@ export function createRoadmapRouter(pool: DatabasePool | undefined, webOrigin: s
     const client = await pool!.connect();
     let row: Awaited<ReturnType<typeof readNewestRoadmap>>;
     let assessment: Awaited<ReturnType<typeof newestAssessmentInfo>>;
+    let survey: Awaited<ReturnType<typeof readSurvey>>;
     try {
       await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
       assessment = await newestAssessmentInfo(client, userId);
       row = await readNewestRoadmap(client, userId);
+      survey = await readSurvey(client, userId);
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
@@ -87,6 +90,8 @@ export function createRoadmapRouter(pool: DatabasePool | undefined, webOrigin: s
       roadmap: row && presentRoadmap(row, today()),
       assessment: assessment && { id: assessment.id, createdAt: iso(assessment.createdAt), hasCareer: assessment.hasCareer === true },
       stale: Boolean(row && assessment && row.assessmentId !== assessment.id),
+      // A new roadmap needs the answered profile survey.
+      surveyDone: survey?.complete === true,
       aiEnabled: enabled,
       worker: await workerStatus(),
     });

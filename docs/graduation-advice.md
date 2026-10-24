@@ -27,7 +27,7 @@ Cách chọn tiêu chuẩn của sinh viên, cấu trúc kết quả đối chi�
 5. **Dữ kiện thay đổi** (bảng điểm, tiêu chuẩn, chuyên ngành, CTĐT…): fingerprint hiện tại khác fingerprint của lời khuyên đang có, nên `GET /advice` trả lời khuyên cũ với `stale: true` và `needsAdvice: true`. Trang hiện lời khuyên cũ mờ đi kèm ghi chú và tự ensure lời khuyên mới.
 6. **Lỗi.** Ensure tự xếp lại một lần (xem bên dưới); sau đó trang hiện nút **Thử lại** gọi `POST /retry`.
 
-Không có bước đồng ý riêng: không thêm mục đích đồng ý (`data_consents` và ràng buộc CHECK của nó không đổi), chính sách bảo mật và điều khoản vẫn là bản 2026-10-11 (`TRANSCRIPT_POLICY_VERSION` ở API và `policyVersion` ở web không đổi). Mô hình chỉ nhận các dữ kiện học tập do server tính (xem "Dữ liệu gửi cho mô hình").
+Không có bước đồng ý riêng: không thêm mục đích đồng ý (`data_consents` và ràng buộc CHECK của nó không đổi), chính sách bảo mật và điều khoản vẫn là bản 2026-10-11 (`TRANSCRIPT_POLICY_VERSION` ở API và `policyVersion` ở web không đổi; bản 2026-10-24 sau đó thêm khảo sát định hướng và lộ trình AI, xem `profile-survey.md`). Mô hình chỉ nhận các dữ kiện học tập do server tính (xem "Dữ liệu gửi cho mô hình").
 
 ## Fingerprint và ensure
 

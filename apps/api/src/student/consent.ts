@@ -2,13 +2,14 @@ import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import type { DatabasePool } from "../db/pool.js";
 
-// Date of the privacy policy a student agrees to before importing a transcript or running a
-// competency assessment.
+// Date of the privacy policy a student agrees to before importing a transcript, running a competency assessment or
+// saving the profile survey ("Khảo sát định hướng"). 2026-10-24: the study roadmap page, the survey and achievements, and
+// the AI roadmap that reads them.
 // Must equal `policyVersion` in apps/web/src/public-information.ts (checked by consent.test.ts).
-export const TRANSCRIPT_POLICY_VERSION = "2026-10-11";
+export const TRANSCRIPT_POLICY_VERSION = "2026-10-24";
 
-/** data_consents.purpose values allowed by migrations 018 and 030. */
-type ConsentPurpose = "transcript_processing" | "competency_assessment";
+/** data_consents.purpose values allowed by migrations 018, 030 and 048. */
+export type ConsentPurpose = "transcript_processing" | "competency_assessment" | "profile_survey";
 
 // Caller holds the user's row lock. Consent to a newer policy supersedes the active one;
 // repeating consent to the same version keeps the original record.

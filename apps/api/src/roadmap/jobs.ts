@@ -2,7 +2,8 @@
 // /api/worker/competency-assessments, whose router calls the claim/extend/complete functions below) and the stored
 // roadmap. The student asks for one on the page ("Tạo lộ trình", "Tạo lại"); it is built from the newest competency
 // assessment and goes with it (foreign key ON DELETE CASCADE: transcript replaced or deleted, consent withdrawn,
-// assessment pruned). One pending row per student; the newest MAX_ROADMAPS_PER_USER rows are kept.
+// assessment pruned), and from the profile survey, which only the AI input carries (cleared when the job ends; deleting
+// the survey deletes the roadmaps). One pending row per student; the newest MAX_ROADMAPS_PER_USER rows are kept.
 import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import {
@@ -13,6 +14,7 @@ import {
 } from "../competency-assessment/ai/worker-protocol.js";
 import type { AssessmentResult } from "../competency-assessment/types.js";
 import type { DatabasePool } from "../db/pool.js";
+import { readSurvey, surveyFacts } from "../student/survey.js";
 import { buildRoadmapFacts, type RoadmapFacts } from "./facts.js";
 import { buildRoadmapInput } from "./prompt.js";
 import { roadmapContextFromAiInput, validateRoadmapOutput, type RoadmapOutput } from "./validate.js";
@@ -131,10 +133,11 @@ type CreateOptions = {
 
 /**
  * "Tạo lộ trình" / "Tạo lại" (POST /api/student/roadmap), inside the caller's transaction. The student's row comes
- * first (FOR KEY SHARE, the lock the insert's foreign key takes anyway), then the queue lock. A roadmap still being
- * written for the newest assessment is returned as it is; otherwise one queued for an older assessment is cancelled
- * and a new one is queued, unless the student queued one in the last 30 seconds (429 roadmap_too_frequent) or the
- * queue is full (429 queue_full).
+ * first (FOR KEY SHARE, the lock the insert's foreign key takes anyway), then the queue lock. It needs an assessment
+ * (409 assessment_required) and the answered profile survey (409 survey_required, user 2026-10-24: the AI advises from
+ * it). A roadmap still being written for the newest assessment is returned as it is; otherwise one queued for an older
+ * assessment is cancelled and a new one is queued, unless the student queued one in the last 30 seconds (429
+ * roadmap_too_frequent) or the queue is full (429 queue_full).
  */
 export async function createRoadmap(client: PoolClient, userId: string, options: CreateOptions = {}): Promise<{ row: RoadmapRow; created: boolean }> {
   const user = await client.query("SELECT id FROM users WHERE id=$1 AND is_active FOR KEY SHARE", [userId]);
@@ -143,6 +146,8 @@ export async function createRoadmap(client: PoolClient, userId: string, options:
   if (options.expire) await options.expire(client);
   const assessment = await newestAssessment(client, userId);
   if (!assessment) throw new RoadmapError("assessment_required", 409);
+  const survey = await readSurvey(client, userId);
+  if (!survey?.complete) throw new RoadmapError("survey_required", 409);
   const rows = await readRoadmapRows(client, userId);
   const pending = rows.find((row) => row.status === "queued" || row.status === "processing");
   if (pending?.assessmentId === assessment.id) return { row: pending, created: false };
@@ -155,7 +160,7 @@ export async function createRoadmap(client: PoolClient, userId: string, options:
     WHERE user_id=$1 AND status IN ${PENDING}`, [userId]);
   const window = roadmapWindow(options.now ?? new Date());
   const facts = buildRoadmapFacts(assessment.id, assessment.computed, window);
-  const aiInput = buildRoadmapInput(facts);
+  const aiInput = buildRoadmapInput(facts, surveyFacts(survey));
   const id = randomUUID();
   const inserted = await client.query<{ createdAt: Date | string }>(
     `INSERT INTO stu_roadmaps(id,user_id,assessment_id,window_start,window_end,facts,status,ai_input,prompt_version)

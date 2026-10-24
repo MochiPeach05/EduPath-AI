@@ -24,6 +24,8 @@ export interface StudentProfileDetail extends StudentProfileSummary {
   careerPositionId?: string | null;
   careerPosition?: { id: string; nameVi: string; nameEn: string; deletedAt: string | null } | null;
   interests: string | null;
+  /** When the profile survey was last saved (stu_profile_surveys); the answers stay with the student. */
+  surveyUpdatedAt?: string | null;
   username: string | null; careerGoal: string | null;
   accountCreatedAt: string; firstLoginAt: string; lastLoginAt: string;
   profileCreatedAt: string | null; profileUpdatedAt: string | null;
@@ -33,11 +35,14 @@ export interface StudentProfileRepository {
   list(actor: AuthenticatedUser, query: StudentProfileQuery): Promise<StudentProfilePage>;
   detail(actor: AuthenticatedUser, id: string): Promise<StudentProfileDetail>;
 }
-// Derive completion from saved data so profile edits and transcript deletion stay in sync.
+// Derive completion from saved data so profile edits and transcript deletion stay in sync. Since 2026-10-24 the
+// specialty and the profile survey count too (the student portal asks for both before its AI features).
 const profileStatus = `CASE WHEN p.user_id IS NULL THEN 'missing'
   WHEN NULLIF(btrim(p.interests), '') IS NOT NULL
     AND p.career_position_id IS NOT NULL
+    AND p.specialty IS NOT NULL
     AND EXISTS (SELECT 1 FROM student_transcripts t WHERE t.user_id = p.user_id)
+    AND EXISTS (SELECT 1 FROM stu_profile_surveys s WHERE s.user_id = p.user_id)
   THEN 'complete' ELSE 'incomplete' END`;
 const summaryColumns = `u.id, COALESCE(p.full_name, u.display_name) AS name, u.email, u.is_active AS "isActive",
   p.cohort_code AS "cohortCode", p.class_name AS "className",
@@ -69,7 +74,8 @@ export class PostgresStudentProfileRepository implements StudentProfileRepositor
   async detail(_actor: AuthenticatedUser, id: string): Promise<StudentProfileDetail> {
     const result = await this.pool.query<StudentProfileDetail>(`SELECT ${summaryColumns}, u.username,
       p.career_goal AS "careerGoal", p.career_position_id AS "careerPositionId", p.specialty,
-      (SELECT json_build_object('id',c.id,'nameVi',c.name_vi,'nameEn',c.name_en,'deletedAt',c.deleted_at) FROM career_positions c WHERE c.id=p.career_position_id) AS "careerPosition", p.interests, u.created_at AS "accountCreatedAt", u.first_login_at AS "firstLoginAt",
+      (SELECT json_build_object('id',c.id,'nameVi',c.name_vi,'nameEn',c.name_en,'deletedAt',c.deleted_at) FROM career_positions c WHERE c.id=p.career_position_id) AS "careerPosition", p.interests,
+      (SELECT s.updated_at FROM stu_profile_surveys s WHERE s.user_id=u.id) AS "surveyUpdatedAt", u.created_at AS "accountCreatedAt", u.first_login_at AS "firstLoginAt",
       u.last_login_at AS "lastLoginAt", p.created_at AS "profileCreatedAt", p.updated_at AS "profileUpdatedAt"
       FROM users u LEFT JOIN student_profiles p ON p.user_id = u.id
       WHERE (${studentScope} OR u.id = $2::uuid) AND u.id = $1`, [id, _actor.userId === id ? id : null]);

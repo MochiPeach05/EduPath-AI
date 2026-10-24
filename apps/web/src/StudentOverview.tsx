@@ -1,5 +1,5 @@
 import type { CareerSelection } from "./career-types";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { Transcript } from "./StudentTranscript";
 import { academicSections, latestResultSection, printedSemesterGpa } from "./student-overview-data";
 import { Icon } from "./student-icons";
@@ -12,11 +12,29 @@ export type StudentProfile = {
   name: string; studentCode: string | null; cohortCode: string | null;
   className: string | null; cohortYear: number | null; currentSemester: number | null;
   email: string | null; careerGoal: string | null; interests: string | null; profileStatus: string;
+  /** When the profile survey ("Khảo sát định hướng") was saved; null when not yet. */
+  surveyUpdatedAt?: string | null;
 };
 
-export default function StudentOverview({ profile, loading: profileLoading, navigate }: {
+/**
+ * What the profile needs before EduPath AI can help (user 2026-10-24: "mày muốn xài cái này là mày bắt buộc phải hoàn
+ * thành phần này trước"): the same fields as the API's profileStatus "complete".
+ */
+export function requiredProfileItems(profile: StudentProfile | null, hasTranscript: boolean) {
+  return [
+    { id: "transcript", label: "Bảng điểm học tập", hint: "Tải bảng điểm PDF của bạn", done: hasTranscript },
+    { id: "specialty", label: "Chuyên ngành", hint: "Chọn trong Thông tin cá nhân", done: Boolean(profile?.specialty) },
+    { id: "career", label: "Nghề mục tiêu", hint: "Chọn vị trí nghề nghiệp mong muốn", done: Boolean(profile?.careerPositionId) },
+    { id: "interests", label: "Sở thích cá nhân", hint: "Công nghệ, hoạt động bạn quan tâm", done: Boolean(profile?.interests?.trim()) },
+    { id: "survey", label: "Khảo sát định hướng", hint: "Trả lời câu hỏi và cho biết thành tích", done: Boolean(profile?.surveyUpdatedAt) },
+  ];
+}
+
+export default function StudentOverview({ profile, loading: profileLoading, navigate, identity }: {
   profile: StudentProfile | null; loading: boolean;
   navigate: (page: "profile" | "career" | "roadmap" | "competency") => void;
+  /** The student's identity strip, shown under the required-profile notice. */
+  identity: ReactNode;
 }) {
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,15 +57,29 @@ export default function StudentOverview({ profile, loading: profileLoading, navi
   const semesters = academicSections(transcript);
   const semester = semesters.find(item => item.id === selectedId);
   const gpa = printedSemesterGpa(semester);
-  const checklist = [
-    { label: "Thông tin lớp học", done: Boolean(profile?.className?.trim()) },
-    { label: "Bảng điểm học tập", done: Boolean(transcript) },
-    { label: "Sở thích cá nhân", done: Boolean(profile?.interests?.trim()) },
-    { label: "Vị trí nghề nghiệp mong muốn", done: Boolean(profile?.careerPositionId) }
-  ];
+  const checklist = requiredProfileItems(profile, Boolean(transcript));
   const ready = checklist.filter(item => item.done).length;
   const readyKnown = !loading && !profileLoading && !error && profile !== null;
+  const missing = checklist.length - ready;
   return <div className="so-overview">
+    {readyKnown && missing > 0 && <section className="so-gate" aria-labelledby="so-gate-title">
+      <span className="so-gate-icon" aria-hidden="true"><Icon name="shield" /></span>
+      <div className="so-gate-body">
+        <p className="so-gate-kicker">BẮT BUỘC TRƯỚC KHI SỬ DỤNG</p>
+        <h2 id="so-gate-title">Hoàn thành Hồ sơ và bảng điểm để EduPath AI hỗ trợ bạn</h2>
+        <p>EduPath AI chỉ đánh giá năng lực, tìm khoảng trống kỹ năng và soạn lộ trình học tập cho bạn khi hồ sơ có đủ các mục dưới đây. Bạn còn {missing} mục chưa hoàn thành.</p>
+        <ol className="so-gate-steps">{checklist.map((item, index) => <li key={item.id} className={item.done ? "is-done" : undefined}>
+          <span className="so-gate-check" aria-hidden="true">{item.done ? <Icon name="check" /> : index + 1}</span>
+          <span><strong>{item.label}</strong><small>{item.done ? "Đã hoàn thành" : item.hint}</small></span>
+          <span className="sr-only">{item.done ? "Đã hoàn thành" : "Chưa hoàn thành"}</span>
+        </li>)}</ol>
+      </div>
+      <div className="so-gate-actions">
+        <span className="so-gate-count" aria-hidden="true">{ready}/{checklist.length}</span>
+        <button className="sw-primary so-gate-button" onClick={() => navigate("profile")}>Hoàn thành hồ sơ ngay <Icon name="arrow" /></button>
+      </div>
+    </section>}
+    {identity}
     <div className="sw-section-heading"><h2>Không gian học tập của bạn</h2><span className="sw-muted">Mỗi bước nhỏ, một hướng đi rõ hơn</span></div>
     <div className="so-quick-grid">
       <article className="so-quick-card">
@@ -63,10 +95,10 @@ export default function StudentOverview({ profile, loading: profileLoading, navi
         <button className="so-card-link" onClick={() => navigate("profile")}>{profile?.careerPositionId ? "Đổi nghề mục tiêu" : "Chọn nghề mục tiêu"}<Icon name="arrowUpRight" /></button>
       </article>
       <article className="so-quick-card">
-        <div className="so-card-heading"><span className="so-kicker">LÊN KẾ HOẠCH</span><span className="sw-tag">Sắp ra mắt</span></div>
-        <h3>Lộ trình học tập</h3><p>Chuẩn bị cho những học kỳ tiếp theo.</p>
-        <div className="so-card-detail"><small>Kế hoạch của bạn</small><strong>Chưa có lộ trình</strong><span>Gợi ý môn học và kỹ năng sẽ được bổ sung tại đây.</span></div>
-        <button className="so-card-link" onClick={() => navigate("roadmap")}>Tìm hiểu lộ trình<Icon name="arrowUpRight" /></button>
+        <div className="so-card-heading"><span className="so-kicker">LÊN KẾ HOẠCH</span><span className={`sw-tag ${readyKnown && !missing ? "sw-tag-green" : ""}`}>{readyKnown && !missing ? "Sẵn sàng" : "Cần hồ sơ đầy đủ"}</span></div>
+        <h3>Lộ trình học tập</h3><p>Theo dõi tiến độ, lên kế hoạch học kỳ và nhận lộ trình 3 tháng do AI soạn.</p>
+        <div className="so-card-detail"><small>Khảo sát định hướng</small><strong>{profileLoading ? "Đang tải hồ sơ…" : profile?.surveyUpdatedAt ? "Đã hoàn thành" : "Chưa làm khảo sát"}</strong><span>Lộ trình AI dùng kết quả đánh giá năng lực và câu trả lời khảo sát của bạn.</span></div>
+        <button className="so-card-link" onClick={() => navigate("roadmap")}>Mở lộ trình học tập<Icon name="arrowUpRight" /></button>
       </article>
     </div>
     <div className="so-columns">
@@ -78,7 +110,7 @@ export default function StudentOverview({ profile, loading: profileLoading, navi
         </> : <div className="sw-empty so-transcript-empty"><span className="so-paper-icon" aria-hidden="true"><Icon name="document" /></span><h3>{transcript ? "Chưa có học phần theo học kỳ" : "Bắt đầu với bảng điểm của bạn"}</h3><p>{transcript ? "Xem điểm bảo lưu và các dữ liệu hiện có trong hồ sơ." : "Tải bảng điểm PDF để xem môn học, điểm số và kết quả từng học kỳ ngay tại đây."}</p><button className="sw-outline" onClick={() => navigate("profile")}>{transcript ? "Xem bảng điểm" : "Import bảng điểm"}</button></div>}
       </section>
       <aside className="so-aside">
-        <section className="sw-panel so-checklist"><div className="sw-section-heading"><h2>Hồ sơ sẵn sàng</h2><span className="so-check-count">{readyKnown ? `${ready}/4` : "—/4"}</span></div><p className="sw-muted">Thêm thông tin để EduPath hiểu bạn hơn.</p><progress max={4} value={readyKnown ? ready : 0} aria-label="Số mục hồ sơ đã bổ sung" /><ul>{checklist.map(item => <li key={item.label}><span className={`so-check ${readyKnown && item.done ? "so-check-done" : ""}`} aria-hidden="true">{readyKnown && item.done ? <Icon name="check" /> : null}</span><span>{item.label}</span><span className="sr-only">{!readyKnown ? "Chưa xác định" : item.done ? "Đã bổ sung" : "Chưa bổ sung"}</span></li>)}</ul><button className="sw-text-link" onClick={() => navigate("profile")}>Hoàn thiện hồ sơ <Icon name="arrow" /></button></section>
+        <section className="sw-panel so-checklist"><div className="sw-section-heading"><h2>Hồ sơ sẵn sàng</h2><span className="so-check-count">{readyKnown ? `${ready}/${checklist.length}` : `—/${checklist.length}`}</span></div><p className="sw-muted">Các mục bắt buộc để EduPath AI hiểu và hỗ trợ bạn.</p><progress max={checklist.length} value={readyKnown ? ready : 0} aria-label="Số mục hồ sơ đã bổ sung" /><ul>{checklist.map(item => <li key={item.id}><span className={`so-check ${readyKnown && item.done ? "so-check-done" : ""}`} aria-hidden="true">{readyKnown && item.done ? <Icon name="check" /> : null}</span><span>{item.label}</span><span className="sr-only">{!readyKnown ? "Chưa xác định" : item.done ? "Đã bổ sung" : "Chưa bổ sung"}</span></li>)}</ul><button className="sw-text-link" onClick={() => navigate("profile")}>Hoàn thiện hồ sơ <Icon name="arrow" /></button></section>
         <section className="so-guidance"><span className="so-kicker">GỢI Ý CHO BẠN</span><h2>Hiểu mình trước.<br />Chọn hướng đi sau.</h2><p>Sở thích và mục tiêu hôm nay là điểm bắt đầu cho hành trình học tập phù hợp với bạn.</p><button className="sw-text-link" onClick={() => navigate("career")}>Khám phá định hướng <Icon name="arrowUpRight" /></button></section>
       </aside>
     </div>

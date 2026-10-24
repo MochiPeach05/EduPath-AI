@@ -251,3 +251,27 @@
   .rm-terms { grid-template-columns: minmax(0, 1fr); }
   .rm-legend-table tbody th { white-space: normal; }
 }
+
+/* "Cần hoàn thành Khảo sát định hướng" before an AI roadmap (StudentAiRoadmap SurveyNeeded). */
+.rm-survey-needed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 18px;
+  margin: 16px 0 0;
+  padding: 14px 16px;
+  border: 1px solid #f1c4cf;
+  border-left: 4px solid var(--sw-red, #b51639);
+  border-radius: 8px;
+  background: #fff5f7;
+  color: #6f1029;
+  text-align: left;
+}
+
+.rm-survey-needed p {
+  flex: 1 1 360px;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+}
