@@ -94,12 +94,12 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
   },
   {
     question: "Tôi chọn mục tiêu nghề nghiệp ở đâu?",
-    answer: ["Bạn chọn mục tiêu trong phần Thông tin cá nhân ở Hồ sơ và bảng điểm. Trước khi chọn, có thể xem lĩnh vực nghề nghiệp, danh sách vị trí và các yêu cầu kỹ năng hoặc công nghệ của từng nghề."],
+    answer: ["Cách thuận tiện nhất là trang Định hướng nghề nghiệp: EduPath tính mức phù hợp của bạn với từng nghề trong danh mục (cùng cách với trang Khoảng trống kỹ năng, từ bảng điểm hiện tại), gợi ý các nghề hợp với năng lực và với Khảo sát định hướng của bạn, và cho so sánh tối đa 3 nghề. Bạn cũng có thể chọn trong phần Thông tin cá nhân ở Hồ sơ và bảng điểm."],
     steps: [
-      "Mở Hồ sơ và bảng điểm, tìm dòng Vị trí nghề nghiệp mong muốn trong phần Thông tin cá nhân và bấm Chọn nghề mục tiêu.",
-      "Chọn một lĩnh vực hoặc nhập tên vị trí, mã hay kỹ năng vào ô Tìm vị trí.",
-      "Bấm Xem yêu cầu ở một vị trí nếu muốn đọc mô tả và các yêu cầu của nghề đó.",
-      "Chọn vị trí trong danh sách rồi bấm Lưu mục tiêu, hoặc bấm Chọn nghề mục tiêu khi đang xem yêu cầu. Mục tiêu được lưu ngay và hiển thị lại trong hồ sơ."
+      "Mở Định hướng nghề nghiệp, xem hai danh sách gợi ý: Phù hợp nhất với năng lực hiện tại và Hợp với sở thích của bạn.",
+      "Ở Tất cả nghề nghiệp, lọc theo lĩnh vực hoặc tìm theo tên; đánh dấu So sánh ở tối đa 3 nghề để xem bảng so sánh từng kỹ năng.",
+      "Bấm Xem chi tiết để đọc mô tả, các yêu cầu kỹ năng và mức hiện tại của bạn với từng yêu cầu.",
+      "Bấm Chọn làm mục tiêu. Mục tiêu được lưu ngay; sau đó bấm Đánh giá lại ở trang Đánh giá năng lực để Khoảng trống kỹ năng và Lộ trình học tập được cập nhật theo nghề mới."
     ],
     note: "Bạn có thể chọn một mục tiêu khác khi định hướng thay đổi. Dùng nút Xem yêu cầu cạnh mục tiêu để đọc lại yêu cầu của nghề đang chọn. Nếu muốn bỏ chọn, bấm Chỉnh sửa thông tin, bấm nút Bỏ chọn cạnh mục tiêu rồi bấm Lưu thay đổi."
   },

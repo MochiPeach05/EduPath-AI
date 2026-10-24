@@ -72,6 +72,7 @@ Dữ liệu sinh viên thật (bảng điểm, kết quả OCR) không bao giờ
 | `/api/student/study-plan` | `study-plan/` | Lộ trình học tập (theo Stellic): theo dõi tiến độ theo tiêu chuẩn tốt nghiệp, kế hoạch học tập thủ công theo học kỳ, kiểm tra tiên quyết/học kỳ mở môn/giới hạn tín chỉ (migration 046) | `study-roadmap.md` |
 | `/api/student/roadmap` | `roadmap/` | Lộ trình học tập 3 tháng do AI soạn như cố vấn học tập: môn cần học, môn cần cải thiện, kỹ năng nên tự học, lời khuyên theo khảo sát định hướng (job `study_roadmap`, migration 047) | `study-roadmap.md`, `profile-survey.md` |
 | `/api/admin/careers`, `/api/student/careers` | `careers/` | Lĩnh vực, kỹ năng (danh mục dùng chung), nghề nghiệp, yêu cầu kỹ năng | `career-positions.md` |
+| `/api/student/career-guidance` | `career-guidance/` | Định hướng nghề nghiệp: mức phù hợp với từng nghề của danh mục (cùng phép tính với Khoảng trống kỹ năng), nghề khớp Khảo sát định hướng | `career-guidance.md` |
 | `/api/admin/careers/requirements/ai-suggestions` | `careers/ai-suggestions/` | AI đề xuất kỹ năng cho nghề nghiệp | `career-ai-suggestions.md` |
 | `/api/admin/competencies` | `competencies/` | Nhóm năng lực, cấu hình năng lực, cấu hình môn học (môn học dùng chung cho mọi khóa, migration 038; liên kết + trọng số) | `competency-management.md` |
 | `/api/admin/competencies/ai` | `competencies/ai/` | AI tạo liên kết kỹ năng kèm trọng số; chạy AI cho các môn chưa có liên kết | `competency-management.md` |

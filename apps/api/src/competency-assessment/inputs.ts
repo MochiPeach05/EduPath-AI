@@ -24,7 +24,8 @@ const num = (value: unknown) => value === null || value === undefined ? null : N
  * deterministic order. The caller runs it inside a REPEATABLE READ READ ONLY transaction
  * (see loadAssessmentInputs); no row locks are taken (they fail with SQLSTATE 25006 there).
  */
-export async function readAssessmentInputs(db: Db, userId: string, options: { promptVersion?: string } = {}): Promise<AssessmentInputs> {
+/** careerOptional: no target career needed ("Định hướng nghề nghiệp" sets each catalog career itself); career is null then. */
+export async function readAssessmentInputs(db: Db, userId: string, options: { promptVersion?: string; careerOptional?: boolean } = {}): Promise<AssessmentInputs> {
   const student = await db.query<{ cohort_code: string | null; specialty: string | null; career_position_id: string | null }>(
     "SELECT cohort_code,specialty,career_position_id FROM student_profiles WHERE user_id=$1", [userId]);
   const transcript = await db.query<{ version: string; data: TranscriptData }>(
@@ -35,7 +36,7 @@ export async function readAssessmentInputs(db: Db, userId: string, options: { pr
   if (!cohortCode) throw new AssessmentError("cohort_unknown", 409);
   const specialty = profileSpecialty(profile?.specialty);
   // All three of the page's checklist are required (user, 2026-10-21): transcript, target career and specialty.
-  if (!profile?.career_position_id) throw new AssessmentError("career_required", 409);
+  if (!profile?.career_position_id && !options.careerOptional) throw new AssessmentError("career_required", 409);
   if (!specialty) throw new AssessmentError("specialty_required", 409);
 
   /* Curriculum: the single active one of the cohort, current revision. */
@@ -134,7 +135,7 @@ export async function readAssessmentInputs(db: Db, userId: string, options: { pr
       };
     }
   }
-  if (!career) throw new AssessmentError("career_required", 409);
+  if (!career && !options.careerOptional) throw new AssessmentError("career_required", 409);
 
   /* Catalog names for transcript codes outside the curriculum (names never come from the transcript). */
   const curriculumCodes = new Set(curriculumCourses.map((course) => courseKey(course.code)));

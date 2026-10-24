@@ -95,7 +95,7 @@ export default function StudentOverview({ profile, loading: profileLoading, navi
         <div className="so-card-heading"><span className="so-kicker">KHÁM PHÁ</span><span className="sw-tag">Mục tiêu cá nhân</span></div>
         <h3>Định hướng của bạn</h3><p>Kết nối điều bạn thích với điều muốn làm.</p>
         <div className="so-card-detail"><small>Vị trí nghề nghiệp mong muốn</small><strong>{profileLoading ? "Đang tải hồ sơ…" : profile?.careerPosition?.nameVi || "Bạn muốn phát triển theo hướng nào?"}</strong></div>
-        <button className="so-card-link" onClick={() => navigate("profile")}>{profile?.careerPositionId ? "Đổi nghề mục tiêu" : "Chọn nghề mục tiêu"}<Icon name="arrowUpRight" /></button>
+        <button className="so-card-link" onClick={() => navigate("career")}>{profile?.careerPositionId ? "Xem nghề phù hợp" : "Khám phá nghề phù hợp"}<Icon name="arrowUpRight" /></button>
       </article>
       <article className="so-quick-card">
         <div className="so-card-heading"><span className="so-kicker">LÊN KẾ HOẠCH</span><span className={`sw-tag ${readyKnown && !missing ? "sw-tag-green" : ""}`}>{readyKnown && !missing ? "Sẵn sàng" : "Cần hồ sơ đầy đủ"}</span></div>

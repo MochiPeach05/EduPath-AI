@@ -17,7 +17,7 @@ import {
   specialtyHasCourses, specialtyLabel, suggestSpecialty,
 } from "./specialty.js";
 import type {
-  AssessmentInputs, AssessmentResult, AssessmentWarning, AttemptOutcome, CareerRequirementResult, CareerResult, Confidence,
+  AssessmentInputs, AssessmentResult, AssessmentWarning, AttemptOutcome, CareerInput, CareerRequirementResult, CareerResult, Confidence,
   CourseFact, CourseState, CourseSuggestion, DeficitBand, Eligibility, EvidenceRole, GapStatus, GroupResult, HistoryPoint,
   LevelCode, NotApplicableReason, PrerequisiteGap, SelfStudyItem, SelfStudyReason, SkillEvidenceRow, SkillPlan, SkillResult, SupportCourse,
 } from "./types.js";
@@ -180,6 +180,14 @@ const addExposure = (into: Exposure, from: Exposure) => {
 export function calculateAssessment(inputs: AssessmentInputs): AssessmentResult {
   const result = assess(inputs);
   return { ...result, history: competencyHistory(inputs, result) };
+}
+
+/**
+ * The career part of the assessment (§7.5, §7.6) for each given career, the same inputs otherwise, without the history
+ * ("Định hướng nghề nghiệp" compares every career of the catalog the way Khoảng trống kỹ năng shows the target one).
+ */
+export function careerFitsFor(inputs: AssessmentInputs, careers: readonly CareerInput[]): CareerResult[] {
+  return careers.map((career) => assess({ ...inputs, career }).career!);
 }
 
 type Assessment = Omit<AssessmentResult, "history">;
