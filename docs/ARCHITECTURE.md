@@ -69,6 +69,7 @@ Dữ liệu sinh viên thật (bảng điểm, kết quả OCR) không bao giờ
 | `/api/admin/plans`, `/api/student/plans` | `plans/` | Kế hoạch đào tạo theo khóa | `training-plan-guide.md`, `student-plans.md` |
 | `/api/admin/graduation`, `/api/student/graduation` | `graduation/` | Tiêu chuẩn xét tốt nghiệp; đánh giá cho từng sinh viên (`evaluation.ts`, thuần) | `graduation-standards.md` |
 | `/api/student/graduation/advice` | `graduation/advice/` | Lời khuyên tốt nghiệp do AI viết, tự xếp hàng theo dấu vân tay dữ liệu | `graduation-advice.md` |
+| `/api/student/study-plan` | `study-plan/` | Lộ trình học tập (theo Stellic): theo dõi tiến độ theo tiêu chuẩn tốt nghiệp, kế hoạch học tập thủ công theo học kỳ, kiểm tra tiên quyết/học kỳ mở môn/giới hạn tín chỉ (migration 046) | `study-roadmap.md` |
 | `/api/student/roadmap` | `roadmap/` | Lộ trình học tập 3 tháng do AI soạn như cố vấn học tập: môn cần học, môn cần cải thiện, kỹ năng nên tự học (job `study_roadmap`, migration 047) | `study-roadmap.md` |
 | `/api/admin/careers`, `/api/student/careers` | `careers/` | Lĩnh vực, kỹ năng (danh mục dùng chung), nghề nghiệp, yêu cầu kỹ năng | `career-positions.md` |
 | `/api/admin/careers/requirements/ai-suggestions` | `careers/ai-suggestions/` | AI đề xuất kỹ năng cho nghề nghiệp | `career-ai-suggestions.md` |

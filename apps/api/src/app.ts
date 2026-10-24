@@ -17,6 +17,7 @@ import helmet from "helmet";
 import type { DatabasePool } from "./db/pool.js";
 import { createStudentDataRouter } from "./student/router.js";
 import { createRoadmapRouter } from "./roadmap/router.js";
+import { createStudyPlanRouter } from "./study-plan/router.js";
 import { createCompetencyAssessmentRouter } from "./competency-assessment/router.js";
 import { createCompetencyAiQueue } from "./competency-assessment/ai/queue.js";
 import { PROMPT_VERSION } from "./competency-assessment/ai/prompt.js";
@@ -192,6 +193,8 @@ export function createApp({
   app.use("/api/student/graduation/advice", createGraduationAdviceRouter(databasePool, config.webOrigin, { enabled: graduationAdviceEnabled }));
   app.use("/api/student/graduation", createStudentGraduationRouter(databasePool));
   app.use("/api/student/curricula", createStudentCurriculaRouter(databasePool));
+  // "Lộ trình học tập": progress against the graduation standard and the manual plan, then the AI 3-month roadmap.
+  app.use("/api/student/study-plan", createStudyPlanRouter(databasePool, config.webOrigin));
   // The 3-month study roadmap is AI work too: it is created only when AI_WORKER_KEY is configured.
   app.use("/api/student/roadmap", createRoadmapRouter(databasePool, config.webOrigin, { enabled: Boolean(config.aiWorkerKey) }));
   // AI comments are queued only when AI_WORKER_KEY is configured; otherwise ai_status is 'disabled'.
