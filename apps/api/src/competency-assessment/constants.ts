@@ -41,7 +41,13 @@ import type { Confidence, FitCode, GapStatus } from "./types.js";
  * lấy yêu cầu là HK1 2026-2027 rồi"). Its planned courses not registered are late, "học kỳ tới" is the term after
  * it, and a career skill whose course was planned for it but not registered is no longer "sắp học".
  */
-export const CALC_VERSION = "comp-calc-v13";
+/**
+ * v14: the "điểm phù hợp" counts every career skill: a skill without a score counts 0 whether it is not studied,
+ * "Cần tự học" (only another specialty teaches it) or "Chưa đủ dữ liệu" (no course measures it); only "Sắp học" waits
+ * (user, 2026-10-24: "Tính đủ mọi kỹ năng", after a career with 0/4 skills met scored 50,6 because its two no-data
+ * skills were left out). "Chưa đủ dữ liệu" as a level now means more than half of the coefficients are "Sắp học".
+ */
+export const CALC_VERSION = "comp-calc-v14";
 /**
  * The graduation evaluation uses no skill level, so it keeps the version of its last change:
  * comp-calc-v10 changed only levels and must not re-date every student's graduation advice.
@@ -71,24 +77,37 @@ export const CAREER_COEFFICIENTS = { required: 2, preferred: 1 } as const;
 export const FIT_BELOW_MAX_CREDIT = 0.5;
 export const FIT_BELOW_FLOOR = 40;
 /**
- * "Điểm phù hợp" (comp-calc-v11): the career's skills averaged like a score, "Bắt buộc" counted twice
- * (its coefficient). A met or below skill counts its score, a not-studied one 0; upcoming, no-data and
- * exempt-only skills are left out; null when nothing is left. Rounded down to 2 decimals like the
- * scores. It is read from the stored requirements, so the page and the AI prompt show older results
- * the same way. Before v11 the level came from `fit`, the share of requirement credit (all met = 100%
- * however high the scores). Mirrored in apps/web/src/student-competency-data.ts (fitScoreOf).
+ * "Điểm phù hợp" (comp-calc-v11, every skill counted since v14): the career's skills averaged like a score,
+ * "Bắt buộc" counted twice (its coefficient). A met or below skill counts its score; a skill without a score
+ * counts 0, whether not studied, "Cần tự học" or "Chưa đủ dữ liệu" (user, 2026-10-24: "Tính đủ mọi kỹ năng").
+ * Only upcoming ("Sắp học") and exempt-only skills are left out; null when nothing is left. Rounded down to
+ * 2 decimals like the scores. It is read from the stored requirements, so the page and the AI prompt show
+ * older results the same way. Before v11 the level came from `fit`, the share of requirement credit (all
+ * met = 100% however high the scores). Mirrored in apps/web/src/student-competency-data.ts (fitScoreOf).
  */
 export function fitScoreOf(requirements: readonly { status: GapStatus; score: number | null; coefficient: number }[]): number | null {
   let sum = 0, weight = 0;
   for (const req of requirements) {
-    const value = req.status === "not_studied" ? 0 : req.status === "met" || req.status === "below" ? req.score : null;
+    const value = req.status === "met" || req.status === "below" ? req.score : req.status === "not_studied" || req.status === "no_data" ? 0 : null;
     if (value === null) continue;
     sum += req.coefficient * value;
     weight += req.coefficient;
   }
   return weight > 0 ? Math.floor((sum / weight) * 100 + 1e-9) / 100 : null;
 }
-/** Below this share of coefficients with data the fit label is "Chưa đủ dữ liệu". */
+/**
+ * Share of the coefficients that are not "Sắp học" (v14). Read from the requirements like fitScoreOf, so stored
+ * results (whose dataShare was the share with a score before v14) show the same level. Mirrored in the web.
+ */
+export function fitDataShareOf(requirements: readonly { status: GapStatus; coefficient: number }[]): number {
+  let total = 0, counted = 0;
+  for (const req of requirements) {
+    total += req.coefficient;
+    if (req.status !== "upcoming") counted += req.coefficient;
+  }
+  return total > 0 ? Math.round((counted / total) * 10000) / 10000 : 0;
+}
+/** Below this share (more than half of the coefficients still "Sắp học") the fit label is "Chưa đủ dữ liệu". */
 export const FIT_MIN_DATA_SHARE = 0.5;
 export const FIT_LABELS: Record<FitCode, string> = {
   very_fit: "Rất phù hợp", fit: "Phù hợp", average: "Trung bình", low_fit: "Ít phù hợp", not_fit: "Không phù hợp",

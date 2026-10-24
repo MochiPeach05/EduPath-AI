@@ -14,7 +14,7 @@ import type {
   SkillResult,
   SupportCourse
 } from "../types.js";
-import { FIT_LABELS, fitCodeOf, fitScoreOf, isStrengthConfidence, LEVEL_THRESHOLDS } from "../constants.js";
+import { FIT_LABELS, fitCodeOf, fitDataShareOf, fitScoreOf, isStrengthConfidence, LEVEL_THRESHOLDS } from "../constants.js";
 import { AI_OUTPUT_LIMITS as L, buildOutputSchema, type JsonSchema, type OutputSchemaContext } from "./schema.js";
 
 /**
@@ -30,8 +30,10 @@ import { AI_OUTPUT_LIMITS as L, buildOutputSchema, type JsonSchema, type OutputS
  * comp-v9: levels are named like the transcript (Xuất sắc, Giỏi, Khá, Trung bình, Yếu; comp-calc-v10), and a
  * career's met skills are deepened up to Giỏi, the level "Bắt buộc" needs (Thành thạo before).
  * comp-v10: a career skill only another specialty's courses teach reads "Cần tự học", like the page (user, 2026-10-23).
+ * comp-v11: "Chưa đủ dữ liệu" and "Cần tự học" skills count 0 toward the fit (comp-calc-v14), still not a weakness;
+ * "Cần tự học" also covers a skill only electives the student did not choose teach.
  */
-export const PROMPT_VERSION = "comp-v10";
+export const PROMPT_VERSION = "comp-v11";
 
 /** Gemma reasons before it writes the comment; the worker sends it to Ollama as think:true. */
 const AI_THINK = true;
@@ -131,7 +133,7 @@ Hệ thống đã tính sẵn mọi con số từ bảng điểm, trọng số h
 Nguyên tắc dữ liệu (bắt buộc):
 1. Không tự tính, ước lượng hay làm tròn lại bất kỳ con số nào. Nếu nhắc đến số liệu, chép đúng từng chữ số như trong dữ liệu, không thêm chữ số thập phân (dữ liệu ghi "điểm 83" thì viết 83, không viết 83,5 hay 83,92).
 2. Chỉ nói về kỹ năng, nhóm năng lực, học phần, nghề nghiệp có trong dữ liệu. Khóa kỹ năng (S01…), khóa nhóm (G1…) và mã học phần chỉ dùng trong các trường skillKey, groupKey, courseCode; trong văn bản luôn gọi bằng tên. Chỉ chọn học phần trong danh sách gợi ý của đúng kỹ năng đó. Không bịa tên khóa học, chứng chỉ, đường link hay giảng viên.
-3. Kỹ năng "Chưa đủ dữ liệu" nghĩa là chương trình đào tạo chưa có học phần đo kỹ năng này. Không kết luận sinh viên yếu; hãy gợi ý cách tự học và tự kiểm chứng bằng sản phẩm cụ thể. Kỹ năng "Cần tự học" nghĩa là kỹ năng chỉ được dạy trong học phần của chuyên ngành khác, không nằm trong chương trình của sinh viên; cũng không kết luận sinh viên yếu mà gợi ý tự học như trên.
+3. Kỹ năng "Chưa đủ dữ liệu" nghĩa là chương trình đào tạo chưa có học phần đo kỹ năng này; khi tính mức phù hợp với nghề, kỹ năng này và kỹ năng "Cần tự học" được tính 0 điểm vì chưa có điểm chứng minh. Không kết luận sinh viên yếu; hãy gợi ý cách tự học và tự kiểm chứng bằng sản phẩm cụ thể. Kỹ năng "Cần tự học" nghĩa là kỹ năng chỉ được dạy trong học phần của chuyên ngành khác hoặc trong học phần tự chọn sinh viên không chọn (nhóm tự chọn đã đủ tín chỉ), không nằm trong chương trình của sinh viên; cũng không kết luận sinh viên yếu mà gợi ý tự học như trên.
 4. "Chưa có minh chứng" nghĩa là sinh viên chưa học học phần liên quan; "Sắp học" nghĩa là học phần nằm ở học kỳ sau theo kế hoạch. Cả hai đều không phải học kém.
 5. Mỗi kỹ năng có "phạm vi" mô tả những gì học phần thực sự dạy. Không khẳng định sinh viên thành thạo công cụ mà phạm vi ghi là chưa xác nhận.
 6. Không phán xét con người, không so sánh với sinh viên khác, không hứa hẹn về kết quả tốt nghiệp hay việc làm. Kết quả xét tốt nghiệp chính thức do nhà trường công bố.
@@ -520,7 +522,7 @@ function renderDataBlock(result: AssessmentResult, context: PromptContext = buil
     push(`${sanitizeText(career.nameVi)}: ${sanitizeText(career.summaryText, 200)}; ${sanitizeText(career.dataText, 80)}`);
     // Only the label: the raw fit index invites "Phù hợp 72%"-style numbers (spec §11 "Không làm").
     // The 2026-10-21 scale, also for a result stored with the earlier labels (regenerated comments).
-    push(`Mức phù hợp: ${FIT_LABELS[fitCodeOf(fitScoreOf(career.requirements), career.dataShare)]}`);
+    push(`Mức phù hợp: ${FIT_LABELS[fitCodeOf(fitScoreOf(career.requirements), fitDataShareOf(career.requirements))]}`);
     for (const req of career.requirements) {
       const name = req.skillKey ? `${req.skillKey} ${skillName(req.skillKey)}` : sanitizeText(req.skillName ?? req.title);
       const title = req.skillName && sanitizeText(req.title) !== sanitizeText(req.skillName) ? ` (yêu cầu: ${sanitizeText(req.title)})` : "";
@@ -530,7 +532,9 @@ function renderDataBlock(result: AssessmentResult, context: PromptContext = buil
         `ngưỡng ${formatScore(req.threshold)}`,
         req.score !== null ? `điểm ${formatScore(req.score)}` : "chưa có điểm",
         req.status === "no_data" && req.noDataReason === "other_specialty"
-          ? "Cần tự học (chỉ có trong học phần của chuyên ngành khác)" : sanitizeText(req.statusLabel, 60)
+          ? "Cần tự học (chỉ có trong học phần của chuyên ngành khác)"
+          : req.status === "no_data" && req.noDataReason === "elective_not_chosen"
+            ? "Cần tự học (chỉ có trong học phần tự chọn bạn không chọn)" : sanitizeText(req.statusLabel, 60)
       ];
       if (req.status === "below" && req.deficit !== null) parts.push(`thiếu ${formatDeficit(req.deficit)}${req.deficitBandLabel ? ` (${sanitizeText(req.deficitBandLabel, 40)})` : ""}`);
       if (req.status === "upcoming") parts.push(plannedText(req.upcomingTerm));

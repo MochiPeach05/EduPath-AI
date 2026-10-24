@@ -47,7 +47,8 @@ describe("careers against the competencies", () => {
     expect(careers.map((item) => item.id)).toEqual([target.id, other.id]);
     expect(careers[0]).toMatchObject({ isTarget: true, fit: { score: expected.fitScore, code: expected.fitCode, met: expected.counts.met, total: expected.counts.total } });
     expect(careers[0]!.requirements.map((row) => row.status)).toEqual(expected.requirements.map((row) => row.status));
-    expect(careers[1]).toMatchObject({ isTarget: false, fit: { code: "insufficient_data" }, requirements: [{ title: "Kỹ năng ngoài danh mục", status: "no_data" }] });
+    // A skill without a score counts 0 (comp-calc-v14), so this career scores 0 instead of "Chưa đủ dữ liệu".
+    expect(careers[1]).toMatchObject({ isTarget: false, fit: { score: 0, code: "not_fit" }, requirements: [{ title: "Kỹ năng ngoài danh mục", status: "no_data" }] });
     // Without the competencies (no transcript, …) the careers are listed without a fit.
     expect(guidanceCareers(catalog, null, null, survey(null)).map((item) => [item.fit, item.requirements[0]!.status])).toEqual([[null, null], [null, null]]);
   });
@@ -67,6 +68,7 @@ describe("GET /api/student/career-guidance", () => {
       }
       if (sql.startsWith("SELECT code,name FROM career_fields")) return result([{ code: "7", name: "Phát triển phần mềm" }, { code: "8", name: "Lĩnh vực trống" }]);
       if (sql.startsWith("SELECT career_position_id FROM student_profiles")) return result([{ career_position_id: "c1" }]);
+      if (sql.includes("FROM stu_comp_assessments")) return result([]);
       if (sql.includes("FROM stu_profile_surveys")) {
         return result([{ version: "survey-v2", answers: { field: "web" }, interest_tech: ["web_backend"], interest_hobbies: ["reading"], has_achievements: false,
           achievements: null, updated_at: new Date() }]);

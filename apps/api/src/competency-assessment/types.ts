@@ -441,7 +441,10 @@ export type CareerRequirementResult = {
   exemptOnly: boolean;
   /** Earliest planned term of the courses that make the skill 'upcoming'. */
   upcomingTerm: string | null;
-  noDataReason: "no_skill" | "not_measured" | "other_specialty" | null;
+  /** "other_specialty" and "elective_not_chosen" (v14: only electives the student did not choose teach it) read "Cần tự học". */
+  noDataReason: "no_skill" | "not_measured" | "other_specialty" | "elective_not_chosen" | null;
+  /** Courses of another specialty that measure the skill (codes), as SkillResult.otherSpecialtyCourses; absent in older results. */
+  otherSpecialtyCourses?: string[];
   supportCourses: SupportCourse[];
   improveCourses: SupportCourse[];
   /** The skill is also listed in selfStudy. */
@@ -466,7 +469,7 @@ export type CareerResult = {
   fitScore?: number | null;
   fitCode: FitCode;
   fitLabel: string;
-  /** Σ coefficient with data (met/below/not_studied) ÷ Σ coefficient. */
+  /** Σ coefficient of the skills that are not "Sắp học" ÷ Σ coefficient (comp-calc-v14; with a score before). */
   dataShare: number;
   /** Coefficient-weighted mean of the scored career skills (does not saturate). */
   weightedMeanScore: number | null;

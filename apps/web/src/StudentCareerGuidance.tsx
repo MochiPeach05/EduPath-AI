@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./student-icons";
 import {
-  CAREER_GUIDANCE_API, COMPARE_MAX, FIT_STEP, bestFits, blockedInProfile, blockedText, compareRows, filterCareers, fitScoreText, hasFit,
-  interestPicks, matchesInterests, missingSkills, requirementName, requirementState, toggleCompare,
+  CAREER_GUIDANCE_API, COMPARE_MAX, FIT_STEP, bestFits, blockedInProfile, blockedText, compareRows, filterCareers, fitScoreText, fitSummary, hasFit,
+  interestPicks, matchesInterests, missingSkills, orderedRequirements, requirementName, requirementScoreText, requirementState, toggleCompare, FIT_RULE_TEXT,
   type CareerFilters, type GuidanceCareer, type GuidanceResponse, type GuidanceRequirement,
 } from "./career-guidance-data";
 import "./career-guidance.css";
@@ -56,7 +56,7 @@ function InterestTags({ career }: { career: GuidanceCareer }) {
 
 function StateChip({ requirement }: { requirement: GuidanceRequirement }) {
   const state = requirementState(requirement);
-  return <span className={`cg-state cg-state-${state.tone}`}>{state.text}</span>;
+  return <span className={`cg-state cg-state-${state.tone}`}><span aria-hidden="true">{state.glyph}</span> {state.text}</span>;
 }
 
 function CareerActions({ career, compared, compareFull, saving, onDetail, onCompare, onChoose }: {
@@ -103,21 +103,29 @@ function DetailDialog({ career, saving, onChoose, onClose }: { career: GuidanceC
       <button type="button" className="sr-secondary" onClick={onClose} aria-label="Đóng chi tiết nghề"><Icon name="close" />Đóng</button>
     </header>
     <div className="cg-dialog-body">
-      <div className="cg-detail-fit"><FitScore career={career} /><FitBadge career={career} />{career.fit && <span>Đạt {career.fit.met}/{career.fit.total} kỹ năng{career.fit.upcoming ? ` · ${career.fit.upcoming} sắp học` : ""}</span>}</div>
+      <div className="cg-detail-fit"><FitScore career={career} /><FitBadge career={career} />{career.fit && <span>{fitSummary(career)}</span>}</div>
+      {career.fit && <p className="cg-fit-rule">{FIT_RULE_TEXT}</p>}
       <InterestTags career={career} />
       <p className="cg-description">{career.description || "Khoa chưa bổ sung mô tả công việc cho nghề này."}</p>
       <h3>Yêu cầu kỹ năng và mức hiện tại của bạn</h3>
       {career.requirements.length ? <div className="cg-table-scroll" tabIndex={0} role="region" aria-label={`Yêu cầu của ${career.nameVi}`}>
         <table className="cg-table">
-          <thead><tr><th scope="col">Kỹ năng</th><th scope="col">Tính chất</th><th scope="col">Mức hiện tại của bạn</th></tr></thead>
-          <tbody>{career.requirements.map((row, index) => <tr key={`${row.title}-${index}`}>
+          <thead><tr><th scope="col">Kỹ năng</th><th scope="col">Tính chất</th><th scope="col" className="cg-num">Điểm</th><th scope="col">Mức hiện tại của bạn</th></tr></thead>
+          <tbody>{orderedRequirements(career).map((row, index) => <tr key={`${row.title}-${index}`}>
             <td><strong>{requirementName(row)}</strong>{row.skillName && row.title !== row.skillName && <small>{row.title}</small>}</td>
             <td>{row.isRequired ? "Bắt buộc" : "Ưu tiên"}</td>
-            <td><StateChip requirement={row} /></td>
+            <td className="cg-num">{requirementScoreText(row)}</td>
+            <td><StateChip requirement={row} />{row.status === "no_data" && <small>{row.noDataReason === "other_specialty"
+              ? `Chỉ có trong học phần của chuyên ngành khác${row.otherSpecialtyCourses.length ? `: ${row.otherSpecialtyCourses.join(", ")}` : ""}.`
+              : row.noDataReason === "elective_not_chosen"
+                ? "Chỉ có trong học phần tự chọn bạn không chọn (nhóm tự chọn đã đủ tín chỉ)."
+                : "Chương trình đào tạo chưa có học phần đo kỹ năng này — không phải điểm yếu."}</small>}</td>
           </tr>)}</tbody>
         </table>
       </div> : <p>Khoa chưa cập nhật yêu cầu kỹ năng cho nghề này.</p>}
-      {missing.length > 0 && <p className="cg-note">Để phù hợp hơn với nghề này, bạn nên bổ sung các kỹ năng: {missing.join(", ")}. Các học phần nên học cho từng kỹ năng sẽ hiện ở trang Khoảng trống kỹ năng sau khi bạn chọn nghề này làm mục tiêu và đánh giá lại.</p>}
+      {missing.length > 0 && <p className="cg-note">Để phù hợp hơn với nghề này, bạn nên bổ sung các kỹ năng: {missing.join(", ")}. {career.isTarget
+        ? "Các học phần nên học cho từng kỹ năng có ở trang Khoảng trống kỹ năng."
+        : "Các học phần nên học cho từng kỹ năng sẽ hiện ở trang Khoảng trống kỹ năng sau khi bạn chọn nghề này làm mục tiêu và đánh giá lại."}</p>}
     </div>
     <footer className="sr-actions sr-form-actions">
       <button type="button" className="sr-secondary" onClick={onClose}><Icon name="close" />Đóng</button>
@@ -173,7 +181,7 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
     setNotice(null);
     try {
       await saveTarget(career.id);
-      setData((value) => value && { ...value, targetCareerId: career.id, careers: value.careers.map((item) => ({ ...item, isTarget: item.id === career.id })) });
+      setData((value) => value && { ...value, targetCareerId: career.id, deletedTargetName: null, gapCurrent: false, careers: value.careers.map((item) => ({ ...item, isTarget: item.id === career.id })) });
       setNotice({ tone: "success", text: `Đã chọn ${career.nameVi} làm nghề mục tiêu. Bấm Đánh giá lại ở trang Đánh giá năng lực để cập nhật Khoảng trống kỹ năng và Lộ trình học tập theo nghề mới.` });
       onProfileChanged();
     } catch (failure) {
@@ -211,8 +219,12 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
         {target ? <div className="cg-current-body">
           <strong>{target.nameVi}</strong><span className="cg-en">{target.nameEn}</span>
           <div className="cg-card-meta"><FitScore career={target} /><FitBadge career={target} /></div>
+          {!data.gapCurrent && <p className="cg-note cg-note-warn">{data.gapAssessedAt
+            ? `Trang Khoảng trống kỹ năng đang hiển thị lần đánh giá lúc ${new Date(data.gapAssessedAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}, tính trên dữ liệu cũ hơn nên có thể khác mức ở đây. Bấm Đánh giá lại ở trang Đánh giá năng lực để cập nhật.`
+            : "Bạn chưa đánh giá năng lực với nghề này; bấm Đánh giá năng lực để xem Khoảng trống kỹ năng."}</p>}
           <a className="sw-text-link" href="#skill-gap">Xem Khoảng trống kỹ năng <Icon name="arrow" /></a>
-        </div> : <p className="cg-current-empty">Bạn chưa chọn nghề mục tiêu. Hãy xem các gợi ý bên dưới rồi bấm Chọn nghề mục tiêu.</p>}
+        </div> : data.deletedTargetName ? <p className="cg-current-empty">{data.deletedTargetName}: nghề này không còn trong danh mục; bạn nên chọn nghề khác.</p>
+          : <p className="cg-current-empty">Bạn chưa chọn nghề mục tiêu. Hãy xem các gợi ý bên dưới rồi bấm Chọn nghề mục tiêu.</p>}
       </div>
       {data.blocked && <div className="cg-note cg-note-warn" role="note"><p>{blockedText(data.blocked)} Bạn vẫn xem được danh mục nghề và yêu cầu của từng nghề.</p>
         {blockedInProfile(data.blocked) && <a className="sw-outline" href="#profile">Mở Hồ sơ và bảng điểm</a>}</div>}

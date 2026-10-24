@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, confidentStrengths, countAxis, dataUsedLine, displayLevel, FIT_SCALE, fitLabelOf, fitLevelOf, fitScoreOf, fitStep, gapHistory, levelChart, levelSummary, levelText, overallIsPooled, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
+  aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, confidentStrengths, countAxis, dataUsedLine, displayLevel, FIT_SCALE, fitLabelOf, fitLevelOf, fitDataShareOf, fitScoreOf, fitStep, gapHistory, levelChart, levelSummary, levelText, overallIsPooled, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
   careerSummaryText, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isPreconditionError, PRIORITY_LABELS, levelStep, mapAiOutput, missingRequirements, missingRequirementsMessage, modelLabel, needsSelfStudy, plansFor, skillGroupKeys,
   scoreDifference, shouldPoll, sortRequirements, termLabel, EMPTY_SKILL_FILTERS,
   careerThresholdsLine, chartLevelLabel, currentImprovements, LEVEL_SCALE, levelOfScore, withCurrentLevels,
@@ -101,14 +101,18 @@ describe("a skill in several competency groups (2026-10-22)", () => {
 describe("fit scale (2026-10-22: a 0–100 điểm phù hợp on the bounds of the competency levels)", () => {
   type Req = Pick<CareerRequirementResult, "status" | "score" | "coefficient">;
   const req = (status: Req["status"], score: number | null, coefficient = 1): Req => ({ status, score, coefficient });
-  const one = (score: number, dataShare = 1) => ({ requirements: [req("met", score)] as CareerRequirementResult[], dataShare });
-  it("averages the career's skills: Bắt buộc twice, not studied 0, upcoming / no data / exempt-only left out", () => {
+  const one = (score: number, upcoming = 0) => ({ requirements: [req("met", score), ...(upcoming ? [req("upcoming", null, upcoming)] : [])] as CareerRequirementResult[] });
+  it("averages the career's skills: Bắt buộc twice, 0 without a score, upcoming / exempt-only left out (v14)", () => {
     // The student's case: every measured skill met, 92 on average → 92, not 100%.
     expect(fitScoreOf([req("met", 95, 2), req("met", 90), req("met", 89), req("upcoming", null)])).toBe(92.25);
-    expect(fitScoreOf([req("met", 90, 2), req("below", 50), req("not_studied", null), req("no_data", null)])).toBe(57.5);
+    // Not studied and no data both count 0 (comp-calc-v14, "Tính đủ mọi kỹ năng"): (2 × 90 + 50) / 5.
+    expect(fitScoreOf([req("met", 90, 2), req("below", 50), req("not_studied", null), req("no_data", null)])).toBe(46);
+    // The user's case (2026-10-24): 0/4 met → 152 / 6 = 25,33, not 50,66 "Ít phù hợp".
+    expect(fitScoreOf([req("below", 76, 2), req("no_data", null, 2), req("not_studied", null), req("no_data", null)])).toBe(25.33);
+    expect(fitDataShareOf([req("met", 80, 2), req("upcoming", null, 2), req("no_data", null)])).toBe(0.6);
     expect(fitScoreOf([req("met", null), req("upcoming", null)])).toBeNull();
-    // Read from the stored requirements (91, 75, 64,4; Bắt buộc twice), whatever fit was stored.
-    expect(fitScoreOf(fixtureResult.career!.requirements)).toBe(79.28);
+    // Read from the stored requirements (91, 75, 64,4 and Docker without data as 0; Bắt buộc twice), whatever fit was stored.
+    expect(fitScoreOf(fixtureResult.career!.requirements)).toBe(66.06);
   });
   it("lists the five fit levels with their bands in points", () => {
     // Only the levels: "Chưa đủ dữ liệu" is no level, like Sắp học on the competency scale.
@@ -119,10 +123,11 @@ describe("fit scale (2026-10-22: a 0–100 điểm phù hợp on the bounds of t
     // The engine's fitCodeOf bounds (90/80/62,5/50) on the điểm phù hợp.
     expect([90, 89.99, 80, 79.99, 62.5, 62.49, 50, 49.99, 0].map((score) => fitLevelOf(one(score))))
       .toEqual(["very_fit", "fit", "fit", "average", "average", "low_fit", "low_fit", "not_fit", "not_fit"]);
-    expect([fitLevelOf(one(100, 0.49)), fitLevelOf(one(100, 0.5)), fitLevelOf({ requirements: [], dataShare: 1 })])
+    // "Chưa đủ dữ liệu" when more than half of the coefficients are still Sắp học (v14), read from the requirements.
+    expect([fitLevelOf(one(100, 2)), fitLevelOf(one(100, 1)), fitLevelOf({ requirements: [] })])
       .toEqual(["insufficient_data", "very_fit", "insufficient_data"]);
     expect((["very_fit", "fit", "average", "low_fit", "not_fit", "insufficient_data"] as const).map(fitStep)).toEqual([5, 4, 3, 2, 1, 0]);
-    // A result stored with the earlier labels (Khá phù hợp, 0,58) reads the current scale: 79,28 is Trung bình.
+    // A result stored with the earlier labels (Khá phù hợp, 0,58) reads the current scale: 66,06 is Trung bình.
     expect(fitLabelOf(fixtureResult.career!)).toBe("Trung bình");
   });
 });

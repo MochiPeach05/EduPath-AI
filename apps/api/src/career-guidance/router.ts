@@ -7,23 +7,34 @@ import { Router, type ErrorRequestHandler } from "express";
 import type { PoolClient } from "pg";
 import { z } from "zod";
 import { careerFitsFor } from "../competency-assessment/calculate.js";
+import { courseKey, uniqueCurriculumCourses } from "../competency-assessment/course-state.js";
 import { AssessmentError, readAssessmentInputs } from "../competency-assessment/inputs.js";
-import type { AssessmentInputs, CareerInput, CareerResult, FitCode, GapStatus } from "../competency-assessment/types.js";
+import type { AssessmentInputs, CareerInput, CareerRequirementResult, CareerResult, FitCode, GapStatus } from "../competency-assessment/types.js";
 import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
 import { readSurvey } from "../student/survey.js";
 import { interestMatch, type InterestMatch } from "./interests.js";
 
 type CatalogRow = CareerInput & { category: string; categoryName: string; description: string };
+type NoDataReason = NonNullable<CareerRequirementResult["noDataReason"]>;
 
 export type GuidanceRequirement = {
   title: string; skillName: string | null; isRequired: boolean;
   /** null when the fit could not be computed (blocked). */
   status: GapStatus | null; statusLabel: string | null; score: number | null; threshold: number | null; deficit: number | null; upcomingTerm: string | null;
+  /** As on Khoảng trống kỹ năng: "other_specialty" and "elective_not_chosen" read "Cần tự học". */
+  noDataReason: NoDataReason | null; exemptOnly: boolean; coefficient: number;
+  /** Courses of another specialty that measure the skill, "Name (CODE)" as the note of Khoảng trống kỹ năng. */
+  otherSpecialtyCourses: string[];
 };
 export type GuidanceCareer = {
   id: string; code: string; nameVi: string; nameEn: string; category: string; categoryName: string; description: string; isTarget: boolean;
-  fit: { score: number | null; code: FitCode; label: string; dataShare: number; met: number; below: number; notStudied: number; upcoming: number; noData: number; total: number } | null;
+  fit: {
+    score: number | null; code: FitCode; label: string; dataShare: number; met: number; below: number; notStudied: number; upcoming: number; noData: number;
+    selfStudy: number; total: number;
+    /** The count lines of Khoảng trống kỹ năng ("Đạt x/y kỹ năng · z sắp học · …", "u/y kỹ năng có dữ liệu"). */
+    summaryText: string; dataText: string;
+  } | null;
   requirements: GuidanceRequirement[];
   interests: InterestMatch;
 };
@@ -46,19 +57,23 @@ export async function readCareerCatalog(db: Pick<PoolClient, "query">): Promise<
   }));
 }
 
-const requirementsOf = (career: CatalogRow, fit: CareerResult | null): GuidanceRequirement[] => fit
+const requirementsOf = (career: CatalogRow, fit: CareerResult | null, courseNames: ReadonlyMap<string, string>): GuidanceRequirement[] => fit
   ? fit.requirements.map((row) => ({
     title: row.title, skillName: row.skillName, isRequired: row.isRequired, status: row.status, statusLabel: row.statusLabel,
     score: row.score, threshold: row.threshold, deficit: row.deficit, upcomingTerm: row.upcomingTerm,
+    noDataReason: row.noDataReason, exemptOnly: row.exemptOnly, coefficient: row.coefficient,
+    otherSpecialtyCourses: (row.otherSpecialtyCourses ?? []).map((code) => (courseNames.has(code) ? `${courseNames.get(code)} (${code})` : code)),
   }))
   : career.requirements.map((row) => ({
     title: row.title, skillName: row.skillName, isRequired: row.isRequired, status: null, statusLabel: null, score: null, threshold: null, deficit: null, upcomingTerm: null,
+    noDataReason: null, exemptOnly: false, coefficient: row.isRequired ? 2 : 1, otherSpecialtyCourses: [],
   }));
 
 /** The careers, best fit first (no fit last, then by name), each with its fit, requirements and survey matches. */
 export function guidanceCareers(catalog: CatalogRow[], inputs: AssessmentInputs | null, targetId: string | null,
   survey: { field: string | null; tech: readonly string[] }): GuidanceCareer[] {
   const fits = inputs ? careerFitsFor(inputs, catalog) : [];
+  const courseNames = new Map(uniqueCurriculumCourses(inputs?.curriculum.courses ?? []).map((course) => [courseKey(course.code), course.name]));
   const careers = catalog.map((career, index): GuidanceCareer => {
     const fit = fits[index] ?? null;
     return {
@@ -67,13 +82,22 @@ export function guidanceCareers(catalog: CatalogRow[], inputs: AssessmentInputs 
       fit: fit && {
         score: fit.fitScore ?? null, code: fit.fitCode, label: fit.fitLabel, dataShare: fit.dataShare, met: fit.counts.met, below: fit.counts.below,
         notStudied: fit.counts.notStudied, upcoming: fit.counts.upcoming, noData: fit.counts.noData, total: fit.counts.total,
+        selfStudy: fit.requirements.filter((row) => row.status === "no_data" && (row.noDataReason === "other_specialty" || row.noDataReason === "elective_not_chosen")).length,
+        summaryText: fit.summaryText, dataText: fit.dataText,
       },
-      requirements: requirementsOf(career, fit),
+      requirements: requirementsOf(career, fit, courseNames),
       interests: interestMatch(career, survey),
     };
   });
   const rank = (career: GuidanceCareer) => (career.fit && career.fit.code !== "insufficient_data" ? career.fit.score ?? -1 : -1);
   return careers.sort((a, b) => rank(b) - rank(a) || a.nameVi.localeCompare(b.nameVi, "vi") || a.id.localeCompare(b.id));
+}
+
+/** Whether a stored assessment's career (Khoảng trống kỹ năng) has the statuses and scores this page computes now. */
+export function sameAsStored(stored: CareerResult | null, live: GuidanceCareer): boolean {
+  const key = (rows: readonly { title: string; isRequired: boolean; status: GapStatus | null; score: number | null }[]) =>
+    JSON.stringify(rows.map((row) => [row.title, row.isRequired, row.status, row.score]).sort());
+  return Boolean(stored && stored.id === live.id && key(stored.requirements) === key(live.requirements));
 }
 
 export function createCareerGuidanceRouter(pool: DatabasePool | undefined) {
@@ -106,15 +130,28 @@ export function createCareerGuidanceRouter(pool: DatabasePool | undefined) {
       const fields = await client.query<{ code: string; name: string }>(
         "SELECT code,name FROM career_fields WHERE deleted_at IS NULL ORDER BY code::bigint,id");
       const profile = await client.query<{ career_position_id: string | null }>("SELECT career_position_id FROM student_profiles WHERE user_id=$1", [userId]);
+      const targetId = profile.rows[0]?.career_position_id ?? null;
+      // A soft-deleted target is not in the catalog; Khoảng trống kỹ năng still shows it ("không còn trong danh mục").
+      const deletedTarget = targetId && !catalog.some((career) => career.id === targetId)
+        ? (await client.query<{ name_vi: string }>("SELECT name_vi FROM career_positions WHERE id=$1", [targetId])).rows[0]?.name_vi ?? null : null;
+      // What Khoảng trống kỹ năng shows: the target career of the latest stored assessment.
+      const stored = await client.query<{ career: CareerResult | null; created_at: Date }>(
+        "SELECT computed->'career' AS career,created_at FROM stu_comp_assessments WHERE user_id=$1 ORDER BY created_at DESC,id DESC LIMIT 1", [userId]);
       const survey = await readSurvey(client, userId);
       await client.query("COMMIT");
       const answers = { field: survey?.answers.field && survey.answers.field !== "unsure" ? survey.answers.field : null, tech: survey?.interestTech ?? [] };
+      const careers = guidanceCareers(catalog, inputs, targetId, answers);
+      const target = careers.find((career) => career.isTarget);
       res.json({
         blocked,
-        targetCareerId: profile.rows[0]?.career_position_id ?? null,
+        targetCareerId: targetId,
+        deletedTargetName: deletedTarget,
+        // false when Khoảng trống kỹ năng shows other statuses or scores for the target career than this page (an older assessment).
+        gapCurrent: Boolean(target?.fit && sameAsStored(stored.rows[0]?.career ?? null, target)),
+        gapAssessedAt: stored.rows[0]?.created_at ?? null,
         surveyDone: Boolean(survey && (answers.field || answers.tech.length)),
         fields: fields.rows.filter((field) => catalog.some((career) => career.category === field.code)),
-        careers: guidanceCareers(catalog, inputs, profile.rows[0]?.career_position_id ?? null, answers),
+        careers,
       });
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);

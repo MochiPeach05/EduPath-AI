@@ -234,12 +234,15 @@ export function scoreDifference(req: Pick<CareerRequirementResult, "score" | "st
   // Met: whole points above the threshold, rounded down like the score (70 against 62,5 is +7, never below 0).
   return Math.max(0, Math.floor(req.score - req.threshold + 1e-9));
 }
-/** A career skill only courses of another specialty teach: "Cần tự học" on the page (user 2026-10-23), outside the fit score. */
+/**
+ * A career skill only courses of another specialty teach (user 2026-10-23), or only electives the student did not
+ * choose (comp-calc-v14): "Cần tự học" on the page. It counts 0 in the fit score since v14.
+ */
 export const needsSelfStudy = (req: Pick<CareerRequirementResult, "status"> & { noDataReason?: CareerRequirementResult["noDataReason"] }) =>
-  req.status === "no_data" && req.noDataReason === "other_specialty";
+  req.status === "no_data" && (req.noDataReason === "other_specialty" || req.noDataReason === "elective_not_chosen");
 
 /** The career's count line ("Đạt x/y kỹ năng · z sắp học · t chưa đủ dữ liệu") with its "Cần tự học" skills counted apart. */
-export function careerSummaryText(career: Pick<CareerResult, "summaryText" | "requirements">): string {
+export function careerSummaryText(career: Pick<CareerResult, "summaryText"> & { requirements: readonly (Pick<CareerRequirementResult, "status"> & { noDataReason?: CareerRequirementResult["noDataReason"] })[] }): string {
   const selfStudy = career.requirements.filter(needsSelfStudy).length;
   if (!selfStudy) return career.summaryText;
   const count = (status: CareerRequirementResult["status"]) => career.requirements.filter((req) => req.status === status).length;
@@ -265,7 +268,7 @@ export function gapStatusDisplay(req: Pick<CareerRequirementResult, "status" | "
 
 const STATUS_ORDER: Record<CareerRequirementResult["status"], number> = { below: 0, not_studied: 1, upcoming: 2, no_data: 3, met: 4 };
 /** Bắt buộc first, then the largest shortfall first (spec §11.4). */
-export function sortRequirements(list: readonly CareerRequirementResult[]): CareerRequirementResult[] {
+export function sortRequirements<T extends Pick<CareerRequirementResult, "isRequired" | "status" | "deficit" | "title">>(list: readonly T[]): T[] {
   return [...list].sort((a, b) => Number(b.isRequired) - Number(a.isRequired)
     || STATUS_ORDER[a.status] - STATUS_ORDER[b.status]
     || (b.deficit ?? 0) - (a.deficit ?? 0)
@@ -276,14 +279,15 @@ export const isGap = (req: Pick<CareerRequirementResult, "status">) => req.statu
 /**
  * "Điểm phù hợp" 0–100 (comp-calc-v11, user 2026-10-22: "Sao lại 100% tròn nhỉ tại vì nó chỉ chấm 92
  * điểm và sửa lại thành đơn vị điểm"): the career's skills averaged like a score, Bắt buộc counted
- * twice; a met or below skill counts its score, a not-studied one 0; upcoming, no-data and exempt-only
- * skills are left out. Read from the stored requirements, so older results show it too. Mirrors the
- * API's fitScoreOf (constants.ts).
+ * twice; a met or below skill counts its score, a skill without a score 0 — not studied, "Cần tự học" or
+ * "Chưa đủ dữ liệu" alike (comp-calc-v14, user 2026-10-24: "Tính đủ mọi kỹ năng"); only upcoming and
+ * exempt-only skills are left out. Read from the stored requirements, so older results show it too.
+ * Mirrors the API's fitScoreOf (constants.ts).
  */
 export function fitScoreOf(requirements: readonly Pick<CareerRequirementResult, "status" | "score" | "coefficient">[]): number | null {
   let sum = 0, weight = 0;
   for (const req of requirements) {
-    const value = req.status === "not_studied" ? 0 : req.status === "met" || req.status === "below" ? req.score : null;
+    const value = req.status === "met" || req.status === "below" ? req.score : req.status === "not_studied" || req.status === "no_data" ? 0 : null;
     if (value === null) continue;
     sum += req.coefficient * value;
     weight += req.coefficient;
@@ -293,13 +297,23 @@ export function fitScoreOf(requirements: readonly Pick<CareerRequirementResult, 
 /**
  * The fit level: the điểm phù hợp on the bounds of the competency levels (user, 2026-10-22: "Đồng bộ
  * cái mức phù hợp bên này thành tương tự của phần đánh giá năng lực"): Rất phù hợp ≥ 90, Phù hợp ≥ 80,
- * Trung bình ≥ 62,5, Ít phù hợp ≥ 50, Không phù hợp; "Chưa đủ dữ liệu" when less than half of the
- * coefficients have data. Same as the engine's fitCodeOf (FIT_MIN_DATA_SHARE).
+ * Trung bình ≥ 62,5, Ít phù hợp ≥ 50, Không phù hợp; "Chưa đủ dữ liệu" when more than half of the
+ * coefficients are still "Sắp học" (v14). Same as the engine's fitCodeOf (FIT_MIN_DATA_SHARE); the share is
+ * read from the requirements (fitDataShareOf), not the stored dataShare, so older results show the same level.
  */
 export type FitLevel = "very_fit" | "fit" | "average" | "low_fit" | "not_fit" | "insufficient_data";
-export function fitLevelOf(career: Pick<CareerResult, "requirements" | "dataShare">): FitLevel {
+/** Share of the coefficients that are not "Sắp học" (v14). Mirrors the API's fitDataShareOf. */
+export function fitDataShareOf(requirements: readonly Pick<CareerRequirementResult, "status" | "coefficient">[]): number {
+  let total = 0, counted = 0;
+  for (const req of requirements) {
+    total += req.coefficient;
+    if (req.status !== "upcoming") counted += req.coefficient;
+  }
+  return total > 0 ? Math.round((counted / total) * 10000) / 10000 : 0;
+}
+export function fitLevelOf(career: Pick<CareerResult, "requirements">): FitLevel {
   const score = fitScoreOf(career.requirements);
-  if (score === null || career.dataShare + 1e-9 < 0.5) return "insufficient_data";
+  if (score === null || fitDataShareOf(career.requirements) + 1e-9 < 0.5) return "insufficient_data";
   const t = LEVEL_THRESHOLDS;
   const reaches = (bound: number) => score + 1e-9 >= bound;
   return reaches(t.excellent) ? "very_fit" : reaches(t.proficient) ? "fit" : reaches(t.good) ? "average" : reaches(t.basic) ? "low_fit" : "not_fit";
@@ -319,7 +333,7 @@ export const FIT_SCALE: readonly { code: Exclude<FitLevel, "insufficient_data">;
   { code: "low_fit", label: FIT_LABELS.low_fit, range: "50 đến dưới 62,5", text: "Nhiều kỹ năng của nghề còn điểm thấp hoặc chưa học." },
   { code: "not_fit", label: FIT_LABELS.not_fit, range: "dưới 50", text: "Phần lớn kỹ năng của nghề chưa đạt ngưỡng hoặc chưa học." },
 ];
-export const fitLabelOf = (career: Pick<CareerResult, "requirements" | "dataShare">) => FIT_LABELS[fitLevelOf(career)];
+export const fitLabelOf = (career: Pick<CareerResult, "requirements">) => FIT_LABELS[fitLevelOf(career)];
 /** Ramp step of a fit level, like levelStep (5 = Rất phù hợp … 1 = Không phù hợp; 0 = Chưa đủ dữ liệu). */
 export function fitStep(level: FitLevel): 0 | 1 | 2 | 3 | 4 | 5 {
   return level === "insufficient_data" ? 0 : (5 - FIT_SCALE.findIndex((item) => item.code === level)) as 1 | 2 | 3 | 4 | 5;

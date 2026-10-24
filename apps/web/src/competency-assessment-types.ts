@@ -259,7 +259,8 @@ export type CareerRequirementResult = {
   exemptOnly: boolean;
   /** Earliest planned term of the courses that make the skill 'upcoming'. */
   upcomingTerm: string | null;
-  noDataReason: "no_skill" | "not_measured" | "other_specialty" | null;
+  /** "other_specialty" and "elective_not_chosen" (comp-calc-v14) read "Cần tự học". */
+  noDataReason: "no_skill" | "not_measured" | "other_specialty" | "elective_not_chosen" | null;
   supportCourses: SupportCourse[];
   improveCourses: SupportCourse[];
   /** The skill is also listed in selfStudy. */

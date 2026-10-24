@@ -90,8 +90,8 @@ describe("buildAiInput", () => {
   };
 
   it("uses the spec system prompt verbatim plus the output description", () => {
-    expect(PROMPT_VERSION).toBe("comp-v10");
-    expect(input.promptVersion).toBe("comp-v10");
+    expect(PROMPT_VERSION).toBe("comp-v11");
+    expect(input.promptVersion).toBe("comp-v11");
     expect(input.think).toBe(true);
     expect(input.system).toBe(SYSTEM_PROMPT);
     expect(input.system.startsWith("Bạn là cố vấn học tập của EduPath AI, đồng hành cùng sinh viên ngành Công nghệ Thông tin, Trường Đại học Văn Lang.\n")).toBe(true);
@@ -283,13 +283,14 @@ describe("buildAiInput", () => {
     const stored = syntheticResult();
     stored.career = { ...stored.career!, fit: 0.58, fitCode: "fairly_fit" as never, fitLabel: "Khá phù hợp" };
     const user = buildAiInput(stored).user;
-    // The level comes from the requirements' điểm phù hợp (2 × 88,5 + 72,5 + 2 × 55) / 5 = 71,9, whatever was stored (comp-calc-v11).
-    expect(user).toContain("Mức phù hợp: Trung bình\n");
+    // The level comes from the requirements' điểm phù hợp, whatever was stored: (2 × 88,5 + 72,5 + 2 × 55 + 0 for
+    // Điện toán đám mây, no data) / 6 = 59,91 (comp-calc-v14; 71,9 while no-data skills were left out).
+    expect(user).toContain("Mức phù hợp: Ít phù hợp\n");
     expect(user).not.toContain("Khá phù hợp");
   });
 
   it("does not send the numeric fit index, only the label", () => {
-    expect(input.user).toContain("Mức phù hợp: Trung bình\n");
+    expect(input.user).toContain("Mức phù hợp: Ít phù hợp\n");
     expect(input.user).not.toContain("chỉ số");
     expect(input.user).not.toContain("0,79");
   });

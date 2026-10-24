@@ -1,7 +1,7 @@
 // "Định hướng nghề nghiệp" (#career): every career of the catalog against the student's competencies (the same fit as
 // Khoảng trống kỹ năng shows for the target career) and against Khảo sát định hướng. Computed by the API
 // (apps/api/src/career-guidance), shown here; no AI.
-import { termShort } from "./student-roadmap-data";
+import { careerSummaryText, formatScore, gapStatusDisplay, sortRequirements, type StatusTone } from "./student-competency-data";
 
 export const CAREER_GUIDANCE_API = "/api/student/career-guidance";
 /** At most this many careers side by side. */
@@ -12,8 +12,10 @@ export type GapStatus = "met" | "below" | "upcoming" | "not_studied" | "no_data"
 export type GuidanceRequirement = {
   title: string; skillName: string | null; isRequired: boolean;
   status: GapStatus | null; statusLabel: string | null; score: number | null; threshold: number | null; deficit: number | null; upcomingTerm: string | null;
+  exemptOnly: boolean; noDataReason: "no_skill" | "not_measured" | "other_specialty" | "elective_not_chosen" | null; otherSpecialtyCourses: string[];
 };
-export type GuidanceFit = { score: number | null; code: FitCode; label: string; dataShare: number; met: number; below: number; notStudied: number; upcoming: number; noData: number; total: number };
+export type GuidanceFit = { score: number | null; code: FitCode; label: string; dataShare: number; met: number; below: number; notStudied: number; upcoming: number; noData: number; total: number;
+  summaryText: string; dataText: string };
 export type GuidanceCareer = {
   id: string; code: string; nameVi: string; nameEn: string; category: string; categoryName: string; description: string; isTarget: boolean;
   fit: GuidanceFit | null; requirements: GuidanceRequirement[]; interests: { field: string | null; tech: string[] };
@@ -21,6 +23,10 @@ export type GuidanceCareer = {
 export type GuidanceResponse = {
   /** Why the fit could not be computed (transcript_required, specialty_required…), or null. */
   blocked: string | null; targetCareerId: string | null; surveyDone: boolean; fields: { code: string; name: string }[]; careers: GuidanceCareer[];
+  /** The target career when it was removed from the catalog (Khoảng trống kỹ năng still shows it). */
+  deletedTargetName: string | null;
+  /** Whether Khoảng trống kỹ năng (the latest assessment, made at gapAssessedAt) shows the target career as this page does. */
+  gapCurrent: boolean; gapAssessedAt: string | null;
 };
 
 /** Ramp step of a fit level (5 = Rất phù hợp … 1 = Không phù hợp, 0 = Chưa đủ dữ liệu), as on Khoảng trống kỹ năng. */
@@ -53,27 +59,30 @@ export function filterCareers(careers: GuidanceCareer[], filters: CareerFilters)
     .sort((a, b) => (filters.sort === "fit" ? fitRank(b) - fitRank(a) : 0) || a.nameVi.localeCompare(b.nameVi, "vi"));
 }
 
-export type RequirementTone = "met" | "below" | "not_studied" | "upcoming" | "no_data" | "unknown";
-const scoreText = (value: number) => String(Math.round(value * 10) / 10).replace(".", ",");
-
-/** How the student stands on one requirement, in plain words. */
-export function requirementState(requirement: GuidanceRequirement): { tone: RequirementTone; text: string } {
-  switch (requirement.status) {
-    case "met": return { tone: "met", text: "Đạt" };
-    case "below": return { tone: "below", text: requirement.deficit !== null ? `Thiếu ${scoreText(requirement.deficit)} điểm` : "Dưới ngưỡng" };
-    case "not_studied": return { tone: "not_studied", text: "Chưa học" };
-    case "upcoming": return { tone: "upcoming", text: requirement.upcomingTerm ? `Sắp học · ${termShort(requirement.upcomingTerm)}` : "Sắp học" };
-    case "no_data": return { tone: "no_data", text: "Chưa đủ dữ liệu" };
-    default: return { tone: "unknown", text: "Chưa tính" };
-  }
+/** How the student stands on one requirement: the glyph, words and tone of Khoảng trống kỹ năng (gapStatusDisplay). */
+export function requirementState(requirement: GuidanceRequirement): { tone: StatusTone; glyph: string; text: string } {
+  return requirement.status === null ? { tone: "neutral", glyph: "?", text: "Chưa tính" } : gapStatusDisplay({ ...requirement, status: requirement.status });
 }
 
 /** The name a requirement is compared by: its skill, else its title. */
 export const requirementName = (requirement: Pick<GuidanceRequirement, "skillName" | "title">) => requirement.skillName ?? requirement.title;
 
-/** The skills still missing for a career (below the threshold or not studied). */
-export const missingSkills = (career: GuidanceCareer) =>
-  career.requirements.filter((row) => row.status === "below" || row.status === "not_studied").map(requirementName);
+type Computed = GuidanceRequirement & { status: GapStatus };
+/** With a fit every requirement has a status. */
+const computed = (career: GuidanceCareer): Computed[] => (career.fit ? career.requirements as Computed[] : []);
+/** The requirements in the order of Khoảng trống kỹ năng (sortRequirements); the catalog order while the fit is blocked. */
+export const orderedRequirements = (career: GuidanceCareer): GuidanceRequirement[] => (career.fit ? sortRequirements(computed(career)) : career.requirements);
+/** "Kỹ năng còn thiếu" of Khoảng trống kỹ năng: every skill that lowers the fit (below, not studied, Cần tự học, Chưa đủ dữ liệu). */
+export const missingSkills = (career: GuidanceCareer) => sortRequirements(computed(career))
+  .filter((row) => row.status === "below" || row.status === "not_studied" || row.status === "no_data").map(requirementName);
+/** How the điểm phù hợp is counted (comp-calc-v14), as "Thang mức phù hợp" of Khoảng trống kỹ năng says it. */
+export const FIT_RULE_TEXT = "Điểm phù hợp là trung bình điểm các kỹ năng của nghề, kỹ năng Bắt buộc tính gấp đôi kỹ năng Ưu tiên; "
+  + "kỹ năng chưa có điểm (chưa học, cần tự học, chưa đủ dữ liệu) tính 0 điểm, kỹ năng sắp học chưa được tính.";
+/** A requirement's score as Khoảng trống kỹ năng prints it ("—" without one). */
+export const requirementScoreText = (requirement: Pick<GuidanceRequirement, "score">) => (requirement.score === null ? "—" : formatScore(requirement.score));
+/** The count lines of Khoảng trống kỹ năng: "Đạt x/y kỹ năng · z sắp học · s cần tự học · t chưa đủ dữ liệu · u/y kỹ năng có dữ liệu". */
+export const fitSummary = (career: GuidanceCareer) =>
+  (career.fit ? `${careerSummaryText({ summaryText: career.fit.summaryText, requirements: computed(career) })} · ${career.fit.dataText}` : "");
 
 /** One row per skill any of the compared careers requires, with each career's requirement (null: not required). */
 export function compareRows(careers: GuidanceCareer[]): { name: string; cells: (GuidanceRequirement | null)[] }[] {
@@ -103,4 +112,5 @@ export const blockedText = (code: string) => BLOCKED[code] ?? "Chưa tính đư�
 /** Whether the student can fix the block in the profile. */
 export const blockedInProfile = (code: string) => code === "transcript_required" || code === "specialty_required";
 
-export const fitScoreText = (score: number) => String(Math.floor(score * 10) / 10).replace(".", ",");
+/** The điểm phù hợp as Khoảng trống kỹ năng prints it (formatScore: whole points rounded down, 62,5–63 with one decimal). */
+export const fitScoreText = (score: number) => formatScore(score);

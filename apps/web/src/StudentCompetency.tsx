@@ -396,7 +396,9 @@ function SkillRow({ skill, courses, groups }: { skill: SkillResult; courses: Map
   // A skill in several groups is listed under each one; its details name them all (2026-10-22).
   const groupNames = skillGroupKeys(skill).map((key) => groups.get(key)?.name).filter((name): name is string => Boolean(name));
   const score = skill.score === null ? null : Math.max(0, Math.min(100, skill.score));
-  const facts = `${skill.confidence ? CONFIDENCE_LABELS[skill.confidence] : "Chưa xác định độ tin cậy"} · độ phủ ${formatPercent(skill.coverage)}`;
+  // Coverage counts only the student's own path (electives chosen, own specialty); say so when other courses are listed (v14).
+  const ownPathOnly = skill.evidenceCourses.some((row) => row.role === "not_chosen") || skill.otherSpecialtyCourses.length > 0;
+  const facts = `${skill.confidence ? CONFIDENCE_LABELS[skill.confidence] : "Chưa xác định độ tin cậy"} · độ phủ ${formatPercent(skill.coverage)}${ownPathOnly ? " (chỉ tính học phần trong lựa chọn của bạn)" : ""}`;
   const moreCourses = skill.evidenceCourses.length - TIP_COURSES;
   return <li><details className="scomp-skill">
     <summary onPointerEnter={(event) => placeTip(event.currentTarget)} onFocus={(event) => placeTip(event.currentTarget)}>
@@ -427,7 +429,7 @@ function SkillRow({ skill, courses, groups }: { skill: SkillResult; courses: Map
       <div className="scomp-table-scroll" tabIndex={0} role="region" aria-label={`Học phần minh chứng của ${skill.name}`}>
         <table className="scomp-table scomp-evidence">
           <caption>Học phần minh chứng của {skill.name}</caption>
-          <thead><tr><th scope="col">Mã</th><th scope="col">Tên học phần</th><th scope="col">TC</th><th scope="col">Điểm</th><th scope="col">Kết quả</th><th scope="col">Số lần học</th><th scope="col">Trọng số</th><th scope="col">Học kỳ</th><th scope="col">Độ phủ</th></tr></thead>
+          <thead><tr><th scope="col">Mã</th><th scope="col">Tên học phần</th><th scope="col">TC</th><th scope="col">Điểm</th><th scope="col">Kết quả</th><th scope="col">Số lần học</th><th scope="col">Trọng số</th><th scope="col">Học kỳ</th><th scope="col">Tỷ trọng</th></tr></thead>
           <tbody>{skill.evidenceCourses.map((row) => {
             const course = courses.get(row.code);
             return <tr key={row.code}>
@@ -438,7 +440,7 @@ function SkillRow({ skill, courses, groups }: { skill: SkillResult; courses: Map
               <td>{course ? COURSE_STATE_LABELS[course.state] : "—"}{course?.inferred && <small>suy ra từ điểm chữ</small>}</td>
               <td className="scomp-num">{course ? course.attempts.toLocaleString("vi-VN") : "—"}</td>
               <td className="scomp-num">{formatNumber(row.weight)}</td>
-              <td>{course?.term ?? (course?.plannedTerm ? `Dự kiến ${course.plannedTerm}` : "—")}</td>
+              <td>{course?.term ?? (row.role !== "not_chosen" && course?.plannedTerm ? `Dự kiến ${course.plannedTerm}` : "—")}</td>
               <td className="scomp-num">{formatPercent(row.share)}</td>
             </tr>;
           })}</tbody>
@@ -519,7 +521,7 @@ function GraduationSection() {
 function FitScale({ career }: { career: NonNullable<AssessmentResult["career"]> }) {
   const level = fitLevelOf(career);
   const own = level === "insufficient_data"
-    ? "Chưa tới một nửa yêu cầu của nghề có điểm để so sánh (phần lớn còn sắp học hoặc chương trình chưa có học phần đo), nên chưa xếp mức (Chưa đủ dữ liệu)." : null;
+    ? "Hơn một nửa yêu cầu của nghề còn sắp học nên chưa xếp mức (Chưa đủ dữ liệu)." : null;
   return <details className="scomp-legend scomp-fit-legend"><summary>Thang mức phù hợp</summary>
     <ul>{FIT_SCALE.map((item) => <li key={item.code}>
       <span className="scomp-fit-scale-name"><FitBadge level={item.code} />{item.code === level && <span className="scomp-career-tag">Mức của bạn</span>}</span>
@@ -528,7 +530,7 @@ function FitScale({ career }: { career: NonNullable<AssessmentResult["career"]> 
     </li>)}</ul>
     <p className="scomp-meta">Cùng ngưỡng với Thang mức năng lực ở trang Đánh giá năng lực.</p>
     {own && <p className="scomp-meta">{own}</p>}
-    <p className="scomp-meta">Cách tính điểm phù hợp: trung bình điểm các kỹ năng của nghề, kỹ năng Bắt buộc tính gấp đôi kỹ năng Ưu tiên; kỹ năng chưa học tính 0 điểm. Kỹ năng sắp học, cần tự học, chưa đủ dữ liệu hoặc chỉ có học phần miễn/công nhận không tính.</p>
+    <p className="scomp-meta">Cách tính điểm phù hợp: trung bình điểm các kỹ năng của nghề, kỹ năng Bắt buộc tính gấp đôi kỹ năng Ưu tiên; kỹ năng chưa có điểm (chưa học, cần tự học, chưa đủ dữ liệu) tính 0 điểm. Kỹ năng sắp học hoặc chỉ có học phần miễn/công nhận chưa được tính.</p>
   </details>;
 }
 
@@ -537,7 +539,8 @@ function GapSummary({ result }: { result: AssessmentResult }) {
   if (!career) return <Section id="sgap-summary" title="Mức phù hợp với nghề mục tiêu">
     <div className="sw-empty scomp-empty"><h3>Bạn chưa chọn nghề mục tiêu</h3><p>Khoảng trống kỹ năng được tính so với yêu cầu của nghề mục tiêu. Kết quả này được tính khi hồ sơ chưa có nghề mục tiêu; hãy chọn nghề rồi bấm “Đánh giá lại” để biết kỹ năng nào đã đạt, kỹ năng nào còn thiếu và học phần nên học.</p><a className="sw-outline" href="#profile">Chọn nghề mục tiêu</a></div>
   </Section>;
-  const missing = sortRequirements(career.requirements).filter((req) => req.status === "below" || req.status === "not_studied" || needsSelfStudy(req));
+  // Every skill that lowers the fit score (v14): below, not studied, "Cần tự học" and "Chưa đủ dữ liệu".
+  const missing = sortRequirements(career.requirements).filter((req) => req.status === "below" || req.status === "not_studied" || req.status === "no_data");
   const level = fitLevelOf(career);
   return <Section id="sgap-summary" title="Mức phù hợp với nghề mục tiêu" description={<>So với yêu cầu của nghề <strong>{career.nameVi}</strong> ({career.nameEn}).{career.deleted && " Nghề này không còn trong danh mục; bạn nên chọn nghề khác."}</>}>
     <div className="scomp-fit-summary">
@@ -558,9 +561,9 @@ function GapSummary({ result }: { result: AssessmentResult }) {
         <StatusText {...gapStatusDisplay(req)} />
         {req.deficitBandLabel && req.status === "below" && <span className="scomp-code">{req.deficitBandLabel}</span>}
       </li>)}</ul>
-        : <p className={career.requirements.length ? "scomp-meta sg-status-pass" : "scomp-meta"}>{career.requirements.length ? "✓ Bạn đã đạt mọi kỹ năng có dữ liệu của nghề này." : "Nghề này chưa có yêu cầu kỹ năng trong danh mục nên chưa so sánh được."}</p>}
+        : <p className={career.requirements.length ? "scomp-meta sg-status-pass" : "scomp-meta"}>{career.requirements.length ? career.requirements.some((req) => req.status === "upcoming") ? "✓ Bạn đã đạt mọi kỹ năng của nghề này, trừ các kỹ năng sắp học." : "✓ Bạn đã đạt mọi kỹ năng của nghề này." : "Nghề này chưa có yêu cầu kỹ năng trong danh mục nên chưa so sánh được."}</p>}
     </div>
-    <p className="scomp-meta">{careerThresholdsLine(career)} Kỹ năng sắp học, cần tự học hoặc chưa đủ dữ liệu không được tính vào mức phù hợp.</p>
+    <p className="scomp-meta">{careerThresholdsLine(career)} Kỹ năng chưa có điểm (chưa học, cần tự học, chưa đủ dữ liệu) tính 0 điểm khi tính mức phù hợp; kỹ năng sắp học chưa được tính.</p>
     <FitScale career={career} />
   </Section>;
 }
@@ -638,7 +641,9 @@ function GapRow({ req, otherCourses }: { req: CareerRequirementResult; otherCour
     <td className="scomp-num" data-label="Chênh lệch">{difference === null ? "—" : difference > 0 ? `+${formatScore(difference)}` : formatScore(difference)}{req.deficitBandLabel && <small>{req.deficitBandLabel}</small>}</td>
     <td data-label="Trạng thái"><StatusText {...status} />{req.status === "no_data" && <small>{req.noDataReason === "other_specialty"
       ? `Chỉ có trong học phần của chuyên ngành khác${otherCourses.length ? `: ${otherCourses.join(", ")}` : ""}.`
-      : "Chương trình đào tạo chưa có học phần đo kỹ năng này — không phải điểm yếu."}</small>}</td>
+      : req.noDataReason === "elective_not_chosen"
+        ? "Chỉ có trong học phần tự chọn bạn không chọn (nhóm tự chọn đã đủ tín chỉ)."
+        : "Chương trình đào tạo chưa có học phần đo kỹ năng này — không phải điểm yếu."}</small>}</td>
   </tr>;
 }
 

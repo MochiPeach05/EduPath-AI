@@ -2,7 +2,7 @@ import { referencedCourseCodes } from "../curricula/course-codes.js";
 import { startsReplacementPath, THESIS_NAME_PATTERN } from "../graduation/thesis.js";
 import {
   CALC_VERSION, CAREER_COEFFICIENTS, CAREER_THRESHOLDS, COVERAGE_BANDS, DEFICIT_BANDS, EVIDENCE_BANDS, FIT_BELOW_FLOOR,
-  FIT_BELOW_MAX_CREDIT, FIT_LABELS, fitCodeOf, fitScoreOf, HIGHLIGHT_COUNT, isStrengthConfidence, LEVEL_THRESHOLDS, MAX_RELATED_SKILLS,
+  FIT_BELOW_MAX_CREDIT, FIT_LABELS, fitCodeOf, fitDataShareOf, fitScoreOf, HIGHLIGHT_COUNT, isStrengthConfidence, LEVEL_THRESHOLDS, MAX_RELATED_SKILLS,
   MAX_SKILL_PLANS, MAX_SUPPORT_COURSES, MIN_WEIGHTED_COURSE_SHARE, SCOPE_MAX_LENGTH,
 } from "./constants.js";
 import {
@@ -597,10 +597,17 @@ function assess(inputs: AssessmentInputs): Assessment {
       else {
         const pending = applicableLinks.map((link) => link.row).filter((row) => !notChosen(row) && !isStudiedState(row.state));
         const future = (row: Row) => row.state === "in_progress" || (row.plannedTerm !== null && (studyTerm === null || row.plannedTerm > studyTerm));
-        if (pending.length && pending.every(future)) {
+        // v14: one course being studied or planned ahead is enough for "Sắp học"; an open option whose plan slot has
+        // passed no longer turns it into "Chưa học" (K30: 71ITAI40303 in progress read "Chưa học").
+        const ahead = pending.filter(future);
+        if (ahead.length) {
           status = "upcoming";
-          upcomingTerm = pending.map((row) => (row.state === "in_progress" ? row.attemptTerm ?? row.plannedTerm : row.plannedTerm))
+          upcomingTerm = ahead.map((row) => (row.state === "in_progress" ? row.attemptTerm ?? row.plannedTerm : row.plannedTerm))
             .filter((term): term is string => term !== null).sort(compareCode)[0] ?? null;
+        } else if (applicableLinks.every((link) => notChosen(link.row))) {
+          // Only electives the student did not choose teach it (the group's credits are filled): "Cần tự học", like a skill
+          // of another specialty, no longer "Chưa học" with no course to register (v14).
+          status = "no_data"; noDataReason = "elective_not_chosen";
         } else status = "not_studied";
       }
       const score = skill?.score ?? null;
@@ -611,8 +618,9 @@ function assess(inputs: AssessmentInputs): Assessment {
       const take = CAREER_GAP_STATUSES.has(status) ? takeCourses(applicableLinks, threshold) : [];
       const improve = status === "below" ? improveCourses(skill?.links ?? [], threshold) : [];
       let selfStudyReason: SelfStudyReason | null = null;
-      if (status === "no_data" && skillKey) selfStudyReason = noDataReason === "other_specialty" ? "other_specialty" : "not_measured";
-      else if (status === "not_studied" && applicableLinks.every((link) => notChosen(link.row))) selfStudyReason = "elective_quota_used";
+      if (status === "no_data" && skillKey) {
+        selfStudyReason = noDataReason === "other_specialty" ? "other_specialty" : noDataReason === "elective_not_chosen" ? "elective_quota_used" : "not_measured";
+      }
       // An improve course is still a course to study for a below skill (spec §7.7), so it is not "no course left".
       else if (!take.length && (status === "not_studied" || (status === "below" && !improve.length))) selfStudyReason = "no_course_left";
       if (selfStudyReason && skillKey) {
@@ -629,6 +637,7 @@ function assess(inputs: AssessmentInputs): Assessment {
         deficitBand: band, deficitBandLabel: band ? DEFICIT_BAND_LABELS[band] : null,
         fitCredit: (() => { const value = fitCredit(status, score, threshold); return value === null ? null : round(value, 4); })(),
         exemptOnly: status === "met" && score === null, upcomingTerm, noDataReason,
+        otherSpecialtyCourses: skill ? skill.links.filter((link) => !link.row.applicable).map((link) => link.row.code).sort(compareCode) : [],
         supportCourses: take, improveCourses: improve, selfStudy: Boolean(selfStudyReason && skillKey),
       };
     });
@@ -637,14 +646,14 @@ function assess(inputs: AssessmentInputs): Assessment {
       (b.deficit ?? 0) - (a.deficit ?? 0) || compareCode(a.skillKey ?? "~", b.skillKey ?? "~") || compareText(a.title, b.title) ||
       compareCode(a.requirementId, b.requirementId));
     const count = (status: GapStatus) => rows.filter((row) => row.status === status).length;
-    const totalCoefficient = rows.reduce((sum, row) => sum + row.coefficient, 0);
     const included = rows.filter((row) => row.status === "met" || row.status === "below" || row.status === "not_studied");
     const includedCoefficient = included.reduce((sum, row) => sum + row.coefficient, 0);
     const fitRaw = includedCoefficient > 0
       ? included.reduce((sum, row) => sum + row.coefficient * (fitCredit(row.status, workById.get(row.skillId ?? "")?.score ?? null, row.threshold) ?? 0), 0) / includedCoefficient
       : null;
     const fit = fitRaw === null ? null : round(fitRaw, 4);
-    const dataShare = round(totalCoefficient > 0 ? includedCoefficient / totalCoefficient : 0, 4);
+    // The share that is not "Sắp học" (v14): the fit score counts every other skill, 0 without a score.
+    const dataShare = fitDataShareOf(rows);
     // "Điểm phù hợp" (v11) from the stored rows: the page and the AI prompt derive the level from them too.
     const fitScore = fitScoreOf(rows);
     const fitCode = fitCodeOf(fitScore, dataShare);
@@ -654,9 +663,13 @@ function assess(inputs: AssessmentInputs): Assessment {
       total: rows.length, met: count("met"), below: count("below"), upcoming: count("upcoming"), notStudied: count("not_studied"),
       noData: count("no_data"), withData: rows.length - count("no_data"),
     };
+    // "Cần tự học" (only another specialty teaches it) is counted apart, like the page's careerSummaryText.
+    const selfStudyCount = rows.filter((row) => row.status === "no_data" && (row.noDataReason === "other_specialty" || row.noDataReason === "elective_not_chosen")).length;
     careerResult = {
       id: career.id, code: career.code, nameVi: career.nameVi, nameEn: career.nameEn, deleted: career.deleted, requirements: rows, counts,
-      summaryText: `Đạt ${counts.met}/${counts.total} kỹ năng · ${counts.upcoming} sắp học · ${counts.noData} chưa đủ dữ liệu`,
+      summaryText: selfStudyCount
+        ? `Đạt ${counts.met}/${counts.total} kỹ năng · ${counts.upcoming} sắp học · ${selfStudyCount} cần tự học · ${counts.noData - selfStudyCount} chưa đủ dữ liệu`
+        : `Đạt ${counts.met}/${counts.total} kỹ năng · ${counts.upcoming} sắp học · ${counts.noData} chưa đủ dữ liệu`,
       dataText: `${counts.withData}/${counts.total} kỹ năng có dữ liệu`,
       fit, fitScore, fitCode, fitLabel: FIT_LABELS[fitCode], dataShare,
       weightedMeanScore: meanCoefficient > 0

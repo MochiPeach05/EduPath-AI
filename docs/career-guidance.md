@@ -2,7 +2,7 @@
 
 Trang `#career` của cổng sinh viên. Người dùng (24/10/2026): "Giờ làm cho tôi phần Định hướng nghề nghiệp này đi hiện tại tôi chưa có functionlist nên bạn cứ làm theo ý bạn muốn nhưng vẫn phải phù hợp với đề tài này". Thay trang "Sắp ra mắt" có ba bước (Khám phá vị trí nghề nghiệp, Lựa chọn nghề nghiệp mục tiêu, So sánh nhiều nghề nghiệp) bằng trang làm đủ ba việc đó.
 
-Theo nguyên tắc chung của đề tài, **hệ thống tính**: mức phù hợp với từng nghề dùng đúng phép tính của trang Khoảng trống kỹ năng; không có phần AI (không gửi gì cho mô hình).
+Theo nguyên tắc chung của đề tài, **hệ thống tính**: mức phù hợp với từng nghề dùng đúng phép tính của trang Khoảng trống kỹ năng; không có phần AI (không gửi gì cho mô hình). Từ comp-calc-v14 trang và Khoảng trống kỹ năng hiện giống hệt nhau (mục "Đồng bộ với Khoảng trống kỹ năng").
 
 ## Trang (`apps/web/src/StudentCareerGuidance.tsx`, `career-guidance-data.ts`, `career-guidance.css`)
 
@@ -33,6 +33,15 @@ Thẻ "Định hướng của bạn" ở Tổng quan nay dẫn tới trang này.
 - `blocked`: mã lỗi của `readAssessmentInputs` (`transcript_required`, `specialty_required`, `cohort_unknown`, `curriculum_unavailable`, `curriculum_ambiguous`, `competency_weights_unavailable`); khi đó `fit` = null, yêu cầu không có trạng thái.
 - **Khớp khảo sát** (`interests.ts`): tên nghề (Việt + Anh) và tên lĩnh vực đọc không dấu, so với quy tắc của từng câu trả lời Lĩnh vực quan tâm nhất (Web, Di động, AI và dữ liệu, An ninh mạng, Cloud/DevOps, Game, Nhúng/IoT) và từng công nghệ bạn thích. Danh mục do Khoa quản lý nên khớp theo tên; nghề không quy tắc nào nhận ra thì không có dòng khớp. Chỉ hiện cho chính sinh viên, không gửi cho AI. Chính sách bảo mật (mục "Thông tin của bạn được dùng để làm gì?": giúp bạn tìm hiểu các vị trí nghề nghiệp và lưu mục tiêu) bao gồm việc này.
 - Thứ tự: mức phù hợp giảm dần (nghề "Chưa đủ dữ liệu" hay chưa tính xếp cuối), rồi tên.
+
+## Đồng bộ với Khoảng trống kỹ năng (comp-calc-v14, 24/10/2026)
+
+Người dùng: "Điểm không đồng bộ sai cách tính rất nhiều chỗ ở phần định hướng nghề nghiệp và cách tính hầu hết bảng nghề nghiệp ở đây có vấn đề hết". Ba agent rà trên dữ liệu giả lập K26–K31 (156 cặp sinh viên × nghề); sau khi sửa không còn chỗ lệch nào giữa hai trang (tiêu đề, dòng đếm, thứ tự, ký hiệu, chữ, màu, danh sách kỹ năng còn thiếu, ghi chú).
+
+- **Điểm phù hợp** theo comp-calc-v14 (xem `docs/competency-assessment.md`): mọi kỹ năng chưa có điểm tính 0, chỉ Sắp học chưa tính. Hộp chi tiết có cột **Điểm** từng kỹ năng và một dòng giải thích cách tính (`FIT_RULE_TEXT`). Điểm in như trang Khoảng trống kỹ năng (`formatScore`: điểm nguyên làm tròn xuống), không còn một chữ số thập phân.
+- **Trạng thái từng yêu cầu** dùng đúng `gapStatusDisplay` của Khoảng trống kỹ năng: ✓ Đạt ngưỡng (· miễn/công nhận), ✗ Dưới ngưỡng · thiếu N điểm (làm tròn lên, tối thiểu 1), ! Chưa học, ○ Sắp học · HKxxx, ! Cần tự học (chuyên ngành khác, kèm tên học phần; hoặc học phần tự chọn bạn không chọn), ? Chưa đủ dữ liệu; cùng màu (`cg-state-pass/fail/unknown/neutral`). API gửi thêm `noDataReason`, `exemptOnly`, `coefficient`, `otherSpecialtyCourses` ("Tên (MÃ)").
+- **Dòng đếm** = `careerSummaryText` + `dataText` ("Đạt x/y kỹ năng · z sắp học · s cần tự học · t chưa đủ dữ liệu · u/y kỹ năng có dữ liệu"); **thứ tự** yêu cầu = `sortRequirements`; **bạn nên bổ sung** = mọi kỹ năng làm giảm điểm (dưới ngưỡng, chưa học, cần tự học, chưa đủ dữ liệu), như "Kỹ năng còn thiếu".
+- **Nghề mục tiêu**: API so yêu cầu của nghề mục tiêu với kết quả đánh giá gần nhất (`sameAsStored`); khác nhau thì thẻ nghề mục tiêu nhắc "Trang Khoảng trống kỹ năng đang hiển thị lần đánh giá lúc …" và bấm Đánh giá lại (`gapCurrent`, `gapAssessedAt`). Nghề mục tiêu đã bị xóa khỏi danh mục hiện "… nghề này không còn trong danh mục" (`deletedTargetName`).
 
 ## Kiểm thử
 
