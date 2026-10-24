@@ -8,8 +8,8 @@ import { requireAuthentication } from "../middleware/authorization.js";
 import { parseTranscript, TranscriptError, type TranscriptData } from "./transcript-parser.js";
 import { enqueueTranscript, expireJobs, jobColumns, runAfterTranscriptImport, type TranscriptImportOptions } from "./transcript-jobs.js";
 import { activeConsentVersion, recordConsent, recordTranscriptConsent, TRANSCRIPT_POLICY_VERSION, withdrawConsent, withdrawTranscriptConsent } from "./consent.js";
-import { ACHIEVEMENTS_MAX, deleteSurvey, parseSurveyInput, readSurvey, saveSurvey, SURVEY_QUESTIONS } from "./survey.js";
-import { bothOrNeither, interestFields } from "./interests.js";
+import { ACHIEVEMENTS_MAX, deleteSurvey, parseSurveyInput, readPreviousInterests, readSurvey, saveSurvey, SURVEY_QUESTIONS } from "./survey.js";
+import { bothOrNeither, INTEREST_HOBBIES, INTEREST_MAX, INTEREST_TECH, interestFields } from "./interests.js";
 import { deleteCompetencyData } from "../competency-assessment/repository.js";
 import { specialtyOffered } from "../competency-assessment/specialty.js";
 import { deleteGraduationAdvice } from "../graduation/advice/jobs.js";
@@ -41,7 +41,7 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
       careerPositionId: z.uuid().nullable().optional(),
       currentSemester: z.number().int().min(1).max(3).nullable().optional(),
       specialty: z.enum(["CNPM", "CNDL", "TTNT", "ANM", "KCN"]).nullable().optional(),
-      // "Sở thích" as choices since 2026-10-24 (interests.ts); the free-text interests above stay for older pages.
+      // Older pages: the free text above and these choices only prefill the survey now (interests.ts).
       ...interestFields,
     }).strict().refine(bothOrNeither).safeParse(req.body);
     if (!input.success) { res.status(400).json({ error: "invalid_profile" }); return; }
@@ -72,7 +72,7 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
         }
         await client.query("UPDATE student_profiles SET specialty=$2 WHERE user_id=$1", [req.session.user!.userId, input.data.specialty]);
       }
-      // The choices replace the free text, which is cleared.
+      // The choices replace the free text, which is cleared; the survey takes them in when saved.
       if (input.data.interestTech && input.data.interestHobbies) {
         await client.query("UPDATE student_profiles SET interest_tech=$2,interest_hobbies=$3,interests=NULL WHERE user_id=$1",
           [req.session.user!.userId, input.data.interestTech, input.data.interestHobbies]);
@@ -83,11 +83,16 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
     finally { client.release(); }
   });
 
-  // "Khảo sát định hướng": the questions, the stored answers and the policy version the student agreed to for them.
+  // "Khảo sát định hướng": the questions and interest lists, the stored answers, what the profile held before the
+  // interests moved into the survey (to start from), and the policy version the student agreed to.
   router.get("/survey", async (req, res) => {
     const userId = req.session.user!.userId;
-    res.json({ questions: SURVEY_QUESTIONS, achievementsMax: ACHIEVEMENTS_MAX, survey: await readSurvey(pool!, userId),
-      consentVersion: await activeConsentVersion(pool!, userId, "profile_survey") });
+    const survey = await readSurvey(pool!, userId);
+    res.json({
+      questions: SURVEY_QUESTIONS, interests: { tech: INTEREST_TECH, hobbies: INTEREST_HOBBIES, max: INTEREST_MAX }, achievementsMax: ACHIEVEMENTS_MAX,
+      survey, previous: survey?.interestTech.length ? null : await readPreviousInterests(pool!, userId),
+      consentVersion: await activeConsentVersion(pool!, userId, "profile_survey"),
+    });
   });
   // Saving needs consent to the current policy: given with this request (X-Consent-Policy-Version) or already active.
   router.put("/survey", async (req, res) => {

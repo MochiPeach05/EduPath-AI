@@ -40,7 +40,8 @@
   gap: 14px;
 }
 
-.ps-questions > li:last-child {
+.ps-questions > li:last-child,
+.ps-questions > .ps-wide {
   grid-column: 1 / -1;
 }
 

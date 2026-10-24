@@ -18,21 +18,24 @@ const student = {
 
 const answers = { goal: "study", environment: "both", company: "large", partTime: "no", leadership: "few", projects: "many",
   internship: "done", selfStudy: "high", english: "working", field: "data" };
-const savedRow = (extra: Record<string, unknown> = {}) => ({ version: "survey-v1", answers, has_achievements: false, achievements: null,
-  updated_at: new Date("2026-10-24T10:00:00Z"), ...extra });
+const interests = { interestTech: ["ai_ml", "python_data"], interestHobbies: ["reading"] };
+const savedRow = (extra: Record<string, unknown> = {}) => ({ version: "survey-v2", answers, interest_tech: interests.interestTech,
+  interest_hobbies: interests.interestHobbies, has_achievements: false, achievements: null, updated_at: new Date("2026-10-24T10:00:00Z"), ...extra });
 
-function setup(options: { consent?: string | null; survey?: boolean } = {}) {
+function setup(options: { consent?: string | null; survey?: boolean; row?: Record<string, unknown>; previous?: Record<string, unknown> } = {}) {
   const consentRows = options.consent ? [{ policy_version: options.consent }] : [];
   const read = async (sql: string) => {
-    if (sql.includes("FROM stu_profile_surveys WHERE user_id=$1")) return { rowCount: options.survey ? 1 : 0, rows: options.survey ? [savedRow()] : [] };
+    if (sql.includes("FROM stu_profile_surveys WHERE user_id=$1")) return { rowCount: options.survey ? 1 : 0, rows: options.survey ? [savedRow(options.row)] : [] };
     if (sql.includes("FROM data_consents")) return { rowCount: consentRows.length, rows: consentRows };
+    if (sql.includes("FROM student_profiles WHERE user_id=$1")) return { rowCount: options.previous ? 1 : 0, rows: options.previous ? [options.previous] : [] };
     return null;
   };
   const clientQuery = vi.fn(async (sql: string, params?: unknown[]) => {
     if (/^(BEGIN|COMMIT|ROLLBACK)/.test(sql)) return { rowCount: 0, rows: [] };
     if (sql.includes("SELECT id FROM users")) return { rowCount: 1, rows: [{ id: studentId }] };
     if (sql.startsWith("INSERT INTO stu_profile_surveys")) {
-      return { rowCount: 1, rows: [savedRow({ answers: JSON.parse(String(params?.[2])), has_achievements: params?.[3], achievements: params?.[4] })] };
+      return { rowCount: 1, rows: [savedRow({ answers: JSON.parse(String(params?.[2])), interest_tech: params?.[3], interest_hobbies: params?.[4],
+        has_achievements: params?.[5], achievements: params?.[6] })] };
     }
     if (sql.startsWith("DELETE FROM stu_profile_surveys")) return { rowCount: options.survey ? 1 : 0, rows: [] };
     return (await read(sql)) ?? { rowCount: 1, rows: [] };
@@ -55,41 +58,51 @@ const put = (app: express.Express, body: unknown, consent?: string) => {
 };
 
 describe("survey answers", () => {
-  it("needs one listed answer per question and Có or Không for achievements, with the list after Có", () => {
-    expect(parseSurveyInput({ answers, hasAchievements: false })).toEqual({ value: { answers, hasAchievements: false, achievements: null } });
-    expect(parseSurveyInput({ answers, hasAchievements: false, achievements: "ignored" })).toEqual({ value: { answers, hasAchievements: false, achievements: null } });
+  it("needs one listed answer per question, 1 to 5 of each interest list and Có or Không for achievements, with the list after Có", () => {
+    expect(parseSurveyInput({ answers, ...interests, hasAchievements: false })).toEqual({ value: { answers, ...interests, hasAchievements: false, achievements: null } });
+    expect(parseSurveyInput({ answers, ...interests, hasAchievements: false, achievements: "ignored" })).toEqual({ value: { answers, ...interests, hasAchievements: false, achievements: null } });
     const { goal: _goal, ...missing } = answers;
-    for (const body of [{ answers: missing, hasAchievements: false }, { answers: { ...answers, goal: "travel" }, hasAchievements: false },
-      { answers: { ...answers, extra: "x" }, hasAchievements: false }, { answers }, { answers, hasAchievements: "yes" }]) {
+    for (const body of [{ answers: missing, ...interests, hasAchievements: false }, { answers: { ...answers, goal: "travel" }, ...interests, hasAchievements: false },
+      { answers: { ...answers, extra: "x" }, ...interests, hasAchievements: false }, { answers, ...interests }, { answers, ...interests, hasAchievements: "yes" },
+      { answers, hasAchievements: false }, { answers, ...interests, interestTech: [], hasAchievements: false },
+      { answers, ...interests, interestHobbies: ["reading", "reading"], hasAchievements: false },
+      { answers, ...interests, interestTech: ["ai_ml", "game", "uiux", "testing", "security", "mobile"], hasAchievements: false },
+      { answers, ...interests, interestTech: ["cooking"], hasAchievements: false }]) {
       expect(parseSurveyInput(body)).toEqual({ error: "invalid_survey" });
     }
-    expect(parseSurveyInput({ answers, hasAchievements: true, achievements: " \n  \n" })).toEqual({ error: "achievements_required" });
-    expect(parseSurveyInput({ answers, hasAchievements: true, achievements: "x".repeat(ACHIEVEMENTS_MAX + 1) })).toEqual({ error: "achievements_too_long" });
-    expect(parseSurveyInput({ answers, hasAchievements: true, achievements: "  Giải Nhì Hackathon khoa \r\n\r\n\u0007Học bổng HK1  " }))
-      .toEqual({ value: { answers, hasAchievements: true, achievements: "Giải Nhì Hackathon khoa\nHọc bổng HK1" } });
+    expect(parseSurveyInput({ answers, ...interests, hasAchievements: true, achievements: " \n  \n" })).toEqual({ error: "achievements_required" });
+    expect(parseSurveyInput({ answers, ...interests, hasAchievements: true, achievements: "x".repeat(ACHIEVEMENTS_MAX + 1) })).toEqual({ error: "achievements_too_long" });
+    expect(parseSurveyInput({ answers, ...interests, hasAchievements: true, achievements: "  Giải Nhì Hackathon khoa \r\n\r\n\u0007Học bổng HK1  " }))
+      .toEqual({ value: { answers, ...interests, hasAchievements: true, achievements: "Giải Nhì Hackathon khoa\nHọc bổng HK1" } });
   });
 
-  it("gives the AI each question with the label of its answer", () => {
+  it("gives the AI each question with the label of its answer, the interests by label and the achievements", () => {
     expect(SURVEY_QUESTIONS).toHaveLength(10);
-    const facts = surveyFacts({ answers, hasAchievements: true, achievements: "Giải Nhì Hackathon khoa" });
+    const facts = surveyFacts({ answers, ...interests, hasAchievements: true, achievements: "Giải Nhì Hackathon khoa" });
     expect(facts.answers[0]).toEqual({ question: "Mục tiêu sau tốt nghiệp", answer: "Học lên cao (thạc sĩ, nghiên cứu)" });
     expect(facts.answers.at(-1)).toEqual({ question: "Lĩnh vực quan tâm nhất", answer: "AI, dữ liệu" });
+    expect(facts.tech).toEqual(["Python, phân tích dữ liệu", "Trí tuệ nhân tạo, học máy"]);
+    expect(facts.hobbies).toEqual(["Đọc sách, tài liệu"]);
     expect(facts.achievements).toBe("Giải Nhì Hackathon khoa");
-    expect(surveyFacts({ answers, hasAchievements: false, achievements: null }).achievements).toBeNull();
+    expect(surveyFacts({ answers, ...interests, hasAchievements: false, achievements: null }).achievements).toBeNull();
   });
 });
 
 describe("/student/survey", () => {
-  it("sends the questions, the stored answers and the policy version agreed to", async () => {
-    const empty = await request(setup().app).get("/student/survey").expect(200);
-    expect(empty.body).toMatchObject({ achievementsMax: ACHIEVEMENTS_MAX, survey: null, consentVersion: null });
+  it("sends the questions, the interest lists, the stored answers, what the profile held before and the policy version agreed to", async () => {
+    const empty = await request(setup({ previous: { tech: ["game"], hobbies: [], text: "Thích làm game" } }).app).get("/student/survey").expect(200);
+    expect(empty.body).toMatchObject({ achievementsMax: ACHIEVEMENTS_MAX, survey: null, consentVersion: null, previous: { tech: ["game"], hobbies: [], text: "Thích làm game" } });
     expect(empty.body.questions).toHaveLength(10);
+    expect([empty.body.interests.tech.length, empty.body.interests.hobbies.length, empty.body.interests.max]).toEqual([14, 12, 5]);
     const saved = await request(setup({ survey: true, consent: TRANSCRIPT_POLICY_VERSION }).app).get("/student/survey").expect(200);
-    expect(saved.body).toMatchObject({ survey: { version: "survey-v1", answers, hasAchievements: false, complete: true }, consentVersion: TRANSCRIPT_POLICY_VERSION });
+    expect(saved.body).toMatchObject({ survey: { version: "survey-v2", answers, ...interests, hasAchievements: false, complete: true }, previous: null, consentVersion: TRANSCRIPT_POLICY_VERSION });
+    // A survey saved before the interests joined it is incomplete.
+    const older = await request(setup({ survey: true, row: { version: "survey-v1", interest_tech: [], interest_hobbies: [] } }).app).get("/student/survey").expect(200);
+    expect(older.body.survey).toMatchObject({ version: "survey-v1", complete: false });
   });
 
   it("saves only with consent to the current policy, given now or still active", async () => {
-    const body = { answers, hasAchievements: true, achievements: "Giải Nhì Hackathon khoa" };
+    const body = { answers, ...interests, hasAchievements: true, achievements: "Giải Nhì Hackathon khoa" };
     const none = setup();
     await put(none.app, body).expect(400, { error: "consent_required" });
     expect(none.sql()).not.toContain("COMMIT");
@@ -98,7 +111,9 @@ describe("/student/survey", () => {
 
     const agreed = setup();
     const response = await put(agreed.app, body, TRANSCRIPT_POLICY_VERSION).expect(200);
-    expect(response.body).toMatchObject({ survey: { answers, hasAchievements: true, achievements: "Giải Nhì Hackathon khoa", complete: true }, consentVersion: TRANSCRIPT_POLICY_VERSION });
+    expect(response.body).toMatchObject({ survey: { answers, ...interests, hasAchievements: true, achievements: "Giải Nhì Hackathon khoa", complete: true }, consentVersion: TRANSCRIPT_POLICY_VERSION });
+    // The interests the profile held before the move are cleared.
+    expect(agreed.sql()).toContain("UPDATE student_profiles SET interest_tech='{}',interest_hobbies='{}',interests=NULL WHERE user_id=$1");
     const granted = agreed.clientQuery.mock.calls.find(([sql]) => String(sql).includes("INSERT INTO data_consents"));
     expect(granted?.[1]).toEqual([expect.any(String), studentId, TRANSCRIPT_POLICY_VERSION, "profile_survey"]);
     expect(agreed.sql().at(-1)).toBe("COMMIT");
@@ -108,7 +123,7 @@ describe("/student/survey", () => {
     await put(again.app, body).expect(200);
     expect(again.sql().some((sql) => sql.includes("INSERT INTO data_consents"))).toBe(false);
     // An older consent does not cover the new policy.
-    await put(setup({ survey: true, consent: "2026-10-11" }).app, body).expect(400, { error: "consent_required" });
+    await put(setup({ survey: true, consent: "2026-10-24" }).app, body).expect(400, { error: "consent_required" });
   });
 
   it("deletes the answers with every AI roadmap and withdraws the consent", async () => {

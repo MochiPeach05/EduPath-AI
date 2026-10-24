@@ -4,6 +4,7 @@ import type { DatabasePool } from "../db/pool.js";
 import type { AuthenticatedUser } from "../auth/types.js";
 import { requireAdminAccess } from "../middleware/authorization.js";
 import { AccountError, type AdminAccountRepository } from "./accounts.js";
+import { TRANSCRIPT_POLICY_VERSION } from "../student/consent.js";
 
 export interface StudentProfileQuery {
   q: string; page: number; pageSize: number;
@@ -24,10 +25,10 @@ export interface StudentProfileDetail extends StudentProfileSummary {
   careerPositionId?: string | null;
   careerPosition?: { id: string; nameVi: string; nameEn: string; deletedAt: string | null } | null;
   interests: string | null;
-  /** "Sở thích" as choices (migration 049): option ids, labels in the web's profile-interests.ts. */
-  interestTech?: string[]; interestHobbies?: string[];
   /** When the profile survey was last saved (stu_profile_surveys); the answers stay with the student. */
   surveyUpdatedAt?: string | null;
+  /** The survey has the interest lists (survey-v2) and the student agreed to the current policy for it. */
+  surveyComplete?: boolean;
   username: string | null; careerGoal: string | null;
   accountCreatedAt: string; firstLoginAt: string; lastLoginAt: string;
   profileCreatedAt: string | null; profileUpdatedAt: string | null;
@@ -37,15 +38,20 @@ export interface StudentProfileRepository {
   list(actor: AuthenticatedUser, query: StudentProfileQuery): Promise<StudentProfilePage>;
   detail(actor: AuthenticatedUser, id: string): Promise<StudentProfileDetail>;
 }
+// The survey counts when it holds the interest lists (survey-v2, 050) and the student agreed to the current policy for it
+// (the constant is code, not input).
+const surveyComplete = `EXISTS (SELECT 1 FROM stu_profile_surveys s WHERE s.user_id = u.id
+    AND cardinality(s.interest_tech) > 0 AND cardinality(s.interest_hobbies) > 0
+    AND EXISTS (SELECT 1 FROM data_consents c WHERE c.user_id = s.user_id AND c.purpose = 'profile_survey' AND c.ended_at IS NULL
+      AND c.policy_version = '${TRANSCRIPT_POLICY_VERSION}'))`;
 // Derive completion from saved data so profile edits and transcript deletion stay in sync. Since 2026-10-24 the
-// specialty and the profile survey count too (the student portal asks for both before its AI features), and interests
-// are the chosen technologies and free-time interests (049), no longer the free text.
+// specialty and the profile survey count too (the student portal asks for both before its AI features); the interests
+// (technologies and free-time interests) are part of the survey.
 const profileStatus = `CASE WHEN p.user_id IS NULL THEN 'missing'
-  WHEN cardinality(p.interest_tech) > 0 AND cardinality(p.interest_hobbies) > 0
-    AND p.career_position_id IS NOT NULL
+  WHEN p.career_position_id IS NOT NULL
     AND p.specialty IS NOT NULL
     AND EXISTS (SELECT 1 FROM student_transcripts t WHERE t.user_id = p.user_id)
-    AND EXISTS (SELECT 1 FROM stu_profile_surveys s WHERE s.user_id = p.user_id)
+    AND ${surveyComplete}
   THEN 'complete' ELSE 'incomplete' END`;
 const summaryColumns = `u.id, COALESCE(p.full_name, u.display_name) AS name, u.email, u.is_active AS "isActive",
   p.cohort_code AS "cohortCode", p.class_name AS "className",
@@ -78,8 +84,7 @@ export class PostgresStudentProfileRepository implements StudentProfileRepositor
     const result = await this.pool.query<StudentProfileDetail>(`SELECT ${summaryColumns}, u.username,
       p.career_goal AS "careerGoal", p.career_position_id AS "careerPositionId", p.specialty,
       (SELECT json_build_object('id',c.id,'nameVi',c.name_vi,'nameEn',c.name_en,'deletedAt',c.deleted_at) FROM career_positions c WHERE c.id=p.career_position_id) AS "careerPosition", p.interests,
-      COALESCE(p.interest_tech,'{}') AS "interestTech", COALESCE(p.interest_hobbies,'{}') AS "interestHobbies",
-      (SELECT s.updated_at FROM stu_profile_surveys s WHERE s.user_id=u.id) AS "surveyUpdatedAt", u.created_at AS "accountCreatedAt", u.first_login_at AS "firstLoginAt",
+      (SELECT s.updated_at FROM stu_profile_surveys s WHERE s.user_id=u.id) AS "surveyUpdatedAt", ${surveyComplete} AS "surveyComplete", u.created_at AS "accountCreatedAt", u.first_login_at AS "firstLoginAt",
       u.last_login_at AS "lastLoginAt", p.created_at AS "profileCreatedAt", p.updated_at AS "profileUpdatedAt"
       FROM users u LEFT JOIN student_profiles p ON p.user_id = u.id
       WHERE (${studentScope} OR u.id = $2::uuid) AND u.id = $1`, [id, _actor.userId === id ? id : null]);

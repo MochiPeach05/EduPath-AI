@@ -27,7 +27,7 @@ Nguyên tắc chung của dự án vẫn giữ: **hệ thống tính, AI diễn 
 |---|---|---|
 | Thời gian | Khoảng 3 tháng của lộ trình: hiện tính từ ngày tạo (giờ Việt Nam), 3 tháng lịch | `apps/api/src/roadmap/window.ts` |
 | Dữ kiện | Đọc từ một kết quả đánh giá năng lực: môn cần học, nhóm tự chọn còn thiếu, môn cần cải thiện, kỹ năng nghề cần bổ sung | `apps/api/src/roadmap/facts.ts` |
-| Prompt | System prompt cố vấn học tập, khối dữ liệu [1]–[8], JSON schema riêng từng job (`ROADMAP_PROMPT_VERSION = "roadmap-v4"` từ tối 24/10/2026: hồ sơ định hướng [8]; v3: lời khuyên chính, tiến độ tốt nghiệp, nhóm đồ án một cách, không cải thiện Anh văn, luôn có hướng học tiếp; v2: có học kỳ đang học, bỏ mục "học kỳ sau"; thinking bật) | `apps/api/src/roadmap/prompt.ts`, `schema.ts` |
+| Prompt | System prompt cố vấn học tập, khối dữ liệu [1]–[8], JSON schema riêng từng job (`ROADMAP_PROMPT_VERSION = "roadmap-v5"` từ khuya 24/10/2026: công nghệ bạn thích và sở thích khi rảnh trong [8]; v4: hồ sơ định hướng [8]; v3: lời khuyên chính, tiến độ tốt nghiệp, nhóm đồ án một cách, không cải thiện Anh văn, luôn có hướng học tiếp; v2: có học kỳ đang học, bỏ mục "học kỳ sau"; thinking bật) | `apps/api/src/roadmap/prompt.ts`, `schema.ts` |
 | Kiểm tra đầu ra | Chặt về cấu trúc, lọc từng mục, thay khóa kỹ năng bằng tên trước khi lưu | `apps/api/src/roadmap/validate.ts` |
 | Hàng đợi | Tạo, cắt bớt dòng cũ; nhận/gia hạn/hoàn tất/hết hạn job cho worker | `apps/api/src/roadmap/jobs.ts` |
 | Hiển thị | Ghép dữ kiện với phần AI viết cho trang | `apps/api/src/roadmap/present.ts` |
@@ -51,7 +51,7 @@ Nguyên tắc chung của dự án vẫn giữ: **hệ thống tính, AI diễn 
 - **Tiến độ tốt nghiệp** (`pace`): tín chỉ tích lũy, yêu cầu và còn thiếu; điểm TB tích lũy so với mức tối thiểu; các nhóm chưa đủ; các học kỳ còn lại theo kế hoạch đào tạo sau học kỳ đang học (đến học kỳ cuối mà kế hoạch còn xếp môn) và số tín chỉ trung bình mỗi học kỳ còn lại để tốt nghiệp đúng hạn; số mục trễ.
 - Hồ sơ: khóa, tên chuyên ngành, tên nghề mục tiêu, học kỳ có điểm gần nhất, học kỳ đang học, học kỳ tiếp theo, kết quả xét tốt nghiệp tham khảo.
 
-**Hồ sơ định hướng** (từ 24/10/2026, chính sách bản 2026-10-24, xem `profile-survey.md`): câu trả lời khảo sát định hướng và thành tích sinh viên liệt kê được đọc lúc tạo lộ trình (`jobs.ts`, `readSurvey`) và chỉ đi vào `ai_input`, không vào `facts` đã lưu. Chưa làm khảo sát thì không tạo được lộ trình (409 `survey_required`). Ô **Sở thích** (văn bản tự do) vẫn không gửi cho mô hình.
+**Hồ sơ định hướng** (từ 24/10/2026, chính sách bản 2026-10-25, xem `profile-survey.md`): câu trả lời khảo sát định hướng (kể cả công nghệ bạn thích, sở thích khi rảnh) và thành tích sinh viên liệt kê được đọc lúc tạo lộ trình (`jobs.ts`, `readSurvey`) và chỉ đi vào `ai_input`, không vào `facts` đã lưu. Chưa xong khảo sát hoặc chưa đồng ý chính sách hiện hành thì không tạo được lộ trình (409 `survey_required`). Câu sở thích ghi bằng chữ cũ trong hồ sơ không gửi cho mô hình.
 
 ## Dữ liệu gửi cho mô hình
 
@@ -96,5 +96,5 @@ Worker: job `study_roadmap` được giao sau đề xuất kỹ năng nghề ngh
 - 23/10/2026 (87f61ff): bảng xếp môn theo học kỳ và lịch tuần (`study-plan/`, `/api/student/study-plan`, migration 046 `stu_study_plans`); 784315e lấy lịch tuần làm giao diện chính và xếp theo kế hoạch đào tạo, rồi được hoàn tác (c0063a5).
 - 24/10/2026: người dùng bỏ hướng xếp lịch (lịch mở lớp ngẫu nhiên nên không xếp được như mong muốn; kế hoạch đăng ký học kỳ sau trường đã công bố trên cổng đào tạo) và chọn lộ trình 3 tháng do AI soạn. Mã `study-plan/` được gỡ (xem lại trong git ở 87f61ff); bảng `stu_study_plans` của migration 046 được giữ nguyên.
 - 24/10/2026 (chiều): trang làm theo Stellic với bốn tab (mục "Bố cục trang" ở đầu); `study-plan/` trở lại không có lịch tuần, đọc bảng `stu_study_plans`.
-- 24/10/2026 (khuya): khảo sát định hướng bắt buộc trước khi tạo lộ trình, roadmap-v4 đọc câu trả lời và thành tích (`profile-survey.md`, migration 048, chính sách 2026-10-24).
+- 24/10/2026 (khuya): khảo sát định hướng bắt buộc trước khi tạo lộ trình, roadmap-v4 đọc câu trả lời và thành tích (`profile-survey.md`, migration 048, chính sách 2026-10-24); sau đó công nghệ bạn thích và sở thích khi rảnh vào khảo sát, roadmap-v5 dùng cả hai (migration 050, chính sách 2026-10-25).
 - 24/10/2026 (tối): ba tab (ký hiệu gộp vào Theo dõi tiến độ, tab AI trước "Kế hoạch học kỳ"); kế hoạch bắt đầu từ học phần bắt buộc của kế hoạch đào tạo và nhận đề xuất của lộ trình AI; roadmap-v3 (lời khuyên chính, tiến độ tốt nghiệp, nhóm đồ án một cách, không cải thiện Anh văn, luôn có hướng học tiếp).

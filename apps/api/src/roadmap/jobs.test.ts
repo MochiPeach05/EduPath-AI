@@ -1,6 +1,7 @@
 import type { PoolClient } from "pg";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { claimRoadmap, completeRoadmap, createRoadmap, createRoadmapExpiry, expireRoadmaps, extendRoadmap, RoadmapError, type RoadmapRow } from "./jobs.js";
+import { TRANSCRIPT_POLICY_VERSION } from "../student/consent.js";
 import { surveyFacts } from "../student/survey.js";
 import { buildRoadmapInput, ROADMAP_PROMPT_VERSION } from "./prompt.js";
 import { ROADMAP_ASSESSMENT, ROADMAP_NOW, syntheticRoadmapFacts, syntheticRoadmapResult, syntheticSurveyRow } from "./test-fixture.js";
@@ -13,14 +14,15 @@ const OTHER_LEASE = "66666666-6666-4666-8666-666666666666";
 const OLD_ASSESSMENT = "77777777-7777-4777-8777-777777777777";
 const facts = syntheticRoadmapFacts();
 const survey = syntheticSurveyRow();
-const aiInput = buildRoadmapInput(facts, surveyFacts({ answers: survey.answers, hasAchievements: survey.has_achievements, achievements: survey.achievements }));
+const aiInput = buildRoadmapInput(facts, surveyFacts({ answers: survey.answers, interestTech: survey.interest_tech, interestHobbies: survey.interest_hobbies,
+  hasAchievements: survey.has_achievements, achievements: survey.achievements }));
 
 const row = (extra: Partial<RoadmapRow> = {}): RoadmapRow => ({
   id: ROADMAP, assessmentId: ROADMAP_ASSESSMENT, status: "completed", errorCode: null, createdAt: new Date("2026-10-24T02:00:00Z"),
   completedAt: new Date("2026-10-24T02:03:00Z"), model: "gemma4:e4b", facts, output: null, recent: false, ...extra,
 });
 
-type State = { rows?: RoadmapRow[]; othersPending?: number; active?: boolean; assessment?: boolean; survey?: boolean };
+type State = { rows?: RoadmapRow[]; othersPending?: number; active?: boolean; assessment?: boolean; survey?: boolean; consent?: string | null };
 
 function fakeClient(state: State = {}) {
   const query = vi.fn(async (sql: string, _params?: unknown[]) => {
@@ -30,6 +32,10 @@ function fakeClient(state: State = {}) {
         : { rowCount: 1, rows: [{ id: ROADMAP_ASSESSMENT, createdAt: new Date("2026-10-24T01:00:00Z"), computed: syntheticRoadmapResult() }] };
     }
     if (sql.includes("FROM stu_profile_surveys WHERE user_id=$1")) return state.survey === false ? { rowCount: 0, rows: [] } : { rowCount: 1, rows: [survey] };
+    if (sql.includes("FROM data_consents")) {
+      const version = state.consent === undefined ? TRANSCRIPT_POLICY_VERSION : state.consent;
+      return version ? { rowCount: 1, rows: [{ policy_version: version }] } : { rowCount: 0, rows: [] };
+    }
     if (sql.includes("FROM stu_roadmaps WHERE user_id=$1 ORDER BY created_at DESC,id DESC")) return { rowCount: state.rows?.length ?? 0, rows: state.rows ?? [] };
     if (sql.includes("count(*)::int AS count FROM stu_roadmaps")) return { rowCount: 1, rows: [{ count: state.othersPending ?? 0 }] };
     if (sql.startsWith("INSERT INTO stu_roadmaps")) return { rowCount: 1, rows: [{ createdAt: new Date("2026-10-24T03:00:00Z") }] };
@@ -98,6 +104,8 @@ describe("createRoadmap", () => {
     expect(user).toContain("[8. HỒ SƠ ĐỊNH HƯỚNG] (sinh viên tự khai)");
     expect(user).toContain("- Mục tiêu sau tốt nghiệp: Đi làm ngay");
     expect(user).toContain("- Thời gian tự học mỗi tuần: 5–10 giờ");
+    expect(user).toContain("- Công nghệ bạn thích: Web front-end (HTML, CSS, JavaScript, React); Trí tuệ nhân tạo, học máy");
+    expect(user).toContain("- Sở thích khi rảnh: Tự làm dự án, viết code; Thể thao, vận động");
     expect(user).toContain("  + Giải Ba cuộc thi lập trình cấp khoa 2025\n  + Học bổng khuyến khích học tập");
     expect(params[5] as string).not.toContain("Giải Ba");
   });
@@ -107,6 +115,9 @@ describe("createRoadmap", () => {
     const noSurvey = fakeClient({ survey: false });
     await expect(createRoadmap(noSurvey.client, USER)).rejects.toMatchObject({ code: "survey_required", status: 409 });
     expect(writes(noSurvey.sql())).toEqual([]);
+    // Answers agreed to under an older policy (before the interests joined) wait for the new consent.
+    await expect(createRoadmap(fakeClient({ consent: "2026-10-24" }).client, USER)).rejects.toMatchObject({ code: "survey_required", status: 409 });
+    await expect(createRoadmap(fakeClient({ consent: null }).client, USER)).rejects.toMatchObject({ code: "survey_required", status: 409 });
     const inactive = fakeClient({ active: false });
     await expect(createRoadmap(inactive.client, USER)).rejects.toMatchObject({ code: "account_unavailable", status: 403 });
     expect(inactive.sql()).toHaveLength(1);

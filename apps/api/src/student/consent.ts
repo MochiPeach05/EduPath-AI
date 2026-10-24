@@ -4,9 +4,10 @@ import type { DatabasePool } from "../db/pool.js";
 
 // Date of the privacy policy a student agrees to before importing a transcript, running a competency assessment or
 // saving the profile survey ("Khảo sát định hướng"). 2026-10-24: the study roadmap page, the survey and achievements, and
-// the AI roadmap that reads them.
+// the AI roadmap that reads them. 2026-10-25 (written on 24/10, the date had to change): the technologies and free-time
+// interests moved into the survey and the AI roadmap reads them too.
 // Must equal `policyVersion` in apps/web/src/public-information.ts (checked by consent.test.ts).
-export const TRANSCRIPT_POLICY_VERSION = "2026-10-24";
+export const TRANSCRIPT_POLICY_VERSION = "2026-10-25";
 
 /** data_consents.purpose values allowed by migrations 018, 030 and 048. */
 export type ConsentPurpose = "transcript_processing" | "competency_assessment" | "profile_survey";

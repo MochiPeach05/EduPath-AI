@@ -1,9 +1,8 @@
-import { readFile } from "node:fs/promises";
 import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import type { DatabasePool } from "../db/pool.js";
-import { INTEREST_HOBBY_IDS, INTEREST_TECH_IDS } from "./interests.js";
+import { INTEREST_HOBBIES, INTEREST_TECH } from "./interests.js";
 import { createStudentDataRouter } from "./router.js";
 
 const origin = "https://edupath.example";
@@ -21,7 +20,7 @@ function setup() {
 }
 const patch = (app: express.Express, body: object) => request(app).patch("/student/profile").set("Origin", origin).send(body);
 
-describe("profile interests as choices", () => {
+describe("profile interests as choices (pages loaded before they moved into the survey)", () => {
   it("saves both lists together and clears the free text they replace", async () => {
     const { app, query } = setup();
     await patch(app, { interestTech: ["ai_ml", "web_frontend"], interestHobbies: ["reading"] }).expect(200, { saved: true });
@@ -50,9 +49,10 @@ describe("profile interests as choices", () => {
     expect(query.mock.calls.some(([sql]) => String(sql).includes("interest_tech"))).toBe(false);
   });
 
-  it("offers the same choices as the web page", async () => {
-    const source = await readFile(new URL("../../../web/src/profile-interests.ts", import.meta.url), "utf8");
-    const ids = [...source.matchAll(/\{ id: "([a-z_]+)", label: "/g)].map((match) => match[1]);
-    expect(ids).toEqual([...INTEREST_TECH_IDS, ...INTEREST_HOBBY_IDS]);
+  it("names every choice once", () => {
+    const all = [...INTEREST_TECH, ...INTEREST_HOBBIES];
+    expect(new Set(all.map((option) => option.id)).size).toBe(all.length);
+    expect(all.every((option) => option.label.trim().length > 0)).toBe(true);
+    expect([INTEREST_TECH.length, INTEREST_HOBBIES.length]).toEqual([14, 12]);
   });
 });

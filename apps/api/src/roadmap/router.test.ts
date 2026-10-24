@@ -6,6 +6,7 @@ import type { DatabasePool } from "../db/pool.js";
 import type { RoadmapRow } from "./jobs.js";
 import { createRoadmapRouter } from "./router.js";
 import { ROADMAP_ASSESSMENT, syntheticRoadmapFacts, syntheticRoadmapResult, syntheticSurveyRow } from "./test-fixture.js";
+import { TRANSCRIPT_POLICY_VERSION } from "../student/consent.js";
 
 // Synthetic K29 data only (fixtures/synthetic-k29.json plus invented grades); no real student record.
 const studentId = "11111111-1111-4111-8111-111111111111";
@@ -50,6 +51,7 @@ function setup(options: Setup = {}) {
       return result([sql.includes('AS "hasCareer"') ? { id: ROADMAP_ASSESSMENT, createdAt, hasCareer: true } : { id: ROADMAP_ASSESSMENT, createdAt, computed: syntheticRoadmapResult() }]);
     }
     if (sql.includes("FROM stu_profile_surveys WHERE user_id=$1")) return result(options.survey === false ? [] : [syntheticSurveyRow()]);
+    if (sql.includes("FROM data_consents")) return result(options.survey === false ? [] : [{ policy_version: TRANSCRIPT_POLICY_VERSION }]);
     if (sql.startsWith('SELECT id,status,error_code AS "errorCode" FROM stu_roadmaps')) {
       return result(rows.slice(0, 1).map((item) => ({ id: item.id, status: item.status, errorCode: item.errorCode })));
     }

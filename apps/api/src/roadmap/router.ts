@@ -9,6 +9,7 @@ import { WORKER_ONLINE_SECONDS } from "../competency-assessment/ai/queue.js";
 import { STUDY_ROADMAP_KIND } from "../competency-assessment/ai/worker-protocol.js";
 import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
+import { activeConsentVersion, TRANSCRIPT_POLICY_VERSION } from "../student/consent.js";
 import { readSurvey } from "../student/survey.js";
 import { createRoadmap, createRoadmapExpiry, newestAssessmentInfo, readNewestRoadmap, RoadmapError, type RoadmapStatus } from "./jobs.js";
 import { presentRoadmap } from "./present.js";
@@ -74,11 +75,13 @@ export function createRoadmapRouter(pool: DatabasePool | undefined, webOrigin: s
     let row: Awaited<ReturnType<typeof readNewestRoadmap>>;
     let assessment: Awaited<ReturnType<typeof newestAssessmentInfo>>;
     let survey: Awaited<ReturnType<typeof readSurvey>>;
+    let surveyConsent: string | null;
     try {
       await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
       assessment = await newestAssessmentInfo(client, userId);
       row = await readNewestRoadmap(client, userId);
       survey = await readSurvey(client, userId);
+      surveyConsent = await activeConsentVersion(client, userId, "profile_survey");
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
@@ -90,8 +93,8 @@ export function createRoadmapRouter(pool: DatabasePool | undefined, webOrigin: s
       roadmap: row && presentRoadmap(row, today()),
       assessment: assessment && { id: assessment.id, createdAt: iso(assessment.createdAt), hasCareer: assessment.hasCareer === true },
       stale: Boolean(row && assessment && row.assessmentId !== assessment.id),
-      // A new roadmap needs the answered profile survey.
-      surveyDone: survey?.complete === true,
+      // A new roadmap needs the answered profile survey, agreed to under the current policy.
+      surveyDone: survey?.complete === true && surveyConsent === TRANSCRIPT_POLICY_VERSION,
       aiEnabled: enabled,
       worker: await workerStatus(),
     });

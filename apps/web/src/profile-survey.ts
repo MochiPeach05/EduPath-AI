@@ -1,18 +1,28 @@
-// "Khảo sát định hướng" of the profile (user 2026-10-24): ten single-choice questions and the achievements yes/no
-// with a list when yes, all required. The questions come from the API (apps/api/src/student/survey.ts).
+// "Khảo sát định hướng" of the profile (user 2026-10-24): ten single-choice questions, the technologies and free-time
+// interests (1 to 5 each, survey-v2) and the achievements yes/no with a list when yes, all required. The questions and
+// interest lists come from the API (apps/api/src/student/survey.ts, interests.ts).
+import { interestProblem, type InterestOption } from "./profile-interests";
 
 export const SURVEY_API = "/api/student/survey";
 
 export type SurveyQuestion = { id: string; label: string; options: { id: string; label: string }[] };
 export type StudentSurvey = {
-  version: string; answers: Record<string, string>; hasAchievements: boolean; achievements: string | null; updatedAt: string; complete: boolean;
+  version: string; answers: Record<string, string>; interestTech: string[]; interestHobbies: string[];
+  hasAchievements: boolean; achievements: string | null; updatedAt: string; complete: boolean;
 };
-export type SurveyResponse = { questions: SurveyQuestion[]; achievementsMax: number; survey: StudentSurvey | null; consentVersion: string | null };
+/** What the profile held before the interests moved into the survey: the form starts from it. */
+export type PreviousInterests = { tech: string[]; hobbies: string[]; text: string | null };
+export type SurveyResponse = {
+  questions: SurveyQuestion[]; interests: { tech: InterestOption[]; hobbies: InterestOption[]; max: number }; achievementsMax: number;
+  survey: StudentSurvey | null; previous: PreviousInterests | null; consentVersion: string | null;
+};
 /** hasAchievements is null until the student picks Có or Không. */
-export type SurveyDraft = { answers: Record<string, string>; hasAchievements: boolean | null; achievements: string };
+export type SurveyDraft = { answers: Record<string, string>; interestTech: string[]; interestHobbies: string[]; hasAchievements: boolean | null; achievements: string };
 
-export const draftOf = (survey: StudentSurvey | null): SurveyDraft => ({
+export const draftOf = (survey: StudentSurvey | null, previous: PreviousInterests | null = null): SurveyDraft => ({
   answers: { ...(survey?.answers ?? {}) },
+  interestTech: survey?.interestTech.length ? [...survey.interestTech] : [...(previous?.tech ?? [])],
+  interestHobbies: survey?.interestHobbies.length ? [...survey.interestHobbies] : [...(previous?.hobbies ?? [])],
   hasAchievements: survey ? survey.hasAchievements : null,
   achievements: survey?.achievements ?? "",
 });
@@ -21,8 +31,8 @@ export const draftOf = (survey: StudentSurvey | null): SurveyDraft => ({
 export const answerLabel = (question: SurveyQuestion, answers: Record<string, string>) =>
   question.options.find((option) => option.id === answers[question.id])?.label ?? null;
 
-/** Field keys of the form: "q:<question id>", "hasAchievements", "achievements", "consent". */
-export type SurveyField = `q:${string}` | "hasAchievements" | "achievements" | "consent";
+/** Field keys of the form: "q:<question id>", "tech", "hobbies", "hasAchievements", "achievements", "consent". */
+export type SurveyField = `q:${string}` | "tech" | "hobbies" | "hasAchievements" | "achievements" | "consent";
 
 /** What still blocks saving, in form order, with the Vietnamese message shown under each field. */
 export function surveyProblems(questions: SurveyQuestion[], draft: SurveyDraft, options: { needsConsent: boolean; consented: boolean; achievementsMax: number }): [SurveyField, string][] {
@@ -30,6 +40,10 @@ export function surveyProblems(questions: SurveyQuestion[], draft: SurveyDraft, 
   for (const question of questions) {
     if (!question.options.some((option) => option.id === draft.answers[question.id])) problems.push([`q:${question.id}`, "Vui lòng chọn một câu trả lời."]);
   }
+  const tech = interestProblem("tech", draft.interestTech);
+  if (tech) problems.push(["tech", tech]);
+  const hobbies = interestProblem("hobbies", draft.interestHobbies);
+  if (hobbies) problems.push(["hobbies", hobbies]);
   if (draft.hasAchievements === null) problems.push(["hasAchievements", "Vui lòng chọn Có hoặc Không."]);
   else if (draft.hasAchievements) {
     const text = draft.achievements.trim();

@@ -124,7 +124,7 @@ export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) 
   // "Hồ sơ của bạn chưa đầy đủ" (user 2026-10-24: not at the top of the page, "để trên xấu quá"): under the result panel
   // of Đánh giá năng lực / Khoảng trống kỹ năng, under the tabs of Lộ trình học tập, under the heading elsewhere.
   const reminder = profile && profile.profileStatus !== "complete" ? <div className="sw-profile-reminder" role="note">
-    <Icon name="shield" /><p><strong>Hồ sơ của bạn chưa đầy đủ.</strong> EduPath AI cần bảng điểm, chuyên ngành, nghề mục tiêu, sở thích và khảo sát định hướng để hỗ trợ bạn đầy đủ.</p>
+    <Icon name="shield" /><p><strong>Hồ sơ của bạn chưa đầy đủ.</strong> EduPath AI cần bảng điểm, chuyên ngành, nghề mục tiêu và khảo sát định hướng (gồm công nghệ, sở thích) để hỗ trợ bạn đầy đủ.</p>
     <button className="sw-outline" onClick={() => navigate("profile")}>Hoàn thành hồ sơ</button>
   </div> : null;
   const fields = { "Mã sinh viên": profile?.studentCode, "Khóa học": profile?.cohortCode, "Lớp học": profile?.className, "Năm nhập học": profile?.cohortYear, "Email": profile?.email ?? user.email };

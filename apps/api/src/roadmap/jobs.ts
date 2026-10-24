@@ -14,6 +14,7 @@ import {
 } from "../competency-assessment/ai/worker-protocol.js";
 import type { AssessmentResult } from "../competency-assessment/types.js";
 import type { DatabasePool } from "../db/pool.js";
+import { activeConsentVersion, TRANSCRIPT_POLICY_VERSION } from "../student/consent.js";
 import { readSurvey, surveyFacts } from "../student/survey.js";
 import { buildRoadmapFacts, type RoadmapFacts } from "./facts.js";
 import { buildRoadmapInput } from "./prompt.js";
@@ -134,8 +135,8 @@ type CreateOptions = {
 /**
  * "Tạo lộ trình" / "Tạo lại" (POST /api/student/roadmap), inside the caller's transaction. The student's row comes
  * first (FOR KEY SHARE, the lock the insert's foreign key takes anyway), then the queue lock. It needs an assessment
- * (409 assessment_required) and the answered profile survey (409 survey_required, user 2026-10-24: the AI advises from
- * it). A roadmap still being written for the newest assessment is returned as it is; otherwise one queued for an older
+ * (409 assessment_required) and the answered profile survey, agreed to under the current policy (409 survey_required,
+ * user 2026-10-24: the AI advises from it). A roadmap still being written for the newest assessment is returned as it is; otherwise one queued for an older
  * assessment is cancelled and a new one is queued, unless the student queued one in the last 30 seconds (429
  * roadmap_too_frequent) or the queue is full (429 queue_full).
  */
@@ -146,8 +147,11 @@ export async function createRoadmap(client: PoolClient, userId: string, options:
   if (options.expire) await options.expire(client);
   const assessment = await newestAssessment(client, userId);
   if (!assessment) throw new RoadmapError("assessment_required", 409);
+  // The answers go to the AI only under consent to the current policy (2026-10-25 added the interests).
   const survey = await readSurvey(client, userId);
-  if (!survey?.complete) throw new RoadmapError("survey_required", 409);
+  if (!survey?.complete || await activeConsentVersion(client, userId, "profile_survey") !== TRANSCRIPT_POLICY_VERSION) {
+    throw new RoadmapError("survey_required", 409);
+  }
   const rows = await readRoadmapRows(client, userId);
   const pending = rows.find((row) => row.status === "queued" || row.status === "processing");
   if (pending?.assessmentId === assessment.id) return { row: pending, created: false };
