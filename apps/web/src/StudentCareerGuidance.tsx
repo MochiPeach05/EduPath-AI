@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./student-icons";
 import {
-  CAREER_GUIDANCE_API, COMPARE_MAX, FIT_STEP, bestFits, blockedInProfile, blockedText, compareRows, filterCareers, fitScoreText, fitSummary, hasFit,
-  interestPicks, matchesInterests, missingSkills, orderedRequirements, requirementName, requirementScoreText, requirementState, toggleCompare, FIT_RULE_TEXT,
-  type CareerFilters, type GuidanceCareer, type GuidanceResponse, type GuidanceRequirement,
+  CAREER_GUIDANCE_API, COMPARE_MAX, FIT_STEP, bestFits, bestFitsHeading, blockedInProfile, blockedText, compareRows, filterCareers, fitRuleText, fitScoreText,
+  fitSummary, gapNote, hasFit, interestPicks, matchesInterests, missingSkills, orderedRequirements, requirementName, requirementScoreText, requirementState,
+  toggleCompare, type CareerFilters, type GuidanceCareer, type GuidanceResponse, type GuidanceRequirement,
 } from "./career-guidance-data";
 import "./career-guidance.css";
 
@@ -11,7 +11,10 @@ import "./career-guidance.css";
 // careers that suit the student's competencies and Khảo sát định hướng, every career with its fit, a side-by-side
 // comparison of up to three careers, and choosing the target career. The system computes the fits; no AI.
 
-type Notice = { tone: "success" | "error"; text: string } | null;
+/** link: the text asks to re-assess, so the notice links to Đánh giá năng lực. */
+type Notice = { tone: "success" | "error"; text: string; link?: boolean } | null;
+
+const reducedMotion = () => Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
 
 async function readGuidance(): Promise<GuidanceResponse> {
   const response = await fetch(CAREER_GUIDANCE_API, { credentials: "include", cache: "no-store" });
@@ -104,7 +107,7 @@ function DetailDialog({ career, saving, onChoose, onClose }: { career: GuidanceC
     </header>
     <div className="cg-dialog-body">
       <div className="cg-detail-fit"><FitScore career={career} /><FitBadge career={career} />{career.fit && <span>{fitSummary(career)}</span>}</div>
-      {career.fit && <p className="cg-fit-rule">{FIT_RULE_TEXT}</p>}
+      {career.fit && <p className="cg-fit-rule">{fitRuleText(career)}</p>}
       <InterestTags career={career} />
       <p className="cg-description">{career.description || "Khoa chưa bổ sung mô tả công việc cho nghề này."}</p>
       <h3>Yêu cầu kỹ năng và mức hiện tại của bạn</h3>
@@ -168,6 +171,7 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
   const [detailId, setDetailId] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
+  const toast = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let alive = true;
@@ -181,15 +185,37 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
     setNotice(null);
     try {
       await saveTarget(career.id);
-      setData((value) => value && { ...value, targetCareerId: career.id, deletedTargetName: null, gapCurrent: false, careers: value.careers.map((item) => ({ ...item, isTarget: item.id === career.id })) });
-      setNotice({ tone: "success", text: `Đã chọn ${career.nameVi} làm nghề mục tiêu. Bấm Đánh giá lại ở trang Đánh giá năng lực để cập nhật Khoảng trống kỹ năng và Lộ trình học tập theo nghề mới.` });
-      onProfileChanged();
     } catch (failure) {
       setNotice({ tone: "error", text: (failure as Error).message });
-    } finally {
       setSaving(null);
+      return;
     }
+    onProfileChanged();
+    // The page reads again what the server says now, Khoảng trống kỹ năng's career included, rather than guessing it.
+    const fresh = await readGuidance().catch(() => null);
+    setData((value) => fresh ?? (value && {
+      ...value, targetCareerId: career.id, deletedTargetName: null, gapCurrent: value.gapCareerId === career.id,
+      careers: value.careers.map((item) => ({ ...item, isTarget: item.id === career.id })),
+    }));
+    setNotice(fresh?.gapCareerId === career.id
+      ? { tone: "success", text: `Đã chọn ${career.nameVi} làm nghề mục tiêu. Khoảng trống kỹ năng cũng đang hiển thị nghề này.` }
+      : { tone: "success", text: `Đã chọn ${career.nameVi} làm nghề mục tiêu. Bấm Đánh giá lại ở trang Đánh giá năng lực để cập nhật Khoảng trống kỹ năng và Lộ trình học tập theo nghề mới.`, link: true });
+    setSaving(null);
   }, [onProfileChanged]);
+
+  // The chosen row's button gives way to "Nghề mục tiêu của bạn": keyboard focus goes to the notice instead of the page top.
+  useEffect(() => {
+    if (notice?.tone !== "success") return;
+    const active = document.activeElement;
+    if ((!active || active === document.body) && !document.querySelector("dialog[open]")) toast.current?.focus({ preventScroll: true });
+  }, [notice]);
+
+  const showCompare = () => {
+    const section = document.getElementById("cg-compare");
+    if (!section) return;
+    section.focus({ preventScroll: true });
+    section.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "start" });
+  };
 
   const careers = data?.careers ?? [];
   const visible = useMemo(() => filterCareers(careers, filters), [careers, filters]);
@@ -206,7 +232,9 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
     onDetail: () => setDetailId(career.id), onCompare: () => setCompare((value) => toggleCompare(value, career.id)), onChoose: () => void choose(career),
   });
   const best = bestFits(careers);
+  const bestHeading = bestFitsHeading(best);
   const liked = interestPicks(careers);
+  const targetNote = target ? gapNote(data, target) : null;
 
   return <div className="cg-page">
     <section className="sw-panel cg-header" aria-labelledby="cg-title">
@@ -219,28 +247,24 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
         {target ? <div className="cg-current-body">
           <strong>{target.nameVi}</strong><span className="cg-en">{target.nameEn}</span>
           <div className="cg-card-meta"><FitScore career={target} /><FitBadge career={target} /></div>
-          {!data.gapCurrent && <p className="cg-note cg-note-warn">{data.gapAssessedAt
-            ? `Trang Khoảng trống kỹ năng đang hiển thị lần đánh giá lúc ${new Date(data.gapAssessedAt).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}, tính trên dữ liệu cũ hơn nên có thể khác mức ở đây. Bấm Đánh giá lại ở trang Đánh giá năng lực để cập nhật.`
-            : "Bạn chưa đánh giá năng lực với nghề này; bấm Đánh giá năng lực để xem Khoảng trống kỹ năng."}</p>}
+          {targetNote && <p className="cg-note cg-note-warn">{targetNote}</p>}
           <a className="sw-text-link" href="#skill-gap">Xem Khoảng trống kỹ năng <Icon name="arrow" /></a>
         </div> : data.deletedTargetName ? <p className="cg-current-empty">{data.deletedTargetName}: nghề này không còn trong danh mục; bạn nên chọn nghề khác.</p>
           : <p className="cg-current-empty">Bạn chưa chọn nghề mục tiêu. Hãy xem các gợi ý bên dưới rồi bấm Chọn nghề mục tiêu.</p>}
       </div>
       {data.blocked && <div className="cg-note cg-note-warn" role="note"><p>{blockedText(data.blocked)} Bạn vẫn xem được danh mục nghề và yêu cầu của từng nghề.</p>
         {blockedInProfile(data.blocked) && <a className="sw-outline" href="#profile">Mở Hồ sơ và bảng điểm</a>}</div>}
-      {notice && <p className={notice.tone === "success" ? "sr-success" : "sr-error"} role={notice.tone === "success" ? "status" : "alert"}>{notice.text}
-        {notice.tone === "success" && <> <a href="#competency">Mở Đánh giá năng lực</a></>}</p>}
     </section>
 
     {!data.blocked && <div className="cg-suggest">
       <section className="sw-panel cg-suggest-col" aria-labelledby="cg-best-title">
-        <div className="cg-section-head"><div><h3 id="cg-best-title">Phù hợp nhất với năng lực hiện tại</h3><p className="sw-muted">Các nghề có mức phù hợp cao nhất với điểm kỹ năng của bạn.</p></div></div>
+        <div className="cg-section-head"><div><h3 id="cg-best-title">{bestHeading.title}</h3><p className="sw-muted">{bestHeading.note}</p></div></div>
         {best.length ? best.map((career) => <SuggestionCard key={career.id} {...actionProps(career)} />)
           : <p className="cg-empty">Chưa đủ dữ liệu để gợi ý: các kỹ năng của nghề chưa được đo bằng học phần bạn đã học.</p>}
       </section>
       <section className="sw-panel cg-suggest-col" aria-labelledby="cg-liked-title">
         <div className="cg-section-head"><div><h3 id="cg-liked-title">Hợp với sở thích và thế mạnh của bạn</h3><p className="sw-muted">Theo lĩnh vực quan tâm và thế mạnh (công nghệ bạn thành thạo) trong Khảo sát định hướng.</p></div></div>
-        {!data.surveyDone ? <div className="cg-empty"><p>Bạn chưa trả lời Khảo sát định hướng nên chưa có gợi ý theo sở thích và thế mạnh.</p><a className="sw-outline" href="#profile">Làm khảo sát ở Hồ sơ và bảng điểm</a></div>
+        {!data.surveyDone ? <div className="cg-empty"><p>Bạn chưa hoàn thành Khảo sát định hướng nên chưa có gợi ý theo sở thích và thế mạnh.</p><a className="sw-outline" href="#profile">Làm khảo sát ở Hồ sơ và bảng điểm</a></div>
           : liked.length ? liked.map((career) => <SuggestionCard key={career.id} {...actionProps(career)} />)
             : <p className="cg-empty">Chưa có nghề trong danh mục khớp với lĩnh vực quan tâm và thế mạnh bạn chọn. Bạn có thể xem tất cả nghề bên dưới.</p>}
       </section>
@@ -278,13 +302,22 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
 
     {compared.length >= 2 && <CompareSection careers={compared} onRemove={(id) => setCompare((value) => value.filter((item) => item !== id))} />}
 
-    {compared.length > 0 && <div className="cg-tray" role="region" aria-label="Nghề đang chọn để so sánh">
-      <span>Đã chọn {compared.length}/{COMPARE_MAX} nghề: {compared.map((career) => career.nameVi).join(", ")}</span>
-      <div className="cg-tray-actions">
-        {compared.length >= 2 && <a className="sw-primary" href="#career" onClick={(event) => { event.preventDefault(); document.getElementById("cg-compare")?.focus(); document.getElementById("cg-compare")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>Xem so sánh</a>}
-        {compared.length < 2 && <span className="cg-tray-hint">Chọn thêm ít nhất 1 nghề để so sánh</span>}
-        <button type="button" className="sr-secondary" onClick={() => setCompare([])}>Bỏ chọn</button>
-      </div>
+    {/* Kept at the bottom of the screen: the notice of "Chọn nghề mục tiêu" (a row far down the list would put it out of view
+        at the top of the page) and the comparison tray. */}
+    {(notice || compared.length > 0) && <div className="cg-dock">
+      {notice && <div ref={toast} tabIndex={-1} className={`cg-toast ${notice.tone === "success" ? "sr-success" : "sr-error"}`}
+        role={notice.tone === "success" ? "status" : "alert"}>
+        <p>{notice.text}{notice.link && <> <a href="#competency">Mở Đánh giá năng lực</a></>}</p>
+        <button type="button" className="cg-toast-close" onClick={() => setNotice(null)} aria-label="Đóng thông báo"><Icon name="close" /></button>
+      </div>}
+      {compared.length > 0 && <div className="cg-tray" role="region" aria-label="Nghề đang chọn để so sánh">
+        <span>Đã chọn {compared.length}/{COMPARE_MAX} nghề: {compared.map((career) => career.nameVi).join(", ")}</span>
+        <div className="cg-tray-actions">
+          {compared.length >= 2 && <a className="sw-primary" href="#career" onClick={(event) => { event.preventDefault(); showCompare(); }}>Xem so sánh</a>}
+          {compared.length < 2 && <span className="cg-tray-hint">Chọn thêm ít nhất 1 nghề để so sánh</span>}
+          <button type="button" className="sr-secondary" onClick={() => setCompare([])}>Bỏ chọn</button>
+        </div>
+      </div>}
     </div>}
 
     {detail && <DetailDialog career={detail} saving={saving === detail.id} onChoose={() => void choose(detail)} onClose={() => setDetailId(null)} />}

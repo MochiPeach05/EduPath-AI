@@ -457,8 +457,13 @@
 .sc-result { font-size: 24px; font-weight: 700; line-height: 1; }
 .sc-result-pass { color: #16804a; }
 .sc-result-fail { color: #c62828; }
-/* A pass/fail decided from the letter grade carries a short text note, not just colour. */
-.sc-result-cell .sc-result-note { margin-top: 4px; font-size: 12px; line-height: 1.35; }
+/* The graduation page's tones: ◐ Đang học and ⇄ đã học trả nợ in blue, ? Chưa rõ kết quả in amber. */
+.sc-result-info { color: #1c4182; }
+.sc-result-unknown { color: #805900; }
+/* Anything but a plain ✓/✗ carries a short text note, not just colour or a glyph. */
+.sc-result-cell .sc-result-note { margin-top: 4px; font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
+.sc-table thead th.sc-result-cell,
+.sc-table tbody td.sc-result-cell { width: 120px; }
 .sc-catalog > .sc-result-legend { margin: 0; padding: 0 24px 16px; }
 @media (max-width: 600px) {
   .sc-catalog > .sc-result-legend { padding: 0 16px 16px; }

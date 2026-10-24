@@ -2,18 +2,32 @@ import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useLiveFilters } from "./use-live-filters";
 import {
   courseKind,
+  courseRowKey,
   courseTypeLabel,
+  electiveGroupName,
+  isSpecialtyName,
+  prerequisiteText,
   searchableCourse,
   searchTerm,
   termLabel,
+  uniqueCourseCount,
   type StudentCourse,
   type StudentCurriculumData,
   type StudentCurriculumList,
 } from "./student-curriculum-types";
+import { readGraduation } from "./student-graduation-api";
+import { GRADUATION_API, standardElectiveQuotas, type StandardElectiveQuota } from "./student-graduation-data";
 import { Icon } from "./student-icons";
+import {
+  courseResult,
+  courseResultDisplay,
+  graduationCourseAliases,
+  transcriptCourseStates,
+  type CourseResultView,
+} from "./student-plan-results";
 import { useLiveData } from "./use-live-data";
 import type { Transcript } from "./StudentTranscript";
-import { INFERRED_RESULT_NOTE, transcriptOutcomes, type CourseOutcome } from "./transcript-results";
+import { INFERRED_RESULT_NOTE } from "./transcript-results";
 import "./student-curriculum.css";
 
 const endpoint = "/api/student/curricula";
@@ -136,12 +150,17 @@ function CurriculumContent({
   const transcript = useLiveData<{ transcript: Transcript | null }>(
     "/api/student/transcript", revision, readTranscript,
   );
-  const outcomes = transcriptOutcomes(transcript.data?.transcript?.data.sections ?? []);
+  // The student's own graduation check: the other codes a course was counted through and the
+  // elective quotas of the standard. Optional: without it the page shows the transcript alone.
+  const graduation = useLiveData(GRADUATION_API, revision, readGraduation);
+  const states = transcriptCourseStates(transcript.data?.transcript?.data.sections ?? []);
+  const aliases = graduationCourseAliases(graduation.data?.evaluation);
   const remote = useCurriculumRequest<StudentCurriculumData>(
     `${endpoint}/${id}`,
     revision,
   );
-  const [opened, setOpened] = useState<string | null>(null);
+  // The opened row itself: a code can be listed in several groups (K27 71ITDS40503).
+  const [opened, setOpened] = useState<StudentCourse | null>(null);
   const { draft, setDraft, filters, reset } = useLiveFilters({
     q: "",
     group: "",
@@ -179,9 +198,14 @@ function CurriculumContent({
       (!filters.semester || String(c.semester) === filters.semester) &&
       (!filters.year || String(c.studyYear) === filters.year),
   );
-  const selected = data.courses.find((c) => c.code === opened);
-  const showsInferred = courses.some((c) => outcomes.get(c.code.trim().toUpperCase())?.inferred);
+  const result = (c: StudentCourse) => courseResult(c.code, states, aliases);
+  const showsInferred = courses.some((c) => result(c)?.inferred);
   const groups = new Map(data.groups.map((g) => [g.id, g.label]));
+  // Quotas of the student's own standard apply to the CTĐT of the same cohort only.
+  const standard = graduation.data?.standard ?? null;
+  const quotas: ReadonlyMap<string, StandardElectiveQuota> =
+    standard && standard.cohortCode.trim().toUpperCase() === data.cohortCode.trim().toUpperCase()
+      ? standardElectiveQuotas(data.electives, standard) : new Map();
   return (
     <>
       <section className="sw-panel sc-summary">
@@ -204,7 +228,7 @@ function CurriculumContent({
           <div>
             <dt>Học phần trong danh mục</dt>
             <dd>
-              {data.courses.length}
+              {uniqueCourseCount(data.courses)}
               <small>Gồm các phương án lựa chọn</small>
             </dd>
           </div>
@@ -224,17 +248,22 @@ function CurriculumContent({
           <details className="sc-electives">
             <summary>Xem các nhóm tự chọn</summary>
             <div>
-              {data.electives.map((group) => (
-                <article key={group.code}>
-                  <strong>{group.code}</strong>
-                  <p>
-                    {group.requiredCredits === null
-                      ? "Xem quy định tín chỉ trong khung hoặc liên hệ cố vấn học tập."
-                      : `Chọn ${group.requiredCredits} tín chỉ`}
-                  </p>
-                  <small>{group.courseCodes.length} học phần trong nhóm</small>
-                </article>
-              ))}
+              {data.electives.map((group) => {
+                const quota = quotas.get(group.code);
+                return (
+                  <article key={group.code}>
+                    <strong>{electiveGroupName(group.code)}</strong>
+                    <p>
+                      {quota
+                        ? `Chọn ${quota.credits} tín chỉ (theo tiêu chuẩn xét tốt nghiệp${quota.groupCode ? `, nhóm ${quota.groupCode}` : ""})`
+                        : group.requiredCredits === null
+                          ? "Xem quy định tín chỉ trong khung hoặc liên hệ cố vấn học tập."
+                          : `Chọn ${group.requiredCredits} tín chỉ`}
+                    </p>
+                    <small>{new Set(group.courseCodes).size} học phần trong nhóm</small>
+                  </article>
+                );
+              })}
             </div>
           </details>
         )}
@@ -299,7 +328,7 @@ function CurriculumContent({
               <option value="">Tất cả chuyên ngành</option>
               {[
                 ...new Set(
-                  data.courses.map((c) => c.specialty).filter(Boolean),
+                  data.courses.map((c) => c.specialty).filter(isSpecialtyName),
                 ),
               ].map((s) => (
                 <option key={s}>{s}</option>
@@ -374,7 +403,7 @@ function CurriculumContent({
             </thead>
             <tbody>
               {courses.map((c, i) => (
-                <Fragment key={c.code}>
+                <Fragment key={courseRowKey(c, i)}>
                   {c.groupId !== courses[i - 1]?.groupId && (
                     <tr className="sc-group">
                       <th colSpan={7} scope="rowgroup">
@@ -387,7 +416,7 @@ function CurriculumContent({
                     <th scope="row">
                       <button
                         className="sc-course-link"
-                        onClick={() => setOpened(c.code)}
+                        onClick={() => setOpened(c)}
                       >
                         {c.name}
                       </button>
@@ -398,7 +427,7 @@ function CurriculumContent({
                       <span
                         className={`sc-badge ${courseKind(c.type) === "elective" ? "sc-elective" : ""}`}
                       >
-                        {courseTypeLabel(c.type)}
+                        {courseTypeLabel(c.type, c.code)}
                       </span>
                     </td>
                     <td className="sc-term">
@@ -406,7 +435,7 @@ function CurriculumContent({
                     </td>
                     <td>
                       <span className="sc-condition-text">
-                        {c.prerequisite || "Không ghi trong khung"}
+                        {c.prerequisite ? prerequisiteText(c.prerequisite) : "Không ghi trong khung"}
                       </span>
                       {c.conditions.some(
                         (r) => r.kind === "prerequisite" && r.reviewRequired,
@@ -417,7 +446,7 @@ function CurriculumContent({
                         )}
                     </td>
                     <td className="sc-result-cell">
-                      <ResultMark outcome={outcomes.get(c.code.trim().toUpperCase())} />
+                      <CourseResultMark view={result(c)} />
                     </td>
                   </tr>
                 </Fragment>
@@ -435,9 +464,9 @@ function CurriculumContent({
           </div>
         )}
       </section>
-      {selected && (
+      {opened && (
         <CourseDetail
-          course={selected}
+          course={opened}
           data={data}
           onClose={() => setOpened(null)}
           onCourse={setOpened}
@@ -447,21 +476,26 @@ function CurriculumContent({
   );
 }
 
-/** ✓/✗ with a spoken label; a result decided from the letter grade also says so in text. */
-function ResultMark({ outcome }: { outcome: CourseOutcome | undefined }) {
-  if (outcome?.status !== "pass" && outcome?.status !== "fail") return null;
-  const label = outcome.status === "pass" ? "Đạt" : "Chưa đạt";
+/**
+ * The Kết quả cell, in the graduation page's words: ✓ Đã đạt, ✗ Chưa đạt, ✓ Miễn thi (MT), ◐ Đang học,
+ * ? Chưa rõ kết quả, or ⇄ for a course passed with a later cohort under another code. The glyph speaks
+ * its label; anything but a plain ✓/✗ (and a result read from the letter grade) is also written out.
+ */
+export function CourseResultMark({ view }: { view: CourseResultView | undefined }) {
+  if (!view) return null;
+  const display = courseResultDisplay(view);
   return (
     <>
-      <span className={`sc-result sc-result-${outcome.status}`} role="img" aria-label={label} title={label}>
-        {outcome.status === "pass" ? "✓" : "✗"}
+      <span className={`sc-result sc-result-${display.tone}`} role="img" aria-label={display.label} title={display.label}>
+        {display.glyph}
       </span>
-      {outcome.inferred && <small className="sc-result-note">{INFERRED_RESULT_NOTE}</small>}
+      {display.notes.map((note) => <small key={note} className="sc-result-note">{note}</small>)}
     </>
   );
 }
 
-function CourseDetail({
+/** The course dialog of one row (exported for its test). */
+export function CourseDetail({
   course,
   data,
   onClose,
@@ -470,7 +504,7 @@ function CourseDetail({
   course: StudentCourse;
   data: StudentCurriculumData;
   onClose: () => void;
-  onCourse: (code: string) => void;
+  onCourse: (course: StudentCourse) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null),
     opener = useRef<HTMLElement | null>(null),
@@ -485,7 +519,7 @@ function CourseDetail({
   }, []);
   useEffect(() => {
     heading.current?.focus();
-  }, [course.code]);
+  }, [course]);
   return (
     <dialog
       ref={dialog}
@@ -515,7 +549,7 @@ function CourseDetail({
       <div className="sc-dialog-content">
         <div className="sc-course-meta">
           <span className="sc-badge">{course.credits} tín chỉ</span>
-          <span className="sc-badge">{courseTypeLabel(course.type)}</span>
+          <span className="sc-badge">{courseTypeLabel(course.type, course.code)}</span>
           <span className="sc-badge">
             Năm {course.studyYear ?? "—"} · Học kỳ {course.semester ?? "—"}
           </span>
@@ -537,8 +571,9 @@ function CourseDetail({
                   : "Học phần học trước"}
               </h3>
               <p className="sc-prewrap">
-                {course[kind] ||
-                  "Không ghi điều kiện trong khung chương trình."}
+                {course[kind]
+                  ? prerequisiteText(course[kind])
+                  : "Không ghi điều kiện trong khung chương trình."}
               </p>
               {condition?.reviewRequired && (
                 <p className="sc-review">
@@ -553,7 +588,7 @@ function CourseDetail({
                     <button
                       key={code}
                       className="sw-outline"
-                      onClick={() => onCourse(code)}
+                      onClick={() => onCourse(related)}
                     >
                       {related.code} · {related.name}
                     </button>

@@ -338,6 +338,92 @@ describe("data warnings", () => {
   });
 });
 
+describe("GDTC (1)/(2) filling the 71PE electives of a K27/K28 standard (audit 2026-10-25)", () => {
+  const k27 = (): GraduationStandardInput => {
+    const base = cnpm();
+    return {
+      ...base,
+      data: {
+        ...base.data, minimumCredits: 3,
+        groups: [
+          { id: "BB", name: "Nhóm bắt buộc", kind: "mandatory", minimumCredits: null, sourceRow: 1 },
+          { id: "PE", name: "Nhóm tự chọn TC104 (4TC)_Tự chọn giáo dục thể chất", kind: "elective", minimumCredits: 4, sourceRow: 2 },
+        ],
+        courses: [
+          { id: "c0", groupId: "BB", code: "71ITBS10103", name: "Nhập môn Công nghệ thông tin", credits: 3, conditionOnly: false, sourceRow: 3 },
+          ...["71PEBA10052", "71PEBB10032", "71PEDA10102"].map((code, index) => ({
+            id: `p${index}`, groupId: "PE", code, name: `Thể thao ${index + 1} (*)`, credits: 2, conditionOnly: true, sourceRow: 4 + index,
+          })),
+        ],
+      },
+    };
+  };
+  const transcript = () => {
+    const data = syntheticTranscript([{ year: "2023-2024", semester: "HK02", rows: [
+      ["71ITBS10103", 3, 7, 3, "B", "Đạt"], ["DGT0010", 2, 8, 3.5, "B+", "Đạt"], ["DGT0020", 2, 7, 3, "B", "Đạt"],
+    ] }]);
+    const courses = data.sections[0]!.courses;
+    courses[1]!.name = "Giáo dục thể chất (1) (*)";
+    courses[2]!.name = "Giáo dục thể chất (2) (*)";
+    for (const course of courses.slice(1)) course.conditional = true;
+    return data;
+  };
+
+  it("passes the PE group (was 0/4 TC) and lists the GDTC rows first; the electives they fill read not taken", () => {
+    const evaluation = run({ standard: k27(), transcript: transcript(), curriculum: [] });
+    const group = evaluation.groups[1]!;
+    expect(group).toMatchObject({ label: "Nhóm tự chọn TC104 – Tự chọn giáo dục thể chất", lower: 4, required: 4, status: "pass", passedCount: 2, courseCount: 5 });
+    expect(group.courses.map((row) => [row.code, row.state, row.credits, row.inPlaceOf ?? null])).toEqual([
+      ["DGT0010", "passed", 2, "71PEBA10052"], ["DGT0020", "passed", 2, "71PEBB10032"],
+      ["71PEBA10052", "not_taken", 2, null], ["71PEBB10032", "not_taken", 2, null], ["71PEDA10102", "not_taken", 2, null],
+    ]);
+    expect(group.courses[0]).toEqual({
+      code: "DGT0010", name: "Giáo dục thể chất (1) (*)", credits: 2, conditionOnly: true, groupId: "PE", state: "passed", inferred: false,
+      attempts: 1, score10: 8, score4: 3.5, letter: "B+", term: "HK232", inPlaceOf: "71PEBA10052",
+    });
+    // Graduation only: no credit transfer, no other code for #curriculum, not outside the standard, no credits or GPA added.
+    expect(evaluation).toMatchObject({ status: "pass", groupStatus: "pass", credits: { lower: 3, source: "calculated" }, gpa: { actual: 3, source: "calculated" } });
+    expect(evaluation.creditTransfers).toBeUndefined();
+    expect(evaluation.codeAliases).toBeUndefined();
+    expect(evaluation.outsideStandard).toBeUndefined();
+    expect(evaluation.warnings.map((warning) => warning.code)).toEqual([]);
+  });
+});
+
+describe("what other pages read: other codes and passed courses outside the standard (audit 2026-10-25)", () => {
+  it("lists every other code a standard course was counted through, a retake with a later cohort flagged as a transfer", () => {
+    const standard = oneGroup([["DIT0070", 3], ["DIT0091", 3], ["DCT0080", 3]]);
+    standard.data.courses[0]!.name = "Cơ sở dữ liệu";
+    standard.data.courses[1]!.alternativeCodes = ["71ITDS30103", "71ITXX99999"];
+    const transcript = syntheticTranscript([{ year: "2024-2025", semester: "HK01", rows: [
+      ["DIT0070", 3, 3, 0, "F"], ["71ITIS30103", 3, 7, 3, "B"], ["71ITDS30103", 3, 8, 3.5, "B+"], ["DCT0080", 3, 8, 3.5, "B+"],
+    ] }]);
+    transcript.sections[0]!.courses[1]!.name = "Cơ sở dữ liệu";
+    const evaluation = run({ standard, transcript, curriculum: [] });
+    // 71ITXX99999 is another code of the standard that the transcript does not print: left out.
+    expect(evaluation.codeAliases).toEqual([
+      { code: "DIT0070", viaCode: "71ITIS30103", transfer: true },
+      { code: "DIT0091", viaCode: "71ITDS30103", transfer: false },
+    ]);
+    expect(evaluation.outsideStandard).toBeUndefined();
+  });
+
+  it("lists the passed courses that map to no standard course, and changes no condition", () => {
+    const standard = oneGroup([["71ITBS10103", 3]]);
+    const rows: Row[] = [["71ITBS10103", 3, 8, 3.5, "B+"], ["DIT0410", 6, 8.5, 3.7, "A"], ["71ITXX00009", 3, 3, 0, "F"], ["71ITXX00010", 3]];
+    const transcript = syntheticTranscript([{ rows: [["71ENG010012", 2, null, null, "MT"]] }, { year: "2024-2025", semester: "HK01", rows }]);
+    transcript.sections[1]!.courses[1]!.name = "Khoá luận tốt nghiệp";
+    const evaluation = run({ standard, transcript, curriculum: [] });
+    expect(evaluation.outsideStandard).toEqual([
+      { code: "71ENG010012", name: "Học phần tổng hợp", credits: 2, state: "exempt", score10: null, score4: null, letter: "MT", term: null },
+      { code: "DIT0410", name: "Khoá luận tốt nghiệp", credits: 6, state: "passed", score10: 8.5, score4: 3.7, letter: "A", term: "HK241" },
+    ]);
+    const without = run({ standard, transcript: syntheticTranscript([{ year: "2024-2025", semester: "HK01", rows: [rows[0]!] }]), curriculum: [] });
+    expect(evaluation.groups).toEqual(without.groups);
+    expect(evaluation.groupStatus).toBe(without.groupStatus);
+  });
+});
+
 describe("retake with a later cohort under another code (2026-10-23)", () => {
   it("counts it, marks the row and lists it for a credit transfer; other evaluations stay as they were", () => {
     const standard = oneGroup([["DIT0070", 3], ["DCT0080", 3]]);

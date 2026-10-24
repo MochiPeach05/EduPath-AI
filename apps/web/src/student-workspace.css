@@ -146,6 +146,9 @@
   border-radius: 10px;
   box-shadow: 0 8px 28px #242b3914;
   z-index: 15;
+  /* The header is sticky, so a long panel scrolls inside itself instead of running off a phone screen. */
+  max-height: calc(100 * var(--ep-vh) - var(--sw-header-height, 92px) - 24px);
+  overflow-y: auto;
 }
 
 .sw-popover h3 {
@@ -156,6 +159,20 @@
 .sw-popover p {
   color: var(--sw-muted);
   font-size: 13px;
+}
+
+.sw-help-steps {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding-left: 20px;
+  color: var(--sw-muted);
+  font-size: 13px;
+}
+
+.sw-help-steps strong,
+.sw-popover p strong {
+  color: var(--sw-ink);
 }
 
 .sw-popover-close {
@@ -197,6 +214,11 @@
   letter-spacing: -.8px;
   font-weight: 700;
   line-height: 1.35;
+}
+
+/* Focus lands on the heading after a page change, for screen readers; it is not a control, so no ring. */
+.sw-page-heading h1:focus {
+  outline: none;
 }
 
 .sw-page-heading p:not(.sw-eyebrow) {
@@ -297,11 +319,16 @@
   color: #9b1639;
 }
 
-.sw-error button {
+.sw-error button,
+.sw-error a {
   background: none;
   color: inherit;
   text-decoration: underline;
   white-space: nowrap;
+}
+
+.sw-error a {
+  font-weight: 700;
 }
 
 .sw-empty {
@@ -326,14 +353,33 @@
 
 .sw-footer {
   display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
+  flex-direction: column;
+  align-items: center;
   gap: 8px;
   border-top: 1px solid var(--sw-border);
   padding: 20px 0;
   margin-top: 32px;
   font-size: 13px;
   color: var(--sw-muted);
+  text-align: center;
+}
+
+.sw-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px 20px;
+}
+
+.sw-footer-links a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  overflow-wrap: anywhere;
+}
+
+.sw-footer-links a:hover {
+  color: var(--sw-red);
 }
 
 /* Compact identity and three equally weighted entry points. */

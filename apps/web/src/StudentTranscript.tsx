@@ -3,6 +3,7 @@ import { Icon } from "./student-icons";
 import TranscriptProgress from "./TranscriptProgress";
 import { policyVersion } from "./public-information";
 import { INFERRED_RESULT_NOTE, attemptOutcome, isFailLetter, isRowWarning, reviewLabels, transcriptCreditCheck, type CreditCheck } from "./transcript-results";
+import { PROFILE_SECTIONS, foldText, formatUpdatedAt } from "./student-overview-data";
 import "./student-records.css";
 
 /** review/printed (2026-10-23): a row saved as printed although something in it did not fit a known form. */
@@ -31,10 +32,23 @@ const errors: Record<string, string> = {
   policy_outdated: "Chính sách bảo mật vừa được cập nhật. Hãy tải lại trang, đọc chính sách mới rồi xác nhận lại.",
   insufficient_role: "Tài khoản hiện không có quyền sinh viên.", invalid_origin: "Phiên thao tác không hợp lệ. Vui lòng tải lại trang."
 };
+/** What each request says when the API gives no known reason or the network fails. */
+const FAILED = {
+  load: "Chưa tải được bảng điểm. Vui lòng thử lại.",
+  poll: "Chưa cập nhật được trạng thái xử lý. Hệ thống sẽ tự thử lại.",
+  upload: "Không import được bảng điểm. Vui lòng thử lại.",
+  cancel: "Chưa hủy được tác vụ. Vui lòng thử lại.",
+  remove: "Chưa xóa được bảng điểm. Vui lòng thử lại.",
+} as const;
 /** Why an import job failed, then (once) that the previous transcript is kept. */
 export function failedImportMessage(code: string | null): string {
   const reason = errors[code ?? ""] ?? "Không xử lý được bảng điểm. Hãy chọn lại PDF để thử lại.";
   return /giữ nguyên/.test(reason) ? reason : `${reason} Bảng điểm cũ (nếu có) vẫn được giữ nguyên.`;
+}
+/** Search by code or name, with or without Vietnamese marks ("lap trinh" finds "Lập trình"). */
+export function courseMatcher(search: string): (course: Pick<Course, "code" | "name">) => boolean {
+  const query = foldText(search.trim());
+  return course => foldText(`${course.code} ${course.name}`).includes(query);
 }
 /** Explicit pass/fail text uses its corresponding colour. MT exemptions are
     displayed separately as passed without changing the imported source data. */
@@ -61,11 +75,14 @@ function CreditMismatch({ check }: { check: CreditCheck }) {
     : credits(check.computed);
   return <div className="sr-review" role="note"><strong>Tổng tín chỉ chưa khớp với bảng điểm.</strong> Tổng số tín chỉ tích lũy in trên bảng điểm là {credits(check.printed ?? 0)}, nhưng các môn có kết quả Đạt (không tính môn điều kiện GDTC/GDQP) cộng lại được {counted}. Kết quả Đạt/Không đạt của một số môn có thể chưa chính xác; hãy đối chiếu với PDF gốc.</div>;
 }
-async function read(response: Response): Promise<{ transcript?: Transcript | null; job?: ImportJob | null; workerOnline?: boolean; ocrEnabled?: boolean }> {
+/** A request the API refused, carrying the message to show; anything else (a network error's own text is English) gets the request's fallback. */
+class TranscriptRequestError extends Error {}
+async function read(response: Response, fallback: string): Promise<{ transcript?: Transcript | null; job?: ImportJob | null; workerOnline?: boolean; ocrEnabled?: boolean }> {
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(errors[data.error] ?? "Thao tác chưa thành công. Vui lòng thử lại.");
+  if (!response.ok) throw new TranscriptRequestError(errors[data.error] ?? fallback);
   return data;
 }
+const messageOf = (failure: unknown, fallback: string) => failure instanceof TranscriptRequestError ? failure.message : fallback;
 function DeleteTranscriptDialog({ busy, error, onClose, onConfirm }: {
   busy: boolean; error: string; onClose: () => void; onConfirm: () => void;
 }) {
@@ -78,7 +95,7 @@ function DeleteTranscriptDialog({ busy, error, onClose, onConfirm }: {
   }, []);
   return <dialog ref={dialog} className="sr-confirm-dialog" aria-labelledby="delete-transcript-title" aria-busy={busy} onCancel={event => { event.preventDefault(); if (!busy) onClose(); }}>
     <h2 id="delete-transcript-title">Xóa bảng điểm</h2>
-    <p>Xóa PDF và toàn bộ dữ liệu bảng điểm đã import? Thông tin cá nhân của bạn vẫn được giữ lại.</p>
+    <p>Xóa PDF và toàn bộ dữ liệu bảng điểm đã import? Kết quả Đánh giá năng lực, các nhận xét của AI và Lộ trình AI tính từ bảng điểm này cũng sẽ bị xóa. Thông tin cá nhân của bạn vẫn được giữ lại.</p>
     {error && <p className="sr-error" role="alert">{error}</p>}
     <div className="sr-actions sr-form-actions">
       <button type="button" className="sr-secondary" disabled={busy} onClick={onClose} autoFocus>Hủy</button>
@@ -99,6 +116,8 @@ export default function StudentTranscript() {
   const [uploading, setUploading] = useState(false);
   const [importCompleted, setImportCompleted] = useState(false);
   const [importAttempt, setImportAttempt] = useState(0);
+  // A failed load offers Thử lại; a refused action (a wrong file, an upload, a cancel) only says why.
+  const [loadError, setLoadError] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -106,12 +125,21 @@ export default function StudentTranscript() {
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const input = useRef<HTMLInputElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
+  const confirmBox = useRef<HTMLInputElement>(null);
   const controller = useRef<AbortController | null>(null);
+  // Keyboard focus after the next render: the button that was used is gone by then (drop zone, upload, delete).
+  const focusNext = useRef<(() => HTMLElement | null) | null>(null);
+  useEffect(() => {
+    const target = focusNext.current;
+    focusNext.current = null;
+    target?.()?.focus();
+  });
   const load = useCallback(async () => {
     controller.current?.abort(); const pending = new AbortController(); controller.current = pending;
-    setLoading(true); setError(""); setLoaded(false);
-    try { const data = await read(await fetch("/api/student/transcript", { credentials: "include", signal: pending.signal })); if (!pending.signal.aborted) { setTranscript(data.transcript ?? null); setJob(data.job ?? null); setWorkerOnline(data.workerOnline ?? false); setLoaded(true); } }
-    catch (e) { if (!pending.signal.aborted) setError(e instanceof Error ? e.message : "Không tải được bảng điểm."); }
+    setLoading(true); setLoadError(""); setLoaded(false);
+    try { const data = await read(await fetch("/api/student/transcript", { credentials: "include", signal: pending.signal }), FAILED.load); if (!pending.signal.aborted) { setTranscript(data.transcript ?? null); setJob(data.job ?? null); setWorkerOnline(data.workerOnline ?? false); setLoaded(true); } }
+    catch (e) { if (!pending.signal.aborted) setLoadError(messageOf(e, FAILED.load)); }
     finally { if (!pending.signal.aborted) setLoading(false); }
   }, []);
   useEffect(() => { void load(); return () => controller.current?.abort(); }, [load]);
@@ -120,13 +148,14 @@ export default function StudentTranscript() {
     const pending = new AbortController(); let timer: ReturnType<typeof setTimeout>;
     const poll = async () => {
       try {
-        const data = await read(await fetch("/api/student/transcript", { credentials: "include", signal: pending.signal }));
+        const data = await read(await fetch("/api/student/transcript", { credentials: "include", signal: pending.signal }), FAILED.poll);
         if (!pending.signal.aborted) {
           setJob(data.job ?? null); setWorkerOnline(data.workerOnline ?? false);
           setTranscript(data.transcript ?? null); setError("");
-          if (data.job?.status === "completed") { setImportCompleted(true); setMessage("Đã lưu bảng điểm. Hãy đối chiếu kết quả bên dưới với PDF gốc."); }
+          // The 100% bar says it was saved (TranscriptProgress); no second message.
+          if (data.job?.status === "completed") { setImportCompleted(true); setMessage(""); }
         }
-      } catch (e) { if (!pending.signal.aborted) setError(e instanceof Error ? e.message : "Không lấy được trạng thái xử lý."); }
+      } catch (e) { if (!pending.signal.aborted) setError(messageOf(e, FAILED.poll)); }
       finally { if (!pending.signal.aborted) timer = setTimeout(() => void poll(), 2000); }
     };
     timer = setTimeout(() => void poll(), 2000);
@@ -136,9 +165,10 @@ export default function StudentTranscript() {
     if (!job) return;
     setBusy(true); setError("");
     try {
-      await read(await fetch("/api/student/transcript/job", { method: "DELETE", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: job.id }) }));
+      await read(await fetch("/api/student/transcript/job", { method: "DELETE", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: job.id }) }), FAILED.cancel);
+      focusNext.current = () => heading.current;
       await load();
-    } catch (e) { setError(e instanceof Error ? e.message : "Không hủy được tác vụ."); }
+    } catch (e) { setError(messageOf(e, FAILED.cancel)); }
     finally { setBusy(false); }
   };
   const [dragging, setDragging] = useState(false);
@@ -149,6 +179,8 @@ export default function StudentTranscript() {
     if (!selected) { setFile(null); return; }
     if (!selected.name.toLowerCase().endsWith(".pdf") || selected.size > 5 * 1024 * 1024 || !selected.size) { setError("Chọn tệp PDF không rỗng, tối đa 5 MB."); clearFile(); return; }
     setFile(selected);
+    // Next step: the confirmation (the drop zone that was used is gone).
+    focusNext.current = () => confirmBox.current;
   };
   const onDrop = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault(); setDragging(false);
@@ -164,36 +196,48 @@ export default function StudentTranscript() {
     try {
       const headers: Record<string, string> = { "Content-Type": "application/pdf", "X-File-Name": encodeURIComponent(file.name), "X-Confirm-Own-Transcript": "true", "X-Consent-Policy-Version": policyVersion };
       if (transcript) headers["X-Transcript-Version"] = transcript.version;
-      const data = await read(await fetch("/api/student/transcript", { method: "POST", credentials: "include", headers, body: file }));
-      if (data.job) { setJob(data.job); setMessage(""); }
-      else { setJob(null); setTranscript(data.transcript ?? null); setImportCompleted(true); setMessage("Đã lưu bảng điểm. Bạn có thể đối chiếu các học phần bên dưới với PDF gốc."); }
+      const data = await read(await fetch("/api/student/transcript", { method: "POST", credentials: "include", headers, body: file }), FAILED.upload);
+      // Queued: the job box follows; saved at once: the 100% bar says so (one success message).
+      if (data.job) setJob(data.job);
+      else { setJob(null); setTranscript(data.transcript ?? null); setImportCompleted(true); }
       clearFile(); setFilter("all"); setSearch("");
-    } catch (e) { setError(e instanceof Error ? e.message : "Không import được bảng điểm."); }
+      focusNext.current = () => heading.current;
+    } catch (e) { setError(messageOf(e, FAILED.upload)); }
     finally { setBusy(false); setUploading(false); }
   };
   const remove = async () => {
     if (!transcript || busy || pendingJob) return;
     setBusy(true); setDeleteError(""); setError(""); setMessage("");
-    try { await read(await fetch("/api/student/transcript", { method: "DELETE", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version: transcript.version, confirmed: true }) })); setDeleteOpen(false); setTranscript(null); setImportCompleted(false); clearFile(); setFilter("all"); setMessage("Đã xóa PDF và dữ liệu bảng điểm."); }
-    catch (e) { setDeleteError(e instanceof Error ? e.message : "Không xóa được bảng điểm."); }
+    try {
+      await read(await fetch("/api/student/transcript", { method: "DELETE", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version: transcript.version, confirmed: true }) }), FAILED.remove);
+      setDeleteOpen(false); setTranscript(null); setImportCompleted(false); clearFile(); setFilter("all"); setMessage("Đã xóa PDF và dữ liệu bảng điểm.");
+      // The delete button went with the transcript: back to the heading, the message just below it.
+      focusNext.current = () => heading.current;
+    }
+    catch (e) { setDeleteError(messageOf(e, FAILED.remove)); }
     finally { setBusy(false); }
   };
   const sections = transcript?.data.sections.filter(s => filter === "all" || s.id === filter) ?? [];
   const creditCheck = transcriptCreditCheck(transcript);
   const inferredRows = transcript?.data.sections.reduce((n, s) => n + s.courses.filter(c => attemptOutcome(c).inferred).length, 0) ?? 0;
-  const matches = (c: Course) => `${c.code} ${c.name}`.toLocaleLowerCase("vi").includes(search.trim().toLocaleLowerCase("vi"));
+  const matches = courseMatcher(search);
   const count = sections.reduce((n, s) => n + s.courses.filter(matches).length, 0);
   // OCR imports show all their notes; a text-layer import only the rows it marked or skipped.
   const transcriptWarnings = transcript ? transcript.data.warnings.filter(w => transcript.data.parserVersion === "vlu-ocr-1.1" || isRowWarning(w)) : [];
-  return <section className="sw-panel sr-transcript" aria-labelledby="transcript-title"><div className="sw-section-heading"><div><h2 id="transcript-title">Bảng điểm của tôi</h2><p className="sw-muted">Import PDF từ cổng đào tạo để theo dõi kết quả học tập.</p></div><span className="sw-tag">PDF · tối đa 5 MB</span></div>
-    {loading && <p role="status">Đang tải bảng điểm…</p>}{error && <div className="sr-error" role="alert">{error}<button disabled={busy || loading} onClick={() => void load()}>Thử lại</button></div>}{message && <p className="sr-success" role="status">{message}</p>}
+  return <section className="sw-panel sr-transcript" id={PROFILE_SECTIONS.transcript} aria-labelledby="transcript-title" aria-busy={loading}><div className="sw-section-heading"><div><h2 id="transcript-title" ref={heading} tabIndex={-1}>Bảng điểm của tôi</h2><p className="sw-muted">Import PDF từ cổng đào tạo để theo dõi kết quả học tập.</p></div><span className="sw-tag">PDF · tối đa 5 MB</span></div>
+    {loading && <p role="status">Đang tải bảng điểm…</p>}
+    {loadError && <div className="sr-error" role="alert">{loadError}<button type="button" disabled={busy || loading} onClick={() => void load()}>Thử lại</button></div>}
+    {error && <p className="sr-error" role="alert">{error}</p>}
+    {message && <p className="sr-success" role="status">{message}</p>}
     {(uploading || pendingJob || importCompleted) && <TranscriptProgress key={importAttempt} stage={uploading ? "uploading" : pendingJob ? job?.status === "queued" ? "queued" : "processing" : "completed"} workerOnline={workerOnline} />}
     {job && pendingJob && <div className="sr-job"><div role="status" aria-live="polite" aria-atomic="true"><strong>{job.status === "queued" ? "Đã nhận PDF · Đang chờ xử lý" : "Đang đọc bảng điểm"}</strong><p>{job.filename}</p><p>{workerOnline ? "Hệ thống đọc chữ trong PDF trước, tự nhận dạng khi cần. Bạn có thể rời trang và quay lại sau." : "Máy xử lý hiện chưa kết nối. PDF đã được giữ trong hàng đợi và sẽ được xử lý khi máy kết nối lại."}</p></div><ol className="sr-job-steps" aria-label="Tiến trình import"><li>1. Đã tải PDF</li><li aria-current="step">2. {job.status === "queued" ? "Chờ đọc bảng điểm" : "Đọc chữ / nhận dạng"}</li><li>3. Lưu kết quả</li></ol><button className="sr-secondary" disabled={busy} onClick={() => void cancelJob()}>Hủy xử lý</button></div>}
     {job?.status === "failed" && <div className="sr-error" role="alert">{failedImportMessage(job.errorCode)}</div>}
     {transcriptWarnings.length > 0 && <div className="sr-review" role="note">{transcriptWarnings.join(" ")}</div>}
-    {loaded && <>{transcript && <div className="sr-upload"><div><strong>Cập nhật bảng điểm mới</strong><p>Dùng PDF rõ, lưu từ cổng đào tạo. Hệ thống đọc chữ trước, tự nhận dạng khi cần.</p></div><label className="sr-file-label">Chọn tệp PDF<input ref={input} type="file" accept=".pdf,application/pdf" disabled={busy || pendingJob} onChange={e => pick(e.target.files?.[0])} /></label></div>}
-      {file && <div className="sr-pending"><p><strong>{file.name}</strong> · {(file.size / 1024).toFixed(0)} KB</p>{transcript && <p>Bảng điểm mới sẽ thay thế PDF và toàn bộ dữ liệu bảng điểm hiện tại sau khi đọc thành công.</p>}<label className="sr-confirm"><input type="checkbox" checked={confirmed} disabled={busy || pendingJob} onChange={e => setConfirmed(e.target.checked)} /><span>Tôi xác nhận đây là bảng điểm của mình và đồng ý để EduPath AI lưu trữ, xử lý bảng điểm theo <a href="/chinh-sach-va-dieu-khoan#bao-mat-bang-diem" target="_blank" rel="noreferrer">Chính sách bảo mật</a>.</span></label><div className="sr-actions sr-form-actions"><button type="button" className="sr-secondary" disabled={busy || pendingJob} onClick={clearFile}>Hủy chọn</button><button type="button" className="sw-primary" disabled={busy || pendingJob || !confirmed} onClick={() => void upload()}><Icon name="upload" />{busy ? "Đang đọc và lưu PDF…" : transcript ? "Cập nhật bảng điểm" : "Import bảng điểm"}</button></div></div>}
-      {transcript ? <><div className="sr-file-info"><div><strong>{transcript.filename}</strong><p>{transcript.data.pageCount} trang · {transcript.data.courseCount} học phần · Cập nhật {new Date(transcript.updatedAt).toLocaleString("vi-VN")}</p></div><div className="sr-file-actions"><button className="sr-secondary sr-danger" disabled={busy || pendingJob} onClick={() => { setDeleteError(""); setDeleteOpen(true); }}><Icon name="trash" />Xóa bảng điểm</button></div></div>{creditCheck.status === "mismatch" && <CreditMismatch check={creditCheck} />}<div className="sr-table-filters"><label>Học kỳ<select value={filter} onChange={e => setFilter(e.target.value)}><option value="all">Tất cả học kỳ</option>{transcript.data.sections.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}</select></label><label>Tìm học phần<input value={search} onChange={e => setSearch(e.target.value)} placeholder="Mã hoặc tên học phần…" /></label><span>{count} dòng học phần</span></div>
+    {loaded && <>{transcript && <div className="sr-upload"><div><strong>Cập nhật bảng điểm mới</strong><p>Dùng PDF rõ, lưu từ cổng đào tạo. Hệ thống đọc chữ trước, tự nhận dạng khi cần.</p></div><button type="button" className="sr-secondary sr-upload-button" disabled={busy || pendingJob} onClick={() => input.current?.click()}><Icon name="upload" />Chọn tệp PDF</button><input ref={input} type="file" accept=".pdf,application/pdf" hidden disabled={busy || pendingJob} onChange={e => pick(e.target.files?.[0])} /></div>}
+      {file && <div className="sr-pending"><p><strong>{file.name}</strong> · {(file.size / 1024).toFixed(0)} KB</p>{transcript && <p>Bảng điểm mới sẽ thay thế PDF và toàn bộ dữ liệu bảng điểm hiện tại sau khi đọc thành công. Kết quả Đánh giá năng lực, các nhận xét của AI và Lộ trình AI tính từ bảng điểm hiện tại cũng sẽ bị xóa.</p>}<label className="sr-confirm"><input ref={confirmBox} type="checkbox" checked={confirmed} disabled={busy || pendingJob} onChange={e => setConfirmed(e.target.checked)} /><span>Tôi xác nhận đây là bảng điểm của mình và đồng ý để EduPath AI lưu trữ, xử lý bảng điểm theo <a href="/chinh-sach-va-dieu-khoan#bao-mat-bang-diem" target="_blank" rel="noreferrer">Chính sách bảo mật</a>.</span></label><div className="sr-actions sr-form-actions"><button type="button" className="sr-secondary" disabled={busy || pendingJob} onClick={clearFile}>Hủy chọn</button><button type="button" className="sw-primary" disabled={busy || pendingJob || !confirmed} onClick={() => void upload()}><Icon name="upload" />{busy ? "Đang đọc và lưu PDF…" : transcript ? "Cập nhật bảng điểm" : "Import bảng điểm"}</button></div></div>}
+      {transcript ? <><div className="sr-file-info"><div><strong>{transcript.filename}</strong><p>{transcript.data.pageCount} trang · {transcript.data.courseCount} học phần · Cập nhật lúc {formatUpdatedAt(transcript.updatedAt)}</p></div><div className="sr-file-actions"><button className="sr-secondary sr-danger" disabled={busy || pendingJob} onClick={() => { setDeleteError(""); setDeleteOpen(true); }}><Icon name="trash" />Xóa bảng điểm</button></div></div>{creditCheck.status === "mismatch" && <CreditMismatch check={creditCheck} />}<div className="sr-table-filters"><label>Học kỳ<select value={filter} onChange={e => setFilter(e.target.value)}><option value="all">Tất cả học kỳ</option>{transcript.data.sections.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}</select></label><label>Tìm học phần<input value={search} onChange={e => setSearch(e.target.value)} placeholder="Mã hoặc tên học phần…" /></label><span>{count} dòng học phần</span></div>
+        {/* Phones: the grade columns sit right of the screen (the tables keep one column layout across terms). */}
+        {count > 0 && <p className="sr-swipe-hint" aria-hidden="true">Vuốt ngang để xem điểm <Icon name="arrow" /></p>}
         {sections.map(section => { const courses = section.courses.filter(matches); if (!courses.length) return null; return <section className="sr-term" key={section.id}><h3>{section.label}</h3><div className="sr-table-scroll" tabIndex={0} role="region" aria-label={`Bảng điểm ${section.label}`}><table><thead><tr><th scope="col">STT</th><th scope="col">Mã môn học</th><th scope="col">Tên môn học</th><th scope="col">Tín chỉ</th><th scope="col">Hệ 10</th><th scope="col">Hệ 4</th><th scope="col">Điểm chữ</th><th scope="col">Kết quả</th></tr></thead><tbody>{courses.map((course, index) => <tr key={`${course.sourcePage}-${course.ordinal}-${index}`} className={course.review?.length ? "sr-row-review" : undefined}><td>{course.ordinal}</td><td>{course.code || "—"}</td><td>{course.name}{course.review?.length ? <small className="sr-review-reasons">Cần kiểm tra: {reviewLabels(course.review).join(", ")}</small> : null}</td><td>{course.printed?.credits !== undefined ? course.printed.credits || "—" : course.credits}</td><td>{course.score10 ?? course.printed?.score10 ?? "—"}</td><td>{course.score4 === null ? course.printed?.score4 ?? "—" : course.score4.toFixed(2)}</td><td><span className={isFailLetter(course.letter) ? "sr-grade-fail" : "sr-grade"}>{course.letter ?? "—"}</span></td><ResultCell course={course} /></tr>)}</tbody></table></div>{section.summaries.length > 0 && <dl className="sr-summaries">{section.summaries.map((summary, i) => <div key={i}><dt>{summary.label}</dt><dd>{summary.value ?? "—"}</dd></div>)}</dl>}</section>; })}{!count && <p className="sw-empty">Không tìm thấy học phần phù hợp.</p>}<p className="sw-muted">(*) Môn điều kiện theo ghi chú PDF. Các tổng kết học kỳ được lấy nguyên từ bảng điểm của trường, không tính lại theo các dòng đang lọc.</p>{inferredRows > 0 && <p className="sw-muted">Nếu ô Kết quả trong PDF chỉ có biểu tượng, hệ thống xem ô đó là trống. Khi đó Đạt/Không đạt được suy ra từ điểm chữ chính thức: A+ đến D là Đạt, F và VT là Không đạt.{creditCheck.status === "match" ? ` Tổng tín chỉ các môn Đạt khớp với Tổng số tín chỉ tích lũy ${credits(creditCheck.printed ?? 0)} in trên bảng điểm.` : ""}</p>}
       </> : !file && !pendingJob && <div className={`sr-dropzone${dragging ? " is-dragging" : ""}`} onClick={() => { if (!busy) input.current?.click(); }} onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = busy ? "none" : "copy"; setDragging(true); }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false); }} onDrop={onDrop}>
         <svg className="sr-dropzone-icon" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M18 16V6h24l12 12v20" /><path d="M42 6v12h12" /><path d="M18 30v28h22" /><rect x="8" y="16" width="26" height="14" rx="2" /><text x="21" y="26.5" fill="currentColor" stroke="none" fontSize="9" fontWeight="700" textAnchor="middle" fontFamily="inherit">PDF</text><path d="M26 40h12M26 47h8" /><path d="M50 60V44M44 50l6-6 6 6" /></svg>

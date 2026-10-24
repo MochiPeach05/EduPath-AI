@@ -83,7 +83,7 @@ export default function StudentCareerExplorer({ selectedId, initialCareerId, onS
         <CareerStatus {...careers} />
         {careers.data && <>
           <p className="sw-muted" role="status">{careers.data.items.length} vị trí nghề nghiệp</p>
-          <div className="sr-career-list" role="radiogroup" aria-label="Chọn mục tiêu nghề nghiệp">{careers.data.items.slice((page - 1) * 10, page * 10).map(career => <article key={career.id} className={career.id === highlightedId ? "sr-career-card-selected" : undefined}>
+          <div className="sr-career-list" role="radiogroup" aria-label="Chọn nghề mục tiêu">{careers.data.items.slice((page - 1) * 10, page * 10).map(career => <article key={career.id} className={career.id === highlightedId ? "sr-career-card-selected" : undefined}>
             <label className="sr-career-option">
               <input type="radio" name="student-career-choice" value={career.id} checked={career.id === highlightedId} disabled={saving} aria-label={`${career.nameVi} — ${career.nameEn}`} onChange={() => { setPendingCareer(career); setSaveError(""); }} />
               <span className="sr-career-option-info"><strong>{career.nameVi}</strong><span>{career.nameEn}</span><small>{fields.data?.items.find(field => field.code === career.category)?.name ?? career.categoryName ?? career.category}</small>

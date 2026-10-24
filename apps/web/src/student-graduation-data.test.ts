@@ -3,9 +3,10 @@ import {
   COURSE_FILTERS, adviceAnnouncement, adviceErrorMessage, adviceFocusLabel, adviceStateCopy, adviceView, asOfLine, conditionItems,
   courseStateText, criteriaRows, failingGroupCredits, filterCourses, formatDate, formatElapsed, formatGpa, formatGpaShortfall, formatNumber,
   groupFacts, groupInSentence, groupShortfall, groupTitle, groupViews, joinVi, loadErrorMessage, lowerFirst, methodNotes, modelLabel,
-  normalizeAdviceOutput, normalizeAdviceResponse, normalizeAdviceStatus, normalizeAdviceWrite, normalizeStoredAdvice, profileLine,
-  requestErrorMessage, scoreParts, shouldPollAdvice, shownGpa, standardDocumentName, standardGroupLabels, standardMeta, standardThresholds,
-  suggestionItems, termText, thesisOption, toneClass, unresolvedCopy, verdictHeadline, warningNotes,
+  normalizeAdviceOutput, normalizeAdviceResponse, normalizeAdviceStatus, normalizeAdviceWrite, normalizeStoredAdvice, outsideStandardViews,
+  profileLine, readableGroupName, requestErrorMessage, scoreParts, shouldPollAdvice, shownGpa, standardDocumentName, standardElectiveQuotas,
+  standardGroupLabels, standardMeta, standardNameParts, standardNotesText, standardThresholds, suggestionItems, termText, thesisOption, toneClass,
+  unresolvedCopy, verdictHeadline, warningNotes,
 } from "./student-graduation-data";
 import type {
   GraduationAdviceResponse, GraduationCourseRow, GraduationEvaluation, GraduationGroupEvaluation, StoredAdvice,
@@ -158,6 +159,23 @@ describe("labels", () => {
     expect(labels.get("A")).toBe("Nhóm tự chọn TC102 · 1 học phần, trong đó có 71ITAI40103");
     expect(labels.get("B")).toBe("Nhóm tự chọn TC102 · 2 học phần, trong đó có 71ITDS40103");
   });
+  it("writes the source files' group names as the server does (audit 2026-10-25)", () => {
+    expect(readableGroupName("Nhóm tự chọn TC104 (4TC)_Tự chọn giáo dục thể chất")).toBe("Nhóm tự chọn TC104 – Tự chọn giáo dục thể chất");
+    expect(readableGroupName("Nhóm tự chọn TC533(27TC)-Tự chọn chuyên ngành")).toBe("Nhóm tự chọn TC533 – Tự chọn chuyên ngành");
+    expect(readableGroupName("Nhóm tự chọn TC124 và nhóm tự chọn TC206")).toBe("Nhóm tự chọn TC124 + TC206");
+    const labels = standardGroupLabels(standard({ groups: [{ id: "BB", name: "Nhóm tự chọn TC306_Tự chọn tốt nghiệp", kind: "elective", minimumCredits: 6 }], courses: [] }));
+    expect(labels.get("BB")).toBe("Nhóm tự chọn TC306 – Tự chọn tốt nghiệp");
+  });
+  it("gives a CTĐT elective group the quota of the standard group with the same courses", () => {
+    const quotas = standardElectiveQuotas([
+      { code: "TC309", courseCodes: ["71ITDS40103", "71itds40203", "71ITXX00001"] },
+      { code: "TC002", courseCodes: ["71PEKC10062"] },
+    ], standard());
+    expect(Object.fromEntries(quotas)).toEqual({ TC309: { credits: 6, groupCode: "TC102" } });
+    const combined = standard({ groups: [{ id: "X", name: "Nhóm tự chọn TC124 và nhóm tự chọn TC206", kind: "elective", minimumCredits: 24 }], courses: [{ id: "x1", groupId: "X", code: "DIT0330", name: "A", credits: 3, conditionOnly: false }] });
+    expect(standardElectiveQuotas([{ code: "TC206", courseCodes: ["DIT0330"] }], combined).get("TC206")).toEqual({ credits: 24, groupCode: "TC124 + TC206" });
+    expect(standardElectiveQuotas([{ code: "TC206", courseCodes: ["DIT0330"] }], null).size).toBe(0);
+  });
 });
 
 describe("standard", () => {
@@ -237,8 +255,9 @@ describe("verdict and conditions", () => {
 describe("suggestions", () => {
   it("lists what to do for every failing part", () => {
     const items = suggestionItems(failing());
-    expect(items.map((item) => item.key)).toEqual(["group:BB", "group:TC306", "gpa", "credits", "in-progress", "unknown-results"]);
-    const [mandatory, elective, gpa, credits, inProgress, unknown] = items;
+    // 71ITSE40303, in progress, is already listed under its group: no separate "đang học" item repeats it.
+    expect(items.map((item) => item.key)).toEqual(["group:BB", "group:TC306", "gpa", "credits", "unknown-results"]);
+    const [mandatory, elective, gpa, credits, unknown] = items;
     expect(mandatory!.text).toBe("Hoàn thành 2 môn còn thiếu trong nhóm bắt buộc:");
     expect(mandatory!.courses.map((item) => `${item.code} ${item.state}`)).toEqual(["71ITSE30103 Chưa đạt (đã học 2 lần)", "71ITSE41010 Chưa học"]);
     expect(elective!.text).toBe("Chọn học thêm ít nhất 4 tín chỉ trong nhóm tự chọn TC306.");
@@ -251,8 +270,17 @@ describe("suggestions", () => {
     expect(gpa!.courses.map((item) => `${item.code} ${item.state} ${item.detail}`)).toEqual([
       "71ITSE40403 Học lại điểm 0/4 (F)", "71ITBS10103 Học cải thiện điểm 1,5/4 (D+)",
     ]);
-    expect(inProgress!.text).toBe("Hoàn thành 1 học phần đang học:");
     expect(unknown!.text).toBe("Kiểm tra kết quả 1 học phần có điểm nhưng chưa rõ Đạt/Chưa đạt:");
+  });
+  it("names a course in progress once: the thesis being written is not repeated under 'đang học' (K29, audit 2026-10-25)", () => {
+    const thesis = course("71ITGR40206", "in_progress", { groupId: "TC306", name: "Đồ án Tốt nghiệp", credits: 6 });
+    const thesisGroup = group({ id: "TC306", kind: "elective", required: 6, lower: 0, upper: 0, remaining: 6, status: "fail", passedCount: 0, courses: [thesis] });
+    const other = course("71ITSE30903", "in_progress", { groupId: "BB" });
+    const items = suggestionItems(evaluation({ status: "fail", groupStatus: "fail", groups: [group({ id: "BB", kind: "mandatory" }), thesisGroup], inProgress: [other, thesis] }));
+    expect(items.map((item) => item.key)).toEqual(["group:TC306", "in-progress"]);
+    expect(items[1]!.text).toBe("Hoàn thành 1 học phần đang học:");
+    expect(items[1]!.courses.map((item) => item.code)).toEqual(["71ITSE30903"]);
+    expect(JSON.stringify(items).match(/Đồ án Tốt nghiệp/g)).toHaveLength(2);
   });
   it("makes the thesis the main path of a thesis group and the replacement courses a fallback with a reason", () => {
     const courses = [
@@ -363,7 +391,23 @@ describe("competency page summary", () => {
   it("writes the graduation standard out in full", () => {
     // A name that already says what it is is not prefixed twice.
     expect(standardDocumentName(standard())).toBe("Tiêu chuẩn xét tốt nghiệp K29 CNPM — khóa K29, ngành Công nghệ thông tin, chuyên ngành 7480201-03");
-    expect(standardDocumentName(standard({ name: "71K29CNTT_TN04 - K29CNTT", specialty: " ", major: "" }))).toBe("Tiêu chuẩn xét tốt nghiệp 71K29CNTT_TN04 - K29CNTT — khóa K29");
+    // The file code of the source workbook is left out, so is a title that only repeats a class code.
+    expect(standardDocumentName(standard({ name: "71K29CNTT_TN04 - K29CNTT", specialty: " ", major: "" }))).toBe("Tiêu chuẩn xét tốt nghiệp khóa K29");
+  });
+  it("titles a standard named after its file code as a document, the file code apart (audit 2026-10-25)", () => {
+    const k28 = standard({ name: "71K28CNTT_TiendohoctapQC1423 - Công nghệ thông tin", cohortCode: "K28", specialty: "" });
+    expect(standardNameParts(k28.name)).toEqual({ title: "Công nghệ thông tin", fileCode: "71K28CNTT_TiendohoctapQC1423" });
+    expect(standardDocumentName(k28)).toBe("Tiêu chuẩn xét tốt nghiệp khóa K28, ngành Công nghệ thông tin");
+    const k27 = standard({ name: "71K27CNTT_7480201-01_TN04 - K27CNTT-An ninh Mạng và IoTs", cohortCode: "K27", specialty: "An ninh Mạng và IoTs (7480201-01)" });
+    expect(standardDocumentName(k27)).toBe("Tiêu chuẩn xét tốt nghiệp khóa K27, ngành Công nghệ thông tin, chuyên ngành An ninh Mạng và IoTs (7480201-01)");
+    expect(standardDocumentName(standard({ name: "K26T-CN_TN02 - K26T-CN", cohortCode: "K26", specialty: "" }))).toBe("Tiêu chuẩn xét tốt nghiệp khóa K26, ngành Công nghệ thông tin");
+    // A title with its own words stays.
+    expect(standardDocumentName(standard({ name: "71K29CNTT_TN04 - Đợt xét bổ sung", specialty: "" }))).toBe("Tiêu chuẩn xét tốt nghiệp Đợt xét bổ sung — khóa K29, ngành Công nghệ thông tin");
+    expect(standardNameParts("Tiêu chuẩn xét tốt nghiệp K29 – Công nghệ phần mềm")).toEqual({ title: "Tiêu chuẩn xét tốt nghiệp K29 – Công nghệ phần mềm", fileCode: null });
+    // The notes' own "Ghi chú:" is not repeated under the page's "Ghi chú" heading.
+    expect(standardNotesText("Ghi chú: Sinh viên cần chứng chỉ ngoại ngữ.")).toBe("Sinh viên cần chứng chỉ ngoại ngữ.");
+    expect(standardNotesText("  GHI CHÚ:\nDòng 1")).toBe("Dòng 1");
+    expect(standardNotesText("Sinh viên cần ghi chú: …")).toBe("Sinh viên cần ghi chú: …");
   });
 });
 
@@ -411,6 +455,22 @@ describe("course views", () => {
     expect(filterCourses(courses, "", "failed").map((item) => item.code)).toEqual(["71ITSE30103", "71ITSE40403"]);
     expect(filterCourses(courses, "", "open")).toHaveLength(5);
     expect(filterCourses(groupViews(response({ evaluation: null })).flatMap((item) => item.courses), "", "passed")).toEqual([]);
+  });
+  it("leaves the courses of an elective group already Đạt out of 'Chưa hoàn thành' (audit 2026-10-25)", () => {
+    const met = group({ id: "TC102", kind: "elective", status: "pass", courses: [course("71ITAI40103", "passed", { groupId: "TC102" }), course("71ITAI40203", "not_taken", { groupId: "TC102" })] });
+    const open = group({ id: "TC306", kind: "elective", status: "fail", courses: [course("71ITSE40203", "not_taken", { groupId: "TC306" })] });
+    const views = groupViews(response({ evaluation: evaluation({ groups: [met, open] }) })).flatMap((item) => item.courses);
+    expect(views.map((item) => [item.code, item.groupMet])).toEqual([["71ITAI40103", true], ["71ITAI40203", true], ["71ITSE40203", false]]);
+    expect(filterCourses(views, "", "open").map((item) => item.code)).toEqual(["71ITSE40203"]);
+    expect(filterCourses(views, "", "not_taken").map((item) => item.code)).toEqual(["71ITAI40203", "71ITSE40203"]);
+  });
+  it("lists the passed courses outside the standard as course views without a group", () => {
+    const outside = { code: "DIT0410", name: "Khoá luận tốt nghiệp", credits: 6, state: "passed" as const, score10: 8.5, score4: 3.7, letter: "A", term: "HK241" };
+    const views = outsideStandardViews({ ...evaluation(), outsideStandard: [outside] });
+    expect(views).toHaveLength(1);
+    expect(views[0]).toMatchObject({ code: "DIT0410", groupTitle: "Học phần đã đạt nhưng không thuộc tiêu chuẩn", row: { state: "passed", score4: 3.7, term: "HK241" } });
+    expect(outsideStandardViews(evaluation())).toEqual([]);
+    expect(outsideStandardViews(null)).toEqual([]);
   });
   it("shows scores on the GPA scale first", () => {
     expect(scoreParts(course("A", "passed"), 4)).toEqual({ main: "3 / 4", detail: "7,5 / 10 · B" });

@@ -4,9 +4,23 @@ import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
 import type { CurriculumData } from "./model.js";
 
+/** One element per distinct key, the first one kept, in order. */
+function uniqueBy<T>(items: readonly T[], key: (item: T) => string): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const value = key(item);
+    if (seen.has(value)) return false;
+    seen.add(value);
+    return true;
+  });
+}
+
 // Student responses expose the current teaching framework, never administrative
 // tokens, actors, source cells, files, audit events or historical revisions.
-function studentCurriculumData(data: CurriculumData) {
+// A row repeated with the same code, group and type (K26 lists DIT0330/DIT0340
+// twice in TC206) is shown once; the same code in another group stays.
+export function studentCurriculumData(data: CurriculumData) {
+  const courses = uniqueBy(data.courses, (c) => JSON.stringify([c.groupId, c.code, c.type]));
   return {
     name: data.name,
     major: data.major,
@@ -23,7 +37,7 @@ function studentCurriculumData(data: CurriculumData) {
       requiredCredits,
       courseCodes,
     })),
-    courses: data.courses.map((c) => ({
+    courses: courses.map((c) => ({
       code: c.code,
       name: c.name,
       englishName: c.englishName,
@@ -40,13 +54,17 @@ function studentCurriculumData(data: CurriculumData) {
       notes: c.notes,
       prerequisite: c.prerequisite,
       prior: c.prior,
-      conditions: data.relations
-        .filter((r) => r.courseCode === c.code)
-        .map((r) => ({
-          kind: r.kind,
-          targetCodes: r.targetCodes,
-          reviewRequired: r.reviewRequired,
-        })),
+      // A repeated row repeats its relations at import; each one is listed once.
+      conditions: uniqueBy(
+        data.relations
+          .filter((r) => r.courseCode === c.code)
+          .map((r) => ({
+            kind: r.kind,
+            targetCodes: r.targetCodes,
+            reviewRequired: r.reviewRequired,
+          })),
+        (r) => JSON.stringify(r),
+      ),
       scheduleNeedsReview: !c.semester || !c.studyYear,
     })),
   };

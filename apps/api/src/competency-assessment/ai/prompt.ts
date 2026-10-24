@@ -105,13 +105,21 @@ export function formatNumber(value: number, digits = 2): string {
  * a whole number rounded down (web formatScore), so 83,92 is sent as 83, and 62,5–63 as 62,5–62,9.
  */
 export function formatScore(value: number): string {
+  return String(shownScore(value)).replace(".", ",");
+}
+/** The number formatScore writes (web shownScore). */
+function shownScore(value: number): number {
   const whole = Math.floor(value + 1e-9);
   // Khá starts at 62,5 (comp-calc-v10): a score from there to 63 keeps one decimal, so it never reads below its level.
   const reached = Object.values(LEVEL_THRESHOLDS).some((bound) => whole < bound && value + 1e-9 >= bound);
-  return reached ? String(Math.floor(value * 10 + 1e-9) / 10).replace(".", ",") : String(whole);
+  return reached ? Math.floor(value * 10 + 1e-9) / 10 : whole;
 }
-/** A career deficit as the page shows it: whole points rounded up, at least 1 (web deficitPoints). */
-export function formatDeficit(deficit: number): string {
+/**
+ * A career deficit as the page shows it (web deficitText): with the score and threshold, the threshold minus the score as sent,
+ * so "ngưỡng 62,5 | điểm 43 | thiếu 19,5" adds up (2026-10-25 audit: it sent "thiếu 19"); else whole points rounded up, at least 1.
+ */
+export function formatDeficit(deficit: number, score?: number | null, threshold?: number): string {
+  if (typeof score === "number" && typeof threshold === "number") return formatNumber(Math.max(0.1, Math.round((threshold - shownScore(score)) * 10) / 10), 1);
   return String(Math.max(1, Math.ceil(deficit - 1e-9)));
 }
 /** A share as a whole percentage, like the page (web formatPercent). */
@@ -432,13 +440,15 @@ function eligibilityText(course: SupportCourse): string {
 /**
  * One candidate course: "code | name | n TC | situation | eligibility | planned term". An ongoing
  * course needs neither of the last two, nor does a passed one to improve (no prerequisite, no term
- * to plan); a planned term not after the latest graded term is marked "(đã qua)".
+ * to plan); a planned term that has passed is marked "(đã qua)": the engine's `overdue` (comp-calc-v17,
+ * up to the term being studied, as the page says it), else not after the latest graded term.
  */
 function supportLine(course: SupportCourse, latestTerm: string | null): string {
   const head = `${sanitizeText(course.code, 20)} | ${sanitizeText(course.name)} | ${formatNumber(course.credits)} TC | ${courseSituation(course)}`;
   if (course.kind === "improve" || course.state === "in_progress") return head;
+  const past = course.overdue ?? Boolean(latestTerm && course.term && course.term <= latestTerm);
   const term = course.term
-    ? `kế hoạch: ${termText(course.term)}${latestTerm && course.term <= latestTerm ? " (đã qua)" : ""}`
+    ? `kế hoạch: ${termText(course.term)}${past ? " (đã qua)" : ""}`
     : "chưa xếp lịch";
   return `${head} | ${eligibilityText(course)} | ${term}`;
 }
@@ -537,7 +547,7 @@ function renderDataBlock(result: AssessmentResult, context: PromptContext = buil
           : req.status === "no_data" && req.noDataReason === "elective_not_chosen"
             ? "Cần tự học (chỉ có trong học phần tự chọn bạn không chọn)" : sanitizeText(req.statusLabel, 60)
       ];
-      if (req.status === "below" && req.deficit !== null) parts.push(`thiếu ${formatDeficit(req.deficit)}${req.deficitBandLabel ? ` (${sanitizeText(req.deficitBandLabel, 40)})` : ""}`);
+      if (req.status === "below" && req.deficit !== null) parts.push(`thiếu ${formatDeficit(req.deficit, req.score, req.threshold)}${req.deficitBandLabel ? ` (${sanitizeText(req.deficitBandLabel, 40)})` : ""}`);
       if (req.status === "upcoming") parts.push(plannedText(req.upcomingTerm));
       if (req.exemptOnly) parts.push("chỉ đạt qua học phần miễn MT");
       push(`- ${parts.join(" | ")}`);

@@ -72,8 +72,43 @@ export type CurriculumData = {
   warnings: { row: number | null; message: string }[];
   sourceWarnings: { row: number | null; message: string }[];
 };
+/** A course name compared within one CTĐT: accents, case, punctuation and spacing ignored ("Triết học Mác – Lênin" = "Triết học Mác - Lênin"). */
+const nameKey = (name: string) => name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[đĐ]/g, "d")
+  .toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+
+/** Folded course name (also "name (English name)") → its code; a name two codes share maps to null. */
+function courseNameCodes(courses: readonly CurriculumCourse[]): Map<string, string | null> {
+  const codes = new Map<string, string | null>();
+  for (const course of courses) {
+    const names = [course.name, ...(course.englishName.trim() ? [`${course.name} (${course.englishName})`] : [])];
+    for (const key of new Set(names.map(nameKey))) {
+      if (!key) continue;
+      const known = codes.get(key);
+      codes.set(key, known === undefined || known === course.code ? course.code : null);
+    }
+  }
+  return codes;
+}
+
+/**
+ * The codes of a relation written with course names instead of codes (K28 writes the prior course of "Lập trình Java
+ * nâng cao" as "Lập trình ứng dụng Java", not 71ITSE30403): the whole text, or each of its parts between ";", "," or
+ * line breaks, is exactly (folded) the name of one course of this CTĐT. Null otherwise, and for text with a bracketed
+ * code, which always names codes. Applies when a CTĐT is imported or re-imported (rebuild), not to stored revisions.
+ */
+function namedCourseCodes(raw: string, names: ReadonlyMap<string, string | null>): string[] | null {
+  if (/[[\]]/.test(raw)) return null;
+  const whole = names.get(nameKey(raw));
+  if (whole) return [whole];
+  const parts = raw.split(/[;,\n]+/).map(nameKey).filter(Boolean);
+  if (parts.length < 2) return null;
+  const codes = parts.map((part) => names.get(part));
+  return codes.every((code): code is string => Boolean(code)) ? [...new Set(codes)] : null;
+}
+
 export function rebuild(data: CurriculumData): CurriculumData {
   const seen = new Set<string>();
+  const names = courseNameCodes(data.courses);
   data.relations = [];
   data.electives = [];
   data.warnings = [...data.sourceWarnings];
@@ -116,7 +151,7 @@ export function rebuild(data: CurriculumData): CurriculumData {
     for (const kind of ["prerequisite", "prior"] as const) {
       const raw = c[kind].trim();
       if (!raw || /^(không|khong|none|-|0)$/i.test(raw)) continue;
-      const targetCodes = referencedCourseCodes(raw, seen);
+      const targetCodes = namedCourseCodes(raw, names) ?? referencedCourseCodes(raw, seen);
       const unresolvedCodes = targetCodes.filter((code) => !seen.has(code));
       const conditional = /chuyên ngành|quy định|\bhoặc\b|\bor\b|\bSV\b/i.test(
         raw,

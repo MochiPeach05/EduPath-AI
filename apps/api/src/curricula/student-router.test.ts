@@ -196,6 +196,26 @@ describe("student curriculum API", () => {
     }
   });
 
+  it("shows a row repeated with the same code, group and type once, and keeps the same code in another group (audit 2026-10-25)", async () => {
+    // K26 lists DIT0330 twice in TC206; K27 lists 71ITDS40503 under two specialties.
+    const relation = curriculum.relations[0]!;
+    const repeated: CurriculumData = {
+      ...curriculum,
+      courses: [
+        course(),
+        course({ position: 2, sourceRow: 40 }),
+        course({ position: 3, sourceRow: 50, groupId: "major", type: "TC203", specialty: "Công nghệ Dữ liệu" }),
+      ],
+      relations: [relation, { ...relation }],
+    };
+    const { app } = setup({ detailRows: [{ id: curriculumId, version: 2, data: repeated }] });
+    const body = (await request(app).get(`/curricula/${curriculumId}`).expect(200)).body;
+    expect(body.courses.map((c: { code: string; groupId: string; type: string }) => [c.code, c.groupId, c.type])).toEqual([
+      ["71IT000001", "general", "BB"], ["71IT000001", "major", "TC203"],
+    ]);
+    expect(body.courses[0].conditions).toEqual([{ kind: "prerequisite", targetCodes: ["71IT000002"], reviewRequired: false }]);
+  });
+
   it.each([lockedId, missingId])("returns 404 for locked or nonexistent framework %s", async (id) => {
     const { app, query } = setup({ detailRows: [] });
     const response = await request(app).get(`/curricula/${id}`).expect(404);

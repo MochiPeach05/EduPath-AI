@@ -4,11 +4,13 @@ import { useLiveData } from "./use-live-data";
 import { INFERRED_RESULT_NOTE } from "./transcript-results";
 import { readGraduation } from "./student-graduation-api";
 import {
-  ADVICE_API, ADVICE_POLL_MS, COURSE_FILTERS, COURSE_STATES, GRADUATION_API, INLINE_COURSES, STATUS_DISPLAY,
+  ADVICE_API, ADVICE_POLL_MS, COURSE_FILTERS, COURSE_STATES, GRADUATION_API, INLINE_COURSES, IN_PLACE_OF_NOTE, OUTSIDE_STANDARD_NOTE,
+  OUTSIDE_STANDARD_TITLE, STATUS_DISPLAY,
   adviceAnnouncement, adviceFocusLabel, adviceStateCopy, adviceView, asOfLine, conditionItems, courseStateText, filterCourses,
   formatDateTime, formatElapsed, formatNumber, groupFacts, groupShortfall, groupViews, methodNotes, modelLabel,
-  normalizeAdviceResponse, normalizeAdviceStatus, normalizeAdviceWrite, profileLineParts, requestErrorMessage, scoreParts,
-  shouldPollAdvice, standardMetaParts, standardThresholds, suggestionItems, toneClass, unresolvedCopy, verdictHeadline, warningNotes,
+  normalizeAdviceResponse, normalizeAdviceStatus, normalizeAdviceWrite, outsideStandardViews, profileLineParts, requestErrorMessage, scoreParts,
+  shouldPollAdvice, standardDocumentName, standardMetaParts, standardNameParts, standardNotesText, standardThresholds, suggestionItems, toneClass,
+  unresolvedCopy, verdictHeadline, warningNotes,
   type AdviceKind, type AdviceView, type ConditionItem, type CourseFilter, type CourseView, type EnsureState, type GroupView, type MetaPart,
   type SuggestionCourse, type SuggestionItem, type Tone,
 } from "./student-graduation-data";
@@ -314,19 +316,23 @@ function StandardSection({ data }: { data: StudentGraduationResponse }) {
       <p className="sg-disclaimer">Kết quả xét tốt nghiệp chính thức do nhà trường công bố.</p>
     </section>;
   }
+  // The title reads as a document; the source workbook's file code stays, muted, for reference.
+  const fileCode = standardNameParts(standard.name).fileCode;
+  const notes = standardNotesText(standard.notes);
   return <section className="sw-panel sg-section sg-standard" aria-labelledby="sg-standard-title">
     <div className="sg-heading">
       <p className="sc-eyebrow">Tiêu chuẩn xét tốt nghiệp của bạn</p>
-      <h2 id="sg-standard-title" className="sg-title">{standard.name}</h2>
+      <h2 id="sg-standard-title" className="sg-title">{standardDocumentName(standard)}</h2>
+      {fileCode && <p className="sg-muted sg-file-code">Mã tiêu chuẩn: {fileCode}</p>}
       <MetaTags parts={standardMetaParts(data)} />
     </div>
     <dl className="sg-stats">{standardThresholds(standard).map((item) => <div key={item.key}>
       <dt>{item.label}</dt>
       <dd className={item.known ? undefined : "sg-unknown"}>{item.value}</dd>
     </div>)}</dl>
-    {standard.notes.trim() && <div className="sc-condition sg-notes">
+    {notes && <div className="sc-condition sg-notes">
       <h3>Ghi chú</h3>
-      <p className="sc-prewrap">{standard.notes}</p>
+      <p className="sc-prewrap">{notes}</p>
     </div>}
     <p className="sg-auto-note">
       <Icon name="info" />
@@ -345,7 +351,7 @@ function CourseRow({ course, options }: { course: CourseView; options: TableOpti
   const state = row ? COURSE_STATES[row.state] : null;
   return <tr>
     <td className="sg-code-cell">{course.code}</td>
-    <td className="sg-name-cell">{course.name}{course.conditionOnly && <small>Môn điều kiện (*): cần đạt nhưng không tính vào tín chỉ tích lũy và điểm trung bình</small>}{row?.transferFrom && <small>Đã học trả nợ với khóa sau (mã {row.transferFrom}); cần làm thủ tục chuyển điểm</small>}</td>
+    <td className="sg-name-cell">{course.name}{course.conditionOnly && <small>Môn điều kiện (*): cần đạt nhưng không tính vào tín chỉ tích lũy và điểm trung bình</small>}{row?.transferFrom && <small>Đã học trả nợ với khóa sau (mã {row.transferFrom}); cần làm thủ tục chuyển điểm</small>}{row?.inPlaceOf && <small>{IN_PLACE_OF_NOTE}</small>}</td>
     {options.showGroup && <td className="sg-group-cell">{course.groupTitle}</td>}
     <td className="sg-num" data-label="TC">{formatNumber(course.credits)}</td>
     {options.hasResults && <>
@@ -445,9 +451,20 @@ function CourseList({ groups, scale, hasResults }: { groups: GroupView[]; scale:
   </div>;
 }
 
+/** Passed courses that map to no standard course: shown so the student can ask, they count toward no group. */
+function OutsideStandard({ courses, scale }: { courses: CourseView[]; scale: 4 | 10 }) {
+  if (!courses.length) return null;
+  return <div className="sg-view-body sg-outside">
+    <h3>{OUTSIDE_STANDARD_TITLE}</h3>
+    <p className="sg-muted">{OUTSIDE_STANDARD_NOTE}</p>
+    <CourseTable courses={courses} options={{ scale, showGroup: false, hasResults: true }} caption={OUTSIDE_STANDARD_TITLE} />
+  </div>;
+}
+
 function CompareSection({ data }: { data: StudentGraduationResponse }) {
   const [tab, setTab] = useState<"groups" | "courses">("groups");
   const groups = useMemo(() => groupViews(data), [data]);
+  const outside = useMemo(() => outsideStandardViews(data.evaluation), [data]);
   const scale = data.evaluation?.gpa.scale ?? data.standard?.gpaScale ?? 4;
   const hasResults = data.evaluation !== null;
   return <section className="sw-panel sg-section sg-compare" aria-labelledby="sg-compare-title">
@@ -461,6 +478,7 @@ function CompareSection({ data }: { data: StudentGraduationResponse }) {
     </div>
     <div id="sg-view-groups" className="sg-view" hidden={tab !== "groups"}><GroupTable groups={groups} scale={scale} hasResults={hasResults} /></div>
     <div id="sg-view-courses" className="sg-view" hidden={tab !== "courses"}><CourseList groups={groups} scale={scale} hasResults={hasResults} /></div>
+    <OutsideStandard courses={outside} scale={scale} />
   </section>;
 }
 

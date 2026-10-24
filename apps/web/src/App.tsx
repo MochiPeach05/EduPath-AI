@@ -20,10 +20,11 @@ const errorMessages: Record<string, string> = {
     "Tài khoản của bạn thuộc cổng Quản trị. Vui lòng chuyển sang trang Quản trị để đăng nhập và bắt đầu sử dụng."
 };
 
+// Sections of the landing page ("/"), reached as /#<targetId>.
 const loginLinks = [
-  { targetId: "/gioi-thieu", label: "Về EduPath AI" },
-  { targetId: "/tinh-nang", label: "Tính năng" },
-  { targetId: "/huong-dan", label: "Cách hoạt động" }
+  { targetId: "gioi-thieu", label: "Về EduPath AI" },
+  { targetId: "tinh-nang", label: "Tính năng" },
+  { targetId: "huong-dan", label: "Cách hoạt động" }
 ];
 
 function getAuthError(): { message: string; portalRestricted: boolean } | null {
@@ -241,6 +242,7 @@ function LoginPage({ error, portalRestricted }: { error: string | null; portalRe
 // portal, so the student workspace shows them the way back instead of any data.
 function StaffPortalNotice() {
   const [busy, setBusy] = useState(false);
+  useEffect(() => { document.title = "Cổng quản lý học tập · EduPath AI"; }, []);
   return (
     <div className="auth-shell auth-shell-notice">
       <main className="auth-content">
@@ -279,13 +281,21 @@ function AuthenticatedApp({ isLoginRoute }: { isLoginRoute: boolean }) {
 
   const refreshAuth = useCallback(async () => {
     try {
-      setAuth(await getCurrentUser());
+      const current = await getCurrentUser();
+      // Leave /login or /auth/callback for the return address before the workspace renders: it reads its page from
+      // the hash, which the return address may carry (/dashboard#profile after "Đăng nhập lại").
+      const returnTo = safeReturnTo(window.location.search);
+      if (current.authenticated && returnTo !== "/quantri"
+        && (isLoginRoute || window.location.pathname.replace(/\/+$/, "") === "/auth/callback")) {
+        window.history.replaceState({}, "", returnTo);
+      }
+      setAuth(current);
       setLoadError(null);
     } catch {
       setLoadError("Không thể kết nối đến máy chủ EduPath AI. Vui lòng thử lại sau.");
       setAuth({ authenticated: false });
     }
-  }, []);
+  }, [isLoginRoute]);
 
   useEffect(() => {
     void refreshAuth();
@@ -293,16 +303,10 @@ function AuthenticatedApp({ isLoginRoute }: { isLoginRoute: boolean }) {
 
   useEffect(() => {
     if (auth?.authenticated) {
-      if (safeReturnTo(window.location.search) === "/quantri") {
-        window.location.replace("/quantri");
-        return;
-      }
-      document.title = "EduPath AI – Không gian học tập";
-      if (isLoginRoute || window.location.pathname.replace(/\/+$/, "") === "/auth/callback") {
-        window.history.replaceState({}, "", safeReturnTo(window.location.search));
-      }
+      // The workspace and the staff notice set their own tab titles.
+      if (safeReturnTo(window.location.search) === "/quantri") window.location.replace("/quantri");
     } else {
-      document.title = "EduPath AI – Đăng nhập";
+      document.title = "Đăng nhập · EduPath AI";
       if (auth || isLoginRoute) {
         const search = new URLSearchParams(window.location.search);
         const loginSearch = new URLSearchParams();
@@ -338,7 +342,7 @@ export default function App() {
 
   useEffect(() => {
     if (route === "landing") {
-      document.title = "EduPath AI – Hiểu năng lực, định hướng tương lai";
+      document.title = "EduPath AI · Hiểu năng lực, định hướng tương lai";
     }
   }, [route]);
 

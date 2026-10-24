@@ -97,7 +97,9 @@ export type TranscriptSummary = {
   parserVersion: string;
   /** Latest term with grades as HKyyS, e.g. "HK253". */
   latestTerm: string | null;
-  /** Distinct course codes on the transcript. */
+  /** The term being studied: the plan progress, "Sắp học" and overdue courses count from it (comp-calc-v17; absent before). */
+  studyTerm?: string | null;
+  /** Distinct courses on the transcript; a retake under another code of a CTĐT course counts once (comp-calc-v17). */
   courseCount: number;
   inCurriculum: number;
   passed: number;
@@ -234,6 +236,8 @@ export type SupportCourse = {
   term: string | null;
   termSource: "plan" | "curriculum" | null;
   termLabel: string;
+  /** The planned term is the term being studied or earlier and the course is not in progress (comp-calc-v17; absent before). */
+  overdue?: boolean;
   electiveGroup: string | null;
   reason: string;
 };
@@ -281,9 +285,9 @@ export type CareerResult = {
   deleted: boolean;
   requirements: CareerRequirementResult[];
   counts: { total: number; met: number; below: number; upcoming: number; notStudied: number; noData: number; withData: number };
-  /** "Đạt x/y kỹ năng · z sắp học · t chưa đủ dữ liệu" */
+  /** "Đạt x/y kỹ năng" and the non-zero counts (comp-calc-v17). The page rebuilds it from the requirements (careerSummaryText). */
   summaryText: string;
-  /** "x/y kỹ năng có dữ liệu" */
+  /** "x/y kỹ năng có điểm" (comp-calc-v17; "có dữ liệu" before). The page rebuilds it from the requirements (careerDataText). */
   dataText: string;
   /** Share of requirement credit; the level used it before comp-calc-v11. */
   fit: number | null;
@@ -317,7 +321,7 @@ export type SelfStudyItem = {
   requirementTitle: string;
   isRequired: boolean;
   status: GapStatus;
-  /** Measured skills with similar names, as context only (never merged). */
+  /** Measured skills with similar names, as context only (never merged); with a score since comp-calc-v17, the page filters older ones. */
   relatedSkillKeys: string[];
   otherSpecialtyCourses: string[];
 };
@@ -395,6 +399,7 @@ export type PlanProgressResult = {
   lateCount: number;
   lateCredits: number;
   next: NextEntry[];
+  /** Courses of the next term, a choice of k counting k (comp-calc-v17; the number of entries before). */
   nextCount: number;
   nextCredits: number;
   /** Sections that are never late (no k, or "Không tính vào tích lũy"). */

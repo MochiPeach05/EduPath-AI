@@ -12,7 +12,8 @@ import { AssessmentError, readAssessmentInputs } from "../competency-assessment/
 import type { AssessmentInputs, CareerInput, CareerRequirementResult, CareerResult, FitCode, GapStatus } from "../competency-assessment/types.js";
 import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
-import { readSurvey } from "../student/survey.js";
+import { activeConsentVersion, TRANSCRIPT_POLICY_VERSION } from "../student/consent.js";
+import { readSurvey, type StudentSurvey } from "../student/survey.js";
 import { interestMatch, type InterestMatch } from "./interests.js";
 
 type CatalogRow = CareerInput & { category: string; categoryName: string; description: string };
@@ -32,7 +33,7 @@ export type GuidanceCareer = {
   fit: {
     score: number | null; code: FitCode; label: string; dataShare: number; met: number; below: number; notStudied: number; upcoming: number; noData: number;
     selfStudy: number; total: number;
-    /** The count lines of Khoảng trống kỹ năng ("Đạt x/y kỹ năng · z sắp học · …", "u/y kỹ năng có dữ liệu"). */
+    /** The count lines of Khoảng trống kỹ năng ("Đạt x/y kỹ năng · z sắp học · …", "u/y kỹ năng có điểm"). */
     summaryText: string; dataText: string;
   } | null;
   requirements: GuidanceRequirement[];
@@ -93,6 +94,16 @@ export function guidanceCareers(catalog: CatalogRow[], inputs: AssessmentInputs 
   return careers.sort((a, b) => rank(b) - rank(a) || a.nameVi.localeCompare(b.nameVi, "vi") || a.id.localeCompare(b.id));
 }
 
+/**
+ * The survey answers this page may use: only a complete Khảo sát định hướng agreed to under the current policy, the rule
+ * of the AI roadmap (roadmap/router.ts surveyDone); older or partial answers are left out and the page asks for the survey.
+ */
+export function surveyAnswers(survey: StudentSurvey | null, consentVersion: string | null): { done: boolean; field: string | null; tech: string[] } {
+  if (survey?.complete !== true || consentVersion !== TRANSCRIPT_POLICY_VERSION) return { done: false, field: null, tech: [] };
+  const field = survey.answers.field;
+  return { done: true, field: field && field !== "unsure" ? field : null, tech: survey.interestTech };
+}
+
 /** Whether a stored assessment's career (Khoảng trống kỹ năng) has the statuses and scores this page computes now. */
 export function sameAsStored(stored: CareerResult | null, live: GuidanceCareer): boolean {
   const key = (rows: readonly { title: string; isRequired: boolean; status: GapStatus | null; score: number | null }[]) =>
@@ -138,18 +149,23 @@ export function createCareerGuidanceRouter(pool: DatabasePool | undefined) {
       const stored = await client.query<{ career: CareerResult | null; created_at: Date }>(
         "SELECT computed->'career' AS career,created_at FROM stu_comp_assessments WHERE user_id=$1 ORDER BY created_at DESC,id DESC LIMIT 1", [userId]);
       const survey = await readSurvey(client, userId);
+      const surveyConsent = await activeConsentVersion(client, userId, "profile_survey");
       await client.query("COMMIT");
-      const answers = { field: survey?.answers.field && survey.answers.field !== "unsure" ? survey.answers.field : null, tech: survey?.interestTech ?? [] };
+      const answers = surveyAnswers(survey, surveyConsent);
       const careers = guidanceCareers(catalog, inputs, targetId, answers);
       const target = careers.find((career) => career.isTarget);
+      const gapCareer = stored.rows[0]?.career ?? null;
       res.json({
         blocked,
         targetCareerId: targetId,
         deletedTargetName: deletedTarget,
-        // false when Khoảng trống kỹ năng shows other statuses or scores for the target career than this page (an older assessment).
-        gapCurrent: Boolean(target?.fit && sameAsStored(stored.rows[0]?.career ?? null, target)),
+        // false when Khoảng trống kỹ năng shows another career, or other statuses or scores for the target career (an older assessment).
+        gapCurrent: Boolean(target?.fit && sameAsStored(gapCareer, target)),
         gapAssessedAt: stored.rows[0]?.created_at ?? null,
-        surveyDone: Boolean(survey && (answers.field || answers.tech.length)),
+        // The career Khoảng trống kỹ năng shows (the latest assessment's), so the page can say it is another one.
+        gapCareerId: gapCareer?.id ?? null,
+        gapCareerName: gapCareer?.nameVi ?? null,
+        surveyDone: answers.done,
         fields: fields.rows.filter((field) => catalog.some((career) => career.category === field.code)),
         careers,
       });

@@ -1,10 +1,8 @@
-import { canAccessAdmin } from "./types";
 import { useEffect, useState, type KeyboardEvent } from "react";
 import "./landing.css";
-import { getCurrentUser } from "./auth-api";
 import EduPathBrand from "./EduPathBrand";
 import { Icon as SharedIcon } from "./ui-icon";
-import PublicFooter from "./PublicFooter";
+import PublicFooter, { portalLabel, usePortalLink } from "./PublicFooter";
 import { frequentlyAskedQuestions } from "./public-information";
 import FaqAnswer from "./FaqAnswer";
 
@@ -192,14 +190,12 @@ function FeaturePreview({ selected, active }: { selected: number; active: boolea
 }
 
 export default function LandingPage() {
-  const [portal, setPortal] = useState<string | null>(null);
+  const portal = usePortalLink();
+  // Links from other pages (/#gioi-thieu, /#cau-hoi…) arrive before the sections exist: go to the section once rendered.
   useEffect(() => {
-    let active = true;
-    const refresh = () => { void getCurrentUser().then(auth => { if (active) setPortal(auth.authenticated ? canAccessAdmin(auth.user.role) ? "/quantri" : "/dashboard" : null); }).catch(() => { if (active) setPortal(null); }); };
-    refresh(); window.addEventListener("pageshow", refresh); window.addEventListener("focus", refresh);
-    return () => { active = false; window.removeEventListener("pageshow", refresh); window.removeEventListener("focus", refresh); };
+    const id = window.location.hash.slice(1);
+    if (id) document.getElementById(id)?.scrollIntoView();
   }, []);
-  const portalLabel = "Quay lại cổng quản lý học tập";
   const [menuOpen, setMenuOpen] = useState(false);
   const [selectedFeature, setSelectedFeature] = useState(0);
 

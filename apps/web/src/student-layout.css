@@ -1,4 +1,5 @@
-/* Reserve the logo column even when the sidebar is closed, so content stays put. */
+/* On desktop (from 1200px, where the page is zoomed) the logo column stays reserved even when the sidebar is closed,
+   so content stays put. Narrower screens give the content the full width and overlay the drawer (see below). */
 html:has(.sw-shell) {
   scrollbar-gutter: stable;
 }
@@ -112,7 +113,7 @@ html:has(.sw-shell) {
 }
 
 /* Balance the reserved sidebar space with an equal right margin on desktop. */
-@media (min-width: 1100px) {
+@media (min-width: 1200px) {
   .sw-body {
     grid-template-columns: var(--sw-rail-width) minmax(0, 1fr) var(--sw-rail-width);
   }
@@ -122,8 +123,9 @@ html:has(.sw-shell) {
   }
 }
 
-/* On phones, navigation overlays the page instead of moving content down. */
-@media (max-width: 700px) {
+/* Below the desktop zoom the header nav is hidden and the drawer is the menu: it overlays the page instead of
+   squeezing the content, and no column is kept for it while it is closed. */
+@media (max-width: 1199.98px) {
   .sw-body {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -133,7 +135,7 @@ html:has(.sw-shell) {
   }
 
   .sw-main {
-    padding: 24px 16px 0;
+    padding: 28px 24px 0;
   }
 
   .sw-body .sw-drawer {
@@ -153,5 +155,11 @@ html:has(.sw-shell) {
     z-index: 9;
     background: #151c2c55;
     touch-action: none;
+  }
+}
+
+@media (max-width: 700px) {
+  .sw-main {
+    padding: 24px 16px 0;
   }
 }

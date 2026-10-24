@@ -49,7 +49,7 @@ export default function AdminWorkspace({ user, busy, error, onLogout }: { user: 
     if (group?.kind === "group") setOpenGroups((previous) => previous[group.id] === false ? { ...previous, [group.id]: true } : previous);
   }, [current]);
   useEffect(() => {
-    document.title = `${current.label} – EduPath AI`;
+    document.title = `${current.label} · EduPath AI`;
     if (window.location.pathname !== current.path) window.history.replaceState({}, "", current.path);
     heading.current?.focus();
   }, [current]);

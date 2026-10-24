@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { courseKey, deriveElectiveGroups, electiveCodeOf } from "./course-state.js";
 import { syntheticCurriculum, syntheticPlan, syntheticStandards } from "./fixtures/synthetic-k29.js";
 import { electiveQuotas } from "./graduation.js";
-import { choiceRule, physicalEducationGroupsFor, physicalEducationSlot, planProgress, type PlanCourseInfo } from "./plan-progress.js";
+import {
+  choiceLabel, choiceRule, physicalEducationCourseSlot, physicalEducationGroupsFor, physicalEducationSlot, planProgress, type PlanCourseInfo,
+} from "./plan-progress.js";
 import { classifyCurriculumSpecialty } from "./specialty.js";
 import type { CourseState, SpecialtyCode } from "./types.js";
 
@@ -52,6 +54,49 @@ describe("section labels (real K29 strings)", () => {
     expect(physicalEducationSlot("GDQP1: Đường lối QP và AN của ĐCSVN")).toBeNull();
     expect(physicalEducationGroupsFor(curriculum.courses)).toEqual({ TC002: ["71PEKC10062", "71PESW10042"], TC102: ["71PEBA10052", "71PETT10012"] });
   });
+
+  it("spaces choice labels and says the real number of options (v17)", () => {
+    expect(choiceLabel("Chọn1 trong 3 môn sau")).toBe("Chọn 1 trong 3 môn sau");
+    expect(choiceLabel("Chọn1 trong 3 môn sau", 1, 3)).toBe("Chọn 1 trong 3 môn sau");
+    expect(choiceLabel("Chọn  các môn sau (Không tính vào tích lũy)")).toBe("Chọn các môn sau (Không tính vào tích lũy)");
+    // "Chọn 1 trong 4 môn sau" over 3 courses the student can take; k never above the options.
+    expect(choiceLabel("Chọn 1 trong 4 môn sau", 1, 3)).toBe("Chọn 1 trong 3 môn sau");
+    expect(choiceLabel("Chọn 2 trong 6 HP tự chọn Cơ sở ngành", 2, 5)).toBe("Chọn 2 trong 5 HP tự chọn Cơ sở ngành");
+    expect(choiceLabel("Chọn 3 trong 4 môn sau", 2, 2)).toBe("Chọn 2 trong 2 môn sau");
+    expect(choiceLabel("Chuyên ngành CNPM", 1, 2)).toBe("Chuyên ngành CNPM");
+  });
+});
+
+describe("GDTC courses named for their slot (K26–K28, v17)", () => {
+  // K26–K28: "Giáo dục thể chất (1)" DGT0010 and "(2)" DGT0020 are mandatory BBKTL courses, not TC002/TC102 electives.
+  const k26 = [
+    { code: "DGT0010", name: "Giáo dục thể chất (1)", type: "BBKTL", credits: 1 },
+    { code: "DGT0020", name: "Giáo dục thể chất (2) (*)", type: "BBKTL", credits: 1 },
+  ];
+  const groups = physicalEducationGroupsFor(k26);
+  const physical = (states: Record<string, CourseState>) => {
+    const map = courses(passedThroughHK243);
+    for (const course of k26) map.set(course.code, { code: course.code, name: course.name, credits: course.credits, state: states[course.code] ?? "not_taken", applicable: true, electiveCode: null });
+    const result = planProgress({ plan: plan.data, physicalEducationGroups: groups, currentTerm: "HK243", courses: map, quotas });
+    return result.late.filter((entry) => entry.kind === "physical_education").map((entry) => entry.kind === "physical_education" && [entry.label, entry.required, entry.passed]);
+  };
+
+  it("maps the courses to slots 1 and 2", () => {
+    expect(groups).toEqual({ TC002: [], TC102: [], GDTC1: ["DGT0010"], GDTC2: ["DGT0020"] });
+    expect(["Giáo dục thể chất (1)", "Giáo dục thể chất 2 (*)", "GDTC 1", "Giáo dục quốc phòng 1", "Giáo dục thể chất 12"].map(physicalEducationCourseSlot)).toEqual([1, 2, 1, null, null]);
+  });
+
+  it("is no longer late once the course of the slot is passed (K26: DGT0010 passed read 'Đã đạt 0/1')", () => {
+    expect(physical({ DGT0010: "passed" })).toEqual([["GDTC 2", 2, 1]]);
+    // The slot's own course decides, not the count: (2) passed leaves slot 1 open.
+    expect(physical({ DGT0020: "passed" })).toEqual([["GDTC 1", 1, 1]]);
+    expect(physical({ DGT0010: "passed", DGT0020: "in_progress" })).toEqual([]);
+    // Without the named courses (before v17) both slots were late.
+    const map = courses(passedThroughHK243);
+    for (const course of k26) map.set(course.code, { code: course.code, name: course.name, credits: course.credits, state: "passed", applicable: true, electiveCode: null });
+    const before = planProgress({ plan: plan.data, physicalEducationGroups: { TC002: [], TC102: [] }, currentTerm: "HK243", courses: map, quotas });
+    expect(before.late.map((entry) => entry.kind)).toEqual(["physical_education", "physical_education"]);
+  });
 });
 
 describe("training-plan progress (spec §7.8)", () => {
@@ -59,7 +104,8 @@ describe("training-plan progress (spec §7.8)", () => {
     const result = run("HK253", { ...passedThroughHK243, "71ITSE41203": "passed", "71ITIN40304": "passed", "71ITIS30403": "in_progress" });
     expect(result.late).toEqual([]);
     expect(result).toMatchObject({ currentTerm: "HK253", nextTerm: "HK261", lateCount: 0, lateCredits: 0 });
-    expect(result.informationalSections).toEqual([expect.objectContaining({ label: "Chọn  các môn sau (Không tính vào tích lũy)", termCode: "HK252" })]);
+    // Labels are shown with their spaces normalised (v17; the plan writes "Chọn  các môn sau").
+    expect(result.informationalSections).toEqual([expect.objectContaining({ label: "Chọn các môn sau (Không tính vào tích lũy)", termCode: "HK252" })]);
     // HK261 alternatives (Đồ án / Chuyên đề) are one quota choice, partly filled by the course in progress.
     expect(result.next).toEqual([expect.objectContaining({ kind: "choice", label: "Nhóm tự chọn TC406: chọn 6 tín chỉ", unit: "credit", remaining: 3 })]);
   });
@@ -68,7 +114,8 @@ describe("training-plan progress (spec §7.8)", () => {
     const states = { ...passedThroughHK243 };
     delete states["71ITIS30303"];
     const result = run("HK243", states);
-    expect(result.late).toEqual([expect.objectContaining({ kind: "choice", label: "Chọn1 trong 3 môn sau", termCode: "HK243", missing: 1, missingCredits: 3 })]);
+    // The plan writes "Chọn1 trong 3 môn sau"; the student reads it spaced (v17).
+    expect(result.late).toEqual([expect.objectContaining({ kind: "choice", label: "Chọn 1 trong 3 môn sau", termCode: "HK243", missing: 1, missingCredits: 3 })]);
     expect(result).toMatchObject({ lateCount: 1, lateCredits: 3 });
   });
 

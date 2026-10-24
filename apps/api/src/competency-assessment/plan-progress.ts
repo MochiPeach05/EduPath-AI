@@ -18,10 +18,22 @@ export type PlanCourseInfo = {
   electiveCode: string | null;
 };
 
-/** Same object plans/student-router.ts returns: PE elective codes per group (TC002, TC102). */
-export function physicalEducationGroupsFor(courses: readonly { code: string; type: string }[]): Record<string, string[]> {
-  return Object.fromEntries(["TC002", "TC102"].map((group) => [group,
+/** The key of physicalEducationGroups holding the courses named for one GDTC slot ("GDTC1", "GDTC2"). */
+const namedSlotKey = (slot: number) => `GDTC${slot}`;
+
+/**
+ * Same object plans/student-router.ts returns: PE elective codes per group (TC002, TC102). Courses named for a slot
+ * ("Giáo dục thể chất (1)", K26–K28 DGT0010/DGT0020 of type BBKTL, outside TC002/TC102) are added under GDTC1/GDTC2 when there
+ * are any (comp-calc-v17): before, a K26 student who passed DGT0010 read "Giáo dục thể chất 1 — Đã đạt 0/1" as late.
+ */
+export function physicalEducationGroupsFor(courses: readonly { code: string; type: string; name?: string }[]): Record<string, string[]> {
+  const groups: Record<string, string[]> = Object.fromEntries(["TC002", "TC102"].map((group) => [group,
     [...new Set(courses.filter((course) => electiveCodeOf(course.type) === group).map((course) => courseKey(course.code)))]]));
+  for (const slot of [1, 2]) {
+    const codes = [...new Set(courses.filter((course) => physicalEducationCourseSlot(course.name ?? "") === slot).map((course) => courseKey(course.code)))];
+    if (codes.length) groups[namedSlotKey(slot)] = codes;
+  }
+  return groups;
 }
 
 /** "GDTC 1", "GDTC2", "Giáo dục thể chất 1" → slot number (port of student-plan-results.ts). */
@@ -29,6 +41,28 @@ export function physicalEducationSlot(name: string): number | null {
   const folded = name.normalize("NFD").replace(/[̀-ͯ]/g, "").trim().toUpperCase();
   const slot = /^(?:GDTC|GIAO DUC THE CHAT)\s*([12])$/.exec(folded);
   return slot ? Number(slot[1]) : null;
+}
+
+/** A CTĐT course named for a GDTC slot: "Giáo dục thể chất (1)", "Giáo dục thể chất 2 (*)", "GDTC 1" → 1 or 2; else null. */
+export function physicalEducationCourseSlot(name: string): number | null {
+  const slot = /^(?:gdtc|giao duc the chat)\s*\(?\s*([12])(?!\d)/.exec(fold(name));
+  return slot ? Number(slot[1]) : null;
+}
+
+/**
+ * A plan choice label as the student reads it (comp-calc-v17): spaces normalised ("Chọn1 trong 3 môn sau" → "Chọn 1 trong 3
+ * môn sau") and, when the label's "trong n" is not the number of options the student really has (a course of another
+ * specialty, one outside the CTĐT, or a typo: "Chọn 1 trong 4 môn sau" over 3 courses), "Chọn k trong n" rebuilt from them.
+ */
+export function choiceLabel(label: string, required?: number, optionCount?: number): string {
+  let text = label.normalize("NFC").replace(/\s+/g, " ").trim()
+    .replace(/(ch[oọ]n)\s*(\d+)/iu, "$1 $2").replace(/(\d+)\s*(trong)(?![\p{L}])/iu, "$1 $2").replace(/(trong)\s*(\d+)/iu, "$1 $2");
+  const rule = /(ch[oọ]n )(\d+)( trong )(\d+)/iu.exec(text);
+  if (rule && optionCount && optionCount > 0 && Number(rule[4]) !== optionCount) {
+    const k = Math.min(required ?? Number(rule[2]), optionCount);
+    text = text.replace(rule[0], `${rule[1]}${k}${rule[3]}${optionCount}`);
+  }
+  return text;
 }
 
 type ChoiceRule = {
@@ -86,8 +120,10 @@ type QuotaGroup = {
  * - current term = the term being studied (studyTermCode: the term after the latest graded one with registrations
  *   without grades, else the latest graded term); an item is due when its term ≤ current term, so a course planned
  *   for the term being studied but not registered is late;
- * - GDTC slots (DGT0010/DGT0020, "GDTC1") count passed PE electives;
- * - "Chọn k …" sections need k courses; sections without k or "(Không tính vào tích lũy)" are never late;
+ * - GDTC slots (DGT0010/DGT0020, "GDTC1") count passed PE electives; a slot with courses named for it ("Giáo dục thể chất
+ *   (1)", K26–K28) is met by one of those (v17);
+ * - "Chọn k …" sections need k courses; sections without k or "(Không tính vào tích lũy)" are never late; their labels are
+ *   spaced and say the real number of options (choiceLabel, v17);
  * - each passed course is allocated to one choice section only, earliest first, then same-group substitutes;
  * - elective items outside choice sections (TC406) form one quota choice in credits;
  * - applicability comes from the curriculum (PlanCourseInfo.applicable), never from section labels;
@@ -183,6 +219,15 @@ export function planProgress(args: {
   const peOngoing = peCourses.filter((course) => ongoing(course.state)).length;
   const peCredits = (item: PlanItem) => item.credits ?? minCredits(peCourses);
   const slotLabel = (item: PlanItem, number: number) => item.name.trim() || `GDTC ${number}`;
+  // A slot whose courses are named for it (K26–K28 "Giáo dục thể chất (1)", v17) is met by one of them; any other slot by
+  // the number of PE courses (TC002/TC102 electives) passed, or passed and in progress.
+  const namedSlotCourses = (number: number) => (args.physicalEducationGroups[namedSlotKey(number)] ?? [])
+    .map((code) => courses.get(courseKey(code))).filter((course): course is PlanCourseInfo => Boolean(course));
+  const slotMet = (number: number, accept: (state: CourseState) => boolean, count: number) => {
+    const named = namedSlotCourses(number);
+    return named.length ? named.some((course) => accept(course.state)) : count >= number;
+  };
+  const choiceText = (slot: ChoiceSlot) => choiceLabel(slot.section.label, slot.need, slot.options.length);
 
   const late: LateEntry[] = [];
   let lateCount = 0, lateCredits = 0;
@@ -199,7 +244,7 @@ export function planProgress(args: {
     if (!due(slot.section.termCode) || missing <= 0) continue;
     const missingCredits = missing * minCredits(slot.options);
     timed.push({ term: slot.section.termCode, order: order++, entry: {
-      kind: "choice", label: slot.section.label, termCode: slot.section.termCode, required: slot.need, unit: "course",
+      kind: "choice", label: choiceText(slot), termCode: slot.section.termCode, required: slot.need, unit: "course",
       missing, missingCredits, options: slot.options.map(ref),
     } });
     lateCount += missing; lateCredits += missingCredits;
@@ -217,7 +262,7 @@ export function planProgress(args: {
     lateCount += missing; lateCredits += missingCredits;
   }
   for (const { item, number } of slots) {
-    if (!due(item.termCode) || pePassed + peOngoing >= number) continue;
+    if (!due(item.termCode) || slotMet(number, (state) => done(state) || ongoing(state), pePassed + peOngoing)) continue;
     const credits = peCredits(item);
     timed.push({ term: item.termCode, order: order++, entry: {
       kind: "physical_education", label: slotLabel(item, number), termCode: item.termCode, required: number, passed: pePassed, missingCredits: credits,
@@ -230,18 +275,19 @@ export function planProgress(args: {
   const termCodes = [...new Set([...args.plan.terms.map((term) => term.code), ...items.map((item) => item.termCode)])].sort();
   const nextTerm = termCodes.find((term) => currentTerm === null || term > currentTerm) ?? null;
   const next: NextEntry[] = [];
-  let nextCredits = 0;
+  // Courses, not entries (v17): K30's "3 courses + Chọn 2 trong 4" is 5, it read 4.
+  let nextCount = 0, nextCredits = 0;
   if (nextTerm) {
     for (const { course, termCode } of plain.values()) {
       if (termCode !== nextTerm || done(course.state)) continue;
       next.push({ kind: "course", code: course.code, name: course.name, credits: course.credits, state: course.state });
-      nextCredits += course.credits;
+      nextCount++; nextCredits += course.credits;
     }
     for (const slot of choiceSlots) {
       const remaining = slot.need - slot.done - slot.ongoing;
       if (slot.section.termCode !== nextTerm || remaining <= 0) continue;
-      next.push({ kind: "choice", label: slot.section.label, required: slot.need, unit: "course", remaining, options: slot.options.map(ref) });
-      nextCredits += remaining * minCredits(slot.options);
+      next.push({ kind: "choice", label: choiceText(slot), required: slot.need, unit: "course", remaining, options: slot.options.map(ref) });
+      nextCount += remaining; nextCredits += remaining * minCredits(slot.options);
     }
     for (const group of quotaGroups.values()) {
       if (group.quota === null || !group.items.some((entry) => entry.termCode === nextTerm)) continue;
@@ -249,22 +295,24 @@ export function planProgress(args: {
       if (remaining <= 0) continue;
       const options = group.items.map((entry) => entry.course).filter((course) => !done(course.state));
       next.push({ kind: "choice", label: `Nhóm tự chọn ${group.code}: chọn ${group.quota} tín chỉ`, required: group.quota, unit: "credit", remaining, options: options.map(ref) });
+      // As many courses as the credits take with the group's largest course, like a late credit choice.
+      nextCount += Math.max(1, Math.ceil(remaining / Math.max(maxCredits(group.items.map((entry) => entry.course)), 1)));
       nextCredits += remaining;
     }
     for (const { item, number } of slots) {
-      if (item.termCode !== nextTerm || pePassed >= number) continue;
+      if (item.termCode !== nextTerm || slotMet(number, done, pePassed)) continue;
       next.push({ kind: "physical_education", label: slotLabel(item, number), required: number, passed: pePassed });
-      nextCredits += peCredits(item);
+      nextCount++; nextCredits += peCredits(item);
     }
   }
 
-  const informationalSections = [...informational.values()].map((entry) => ({ label: entry.label, termCode: entry.termCode, options: entry.options.map(ref) }));
+  const informationalSections = [...informational.values()].map((entry) => ({ label: choiceLabel(entry.label), termCode: entry.termCode, options: entry.options.map(ref) }));
   for (const group of quotaGroups.values()) {
     if (group.quota !== null) continue;
     informationalSections.push({ label: `Nhóm tự chọn ${group.code}`, termCode: group.dueTerm, options: group.items.map((entry) => ref(entry.course)) });
   }
   return {
-    currentTerm, nextTerm, late, lateCount, lateCredits, next, nextCount: next.length, nextCredits,
+    currentTerm, nextTerm, late, lateCount, lateCredits, next, nextCount, nextCredits,
     informationalSections, countMismatches,
   };
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { academicSections, latestResultSection, printedSemesterGpa } from "./student-overview-data";
+import { academicSections, foldText, formatUpdatedAt, latestResultSection, printedSemesterGpa, profileSectionOf } from "./student-overview-data";
 import type { Transcript } from "./StudentTranscript";
 
 type Section = Transcript["data"]["sections"][number];
@@ -34,5 +34,28 @@ describe("student overview academic data", () => {
     expect(printedSemesterGpa(term)).toBe("3.41");
     term.summaries.pop();
     expect(printedSemesterGpa(term)).toBeNull();
+  });
+  it("reads the semester GPA also when the label is written out", () => {
+    const term = section("2025-2026/HK02", 9);
+    term.summaries = [{ label: "Điểm trung bình tích lũy hệ 4", value: "3.10" }, { label: "Điểm trung bình học kỳ hệ 4", value: "3.52" }];
+    expect(printedSemesterGpa(term)).toBe("3.52");
+    term.summaries = [{ label: "Điểm trung bình học kỳ hệ 10", value: "8.10" }];
+    expect(printedSemesterGpa(term)).toBeNull();
+  });
+});
+
+describe("profile helpers", () => {
+  it("folds Vietnamese marks and đ for matching", () => {
+    expect(foldText("Đồ án Tốt nghiệp")).toBe("do an tot nghiep");
+    expect(foldText("ĐIỂM TB HỌC KỲ")).toBe("diem tb hoc ky");
+  });
+  it("writes update times as HH:mm dd/MM/yyyy in Vietnam time, without seconds", () => {
+    expect(formatUpdatedAt("2026-10-22T21:02:43.000Z")).toBe("04:02 23/10/2026");
+    expect(formatUpdatedAt("2026-10-23T17:00:05.000Z")).toBe("00:00 24/10/2026");
+    expect(formatUpdatedAt("not a date")).toBe("—");
+  });
+  it("opens the section of Hồ sơ và bảng điểm that holds each required item", () => {
+    expect(["transcript", "specialty", "career", "survey", "other"].map(profileSectionOf))
+      .toEqual(["bang-diem", "muc-tieu-hoc-tap", "muc-tieu-hoc-tap", "khao-sat-dinh-huong", undefined]);
   });
 });

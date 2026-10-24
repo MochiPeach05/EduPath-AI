@@ -1,14 +1,16 @@
 import StudentPlans from "./StudentPlans";
 import StudentGraduation from "./StudentGraduation";
-import { Suspense, lazy, useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import EduPathBrand from "./EduPathBrand";
 import { layoutHeight } from "./page-scale";
 import StudentProfileEditor from "./StudentProfileEditor";
 import StudentProfileSurvey from "./StudentProfileSurvey";
 import StudentTranscript from "./StudentTranscript";
 import StudentCurriculum from "./StudentCurriculum";
-import StudentOverview, { requiredProfileItems, type StudentProfile } from "./StudentOverview";
+import StudentOverview, { requiredProfileItems, revealProfileSection, type StudentProfile } from "./StudentOverview";
+import { profileSectionOf } from "./student-overview-data";
 import { logout } from "./auth-api";
+import { publicInformationLinks, supportEmail } from "./public-information";
 import { Icon } from "./student-icons";
 import type { AuthenticatedUser } from "./types";
 import "./student-workspace.css";
@@ -28,27 +30,73 @@ const pages = [
   { id: "career", label: "Định hướng nghề nghiệp", icon: "compass" },
   { id: "roadmap", label: "Lộ trình học tập", icon: "route" },
   { id: "curriculum", label: "Chương trình đào tạo", icon: "book" },
-  { id: "plans", label: "Kế hoạch đào tạo", icon: "book" },
+  { id: "plans", label: "Kế hoạch đào tạo", icon: "clock" },
   { id: "graduation", label: "Điều kiện xét tốt nghiệp", icon: "shield" },
   { id: "assistant", label: "Trợ lý AI", icon: "spark" }
 ] as const;
-type Page = typeof pages[number]["id"];
+export type StudentPage = typeof pages[number]["id"];
+type Page = StudentPage;
 // The main nav only carries the core journey; profile, curriculum, plans and graduation live in the account menu instead.
 const navPageIds = new Set<Page>(["overview", "competency", "skill-gap", "career", "roadmap", "assistant"]);
 const navPages = pages.filter(p => navPageIds.has(p.id));
+const accountPages = pages.filter(p => !navPageIds.has(p.id));
+// Below the desktop zoom (1200px, styles.css) the header nav does not fit: the drawer is the menu and overlays the page.
+const overlayDrawerQuery = "(max-width: 1199.98px)";
 type Profile = StudentProfile;
-function currentPage(): Page {
-  const hash = window.location.hash.slice(1);
-  return pages.find(p => p.id === hash)?.id ?? "overview";
+type Panel = "notifications" | "help" | "account";
+type ShellError = { kind: "session" | "profile" | "logout"; message: string };
+const sessionExpired: ShellError = { kind: "session", message: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại." };
+const profileFailed: ShellError = { kind: "profile", message: "Chưa tải được hồ sơ của bạn." };
+
+/** The page a URL hash opens: the overview for an empty hash, null for a hash that names no page. */
+export function pageFromHash(hash: string): Page | null {
+  const id = hash.replace(/^#/, "");
+  return id ? pages.find(p => p.id === id)?.id ?? null : "overview";
 }
+
+/**
+ * The name to show. Microsoft gives students the display name "MSSV - Họ tên - Lớp"
+ * (e.g. "2174802010992 - Nguyễn Văn An - 71K27CNTT01"); only the name part is shown.
+ */
+export function studentDisplayName(raw: string): string {
+  const name = raw.trim();
+  const parts = name.split(/\s+[-–]\s+/).filter(Boolean);
+  if (parts.length >= 3) return parts.slice(1, -1).join(" - ");
+  if (parts.length === 2) return /^\d+$/.test(parts[0]) ? parts[1] : /^\d{2}K\d{2}/i.test(parts[1]) ? parts[0] : name;
+  return name;
+}
+
+/**
+ * Up to two initials, from the last two words that start with a capital letter (any letter when none does), so a
+ * student code, a class code or a stray "-" never shows up: "Sinh viên Thử nghiệm K27" gives "TK".
+ */
+export function nameInitials(name: string): string {
+  const words = name.normalize("NFC").split(/\s+/).filter(word => /^\p{L}/u.test(word));
+  const capitalised = words.filter(word => /^\p{Lu}/u.test(word));
+  return (capitalised.length > 0 ? capitalised : words).slice(-2).map(word => word[0]).join("").toLocaleUpperCase("vi");
+}
+
 const featureCopy: Partial<Record<Page, { title: string; text: string; steps: string[] }>> = {
   assistant: { title: "Một người bạn đồng hành trong học tập", text: "Trợ lý AI sẽ giúp giải thích kết quả đánh giá và lý do đề xuất học phần, đồng thời tư vấn kỹ năng nên tự học.", steps: ["Giải thích kết quả năng lực", "Hỏi đáp về lộ trình", "Gợi ý tài nguyên học tập"] }
 };
 
+// "?" help: one short step per page, in the order a new student needs them.
+const helpSteps: [string, string][] = [
+  ["Hồ sơ và bảng điểm", "Import bảng điểm, chọn chuyên ngành và làm Khảo sát định hướng."],
+  ["Định hướng nghề nghiệp", "xem các nghề hợp với bạn và chọn nghề mục tiêu."],
+  ["Đánh giá năng lực", "bấm Đánh giá năng lực để xem điểm theo nhóm năng lực và mức thành thạo từng kỹ năng."],
+  ["Khoảng trống kỹ năng", "xem kỹ năng còn thiếu so với nghề mục tiêu và học phần nên học."],
+  ["Lộ trình học tập", "theo dõi tiến độ, nhờ EduPath AI soạn lộ trình 3 tháng và lên kế hoạch các học kỳ tới."],
+  ["Chương trình đào tạo, Kế hoạch đào tạo và Điều kiện xét tốt nghiệp", "tra cứu học phần, kế hoạch từng học kỳ và tự kiểm tra điều kiện xét tốt nghiệp (trong menu tài khoản)."]
+];
+
 export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) {
-  const [page, setPage] = useState<Page>(currentPage);
+  const [page, setPage] = useState<Page>(() => pageFromHash(window.location.hash) ?? "overview");
+  // The page on screen, for the hashchange listener (which outlives renders).
+  const pageRef = useRef(page);
   const [menu, setMenu] = useState(false);
-  const [panel, setPanel] = useState<"notifications" | "help" | "account" | null>(null);
+  const [panel, setPanel] = useState<Panel | null>(null);
+  const [focusRequest, setFocusRequest] = useState(0);
   const headerRef = useRef<HTMLElement>(null);
   useEffect(() => {
     const header = headerRef.current;
@@ -60,35 +108,92 @@ export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) 
     return () => resize.disconnect();
   }, []);
   const navigationButton = useRef<HTMLButtonElement>(null);
+  const drawerRef = useRef<HTMLElement>(null);
   const accountRef = useRef<HTMLDivElement>(null);
   const accountButton = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLElement>(null);
+  // What opened the current panel: focus goes back there when the panel is closed with Esc or Đóng.
+  const panelOpener = useRef<HTMLElement | null>(null);
+  const mainRef = useRef<HTMLElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const openPanel = (next: Panel, opener: HTMLElement | null) => { panelOpener.current = opener; setPanel(next); };
+  const closePanel = (restoreFocus: boolean) => { setPanel(null); if (restoreFocus) panelOpener.current?.focus(); };
   useEffect(() => {
-    const dismiss = (event: PointerEvent) => { if (!accountRef.current?.contains(event.target as Node)) setPanel(p => p === "account" ? null : p); };
-    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") { if (panel === "account") accountButton.current?.focus(); if (menu) navigationButton.current?.focus(); setPanel(null); setMenu(false); } };
+    if (!panel && !menu) return;
+    // A click outside closes the open panel; a click on its own trigger is left to the trigger, which toggles it.
+    const dismiss = (event: PointerEvent) => {
+      const target = event.target as Node;
+      const outside = panel === "account" ? !accountRef.current?.contains(target)
+        : panel !== null && !popoverRef.current?.contains(target) && !panelOpener.current?.contains(target);
+      if (outside) setPanel(null);
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (panel) closePanel(true);
+      else if (menu) { setMenu(false); navigationButton.current?.focus(); }
+    };
     document.addEventListener("pointerdown", dismiss); document.addEventListener("keydown", escape);
     return () => { document.removeEventListener("pointerdown", dismiss); document.removeEventListener("keydown", escape); };
   }, [panel, menu]);
+  // The help and notification panels take focus when they open, so screen readers read them.
+  useEffect(() => {
+    if (panel === "help" || panel === "notifications") popoverRef.current?.focus({ preventScroll: true });
+  }, [panel]);
+  // The drawer overlays the page below the desktop width: opening it moves focus to its first link.
+  useEffect(() => {
+    if (menu && window.matchMedia(overlayDrawerQuery).matches) drawerRef.current?.querySelector<HTMLElement>("nav a")?.focus();
+  }, [menu]);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<ShellError | null>(null);
   const [reload, setReload] = useState(0);
   const [loggingOut, setLoggingOut] = useState(false);
+  // Every page change starts at the top of the new page. The scroll happens right away, inside the click or the
+  // hashchange, so a page that scrolls somewhere on purpose afterwards (e.g. to the transcript) wins.
+  const showNewPage = (id: Page) => {
+    pageRef.current = id;
+    setPage(id);
+    setPanel(null);
+    if (window.matchMedia(overlayDrawerQuery).matches) setMenu(false);
+    window.scrollTo({ top: 0, left: 0, behavior: "instant" });
+    setFocusRequest(n => n + 1);
+  };
   useEffect(() => {
+    // A reload with a hash that names no page opens the overview, and the address says so.
+    if (pageFromHash(window.location.hash) === null) window.history.replaceState(window.history.state, "", "#overview");
+    // Back and forward open a page like any other page change, at its top: the browser would otherwise put back the old
+    // scroll position after the page has been shown.
+    const restoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
     const update = () => {
-      const hash = window.location.hash.slice(1);
-      if (!hash || pages.some(p => p.id === hash)) setPage(currentPage());
       setPanel(null);
+      const next = pageFromHash(window.location.hash);
+      // Not a page (e.g. an in-page anchor): keep the page shown and put its hash back, so a reload opens it again.
+      if (next === null) { window.history.replaceState(window.history.state, "", `#${pageRef.current}`); return; }
+      // navigate() has already shown the page whose hash it set.
+      if (next !== pageRef.current) showNewPage(next);
     };
     window.addEventListener("hashchange", update);
-    return () => window.removeEventListener("hashchange", update);
+    return () => { window.removeEventListener("hashchange", update); window.history.scrollRestoration = restoration; };
   }, []);
+  // After a page change, focus moves to the new heading for screen readers, unless the new page has already put focus
+  // inside its own content on purpose.
+  useEffect(() => {
+    if (!focusRequest) return;
+    const active = document.activeElement;
+    if (active && active !== mainRef.current && mainRef.current?.contains(active)) return;
+    headingRef.current?.focus({ preventScroll: true });
+  }, [focusRequest]);
   useEffect(() => {
     const controller = new AbortController();
-    setLoading(true); setError("");
+    setLoading(true); setError(null);
     fetch("/api/student/profile", { credentials: "include", signal: controller.signal })
-      .then(async r => { if (!r.ok) throw new Error(r.status === 401 ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại." : "Chưa tải được hồ sơ của bạn."); return r.json() as Promise<{ student: Profile }>; })
-      .then(data => setProfile(data.student))
-      .catch((e: unknown) => { if (!controller.signal.aborted) setError(e instanceof Error ? e.message : "Không thể tải hồ sơ."); })
+      .then(async response => {
+        if (!response.ok) { if (!controller.signal.aborted) setError(response.status === 401 ? sessionExpired : profileFailed); return; }
+        const data = await response.json() as { student: Profile };
+        if (!controller.signal.aborted) setProfile(data.student);
+      })
+      .catch(() => { if (!controller.signal.aborted) setError(profileFailed); })
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [reload]);
@@ -98,28 +203,45 @@ export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) 
     if (firstPage.current) { firstPage.current = false; return; }
     const controller = new AbortController();
     fetch("/api/student/profile", { credentials: "include", signal: controller.signal })
-      .then(r => r.ok ? r.json() as Promise<{ student: Profile }> : null)
-      .then(data => { if (data && !controller.signal.aborted) setProfile(data.student); })
+      .then(async response => {
+        if (controller.signal.aborted) return;
+        if (response.status === 401) { setError(sessionExpired); return; }
+        if (!response.ok) return;
+        const data = await response.json() as { student: Profile };
+        if (!controller.signal.aborted) setProfile(data.student);
+      })
       .catch(() => undefined);
     return () => controller.abort();
   }, [page]);
-  useEffect(() => { document.title = `${pages.find(p => p.id === page)?.label} · EduPath AI`; }, [page]);
-  const name = profile?.name ?? user.name;
-  const initials = name.split(/\s+/).filter(Boolean).slice(-2).map(s => s[0]).join("").toUpperCase();
+  // The student pages announce a 401 with this event (the admin portal listens for it too).
+  useEffect(() => {
+    const expired = () => setError(sessionExpired);
+    window.addEventListener("edupath-session-expired", expired);
+    return () => window.removeEventListener("edupath-session-expired", expired);
+  }, []);
   const selected = pages.find(p => p.id === page)!;
+  useEffect(() => { document.title = `${selected.label} · EduPath AI`; }, [selected.label]);
+  const name = studentDisplayName(profile?.name ?? user.name);
+  // A neutral avatar until the profile answers, then initials (from the account name if the profile cannot be read).
+  const initials = loading && !profile ? "" : nameInitials(name);
+  const avatar = initials || <Icon name="user" />;
+  const email = profile?.email ?? user.email;
   const navigate = (id: Page) => {
+    // The hashchange that follows finds the page already shown and leaves it alone.
     window.location.hash = id;
-    setPage(id);
-    setPanel(null);
-    if (window.matchMedia("(max-width: 700px)").matches) {
-      setMenu(false);
-      navigationButton.current?.focus();
-    }
+    showNewPage(id);
+  };
+  // Page links navigate in place; a modified click still opens a new tab or window.
+  const followLink = (id: Page) => (event: ReactMouseEvent<HTMLAnchorElement>) => {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+    event.preventDefault();
+    navigate(id);
   };
   const exit = async () => {
     setLoggingOut(true);
+    setError(current => current?.kind === "logout" ? null : current);
     try { await logout(); }
-    catch { setError("Đăng xuất chưa thành công. Vui lòng thử lại."); setLoggingOut(false); }
+    catch { setError({ kind: "logout", message: "Đăng xuất chưa thành công. Vui lòng thử lại." }); setLoggingOut(false); }
   };
   // "Hồ sơ của bạn chưa đầy đủ" (user 2026-10-24: not at the top of the page, "để trên xấu quá"): under the result panel
   // of Đánh giá năng lực / Khoảng trống kỹ năng, under the tabs of Lộ trình học tập, under the heading elsewhere.
@@ -131,31 +253,78 @@ export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) 
       <p>Bạn vui lòng cung cấp đầy đủ các mục thông tin dưới đây để kết quả đánh giá được chính xác. Nếu có sự thay đổi, bạn có thể điều chỉnh lại các thông tin này trong tương lai.</p>
       {missingItems.length > 0 && <ul className="sw-profile-missing" aria-label="Mục còn thiếu">{missingItems.map((item) => <li key={item.id}>{item.label}</li>)}</ul>}
     </div>
-    <button className="sw-outline" onClick={() => navigate("profile")}>Hoàn thành hồ sơ</button>
+    <button className="sw-outline" onClick={() => {
+      const section = missingItems[0] && profileSectionOf(missingItems[0].id);
+      navigate("profile");
+      if (section) revealProfileSection(section);
+    }}>Hoàn thành hồ sơ</button>
   </div> : null;
-  const fields = { "Mã sinh viên": profile?.studentCode, "Khóa học": profile?.cohortCode, "Lớp học": profile?.className, "Năm nhập học": profile?.cohortYear, "Email": profile?.email ?? user.email };
-  const profileCard = <section className="sw-panel sw-profile"><div className="sw-section-heading"><h2>Thông tin học tập</h2><span className="sw-tag">Hồ sơ của bạn</span></div><div className="sw-profile-intro"><span className="sw-avatar sw-avatar-large">{initials}</span><div><h3>{name}</h3><p>{profile?.email ?? user.email ?? "Chưa cập nhật email"}</p></div></div><dl className="sw-fields">{Object.entries(fields).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{loading ? "Đang tải…" : value ?? "Chưa cập nhật"}</dd></div>)}</dl></section>;
+  const fields = { "Mã sinh viên": profile?.studentCode, "Khóa học": profile?.cohortCode, "Lớp học": profile?.className, "Năm nhập học": profile?.cohortYear, "Email": email };
+  const profileCard = <section className="sw-panel sw-profile"><div className="sw-section-heading"><h2>Thông tin học tập</h2><span className="sw-tag">Hồ sơ của bạn</span></div><div className="sw-profile-intro"><span className="sw-avatar sw-avatar-large">{avatar}</span><div><h3>{name}</h3><p>{email ?? "Chưa cập nhật email"}</p></div></div><dl className="sw-fields">{Object.entries(fields).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{loading ? "Đang tải…" : value ?? "Chưa cập nhật"}</dd></div>)}</dl></section>;
+  const popoverOpen = panel === "help" || panel === "notifications";
   return <div className="sw-shell">
-    <a className="sw-skip" href="#student-main">Chuyển đến nội dung chính</a>
+    <a className="sw-skip" href="#student-main" onClick={event => { event.preventDefault(); mainRef.current?.focus(); }}>Chuyển đến nội dung chính</a>
     <div className="sw-workspace">
-      <header ref={headerRef} className="sw-topbar"><button ref={navigationButton} className="sw-icon-button sw-menu-button" aria-label={menu ? "Ẩn menu bên trái" : "Hiện menu bên trái"} aria-controls="student-sidebar" aria-expanded={menu} onClick={() => setMenu(!menu)}><Icon name="menu" /></button><div className="sw-header-brand"><EduPathBrand href="/dashboard" /></div><nav id="student-navigation" className="sw-header-nav" aria-label="Điều hướng sinh viên">{navPages.map(p => <a key={p.id} href={`#${p.id}`} aria-current={page === p.id ? "page" : undefined} onClick={() => navigate(p.id)}><span>{p.label}</span></a>)}</nav><div className="sw-tools"><button className="sw-icon-button" aria-label="Hướng dẫn" aria-expanded={panel === "help"} onClick={() => setPanel(panel === "help" ? null : "help")}><Icon name="help" /></button><button className="sw-icon-button" aria-label="Thông báo" aria-expanded={panel === "notifications"} onClick={() => setPanel(panel === "notifications" ? null : "notifications")}><Icon name="bell" /></button><div className="sw-account" ref={accountRef} onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setPanel(p => p === "account" ? null : p); }}><button ref={accountButton} className="sw-avatar" aria-label={`Tài khoản ${name}`} aria-expanded={panel === "account"} aria-controls="student-account-menu" onClick={() => setPanel(panel === "account" ? null : "account")}>{initials}</button>{panel === "account" && <div id="student-account-menu" className="sw-account-dropdown"><strong>{name}</strong><span>{profile?.email ?? user.email}</span><a href="#profile" onClick={() => navigate("profile")}><Icon name="user" />Hồ sơ và bảng điểm</a><a href="#curriculum" onClick={() => navigate("curriculum")}><Icon name="book" />Chương trình đào tạo</a><a href="#plans" onClick={() => navigate("plans")}><Icon name="book" />Kế hoạch đào tạo</a><a href="#graduation" onClick={() => navigate("graduation")}><Icon name="shield" />Điều kiện xét tốt nghiệp</a><button disabled={loggingOut} onClick={() => void exit()}><Icon name="logout" />{loggingOut ? "Đang đăng xuất…" : "Đăng xuất"}</button></div>}</div></div>{panel && panel !== "account" && <section className="sw-popover"><button className="sw-icon-button sw-popover-close" onClick={() => setPanel(null)} aria-label="Đóng" title="Đóng"><Icon name="close" /></button><h3>{panel === "help" ? "Bắt đầu với EduPath AI" : "Thông báo"}</h3><p>{panel === "help" ? "Import bảng điểm, chọn nghề mục tiêu, chuyên ngành và làm Khảo sát định hướng tại Hồ sơ và bảng điểm, rồi mở Đánh giá năng lực để xem điểm theo nhóm năng lực và mức thành thạo, và Khoảng trống kỹ năng để xem kỹ năng còn thiếu so với nghề mục tiêu cùng học phần nên học. Lộ trình học tập cho bạn theo dõi tiến độ theo yêu cầu của chương trình, nhờ EduPath AI soạn lộ trình 3 tháng và lên kế hoạch các học kỳ tới từ đề xuất đó; Trợ lý AI sẽ được bổ sung sau." : "Chức năng thông báo học tập đang được phát triển."}</p></section>}</header>
+      <header ref={headerRef} className="sw-topbar">
+        <button ref={navigationButton} type="button" className="sw-icon-button sw-menu-button" aria-label={menu ? "Ẩn menu bên trái" : "Hiện menu bên trái"} aria-controls={menu ? "student-sidebar" : undefined} aria-expanded={menu} onClick={() => setMenu(!menu)}><Icon name="menu" /></button>
+        <div className="sw-header-brand"><EduPathBrand href="/dashboard" /></div>
+        <nav id="student-navigation" className="sw-header-nav" aria-label="Điều hướng sinh viên">{navPages.map(p => <a key={p.id} href={`#${p.id}`} aria-current={page === p.id ? "page" : undefined} onClick={followLink(p.id)}><span>{p.label}</span></a>)}</nav>
+        <div className="sw-tools">
+          <button type="button" className="sw-icon-button" aria-label="Hướng dẫn" aria-haspopup="dialog" aria-expanded={panel === "help"} aria-controls={panel === "help" ? "student-help-panel" : undefined} onClick={event => panel === "help" ? closePanel(true) : openPanel("help", event.currentTarget)}><Icon name="help" /></button>
+          <button type="button" className="sw-icon-button" aria-label="Thông báo" aria-haspopup="dialog" aria-expanded={panel === "notifications"} aria-controls={panel === "notifications" ? "student-notifications-panel" : undefined} onClick={event => panel === "notifications" ? closePanel(true) : openPanel("notifications", event.currentTarget)}><Icon name="bell" /></button>
+          <div className="sw-account" ref={accountRef} onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setPanel(p => p === "account" ? null : p); }}>
+            {/* The ring marks the avatar while the page on screen is one of its menu items. */}
+            <button ref={accountButton} type="button" className={`sw-avatar${accountPages.some(p => p.id === page) ? " sw-avatar-here" : ""}`} aria-label={`Tài khoản ${name}`} aria-expanded={panel === "account"} aria-controls={panel === "account" ? "student-account-menu" : undefined} onClick={event => panel === "account" ? setPanel(null) : openPanel("account", event.currentTarget)}>{avatar}</button>
+            {panel === "account" && <div id="student-account-menu" className="sw-account-dropdown">
+              <strong>{name}</strong><span>{email}</span>
+              {accountPages.map(p => <a key={p.id} href={`#${p.id}`} aria-current={page === p.id ? "page" : undefined} onClick={followLink(p.id)}><Icon name={p.icon} />{p.label}</a>)}
+              {/* Phones hide the "?" button in the header, so the help is offered here instead. */}
+              <button type="button" className="sw-account-help" onClick={() => openPanel("help", accountButton.current)}><Icon name="help" />Hướng dẫn</button>
+              <button type="button" disabled={loggingOut} onClick={() => void exit()}><Icon name="logout" />{loggingOut ? "Đang đăng xuất…" : "Đăng xuất"}</button>
+            </div>}
+          </div>
+        </div>
+        {popoverOpen && <section ref={popoverRef} id={panel === "help" ? "student-help-panel" : "student-notifications-panel"} className="sw-popover" role="dialog" aria-labelledby={panel === "help" ? "student-help-title" : "student-notifications-title"} tabIndex={-1}>
+          <button type="button" className="sw-icon-button sw-popover-close" onClick={() => closePanel(true)} aria-label="Đóng" title="Đóng"><Icon name="close" /></button>
+          {panel === "help" ? <>
+            <h3 id="student-help-title">Bắt đầu với EduPath AI</h3>
+            <ol className="sw-help-steps">{helpSteps.map(([where, what]) => <li key={where}><strong>{where}</strong>: {what}</li>)}</ol>
+            <p><strong>Trợ lý AI</strong> sẽ được bổ sung sau.</p>
+          </> : <>
+            <h3 id="student-notifications-title">Thông báo</h3>
+            <p>Chức năng thông báo học tập đang được phát triển.</p>
+          </>}
+        </section>}
+      </header>
       <div className={`sw-body ${menu ? "sw-body-menu-open" : ""}`}>
         {menu && <button className="sw-drawer-backdrop" aria-label="Đóng menu bên trái" tabIndex={-1} onClick={() => { setMenu(false); navigationButton.current?.focus(); }} />}
-        {menu && <aside id="student-sidebar" className="sw-drawer" aria-label="Menu bên trái"><div className="sw-drawer-heading"><strong>Danh mục học tập</strong></div><nav aria-label="Danh mục bên trái">{pages.map(p => <a key={p.id} href={`#${p.id}`} aria-current={page === p.id ? "page" : undefined} onClick={() => navigate(p.id)}>{p.label}</a>)}<a href="/">Về trang giới thiệu</a></nav><p>Hiểu năng lực.<br /><strong>Chủ động tương lai.</strong></p></aside>}
-        <div className="sw-body-content"><main className="sw-main" id="student-main" tabIndex={-1}>
-          {error && <div className="sw-error" role="alert">{error}<button onClick={() => setReload(n => n + 1)}>Thử lại</button></div>}
+        {menu && <aside ref={drawerRef} id="student-sidebar" className="sw-drawer" aria-label="Menu bên trái"><div className="sw-drawer-heading"><strong>Danh mục học tập</strong></div><nav aria-label="Danh mục bên trái">{pages.map(p => <a key={p.id} href={`#${p.id}`} aria-current={page === p.id ? "page" : undefined} onClick={followLink(p.id)}>{p.label}</a>)}<a href="/">Về trang giới thiệu</a></nav><p>Hiểu năng lực.<br /><strong>Chủ động tương lai.</strong></p></aside>}
+        <div className="sw-body-content"><main ref={mainRef} className="sw-main" id="student-main" tabIndex={-1}>
+          {error && <div className="sw-error" role="alert">
+            <span>{error.message}</span>
+            {error.kind === "session"
+              ? <a href={`/login?returnTo=/dashboard%23${page}`}>Đăng nhập lại</a>
+              : <button type="button" onClick={error.kind === "logout" ? () => void exit() : () => setReload(n => n + 1)}>Thử lại</button>}
+          </div>}
           <div className="sw-page-heading">
-            <div><p className="sw-eyebrow">CỔNG QUẢN LÝ HỌC TẬP</p><h1>{page === "overview" ? "Tổng quan học tập" : selected.label}</h1><p>{page === "overview" ? `Xin chào, ${name}. Cùng tiếp tục hành trình của bạn nhé.` : page === "profile" ? "Thông tin cá nhân và kết quả học tập của bạn, tại một nơi." : page === "plans" ? "Xem các học phần dự kiến theo năm học và học kỳ." : page === "roadmap" ? "Theo dõi tiến độ theo yêu cầu của chương trình, rồi tự lên kế hoạch các học kỳ tới hoặc để EduPath AI soạn lộ trình 3 tháng cho bạn." : page === "graduation" ? "Đối chiếu bảng điểm với tiêu chuẩn xét tốt nghiệp của khóa và chuyên ngành của bạn." : page === "curriculum" ? "Tra cứu học phần, tín chỉ và điều kiện học theo chương trình đào tạo." : page === "competency" ? "Điểm theo nhóm năng lực, mức thành thạo từng kỹ năng, tiến độ học tập và xét tốt nghiệp, tính từ bảng điểm của bạn." : page === "skill-gap" ? "So sánh năng lực của bạn với yêu cầu của nghề mục tiêu: kỹ năng còn thiếu, mức thiếu hụt, học phần nên học và kỹ năng cần tự học." : page === "career" ? "Gợi ý nghề phù hợp với năng lực và sở thích của bạn, so sánh các nghề và chọn nghề mục tiêu." : "Khám phá bước tiếp theo trên hành trình học tập của bạn."}</p></div>
-            {page === "overview" && <button className="sw-outline" onClick={() => navigate("profile")}>Xem hồ sơ của tôi <Icon name="arrow" /></button>}
+            <div><p className="sw-eyebrow">CỔNG QUẢN LÝ HỌC TẬP</p><h1 ref={headingRef} tabIndex={-1}>{selected.label}</h1><p>{page === "overview" ? `Xin chào, ${name}. Cùng tiếp tục hành trình của bạn nhé.` : page === "profile" ? "Thông tin cá nhân và kết quả học tập của bạn, tại một nơi." : page === "plans" ? "Xem các học phần dự kiến theo năm học và học kỳ." : page === "roadmap" ? "Theo dõi tiến độ theo yêu cầu của chương trình, rồi tự lên kế hoạch các học kỳ tới hoặc để EduPath AI soạn lộ trình 3 tháng cho bạn." : page === "graduation" ? "Đối chiếu bảng điểm với tiêu chuẩn xét tốt nghiệp của khóa và chuyên ngành của bạn." : page === "curriculum" ? "Tra cứu học phần, tín chỉ và điều kiện học theo chương trình đào tạo." : page === "competency" ? "Điểm theo nhóm năng lực, mức thành thạo từng kỹ năng, tiến độ học tập và xét tốt nghiệp, tính từ bảng điểm của bạn." : page === "skill-gap" ? "So sánh năng lực của bạn với yêu cầu của nghề mục tiêu: kỹ năng còn thiếu, mức thiếu hụt, học phần nên học và kỹ năng cần tự học." : page === "career" ? "Gợi ý nghề phù hợp với năng lực và sở thích của bạn, so sánh các nghề và chọn nghề mục tiêu." : "Khám phá bước tiếp theo trên hành trình học tập của bạn."}</p></div>
+            {page === "overview" && <button className="sw-outline" onClick={() => navigate("profile")}>Xem Hồ sơ và bảng điểm <Icon name="arrow" /></button>}
           </div>
-          {!["overview", "profile", "competency", "skill-gap", "roadmap"].includes(page) && reminder}
+          {/* Not on the Trợ lý AI placeholder either: nothing there depends on the profile yet. */}
+          {!["overview", "profile", "competency", "skill-gap", "roadmap", "assistant"].includes(page) && reminder}
           {page === "overview" ? <StudentOverview profile={profile} loading={loading} navigate={navigate} identity={
             <section className="so-student-strip" aria-label="Thông tin sinh viên">
-              <div className="so-student-identity"><span className="sw-avatar sw-avatar-large">{initials}</span><div><strong>{name}</strong><span>{profile?.email ?? user.email ?? "Chưa cập nhật email"}</span></div></div>
+              <div className="so-student-identity"><span className="sw-avatar sw-avatar-large">{avatar}</span><div><strong>{name}</strong><span>{email ?? "Chưa cập nhật email"}</span></div></div>
               <dl><div><dt>Mã sinh viên</dt><dd>{loading ? "Đang tải…" : profile?.studentCode ?? "Chưa cập nhật"}</dd></div><div><dt>Khóa · Lớp</dt><dd>{loading ? "Đang tải…" : [profile?.cohortCode, profile?.className].filter(Boolean).join(" · ") || "Chưa cập nhật"}</dd></div><div><dt>Năm nhập học</dt><dd>{loading ? "Đang tải…" : profile?.cohortYear ?? "Chưa cập nhật"}</dd></div></dl>
             </section>} />
-          : page === "profile" ? <div className="sr-profile-layout">{profileCard}{profile && <StudentProfileEditor profile={profile} onSaved={() => setReload(n => n + 1)} />}{profile && <StudentProfileSurvey onSaved={() => setReload(n => n + 1)} />}<StudentTranscript /></div> : page === "curriculum" ? <StudentCurriculum /> : page === "plans" ? <StudentPlans /> : page === "graduation" ? <StudentGraduation /> : page === "roadmap" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">Đang tải lộ trình học tập…</p></section>}><StudentRoadmap notice={reminder} /></Suspense> : page === "career" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">Đang tải định hướng nghề nghiệp…</p></section>}><StudentCareerGuidance onProfileChanged={() => setReload(n => n + 1)} /></Suspense> : page === "competency" || page === "skill-gap" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">{page === "skill-gap" ? "Đang tải trang khoảng trống kỹ năng…" : "Đang tải trang đánh giá năng lực…"}</p></section>}><StudentCompetency key={page} profile={profile} view={page === "skill-gap" ? "gap" : "competency"} notice={reminder} /></Suspense> : <section className="sw-panel sw-feature"><span className="sw-card-icon"><Icon name={selected.icon} /></span><span className="sw-tag">Sắp ra mắt</span><h2>{featureCopy[page]?.title}</h2><p>{featureCopy[page]?.text}</p><div className="sw-feature-steps">{featureCopy[page]?.steps.map((step, i) => <div key={step}><span>0{i + 1}</span><h3>{step}</h3></div>)}</div><p className="sw-muted">Chức năng này chưa sẵn sàng sử dụng. Bạn có thể xem thông tin học tập hiện có trong hồ sơ.</p><button className="sw-primary" onClick={() => navigate("profile")}>Xem hồ sơ học tập <Icon name="arrow" /></button></section>}
-          <footer className="sw-footer"><span>© 2026 · Bản quyền thuộc Khoa Công nghệ Thông tin · Trường Đại học Văn Lang.</span></footer>
+          : page === "profile" ? <div className="sr-profile-layout">{profileCard}{profile && <StudentProfileEditor profile={profile} onSaved={() => setReload(n => n + 1)} />}{profile && <StudentProfileSurvey onSaved={() => setReload(n => n + 1)} />}<StudentTranscript /></div> : page === "curriculum" ? <StudentCurriculum /> : page === "plans" ? <StudentPlans /> : page === "graduation" ? <StudentGraduation /> : page === "roadmap" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">Đang tải lộ trình học tập…</p></section>}><StudentRoadmap notice={reminder} /></Suspense> : page === "career" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">Đang tải định hướng nghề nghiệp…</p></section>}><StudentCareerGuidance onProfileChanged={() => setReload(n => n + 1)} /></Suspense> : page === "competency" || page === "skill-gap" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">{page === "skill-gap" ? "Đang tải trang khoảng trống kỹ năng…" : "Đang tải trang đánh giá năng lực…"}</p></section>}><StudentCompetency key={page} profile={profile} view={page === "skill-gap" ? "gap" : "competency"} notice={reminder} /></Suspense> : <section className="sw-panel sw-feature"><span className="sw-card-icon"><Icon name={selected.icon} /></span><span className="sw-tag">Sắp ra mắt</span><h2>{featureCopy[page]?.title}</h2><p>{featureCopy[page]?.text}</p><div className="sw-feature-steps">{featureCopy[page]?.steps.map((step, i) => <div key={step}><span>0{i + 1}</span><h3>{step}</h3></div>)}</div><p className="sw-muted">Chức năng này chưa sẵn sàng sử dụng. Bạn có thể xem thông tin học tập hiện có trong Hồ sơ và bảng điểm.</p><button className="sw-primary" onClick={() => navigate("profile")}>Xem Hồ sơ và bảng điểm <Icon name="arrow" /></button></section>}
+          <footer className="sw-footer">
+            <nav className="sw-footer-links" aria-label="Liên kết cuối trang">
+              {publicInformationLinks.map(link => <a key={link.href} href={link.href} target="_blank" rel="noreferrer">{link.label}<span className="sr-only"> (mở trong tab mới)</span></a>)}
+              <a href={`mailto:${supportEmail}`}>Hỗ trợ: {supportEmail}</a>
+            </nav>
+            <span>© 2026 · Bản quyền thuộc Khoa Công nghệ Thông tin · Trường Đại học Văn Lang.</span>
+          </footer>
         </main></div>
       </div>
     </div>

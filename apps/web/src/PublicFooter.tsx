@@ -1,6 +1,27 @@
+import { useEffect, useState } from "react";
+import { getCurrentUser } from "./auth-api";
 import EduPathBrand from "./EduPathBrand";
 import { publicInformationLinks } from "./public-information";
+import { canAccessAdmin } from "./types";
 import { Icon } from "./ui-icon";
+
+/** The way back for a signed-in visitor of the public pages. */
+export const portalLabel = "Quay lại cổng quản lý học tập";
+
+/**
+ * The portal of the signed-in visitor ("/dashboard" or "/quantri"), or null when nobody is signed in. Checked again
+ * when the page is shown or focused, so the public pages follow a sign-in or sign-out made in another tab.
+ */
+export function usePortalLink(): string | null {
+  const [portal, setPortal] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    const refresh = () => { void getCurrentUser().then(auth => { if (active) setPortal(auth.authenticated ? canAccessAdmin(auth.user.role) ? "/quantri" : "/dashboard" : null); }).catch(() => { if (active) setPortal(null); }); };
+    refresh(); window.addEventListener("pageshow", refresh); window.addEventListener("focus", refresh);
+    return () => { active = false; window.removeEventListener("pageshow", refresh); window.removeEventListener("focus", refresh); };
+  }, []);
+  return portal;
+}
 
 export default function PublicFooter({ home = false, portal }: { home?: boolean; portal?: string | null }) {
   const homePrefix = home ? "" : "/";
@@ -26,7 +47,7 @@ export default function PublicFooter({ home = false, portal }: { home?: boolean;
               <span className="sr-only"> (mở trong tab mới)</span>
             </a>
             <a href={portal ?? "/login"}>
-              {portal ? "Quay lại cổng quản lý học tập" : "Đăng nhập hệ thống"} <Icon name="arrow" />
+              {portal ? portalLabel : "Đăng nhập hệ thống"} <Icon name="arrow" />
             </a>
           </div>
         </div>

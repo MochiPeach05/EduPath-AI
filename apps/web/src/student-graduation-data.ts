@@ -136,18 +136,77 @@ export function groupInSentence(title: string): string {
 
 const unitWord = (unit: "môn" | "TC") => unit === "TC" ? "tín chỉ" : "môn";
 
+/** "Nhóm tự chọn TC124 và nhóm tự chọn TC206": one group the source file names after two codes. */
+const COMBINED_GROUP = /\b(TC\d{3})\s+và\s+(?:nhóm\s+)?(?:tự\s+chọn\s+)?(TC\d{3})\b/iu;
+
 /**
- * Display label per group of a standard without an evaluation: the server's rule (E1) — a
- * repeated name adds its course count and first course code in standard order.
+ * A standard group name as a student reads it, the server's rule (readableGroupName in
+ * apps/api/src/competency-assessment/graduation.ts): "(4TC)" goes, a "_" or "-" after the code becomes
+ * " – ", and a group named after two codes reads "TC124 + TC206". Codes stay as written.
+ */
+export function readableGroupName(name: string): string {
+  let text = name.normalize("NFC")
+    .replace(/\s*\(\s*\d+(?:[.,]\d+)?\s*TC\s*\)/giu, " ")
+    .replace(/\s*_+\s*/g, " – ")
+    .replace(/\b(TC\d{3})\s*-\s*/giu, "$1 – ")
+    .replace(/\s+[-–—]\s+/g, " – ");
+  while (COMBINED_GROUP.test(text)) text = text.replace(COMBINED_GROUP, "$1 + $2");
+  return text.replace(/\s+/g, " ").replace(/^[\s–-]+|[\s–-]+$/g, "");
+}
+
+/**
+ * Display label per group of a standard without an evaluation: the server's rule (E1) — the readable
+ * name; a repeated name adds its course count and first course code in standard order.
  */
 export function standardGroupLabels(standard: Pick<StudentGraduationStandard, "groups" | "courses">): Map<string, string> {
+  const readable = new Map(standard.groups.map((group) => [group.id, readableGroupName(group.name)]));
   const names = new Map<string, number>();
-  for (const group of standard.groups) names.set(group.name.trim(), (names.get(group.name.trim()) ?? 0) + 1);
+  for (const name of readable.values()) names.set(name, (names.get(name) ?? 0) + 1);
   return new Map(standard.groups.map((group) => {
-    if ((names.get(group.name.trim()) ?? 0) < 2) return [group.id, group.name];
+    const name = readable.get(group.id)!;
+    if ((names.get(name) ?? 0) < 2) return [group.id, name];
     const codes = standard.courses.filter((course) => course.groupId === group.id).map((course) => course.code.trim().toUpperCase());
-    return [group.id, `${group.name} · ${codes.length} học phần${codes[0] ? `, trong đó có ${codes[0]}` : ""}`];
+    return [group.id, `${name} · ${codes.length} học phần${codes[0] ? `, trong đó có ${codes[0]}` : ""}`];
   }));
+}
+
+/** The group codes a standard group's name holds, as it reads them: "TC209", or "TC124 + TC206" for a combined group. */
+const standardGroupCodes = (name: string): string | null => {
+  const codes = [...new Set((readableGroupName(name).match(/\bTC\d{3}\b/gi) ?? []).map((code) => code.toUpperCase()))];
+  return codes.length ? codes.join(" + ") : null;
+};
+
+/** Overlap of two code lists, the server's rule (matchStandardElectiveGroup): each side shares at least half of its codes. */
+function codeOverlap(a: readonly string[], b: readonly string[]): { shared: number; difference: number } | null {
+  const left = new Set(a.map((code) => code.trim().toUpperCase())), right = new Set(b.map((code) => code.trim().toUpperCase()));
+  const shared = [...left].filter((code) => right.has(code)).length;
+  if (!shared || shared * 2 < left.size || shared * 2 < right.size) return null;
+  return { shared, difference: left.size + right.size - 2 * shared };
+}
+
+export type StandardElectiveQuota = { credits: number; groupCode: string | null };
+
+/**
+ * The quota of each CTĐT elective group from the graduation standard (audit 2026-10-25: the curriculum page said "Xem quy
+ * định tín chỉ…" while the standard knows K29 TC209 = 9 TC): the standard elective group with the same courses, matched
+ * by codes like the server (TC309 ≡ TC209, TC406 ≡ TC306), with its minimum credits and its code(s). A CTĐT group without
+ * a match or a standard group without a minimum is left out.
+ */
+export function standardElectiveQuotas(
+  electives: readonly { code: string; courseCodes: readonly string[] }[],
+  standard: Pick<StudentGraduationStandard, "groups" | "courses"> | null,
+): Map<string, StandardElectiveQuota> {
+  const quotas = new Map<string, StandardElectiveQuota>();
+  for (const elective of electives) {
+    let best: { group: StudentGraduationStandard["groups"][number]; shared: number; difference: number } | null = null;
+    for (const group of standard?.groups ?? []) {
+      if (group.kind !== "elective") continue;
+      const match = codeOverlap(elective.courseCodes, standard!.courses.filter((course) => course.groupId === group.id).map((course) => course.code));
+      if (match && (!best || match.shared > best.shared || (match.shared === best.shared && match.difference < best.difference))) best = { group, ...match };
+    }
+    if (best && best.group.minimumCredits !== null) quotas.set(elective.code, { credits: best.group.minimumCredits, groupCode: standardGroupCodes(best.group.name) });
+  }
+  return quotas;
 }
 
 /* ------------------------------------------------------- standard section */
@@ -426,19 +485,41 @@ export function criteriaRows(evaluation: Pick<GraduationEvaluation, "groups" | "
 }
 
 /**
- * The graduation standard written out in full, as the document the student is checked against:
- * "Tiêu chuẩn xét tốt nghiệp <tên> — khóa K29, ngành Công nghệ thông tin, chuyên ngành …". The version is
- * not shown to students.
+ * A standard's name split into the file code of its source workbook and its title: "71K28CNTT_TiendohoctapQC1423 -
+ * Công nghệ thông tin" is "<file code> - <title>" (one word with a "_" or a digit before " - "). Any other name is all title.
+ */
+export function standardNameParts(name: string): { title: string; fileCode: string | null } {
+  const text = name.normalize("NFC").trim();
+  const match = /^(\S+)\s+[-–]\s+(.+)$/.exec(text);
+  return match && /[_\d]/.test(match[1]!) ? { title: match[2]!.trim(), fileCode: match[1]! } : { title: text, fileCode: null };
+}
+
+const STANDARD_PREFIX = /^tieu chuan xet tot nghiep\b/;
+
+/**
+ * The graduation standard written out in full, as the document the student is checked against (the page's title, audit
+ * 2026-10-25): "Tiêu chuẩn xét tốt nghiệp <tên> — khóa K29, ngành Công nghệ thông tin, chuyên ngành …". The file code
+ * (standardNameParts) is left out, so is a title that only repeats a class code ("K26T-CN") or the major and specialty
+ * ("K28: … - Công nghệ thông tin"): then it reads "Tiêu chuẩn xét tốt nghiệp khóa K28, ngành Công nghệ thông tin". The
+ * version is not shown to students.
  */
 export function standardDocumentName(standard: Pick<StudentGraduationStandard, "name" | "cohortCode" | "major" | "specialty">): string {
   const facts = [
     `khóa ${standard.cohortCode}`,
     standard.major.trim() ? `ngành ${standard.major.trim()}` : null,
     standard.specialty.trim() ? `chuyên ngành ${standard.specialty.trim()}` : null,
-  ].filter(Boolean);
-  const name = standard.name.trim();
-  return `${/^tieu chuan xet tot nghiep\b/.test(foldName(name)) ? name : `Tiêu chuẩn xét tốt nghiệp ${name}`} — ${facts.join(", ")}`;
+  ].filter(Boolean).join(", ");
+  const title = standardNameParts(standard.name).title.replace(/^K\d{2}[A-Z]*[-_]\s*(?=\S+\s)/, "");
+  const words = (text: string) => foldName(text).split(/[^a-z0-9]+/).filter(Boolean);
+  const known = new Set(words(`${standard.cohortCode} ${standard.major} ${standard.specialty}`));
+  const own = words(foldName(title).replace(STANDARD_PREFIX, ""));
+  const redundant = !/\s/.test(title) || own.every((word) => known.has(word));
+  if (redundant) return `Tiêu chuẩn xét tốt nghiệp ${facts}`;
+  return `${STANDARD_PREFIX.test(foldName(title)) ? title : `Tiêu chuẩn xét tốt nghiệp ${title}`} — ${facts}`;
 }
+
+/** The standard's notes without the "Ghi chú:" the source repeats under the page's own "Ghi chú" heading. */
+export const standardNotesText = (notes: string): string => notes.normalize("NFC").trim().replace(/^ghi\s*chú\s*[:：.-]?\s*/iu, "");
 
 export type SuggestionCourse = { key: string; code: string; name: string; credits: number | null; glyph: string; state: string; tone: Tone; detail: string | null };
 export type SuggestionItem = {
@@ -611,10 +692,13 @@ export function suggestionItems(evaluation: GraduationEvaluation): SuggestionIte
             : `Tích lũy thêm ít nhất ${formatNumber(remaining)} tín chỉ để đạt ${formatNumber(credits.required)} tín chỉ tích lũy.`,
     });
   }
-  if (evaluation.inProgress.length) {
+  // A course an earlier item already names (the thesis being written, a missing mandatory course) is not listed again.
+  const named = new Set(items.flatMap((item) => [...item.courses, ...(item.alternative?.courses ?? [])].map((course) => course.code)));
+  const ongoing = evaluation.inProgress.filter((course) => !named.has(course.code));
+  if (ongoing.length) {
     items.push({
-      key: "in-progress", text: `Hoàn thành ${formatNumber(evaluation.inProgress.length)} học phần đang học:`, coursesLabel: null,
-      courses: evaluation.inProgress.map(suggestionCourse), note: null,
+      key: "in-progress", text: `Hoàn thành ${formatNumber(ongoing.length)} học phần đang học:`, coursesLabel: null,
+      courses: ongoing.map(suggestionCourse), note: null,
     });
   }
   if (evaluation.unknownResults.length) {
@@ -681,9 +765,11 @@ export type CourseView = {
   groupId: string;
   groupTitle: string;
   /** Null without an evaluation (no transcript yet). */
-  row: GraduationCourseRow | null;
+  row: (GraduationCourseRow & GraduationCourseRowExtras) | null;
   /** A GPA retake candidate: "passed" = học cải thiện, "failed" = học lại. */
   improvement: "passed" | "failed" | null;
+  /** In an elective group that is already Đạt: the course is not needed any more ("Chưa hoàn thành" leaves it out). */
+  groupMet: boolean;
 };
 
 export type GroupView = {
@@ -712,6 +798,7 @@ export function groupViews(data: Pick<StudentGraduationResponse, "standard" | "e
         courses: group.courses.map((row, index) => ({
           key: `${group.id}:${index}`, code: row.code, name: row.name, credits: row.credits, conditionOnly: row.conditionOnly,
           groupId: group.id, groupTitle: title, row, improvement: retakes.get(row.code) ?? null,
+          groupMet: group.kind === "elective" && group.status === "pass",
         })),
       };
     });
@@ -727,7 +814,7 @@ export function groupViews(data: Pick<StudentGraduationResponse, "standard" | "e
       required: group.kind === "mandatory" ? `${formatNumber(courses.length)} môn` : group.minimumCredits === null ? "—" : `${formatNumber(group.minimumCredits)} TC`,
       courses: courses.map((course, index) => ({
         key: `${group.id}:${index}`, code: course.code.trim().toUpperCase(), name: course.name, credits: course.credits,
-        conditionOnly: course.conditionOnly, groupId: group.id, groupTitle: title, row: null, improvement: null,
+        conditionOnly: course.conditionOnly, groupId: group.id, groupTitle: title, row: null, improvement: null, groupMet: false,
       })),
     };
   });
@@ -746,7 +833,7 @@ export function groupShortfall(result: GraduationGroupEvaluation | null): string
   return `${result.status === "unknown" ? "tối đa " : ""}${formatNumber(result.remaining)} ${result.unit}`;
 }
 
-/** "" = every course, "open" = not passed yet (anything but Đã đạt / MT), else one state. */
+/** "" = every course, "open" = still to do (not Đã đạt / MT, outside an elective group already Đạt), else one state. */
 export type CourseFilter = "" | "open" | GradCourseState;
 export const COURSE_FILTERS: readonly { value: CourseFilter; label: string }[] = [
   { value: "", label: "Tất cả trạng thái" },
@@ -757,7 +844,50 @@ export const COURSE_FILTERS: readonly { value: CourseFilter; label: string }[] =
 export function filterCourses(courses: readonly CourseView[], query: string, filter: CourseFilter): CourseView[] {
   const needle = searchTerm(query);
   return courses.filter((course) => (!needle || searchTerm(`${course.code} ${course.name}`).includes(needle))
-    && (!filter || (course.row !== null && (filter === "open" ? !isPassedState(course.row.state) : course.row.state === filter))));
+    && (!filter || (course.row !== null && (filter === "open" ? !isPassedState(course.row.state) && !course.groupMet : course.row.state === filter))));
+}
+
+/* ------------------------------------------- fields newer than student-graduation-types.ts */
+
+/** A passed transcript course that maps to no standard course (GraduationOutsideCourse in apps/api/src/graduation/evaluation.ts). */
+export type GraduationOutsideCourse = {
+  code: string;
+  name: string;
+  credits: number | null;
+  state: "passed" | "exempt";
+  score10: number | null;
+  score4: number | null;
+  letter: string | null;
+  term: string | null;
+};
+/**
+ * Evaluation fields of GET /api/student/graduation newer than student-graduation-types.ts (audit 2026-10-25), all
+ * optional: an older server sends none of them.
+ */
+export type GraduationEvaluationExtras = {
+  /** Other codes a standard course was counted through (transfer = a retake with a later cohort, needs "chuyển điểm"). */
+  codeAliases?: { code: string; viaCode: string; transfer: boolean }[];
+  /** Passed transcript courses that map to no standard course. */
+  outsideStandard?: GraduationOutsideCourse[];
+};
+/** A row of the student's own programme that fills a 71PE elective of the group (a GDTC (1)/(2) course of K27/K28). */
+export type GraduationCourseRowExtras = { inPlaceOf?: string };
+
+/** The note under a GDTC course that fills a 71PE elective of its group. */
+export const IN_PLACE_OF_NOTE = "Được tính vào nhóm này thay cho một học phần giáo dục thể chất tự chọn";
+export const OUTSIDE_STANDARD_TITLE = "Học phần đã đạt nhưng không thuộc tiêu chuẩn";
+export const OUTSIDE_STANDARD_NOTE = "Các học phần này không được tính vào nhóm nào; hãy hỏi cố vấn học tập.";
+
+/** The passed courses outside the standard as course views (no group; visibility only). */
+export function outsideStandardViews(evaluation: (GraduationEvaluation & GraduationEvaluationExtras) | null): CourseView[] {
+  return (evaluation?.outsideStandard ?? []).map((course, index) => ({
+    key: `outside:${index}`, code: course.code, name: course.name, credits: course.credits, conditionOnly: false, groupId: "",
+    groupTitle: OUTSIDE_STANDARD_TITLE, improvement: null, groupMet: false,
+    row: {
+      code: course.code, name: course.name, credits: course.credits, conditionOnly: false, groupId: "", state: course.state,
+      inferred: false, attempts: 1, score10: course.score10, score4: course.score4, letter: course.letter, term: course.term,
+    },
+  }));
 }
 
 /** The score of a course on the GPA scale first, then the other scale and the letter. */

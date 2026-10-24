@@ -1,7 +1,9 @@
 import { referencedCourseCodes } from "../curricula/course-codes.js";
+import type { GraduationData } from "../graduation/model.js";
 import { startsReplacementPath, THESIS_NAME_PATTERN } from "../graduation/thesis.js";
+import type { TranscriptData } from "../student/transcript-parser.js";
 import {
-  CALC_VERSION, CAREER_COEFFICIENTS, CAREER_THRESHOLDS, COVERAGE_BANDS, DEFICIT_BANDS, EVIDENCE_BANDS, FIT_BELOW_FLOOR,
+  CALC_VERSION, CAREER_COEFFICIENTS, CAREER_THRESHOLDS, CONDITION_NOMINAL_CREDITS, COVERAGE_BANDS, DEFICIT_BANDS, EVIDENCE_BANDS, FIT_BELOW_FLOOR,
   FIT_BELOW_MAX_CREDIT, FIT_LABELS, fitCodeOf, fitDataShareOf, fitScoreOf, HIGHLIGHT_COUNT, isStrengthConfidence, LEVEL_THRESHOLDS, MAX_RELATED_SKILLS,
   MAX_SKILL_PLANS, MAX_SUPPORT_COURSES, MIN_WEIGHTED_COURSE_SHARE, SCOPE_MAX_LENGTH,
 } from "./constants.js";
@@ -18,7 +20,7 @@ import {
 } from "./specialty.js";
 import type {
   AssessmentInputs, AssessmentResult, AssessmentWarning, AttemptOutcome, CareerInput, CareerRequirementResult, CareerResult, Confidence,
-  CourseFact, CourseState, CourseSuggestion, DeficitBand, Eligibility, EvidenceRole, GapStatus, GroupResult, HistoryPoint,
+  CourseFact, CourseState, CourseSuggestion, CurriculumCourseInput, DeficitBand, Eligibility, EvidenceRole, GapStatus, GroupResult, HistoryPoint,
   LevelCode, NotApplicableReason, PrerequisiteGap, SelfStudyItem, SelfStudyReason, SkillEvidenceRow, SkillPlan, SkillResult, SupportCourse,
 } from "./types.js";
 
@@ -94,6 +96,33 @@ export function fitCredit(status: GapStatus, score: number | null, threshold: nu
   return null;
 }
 
+/** A career requirement's status and score, with the reason it has no data ("Cần tự học" or "Chưa đủ dữ liệu"). */
+type CountedRequirement = Pick<CareerRequirementResult, "status" | "score" | "noDataReason">;
+/** "Cần tự học": only another specialty's courses, or electives the student did not choose, teach the skill. */
+const selfStudyRequirement = (req: CountedRequirement) =>
+  req.status === "no_data" && (req.noDataReason === "other_specialty" || req.noDataReason === "elective_not_chosen");
+
+/**
+ * The career's count line (comp-calc-v17): "Đạt x/y kỹ năng", then only the counts that are not 0, always in this order
+ * ("Đạt 4/6 kỹ năng · 1 dưới ngưỡng · 2 chưa học · 1 sắp học · 1 cần tự học · 1 chưa đủ dữ liệu"). Before v17 it said
+ * "0 sắp học · 0 chưa đủ dữ liệu" and left out the skills below the threshold or not studied. Mirrored in the web's
+ * careerSummaryText, which rebuilds it from the stored requirements.
+ */
+export function careerSummaryOf(requirements: readonly CountedRequirement[]): string {
+  const count = (keep: (req: CountedRequirement) => boolean) => requirements.filter(keep).length;
+  const parts: [number, string][] = [
+    [count((req) => req.status === "below"), "dưới ngưỡng"],
+    [count((req) => req.status === "not_studied"), "chưa học"],
+    [count((req) => req.status === "upcoming"), "sắp học"],
+    [count(selfStudyRequirement), "cần tự học"],
+    [count((req) => req.status === "no_data" && !selfStudyRequirement(req)), "chưa đủ dữ liệu"],
+  ];
+  return [`Đạt ${count((req) => req.status === "met")}/${requirements.length} kỹ năng`,
+    ...parts.filter(([value]) => value > 0).map(([value, label]) => `${value} ${label}`)].join(" · ");
+}
+/** "x/y kỹ năng có điểm" (comp-calc-v17; "x/y kỹ năng có dữ liệu" counted every skill but no_data before). */
+export const careerDataTextOf = (requirements: readonly CountedRequirement[]) =>
+  `${requirements.filter((req) => req.score !== null).length}/${requirements.length} kỹ năng có điểm`;
 
 const compareText = (a: string, b: string) => {
   const left = fold(a), right = fold(b);
@@ -126,6 +155,11 @@ type Row = {
   code: string;
   name: string;
   credits: number;
+  /**
+   * The credits its skill links weigh: the CTĐT credits, or CONDITION_NOMINAL_CREDITS for a condition-only course
+   * printed with 0 credits (K27/K28 GDTC/GDQP, v17), so its skills are scored like those of K29–K31.
+   */
+  weightCredits: number;
   type: string;
   specialty: CurriculumSpecialtyClass;
   electiveCode: string | null;
@@ -171,6 +205,26 @@ type SkillWork = {
   conditionOnly: boolean;
   exempt: boolean;
 };
+
+/**
+ * v17: transcript code → CTĐT code for the competency table. The graduation check's aliases count here too when they lead from
+ * a code outside the CTĐT to a CTĐT course: another code the standard writes for the course, or a retake with a later cohort
+ * ("học trả nợ với khóa sau": a K26 student failed DIT0070 Cơ sở dữ liệu and passed it as 71ITIS30103, yet the skill was scored
+ * from the F and the course listed as late while the graduation check counted it passed). An alias between two CTĐT codes (the
+ * standard and the CTĐT writing one course differently) would take a CTĐT row's own attempts away and is left out. Without a
+ * graduation standard, the same rule (graduationCodeAliases) runs on the CTĐT's own course names.
+ */
+function competencyAliases(
+  graduationAliases: ReadonlyMap<string, string>, standard: Pick<GraduationData, "courses"> | null,
+  curriculumCourses: readonly CurriculumCourseInput[], transcript: TranscriptData, curriculumCodes: ReadonlySet<string>,
+): Map<string, string> {
+  const source = standard?.courses.length ? graduationAliases : graduationCodeAliases({
+    courses: curriculumCourses.map((course, index) => ({
+      id: `ctdt-${index}`, groupId: "ctdt", code: courseKey(course.code), name: course.name, credits: null, conditionOnly: false, sourceRow: index,
+    })),
+  }, transcript, curriculumCodes).aliases;
+  return new Map([...source].filter(([from, to]) => !curriculumCodes.has(from) && curriculumCodes.has(to)));
+}
 
 const emptyExposure = (): Exposure => ({ num: 0, den: 0, scoreNum: 0, scoreDen: 0, exempt: 0 });
 const addExposure = (into: Exposure, from: Exposure) => {
@@ -256,10 +310,15 @@ function assess(inputs: AssessmentInputs): Assessment {
 
   /* ---- 1. one shared per-course state table (§7.1, §7.2) ---- */
   const curriculumCourses = uniqueCurriculumCourses(inputs.curriculum.courses);
+  const curriculumCodes = new Set(curriculumCourses.map((course) => courseKey(course.code)));
   const electives = deriveElectiveGroups(curriculumCourses);
   const quotas = electiveQuotas(electives, standardData);
   const conditionCodes = conditionOnlyCodes(standardData, curriculumCourses);
-  const records = transcriptCourses(transcript);
+  // The graduation check's code aliases (§7.9): the standard's other codes of a course (K26 "DIT0091 / 71ITDS30103") and
+  // same-name retakes under another code. Since v17 the competency table reads them too (competencyAliases), so a course
+  // passed with a later cohort counts for its CTĐT course everywhere on the page, not only for graduation.
+  const { aliases: codeAliases, transfers } = graduationCodeAliases(standardData, transcript, curriculumCodes);
+  const records = transcriptCourses(transcript, competencyAliases(codeAliases, standardData, curriculumCourses, transcript, curriculumCodes));
   const currentTerm = currentTermCode(transcript);
   // The term being studied (v13): the plan progress and "sắp học" count from it, the results end at currentTerm.
   const studyTerm = studyTermCode(transcript);
@@ -285,9 +344,11 @@ function assess(inputs: AssessmentInputs): Assessment {
     const plannedFromPlan = planTerms.get(code) ?? null;
     const plannedFromCurriculum = curriculumTermCode(admissionYear, course.studyYear, course.semester);
     const selected = record?.selected ?? null;
+    const credits = Number.isFinite(course.credits) && course.credits > 0 ? course.credits : 0;
+    const conditionOnly = isConditionOnly(code, conditionCodes);
     table.set(code, {
-      code, name: course.name, credits: Number.isFinite(course.credits) && course.credits > 0 ? course.credits : 0, type: course.type,
-      specialty: specialtyClass, electiveCode: electiveCodeOf(course.type), conditionOnly: isConditionOnly(code, conditionCodes),
+      code, name: course.name, credits, weightCredits: credits > 0 ? credits : conditionOnly ? CONDITION_NOMINAL_CREDITS : 0, type: course.type,
+      specialty: specialtyClass, electiveCode: electiveCodeOf(course.type), conditionOnly,
       record, state,
       applicable: specialtyClass.kind === "common" || specialtyClass.code === specialty || standardCodes.has(code) || isAttemptedState(state),
       plannedTerm: plannedFromPlan ?? plannedFromCurriculum,
@@ -364,7 +425,7 @@ function assess(inputs: AssessmentInputs): Assessment {
     const groups = new Set<string>();
     for (const { row, weight } of links) {
       if (!include(row)) continue;
-      const contribution = row.credits * weight;
+      const contribution = row.weightCredits * weight;
       if (row.score10 !== null) { result.scoreNum += row.score10 * contribution; result.scoreDen += contribution; }
       if (!row.applicable) continue;
       if (row.state === "exempt") result.exempt += contribution;
@@ -375,13 +436,13 @@ function assess(inputs: AssessmentInputs): Assessment {
     for (const code of groups) {
       const group = electiveStates.get(code)!;
       const rows = group.rows.filter(include);
-      const credits = rows.reduce((sum, row) => sum + row.credits, 0);
-      const offered = rows.reduce((sum, row) => sum + row.credits * (weightOf.get(row.code) ?? 0), 0);
+      const credits = rows.reduce((sum, row) => sum + row.weightCredits, 0);
+      const offered = rows.reduce((sum, row) => sum + row.weightCredits * (weightOf.get(row.code) ?? 0), 0);
       const chosen = rows.filter((row) => isAttemptedState(row.state));
-      const chosenExposure = chosen.reduce((sum, row) => sum + row.credits * (weightOf.get(row.code) ?? 0), 0);
+      const chosenExposure = chosen.reduce((sum, row) => sum + row.weightCredits * (weightOf.get(row.code) ?? 0), 0);
       // Quota-aware: chosen courses plus the remaining quota at the group's average weight per credit.
       result.den += group.remaining === null ? offered : chosenExposure + (credits > 0 ? group.remaining * offered / credits : 0);
-      result.num += chosen.filter((row) => isStudiedState(row.state)).reduce((sum, row) => sum + row.credits * (weightOf.get(row.code) ?? 0), 0);
+      result.num += chosen.filter((row) => isStudiedState(row.state)).reduce((sum, row) => sum + row.weightCredits * (weightOf.get(row.code) ?? 0), 0);
     }
     return result;
   };
@@ -434,7 +495,7 @@ function assess(inputs: AssessmentInputs): Assessment {
     return skill.links.filter((link) => link.row.applicable).map(({ row, weight }) => {
       const role: EvidenceRole = row.score10 !== null && row.state !== "exempt" ? "score" : row.state === "exempt" ? "exempt"
         : isStudiedState(row.state) ? "studied" : row.state === "in_progress" ? "in_progress" : notChosen(row) ? "not_chosen" : "planned";
-      const contribution = row.credits * weight;
+      const contribution = row.weightCredits * weight;
       const group = row.electiveCode ? electiveStates.get(row.electiveCode) : undefined;
       // Unchosen options of a quota group only enter the denominator through the remaining quota.
       const counted = role !== "not_chosen" && (!group || group.remaining === null || isAttemptedState(row.state));
@@ -559,10 +620,13 @@ function assess(inputs: AssessmentInputs): Assessment {
   const supportCourse = (row: Row, weight: number, kind: SupportCourse["kind"], threshold: number): SupportCourse => {
     const eligibility = kind === "improve" ? { eligibility: "eligible" as const, missing: [], reviewNotes: [] } : eligibilityOf(row.code);
     const contribution = row.credits * weight;
+    // v17: a planned term that is the term being studied or earlier has passed for registration ("HK233 theo KHĐT" read
+    // as still ahead for a student in HK251); a course in progress is where it should be.
+    const overdue = row.state !== "in_progress" && row.plannedTerm !== null && studyTerm !== null && row.plannedTerm <= studyTerm;
     return {
       code: row.code, name: row.name, credits: row.credits, weight: round(weight, 4), contribution: round(contribution, 4), kind,
       state: row.state, score10: row.score10, letter: row.letter, ...eligibility, eligibilityLabel: ELIGIBILITY_LABELS[eligibility.eligibility],
-      term: row.plannedTerm, termSource: row.plannedTermSource, termLabel: row.plannedTerm ?? "Chưa xếp lịch", electiveGroup: row.electiveCode,
+      term: row.plannedTerm, termSource: row.plannedTermSource, termLabel: row.plannedTerm ?? "Chưa xếp lịch", overdue, electiveGroup: row.electiveCode,
       reason: kind === "improve" && row.score10 !== null
         ? `Đã đạt nhưng điểm học phần ${vn(row.score10 * 10)}/100 thấp hơn ngưỡng ${vn(threshold)}`
         : `${vn(row.credits)} tín chỉ × trọng số ${vn(weight)} cho kỹ năng này`,
@@ -672,14 +736,10 @@ function assess(inputs: AssessmentInputs): Assessment {
       total: rows.length, met: count("met"), below: count("below"), upcoming: count("upcoming"), notStudied: count("not_studied"),
       noData: count("no_data"), withData: rows.length - count("no_data"),
     };
-    // "Cần tự học" (only another specialty teaches it) is counted apart, like the page's careerSummaryText.
-    const selfStudyCount = rows.filter((row) => row.status === "no_data" && (row.noDataReason === "other_specialty" || row.noDataReason === "elective_not_chosen")).length;
     careerResult = {
       id: career.id, code: career.code, nameVi: career.nameVi, nameEn: career.nameEn, deleted: career.deleted, requirements: rows, counts,
-      summaryText: selfStudyCount
-        ? `Đạt ${counts.met}/${counts.total} kỹ năng · ${counts.upcoming} sắp học · ${selfStudyCount} cần tự học · ${counts.noData - selfStudyCount} chưa đủ dữ liệu`
-        : `Đạt ${counts.met}/${counts.total} kỹ năng · ${counts.upcoming} sắp học · ${counts.noData} chưa đủ dữ liệu`,
-      dataText: `${counts.withData}/${counts.total} kỹ năng có dữ liệu`,
+      // v17: only the non-zero counts, "Cần tự học" apart, like the page's careerSummaryText; "x/y kỹ năng có điểm".
+      summaryText: careerSummaryOf(rows), dataText: careerDataTextOf(rows),
       fit, fitScore, fitCode, fitLabel: FIT_LABELS[fitCode], dataShare,
       weightedMeanScore: meanCoefficient > 0
         ? floorScore(snapScore(scoredRows.reduce((sum, row) => sum + row.coefficient * workById.get(row.skillId!)!.score!, 0) / meanCoefficient)) : null,
@@ -696,10 +756,11 @@ function assess(inputs: AssessmentInputs): Assessment {
   for (let index = selfStudy.length - 1; index > 0; index--) {
     if (selfStudy.findIndex((item) => item.skillKey === selfStudy[index]!.skillKey) < index) selfStudy.splice(index, 1);
   }
-  // Self-study context: measured skills with a similar name, never merged automatically.
+  // Self-study context: measured skills with a similar name and a score ("Kỹ năng gần giống đã đo", v17: never one that is
+  // still to come or not studied), never merged automatically.
   for (const item of selfStudy) {
     const tokens = nameTokens(item.name);
-    item.relatedSkillKeys = work.filter((skill) => skill.skillId !== item.skillId)
+    item.relatedSkillKeys = work.filter((skill) => skill.skillId !== item.skillId && skill.score !== null)
       .map((skill) => ({ key: skill.key, shared: [...nameTokens(skill.name)].filter((token) => tokens.has(token)).length }))
       .filter((entry) => entry.shared > 0).sort((a, b) => b.shared - a.shared || compareCode(a.key, b.key))
       .slice(0, MAX_RELATED_SKILLS).map((entry) => entry.key);
@@ -736,12 +797,10 @@ function assess(inputs: AssessmentInputs): Assessment {
 
   /* ---- 10. graduation (§7.9): the graduation page's engine, inputs built like graduationInputs() ---- */
   const curriculumCredits = new Map([...table.values()].map((row) => [row.code, row.credits]));
-  // The standard's other codes of a course (K26 "DIT0091 / 71ITDS30103") and same-name retakes under
-  // another code count only for graduation.
-  const { aliases: codeAliases, transfers } = graduationCodeAliases(standardData, transcript, new Set(table.keys()));
+  // Every alias of the standard (step 1), those between two CTĐT codes too: the graduation page's inputs exactly.
   const graduation = assessGraduation({
     resolution: inputs.graduation.resolution, standard: graduationStandard, transcript, transfers,
-    records: codeAliases.size ? transcriptCourses(transcript, codeAliases) : records,
+    records: transcriptCourses(transcript, codeAliases),
     programCredits: programCreditMap(standardData, curriculumCredits), electives, conditionCodes,
   });
 
@@ -751,7 +810,7 @@ function assess(inputs: AssessmentInputs): Assessment {
   const inferredCount = recordList.filter((record) => record.inferred).length;
   const needsReview = Boolean(transcript.ocr?.needsReview);
   const transcriptSummary = {
-    parserVersion: transcript.parserVersion, latestTerm: currentTerm, courseCount: records.size,
+    parserVersion: transcript.parserVersion, latestTerm: currentTerm, studyTerm, courseCount: records.size,
     inCurriculum: recordList.filter((record) => table.has(record.code)).length,
     passed: recordList.filter((record) => record.state === "passed").length,
     failed: recordList.filter((record) => record.state === "failed").length,

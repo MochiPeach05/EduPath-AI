@@ -90,7 +90,11 @@
 .sg-page .sg-load-error { margin: 0; align-items: center; }
 
 /* Standard */
+/* The source workbook's file code under the document title: muted, for reference only. */
+.sg-page .sg-file-code { margin: 0; overflow-wrap: anywhere; }
 .sg-page .sg-notes h3 { margin-bottom: 8px; }
+/* Passed courses outside the standard, below the comparison: a separate, plain list. */
+.sg-page .sg-outside { padding-top: 16px; border-top: 1px solid var(--sw-border); }
 .sg-page .sg-auto-note { display: flex; align-items: flex-start; gap: 10px; padding-top: 16px; border-top: 1px solid var(--sw-border); color: var(--sw-muted); font-size: 13px; line-height: 1.6; }
 .sg-page .sg-auto-note > svg { width: 18px; height: 18px; margin-top: 2px; color: #1c4182; }
 .sg-page .sg-link { color: var(--ep-action); font-weight: 650; text-decoration: underline; text-underline-offset: 3px; white-space: nowrap; }

@@ -144,7 +144,8 @@ describe("StudentGraduation standard", () => {
   it("shows only the student's own standard, picked automatically, without a selector", () => {
     const html = render(ready(graduation()));
     expect(html).toContain("Tiêu chuẩn xét tốt nghiệp của bạn");
-    expect(html).toContain("<h2 id=\"sg-standard-title\" class=\"sg-title\">Tiêu chuẩn xét tốt nghiệp K29 – Công nghệ phần mềm</h2>");
+    expect(html).toContain("<h2 id=\"sg-standard-title\" class=\"sg-title\">Tiêu chuẩn xét tốt nghiệp K29 – Công nghệ phần mềm — khóa K29, ngành Công nghệ thông tin, chuyên ngành 7480201-03</h2>");
+    expect(html).not.toContain("sg-file-code");
     expect(html).toContain('<ul class="sg-meta-tags"><li><span>Khóa</span> <strong>K29</strong></li><li><span>Chuyên ngành</span> <strong>Công nghệ phần mềm</strong></li></ul>');
     expect(html).not.toContain("Phiên bản");
     for (const label of ["Tín chỉ tích lũy tối thiểu", "Tín chỉ bắt buộc", "Tín chỉ nhóm tự chọn", "Tín chỉ tự chọn tự do", "Điểm trung bình tích lũy tối thiểu"]) expect(html).toContain(label);
@@ -154,6 +155,12 @@ describe("StudentGraduation standard", () => {
     expect(html).toContain('<a class="sg-link" href="#profile">Cập nhật chuyên ngành</a>');
     expect(html).not.toContain("<select value");
     expect(html).not.toContain("Tiêu chuẩn đang áp dụng");
+  });
+  it("titles a standard named after its file code as a document, the file code muted, and drops a repeated 'Ghi chú:' (audit 2026-10-25)", () => {
+    const k28 = { ...standard(), name: "71K28CNTT_TiendohoctapQC1423 - Công nghệ thông tin", cohortCode: "K28", specialty: "", notes: "Ghi chú: Sinh viên cần chứng chỉ ngoại ngữ." };
+    const html = render(ready(graduation({ standard: k28, resolution: "general", profile: { cohortCode: "K28", specialty: null } })));
+    expect(html).toContain('<h2 id="sg-standard-title" class="sg-title">Tiêu chuẩn xét tốt nghiệp khóa K28, ngành Công nghệ thông tin</h2><p class="sg-muted sg-file-code">Mã tiêu chuẩn: 71K28CNTT_TiendohoctapQC1423</p>');
+    expect(html).toContain('<h3>Ghi chú</h3><p class="sc-prewrap">Sinh viên cần chứng chỉ ngoại ngữ.</p>');
   });
   it("explains each unresolved standard and links to the profile where it helps", () => {
     const unresolved = (overrides: Partial<StudentGraduationResponse>) =>
@@ -216,7 +223,9 @@ describe("StudentGraduation result", () => {
     expect(html).toContain("Nâng điểm trung bình tích lũy (hệ 4) thêm ít nhất 0,13 điểm để đạt 2,00.");
     expect(visible).toContain("Kiểm thử phần mềm3 TC · điểm 0/4 (F)↻ Học lại");
     expect(visible).toContain("Lập trình3 TC · điểm 1,5/4 (D+)↑ Học cải thiện");
-    expect(html).toContain("Hoàn thành 1 học phần đang học:");
+    // Điện toán đám mây, in progress, is already listed under its group: no separate "đang học" item repeats it.
+    expect(html).not.toContain("học phần đang học:");
+    expect(visible.match(/Điện toán đám mây3 TC◐ Đang học/g)).toHaveLength(1);
     expect(html).toContain("Kết quả xét tốt nghiệp chính thức do nhà trường công bố.");
   });
   it("recommends the graduation thesis first and lists the replacement courses as a fallback", () => {
@@ -359,6 +368,17 @@ describe("StudentGraduation comparison", () => {
     expect(html).toContain('<span class="sg-state sg-status-fail"><span aria-hidden="true">✗</span> Chưa đạt</span>');
     expect(html).toContain('<span class="sg-state sg-status-pass"><span aria-hidden="true">✓</span> Đạt</span>');
     expect(html).toContain("Mở rộng tất cả");
+  });
+  it("lists passed courses outside the standard and marks a GDTC course that fills a 71PE elective (audit 2026-10-25)", () => {
+    const outside = [{ code: "DIT0410", name: "Khoá luận tốt nghiệp", credits: 6, state: "passed", score10: 8.5, score4: 3.7, letter: "A", term: "HK241" }];
+    const base = evaluation("fail");
+    const filled = Object.assign(row("DGT0010", "Giáo dục thể chất (1) (*)", "TC102", "passed", { conditionOnly: true, credits: 2 }), { inPlaceOf: "71PEBA10052" });
+    const pe = { ...base.groups[2]!, courses: [filled, ...freeCourses] };
+    const html = render(ready(graduation({ evaluation: { ...base, groups: [base.groups[0]!, base.groups[1]!, pe], outsideStandard: outside } as GraduationEvaluation })));
+    expect(html).toContain('<h3>Học phần đã đạt nhưng không thuộc tiêu chuẩn</h3><p class="sg-muted">Các học phần này không được tính vào nhóm nào; hãy hỏi cố vấn học tập.</p>');
+    expect(text(html)).toMatch(/DIT0410Khoá luận tốt nghiệp63,7\s\/\s48,5\s\/\s10 · A✓ Đã đạt/);
+    expect(html).toContain("<small>Được tính vào nhóm này thay cho một học phần giáo dục thể chất tự chọn</small>");
+    expect(render(ready(graduation()))).not.toContain("không thuộc tiêu chuẩn");
   });
   it("labels every course state with a glyph and marks letter-grade inferences", () => {
     const html = render(ready(graduation({ evaluation: evaluation("fail", {

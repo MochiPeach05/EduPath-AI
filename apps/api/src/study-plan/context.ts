@@ -2,6 +2,7 @@ import type { PoolClient } from "pg";
 import { courseKey, curriculumTermCode, electiveCodeOf, isConditionOnly, studyTermCode, uniqueCurriculumCourses } from "../competency-assessment/course-state.js";
 import { CONDITION_ONLY_BLOCK } from "../competency-assessment/constants.js";
 import { assessGraduationGpa, assessGraduationStandard, graduationCodeAliases, graduationInputs } from "../competency-assessment/graduation.js";
+import { choiceRule } from "../competency-assessment/plan-progress.js";
 import { classifyCurriculumSpecialty, fold, specialtyLabel } from "../competency-assessment/specialty.js";
 import type { CourseState, CurriculumCourseInput, GraduationStandardInput, SpecialtyCode, TriState } from "../competency-assessment/types.js";
 import type { CurriculumData } from "../curricula/model.js";
@@ -36,7 +37,11 @@ export type StudyPlanCourse = {
   specialtyName: string | null;
   /** HKyyS of the CTĐT study year and semester for the student's intake, or null. */
   standardTerm: string | null;
-  /** Courses to pass first (tiên quyết) and to have studied first (học trước), CTĐT codes. */
+  /**
+   * Courses to pass first (tiên quyết) and to have studied first (học trước), CTĐT codes. For a course that applies to
+   * the student, another specialty's courses are left out: a relation can list every specialty's courses ("SV chuyên
+   * ngành CNPM … SV chuyên ngành CNDL …", K29 Chuyên đề Tốt nghiệp 1).
+   */
   prerequisites: string[];
   prior: string[];
   state: CourseState;
@@ -70,6 +75,14 @@ export type StudyPlanGraduationGroup = {
 /** A course of the transcript that counts toward no requirement (Stellic's "Unmatched courses"). */
 export type StudyPlanUnmatched = { code: string; name: string; credits: number; state: CourseState; grade: string | null; term: string | null };
 
+/** What the cohort's own training plan asks of a CTĐT elective group: its "Chọn k trong n" sections. */
+export type StudyPlanChoice = {
+  /** Courses to choose in the group (the k of each section, at most its applicable options). */
+  courses: number;
+  /** Those sections as the training plan labels them, in plan order. */
+  sections: { label: string; termCode: string }[];
+};
+
 export type StudyPlanContext = {
   cohortCode: string | null;
   specialty: SpecialtyCode | null;
@@ -85,8 +98,11 @@ export type StudyPlanContext = {
   standardTerms: string[];
   limits: { average: number; min: number; max: number } | null;
   courses: StudyPlanCourse[];
-  /** CTĐT elective groups: required credits from "(n TC)". */
-  electiveGroups: { code: string; requiredCredits: number | null; courseCodes: string[] }[];
+  /**
+   * CTĐT elective groups: required credits from "(n TC)"; planChoice, the courses the cohort's training plan has the
+   * student choose in the group ("Chọn 2 trong 6 HP…", the rule the AI roadmap uses), for a CTĐT that states no credits.
+   */
+  electiveGroups: { code: string; requiredCredits: number | null; courseCodes: string[]; planChoice: StudyPlanChoice | null }[];
   /** The last term any training plan covers; later terms have no plan to compare with (null without plans). */
   offeringUntil: string | null;
   /**
@@ -122,11 +138,60 @@ async function readCurriculum(db: Db, cohortCode: string): Promise<CurriculumDat
   return rows.length === 1 ? rows[0]!.data : null;
 }
 
-/** Items of every active training plan (kế hoạch đào tạo): which course each cohort's plan opens in which term. */
+type PlanOffering = { cohort_code: string; code: string; name: string; term_code: string; section_label?: string | null };
+
+/**
+ * Items of every active training plan (kế hoạch đào tạo): which course each cohort's plan opens in which term, with the
+ * label of the item's section ("Chọn 2 trong 6 HP tự chọn Cơ sở ngành"), if any.
+ */
 async function readPlanOfferings(db: Db) {
-  return (await db.query<{ cohort_code: string; code: string; name: string; term_code: string }>(
-    `SELECT tp.cohort_code,i.code,i.name,i.term_code FROM training_plans tp JOIN training_plan_items i ON i.revision_id=tp.current_revision
+  return (await db.query<PlanOffering>(
+    `SELECT tp.cohort_code,i.code,i.name,i.term_code,
+       (SELECT s->>'label' FROM training_plan_revisions r,
+          jsonb_array_elements(CASE WHEN jsonb_typeof(r.data->'sections')='array' THEN r.data->'sections' ELSE '[]'::jsonb END) s
+        WHERE r.id=tp.current_revision AND s->>'id'=i.section_id LIMIT 1) AS section_label
+     FROM training_plans tp JOIN training_plan_items i ON i.revision_id=tp.current_revision
      WHERE tp.is_active ORDER BY tp.cohort_code,i.position`)).rows;
+}
+
+/**
+ * The courses the cohort's own training plan has the student choose in each CTĐT elective group (K30's CTĐT states no
+ * credits for TC209, its plan says "Chọn 2 trong 6 HP tự chọn Cơ sở ngành" and "Chọn 1 trong 3 HP tự chọn Cơ sở ngành
+ * sau"): every "Chọn k trong n" section (choiceRule, as the plan progress the AI roadmap reads) asks for k of its
+ * applicable options, at most all of them, in the group most of those options belong to. Sections without k, or "(Không
+ * tính vào tích lũy)", ask for nothing. Matched by code, else by name, as the planner matches plan rows.
+ */
+export function planChoices(rows: readonly PlanOffering[], courses: readonly StudyPlanCourse[]): Map<string, StudyPlanChoice> {
+  const byCode = new Map(courses.map((course) => [course.code, course]));
+  const byName = new Map(courses.map((course) => [fold(course.name), course]));
+  const sections = new Map<string, { label: string; termCode: string; options: StudyPlanCourse[] }>();
+  for (const row of rows) {
+    const label = row.section_label?.trim();
+    if (!label) continue;
+    const key = `${row.term_code}\n${label}`;
+    const section = sections.get(key) ?? { label, termCode: row.term_code, options: [] };
+    const course = byCode.get(courseKey(row.code)) ?? byName.get(fold(row.name));
+    if (course?.applicable && !section.options.includes(course)) section.options.push(course);
+    sections.set(key, section);
+  }
+  const choices = new Map<string, StudyPlanChoice>();
+  for (const section of sections.values()) {
+    const rule = choiceRule(section.label);
+    if (!rule.choice || rule.informational || rule.k === null || !section.options.length) continue;
+    const counts = new Map<string, number>();
+    for (const option of section.options) if (option.group) counts.set(option.group, (counts.get(option.group) ?? 0) + 1);
+    // The group most options belong to; the first one met on a tie.
+    const group = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+    if (!group) continue;
+    const choice = choices.get(group) ?? { courses: 0, sections: [] };
+    choice.courses += Math.min(rule.k, section.options.length);
+    choice.sections.push({ label: section.label, termCode: section.termCode });
+    choices.set(group, choice);
+  }
+  for (const [group, choice] of choices) {
+    choice.courses = Math.min(choice.courses, courses.filter((course) => course.applicable && course.group === group).length);
+  }
+  return choices;
 }
 
 const laterTerm = (a: string, b: string | null) => (b && termIndex(b) > termIndex(a) ? b : a);
@@ -203,6 +268,15 @@ export async function readStudyPlanFacts(db: Db, userId: string, now = new Date(
       planTerm: planTermOf(code, item.name), offeredTerms: termsOf(planRows(code, item.name)), ...audit(code),
     });
   }
+  // A course that applies to the student needs only the prerequisites of the student's own program: the planner would
+  // otherwise ask a CNPM student for CNDL and TTNT courses. Another specialty's course keeps all of its own.
+  const otherSpecialty = new Set(courses.filter((course) => !course.applicable).map((course) => course.code));
+  for (const course of courses) {
+    if (!course.applicable) continue;
+    course.prerequisites = course.prerequisites.filter((code) => !otherSpecialty.has(code));
+    course.prior = course.prior.filter((code) => !otherSpecialty.has(code));
+  }
+  const choices = planChoices(offerings.filter((row) => normalizeCohortCode(row.cohort_code) === cohortCode), courses);
 
   let graduation: StudyPlanContext["graduation"] = null;
   // Without a standard the GPA is read on the 4-point scale, with no minimum.
@@ -247,7 +321,9 @@ export async function readStudyPlanFacts(db: Db, userId: string, now = new Date(
       curriculum: curriculum ? { name: curriculum.name, totalCredits } : null,
       hasTranscript: Boolean(transcript), currentTerm: laterTerm(calendarTermCode(now), studyTerm), studyTerm, admissionYear, standardTerms,
       limits: creditLimits(totalCredits, standardTerms.length), courses,
-      electiveGroups: inputs.electives.map((group) => ({ code: group.code, requiredCredits: group.requiredCredits, courseCodes: group.courseCodes })),
+      electiveGroups: inputs.electives.map((group) => ({
+        code: group.code, requiredCredits: group.requiredCredits, courseCodes: group.courseCodes, planChoice: choices.get(group.code) ?? null,
+      })),
       offeringUntil: termsOf(offerings).at(-1) ?? null,
       graduation, gpa, unmatched,
     },

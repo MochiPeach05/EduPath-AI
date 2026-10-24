@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "../auth/types.js";
 import { syntheticCurriculum, syntheticPlan, syntheticStandards, syntheticStudentTerms, syntheticTranscript } from "../competency-assessment/fixtures/synthetic-k29.js";
 import type { DatabasePool } from "../db/pool.js";
-import { readStudyPlanFacts } from "./context.js";
+import { planChoices, readStudyPlanFacts, type StudyPlanCourse } from "./context.js";
 import { calendarTermCode, creditLimits, nextTerm, studyPlanSchema, termIndex, termLabel, type StudyPlanData } from "./model.js";
 import { prefillPlan, readAiProposal } from "./prefill.js";
 import { plannedTranscript, projectGraduation } from "./projection.js";
@@ -43,8 +43,12 @@ function fakeDb(options: Options = {}) {
     if (sql.includes("FROM curricula")) return rows(params[0] === "K29" ? [{ data: curriculumData() }] : []);
     if (sql.includes("FROM graduation_standards")) return rows(standards);
     if (sql.includes("FROM training_plans tp JOIN training_plan_items")) {
-      const k29 = syntheticPlan().data.items.map((item) => ({ cohort_code: "K29", code: item.code, name: item.name, term_code: item.termCode }));
-      return rows([...k29, { cohort_code: "K30", code: "71ITIN40304", name: "Đồ án thực tập", term_code: "HK262" }]);
+      const plan = syntheticPlan().data;
+      const labels = new Map(plan.sections.map((section) => [section.id, section.label]));
+      const k29 = plan.items.map((item) => ({ cohort_code: "K29", code: item.code, name: item.name, term_code: item.termCode, section_label: labels.get(item.sectionId) ?? null }));
+      // Another cohort's "Chọn" section never sets K29's requirements.
+      return rows([...k29, { cohort_code: "K30", code: "71ITIN40304", name: "Đồ án thực tập", term_code: "HK262", section_label: null },
+        { cohort_code: "K30", code: "71ITSE30803", name: "Lập trình Web nâng cao với framework", term_code: "HK262", section_label: "Chọn 2 trong 4 môn sau" }]);
     }
     if (sql.startsWith("SELECT version,data,updated_at FROM stu_study_plans")) return rows(saved.slice(-1));
     if (sql.includes("FROM stu_roadmaps WHERE user_id=$1 AND status='completed'")) return rows(options.roadmap ? [options.roadmap] : []);
@@ -67,7 +71,7 @@ describe("study plan model", () => {
   it("orders and names terms, and finds the running term in Vietnam time", () => {
     expect([nextTerm("HK261"), nextTerm("HK262"), nextTerm("HK263"), nextTerm("HK993")]).toEqual(["HK262", "HK263", "HK271", "HK001"]);
     expect(termIndex("HK263") < termIndex("HK271")).toBe(true);
-    expect(termLabel("HK262")).toBe("HK2 · 2026-2027");
+    expect(termLabel("HK262")).toBe("HK2 · 2026–2027");
     expect(["2026-10-23T08:00:00Z", "2027-01-20T08:00:00Z", "2027-02-01T08:00:00Z", "2027-07-15T08:00:00Z", "2026-08-31T18:00:00Z"]
       .map((date) => calendarTermCode(new Date(date)))).toEqual(["HK261", "HK261", "HK262", "HK263", "HK261"]);
   });
@@ -84,6 +88,15 @@ describe("study plan model", () => {
     const old = studyPlanSchema.safeParse({ schemaVersion: 1, terms: [{ code: "HK262", courses: [{ code: "A1", sessions: [{ kind: "TH", day: 8, block: 5 }] }] }] });
     expect(old.success && old.data).toEqual({ schemaVersion: 1, terms: [{ code: "HK262", courses: [{ code: "A1" }] }] });
   });
+
+  it("keeps what the AI roadmap's proposal added, so Kế hoạch học kỳ can name it later", () => {
+    const aiAdded = { completedAt: "2026-10-24T10:00:00.000Z", term: "HK262", codes: ["71ITIN40304"], addedAt: "2026-10-24T10:05:00.000Z" };
+    const plan = { schemaVersion: 1, roadmapId: "99999999-9999-4999-8999-999999999999", aiAdded, terms: [{ code: "HK262", courses: [{ code: "71ITIN40304" }] }] };
+    expect(studyPlanSchema.parse(plan)).toEqual(plan);
+    expect(studyPlanSchema.safeParse({ ...plan, aiAdded: null }).success).toBe(true);
+    expect(studyPlanSchema.safeParse({ ...plan, aiAdded: { ...aiAdded, term: "2026" } }).success).toBe(false);
+    expect(studyPlanSchema.safeParse({ ...plan, aiAdded: { ...aiAdded, extra: true } }).success).toBe(false);
+  });
 });
 
 describe("study plan context", () => {
@@ -99,6 +112,47 @@ describe("study plan context", () => {
     expect(byCode.get("71PEBA10052")).toMatchObject({ conditional: true, kind: "elective", group: "TC102" });
     // Offered by the K29 plan in HK253 and by a K30 plan in HK262.
     expect(byCode.get("71ITIN40304")).toMatchObject({ planTerm: "HK253", offeredTerms: ["HK253", "HK262"], state: "not_taken" });
+  });
+
+  it("asks a course of the student's program for the prerequisites of the student's own specialty only", async () => {
+    // The CTĐT lists the prerequisites of Chuyên đề Tốt nghiệp 1 for every specialty: CNPM, then CNDL, then TTNT.
+    const own = (await facts()).context.courses.find((course) => course.code === "71ITGR40203");
+    expect(own?.prerequisites).toEqual(["71ITSE41003", "71ITSE41203"]);
+    const data = (await facts({ specialty: "CNDL" })).context.courses.find((course) => course.code === "71ITGR40203");
+    expect(data?.prerequisites).toEqual(["71ITDS40303"]);
+    // Without a specialty every course applies, and so does every prerequisite.
+    const any = (await facts({ specialty: null })).context.courses.find((course) => course.code === "71ITGR40203");
+    expect(any?.prerequisites).toEqual(["71ITSE41003", "71ITSE41203", "71ITDS40303", "71ITAI40803"]);
+  });
+
+  it("takes the courses to choose in a CTĐT elective group from the cohort's training plan", async () => {
+    const { context } = await facts({ standards: false });
+    const groups = new Map(context.electiveGroups.map((group) => [group.code, group]));
+    // K29 TC309 has no "(n TC)": its plan says "Chọn 1 trong 2 môn sau" (HK241) and "Chọn1 trong 3 môn sau" (HK243);
+    // "Chọn các môn sau (Không tính vào tích lũy)" asks for nothing. K30's section is another cohort's.
+    expect(groups.get("TC309")).toMatchObject({ requiredCredits: null, planChoice: { courses: 2, sections: [
+      { label: "Chọn 1 trong 2 môn sau", termCode: "HK241" }, { label: "Chọn1 trong 3 môn sau", termCode: "HK243" }] } });
+    // The thesis group has no section in the plan: nothing known; "(2TC)" groups keep their credits.
+    expect(groups.get("TC406")?.planChoice).toBeNull();
+    expect(groups.get("TC002")).toMatchObject({ requiredCredits: 2, planChoice: null });
+  });
+
+  it("counts a choice section in the group most of its options belong to, at most its own options", () => {
+    const course = (code: string, group: string | null, applicable = true) => ({ code, name: `Môn ${code}`, group, applicable }) as StudyPlanCourse;
+    const courses = [course("A1", "TC209"), course("A2", "TC209"), course("A3", "TC209"), course("B1", "TC309"), course("B2", "TC309"), course("X1", "TC309", false)];
+    const row = (code: string, term_code: string, section_label: string | null) => ({ cohort_code: "K30", code, name: `Môn ${code}`, term_code, section_label });
+    const choices = planChoices([
+      // K30's "Chọn 2 trong 6 HP tự chọn Cơ sở ngành" lists a TC309 course among its TC209 ones.
+      row("A1", "HK252", "Chọn 2 trong 6 HP tự chọn Cơ sở ngành"), row("A2", "HK252", "Chọn 2 trong 6 HP tự chọn Cơ sở ngành"), row("B1", "HK252", "Chọn 2 trong 6 HP tự chọn Cơ sở ngành"),
+      // Only one of its options applies (X1 is another specialty's): one course, not two.
+      row("B2", "HK262", "Chọn 2 trong 4 HP tự chọn Chuyên ngành sau"), row("X1", "HK262", "Chọn 2 trong 4 HP tự chọn Chuyên ngành sau"),
+      // A course outside every section, and a section without k.
+      row("A3", "HK253", null), row("A3", "HK261", "Chọn các môn sau (Không tính vào tích lũy)"),
+    ], courses);
+    expect(Object.fromEntries(choices)).toEqual({
+      TC209: { courses: 2, sections: [{ label: "Chọn 2 trong 6 HP tự chọn Cơ sở ngành", termCode: "HK252" }] },
+      TC309: { courses: 1, sections: [{ label: "Chọn 2 trong 4 HP tự chọn Chuyên ngành sau", termCode: "HK262" }] },
+    });
   });
 
   it("reads the standard's groups, credits and GPA, and the courses no requirement counts", async () => {

@@ -69,6 +69,19 @@ describe("public policy, terms and FAQ", () => {
     for (const text of [...policyBlocks, ...faqBlocks]) expect(text).not.toMatch(/\*\*|`|\]\(|<\/?[a-z]/);
   });
 
+  it("sends students to the pages that do each job today", () => {
+    const faqText = faqBlocks.join(" ");
+    expect(faqText).not.toContain("chọn mục tiêu trong Thông tin cá nhân");
+    expect(faqText).not.toContain("dùng Đánh giá năng lực để biết kỹ năng hiện tại");
+    expect(faqText).not.toContain("cổng sinh viên");
+    const functions = frequentlyAskedQuestions.find((faq) => faq.question === "Tôi có thể sử dụng những chức năng học tập nào?");
+    for (const page of ["Hồ sơ và bảng điểm", "Định hướng nghề nghiệp", "Đánh giá năng lực", "Khoảng trống kỹ năng", "Lộ trình học tập", "Điều kiện xét tốt nghiệp"]) {
+      expect(functions?.note).toContain(page);
+    }
+    const ai = frequentlyAskedQuestions.find((faq) => faq.question === "EduPath AI dùng AI vào việc gì?")?.answer.join(" ") ?? "";
+    for (const use of ["Đánh giá năng lực", "Lộ trình AI", "Lời khuyên từ EduPath AI"]) expect(ai).toContain(use);
+  });
+
   it("renders the support e-mail in FAQ answers as a link", () => {
     const faq = frequentlyAskedQuestions.find((item) => item.note?.includes(supportEmail));
     expect(faq).toBeDefined();

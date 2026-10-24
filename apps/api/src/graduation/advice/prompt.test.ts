@@ -255,13 +255,13 @@ describe("the thesis option of Nhóm tự chọn TC306 in section [4]", () => {
     ]);
   });
 
-  it("names Khóa luận tốt nghiệp in K28 Nhóm tự chọn TC306_Tự chọn tốt nghiệp", () => {
+  it("names Khóa luận tốt nghiệp in K28 Nhóm tự chọn TC306_Tự chọn tốt nghiệp, with the group's readable label", () => {
     const k28 = withThesisGroup([
       ["71ITGR40106", "Khóa luận tốt nghiệp", 6], ["71ITGR40203", "Chuyên đề Tốt nghiệp 1", 3], ["71ITGR40303", "Chuyên đề Tốt nghiệp 2", 3],
       ["71ITIS30403", "Quản lý và phát triển các hệ thống thông tin", 3],
     ], "Nhóm tự chọn TC306_Tự chọn tốt nghiệp");
     expect(g5({}, k28).slice(0, 3)).toEqual([
-      "[G5] Nhóm tự chọn TC306_Tự chọn tốt nghiệp: khóa luận tốt nghiệp hoặc học phần thay thế",
+      "[G5] Nhóm tự chọn TC306 – Tự chọn tốt nghiệp: khóa luận tốt nghiệp hoặc học phần thay thế",
       "- phương án chính: 71ITGR40106 Khóa luận tốt nghiệp (6 TC): chưa học — một học phần đủ số tín chỉ của nhóm",
       "- phương án thay thế (chỉ khi bạn không làm khóa luận tốt nghiệp theo quy định của Khoa): chọn các học phần sau cho đủ 6 TC:",
     ]);

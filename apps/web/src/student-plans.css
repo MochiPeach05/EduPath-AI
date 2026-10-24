@@ -2,9 +2,15 @@
   grid-column: 1 / -1;
   margin: 0;
 }
+/* One column that never grows past the panel: each term's table scrolls inside its
+   .sc-table-wrap instead of widening the page (about 500 px and 1024 px wide). */
 .sp-content {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 20px;
+  min-width: 0;
+}
+.sp-content > * {
   min-width: 0;
 }
 .sp-content > h2,
@@ -15,22 +21,26 @@
   margin-top: 12px;
 }
 /* One table per term: fixed widths keep the columns lined up across terms
-   instead of each table sizing itself to its own content. */
+   instead of each table sizing itself to its own content. The name column
+   takes what is left: at least about 220 px at the 900 px minimum. */
 .sp-content .sc-table {
   table-layout: fixed;
-  min-width: 760px;
+  min-width: 900px;
 }
 .sp-content .sc-table th:nth-child(1) {
-  width: 150px;
+  width: 140px;
 }
 .sp-content .sc-table th:nth-child(3) {
-  width: 72px;
+  width: 60px;
 }
 .sp-content .sc-table th:nth-child(4) {
-  width: 110px;
+  width: 130px;
 }
 .sp-content .sc-table th:nth-child(5) {
-  width: 36%;
+  width: 24%;
+}
+.sp-content .sc-table th.sc-result-cell {
+  width: 120px;
 }
 .sp-content .sc-table td:nth-child(5) {
   white-space: normal;
@@ -39,6 +49,18 @@
   vertical-align: top;
   overflow-wrap: anywhere;
 }
+.sp-content .sc-table td:nth-child(4) {
+  min-width: 0;
+}
 .sp-content .sc-filters {
   padding: 0;
+}
+.sp-link {
+  color: var(--ep-action);
+  font-weight: 650;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.sp-link:hover {
+  color: var(--ep-action-hover);
 }

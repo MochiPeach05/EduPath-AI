@@ -137,7 +137,9 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
     // Segments in scale order, each a button that names the group, the count and the share.
     expect([...section.matchAll(/class="scomp-chart-seg scomp-chart-(\w+)/g)].map((match) => match[1])).toEqual(["excellent", "proficient", "good", "upcoming", "exempt"]);
     expect(section).toContain('aria-label="Kiến thức chuyên môn: 1 kỹ năng Xuất sắc, 20% số kỹ năng của nhóm. Bấm để xem các kỹ năng này."');
-    expect(section).toContain("left:0%;width:20%");
+    // Each bar is the group's share of the axis; its segments grow with their counts but stay at least 14px wide (2026-10-25).
+    expect(section).toContain('<div class="scomp-chart-bar" style="width:100%;min-width:56px"><button type="button" class="scomp-chart-seg scomp-chart-excellent" style="flex-grow:1"');
+    expect(section).toContain('class="scomp-chart-seg scomp-chart-good" style="flex-grow:2"');
     // The tooltip gives the full picture: count, level, group share, the level's range and the skills with their scores.
     const tip = section.slice(section.indexOf("scomp-chart-tip"), section.indexOf("Bấm để xem danh sách"));
     expect(tip).toContain("<strong>1 kỹ năng</strong><span>Xuất sắc</span>");
@@ -187,7 +189,9 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
     // Changes in whole points as shown: rises green, falls red, the first term has none.
     const changes = [...section.matchAll(/<td class="scomp-num">(?:<span class="(sg-status-pass|sg-status-fail|scomp-zero)">([^<]+)<\/span>)<\/td><\/tr>/g)].map((match) => `${match[2]} ${match[1]}`);
     expect(changes).toEqual(["— scomp-zero", "+4 sg-status-pass", "+3 sg-status-pass", "+6 sg-status-pass", "−2 sg-status-fail"]);
-    expect(section).toMatch(/class="scomp-history-latest"><th scope="row">Học kỳ 2<span class="scomp-career-tag">Hiện tại<\/span><small>HK252<\/small>/);
+    // "Mới nhất", not "Hiện tại": the term being studied is another one (2026-10-25 audit).
+    expect(section).toMatch(/class="scomp-history-latest"><th scope="row">Học kỳ 2<span class="scomp-career-tag">Mới nhất<\/span><small>HK252<\/small>/);
+    expect(section).not.toContain("Hiện tại");
     // A result stored before the history asks for a new run instead of an empty table.
     const assessment = fixtureAssessment("completed");
     const older = render({ assessment: { ...assessment, result: { ...fixtureResult, history: undefined } }, aiEnabled: true, workerOnline: true });
@@ -374,7 +378,8 @@ describe("StudentCompetency — Khoảng trống kỹ năng", () => {
     const html = withAi("completed", "gap");
     expect(html).toContain("✓</span> Đạt ngưỡng");
     expect(html).toContain("Dưới ngưỡng · thiếu 10 điểm");
-    expect(html).toContain("Sắp học · HK261");
+    expect(html).toContain("Sắp học · HK1 · 2026–2027");
+    expect(html).not.toContain("Sắp học · HK261");
     expect(html).toMatch(/scomp-status scomp-status-neutral"><span aria-hidden="true">\?<\/span> Chưa đủ dữ liệu/);
     expect(html).toContain("<caption");
   });
@@ -446,5 +451,116 @@ describe("StudentCompetency — Khoảng trống kỹ năng", () => {
     const html = render({ assessment: null, aiEnabled: false, workerOnline: false }, { view: "gap" });
     expect(html).toContain("Chưa có kết quả phân tích");
     expect(html).toContain("Khoảng trống kỹ năng được tính cùng lúc với đánh giá năng lực");
+  });
+});
+
+describe("StudentCompetency — audit of 2026-10-25", () => {
+  const withResult = (patch: (result: typeof fixtureResult) => typeof fixtureResult, view?: CompetencyView) => {
+    const assessment = fixtureAssessment("completed");
+    return render({ assessment: { ...assessment, result: patch(assessment.result) }, aiEnabled: true, workerOnline: true }, { view });
+  };
+  /** The fixture as computed by comp-calc-v17 in HK261 (being studied), HK262 next. */
+  const v17 = (result: typeof fixtureResult) => ({
+    ...result, meta: { ...result.meta, calcVersion: "comp-calc-v17" }, transcript: { ...result.transcript, studyTerm: "HK261" },
+    progress: { ...result.progress!, currentTerm: "HK261", nextTerm: "HK262" },
+  });
+
+  it("links to the career page and the gap page by their names", () => {
+    const html = withAi("completed");
+    expect(html).toContain('href="#skill-gap">Xem Khoảng trống kỹ năng');
+    const none = withResult((result) => ({ ...result, career: null }));
+    expect(none).toContain('<a class="sw-text-link" href="#career">Chọn nghề mục tiêu');
+    expect(withResult((result) => ({ ...result, career: null }), "gap")).toContain('<a class="sw-outline" href="#career">Chọn nghề mục tiêu</a>');
+  });
+
+  it("explains Chưa học and names a planned evidence course Sắp học after the term being studied", () => {
+    const html = withAi("completed");
+    expect(html).toContain("<li><strong>Chưa học:</strong> học phần đo kỹ năng đó đã qua học kỳ trong kế hoạch mà bạn chưa học, hoặc không có trong kế hoạch; hãy đăng ký ở học kỳ tới.</li>");
+    // Kiểm thử phần mềm (TST105), planned for HK261 while HK252 is the newest term: Sắp học, not Chưa học; not registered yet.
+    const row = html.slice(html.indexOf("<td>TST105</td>"), html.indexOf("</tr>", html.indexOf("<td>TST105</td>")));
+    expect(row).toContain("Kiểm thử phần mềm<small>Sắp học · HK1 · 2026–2027</small>");
+    expect(row).toContain("<td>Chưa đăng ký</td>");
+    expect(row).toContain("<td>Dự kiến HK261</td>");
+    expect(html).toContain("<span>Kiểm thử phần mềm (TST105)</span><b>Sắp học · HK1 · 2026–2027</b>");
+    // The skill's own term reads the same way (it read "Sắp học · HK261").
+    const termed = withResult((result) => ({ ...result, skills: result.skills.map((skill) => (skill.key === "S07" ? { ...skill, upcoming: true, upcomingTerm: "HK261" } : skill)) }));
+    expect(termed).toContain('<span class="scomp-skill-none">Sắp học · HK1 · 2026–2027</span>');
+  });
+
+  it("says a planned term that has passed and when to register, on the evidence and on the suggested courses", () => {
+    // TST105 planned for HK253 while HK261 is being studied.
+    const late = (result: typeof fixtureResult) => {
+      const next = v17(result);
+      return {
+        ...next, courses: next.courses.map((course) => (course.code === "TST105" ? { ...course, plannedTerm: "HK253" } : course)),
+        courseSuggestions: next.courseSuggestions.map((course) => (course.code === "TST105" ? { ...course, term: "HK253", overdue: true } : course)),
+      };
+    };
+    const html = withResult(late);
+    expect(html).toContain("Kiểm thử phần mềm<small>Chưa học</small>");
+    expect(html).toContain("<td>Đã qua học kỳ dự kiến HK253 — đăng ký ở HK262</td>");
+    const gap = withResult(late, "gap");
+    expect(gap).toContain("<dt>Học kỳ</dt><dd>Đã qua học kỳ dự kiến HK253 — đăng ký ở HK262</dd>");
+    expect(gap).not.toContain("HK253 theo KHĐT");
+  });
+
+  it("hides the evidence table of a skill without courses of the student's own path", () => {
+    const html = withResult((result) => ({ ...result, skills: result.skills.map((skill) => (skill.key === "S08" ? { ...skill, evidenceCourses: [] } : skill)) }));
+    expect(html).not.toContain("<caption>Học phần minh chứng của Triển khai dịch vụ đám mây</caption>");
+    expect(html).toContain("<caption>Học phần minh chứng của Lập trình web</caption>");
+  });
+
+  it("lists a skill of courses without credits under Môn điều kiện (K27/K28 before comp-calc-v17)", () => {
+    const html = withResult((result) => ({ ...result, skills: result.skills.map((skill) => (skill.key === "S08" ? { ...skill, notApplicableReason: "no_credits" as const } : skill)) }));
+    expect(html).toContain("Môn điều kiện (GDTC/GDQP) (2)");
+    expect(html).not.toContain("Ngoài lựa chọn học phần của bạn");
+    expect(html).toContain('<span class="scomp-skill-none">Học phần không tính tín chỉ</span>');
+  });
+
+  it("counts the next term in courses and spaces the plan's choice labels in results stored before", () => {
+    const html = withResult((result) => ({ ...result, progress: { ...result.progress!, nextCount: 2, next: [
+      ...result.progress!.next.filter((entry) => entry.kind === "course"),
+      { kind: "choice" as const, label: "Chọn2 trong 4 môn sau", required: 2, unit: "course" as const, remaining: 2, options: [
+        { code: "TST106", name: "Điện toán đám mây", credits: 3, state: "not_taken" as const }, { code: "TST110", name: "Phát triển ứng dụng di động", credits: 3, state: "not_taken" as const },
+      ] },
+    ] } }));
+    expect(html).toContain("<dt>Học kỳ tới (HK261)</dt><dd>3 <small>học phần");
+    expect(html).toContain("<strong>Chọn 2 trong 2 môn sau</strong>");
+  });
+
+  it("aligns the gap counts, the missing list and the toggle, with the shortfall adding up", () => {
+    const html = withAi("completed", "gap");
+    const summary = html.slice(html.indexOf('id="sgap-summary"'), html.indexOf('id="scomp-ai"'));
+    expect(summary).toContain("<li>Đạt 1/5 kỹ năng · 2 dưới ngưỡng · 1 sắp học · 1 chưa đủ dữ liệu</li><li>3/5 kỹ năng có điểm</li>");
+    expect(summary).not.toContain("kỹ năng có dữ liệu");
+    expect(html).toContain("Chỉ kỹ năng còn thiếu");
+    expect(html).not.toContain("Chỉ kỹ năng chưa đạt");
+    // 75 against 85: −10 with a real minus sign; 91 against 85: +6.
+    expect(html).toContain('data-label="Chênh lệch">−10<small>Thiếu vừa</small>');
+    expect(html).toContain('data-label="Chênh lệch">+6</td>');
+    // The career line of the overview reads the same.
+    expect(withAi("completed")).toContain("<p class=\"scomp-meta\">Đạt 1/5 kỹ năng · 2 dưới ngưỡng · 1 sắp học · 1 chưa đủ dữ liệu</p>");
+    // The last column of the career history is the newest graded term, not "Hiện tại".
+    const history = html.slice(html.indexOf('id="sgap-history"'), html.indexOf('id="scomp-courses"'));
+    expect(history).toContain("HK2<small>Mới nhất</small>");
+  });
+
+  it("names the helped skills once per course card and shows the prerequisite notes of plan courses", () => {
+    const html = withAi("completed", "gap");
+    expect(html).not.toContain("Giúp rèn kỹ năng");
+    const noCareer = withResult((result) => ({ ...result, career: null, skillPlans: result.skillPlans!.map((plan, index) => (index ? plan : {
+      ...plan, take: plan.take.map((course) => ({ ...course, eligibility: "review" as const, reviewNotes: ["[71ENG010012]Anh văn dự bị (AV0)"] })),
+    })) }), "gap");
+    expect(noCareer).toContain("<p class=\"scomp-meta\">Cần xác nhận: [71ENG010012]Anh văn dự bị (AV0)</p>");
+  });
+
+  it("lists only similar skills with a score next to a self-study skill", () => {
+    // Docker's related S08 has no score (outside the student's choices).
+    expect(withAi("completed", "gap")).not.toContain("Kỹ năng gần giống đã đo");
+  });
+
+  it("shows the exempt column in the table view of the proficiency chart", () => {
+    const html = withAi("completed");
+    expect(html).toContain('aria-label="1 kỹ năng Miễn/công nhận trong nhóm Kỹ năng bổ trợ"');
   });
 });

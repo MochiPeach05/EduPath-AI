@@ -135,6 +135,42 @@ describe("real faculty curriculum workbooks", () => {
       unresolvedCodes: ["71ITMA10403"],
     });
   });
+  it("resolves course names the K28 CTĐT writes instead of codes, when it is imported again (audit 2026-10-25)", async () => {
+    const k28 = await readWorkbook(await readFile(new URL("../../data/curricula/Khung CTĐT K28 CNTT (Gởi SV-CVHT).xlsx", import.meta.url)));
+    expect(k28.relations.find((r) => r.courseCode === "71ITSE30803" && r.kind === "prior")).toMatchObject({
+      raw: "Lập trình ứng dụng Java", targetCodes: ["71ITSE30403"], unresolvedCodes: [], reviewRequired: false,
+    });
+    // Two names separated by ";" with a final period, and an en dash for a hyphen.
+    expect(k28.relations.find((r) => r.courseCode === "71POLC10052")).toMatchObject({ targetCodes: ["71POLS10032", "71POLH10042"], reviewRequired: false });
+    expect(k28.relations.find((r) => r.courseCode === "71POLS10032")).toMatchObject({ raw: "Triết học Mác – Lênin", reviewRequired: false });
+    // Text that names no course stays for review.
+    expect(k28.relations.find((r) => r.courseCode === "71NAD310032")).toMatchObject({ raw: "GDQP 1,2", targetCodes: [], reviewRequired: true });
+  }, 30000);
+  it("resolves only exact names of the same CTĐT, never a bracketed text, a partial name or a name two codes share", () => {
+    const data = creditFixture(
+      12,
+      [{ id: "a", label: "A. Program", credits: 12, sourceRow: 10 }],
+      ["71ITSE30403", "71ITSE30803", "71ITIS30103", "71ITAI40203", "71ITAI40303"].map((code) => ({ code, type: "BB", credits: 3, groupId: "a" })),
+    );
+    const [java, advanced, database, first, second] = data.courses;
+    java!.name = "Lập trình ứng dụng Java";
+    advanced!.name = "Lập trình Java nâng cao";
+    advanced!.prior = "lập trình ứng dụng  JAVA.";
+    database!.name = "Cơ sở dữ liệu";
+    database!.prior = "Lập trình ứng dụng Java; Lập trình Java nâng cao";
+    database!.prerequisite = "[71ITSE30403]Lập trình ứng dụng Java";
+    first!.name = "Học máy";
+    second!.name = "Học máy";
+    first!.prior = "Lập trình ứng dụng";
+    second!.prior = "Học máy";
+    rebuild(data);
+    const relation = (code: string, kind: "prior" | "prerequisite") => data.relations.find((r) => r.courseCode === code && r.kind === kind);
+    expect(relation("71ITSE30803", "prior")).toMatchObject({ targetCodes: ["71ITSE30403"], reviewRequired: false });
+    expect(relation("71ITIS30103", "prior")).toMatchObject({ targetCodes: ["71ITSE30403", "71ITSE30803"], reviewRequired: false });
+    expect(relation("71ITIS30103", "prerequisite")).toMatchObject({ targetCodes: ["71ITSE30403"], reviewRequired: false });
+    expect(relation("71ITAI40203", "prior")).toMatchObject({ targetCodes: [], reviewRequired: true });
+    expect(relation("71ITAI40303", "prior")).toMatchObject({ targetCodes: [], reviewRequired: true });
+  });
   it("keeps the two relation kinds and conditional requirements distinct", () => {
     expect(k31.relations.some((r) => r.kind === "prior")).toBe(true);
     expect(k31.relations.some((r) => r.kind === "prerequisite")).toBe(true);

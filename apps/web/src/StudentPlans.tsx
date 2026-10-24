@@ -1,10 +1,15 @@
 import { useState } from "react";
 import type { PlanData, PlanItem } from "./plan-types";
-import { courseTypeLabel, searchTerm } from "./student-curriculum-types";
+import { courseTypeLabel, prerequisiteText, searchTerm } from "./student-curriculum-types";
+import { CourseResultMark } from "./StudentCurriculum";
+import { readGraduation } from "./student-graduation-api";
+import { GRADUATION_API } from "./student-graduation-data";
 import { useLiveData } from "./use-live-data";
 import type { Transcript } from "./StudentTranscript";
-import { INFERRED_RESULT_NOTE, transcriptOutcomes } from "./transcript-results";
-import { physicalEducationProgress, studentPlanOutcome } from "./student-plan-results";
+import { INFERRED_RESULT_NOTE } from "./transcript-results";
+import {
+  graduationCourseAliases, physicalEducationProgress, planTermCredits, studentPlanOutcome, transcriptCourseStates,
+} from "./student-plan-results";
 import "./student-curriculum.css";
 import "./student-plans.css";
 
@@ -38,11 +43,19 @@ async function readTranscript(response: Response): Promise<{ transcript: Transcr
   if (!response.ok) throw new Error("Chưa tải được kết quả bảng điểm. Vui lòng thử lại.");
   return response.json();
 }
+
+/** Where a student without a plan of their cohort still finds each course's planned year and term. */
+function CurriculumLink() {
+  return <a className="sp-link" href="#curriculum">Chương trình đào tạo</a>;
+}
+
 export default function StudentPlans() {
   const [choice, setChoice] = useState<string | null>(null);
   const list = useLiveData<List>("/api/student/plans", 0, readPlan);
   const id = choice ?? list.data?.suggestedId ?? "";
   const selected = list.data?.items.find((item) => item.id === id);
+  const profileCohort = list.data?.profileCohort ?? null;
+  const ownMissing = Boolean(profileCohort && list.data && !list.data.items.some((item) => item.cohortCode === profileCohort));
   return (
     <div className="sc-workspace">
       <section className="sw-panel sc-selector sp-selector">
@@ -74,16 +87,18 @@ export default function StudentPlans() {
         {list.loading && <p role="status">Đang tải kế hoạch…</p>}
         {list.error && <p role="alert">{list.error}</p>}
         {list.data && !list.data.items.length && (
-          <p>Chưa có kế hoạch đào tạo đang mở.</p>
+          <p>
+            Chưa có kế hoạch đào tạo đang mở. Bạn có thể xem năm học, học kỳ dự kiến của từng học phần trong <CurriculumLink />.
+          </p>
         )}
         {list.data && !!list.data.items.length && (
           <p className="sc-muted">
-            {selected?.cohortCode === list.data.profileCohort
+            {selected?.cohortCode === profileCohort
               ? "Kế hoạch cùng khóa tuyển sinh của bạn."
-              : list.data.profileCohort && !list.data.items.some((item) => item.cohortCode === list.data!.profileCohort)
-                ? `Chưa có kế hoạch đào tạo của khóa ${list.data.profileCohort}. Bạn có thể chọn kế hoạch của khóa khác để tham khảo.`
-                : "Bạn có thể chọn kế hoạch của khóa khác để tham khảo."}{" "}
-            Đây là kế hoạch giảng dạy, không phải danh sách môn bạn đã đăng ký.
+              : ownMissing
+                ? <>Chưa có kế hoạch đào tạo của khóa {profileCohort}. Bạn có thể chọn kế hoạch của khóa khác để tham khảo, hoặc xem năm học, học kỳ dự kiến của từng học phần trong <CurriculumLink />.</>
+                : "Bạn có thể chọn kế hoạch của khóa khác để tham khảo."}
+            {selected && " Đây là kế hoạch giảng dạy, không phải danh sách môn bạn đã đăng ký."}
           </p>
         )}
       </section>
@@ -93,12 +108,26 @@ export default function StudentPlans() {
     </div>
   );
 }
+
+/** "Tín chỉ học kỳ theo kế hoạch": the plan's own figure, else what the term's rows add up to (K26 prints none). */
+function termCreditsText(term: Detail["terms"][number], items: Detail["items"], sectionIds: ReadonlySet<string>): string {
+  if (term.sourceCredits !== null) return String(term.sourceCredits);
+  const sum = planTermCredits(items.filter((item) => item.termCode === term.code), sectionIds);
+  if (!sum) return "Chưa xác định";
+  return sum.partial
+    ? `${sum.credits} tín chỉ chung, chưa tính các học phần tự chọn hoặc theo chuyên ngành bên dưới`
+    : `${sum.credits} (cộng từ các học phần trong kỳ, không tính môn điều kiện (*))`;
+}
+
 function PlanContents({ id }: { id: string }) {
   const [transcriptRevision, setTranscriptRevision] = useState(0);
   const transcript = useLiveData<{ transcript: Transcript | null }>(
     "/api/student/transcript", transcriptRevision, readTranscript,
   );
-  const outcomes = transcriptOutcomes(transcript.data?.transcript?.data.sections ?? []);
+  // The student's own graduation check: a course passed under another code (a retake with a later cohort).
+  const graduation = useLiveData(GRADUATION_API, transcriptRevision, readGraduation);
+  const states = transcriptCourseStates(transcript.data?.transcript?.data.sections ?? []);
+  const aliases = graduationCourseAliases(graduation.data?.evaluation);
   const remote = useLiveData<Detail>(`/api/student/plans/${id}`, 0, readPlan);
   const [query, setQuery] = useState(""),
     [term, setTerm] = useState("");
@@ -117,14 +146,16 @@ function PlanContents({ id }: { id: string }) {
   const data = remote.data!;
   const physicalEducation = physicalEducationProgress(
     [...(data.physicalEducationGroups?.TC002 ?? []), ...(data.physicalEducationGroups?.TC102 ?? [])],
-    outcomes,
+    states,
   );
+  const outcome = (item: Detail["items"][number]) => studentPlanOutcome(item, states, physicalEducation, aliases);
+  const sectionIds = new Set(data.sections.map((section) => section.id));
   const rows = data.items.filter(
     (item) =>
       (!term || item.termCode === term) &&
       searchTerm(`${item.code} ${item.name}`).includes(searchTerm(query)),
   );
-  const showsInferred = rows.some((item) => studentPlanOutcome(item, outcomes, physicalEducation)?.inferred);
+  const showsInferred = rows.some((item) => outcome(item)?.inferred);
   return (
     <section className="sw-panel sp-content">
       <h2>{data.name}</h2>
@@ -185,7 +216,7 @@ function PlanContents({ id }: { id: string }) {
               </h3>
               <p className="sc-muted">
                 Tín chỉ học kỳ theo kế hoạch:{" "}
-                {t.sourceCredits ?? "Chưa xác định"}
+                {termCreditsText(t, data.items, sectionIds)}
               </p>
               <div className="sc-table-wrap">
                 <table className="sc-table">
@@ -200,9 +231,7 @@ function PlanContents({ id }: { id: string }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {items.map((item) => {
-                      const outcome = studentPlanOutcome(item, outcomes, physicalEducation);
-                      return (
+                    {items.map((item) => (
                       <tr key={item.id}>
                         <td>{item.code || "—"}</td>
                         <td>
@@ -216,28 +245,19 @@ function PlanContents({ id }: { id: string }) {
                           {item.notes && <small>{item.notes}</small>}
                         </td>
                         <td>{item.credits ?? "—"}</td>
-                        <td>{item.type ? courseTypeLabel(item.type) : "—"}</td>
+                        <td>{courseTypeLabel(item.type, item.code) || "—"}</td>
                         <td>
                           {item.prerequisite && (
-                            <div>Tiên quyết: {item.prerequisite}</div>
+                            <div>Tiên quyết: {prerequisiteText(item.prerequisite)}</div>
                           )}
-                          {item.prior && <div>Học trước: {item.prior}</div>}
+                          {item.prior && <div>Học trước: {prerequisiteText(item.prior)}</div>}
                           {!item.prerequisite && !item.prior && "Không ghi trong kế hoạch"}
                         </td>
                         <td className="sc-result-cell">
-                          {outcome && (
-                            <span className={`sc-result sc-result-${outcome.result}`}
-                              role="img"
-                              aria-label={outcome.result === "pass" ? "Đạt" : "Chưa đạt"}
-                              title={outcome.result === "pass" ? "Đạt" : "Chưa đạt"}>
-                              {outcome.result === "pass" ? "✓" : "✗"}
-                            </span>
-                          )}
-                          {outcome?.inferred && <small className="sc-result-note">{INFERRED_RESULT_NOTE}</small>}
+                          <CourseResultMark view={outcome(item)} />
                         </td>
                       </tr>
-                      );
-                    })}
+                    ))}
                   </tbody>
                 </table>
               </div>

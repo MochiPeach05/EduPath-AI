@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
   aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, confidentStrengths, countAxis, dataUsedLine, displayLevel, FIT_SCALE, fitLabelOf, fitLevelOf, fitDataShareOf, fitScoreOf, fitStep, gapHistory, levelChart, levelSummary, levelText, overallIsPooled, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
-  careerSummaryText, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isPreconditionError, PRIORITY_LABELS, levelStep, mapAiOutput, missingRequirements, missingRequirementsMessage, modelLabel, needsSelfStudy, plansFor, skillGroupKeys,
-  scoreDifference, shouldPoll, sortRequirements, termLabel, EMPTY_SKILL_FILTERS,
+  careerDataText, careerSummaryText, choiceLabel, courseTermText, formatDifference, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isOverdue, isPreconditionError, PRIORITY_LABELS, levelStep, mapAiOutput, missingRequirements, missingRequirementsMessage, modelLabel, needsSelfStudy, nextCourseCount, nextTermOf, plannedCourseNote, plansFor, relatedSkillNames, shownScore, skillGroupKeys,
+  scoreDifference, shouldPoll, sortRequirements, studyTermOf, termLabel, upcomingText, CHART_LEVELS, EMPTY_SKILL_FILTERS, LEVEL_COLUMNS,
   careerThresholdsLine, chartLevelLabel, currentImprovements, LEVEL_SCALE, levelOfScore, withCurrentLevels,
 } from "./student-competency-data";
 import { fixtureAiOutput, fixtureAssessment, fixtureResult } from "./student-competency.fixture";
@@ -146,6 +146,16 @@ describe("fit scale (2026-10-22: a 0–100 điểm phù hợp on the bounds of t
     // A result stored with the earlier labels (Khá phù hợp, 0,58) reads the current scale: 56,62 is Ít phù hợp.
     expect(fitLabelOf(fixtureResult.career!)).toBe("Ít phù hợp");
   });
+  it("describes each fit level by its score band, never by the skills' statuses (2026-10-25 audit)", () => {
+    // A career whose 4 skills were all met read "một số kỹ năng còn dưới ngưỡng hoặc chưa học" at Trung bình.
+    expect(FIT_SCALE.map((item) => item.text)).toEqual([
+      "Điểm trung bình các kỹ năng của nghề ở mức Xuất sắc (từ 90).",
+      "Điểm trung bình các kỹ năng của nghề ở mức Giỏi (80 đến dưới 90).",
+      "Điểm trung bình các kỹ năng của nghề ở mức Khá (62,5 đến dưới 80).",
+      "Điểm trung bình các kỹ năng của nghề ở mức Trung bình (50 đến dưới 62,5).",
+      "Điểm trung bình các kỹ năng của nghề ở mức Yếu (dưới 50).",
+    ]);
+  });
 });
 
 describe("strengths (2026-10-21)", () => {
@@ -288,7 +298,8 @@ describe("career gaps", () => {
     const byStatus = (status: CareerRequirementResult["status"]) => gapStatusDisplay(reqs.find((req) => req.status === status)!);
     expect(byStatus("met")).toEqual({ tone: "pass", glyph: "✓", text: "Đạt ngưỡng" });
     expect(byStatus("below").tone).toBe("fail");
-    expect(byStatus("upcoming")).toEqual({ tone: "neutral", glyph: "○", text: "Sắp học · HK261" });
+    // The term reads like termLabel (2026-10-25 audit: "Sắp học · HK261" before).
+    expect(byStatus("upcoming")).toEqual({ tone: "neutral", glyph: "○", text: "Sắp học · HK1 · 2026–2027" });
     expect(byStatus("no_data")).toEqual({ tone: "neutral", glyph: "?", text: "Chưa đủ dữ liệu" });
     expect(gapStatusDisplay({ status: "not_studied", deficit: null, upcomingTerm: null, exemptOnly: false }).tone).toBe("unknown");
   });
@@ -298,9 +309,27 @@ describe("career gaps", () => {
     expect(gapStatusDisplay(other)).toEqual({ tone: "unknown", glyph: "!", text: "Cần tự học" });
     expect(needsSelfStudy(other)).toBe(true);
     expect(needsSelfStudy({ ...other, noDataReason: "not_measured" })).toBe(false);
-    expect(careerSummaryText(career)).toBe(career.summaryText);
+    // Rebuilt from the requirements, the stored line ("Đạt 1/5 kỹ năng · 1 sắp học · 1 chưa đủ dữ liệu") is not read: the
+    // two skills below the threshold are named, the zero counts are not (2026-10-25 audit).
+    expect(career.summaryText).toBe("Đạt 1/5 kỹ năng · 1 sắp học · 1 chưa đủ dữ liệu");
+    expect(careerSummaryText(career)).toBe("Đạt 1/5 kỹ năng · 2 dưới ngưỡng · 1 sắp học · 1 chưa đủ dữ liệu");
     expect(careerSummaryText({ ...career, requirements: career.requirements.map((req) => (req.status === "no_data" ? other : req)) }))
-      .toBe("Đạt 1/5 kỹ năng · 1 sắp học · 1 cần tự học · 0 chưa đủ dữ liệu");
+      .toBe("Đạt 1/5 kỹ năng · 2 dưới ngưỡng · 1 sắp học · 1 cần tự học");
+  });
+  it("names only the non-zero counts in a fixed order, and the skills with a score (2026-10-25 audit)", () => {
+    const req = (status: CareerRequirementResult["status"], score: number | null = null, noDataReason: CareerRequirementResult["noDataReason"] = null) => ({ status, score, noDataReason });
+    // The K28 case: "Đạt 4/6 kỹ năng · 0 sắp học · 0 chưa đủ dữ liệu" hid the 2 skills not studied; "6/6 kỹ năng có dữ liệu".
+    const k28 = { requirements: [req("met", 85), req("met", 90), req("met", 70), req("met", 81), req("not_studied"), req("not_studied")] };
+    expect(careerSummaryText(k28)).toBe("Đạt 4/6 kỹ năng · 2 chưa học");
+    expect(careerDataText(k28)).toBe("4/6 kỹ năng có điểm");
+    expect(careerSummaryText({ requirements: [
+      req("no_data", null, "not_measured"), req("upcoming"), req("no_data", null, "elective_not_chosen"), req("not_studied"),
+      req("below", 50), req("met", 90), req("met", null), req("no_data", null, "other_specialty"),
+    ] })).toBe("Đạt 2/8 kỹ năng · 1 dưới ngưỡng · 1 chưa học · 1 sắp học · 2 cần tự học · 1 chưa đủ dữ liệu");
+    expect(careerDataText(fixtureResult.career!)).toBe("3/5 kỹ năng có điểm");
+  });
+  it("keeps 'Kỹ năng còn thiếu' and 'Chỉ kỹ năng còn thiếu' to one rule: Sắp học is not missing", () => {
+    expect(reqs.filter(isGap).map((req) => req.requirementId)).toEqual(["q2", "q3", "q5"]);
   });
   it("sorts Bắt buộc first, then the largest shortfall", () => {
     expect(sortRequirements(reqs).map((req) => req.requirementId)).toEqual(["q2", "q1", "q3", "q4", "q5"]);
@@ -325,6 +354,23 @@ describe("skills", () => {
       ["G1", ["S01", "S02", "S03", "S04"]], ["G2", ["S05"]], ["condition", ["S06"]], ["not-applicable", ["S08"]], ["upcoming", ["S07"]],
     ]);
     expect(buckets.at(-1)!.note).toContain("Không phải điểm yếu");
+  });
+  it("lists a skill of courses without credits with the condition-only skills, never outside the student's choices", () => {
+    // K27/K28 before comp-calc-v17: GDTC/GDQP with 0 credits made the skill "not applicable, no_credits" although passed.
+    const skills = fixtureResult.skills.map((skill) => skill.key === "S08" ? { ...skill, notApplicableReason: "no_credits" as const } : skill);
+    expect(bucketSkills(fixtureResult, skills).map((bucket) => [bucket.id, bucket.skills.map((skill) => skill.key)])).toEqual([
+      ["G1", ["S01", "S02", "S03", "S04"]], ["G2", ["S05"]], ["condition", ["S06", "S08"]], ["upcoming", ["S07"]],
+    ]);
+  });
+  it("names only similar skills with a score next to a self-study skill (2026-10-25 audit)", () => {
+    // Docker's related S08 is outside the student's choices (no score): not shown; a scored one is.
+    expect(relatedSkillNames(fixtureResult, fixtureResult.selfStudy[0]!)).toEqual([]);
+    expect(relatedSkillNames(fixtureResult, { relatedSkillKeys: ["S08", "S03"] })).toEqual(["Thiết kế cơ sở dữ liệu"]);
+  });
+  it("gives the table view the chart's exempt column", () => {
+    expect(LEVEL_COLUMNS).toEqual(CHART_LEVELS);
+    expect(LEVEL_COLUMNS.at(-1)).toBe("exempt");
+    expect(levelSummary(fixtureResult)[1]!.counts.exempt).toBe(1);
   });
   it("counts a group's skills with the overall rule, whatever a stored skillCount says", () => {
     // Regression: "49/65" next to an overall "62/66" — not-applicable skills (S08) are not in the denominator.
@@ -386,6 +432,77 @@ describe("scoreDifference", () => {
     expect(scoreDifference({ score: 85, status: "met", deficit: null, threshold: 85 })).toBe(0);
     expect(scoreDifference({ score: null, status: "not_studied", deficit: null, threshold: 85 })).toBeNull();
     expect(scoreDifference({ score: 50, status: "upcoming", deficit: null, threshold: 70 })).toBeNull();
+  });
+  it("adds up with the shown score at the 62,5 threshold, with a real minus sign (2026-10-25 audit)", () => {
+    // 43,6 shows as 43: 43 + 19,5 = 62,5 (it read "thiếu 19", 43 + 19 = 62); 73,6 shows as 73: +10,5, not +11.
+    const below = { score: 43.6, status: "below" as const, deficit: 18.9, threshold: 62.5 };
+    expect(scoreDifference(below)).toBe(-19.5);
+    expect(formatDifference(scoreDifference(below)!)).toBe("−19,5");
+    expect(deficitText(below.deficit, below)).toBe("Dưới ngưỡng · thiếu 19,5 điểm");
+    expect(gapStatusDisplay({ ...below, upcomingTerm: null, exemptOnly: false }).text).toBe("Dưới ngưỡng · thiếu 19,5 điểm");
+    expect(scoreDifference({ score: 73.6, status: "met", deficit: null, threshold: 62.5 })).toBe(10.5);
+    expect(formatDifference(10.5)).toBe("+10,5");
+    // A Khá score shown with one decimal (62,7) against 80 lacks 17,3; whole numbers stay whole.
+    expect(scoreDifference({ score: 62.77, status: "below", deficit: 17.23, threshold: 80 })).toBe(-17.3);
+    expect([formatDifference(-6), formatDifference(0), formatDifference(6)]).toEqual(["−6", "0", "+6"]);
+    expect(shownScore(62.77)).toBe(62.7);
+    // Without the score (an older caller): the deficit rounded up to a whole point, never 0.
+    expect(deficitText(0.04)).toBe("Dưới ngưỡng · thiếu 1 điểm");
+  });
+});
+
+describe("terms ahead and past (2026-10-25 audit)", () => {
+  const v17 = { ...fixtureResult, meta: { ...fixtureResult.meta, calcVersion: "comp-calc-v17" }, transcript: { ...fixtureResult.transcript, studyTerm: "HK261" } };
+  it("reads the term being studied from the result, older results from the plan or the latest graded term", () => {
+    expect(studyTermOf(v17)).toBe("HK261");
+    expect(studyTermOf({ ...fixtureResult, meta: { ...fixtureResult.meta, calcVersion: "comp-calc-v13" } })).toBe("HK252");
+    expect(studyTermOf(fixtureResult)).toBe("HK252");
+    expect(nextTermOf({ ...fixtureResult, meta: { ...fixtureResult.meta, calcVersion: "comp-calc-v16" } })).toBe("HK261");
+    // Before v13 the plan's next term was the term being studied: not named.
+    expect(nextTermOf(fixtureResult)).toBeNull();
+  });
+  it("says a planned term that has passed and when to register, never 'HK233 theo KHĐT'", () => {
+    const course = { term: "HK233", termSource: "plan" as const, state: "not_taken" as const };
+    expect(courseTermText(course, "HK251", "HK252")).toBe("Đã qua học kỳ dự kiến HK233 — đăng ký ở HK252");
+    expect(courseTermText(course, "HK251", null)).toBe("Đã qua học kỳ dự kiến HK233 — đăng ký ở học kỳ tới");
+    // The term being studied has passed for registration too; in progress is where it should be.
+    expect(courseTermText({ ...course, term: "HK251" }, "HK251", "HK252")).toBe("Đã qua học kỳ dự kiến HK251 — đăng ký ở HK252");
+    expect(courseTermText({ ...course, term: "HK251", state: "in_progress" }, "HK251", "HK252")).toBe("HK251 theo KHĐT");
+    expect(courseTermText({ ...course, term: "HK261", termSource: "curriculum" }, "HK251", "HK252")).toBe("HK261 theo CTĐT");
+    // The engine's flag wins (comp-calc-v17).
+    expect(isOverdue({ ...course, overdue: false }, "HK251")).toBe(false);
+    expect(courseTermText({ ...course, term: null }, "HK251", "HK252")).toBe("Chưa xếp lịch");
+  });
+  it("calls a planned course Sắp học only after the term being studied", () => {
+    expect(plannedCourseNote("HK262", "HK261")).toBe("Sắp học · HK2 · 2026–2027");
+    expect(plannedCourseNote("HK253", "HK261")).toBe("Chưa học");
+    expect(plannedCourseNote(null, "HK261")).toBe("Chưa học");
+    expect(upcomingText(null)).toBe("Sắp học");
+  });
+});
+
+describe("training plan progress (2026-10-25 audit)", () => {
+  it("spaces choice labels and counts the real options", () => {
+    expect(choiceLabel("Chọn1 trong 3 môn sau")).toBe("Chọn 1 trong 3 môn sau");
+    expect(choiceLabel("Chọn 1 trong 4 môn sau", 1, 3)).toBe("Chọn 1 trong 3 môn sau");
+    expect(choiceLabel("Tự chọn chuyên ngành (chọn 1 trong 2)", 1, 2)).toBe("Tự chọn chuyên ngành (chọn 1 trong 2)");
+  });
+  it("counts the next term in courses, also in results stored before comp-calc-v17", () => {
+    const progress = {
+      nextCount: 4,
+      next: [
+        { kind: "course" as const, code: "A", name: "A", credits: 3, state: "not_taken" as const },
+        { kind: "course" as const, code: "B", name: "B", credits: 3, state: "not_taken" as const },
+        { kind: "course" as const, code: "C", name: "C", credits: 3, state: "not_taken" as const },
+        { kind: "choice" as const, label: "Chọn 2 trong 4 môn sau", required: 2, unit: "course" as const, remaining: 2, options: [] },
+      ],
+    };
+    // K30: 3 courses + "Chọn 2 trong 4" is 5, the stored count of entries said 4.
+    expect(nextCourseCount(progress, "comp-calc-v16")).toBe(5);
+    expect(nextCourseCount({ ...progress, nextCount: 5 }, "comp-calc-v17")).toBe(5);
+    const credit = { kind: "choice" as const, label: "Nhóm tự chọn TC406: chọn 6 tín chỉ", required: 6, unit: "credit" as const, remaining: 6,
+      options: [{ code: "X", name: "X", credits: 3, state: "not_taken" as const }, { code: "Y", name: "Y", credits: 3, state: "not_taken" as const }] };
+    expect(nextCourseCount({ nextCount: 1, next: [credit] }, "comp-calc-v16")).toBe(2);
   });
 });
 

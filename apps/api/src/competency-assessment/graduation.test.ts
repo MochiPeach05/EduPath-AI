@@ -4,8 +4,8 @@ import type { GraduationData } from "../graduation/model.js";
 import { deriveElectiveGroups, transcriptCourses } from "./course-state.js";
 import { syntheticCurriculum, syntheticStandards, syntheticTranscript, type TranscriptRow } from "./fixtures/synthetic-k29.js";
 import {
-  assessGraduation, assessGraduationGpa, courseNameKey, decide, electiveQuotas, graduationGroupLabels, graduationInputs, groupCode,
-  matchStandardElectiveGroup, programCreditMap, standardCodeAliases, standardCourseCredits,
+  assessGraduation, assessGraduationGpa, courseNameKey, decide, electiveQuotas, graduationCodeAliases, graduationGroupLabels, graduationInputs,
+  groupCode, matchStandardElectiveGroup, programCreditMap, readableGroupName, standardCodeAliases, standardCourseCredits,
 } from "./graduation.js";
 import type { CurriculumCourseInput, GraduationResolution, TriState } from "./types.js";
 
@@ -149,8 +149,36 @@ describe("E1: group labels and codes", () => {
     );
     expect([...graduationGroupLabels(data).values()]).toEqual([
       "Nhóm tự chọn TC102 · 1 học phần, trong đó có 71PEKC10062",
-      " Nhóm tự chọn TC102  · 2 học phần, trong đó có 71PEBB10052",
+      "Nhóm tự chọn TC102 · 2 học phần, trong đó có 71PEBB10052",
       "Nhóm tự chọn TC102 · 0 học phần",
+    ]);
+  });
+
+  it("writes the source files' group names as a student reads them, codes kept (audit 2026-10-25)", () => {
+    const names: [raw: string, label: string][] = [
+      ["Nhóm tự chọn TC104 (4TC)_Tự chọn giáo dục thể chất", "Nhóm tự chọn TC104 – Tự chọn giáo dục thể chất"],
+      ["Nhóm tự chọn TC306_Tự chọn tốt nghiệp", "Nhóm tự chọn TC306 – Tự chọn tốt nghiệp"],
+      ["Nhóm tự chọn TC533(27TC)-Tự chọn chuyên ngành", "Nhóm tự chọn TC533 – Tự chọn chuyên ngành"],
+      ["Nhóm tự chọn TC509-Tự chọn chuyên ngành", "Nhóm tự chọn TC509 – Tự chọn chuyên ngành"],
+      ["Nhóm tự chọn TC106 (6 TC)_Tự chọn cơ sở ngành", "Nhóm tự chọn TC106 – Tự chọn cơ sở ngành"],
+      ["Nhóm tự chọn TC124 và nhóm tự chọn TC206", "Nhóm tự chọn TC124 + TC206"],
+      ["Nhóm tự chọn TC104 (4TC)", "Nhóm tự chọn TC104"],
+      ["Nhóm bắt buộc", "Nhóm bắt buộc"],
+      ["  Nhóm tự chọn TC209 ", "Nhóm tự chọn TC209"],
+    ];
+    for (const [raw, label] of names) expect(readableGroupName(raw), raw).toBe(label);
+    // NFD input (as some workbooks store it) reads the same.
+    expect(readableGroupName("Nhóm tự chọn TC124 và nhóm tự chọn TC206".normalize("NFD"))).toBe("Nhóm tự chọn TC124 + TC206");
+    const data = smallStandard(
+      [
+        { id: "PE", name: "Nhóm tự chọn TC104 (4TC)_Tự chọn giáo dục thể chất", kind: "elective", minimumCredits: 4 },
+        { id: "X", name: "Nhóm tự chọn TC124 và nhóm tự chọn TC206", kind: "elective", minimumCredits: 24 },
+      ],
+      [{ groupId: "PE", code: "71PEKC10062", credits: 2, conditionOnly: true }, { groupId: "X", code: "DIT0330", credits: 3 }],
+    );
+    const summary = evaluate(data, []);
+    expect(summary.groups.map((group) => [group.label, group.code])).toEqual([
+      ["Nhóm tự chọn TC104 – Tự chọn giáo dục thể chất", "TC104"], ["Nhóm tự chọn TC124 + TC206", "TC124"],
     ]);
   });
 
@@ -377,6 +405,105 @@ describe("retakes with a later cohort: same name, another code (2026-10-23)", ()
     for (const [left, right] of [["Anh văn 1", "Anh văn 2"], ["Lập trình Web", "Lập trình Web nâng cao"], ["Giáo dục thể chất 1", "Giáo dục thể chất 2"]])
       expect(courseNameKey(left!)).not.toBe(courseNameKey(right!));
     expect(courseNameKey("(*)")).toBe("");
+  });
+});
+
+describe("GDTC (1)/(2) fill the 71PE electives of a K27/K28 standard (audit 2026-10-25)", () => {
+  /** One graded term whose courses carry these names; a "(*)" name is conditional, as both transcript parsers read it. */
+  const named = (rows: TranscriptRow[], names: Record<string, string>) => {
+    const transcript = syntheticTranscript([{ year: "2023-2024", semester: "HK02", rows }]);
+    for (const section of transcript.sections) {
+      for (const course of section.courses) {
+        course.name = names[course.code] ?? `Môn ${course.code}`;
+        course.conditional = course.name.includes("*");
+      }
+    }
+    return transcript;
+  };
+  const pe = (code: string): CourseSpec => ({ groupId: "PE", code, credits: 2, conditionOnly: true });
+  /** K27/K28: TC104 lists only 71PE (*) electives, 4 TC; the CTĐT lists DGT0010/DGT0020 (0 TC). */
+  const k27 = () => smallStandard(
+    [{ id: "BB", name: "Nhóm bắt buộc", kind: "mandatory", minimumCredits: 3 }, { id: "PE", name: "Nhóm tự chọn TC104", kind: "elective", minimumCredits: 4 }],
+    [{ groupId: "BB", code: "71ITBS10103", credits: 3 }, pe("71PEBA10052"), pe("71PEBB10032"), pe("71PEDA10102")],
+    { minimumCredits: 3 },
+  );
+  const gdtc = { DGT0010: "Giáo dục thể chất (1) (*)", DGT0020: "Giáo dục thể chất (2) (*)" };
+  const both = () => named([["71ITBS10103", 3, 7, 3, "B"], ["DGT0010", 2, 8, 3.5, "B+"], ["DGT0020", 2, 7, 3, "B"]], gdtc);
+  const curriculum = [ctdt("71ITBS10103", 3), ctdt("DGT0010", 0), ctdt("DGT0020", 0)];
+  const judge = (data: GraduationData, transcript: ReturnType<typeof named>, courses: CurriculumCourseInput[] = curriculum) =>
+    assessGraduation({ resolution: "general", standard: { id: "s", revisionId: "r", version: 1, data }, ...graduationInputs(data, courses, transcript) });
+
+  it("counts passed DGT0010 and DGT0020 toward the group whose courses are all 71PE (*) electives, without a transfer", () => {
+    const inputs = graduationInputs(k27(), curriculum, both());
+    expect(inputs.substitutes).toEqual([
+      { code: "71PEBA10052", name: "Học phần 71PEBA10052", viaCode: "DGT0010", viaName: "Giáo dục thể chất (1) (*)" },
+      { code: "71PEBB10032", name: "Học phần 71PEBB10032", viaCode: "DGT0020", viaName: "Giáo dục thể chất (2) (*)" },
+    ]);
+    expect(inputs.transfers).toEqual([]);
+    // The GDTC courses keep their own records: the CTĐT, and the study plan read from these inputs, still list them.
+    expect(inputs.records.get("DGT0010")).toMatchObject({ code: "DGT0010", state: "passed" });
+    expect(inputs.records.get("71PEBA10052")).toMatchObject({ state: "passed", attempts: [{ code: "71PEBA10052" }] });
+    const summary = judge(k27(), both());
+    // Was 0/4 TC (audit: "đã đạt 0/4 TC" with DGT0010 and DGT0020 passed).
+    expect(summary.groups[1]).toMatchObject({ lower: 4, upper: 4, required: 4, status: "pass", accumulatedCredits: 0 });
+    expect(summary.groupStatus).toBe("pass");
+    // Condition-only: neither the credit estimate nor the GPA changes.
+    const without = judge(k27(), named([["71ITBS10103", 3, 7, 3, "B"]], {}));
+    expect(summary.credits).toEqual(without.credits);
+    expect(summary.gpa).toEqual(without.gpa);
+  });
+
+  it("gives calculate.ts the same aliases (it builds its graduation records from graduationCodeAliases)", () => {
+    const { aliases, transfers, substitutes } = graduationCodeAliases(k27(), both(), new Set(["71ITBS10103", "DGT0010", "DGT0020"]));
+    expect([...aliases]).toEqual([["DGT0010", "71PEBA10052"], ["DGT0020", "71PEBB10032"]]);
+    expect(transfers).toEqual([]);
+    expect(substitutes.map((item) => item.viaCode)).toEqual(["DGT0010", "DGT0020"]);
+  });
+
+  it("needs no CTĐT for DGT0010/DGT0020, and one passed course fills one 2-credit elective", () => {
+    const one = named([["DGT0010", 2, 8, 3.5, "B+"], ["DGT0020", 2, 3, 0, "F"]], gdtc);
+    expect(judge(k27(), one, []).groups[1]).toMatchObject({ lower: 2, required: 4, status: "fail" });
+    expect(graduationInputs(k27(), [], one).substitutes!.map((item) => item.viaCode)).toEqual(["DGT0010"]);
+  });
+
+  it("reads a course of the own CTĐT named 'Giáo dục thể chất (n)' under another code", () => {
+    const transcript = named([["GDTC0001", 2, 8, 3.5, "B+"]], { GDTC0001: "Giáo dục thể chất 1" });
+    const own = [{ ...ctdt("GDTC0001", 0), name: "Giáo dục thể chất (1)" }];
+    expect(judge(k27(), transcript, own).groups[1]).toMatchObject({ lower: 2, status: "fail" });
+    // Not a course of the CTĐT: no substitute.
+    expect(graduationInputs(k27(), [], transcript).substitutes).toEqual([]);
+    // A course of the CTĐT with another name: no substitute.
+    expect(graduationInputs(k27(), [{ ...ctdt("GDTC0001", 0), name: "Bóng đá" }], named([["GDTC0001", 2, 8, 3.5, "B+"]], { GDTC0001: "Bóng đá" })).substitutes).toEqual([]);
+  });
+
+  it("fills an elective nobody took, after the 71PE courses the student passed, and never twice", () => {
+    const transcript = named([["71PEBA10052", 2, 9, 4, "A"], ["71PEBB10032", 2, 3, 0, "F"], ["DGT0010", 2, 8, 3.5, "B+"]], gdtc);
+    const inputs = graduationInputs(k27(), curriculum, transcript);
+    // 71PEBA10052 is passed and 71PEBB10032 was taken (failed): DGT0010 fills 71PEDA10102.
+    expect(inputs.substitutes!.map((item) => [item.viaCode, item.code])).toEqual([["DGT0010", "71PEDA10102"]]);
+    expect(judge(k27(), transcript).groups[1]).toMatchObject({ lower: 4, status: "pass" });
+  });
+
+  it("leaves alone a standard that lists DGT0010/DGT0020 itself (K26), a GDTC course not passed, and a group with other courses", () => {
+    const k26 = smallStandard([{ id: "PE", name: "Nhóm tự chọn TC004", kind: "elective", minimumCredits: 4 }], [
+      { groupId: "PE", code: "DGT0010", credits: 2, conditionOnly: true }, { groupId: "PE", code: "DGT0020", credits: 2, conditionOnly: true }, pe("71PEBA10052"),
+    ]);
+    expect(graduationInputs(k26, [], both()).substitutes).toEqual([]);
+    expect(judge(k26, both(), []).groups[0]).toMatchObject({ lower: 4, status: "pass" });
+    const pending = named([["DGT0010", 2], ["DGT0020", 2, 3, 0, "F"]], gdtc);
+    expect(graduationInputs(k27(), curriculum, pending).substitutes).toEqual([]);
+    const mixed = smallStandard([{ id: "PE", name: "Nhóm tự chọn TC104", kind: "elective", minimumCredits: 4 }],
+      [pe("71PEBA10052"), { groupId: "PE", code: "71ITSE30903", credits: 3 }]);
+    expect(graduationInputs(mixed, curriculum, both()).substitutes).toEqual([]);
+  });
+
+  it("puts the GDTC courses in the PE group with fewer passed courses when a standard has two (K29 TC002/TC102)", () => {
+    const k29 = smallStandard(
+      [{ id: "A", name: "Nhóm tự chọn TC102", kind: "elective", minimumCredits: 2 }, { id: "B", name: "Nhóm tự chọn TC102", kind: "elective", minimumCredits: 2 }],
+      [{ ...pe("71PEKC10062"), groupId: "A" }, { ...pe("71PESW10042"), groupId: "A" }, { ...pe("71PEBA10052"), groupId: "B" }],
+    );
+    const transcript = named([["71PEKC10062", 2, 9, 4, "A"], ["DGT0010", 2, 8, 3.5, "B+"]], gdtc);
+    expect(graduationInputs(k29, [], transcript).substitutes!.map((item) => [item.viaCode, item.code])).toEqual([["DGT0010", "71PEBA10052"]]);
   });
 });
 

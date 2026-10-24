@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { answerLabel, draftOf, problemSummary, surveyErrorMessage, surveyProblems, type SurveyQuestion } from "./profile-survey";
+import { answerLabel, draftOf, gapSentence, problemSummary, surveyErrorMessage, surveyGaps, surveyProblems, type SurveyQuestion } from "./profile-survey";
+import { policyVersion } from "./public-information";
 import { requiredProfileItems, type StudentProfile } from "./StudentOverview";
 
 // Invented questions and answers only.
@@ -46,6 +47,34 @@ describe("profile survey form", () => {
     expect(surveyErrorMessage(undefined, 401)).toBe("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
     expect(surveyErrorMessage("unknown", 500)).toBe("Không lưu được khảo sát. Vui lòng thử lại.");
   });
+
+  it("names the failed action when the API gives no known reason or the network fails", () => {
+    expect(surveyErrorMessage("unknown", 500, "save")).toBe("Không lưu được khảo sát. Vui lòng thử lại.");
+    expect(surveyErrorMessage(undefined, 500, "load")).toBe("Chưa tải được Khảo sát định hướng. Vui lòng thử lại.");
+    expect(surveyErrorMessage(undefined, 0, "delete")).toBe("Chưa xóa được câu trả lời. Vui lòng thử lại.");
+    expect(surveyErrorMessage("database_required", 503, "load")).toBe("Chưa kết nối được nơi lưu hồ sơ. Vui lòng thử lại sau.");
+    expect(surveyErrorMessage(undefined, 401, "delete")).toBe("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
+  });
+
+  it("lists what stored answers lack under the current questions and policy", () => {
+    const answered = { ...survey, answers: { goal: "work", english: "reading" }, complete: true };
+    expect(surveyGaps(questions, null, null)).toEqual([]);
+    expect(surveyGaps(questions, answered, policyVersion)).toEqual([]);
+    // survey-v2 (no description of the strengths), agreed to under an older policy.
+    const v2 = { ...answered, version: "survey-v2", strengths: null, complete: false };
+    expect(surveyGaps(questions, v2, "2026-10-24")).toEqual(["Bổ sung mô tả thế mạnh", "Xác nhận lại theo chính sách mới"]);
+    expect(gapSentence(surveyGaps(questions, v2, "2026-10-24"))).toBe("Bổ sung mô tả thế mạnh và xác nhận lại theo chính sách mới");
+    // survey-v1 (no interests at all) and a question added since.
+    const v1 = { ...v2, version: "survey-v1", answers: { goal: "work" }, interestTech: [], interestHobbies: [] };
+    expect(surveyGaps(questions, v1, null)).toEqual([
+      "Trả lời 1 câu hỏi còn thiếu", "Chọn công nghệ trong Thế mạnh của bạn", "Bổ sung mô tả thế mạnh", "Chọn sở trường",
+      "Đánh dấu ô đồng ý cho EduPath AI dùng câu trả lời",
+    ]);
+    expect(gapSentence(["Xác nhận lại theo chính sách mới"])).toBe("Xác nhận lại theo chính sách mới");
+    expect(gapSentence(["Chọn sở trường", "Bổ sung mô tả thế mạnh", "Xác nhận lại theo chính sách mới"]))
+      .toBe("Chọn sở trường, bổ sung mô tả thế mạnh và xác nhận lại theo chính sách mới");
+    expect(gapSentence([])).toBe("");
+  });
 });
 
 describe("required profile", () => {
@@ -60,8 +89,13 @@ describe("required profile", () => {
     ]);
     const complete = profile({ specialty: "CNPM", careerPositionId: "c1", surveyUpdatedAt: "2026-10-24T10:00:00.000Z", surveyComplete: true });
     expect(requiredProfileItems(complete, true).every((item) => item.done)).toBe(true);
-    // A survey saved before the interests joined it asks for them and the new consent.
-    const older = requiredProfileItems(profile({ surveyUpdatedAt: "2026-10-24T10:00:00.000Z", surveyComplete: false }), true).find((item) => item.id === "survey");
-    expect(older).toMatchObject({ done: false, hint: "Bổ sung thế mạnh, sở trường và xác nhận lại" });
+    // Saved answers that no longer count: what they lack once the survey is read (surveyGaps), a neutral line before.
+    const older = profile({ surveyUpdatedAt: "2026-10-24T10:00:00.000Z", surveyComplete: false });
+    expect(requiredProfileItems(older, true).find((item) => item.id === "survey")).toMatchObject({ done: false, hint: "Cập nhật các mục còn thiếu" });
+    expect(requiredProfileItems(older, true, "Bổ sung mô tả thế mạnh và xác nhận lại theo chính sách mới").find((item) => item.id === "survey"))
+      .toMatchObject({ done: false, hint: "Bổ sung mô tả thế mạnh và xác nhận lại theo chính sách mới" });
+    expect(requiredProfileItems(profile(), true).find((item) => item.id === "survey")?.hint).toBe("Câu hỏi, thế mạnh, sở trường và thành tích");
+    // The specialty and the career are chosen in "Mục tiêu học tập" (was "Thông tin cá nhân").
+    expect(requiredProfileItems(profile(), true).find((item) => item.id === "specialty")?.hint).toBe("Chọn trong Mục tiêu học tập");
   });
 });

@@ -54,5 +54,7 @@ describe("transcript import progress", () => {
     expect(completed).toContain('aria-valuenow="100"');
     expect(completed).toContain('class="sr-progress-track is-completed"');
     expect(completed).not.toContain("ước lượng");
+    // The import's one success message (StudentTranscript adds no second one).
+    expect(completed).toContain('<p role="status">Đã lưu bảng điểm. Hãy đối chiếu các học phần bên dưới với PDF gốc.</p>');
   });
 });

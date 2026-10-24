@@ -76,6 +76,10 @@ describe("formatting helpers", () => {
     expect(formatDeficit(9.44)).toBe("10");
     expect(formatDeficit(30)).toBe("30");
     expect(formatDeficit(0.2)).toBe("1");
+    // With the score and threshold the deficit adds up with the score as sent (2026-10-25 audit): 43 + 19,5 = 62,5, not 19.
+    expect(formatDeficit(18.9, 43.6, 62.5)).toBe("19,5");
+    expect(formatDeficit(5.6, 64.4, 70)).toBe("6");
+    expect(formatDeficit(17.23, 62.77, 80)).toBe("17,3");
   });
 });
 
@@ -221,6 +225,16 @@ describe("buildAiInput", () => {
     expect(user).toContain("  - TST402 | Kho dữ liệu | 3 TC | chưa học | chưa đủ điều kiện: cần đạt trước học phần TST499; cần học trước Hệ điều hành (TST210) | kế hoạch: học kỳ 1 năm học 2026–2027\n");
     expect(user).toContain("  - TST403 | Khai phá dữ liệu | 3 TC | đang học\n");
     expect(user).toContain("  - TST404 | Dữ liệu lớn | 3 TC | đã có điểm, chưa rõ kết quả | đủ điều kiện đăng ký | kế hoạch: học kỳ 3 năm học 2025–2026 (đã qua)\n");
+  });
+
+  it("marks the planned term the engine calls overdue as past, up to the term being studied (comp-calc-v17)", () => {
+    const result = syntheticResult();
+    const take = result.skillPlans[0]!.take[0]!;
+    // HK261 is after the latest graded term but is the term being studied: overdue; overdue: false wins over an old term.
+    result.skillPlans[0]!.take = [{ ...take, code: "TST405", name: "Học máy", term: "HK261", overdue: true }, { ...take, code: "TST406", name: "Thị giác máy tính", term: "HK252", overdue: false }];
+    const user = buildAiInput(result).user;
+    expect(user).toContain("  - TST405 | Học máy | 3 TC | chưa học | đủ điều kiện đăng ký | kế hoạch: học kỳ 1 năm học 2026–2027 (đã qua)\n");
+    expect(user).toContain("  - TST406 | Thị giác máy tính | 3 TC | chưa học | đủ điều kiện đăng ký | kế hoạch: học kỳ 2 năm học 2025–2026\n");
   });
 
   it("names the weakest skills of each group below Khá and, with a career, whether each belongs to it", () => {

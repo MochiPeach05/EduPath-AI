@@ -1,10 +1,9 @@
-import { useMemo, useState, type DragEvent } from "react";
-import type { PlanOrigin } from "./StudentRoadmap";
+import { useMemo, useRef, useState, type DragEvent } from "react";
 import { Icon } from "./student-icons";
 import { Mark } from "./RoadmapProgress";
 import {
-  MAX_TERMS, formatNumber, moveCourse, nextTerm, offeredSemesters, planIssues, plannedTerms, poolSections, runningIn, searchCourses,
-  termLabel, termLoad, type PlanIssue, type StudyPlanContext, type StudyPlanCourse, type StudyPlanData,
+  MAX_TERMS, aiAddedText, formatNumber, moveCourse, nextTerm, offeredSemesters, ownRelations, planIssues, plannedTerms, poolSections, runningIn,
+  searchCourses, termLabel, termLoad, termLoadText, type PlanIssue, type PlanOrigin, type StudyPlanContext, type StudyPlanCourse, type StudyPlanData,
 } from "./study-plan-data";
 
 // "Kế hoạch học kỳ" of #roadmap (user 2026-10-24, after Stellic's planner; it starts from the training plan and the AI
@@ -26,14 +25,16 @@ function issueTexts(issue: PlanIssue | undefined, course: StudyPlanCourse, term:
   ];
 }
 
-function CourseFacts({ course, names }: { course: StudyPlanCourse; names: ReadonlyMap<string, string> }) {
+function CourseFacts({ course, names, byCode }: { course: StudyPlanCourse; names: ReadonlyMap<string, string>; byCode: ReadonlyMap<string, StudyPlanCourse> }) {
+  const prerequisites = ownRelations(course, course.prerequisites, byCode);
   const facts = [`${formatNumber(course.credits)} TC`, course.offeredTerms.length ? `Thường mở: ${offeredSemesters(course)}` : null,
-    course.prerequisites.length ? `Tiên quyết: ${course.prerequisites.map((code) => names.get(code) ?? code).join(", ")}` : null,
+    prerequisites.length ? `Tiên quyết: ${prerequisites.map((code) => names.get(code) ?? code).join(", ")}` : null,
     course.state === "failed" ? `Chưa đạt${course.grade ? ` (${course.grade})` : ""}: học lại` : null].filter(Boolean);
   return <small className="rm-course-facts">{facts.join(" · ")}</small>;
 }
 
-const dateTime = (iso: string) => new Date(iso).toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" });
+/** The width below which student-roadmap.css stacks Danh sách chờ under the terms. */
+const STACKED_QUERY = "(max-width: 1100px)";
 
 export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, origin, onOpenAi }: {
   context: StudyPlanContext; plan: StudyPlanData; onChange: (plan: StudyPlanData) => void; saveState: SaveState; saveError: string;
@@ -44,6 +45,7 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
   const firstOpen = plan.terms.find((term) => term.code !== context.currentTerm)?.code ?? plan.terms[0]?.code ?? context.currentTerm;
   const [target, setTarget] = useState(firstOpen);
   const [over, setOver] = useState<string | null>(null);
+  const sidePanel = useRef<HTMLElement>(null);
   const names = useMemo(() => new Map(context.courses.map((course) => [course.code, course.name])), [context.courses]);
   const byCode = useMemo(() => new Map(context.courses.map((course) => [course.code, course])), [context.courses]);
   const issues = planIssues(context, plan);
@@ -51,8 +53,19 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
   const sections = poolSections(context, plan);
   const found = searchCourses(context, query).filter((course) => !placed.has(course.code));
   const targetTerm = plan.terms.some((term) => term.code === target) ? target : firstOpen;
+  const plannedCount = plan.terms.reduce((sum, term) => sum + term.courses.length, 0);
 
   const move = (code: string, to: string | null) => onChange(moveCourse(plan, code, to));
+  /** "+ Thêm vào học kỳ này": that term in "Thêm vào"; on a narrow screen the list sits under every term, so it scrolls into view. */
+  const addHere = (term: string) => {
+    setTarget(term);
+    setSide("list");
+    const panel = sidePanel.current;
+    if (!panel || !window.matchMedia?.(STACKED_QUERY).matches) return;
+    const still = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    panel.scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
+    panel.focus({ preventScroll: true });
+  };
   const addTerm = () => {
     const last = plan.terms.at(-1)?.code ?? context.currentTerm;
     if (plan.terms.length < MAX_TERMS) onChange({ ...plan, terms: [...plan.terms, { code: nextTerm(last), courses: [] }] });
@@ -73,7 +86,7 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
     <div>
       <strong>{course.name}</strong>
       <span className="rm-course-code">{course.code}</span>
-      <CourseFacts course={course} names={names} />
+      <CourseFacts course={course} names={names} byCode={byCode} />
     </div>
     <button type="button" className="rm-add" onClick={() => move(course.code, targetTerm)} aria-label={`Thêm ${course.name} vào ${termLabel(targetTerm)}`}>
       <Icon name="plus" />Thêm
@@ -84,17 +97,21 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
     <header className="rm-planner-head">
       <div>
         <h2 id="rm-planner-title">Kế hoạch học kỳ</h2>
-        <p>Kế hoạch được điền sẵn các học phần bắt buộc theo kế hoạch đào tạo của khóa và các học phần lộ trình AI đề xuất. Bạn điều chỉnh bằng cách kéo học phần giữa các học kỳ, kéo từ Danh sách chờ vào, hoặc chọn học kỳ ở "Thêm vào" rồi bấm Thêm. Kế hoạch tự lưu và được tính ở chế độ Theo kế hoạch của mục Theo dõi tiến độ.</p>
+        <p>{plannedCount
+          ? <>Bạn điều chỉnh kế hoạch bằng cách kéo học phần giữa các học kỳ, kéo từ Danh sách chờ vào, hoặc chọn học kỳ ở "Thêm vào" rồi bấm Thêm.</>
+          : <>Xếp các học phần còn thiếu vào từng học kỳ: kéo từ Danh sách chờ vào một học kỳ, hoặc chọn học kỳ ở "Thêm vào" rồi bấm Thêm.</>} Kế hoạch tự lưu và được tính ở chế độ Theo kế hoạch của mục Theo dõi tiến độ.</p>
       </div>
       <p className={`rm-save rm-save-${saveState}`} role="status">{saveState === "saving" ? "Đang lưu…" : saveState === "saved" ? "Đã lưu" : saveState === "dirty" ? "Có thay đổi chưa lưu" : saveState === "error" ? saveError || "Chưa lưu được" : ""}</p>
     </header>
     {!context.curriculum && <p className="rm-note">Chưa có chương trình đào tạo cho khóa của bạn nên chưa có danh sách học phần để lên kế hoạch.</p>}
-    {origin?.kind === "ai" && <p className="rm-origin"><Mark kind="planned" /> {origin.added
-      ? `Đã thêm ${origin.added} học phần do lộ trình AI đề xuất (lộ trình soạn lúc ${dateTime(origin.completedAt)}), xếp từ ${termLabel(origin.term)} trở đi, vào học kỳ mà kế hoạch đào tạo mở môn đó. Bạn điều chỉnh tiếp bên dưới.`
-      : `Các học phần lộ trình AI đề xuất (soạn lúc ${dateTime(origin.completedAt)}) đã có sẵn trong kế hoạch.`}</p>}
-    {origin?.kind === "prefill" && <p className="rm-origin"><Mark kind="planned" /> Đây là kế hoạch điền sẵn, sẽ được lưu khi bạn chỉnh sửa.</p>}
-    {!plan.terms.some((term) => term.courses.length) && !runningIn(context, context.currentTerm).length && context.curriculum && <div className="rm-origin rm-origin-empty">
-      <p>Chưa có học phần nào được điền sẵn: các học phần còn lại của bạn đã trễ so với kế hoạch đào tạo, hoặc bạn chưa tạo lộ trình AI. Hãy tạo lộ trình ở mục Lộ trình AI đề xuất, rồi điều chỉnh tại đây.</p>
+    {origin?.kind === "prefill" && plannedCount > 0 && <p className="rm-origin"><Mark kind="planned" /> Kế hoạch được điền sẵn {plannedCount} học phần bắt buộc còn lại theo kế hoạch đào tạo của khóa; kế hoạch sẽ được lưu khi bạn chỉnh sửa.</p>}
+    {plan.aiAdded && <div className="rm-origin rm-origin-ai">
+      <Mark kind="planned" />
+      <p>{aiAddedText(context, plan.aiAdded)}</p>
+      <button type="button" className="rm-link" onClick={() => onChange({ ...plan, aiAdded: null })}>Ẩn thông báo</button>
+    </div>}
+    {!plannedCount && context.curriculum && <div className="rm-origin rm-origin-empty">
+      <p>Kế hoạch chưa có học phần nào. Học phần bắt buộc chỉ được điền sẵn khi còn ở phía trước theo kế hoạch đào tạo (học phần đã trễ không được điền), và học phần lộ trình AI đề xuất được thêm khi bạn có lộ trình AI. Hãy tạo lộ trình ở mục Lộ trình AI đề xuất, hoặc tự thêm học phần từ Danh sách chờ.</p>
       <button type="button" className="sw-outline" onClick={onOpenAi}>Mở Lộ trình AI đề xuất</button>
     </div>}
     <div className="rm-planner">
@@ -107,8 +124,11 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
             onDragOver={(event) => allowDrop(event, term.code)} onDragLeave={() => setOver(null)} onDrop={(event) => drop(event, term.code)}>
             <header className="rm-term-head">
               <h3>{termLabel(term.code)}{current && <span className="rm-tag rm-tag-running">Học kỳ hiện tại</span>}</h3>
-              <span className={`rm-load rm-load-${load.status}`} title={load.conditional
-                ? `Gồm ${formatNumber(load.conditional)} TC môn điều kiện (Giáo dục thể chất, Giáo dục quốc phòng), không tính vào tín chỉ tích lũy.` : undefined}>{formatNumber(load.credits)} TC{load.status === "over" && context.limits ? ` · vượt ${context.limits.max}` : load.status === "under" && context.limits ? ` · dưới ${context.limits.min}` : ""}</span>
+              <div className="rm-load-box">
+                <span className={`rm-load rm-load-${load.status}`}>{termLoadText(load, context.limits)}</span>
+                {load.conditional > 0 && <small className="rm-load-note" title="Môn điều kiện: Giáo dục thể chất, Giáo dục quốc phòng; không tính vào tín chỉ tích lũy.">
+                  gồm {formatNumber(load.conditional)} TC môn điều kiện</small>}
+              </div>
             </header>
             <ul className="rm-term-courses">
               {running.map((course) => <li key={course.code} className="rm-term-course is-locked">
@@ -136,13 +156,13 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
               })}
             </ul>
             {!running.length && !term.courses.length && <p className="rm-drop-hint">Kéo học phần vào đây hoặc bấm Thêm vào học kỳ này.</p>}
-            <button type="button" className="rm-link" onClick={() => { setTarget(term.code); setSide("list"); }}>+ Thêm vào học kỳ này</button>
+            <button type="button" className="rm-link" onClick={() => addHere(term.code)}>+ Thêm vào học kỳ này</button>
           </section>;
         })}
         {plan.terms.length < MAX_TERMS && <button type="button" className="rm-add-term" onClick={addTerm}><Icon name="plus" />Thêm học kỳ</button>}
       </div>
 
-      <aside className={`rm-side${over === "side" ? " is-over" : ""}`} aria-label="Học phần còn thiếu"
+      <aside ref={sidePanel} tabIndex={-1} className={`rm-side${over === "side" ? " is-over" : ""}`} aria-label="Học phần còn thiếu"
         onDragOver={(event) => allowDrop(event, "side")} onDragLeave={() => setOver(null)} onDrop={(event) => drop(event, null)}>
         <label className="rm-target">Thêm vào
           <select value={targetTerm} onChange={(event) => setTarget(event.target.value)}>

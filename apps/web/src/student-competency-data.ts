@@ -2,7 +2,7 @@
 // the polling decision. No fetch, no DOM — everything here is unit tested.
 import type {
   AiOutput, AiPriority, AiStatus, AssessmentResult, CareerRequirementResult, CareerResult, Confidence,
-  CourseState, Eligibility, HistoryPoint, LevelCode, SkillPlan, SkillResult, StoredAssessment, SupportCourse,
+  CourseState, Eligibility, HistoryPoint, LevelCode, PlanProgressResult, SelfStudyItem, SkillPlan, SkillResult, StoredAssessment, SupportCourse,
 } from "./competency-assessment-types";
 
 export const COMPETENCY_API = "/api/student/competency-assessments";
@@ -20,7 +20,7 @@ export function isPreconditionError(code: string | null | undefined): code is Pr
 /** Title, explanation and next step for each precondition. */
 export const PRECONDITION_COPY: Record<PreconditionError, { title: string; text: string; action: { label: string; href: string } | null }> = {
   transcript_required: { title: "Cần bảng điểm để bắt đầu", text: "EduPath AI tính năng lực từ kết quả các học phần bạn đã học. Hãy import bảng điểm PDF xuất từ cổng đào tạo, rồi quay lại đây.", action: { label: "Import bảng điểm", href: "#profile" } },
-  career_required: { title: "Cần chọn nghề mục tiêu", text: "Đánh giá năng lực cần đủ bảng điểm, nghề mục tiêu và chuyên ngành. Hãy chọn nghề mục tiêu trong hồ sơ, rồi quay lại đây.", action: { label: "Chọn nghề mục tiêu", href: "#profile" } },
+  career_required: { title: "Cần chọn nghề mục tiêu", text: "Đánh giá năng lực cần đủ bảng điểm, nghề mục tiêu và chuyên ngành. Hãy chọn nghề mục tiêu ở trang Định hướng nghề nghiệp, rồi quay lại đây.", action: { label: "Chọn nghề mục tiêu", href: "#career" } },
   specialty_required: { title: "Cần chọn chuyên ngành", text: "Đánh giá năng lực cần đủ bảng điểm, nghề mục tiêu và chuyên ngành. Hãy chọn chuyên ngành trong hồ sơ, rồi quay lại đây.", action: { label: "Chọn chuyên ngành", href: "#profile" } },
   cohort_unknown: { title: "Hồ sơ chưa có khóa học", text: "Hệ thống cần biết bạn thuộc khóa nào để chọn đúng chương trình đào tạo. Thông tin khóa được đồng bộ từ tài khoản trường; nếu mục Khóa học trong hồ sơ còn trống, hãy liên hệ Khoa để được cập nhật.", action: { label: "Xem hồ sơ", href: "#profile" } },
   curriculum_unavailable: { title: "Chưa có chương trình đào tạo cho khóa của bạn", text: "Khoa chưa công bố chương trình đào tạo đang áp dụng cho khóa này trên EduPath AI. Bạn có thể quay lại sau khi chương trình được cập nhật.", action: null },
@@ -92,12 +92,7 @@ const oneDecimal = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 });
  * Khá starts at 62,5 (comp-calc-v10): from there to 63 one decimal is kept (62,7), so a Khá score
  * never reads 62 and the bound itself reads 62,5.
  */
-export const formatScore = (value: number | null | undefined) => {
-  if (value === null || value === undefined) return "—";
-  const whole = Math.floor(value + 1e-9);
-  const reached = Object.values(LEVEL_THRESHOLDS).some((bound) => whole < bound && value + 1e-9 >= bound);
-  return reached ? oneDecimal.format(Math.floor(value * 10 + 1e-9) / 10) : integer.format(whole);
-};
+export const formatScore = (value: number | null | undefined) => (value === null || value === undefined ? "—" : oneDecimal.format(shownScore(value)));
 export const formatNumber = (value: number | null | undefined) => value === null || value === undefined ? "—" : decimal.format(value);
 export const formatPercent = (share: number | null | undefined) => share === null || share === undefined ? "—" : `${integer.format(share * 100)}%`;
 export function formatDateTime(iso: string | null | undefined): string {
@@ -112,6 +107,63 @@ export function termLabel(term: string | null | undefined): string {
   if (!match) return term;
   const start = 2000 + Number(match[1]);
   return `HK${match[2]} · ${start}–${start + 1}`;
+}
+/** "Sắp học · HK3 · 2026–2027": a skill or course still to come, its term written like termLabel (2026-10-25 audit, "Sắp học · HK263" before). */
+export const upcomingText = (term: string | null | undefined) => (term ? `Sắp học · ${termLabel(term)}` : "Sắp học");
+
+/* ------------------------------------------------------------ terms ahead */
+
+/**
+ * The term being studied (comp-calc-v13): stored with the transcript since comp-calc-v17, else the plan's current term of a
+ * v13+ result, else the latest graded term. "Sắp học" and overdue courses count from it.
+ */
+export function studyTermOf(result: Pick<AssessmentResult, "transcript" | "progress" | "meta">): string | null {
+  if (result.transcript.studyTerm !== undefined) return result.transcript.studyTerm;
+  if (result.progress && countsFromStudyTerm(result.meta.calcVersion)) return result.progress.currentTerm;
+  return result.transcript.latestTerm;
+}
+/** The term after the one being studied, from the plan (v13+ results), else null ("học kỳ tới"). */
+export function nextTermOf(result: Pick<AssessmentResult, "progress" | "meta">): string | null {
+  return result.progress && countsFromStudyTerm(result.meta.calcVersion) ? result.progress.nextTerm : null;
+}
+/**
+ * A course whose planned term is the term being studied or earlier and that is not in progress (SupportCourse.overdue,
+ * comp-calc-v17; compared here for results stored before).
+ */
+export function isOverdue(course: { term: string | null; state: CourseState; overdue?: boolean }, studyTerm: string | null): boolean {
+  if (course.overdue !== undefined) return course.overdue;
+  return course.term !== null && studyTerm !== null && course.state !== "in_progress" && course.term <= studyTerm;
+}
+/** "Đã qua học kỳ dự kiến HK233 — đăng ký ở HK262" (or "ở học kỳ tới" when the next term is not known). */
+export const overdueText = (term: string, nextTerm: string | null) => `Đã qua học kỳ dự kiến ${term} — đăng ký ở ${nextTerm ?? "học kỳ tới"}`;
+/** The "Học kỳ" of a suggested course: "HK261 theo KHĐT", "Chưa xếp lịch", or the overdue wording when its term has passed. */
+export function courseTermText(course: Pick<SupportCourse, "term" | "termSource" | "state" | "overdue">, studyTerm: string | null, nextTerm: string | null): string {
+  if (!course.term) return "Chưa xếp lịch";
+  if (isOverdue(course, studyTerm)) return overdueText(course.term, nextTerm);
+  return `${course.term} theo ${course.termSource === "plan" ? "KHĐT" : "CTĐT"}`;
+}
+/**
+ * What an evidence course not taken yet says (2026-10-25 audit): "Sắp học · HK2 · 2026–2027" when it is planned after the
+ * term being studied (the engine's rule for SkillResult.upcoming), else "Chưa học" (its term has passed or it has none).
+ */
+export function plannedCourseNote(plannedTerm: string | null, studyTerm: string | null): string {
+  return plannedTerm !== null && (studyTerm === null || plannedTerm > studyTerm) ? upcomingText(plannedTerm) : "Chưa học";
+}
+
+/**
+ * A plan choice label as the student reads it, like the engine's choiceLabel (comp-calc-v17), so results stored before read the
+ * same: spaces normalised ("Chọn1 trong 3 môn sau" → "Chọn 1 trong 3 môn sau") and "Chọn k trong n" rebuilt from the options
+ * listed when the label's n differs ("Chọn 1 trong 4 môn sau" over 3 courses).
+ */
+export function choiceLabel(label: string, required?: number, optionCount?: number): string {
+  let text = label.normalize("NFC").replace(/\s+/g, " ").trim()
+    .replace(/(ch[oọ]n)\s*(\d+)/iu, "$1 $2").replace(/(\d+)\s*(trong)(?![\p{L}])/iu, "$1 $2").replace(/(trong)\s*(\d+)/iu, "$1 $2");
+  const rule = /(ch[oọ]n )(\d+)( trong )(\d+)/iu.exec(text);
+  if (rule && optionCount && optionCount > 0 && Number(rule[4]) !== optionCount) {
+    const k = Math.min(required ?? Number(rule[2]), optionCount);
+    text = text.replace(rule[0], `${rule[1]}${k}${rule[3]}${optionCount}`);
+  }
+  return text;
 }
 
 /* ----------------------------------------------------------------- levels */
@@ -212,6 +264,18 @@ export function countsFromStudyTerm(calcVersion: string | null | undefined): boo
   return !Number.isFinite(version) || version >= 13;
 }
 
+/**
+ * "Học kỳ tới: n học phần": the engine's count of courses since comp-calc-v17; a result stored before counted entries ("3 courses +
+ * Chọn 2 trong 4" read 4), so it is counted here the same way: a course or GDTC slot 1, a choice the courses still to choose, a
+ * credit choice its credits over its largest option.
+ */
+export function nextCourseCount(progress: Pick<PlanProgressResult, "next" | "nextCount">, calcVersion: string | null | undefined): number {
+  const version = Number(/^comp-calc-v(\d+)$/.exec(calcVersion ?? "")?.[1]);
+  if (!Number.isFinite(version) || version >= 17) return progress.nextCount;
+  return progress.next.reduce((sum, entry) => sum + (entry.kind !== "choice" ? 1 : entry.unit === "course" ? entry.remaining
+    : Math.max(1, Math.ceil(entry.remaining / Math.max(1, ...entry.options.map((option) => option.credits ?? 0))))), 0);
+}
+
 /** One sentence that explains what the overall level means. */
 export function levelSentence(level: LevelCode | null | undefined): string {
   return LEVEL_SCALE.find((item) => item.code === level)?.text ?? "Chưa đủ dữ liệu để xếp mức.";
@@ -222,21 +286,41 @@ export const CONFIDENCE_LABELS: Record<Confidence, string> = { low: "Độ tin c
 /* --------------------------------------------------------- career and gaps */
 
 export type StatusTone = "pass" | "fail" | "unknown" | "neutral";
-/** Deficits are unrounded; shown as whole points rounded UP (matches the rounded-down score), never "thiếu 0 điểm". */
-function deficitPoints(deficit: number): number {
+/** The value formatScore prints, as a number: 84,6 → 84; 62,77 → 62,7 (from a bound that is not whole, 62,5, to 63 one decimal is kept). */
+export function shownScore(value: number): number {
+  const whole = Math.floor(value + 1e-9);
+  const reached = Object.values(LEVEL_THRESHOLDS).some((bound) => whole < bound && value + 1e-9 >= bound);
+  return reached ? Math.floor(value * 10 + 1e-9) / 10 : whole;
+}
+const tenths = (value: number) => Math.round(value * 10) / 10;
+/**
+ * The shortfall as the page shows it (2026-10-25 audit): the threshold minus the score as shown, so the two add up — 43 is
+ * "thiếu 19,5" against 62,5 (it read "thiếu 19": 43 + 19 = 62), 75 "thiếu 5" against 80. One decimal only when the threshold
+ * or the shown score has one. Without the score and threshold (an older caller) the deficit rounded up to a whole point.
+ * Never 0: a score below the threshold always lacks something.
+ */
+function shortfall(deficit: number, shown?: { score?: number | null; threshold?: number | null }): number {
+  if (typeof shown?.score === "number" && typeof shown.threshold === "number") return Math.max(0.1, tenths(shown.threshold - shownScore(shown.score)));
   return Math.max(1, Math.ceil(deficit - 1e-9));
 }
-export function deficitText(deficit: number | null): string {
+/** A number of points with at most one decimal ("19,5", "6"). */
+const formatPoints = (value: number) => oneDecimal.format(tenths(value));
+/** "Dưới ngưỡng · thiếu 19,5 điểm"; pass the score and threshold so the shortfall adds up with the shown score (shortfall). */
+export function deficitText(deficit: number | null, shown?: { score?: number | null; threshold?: number | null }): string {
   if (deficit === null) return "Dưới ngưỡng";
-  return `Dưới ngưỡng · thiếu ${formatScore(deficitPoints(deficit))} điểm`;
+  return `Dưới ngưỡng · thiếu ${formatPoints(shortfall(deficit, shown))} điểm`;
 }
-/** "Chênh lệch" column: consistent with formatScore and deficitText; null when there is nothing to compare. */
+/**
+ * "Chênh lệch" column: the shown score minus the threshold, consistent with formatScore and deficitText (73 against 62,5 is
+ * +10,5, 43 is −19,5; it read +11 and -19); null when there is nothing to compare. Never below 0 for a met skill.
+ */
 export function scoreDifference(req: Pick<CareerRequirementResult, "score" | "status" | "deficit" | "threshold">): number | null {
   if (req.score === null || req.status === "upcoming" || req.status === "no_data") return null;
-  if (req.status === "below" && req.deficit !== null) return -deficitPoints(req.deficit);
-  // Met: whole points above the threshold, rounded down like the score (70 against 62,5 is +7, never below 0).
-  return Math.max(0, Math.floor(req.score - req.threshold + 1e-9));
+  if (req.status === "below" && req.deficit !== null) return -shortfall(req.deficit, req);
+  return Math.max(0, tenths(shownScore(req.score) - req.threshold));
 }
+/** A difference with its sign: "+10,5", "−19,5" (a real minus sign, like the history's changes), "0". */
+export const formatDifference = (value: number) => (value > 0 ? `+${formatPoints(value)}` : value < 0 ? `−${formatPoints(-value)}` : "0");
 /**
  * A career skill only courses of another specialty teach (user 2026-10-23), or only electives the student did not
  * choose (comp-calc-v14): "Cần tự học" on the page. It counts 0 in the fit score since v14.
@@ -244,25 +328,40 @@ export function scoreDifference(req: Pick<CareerRequirementResult, "score" | "st
 export const needsSelfStudy = (req: Pick<CareerRequirementResult, "status"> & { noDataReason?: CareerRequirementResult["noDataReason"] }) =>
   req.status === "no_data" && (req.noDataReason === "other_specialty" || req.noDataReason === "elective_not_chosen");
 
-/** The career's count line ("Đạt x/y kỹ năng · z sắp học · t chưa đủ dữ liệu") with its "Cần tự học" skills counted apart. */
-export function careerSummaryText(career: Pick<CareerResult, "summaryText"> & { requirements: readonly (Pick<CareerRequirementResult, "status"> & { noDataReason?: CareerRequirementResult["noDataReason"] })[] }): string {
-  const selfStudy = career.requirements.filter(needsSelfStudy).length;
-  if (!selfStudy) return career.summaryText;
-  const count = (status: CareerRequirementResult["status"]) => career.requirements.filter((req) => req.status === status).length;
-  return `Đạt ${count("met")}/${career.requirements.length} kỹ năng · ${count("upcoming")} sắp học · ${selfStudy} cần tự học · ${count("no_data") - selfStudy} chưa đủ dữ liệu`;
+/**
+ * The career's count line, rebuilt from the requirements so results stored before read the same (2026-10-25 audit, the
+ * engine's careerSummaryOf since comp-calc-v17): "Đạt x/y kỹ năng", then only the counts that are not 0, in this order —
+ * "Đạt 4/6 kỹ năng · 1 dưới ngưỡng · 2 chưa học · 1 sắp học · 1 cần tự học · 1 chưa đủ dữ liệu". It said
+ * "· 0 sắp học · 0 chưa đủ dữ liệu" and left the skills below the threshold or not studied out. `summaryText` is not read.
+ */
+export function careerSummaryText(career: Partial<Pick<CareerResult, "summaryText">> & { requirements: readonly (Pick<CareerRequirementResult, "status"> & { noDataReason?: CareerRequirementResult["noDataReason"] })[] }): string {
+  const count = (keep: (req: (typeof career.requirements)[number]) => boolean) => career.requirements.filter(keep).length;
+  const parts: [number, string][] = [
+    [count((req) => req.status === "below"), "dưới ngưỡng"],
+    [count((req) => req.status === "not_studied"), "chưa học"],
+    [count((req) => req.status === "upcoming"), "sắp học"],
+    [count(needsSelfStudy), "cần tự học"],
+    [count((req) => req.status === "no_data" && !needsSelfStudy(req)), "chưa đủ dữ liệu"],
+  ];
+  return [`Đạt ${count((req) => req.status === "met")}/${career.requirements.length} kỹ năng`,
+    ...parts.filter(([value]) => value > 0).map(([value, label]) => `${value} ${label}`)].join(" · ");
 }
+/** "x/y kỹ năng có điểm" from the requirements (comp-calc-v17's dataText; a stored "x/y kỹ năng có dữ liệu" is not shown). */
+export const careerDataText = (career: { requirements: readonly Pick<CareerRequirementResult, "score">[] }) =>
+  `${career.requirements.filter((req) => req.score !== null).length}/${career.requirements.length} kỹ năng có điểm`;
 
 /**
  * Glyph + text + colour of a career requirement. Green/red/amber only for met and gaps; never red for missing data.
- * A skill only another specialty's courses teach is "Cần tự học", not missing data.
+ * A skill only another specialty's courses teach is "Cần tự học", not missing data. With its score and threshold, the
+ * shortfall adds up with the shown score (deficitText); the term of "Sắp học" reads like termLabel (2026-10-25 audit).
  */
 export function gapStatusDisplay(req: Pick<CareerRequirementResult, "status" | "deficit" | "upcomingTerm" | "exemptOnly">
-  & { noDataReason?: CareerRequirementResult["noDataReason"] }): { tone: StatusTone; glyph: string; text: string } {
+  & { noDataReason?: CareerRequirementResult["noDataReason"]; score?: number | null; threshold?: number | null }): { tone: StatusTone; glyph: string; text: string } {
   switch (req.status) {
     case "met": return { tone: "pass", glyph: "✓", text: req.exemptOnly ? "Đạt ngưỡng · miễn/công nhận" : "Đạt ngưỡng" };
-    case "below": return { tone: "fail", glyph: "✗", text: deficitText(req.deficit) };
+    case "below": return { tone: "fail", glyph: "✗", text: deficitText(req.deficit, req) };
     case "not_studied": return { tone: "unknown", glyph: "!", text: "Chưa học" };
-    case "upcoming": return { tone: "neutral", glyph: "○", text: req.upcomingTerm ? `Sắp học · ${req.upcomingTerm}` : "Sắp học" };
+    case "upcoming": return { tone: "neutral", glyph: "○", text: upcomingText(req.upcomingTerm) };
     default: return needsSelfStudy(req)
       ? { tone: "unknown", glyph: "!", text: "Cần tự học" }
       : { tone: "neutral", glyph: "?", text: "Chưa đủ dữ liệu" };
@@ -277,7 +376,12 @@ export function sortRequirements<T extends Pick<CareerRequirementResult, "isRequ
     || (b.deficit ?? 0) - (a.deficit ?? 0)
     || a.title.localeCompare(b.title, "vi"));
 }
-export const isGap = (req: Pick<CareerRequirementResult, "status">) => req.status !== "met";
+/**
+ * "Kỹ năng còn thiếu": below the threshold, not studied, "Cần tự học" or "Chưa đủ dữ liệu" — the skills the student has to act
+ * on. "Sắp học" comes with the plan and is not one of them (2026-10-25 audit: the toggle of the detailed report counted it,
+ * the summary list did not; both use this rule and these words now).
+ */
+export const isGap = (req: Pick<CareerRequirementResult, "status">) => req.status === "below" || req.status === "not_studied" || req.status === "no_data";
 
 /**
  * "Điểm phù hợp" 0–100 (comp-calc-v11, user 2026-10-22: "Sao lại 100% tròn nhỉ tại vì nó chỉ chấm 92
@@ -328,14 +432,16 @@ export const FIT_LABELS: Record<FitLevel, string> = {
 };
 /**
  * "Thang mức phù hợp" of the gap page: the five levels only, like "Thang mức năng lực" (2026-10-22;
- * "Chưa đủ dữ liệu" is no level and is explained under the scale when it is the student's).
+ * "Chưa đủ dữ liệu" is no level and is explained under the scale when it is the student's). Each text names the score band
+ * on the competency levels, never the skills' statuses (2026-10-25 audit: a career whose 4 skills were all met read "một
+ * số kỹ năng còn dưới ngưỡng hoặc chưa học").
  */
 export const FIT_SCALE: readonly { code: Exclude<FitLevel, "insufficient_data">; label: string; range: string; text: string }[] = [
-  { code: "very_fit", label: FIT_LABELS.very_fit, range: "từ 90", text: "Các kỹ năng của nghề đều đạt điểm rất cao." },
-  { code: "fit", label: FIT_LABELS.fit, range: "80 đến dưới 90", text: "Các kỹ năng của nghề đạt điểm tốt; vài kỹ năng có thể nâng thêm." },
-  { code: "average", label: FIT_LABELS.average, range: "62,5 đến dưới 80", text: "Kỹ năng của nghề ở mức khá; một số kỹ năng còn dưới ngưỡng hoặc chưa học." },
-  { code: "low_fit", label: FIT_LABELS.low_fit, range: "50 đến dưới 62,5", text: "Nhiều kỹ năng của nghề còn điểm thấp hoặc chưa học." },
-  { code: "not_fit", label: FIT_LABELS.not_fit, range: "dưới 50", text: "Phần lớn kỹ năng của nghề chưa đạt ngưỡng hoặc chưa học." },
+  { code: "very_fit", label: FIT_LABELS.very_fit, range: "từ 90", text: "Điểm trung bình các kỹ năng của nghề ở mức Xuất sắc (từ 90)." },
+  { code: "fit", label: FIT_LABELS.fit, range: "80 đến dưới 90", text: "Điểm trung bình các kỹ năng của nghề ở mức Giỏi (80 đến dưới 90)." },
+  { code: "average", label: FIT_LABELS.average, range: "62,5 đến dưới 80", text: "Điểm trung bình các kỹ năng của nghề ở mức Khá (62,5 đến dưới 80)." },
+  { code: "low_fit", label: FIT_LABELS.low_fit, range: "50 đến dưới 62,5", text: "Điểm trung bình các kỹ năng của nghề ở mức Trung bình (50 đến dưới 62,5)." },
+  { code: "not_fit", label: FIT_LABELS.not_fit, range: "dưới 50", text: "Điểm trung bình các kỹ năng của nghề ở mức Yếu (dưới 50)." },
 ];
 export const fitLabelOf = (career: Pick<CareerResult, "requirements">) => FIT_LABELS[fitLevelOf(career)];
 /** Ramp step of a fit level, like levelStep (5 = Rất phù hợp … 1 = Không phù hợp; 0 = Chưa đủ dữ liệu). */
@@ -475,8 +581,11 @@ export function gapHistory(result: Pick<AssessmentResult, "career" | "history">)
 
 /* ---------------------------------------------------- proficiency summary */
 
-/** The level columns of the proficiency table, best first; "Sắp học" and "Chưa có điểm" last (not weaknesses). */
-export const LEVEL_COLUMNS = ["excellent", "proficient", "good", "basic", "needs_work", "upcoming", "not_studied", "no_score"] as const satisfies readonly DisplayLevel[];
+/**
+ * The level columns of the proficiency table, best first; "Sắp học", "Chưa học", "Chưa có điểm" and "Miễn/công nhận" last
+ * (not weaknesses). The same segments as the chart (CHART_LEVELS): the exempt column was missing from the table (2026-10-25).
+ */
+export const LEVEL_COLUMNS = ["excellent", "proficient", "good", "basic", "needs_work", "upcoming", "not_studied", "no_score", "exempt"] as const satisfies readonly DisplayLevel[];
 type LevelRow = {
   key: string; name: string; score: number | null; level: LevelCode; levelLabel: string;
   /** Skills of the group counted like the group line: condition-only and not-applicable skills left out. */
@@ -517,8 +626,8 @@ export function careerThresholdsLine(career: Pick<CareerResult, "requirements">)
 
 /* ------------------------------------------------- level chart ("Bảng phân tích mức độ thành thạo") */
 
-/** Segment order of each group's bar: the five levels from the top down, then "Sắp học", "Chưa có điểm" and exempt (no score). */
-export const CHART_LEVELS = [...LEVEL_COLUMNS, "exempt"] as const satisfies readonly DisplayLevel[];
+/** Segment order of each group's bar: the five levels from the top down, then "Sắp học", "Chưa học", "Chưa có điểm" and exempt (no score). */
+export const CHART_LEVELS = LEVEL_COLUMNS;
 export type ChartLevel = (typeof CHART_LEVELS)[number];
 /** The name of a level or of an unscored state in the chart and its legend. */
 export const chartLevelLabel = (level: ChartLevel): string => [...LEVEL_SCALE, ...UNSCORED_STATES].find((item) => item.code === level)?.label ?? level;
@@ -598,9 +707,16 @@ export function groupEvidenceCounts(skills: readonly Pick<SkillResult, "groupKey
 }
 
 type SkillBucket = { id: string; title: string; note: string | null; skills: SkillResult[] };
+/** "Chưa học" in the student's words; "Kết quả này cho biết gì?" on the page says the same of "kỹ năng đó". */
+const NOT_STUDIED_NOTE = "Học phần đo kỹ năng này đã qua học kỳ trong kế hoạch mà bạn chưa học, hoặc không có trong kế hoạch; hãy đăng ký ở học kỳ tới.";
+/**
+ * A skill whose only courses carry no credit (not applicable, "no_credits"): before comp-calc-v17 the 0-credit GDTC/GDQP
+ * courses of K27/K28, passed or not. It belongs with the condition-only skills, never "Ngoài lựa chọn học phần của bạn".
+ */
+export const noCreditSkill = (skill: Pick<SkillResult, "status" | "notApplicableReason">) => skill.status === "not_applicable" && skill.notApplicableReason === "no_credits";
 /**
  * Groups for the skill list: one per engine group (scored or exempt skills),
- * then condition-only skills, skills outside the student's choices and, last,
+ * then condition-only skills (and those of courses without credits), skills outside the student's choices and, last,
  * "Sắp học" and "Chưa có điểm" (ids = their display levels) — never presented as weaknesses.
  * A skill in several groups is listed under each of them, or only under `group` when the list is
  * filtered to one group.
@@ -610,11 +726,12 @@ export function bucketSkills(result: Pick<AssessmentResult, "groups">, skills: r
   const condition: SkillBucket = { id: "condition", title: "Môn điều kiện (GDTC/GDQP)", note: "Không tính vào điểm nhóm và điểm tổng.", skills: [] };
   const notApplicable: SkillBucket = { id: "not-applicable", title: "Ngoài lựa chọn học phần của bạn", note: "Chỉ có trong học phần của chuyên ngành khác hoặc học phần tự chọn bạn không chọn.", skills: [] };
   const upcoming: SkillBucket = { id: "upcoming", title: "Sắp học", note: "Không phải điểm yếu — bạn đang học hoặc sẽ học học phần đo kỹ năng này ở học kỳ sau theo kế hoạch (kể cả môn tự chọn chưa chọn).", skills: [] };
-  const notStudied: SkillBucket = { id: "not_studied", title: "Chưa học", note: "Học phần đo kỹ năng này đã qua học kỳ trong kế hoạch mà bạn chưa học, hoặc không có trong kế hoạch; hãy đăng ký ở học kỳ tới.", skills: [] };
+  const notStudied: SkillBucket = { id: "not_studied", title: "Chưa học", note: NOT_STUDIED_NOTE, skills: [] };
   const noScore: SkillBucket = { id: "no_score", title: "Chưa có điểm", note: "Bạn đã học học phần liên quan nhưng bảng điểm chưa có điểm số, nên chưa đánh giá được.", skills: [] };
   for (const skill of skills) {
     const level = displayLevel(skill);
-    if (skill.status === "not_applicable") notApplicable.skills.push(skill);
+    if (noCreditSkill(skill)) condition.skills.push(skill);
+    else if (skill.status === "not_applicable") notApplicable.skills.push(skill);
     else if (level === "upcoming") upcoming.skills.push(skill);
     else if (level === "not_studied") notStudied.skills.push(skill);
     else if (level === "no_score") noScore.skills.push(skill);
@@ -784,6 +901,15 @@ export function mapAiOutput(output: AiOutput | null | undefined, result: Assessm
 
 export function skillName(result: Pick<AssessmentResult, "skillDirectory">, key: string): string | null {
   return result.skillDirectory.find((skill) => skill.key === key)?.name ?? null;
+}
+
+/**
+ * "Kỹ năng gần giống đã đo" of a self-study skill: only the similar skills that have a score (comp-calc-v17 stores no other;
+ * older results listed skills still to come or outside the student's choices).
+ */
+export function relatedSkillNames(result: Pick<AssessmentResult, "skills" | "skillDirectory">, item: Pick<SelfStudyItem, "relatedSkillKeys">): string[] {
+  const scored = new Set(result.skills.filter((skill) => skill.score !== null).map((skill) => skill.key));
+  return item.relatedSkillKeys.filter((key) => scored.has(key)).map((key) => skillName(result, key)).filter((name): name is string => Boolean(name));
 }
 
 /** "Cập nhật lúc … · dữ liệu đã dùng …" for the page header. */

@@ -3,6 +3,7 @@
 // required. The questions and
 // interest lists come from the API (apps/api/src/student/survey.ts, interests.ts).
 import { interestProblem, type InterestOption } from "./profile-interests";
+import { policyVersion } from "./public-information";
 
 export const SURVEY_API = "/api/student/survey";
 
@@ -65,6 +66,29 @@ export function surveyProblems(questions: SurveyQuestion[], draft: SurveyDraft, 
 /** "Còn 3 mục chưa hoàn thành." for the screen-reader summary and the line above the save button. */
 export const problemSummary = (count: number) => (count ? `Còn ${count} mục chưa hoàn thành. Vui lòng xem các thông báo màu đỏ.` : "");
 
+/**
+ * What stored answers still lack under the current questions and policy, in form order (answers saved before a question,
+ * the strengths or a policy update was added); empty when nothing is stored or nothing is missing. Same rule as the
+ * API's "complete" (apps/api/src/student/survey.ts) plus the consent.
+ */
+export function surveyGaps(questions: SurveyQuestion[], survey: StudentSurvey | null, consentVersion: string | null): string[] {
+  if (!survey) return [];
+  const gaps: string[] = [];
+  const unanswered = questions.filter((question) => answerLabel(question, survey.answers) === null).length;
+  if (unanswered) gaps.push(`Trả lời ${unanswered} câu hỏi còn thiếu`);
+  if (!survey.interestTech.length) gaps.push("Chọn công nghệ trong Thế mạnh của bạn");
+  if (!survey.strengths?.trim()) gaps.push("Bổ sung mô tả thế mạnh");
+  if (!survey.interestHobbies.length) gaps.push("Chọn sở trường");
+  if (consentVersion !== policyVersion) gaps.push(consentVersion ? "Xác nhận lại theo chính sách mới" : "Đánh dấu ô đồng ý cho EduPath AI dùng câu trả lời");
+  return gaps;
+}
+
+/** The gaps as one line for Tổng quan: "Bổ sung mô tả thế mạnh và xác nhận lại theo chính sách mới". */
+export function gapSentence(gaps: string[]): string {
+  const parts = gaps.map((gap, index) => (index ? gap.charAt(0).toLocaleLowerCase("vi") + gap.slice(1) : gap));
+  return parts.length > 1 ? `${parts.slice(0, -1).join(", ")} và ${parts.at(-1)}` : parts[0] ?? "";
+}
+
 const ERRORS: Record<string, string> = {
   invalid_survey: "Câu trả lời chưa hợp lệ. Vui lòng tải lại trang rồi thử lại.",
   strengths_required: "Vui lòng mô tả công nghệ bạn thành thạo.",
@@ -77,5 +101,12 @@ const ERRORS: Record<string, string> = {
   invalid_origin: "Phiên thao tác không hợp lệ. Vui lòng tải lại trang.",
   database_required: "Chưa kết nối được nơi lưu hồ sơ. Vui lòng thử lại sau.",
 };
-export const surveyErrorMessage = (code: string | undefined, status: number) =>
-  status === 401 ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại." : ERRORS[code ?? ""] ?? "Không lưu được khảo sát. Vui lòng thử lại.";
+/** What the request was doing, for the message when the API gives no known reason (or the network fails, status 0). */
+export type SurveyAction = "load" | "save" | "delete";
+const FALLBACKS: Record<SurveyAction, string> = {
+  load: "Chưa tải được Khảo sát định hướng. Vui lòng thử lại.",
+  save: "Không lưu được khảo sát. Vui lòng thử lại.",
+  delete: "Chưa xóa được câu trả lời. Vui lòng thử lại.",
+};
+export const surveyErrorMessage = (code: string | undefined, status: number, action: SurveyAction = "save") =>
+  status === 401 ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại." : ERRORS[code ?? ""] ?? FALLBACKS[action];

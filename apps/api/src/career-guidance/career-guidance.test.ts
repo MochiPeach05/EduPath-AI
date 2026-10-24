@@ -4,6 +4,8 @@ import { describe, expect, it, vi } from "vitest";
 import { calculateAssessment } from "../competency-assessment/calculate.js";
 import { syntheticCareer, syntheticInputs } from "../competency-assessment/fixtures/synthetic-k29.js";
 import type { DatabasePool } from "../db/pool.js";
+import { syntheticSurveyRow } from "../roadmap/test-fixture.js";
+import { TRANSCRIPT_POLICY_VERSION } from "../student/consent.js";
 import { interestMatch } from "./interests.js";
 import { createCareerGuidanceRouter, guidanceCareers } from "./router.js";
 
@@ -55,7 +57,11 @@ describe("careers against the competencies", () => {
 });
 
 describe("GET /api/student/career-guidance", () => {
-  function setup(rows: { transcript?: boolean } = {}) {
+  /** survey: a complete Khảo sát định hướng (survey-v3), an older partial one (survey-v2: the field only) or none; consent: its policy version. */
+  type Setup = { transcript?: boolean; survey?: "complete" | "partial" | null; consent?: string | null; stored?: { career: unknown; created_at: Date } | null };
+  function setup(rows: Setup = {}) {
+    const survey = rows.survey === undefined ? "complete" : rows.survey;
+    const consent = rows.consent === undefined ? TRANSCRIPT_POLICY_VERSION : rows.consent;
     const query = vi.fn(async (sql: string) => {
       const result = (list: unknown[]) => ({ rowCount: list.length, rows: list });
       if (sql.startsWith("SELECT id FROM users")) return result([{ id: "student-id" }]);
@@ -68,11 +74,15 @@ describe("GET /api/student/career-guidance", () => {
       }
       if (sql.startsWith("SELECT code,name FROM career_fields")) return result([{ code: "7", name: "Phát triển phần mềm" }, { code: "8", name: "Lĩnh vực trống" }]);
       if (sql.startsWith("SELECT career_position_id FROM student_profiles")) return result([{ career_position_id: "c1" }]);
-      if (sql.includes("FROM stu_comp_assessments")) return result([]);
+      if (sql.includes("FROM stu_comp_assessments")) return result(rows.stored ? [rows.stored] : []);
       if (sql.includes("FROM stu_profile_surveys")) {
-        return result([{ version: "survey-v2", answers: { field: "web" }, interest_tech: ["web_backend"], interest_hobbies: ["reading"], has_achievements: false,
-          achievements: null, updated_at: new Date() }]);
+        if (survey === "partial") {
+          return result([{ version: "survey-v2", answers: { field: "web" }, interest_tech: ["web_backend"], interest_hobbies: ["reading"], strengths: null,
+            has_achievements: false, achievements: null, updated_at: new Date() }]);
+        }
+        return result(survey === "complete" ? [{ ...syntheticSurveyRow(), version: "survey-v3", interest_tech: ["web_backend"] }] : []);
       }
+      if (sql.includes("FROM data_consents")) return result(consent ? [{ policy_version: consent }] : []);
       throw new Error(`Unexpected query: ${sql}`);
     });
     const pool = { query, connect: vi.fn(async () => ({ query, release: vi.fn() })) } as unknown as DatabasePool;
@@ -91,6 +101,24 @@ describe("GET /api/student/career-guidance", () => {
       requirements: [expect.objectContaining({ title: "SQL", skillName: "SQL", isRequired: true, status: null })],
       interests: { field: "Web", tech: ["Web back-end (Node.js, Java, .NET, PHP)"] },
     })]);
+  });
+
+  it("uses the survey only when it is complete and agreed to under the current policy, as the AI roadmap does", async () => {
+    const unused = { surveyDone: false, careers: [expect.objectContaining({ id: "c1", interests: { field: null, tech: [] } })] };
+    // An older survey that only answered the field (survey-v2): no matches from it, and the page asks for the survey.
+    expect((await request(setup({ survey: "partial" })).get("/guidance").expect(200)).body).toMatchObject(unused);
+    // A complete survey agreed to under an older policy, or with the consent withdrawn.
+    expect((await request(setup({ consent: "2026-10-24" })).get("/guidance").expect(200)).body).toMatchObject(unused);
+    expect((await request(setup({ consent: null })).get("/guidance").expect(200)).body).toMatchObject(unused);
+    expect((await request(setup({ survey: null })).get("/guidance").expect(200)).body).toMatchObject(unused);
+  });
+
+  it("names the career Khoảng trống kỹ năng shows, from the latest stored assessment", async () => {
+    const createdAt = new Date("2026-10-24T18:52:14Z");
+    const other = await request(setup({ stored: { career: { id: "c2", nameVi: "Kỹ sư dữ liệu", requirements: [] }, created_at: createdAt } })).get("/guidance").expect(200);
+    expect(other.body).toMatchObject({ targetCareerId: "c1", gapCareerId: "c2", gapCareerName: "Kỹ sư dữ liệu", gapCurrent: false, gapAssessedAt: createdAt.toISOString() });
+    // No assessment yet: nothing to name.
+    expect((await request(setup()).get("/guidance").expect(200)).body).toMatchObject({ gapCareerId: null, gapCareerName: null, gapAssessedAt: null });
   });
 
   it("refuses query parameters", async () => {

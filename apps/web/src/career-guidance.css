@@ -19,7 +19,7 @@
 .cg-kicker { color: var(--sw-red); font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 
 .cg-header { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: 18px 28px; align-items: start; }
-.cg-header > .cg-note, .cg-header > .sr-success, .cg-header > .sr-error { grid-column: 1 / -1; margin: 0 !important; }
+.cg-header > .cg-note { grid-column: 1 / -1; margin: 0 !important; }
 .cg-lead { margin: 8px 0 0; color: #4a5465; font-size: 13px; line-height: 1.7; max-width: 760px; }
 .cg-current { display: grid; gap: 8px; padding: 14px 16px; border: 1px solid var(--sw-border); border-radius: var(--sw-radius); background: #fafbfc; }
 .cg-current-body { display: grid; gap: 4px; }
@@ -123,10 +123,26 @@
 .cg-detail-fit { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; color: #4a5465; font-size: 13px; }
 .cg-description { margin: 0; color: #3b4456; font-size: 13px; line-height: 1.7; white-space: pre-line; }
 
-.cg-tray { position: sticky; bottom: 12px; z-index: 5; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 12px 16px;
+/* The bottom of the screen: the notice of "Chọn nghề mục tiêu", then the comparison tray. */
+.cg-dock { position: sticky; bottom: 12px; z-index: 5; display: grid; gap: 8px; }
+.cg-tray { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 12px 16px;
   border: 1px solid #dfe3ea; border-radius: 12px; background: #fff; box-shadow: 0 10px 28px rgb(20 24 35 / 14%); font-size: 13px; color: #33415c; }
 .cg-tray-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .cg-tray-hint { color: var(--sw-muted); font-size: 12px; }
+/* .cg-dock > raises the specificity over .sr-success/.sr-error (student-records.css), whatever the order the sheets load in. */
+.cg-dock > .cg-toast { display: flex; align-items: flex-start; gap: 10px; margin: 0 !important; border: 1px solid currentColor; border-radius: 12px;
+  box-shadow: 0 10px 28px rgb(20 24 35 / 14%); font-size: 13px; }
+.cg-dock > .cg-toast.sr-success { border-color: #b9dcc7; }
+.cg-dock > .cg-toast.sr-error { border-color: #f1c4cf; }
+.cg-toast p { flex: 1 1 auto; margin: 0; }
+.cg-toast a { color: inherit; font-weight: 700; }
+.cg-dock .cg-toast-close { flex: none; display: grid; place-items: center; width: 28px; height: 28px; margin: -4px -6px 0 0; padding: 0; border: 0; border-radius: 6px;
+  background: transparent; color: inherit; text-decoration: none; cursor: pointer; }
+.cg-dock .cg-toast-close:hover { background: rgb(20 24 35 / 8%); }
+.cg-toast-close svg { width: 14px; height: 14px; }
+
+/* "Xem so sánh" scrolls here: keep the heading clear of the sticky top bar (as profile-survey.css does). */
+.cg-compare { scroll-margin-top: calc(var(--sw-header-height, 72px) + 16px); }
 .cg-problem { display: grid; gap: 10px; justify-items: start; }
 .cg-problem p { margin: 0; }
 
@@ -144,7 +160,7 @@
   .cg-filters { grid-template-columns: minmax(0, 1fr); }
   .cg-filters .cg-check { padding-bottom: 0; }
   .cg-card-head { flex-direction: column; }
-  .cg-tray { bottom: 8px; }
+  .cg-dock { bottom: 8px; }
 }
 
 /* How the điểm phù hợp is counted (comp-calc-v14) and each skill's score in the detail table. */

@@ -40,7 +40,8 @@
 .scomp-page .scomp-prose { font-size: 14px; line-height: 1.7; }
 .scomp-page .scomp-kicker { display: block; color: var(--sw-muted); font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
 .scomp-page .scomp-subtitle { margin-top: 4px; }
-.scomp-page .scomp-code { color: var(--sw-muted); font-size: 12px; font-weight: 600; }
+/* A course code never breaks ("71ITSE410/03" at 500 px). */
+.scomp-page .scomp-code { color: var(--sw-muted); font-size: 12px; font-weight: 600; white-space: nowrap; }
 .scomp-page .scomp-num { text-align: right; white-space: nowrap; }
 .scomp-page .scomp-actions { display: flex; flex-wrap: wrap; gap: 12px; }
 
@@ -225,7 +226,7 @@
 .scomp-page .scomp-bucket[open] > summary::before { transform: rotate(45deg); }
 .scomp-page .scomp-bucket > summary::before { align-self: center; margin-right: 4px; }
 .scomp-page .scomp-skill-name { font-weight: 600; }
-.scomp-page .scomp-career-tag { display: inline-block; margin-left: 8px; padding: 0 6px; border: 1px solid #c9d6ea; border-radius: 4px; color: var(--scomp-l4); font-size: 11px; font-weight: 700; vertical-align: 1px; }
+.scomp-page .scomp-career-tag { display: inline-block; margin-left: 8px; padding: 0 6px; border: 1px solid #c9d6ea; border-radius: 4px; color: var(--scomp-l4); font-size: 11px; font-weight: 700; vertical-align: 1px; white-space: nowrap; }
 .scomp-page .scomp-skill-score { position: absolute; top: 50%; transform: translateY(-50%); color: var(--sw-ink, #1d2433); font-size: 13px; font-weight: 700; white-space: nowrap; }
 .scomp-page .scomp-skill-body { display: grid; gap: 10px; padding: 4px 14px 14px 30px; }
 .scomp-page .scomp-evidence { min-width: 820px; }
@@ -273,7 +274,10 @@
 .scomp-page .scomp-chart-scale { position: relative; height: 44px; margin-right: 88px; }
 .scomp-page .scomp-chart-grid i { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--scomp-grid); }
 .scomp-page .scomp-chart-grid i:first-child { background: var(--scomp-axis); }
-.scomp-page .scomp-chart-seg { position: absolute; top: 0; height: 100%; padding: 0; border: 0; background: transparent; font: inherit; cursor: pointer; }
+/* One flex row per group: its width is the group's share of the axis, each segment's its count (flex-grow), but never under
+   14px so one skill can be pointed at and tapped (2026-10-25: about 4px at 500px). The total follows the last segment. */
+.scomp-page .scomp-chart-bar { position: absolute; top: 0; bottom: 0; left: 0; display: flex; }
+.scomp-page .scomp-chart-seg { position: relative; flex: 1 1 0; min-width: 14px; height: 100%; padding: 0; border: 0; background: transparent; font: inherit; cursor: pointer; }
 .scomp-page .scomp-chart-fill { position: absolute; top: 50%; left: 0; right: 2px; height: 22px; display: grid; place-items: center; background: var(--scomp-chart-color); transform: translateY(-50%); transition: filter .15s; }
 .scomp-page .scomp-chart-seg.is-last .scomp-chart-fill { right: 0; border-radius: 0 4px 4px 0; }
 .scomp-page .scomp-chart-value { color: var(--sw-ink, #1d2433); font-size: 12px; font-weight: 700; line-height: 1; }
@@ -297,7 +301,7 @@
 .scomp-page .scomp-tip-list b { flex: none; font-weight: 700; }
 .scomp-page .scomp-tip-more { color: var(--scomp-neutral); }
 .scomp-page .scomp-tip-hint { margin-top: 2px; color: var(--scomp-l3); font-weight: 600; }
-.scomp-page .scomp-chart-total { position: absolute; top: 50%; transform: translateY(-50%); color: var(--scomp-neutral); font-size: 12px; white-space: nowrap; }
+.scomp-page .scomp-chart-total { position: absolute; top: 50%; left: calc(100% + 8px); transform: translateY(-50%); color: var(--scomp-neutral); font-size: 12px; white-space: nowrap; }
 .scomp-page .scomp-chart-axis .scomp-chart-scale { height: 18px; }
 .scomp-page .scomp-chart-axis .scomp-chart-scale > span { position: absolute; top: 0; transform: translateX(-50%); color: var(--scomp-neutral); font-size: 12px; white-space: nowrap; }
 .scomp-page .scomp-chart-unit p { margin: 0 88px 0 0; color: var(--scomp-neutral); font-size: 12px; text-align: center; }
@@ -325,12 +329,14 @@
 .scomp-page .scomp-grad-detail { flex: none; background: #fff; }
 .scomp-page .scomp-grad-unresolved { display: grid; gap: 8px; justify-items: start; }
 
-/* Competency per term (STU-COMP-07) */
+/* Competency per term (STU-COMP-07). The term column keeps its width and "Mới nhất" stays whole at 500px ("Hi / ện / tại"
+   broke there: the section's overflow-wrap lets any word break). */
 .scomp-page .scomp-history-table { min-width: 860px; }
+.scomp-page .scomp-history-table tbody th[scope="row"] { min-width: 140px; white-space: nowrap; }
 /* STU-GAP-07: career skills by term */
 .scomp-page .scomp-gap-history { min-width: 640px; }
 .scomp-page .scomp-gap-history .scomp-gap-year { text-align: center; }
-.scomp-page .scomp-gap-history thead small { display: block; color: var(--scomp-neutral); font-size: 11px; font-weight: 600; }
+.scomp-page .scomp-gap-history thead small { display: block; color: var(--scomp-neutral); font-size: 11px; font-weight: 600; white-space: nowrap; }
 .scomp-page .scomp-gap-history tfoot th, .scomp-page .scomp-gap-history tfoot td { background: #f8f9fb; font-weight: 700; }
 .scomp-page .scomp-gap-history td span { white-space: nowrap; }
 .scomp-page .scomp-gap-change { font-weight: 700; }

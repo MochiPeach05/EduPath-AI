@@ -9,15 +9,26 @@ export const MAX_TERMS = 15;
 export const MAX_COURSES_PER_TERM = 40;
 
 const termCode = z.string().regex(/^HK\d{2}[123]$/);
+const courseCode = z.string().trim().min(1).max(40);
 
 export const studyPlanSchema = z.object({
   schemaVersion: z.literal(1),
   /** The AI roadmap whose proposal the plan has taken in (prefill.ts readAiProposal); null or absent before any. */
   roadmapId: z.uuid().nullable().optional(),
+  /**
+   * What taking that proposal in added (the page saves it at once, from any tab): kept so "Kế hoạch học kỳ" names the
+   * courses on later visits too. null or absent: nothing to say (a plan saved before, or the student hid the note).
+   */
+  aiAdded: z.object({
+    completedAt: z.iso.datetime({ offset: true }),
+    term: termCode,
+    codes: z.array(courseCode).max(MAX_TERMS * MAX_COURSES_PER_TERM),
+    addedAt: z.iso.datetime({ offset: true }),
+  }).strict().nullable().optional(),
   terms: z.array(z.object({
     code: termCode,
     // Unknown keys (the old "sessions") are stripped.
-    courses: z.array(z.object({ code: z.string().trim().min(1).max(40) })).max(MAX_COURSES_PER_TERM),
+    courses: z.array(z.object({ code: courseCode })).max(MAX_COURSES_PER_TERM),
   }).strict()).max(MAX_TERMS),
 }).strict().superRefine((plan, context) => {
   const terms = plan.terms.map((term) => term.code);
@@ -34,10 +45,10 @@ export function nextTerm(code: string): string {
   const year = Number(code.slice(2, 4)), semester = Number(code.slice(4));
   return semester < 3 ? `HK${code.slice(2, 4)}${semester + 1}` : `HK${String((year + 1) % 100).padStart(2, "0")}1`;
 }
-/** "HK261" → "HK1 · 2026-2027". */
+/** "HK261" → "HK1 · 2026–2027" (en dash, as every other page prints a school year). */
 export function termLabel(code: string): string {
   const year = 2000 + Number(code.slice(2, 4));
-  return `HK${code.slice(4)} · ${year}-${year + 1}`;
+  return `HK${code.slice(4)} · ${year}–${year + 1}`;
 }
 
 /**

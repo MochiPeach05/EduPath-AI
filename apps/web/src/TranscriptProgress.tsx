@@ -14,7 +14,8 @@ export default function TranscriptProgress({ stage, workerOnline = true }: Props
   const completed = stage === "completed";
   const percent = completed ? 100 : Math.floor(progress);
   const waiting = !completed && stage !== "uploading" && !workerOnline;
-  const label = completed ? "Đã đọc và lưu bảng điểm thành công."
+  // The only success message of an import (StudentTranscript shows no second one).
+  const label = completed ? "Đã lưu bảng điểm. Hãy đối chiếu các học phần bên dưới với PDF gốc."
     : stage === "uploading"
     ? "Đang gửi PDF và chờ hệ thống đọc dữ liệu…"
     : waiting ? "Đang chờ máy xử lý kết nối lại…"

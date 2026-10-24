@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import EduPathBrand from "./EduPathBrand";
-import PublicFooter from "./PublicFooter";
+import PublicFooter, { portalLabel, usePortalLink } from "./PublicFooter";
 import FaqAnswer, { withEmailLinks } from "./FaqAnswer";
 import { Icon } from "./ui-icon";
 import { frequentlyAskedQuestions, informationPolicies, policyUpdatedAt, publicInformationLinks, supportEmail, type PolicyKind } from "./public-information";
@@ -66,8 +66,9 @@ function PolicyContent() {
         <aside className="pi-policy-sidebar">
           <h2 className="pi-policy-column-heading">Danh mục</h2>
           <nav className="pi-policy-menu" aria-label="Mục lục chính sách và điều khoản">
+            {/* No id here: #bao-mat and #dieu-khoan open the text of the policy, not its entry in this menu. */}
             {policyGroups.map((group) => (
-              <div className="pi-policy-menu-group" id={group.id} key={group.id}>
+              <div className="pi-policy-menu-group" key={group.id}>
                 <h3>{group.title}</h3>
                 {policyCategories.filter((category) => category.groupId === group.id).map((category) => (
                   <button key={category.fragment} type="button" aria-current={activeId === category.fragment ? "true" : undefined} aria-controls="policy-description" onClick={() => selectCategory(category.fragment)}>
@@ -127,15 +128,19 @@ function FrequentlyAskedQuestions() {
 export default function PublicInformationPage({ page }: { page: "policy" | "faq" }) {
   const title = page === "faq" ? "Câu hỏi thường gặp" : "Chính sách & Điều khoản";
   const currentHref = publicInformationLinks[page === "policy" ? 0 : 1].href;
+  const portal = usePortalLink();
   useEffect(() => {
-    document.title = `${title} – EduPath AI`;
+    document.title = `${title} · EduPath AI`;
     if (page === "policy") {
       const pathname = window.location.pathname.replace(/\/+$/, "");
       if (pathname === "/chinh-sach-bao-mat" || pathname === "/dieu-khoan-su-dung") {
         const fragment = window.location.hash || (pathname === "/chinh-sach-bao-mat" ? "#bao-mat" : "#dieu-khoan");
         window.history.replaceState(null, "", `${publicInformationLinks[0].href}${window.location.search}${fragment}`);
       }
-      if (window.location.hash) document.getElementById(window.location.hash.slice(1))?.scrollIntoView();
+      // A whole policy (#bao-mat, #dieu-khoan) opens at the top of its text, which shows its first category.
+      const fragment = window.location.hash.slice(1);
+      const target = policyGroups.some((group) => group.id === fragment) ? categoryFromLocation() : fragment;
+      if (target) document.getElementById(target)?.scrollIntoView();
     }
   }, [page, title]);
 
@@ -149,13 +154,13 @@ export default function PublicInformationPage({ page }: { page: "policy" | "faq"
             <a href="/">Trang chủ</a>
             {publicInformationLinks.map((link) => <a key={link.href} href={link.href} aria-current={link.href === currentHref ? "page" : undefined}>{link.label}</a>)}
           </nav>
-          <a className="lp-button lp-button-small pi-login" href="/login">Đăng nhập <Icon name="arrow" /></a>
+          <a className={`lp-button lp-button-small pi-login${portal ? " lp-return-portal" : ""}`} href={portal ?? "/login"}>{portal ? portalLabel : "Đăng nhập"} <Icon name="arrow" /></a>
         </div>
       </header>
       <main id="noi-dung">
         {page === "faq" ? <FrequentlyAskedQuestions /> : <PolicyContent />}
       </main>
-      <PublicFooter />
+      <PublicFooter portal={portal} />
     </div>
   );
 }

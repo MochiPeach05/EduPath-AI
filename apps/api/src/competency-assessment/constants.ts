@@ -53,7 +53,24 @@ import type { Confidence, FitCode, GapStatus } from "./types.js";
  * studied (SkillResult.upcoming/upcomingTerm), the rule of the career rows, so Đánh giá năng lực tells "Sắp học"
  * from "Chưa học" like Khoảng trống kỹ năng (user, 2026-10-25, chose to align the pages).
  */
-export const CALC_VERSION = "comp-calc-v16";
+/**
+ * v17 (audit of Đánh giá năng lực and Khoảng trống kỹ năng, 2026-10-25):
+ * - a course retaken under another code ("học trả nợ với khóa sau": K26 failed DIT0070 and passed it as 71ITIS30103) counts
+ *   for its CTĐT course in the competency table, the plan progress and the transcript summary, through the graduation
+ *   check's code aliases (the CTĐT's own course names without a standard), not only for graduation;
+ * - a suggested course whose planned term is the term being studied or earlier, and not in progress, is `overdue`;
+ *   the transcript summary keeps that term (`studyTerm`);
+ * - "Giáo dục thể chất (1)/(2)" courses (K26–K28, not in TC002/TC102) fill the plan's GDTC slots 1 and 2;
+ * - "học kỳ tới" counts courses: one per course, the courses still to choose of a choice, the credits of a credit choice
+ *   over its largest option;
+ * - a condition-only course (GDTC/GDQP) printed with 0 credits (K27/K28) scores its skills with a nominal credit
+ *   (CONDITION_NOMINAL_CREDITS), so they show under "Môn điều kiện" like K29–K31, never "Ngoài lựa chọn học phần";
+ * - the career count line names only its non-zero parts ("Đạt 4/6 kỹ năng · 2 chưa học"), and dataText counts the
+ *   skills with a score ("x/y kỹ năng có điểm"; "có dữ liệu" before);
+ * - "Kỹ năng gần giống đã đo" of a self-study skill lists scored skills only;
+ * - plan choice labels are spaced ("Chọn1 trong 3" → "Chọn 1 trong 3") and say the real number of options.
+ */
+export const CALC_VERSION = "comp-calc-v17";
 /**
  * The graduation evaluation uses no skill level, so it keeps the version of its last change:
  * comp-calc-v10 changed only levels and must not re-date every student's graduation advice.
@@ -167,5 +184,11 @@ export const EXEMPT_LETTER = "MT";
 
 /** Condition-only courses (GDTC/GDQP) when no graduation standard says otherwise. */
 export const CONDITION_ONLY_CODE_PATTERN = /^71(?:NAD|PE)/;
+/**
+ * Credits a condition-only course (GDTC/GDQP) printed with 0 credits (K27/K28 "Giáo dục thể chất (1)") counts in its skills'
+ * score and coverage (comp-calc-v17). Its skills are condition-only, so group and overall scores never see it; without it such a
+ * skill had no weight at all and was listed as outside the student's choices although the course was passed.
+ */
+export const CONDITION_NOMINAL_CREDITS = 1;
 /** Folded CTĐT block name of the condition-only courses. */
 export const CONDITION_ONLY_BLOCK = "giao duc the chat va giao duc quoc phong";

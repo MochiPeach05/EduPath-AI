@@ -144,8 +144,9 @@ export type PlanRevisionInput = {
   data: PlanData;
   /**
    * Course codes of the PE elective groups, as plans/student-router.ts builds them:
-   * { TC002: [...], TC102: [...] } from the active curriculum. physicalEducationGroupsFor()
-   * in plan-progress.ts computes the same object from curriculum courses.
+   * { TC002: [...], TC102: [...] } from the active curriculum, plus GDTC1/GDTC2 for the courses named
+   * "Giáo dục thể chất (1)"/"(2)" (K26–K28, comp-calc-v17). physicalEducationGroupsFor() in plan-progress.ts
+   * computes this object from curriculum courses.
    */
   physicalEducationGroups: Record<string, string[]>;
 };
@@ -276,7 +277,12 @@ export type TranscriptSummary = {
   parserVersion: string;
   /** Latest term with grades as HKyyS, e.g. "HK253". */
   latestTerm: string | null;
-  /** Distinct course codes on the transcript. */
+  /**
+   * The term being studied (studyTermCode, comp-calc-v13): the plan progress, "Sắp học" and overdue courses count from it.
+   * Stored since comp-calc-v17; absent before.
+   */
+  studyTerm?: string | null;
+  /** Distinct courses on the transcript; a retake under another code of a CTĐT course counts once (comp-calc-v17). */
   courseCount: number;
   inCurriculum: number;
   passed: number;
@@ -416,6 +422,11 @@ export type SupportCourse = {
   term: string | null;
   termSource: "plan" | "curriculum" | null;
   termLabel: string;
+  /**
+   * The planned term is the term being studied or earlier and the course is not in progress: it can only be registered in a
+   * coming term (comp-calc-v17; absent before, the page then compares `term` itself).
+   */
+  overdue?: boolean;
   electiveGroup: string | null;
   reason: string;
 };
@@ -465,9 +476,12 @@ export type CareerResult = {
   deleted: boolean;
   requirements: CareerRequirementResult[];
   counts: { total: number; met: number; below: number; upcoming: number; notStudied: number; noData: number; withData: number };
-  /** "Đạt x/y kỹ năng · z sắp học · t chưa đủ dữ liệu" */
+  /**
+   * "Đạt x/y kỹ năng" and then only the non-zero counts, in this order: dưới ngưỡng, chưa học, sắp học, cần tự học, chưa đủ dữ
+   * liệu (comp-calc-v17; before, "· z sắp học · t chưa đủ dữ liệu" even at 0 and without the others).
+   */
   summaryText: string;
-  /** "x/y kỹ năng có dữ liệu" */
+  /** "x/y kỹ năng có điểm": the skills with a score (comp-calc-v17; "x/y kỹ năng có dữ liệu", all but no_data, before). */
   dataText: string;
   /** Share of requirement credit (met 1, below up to 0,5, not studied 0); the level used it before comp-calc-v11. */
   fit: number | null;
@@ -501,7 +515,7 @@ export type SelfStudyItem = {
   requirementTitle: string;
   isRequired: boolean;
   status: GapStatus;
-  /** Measured skills with similar names, as context only (never merged). */
+  /** Measured skills with similar names that have a score (comp-calc-v17; any measured skill before), as context only (never merged). */
   relatedSkillKeys: string[];
   otherSpecialtyCourses: string[];
 };
@@ -559,6 +573,10 @@ export type PlanProgressResult = {
   lateCount: number;
   lateCredits: number;
   next: NextEntry[];
+  /**
+   * Courses of the next term: one per course and GDTC slot, the courses still to choose of a choice, and a credit choice's
+   * credits over its largest option (comp-calc-v17; the number of entries before).
+   */
   nextCount: number;
   nextCredits: number;
   /** Sections that are never late (no k, or "Không tính vào tích lũy"). */

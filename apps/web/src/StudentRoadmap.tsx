@@ -3,7 +3,7 @@ import StudentAiRoadmap from "./StudentAiRoadmap";
 import { RoadmapTrack } from "./RoadmapProgress";
 import { RoadmapPlanner, type SaveState } from "./RoadmapPlanner";
 import {
-  STUDY_PLAN_API, applyProposal, planErrorMessage, withTerms, type StudyPlanData, type StudyPlanProjection, type StudyPlanResponse,
+  STUDY_PLAN_API, applyProposal, planErrorMessage, withTerms, type PlanOrigin, type StudyPlanData, type StudyPlanProjection, type StudyPlanResponse,
 } from "./study-plan-data";
 import "./student-roadmap.css";
 
@@ -42,13 +42,11 @@ async function call<T>(init: RequestInit = {}): Promise<T> {
   return body as T;
 }
 
-/** Where the plan on screen came from, shown above the planner. */
-export type PlanOrigin = { kind: "prefill" } | { kind: "ai"; added: number; completedAt: string; term: string } | null;
-
 /**
  * The plan the page edits: loaded when the page opens and again when a planning tab opens (an AI roadmap may have been
  * written meanwhile), saved 0.7 s after the last change with the version it was loaded at. A student without a plan starts
- * from the training plan's mandatory courses; the newest AI roadmap's proposal is taken in and saved at once.
+ * from the training plan's mandatory courses; the newest AI roadmap's proposal is taken in and saved at once, with what
+ * it added (aiAdded), which Kế hoạch học kỳ names on later visits and Theo dõi tiến độ mentions during this one.
  */
 function useStudyPlan() {
   const [loaded, setLoaded] = useState<{ data: StudyPlanResponse | null; error: string | null }>({ data: null, error: null });
@@ -77,7 +75,7 @@ function useStudyPlan() {
       if (data.aiProposal) {
         const applied = applyProposal(next, data.aiProposal);
         next = applied.plan;
-        setOrigin({ kind: "ai", added: applied.added, completedAt: data.aiProposal.completedAt, term: data.aiProposal.term });
+        setOrigin({ kind: "ai", added: applied.added });
         // Saved at once, so the proposal is taken in only once.
         latest.current = next;
         timer.current = setTimeout(() => void save(), 0);
@@ -105,6 +103,8 @@ function useStudyPlan() {
       version.current = result.plan.version;
       setProjection(result.projection);
       setSaveState(latest.current ? "dirty" : "saved");
+      // A prefilled plan is saved now: its note ("sẽ được lưu khi bạn chỉnh sửa") no longer applies.
+      setOrigin((value) => (value?.kind === "prefill" ? null : value));
     } catch (error) {
       setSaveError((error as Error).message);
       setSaveState("error");
@@ -147,7 +147,8 @@ export default function StudentRoadmap({ notice }: { notice?: ReactNode }) {
       {tab === "ai" ? <StudentAiRoadmap />
           : needsPlan && study.error ? <section className="sw-panel rm-problem" role="alert"><strong>Chưa tải được dữ liệu lộ trình</strong><p>{study.error}</p></section>
             : !study.context || !study.plan ? <section className="sw-panel" aria-busy="true"><p role="status">Đang tải lộ trình học tập…</p></section>
-              : tab === "track" ? <RoadmapTrack context={study.context} plan={study.plan} projection={study.projection} />
+              : tab === "track" ? <RoadmapTrack context={study.context} plan={study.plan} projection={study.projection} origin={study.origin}
+                onOpenPlanner={() => choose("manual")} />
                 : <RoadmapPlanner context={study.context} plan={study.plan} onChange={study.change} saveState={study.saveState} saveError={study.saveError}
                   origin={study.origin} onOpenAi={() => choose("ai")} />}
     </div>

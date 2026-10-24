@@ -36,7 +36,7 @@ export default function AdminPortal() {
   });
 
   useEffect(() => {
-    document.title = "EduPath AI – Cổng quản trị";
+    document.title = "Cổng quản trị · EduPath AI";
     const controller = new AbortController();
     setState({ kind: "loading" });
     void fetch("/api/admin/me", {

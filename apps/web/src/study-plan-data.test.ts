@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  applyProposal, auditGroups, auditNote, creditProgress, moveCourse, offering, planIssues, poolSections, searchCourses, termLoad, withTerms,
-  type StudyPlanContext, type StudyPlanCourse, type StudyPlanData,
+  aiAddedText, applyProposal, auditGroups, auditNote, creditProgress, groupCountText, moveCourse, offering, ownRelations, planChoiceText, planIssues,
+  poolSections, searchCourses, termLabel, termLoad, termLoadText, withTerms, type StudyPlanContext, type StudyPlanCourse, type StudyPlanData,
 } from "./study-plan-data";
 
 // Synthetic courses only (no student data).
@@ -43,14 +43,37 @@ describe("auditGroups", () => {
     expect([elective!.done, elective!.counted, elective!.remaining]).toEqual([3, 3, 3]);
   });
 
-  it("counts the plan in the planned view", () => {
+  it("counts the plan in the planned view, without calling a group complete before its courses are passed", () => {
     const [mandatory, elective] = auditGroups(context(), plan, "planned");
     expect(mandatory!.rows.map((row) => row.mark)).toEqual(["done", "running", "planned", "planned"]);
-    expect([mandatory!.remaining, mandatory!.complete]).toEqual([0, true]);
+    // Every course is passed, being studied or planned: nothing is missing, yet only 1 of the 4 is passed.
+    expect([mandatory!.remaining, mandatory!.complete, mandatory!.mark]).toEqual([0, false, "planned"]);
+    expect(groupCountText(mandatory!)).toBe("Đã đạt 1/4 môn · phần còn lại đã có trong kế hoạch");
     expect(elective!.remaining).toBe(3);
-    expect(auditNote(mandatory!.rows[2]!)).toBe("Kế hoạch · HK2 · 2026-2027");
-    expect(auditNote(auditGroups(context(), plan, "official")[0]!.rows[3]!)).toBe("Chưa đạt (F) · kế hoạch HK2 · 2026-2027");
-    expect(auditNote(mandatory!.rows[0]!)).toBe("B+ · HK1 · 2024-2025");
+    expect(auditNote(mandatory!.rows[2]!)).toBe("Kế hoạch · HK2 · 2026–2027");
+    expect(auditNote(auditGroups(context(), plan, "official")[0]!.rows[3]!)).toBe("Chưa đạt (F) · kế hoạch HK2 · 2026–2027");
+    expect(auditNote(mandatory!.rows[0]!)).toBe("B+ · HK1 · 2024–2025");
+  });
+
+  it("marks a group done only by results: a course being studied makes it ✓✓ Đang học, not ✓ Đã hoàn thành", () => {
+    // K29 TC306 (6 TC): F passed, the rest (E) being studied.
+    const studying = context({ courses: context().courses.map((item) => (item.code === "E" ? { ...item, state: "in_progress" as const, inProgressTerm: "HK261" } : item)) });
+    for (const view of ["official", "planned"] as const) {
+      const elective = auditGroups(studying, plan, view)[1]!;
+      expect([elective.done, elective.running, elective.counted, elective.remaining, elective.complete, elective.mark]).toEqual([3, 3, 6, 0, false, "running"]);
+      expect(groupCountText(elective)).toBe("Đã đạt 3/6 TC · phần còn lại đang học");
+    }
+    // A group whose only course is being studied.
+    const thesis = context({ graduation: { ...context().graduation!, groups: [
+      { label: "Đồ án tốt nghiệp", kind: "mandatory", unit: "môn", required: 1, passed: 0, status: "unknown", courseCodes: ["B"] }] } });
+    expect(auditGroups(thesis, plan, "official")[0]).toMatchObject({ complete: false, mark: "running", remaining: 0 });
+    // Once passed, it is done.
+    const passed = context({ courses: context().courses.map((item) => (item.code === "E" ? { ...item, state: "passed" as const } : item)) });
+    const done = auditGroups(passed, plan, "official")[1]!;
+    expect([done.complete, done.mark, groupCountText(done)]).toEqual([true, "done", "Đã đủ 6 TC"]);
+    // Still short: the red count.
+    const open = auditGroups(context(), plan, "official")[1]!;
+    expect([open.mark, groupCountText(open)]).toEqual(["open", "3/6 TC · còn thiếu 3 TC"]);
   });
 
   it("without a standard, groups the CTĐT: mandatory courses, then each elective group", () => {
@@ -59,6 +82,24 @@ describe("auditGroups", () => {
     expect(groups.map((group) => [group.label, group.required, group.rows.map((row) => row.course.code)])).toEqual([
       ["Học phần bắt buộc", 4, ["A", "B", "C", "D"]], ["Nhóm tự chọn TC306", 6, ["F", "E"]],
     ]);
+  });
+
+  it("without '(n TC)', takes an elective group's courses from the training plan's 'Chọn k trong n', else says it is not known", () => {
+    const choice = { courses: 2, sections: [{ label: "Chọn 2 trong 6 HP tự chọn Cơ sở ngành", termCode: "HK252" }] };
+    const plain = context({ graduation: null, electiveGroups: [
+      { code: "TC209", requiredCredits: null, courseCodes: ["E", "F"], planChoice: choice },
+      { code: "TC406", requiredCredits: null, courseCodes: ["E", "F"], planChoice: null },
+    ] });
+    const [, chosen, unknown] = auditGroups(plain, plan, "official");
+    // As the AI tab counts it ("còn thiếu … môn"): 1 of the 2 courses passed.
+    expect([chosen!.unit, chosen!.required, chosen!.done, chosen!.mark, groupCountText(chosen!)]).toEqual(["môn", 2, 1, "open", "1/2 môn · còn thiếu 1 môn"]);
+    expect(chosen!.planChoice).toEqual(choice);
+    expect(planChoiceText(choice)).toBe("Số môn cần chọn theo kế hoạch đào tạo của khóa: Chọn 2 trong 6 HP tự chọn Cơ sở ngành (HK2 · 2025–2026).");
+    // Nothing says how much TC406 needs: a neutral "?" instead of a group that can never be met.
+    expect([unknown!.required, unknown!.remaining, unknown!.complete, unknown!.mark, groupCountText(unknown!)])
+      .toEqual([null, null, false, "unknown", "Chưa rõ số tín chỉ yêu cầu · đã có 3 TC"]);
+    // The planner's list asks for the same: one more course of TC209.
+    expect(poolSections(plain, { schemaVersion: 1, terms: [] }).find((section) => section.id === "group-TC209")?.note).toBe("Cần thêm 1 môn");
   });
 });
 
@@ -73,14 +114,34 @@ describe("planning", () => {
   it("takes in the AI roadmap's proposal once: new courses go to its term, planned ones stay where they are", () => {
     const proposal = { roadmapId: "99999999-9999-4999-8999-999999999999", completedAt: "2026-10-24T10:00:00.000Z", term: "HK262",
       courses: [{ code: "c", term: "HK262" }, { code: "E", term: "HK262" }] };
-    const { plan: next, added } = applyProposal(withTerms(context(), { ...plan, terms: [{ code: "HK263", courses: [{ code: "C" }] }] }), proposal);
+    const now = new Date("2026-10-24T10:05:00.000Z");
+    const { plan: next, added } = applyProposal(withTerms(context(), { ...plan, terms: [{ code: "HK263", courses: [{ code: "C" }] }] }), proposal, now);
     expect(added).toBe(1);
     expect(next.roadmapId).toBe(proposal.roadmapId);
     expect(next.terms.map((term) => [term.code, term.courses.map((item) => item.code)])).toEqual([["HK261", []], ["HK262", ["E"]], ["HK263", ["C"]]]);
+    // What it added stays in the plan (saved with it), so Kế hoạch học kỳ names the courses on later visits too.
+    expect(next.aiAdded).toEqual({ completedAt: proposal.completedAt, term: "HK262", codes: ["E"], addedAt: now.toISOString() });
+    expect(withTerms(context(), next).aiAdded).toEqual(next.aiAdded);
+    expect(moveCourse(next, "E", "HK263").aiAdded).toEqual(next.aiAdded);
+    expect(aiAddedText(context(), next.aiAdded!)).toBe(`Đã thêm 1 học phần do lộ trình AI đề xuất (lộ trình soạn lúc 17:00 24/10/2026): Môn E (E). `
+      + "Các học phần được xếp từ HK2 · 2026–2027 trở đi, vào học kỳ mà kế hoạch đào tạo mở môn đó; bạn điều chỉnh tiếp bên dưới.");
+    expect(aiAddedText(context(), { ...next.aiAdded!, codes: [] })).toBe("Các học phần lộ trình AI đề xuất (lộ trình soạn lúc 17:00 24/10/2026) đã có sẵn trong kế hoạch.");
     // A term the plan does not show yet is added in order; moving a course keeps the roadmap it came from.
     const later = applyProposal(plan, { ...proposal, courses: [{ code: "E", term: "HK271" }] }).plan;
     expect(later.terms.map((term) => term.code)).toEqual(["HK262", "HK271"]);
     expect(moveCourse(later, "E", "HK262").roadmapId).toBe(proposal.roadmapId);
+  });
+
+  it("never asks a course of the student's program for another specialty's prerequisites", () => {
+    // Chuyên đề Tốt nghiệp 1 (G1) lists the prerequisites of every specialty: C of the student's, X of another one.
+    const thesis = context({ courses: [...context().courses, course("G1", { prerequisites: ["C", "X"], prior: ["X"] }),
+      course("Y", { applicable: false, specialtyName: "Khoa học dữ liệu", prerequisites: ["X"] })] });
+    const planned: StudyPlanData = { schemaVersion: 1, terms: [{ code: "HK262", courses: [{ code: "G1" }, { code: "Y" }] }] };
+    const byCode = new Map(thesis.courses.map((item) => [item.code, item]));
+    expect(planIssues(thesis, planned).get("G1")).toEqual({ prerequisites: ["C"], prior: [], notOffered: null });
+    expect(ownRelations(byCode.get("G1")!, ["C", "X", "OUTSIDE"], byCode)).toEqual(["C", "OUTSIDE"]);
+    // Another specialty's course, planned anyway, keeps its own prerequisites.
+    expect(planIssues(thesis, planned).get("Y")?.prerequisites).toEqual(["X"]);
   });
 
   it("flags a prerequisite planned in the same term and a course no training plan opens in that term", () => {
@@ -104,6 +165,14 @@ describe("planning", () => {
     const withSport = context({ courses: [...context().courses, course("PE1", { credits: 2, conditional: true, group: "TC102" })] });
     expect(termLoad(withSport, { schemaVersion: 1, terms: [{ code: "HK262", courses: [{ code: "C" }, { code: "D" }, { code: "PE1" }] }] }, "HK262"))
       .toEqual({ credits: 8, conditional: 2, status: "over" });
+    // The label says which limit, in words.
+    const limits = context().limits;
+    expect([termLoadText({ credits: 8, status: "over" }, limits), termLoadText({ credits: 3, status: "under" }, limits), termLoadText({ credits: 6, status: "ok" }, limits)])
+      .toEqual(["8 TC · vượt mức tối đa 7 TC", "3 TC · dưới mức tối thiểu 4 TC", "6 TC"]);
+  });
+
+  it("names a term with the school year's en dash", () => {
+    expect(termLabel("HK262")).toBe("HK2 · 2026–2027");
   });
 
   it("lists the courses still needed by requirement, finds courses by name and sums the credits", () => {
@@ -115,6 +184,12 @@ describe("planning", () => {
     expect(poolSections(context(), moveCourse(plan, "E", "HK263")).map((section) => section.title)).toEqual(["Chuyên ngành khác"]);
     expect(searchCourses(context(), "mon c").map((item) => item.code)).toEqual(["C"]);
     expect(searchCourses(context(), "Môn").map((item) => item.code)).toEqual(["C", "D", "E", "X"]);
-    expect(creditProgress(context(), plan)).toEqual({ done: 6, running: 3, planned: 6, total: 30 });
+    expect(creditProgress(context(), plan)).toEqual({ done: 6, running: 3, planned: 6, plannedOther: 0, total: 30 });
+  });
+
+  it("counts in Theo kế hoạch only the planned courses of the student's program, another specialty's apart", () => {
+    // X belongs to another specialty: planned, it counts toward nothing of the program.
+    const withOther = moveCourse(plan, "X", "HK263");
+    expect(creditProgress(context(), withOther)).toEqual({ done: 6, running: 3, planned: 6, plannedOther: 3, total: 30 });
   });
 });

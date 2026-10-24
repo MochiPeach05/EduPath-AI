@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
+import type { TranscriptData } from "../student/transcript-parser.js";
 import {
-  calculateAssessment, compareSkills, confidenceOf, deficitBand, fitCredit, floorScore, levelOf, snapScore, termParts,
+  calculateAssessment, careerDataTextOf, careerSummaryOf, compareSkills, confidenceOf, deficitBand, fitCredit, floorScore, levelOf, snapScore, termParts,
 } from "./calculate.js";
 import { CALC_VERSION, fitCodeOf, fitDataShareOf, fitScoreOf, MAX_SKILL_PLANS } from "./constants.js";
 import {
-  SKILL, syntheticCareer, syntheticInputs, syntheticStudentTerms, syntheticTranscript, type SyntheticOptions, type TranscriptTerm,
+  SKILL, syntheticCareer, syntheticInputs, syntheticStudentTerms, syntheticTranscript, type SyntheticOptions, type TranscriptRow, type TranscriptTerm,
 } from "./fixtures/synthetic-k29.js";
 import type { AssessmentInputs, AssessmentResult, CareerInput, HistoryPoint, SpecialtyCode } from "./types.js";
 
@@ -401,7 +402,9 @@ describe("career gaps and fit (spec §7.5–§7.7)", () => {
       // Điểm phù hợp (v15): (2 × 88 + 56 + 2 × 47 + 0 for Phân tích dữ liệu lớn, Cần tự học + 0 for Thuyết trình, Sắp
       // học + 0 for Docker, no data) / 8; every skill counts, so the data share is 1.
       fitScore: 40.75, fitCode: "not_fit", fitLabel: "Không phù hợp", dataShare: 1,
-      summaryText: "Đạt 1/6 kỹ năng · 1 sắp học · 1 cần tự học · 1 chưa đủ dữ liệu", dataText: "4/6 kỹ năng có dữ liệu",
+      // v17: every non-zero count, in a fixed order (the two skills below the threshold were not named before), and the
+      // skills with a score (88, 56, 47) instead of "4/6 kỹ năng có dữ liệu".
+      summaryText: "Đạt 1/6 kỹ năng · 2 dưới ngưỡng · 1 sắp học · 1 cần tự học · 1 chưa đủ dữ liệu", dataText: "3/6 kỹ năng có điểm",
       counts: { total: 6, met: 1, below: 2, upcoming: 1, notStudied: 0, noData: 2, withData: 4 },
       weightedMeanScore: 65.2, weightedMeanCount: 3,
     });
@@ -819,6 +822,114 @@ describe("data warnings (spec §7.10)", () => {
     const result = calculateAssessment(syntheticInputs({ terms }));
     expect(result.transcript.inferredCount).toBe(0);
     expect(result.warnings.map((warning) => warning.code)).toEqual(["credits_mismatch"]);
+  });
+});
+
+describe("a course retaken under another code (comp-calc-v17)", () => {
+  // The synthetic student fails Lập trình ứng dụng Web (71ITSE30503) in HK241 and passes it with a later cohort, under that
+  // cohort's code 71ITWB30503, in HK243 ("học trả nợ với khóa sau"; K26: DIT0070 F, then 71ITIS30103 B).
+  const retaken = (): TranscriptData => {
+    const terms = syntheticStudentTerms().map((term, index) => index === 4
+      ? { ...term, rows: term.rows.map((row): TranscriptRow => (row[0] === "71ITSE30503" ? ["71ITSE30503", 3, 3, 0, "F"] : row)) }
+      : index === 5 ? { ...term, rows: [...term.rows, ["71ITWB30503", 3, 9, 4, "A"] as TranscriptRow] } : term);
+    const data = syntheticTranscript(terms);
+    for (const section of data.sections) for (const course of section.courses) {
+      if (course.code === "71ITSE30503" || course.code === "71ITWB30503") course.name = "Lập trình ứng dụng Web";
+    }
+    return data;
+  };
+  const check = (result: AssessmentResult) => {
+    expect(result.courses.find((course) => course.code === "71ITSE30503")).toMatchObject({ state: "passed", score10: 9, letter: "A", attempts: 2, term: "HK243" });
+    // Phát triển web is scored from the A (90), no longer from the F (30).
+    expect(byName(result, "Phát triển web")).toMatchObject({ status: "scored", score: 90 });
+    // Not late, not failed, not outside the CTĐT; the credits match the printed 27 again.
+    expect(result.progress!.late.filter((entry) => entry.kind === "course").map((entry) => entry.kind === "course" && entry.code)).not.toContain("71ITSE30503");
+    expect(result.transcript).toMatchObject({ failed: 0, creditCheck: { computed: 27, printed: 27, status: "match" } });
+    expect(result.transcript.notInCurriculum.map((course) => course.code)).not.toContain("71ITWB30503");
+    expect(result.warnings.map((warning) => warning.code)).not.toContain("credits_mismatch");
+  };
+
+  it("counts the retake for its CTĐT course in the competency table, the progress and the transcript summary", () => {
+    const result = calculateAssessment(syntheticInputs({ transcript: retaken() }));
+    check(result);
+    // The history keeps the F at HK241, the term before the retake.
+    const web = result.career!.requirements.find((req) => req.title === "Phát triển web")!;
+    const at = (term: string) => result.history.find((point) => point.term === term)!.career!.requirements.find((req) => req.requirementId === web.requirementId);
+    expect([at("HK241"), at("HK243")]).toEqual([
+      { requirementId: web.requirementId, score: 30, status: "below" }, { requirementId: web.requirementId, score: 90, status: "met" },
+    ]);
+  });
+
+  it("does the same from the CTĐT's own course names without a graduation standard", () => {
+    check(calculateAssessment({ ...syntheticInputs({ transcript: retaken() }), graduation: { resolution: "not_found", standard: null } }));
+  });
+
+  it("never takes the attempts of one CTĐT course for another", () => {
+    // Both codes are CTĐT courses with the same name: each keeps its own attempts.
+    const inputs = syntheticInputs({ transcript: retaken() });
+    inputs.curriculum.courses.push({ code: "71ITWB30503", name: "Lập trình ứng dụng Web", credits: 3, type: "BB", block: "", specialty: "", semester: 3, studyYear: 2 });
+    const result = calculateAssessment({ ...inputs, graduation: { resolution: "not_found", standard: null } });
+    expect(result.courses.find((course) => course.code === "71ITSE30503")).toMatchObject({ state: "failed", score10: 3 });
+    expect(result.courses.find((course) => course.code === "71ITWB30503")).toMatchObject({ state: "passed", score10: 9 });
+  });
+});
+
+describe("audit of the competency pages (comp-calc-v17)", () => {
+  it("marks a suggested course whose planned term has passed as overdue, and keeps the term being studied", () => {
+    // Lập trình ứng dụng Web failed in HK241: the retake is suggested for Phát triển web, its plan term long gone.
+    const failed = calculateAssessment(syntheticInputs({ terms: mapTerms((row) => (row[0] === "71ITSE30503" ? ["71ITSE30503", 3, 3, 0, "F"] : row)) }));
+    const web = failed.career!.requirements.find((req) => req.title === "Phát triển web")!;
+    expect(web.supportCourses.map((course) => [course.code, course.term, course.overdue])).toEqual([["71ITSE30503", "HK241", true]]);
+    expect(failed.transcript).toMatchObject({ latestTerm: "HK243", studyTerm: "HK251" });
+    // Planned after the term being studied: not overdue.
+    const presenting = calculateAssessment(syntheticInputs({ career: career([[SKILL.presenting, false]]) })).career!.requirements[0]!;
+    expect(presenting.supportCourses.map((course) => [course.code, course.term, course.overdue])).toEqual([["71ITGR40206", "HK261", false], ["71ITIN40304", "HK253", false]]);
+  });
+
+  it("scores a 0-credit GDTC/GDQP course with a nominal credit and keeps it a condition-only skill (K27/K28)", () => {
+    const base = syntheticInputs();
+    const zero = { ...base, curriculum: { ...base.curriculum, courses: base.curriculum.courses.map((course) => (course.code === "71NAD110013" ? { ...course, credits: 0 } : course)) } };
+    const before = calculateAssessment(base), after = calculateAssessment(zero);
+    // Before v17 it had no weight at all: not applicable ("no_credits"), listed as outside the student's choices.
+    expect(byName(after, "Kiến thức quốc phòng")).toMatchObject({ status: "scored", score: 70, conditionOnly: true, notApplicableReason: null, denominator: 1 });
+    expect(after.overall).toEqual(before.overall);
+    expect(after.groups).toEqual(before.groups);
+  });
+
+  it("names only the non-zero counts of the career line, in a fixed order, and counts the skills with a score", () => {
+    type Req = Parameters<typeof careerSummaryOf>[0][number];
+    const req = (status: Req["status"], score: number | null = null, noDataReason: Req["noDataReason"] = null): Req => ({ status, score, noDataReason });
+    // The K28 case: 4/6 met and 2 not studied read "· 0 sắp học · 0 chưa đủ dữ liệu" and "6/6 kỹ năng có dữ liệu".
+    const k28 = [req("met", 85), req("met", 90), req("met", 70), req("met", 81), req("not_studied"), req("not_studied")];
+    expect(careerSummaryOf(k28)).toBe("Đạt 4/6 kỹ năng · 2 chưa học");
+    expect(careerDataTextOf(k28)).toBe("4/6 kỹ năng có điểm");
+    expect(careerSummaryOf([
+      req("no_data", null, "not_measured"), req("upcoming"), req("no_data", null, "elective_not_chosen"), req("not_studied"),
+      req("below", 50), req("met", 90), req("met", null), req("no_data", null, "other_specialty"),
+    ])).toBe("Đạt 2/8 kỹ năng · 1 dưới ngưỡng · 1 chưa học · 1 sắp học · 2 cần tự học · 1 chưa đủ dữ liệu");
+    expect(careerSummaryOf([])).toBe("Đạt 0/0 kỹ năng");
+  });
+
+  it("lists only scored skills as similar skills of a self-study skill", () => {
+    // Docker's similar skill "Docker cơ bản" has no course studied yet: it is no context for self-study.
+    const inputs = syntheticInputs();
+    inputs.weights.skills.push({ skillId: "00000000-0000-4000-8000-0000000000f9", name: "Docker cơ bản", description: "", scope: "", groupId: inputs.weights.groups[2]!.id });
+    inputs.weights.links.push({ courseCode: "71ITSE30803", skillId: "00000000-0000-4000-8000-0000000000f9", weight: 1 });
+    inputs.weights.skills.push({ skillId: "00000000-0000-4000-8000-0000000000fa", name: "Docker nâng cao", description: "", scope: "", groupId: inputs.weights.groups[2]!.id });
+    inputs.weights.links.push({ courseCode: "71ITSE30503", skillId: "00000000-0000-4000-8000-0000000000fa", weight: 0.2 });
+    const result = calculateAssessment(inputs);
+    const docker = result.selfStudy.find((item) => item.name === "Docker")!;
+    expect(docker.relatedSkillKeys.map((key) => result.skillDirectory.find((entry) => entry.key === key)!.name)).toEqual(["Docker nâng cao"]);
+  });
+
+  it("counts the next term in courses and spaces the plan's choice labels", () => {
+    const inputs = syntheticInputs({ terms: syntheticStudentTerms().slice(0, 4) });
+    const plan = inputs.plan.resolution === "found" ? inputs.plan.revision.data : null;
+    plan!.sections = plan!.sections.map((section) => (section.id === "section-36" ? { ...section, label: "Chọn2 trong 2 môn sau" } : section));
+    const progress = calculateAssessment(inputs).progress!;
+    // HK241: Lập trình ứng dụng Web and two courses of "Chọn 2 trong 2": 3 courses, 2 entries.
+    expect(progress).toMatchObject({ currentTerm: "HK233", nextTerm: "HK241", nextCount: 3, nextCredits: 9 });
+    expect(progress.next.map((entry) => (entry.kind === "course" ? entry.code : entry.label))).toEqual(["71ITSE30503", "Chọn 2 trong 2 môn sau"]);
   });
 });
 

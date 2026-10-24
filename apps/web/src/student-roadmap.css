@@ -115,6 +115,7 @@
 .rm-mark-retake { width: 18px; height: 18px; border-radius: 50%; color: #2e7d32; font-size: 15px; }
 .rm-mark-not-counted { width: 18px; height: 18px; border-radius: 50%; background: #d32f2f; color: #fff; font-size: 12px; }
 .rm-mark-equivalent { width: 18px; height: 18px; color: #242b39; font-size: 14px; }
+.rm-mark-unknown { border: 2px solid #8a93a3; background: #f1f3f6; color: #4a5465; }
 
 /* ---- Theo dõi tiến độ ---- */
 .rm-track { display: grid; gap: 20px; min-width: 0; }
@@ -148,6 +149,10 @@
 .rm-req-title { flex: 1 1 220px; font-weight: 700; font-size: 14px; }
 .rm-req-count { color: #4a5465; font-size: 13px; }
 .rm-req-done .rm-req-count { color: #2e7d32; }
+.rm-req-running .rm-req-count, .rm-req-planned .rm-req-count { color: #8a6400; }
+.rm-req-unknown .rm-req-count { color: var(--sw-muted); }
+/* Where a group's required courses come from (the training plan's "Chọn k trong n"), or why it is not known. */
+.rm-req-rule { margin: 0; padding: 8px 14px 0; color: var(--sw-muted); font-size: 12px; line-height: 1.6; }
 .rm-req-rows { display: grid; margin: 0; padding: 4px 0; list-style: none; }
 .rm-req-row { display: grid; grid-template-columns: 22px 110px minmax(0, 1fr) 56px minmax(140px, 220px); align-items: center; gap: 10px; padding: 8px 14px; border-top: 1px solid #f0f2f5; font-size: 13px; }
 .rm-req-row:first-child { border-top: 0; }
@@ -188,14 +193,21 @@
 .rm-origin { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 10px 14px; border: 1px solid #f2dc8c; border-radius: 8px; background: #fffbea; color: #5c4a10; font-size: 13px; line-height: 1.6; }
 .rm-origin-empty { flex-wrap: wrap; align-items: center; justify-content: space-between; }
 .rm-origin-empty p { margin: 0; flex: 1 1 320px; }
+.rm-origin-empty p .rm-mark { margin-right: 4px; }
+/* What the AI roadmap's proposal added, with "Ẩn thông báo". */
+.rm-origin-ai p { flex: 1 1 auto; margin: 0; }
+.rm-origin-ai .rm-link { flex: none; align-self: center; }
 .rm-save-saved { color: #2e7d32; }
 .rm-save-error { color: #b42335; font-weight: 600; }
 .rm-planner { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
 .rm-terms { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; align-items: start; min-width: 0; }
 .rm-term { display: grid; gap: 8px; min-width: 0; padding: 12px; border: 1px dashed transparent; border-radius: 10px; background: #f5f6f8; }
 .rm-term.is-over, .rm-side.is-over { border-color: var(--sw-red); background: var(--sw-soft); }
-.rm-term-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 6px; }
+.rm-term-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; gap: 6px; }
 .rm-term-head h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; font-size: 14px; }
+/* The credits of the term and, visible, the part of them from môn điều kiện. */
+.rm-load-box { display: grid; justify-items: end; gap: 2px; margin-inline-start: auto; }
+.rm-load-note { color: var(--sw-muted); font-size: 11px; line-height: 1.4; text-align: right; }
 .rm-load { flex: none; padding: 3px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; background: #e6eaef; color: #4a5465; }
 .rm-load-ok { background: #eaf5ee; color: #246b50; }
 .rm-load-over { background: #fde8ec; color: #b42335; }
@@ -217,7 +229,12 @@
 .rm-link { justify-self: start; padding: 0; border: 0; background: none; color: var(--sw-red); font: inherit; font-size: 12px; font-weight: 600; cursor: pointer; }
 .rm-add-term { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 90px; border: 1px dashed #c9cfd8; border-radius: 10px; background: transparent; color: #4a5465; font: inherit; font-weight: 600; cursor: pointer; }
 .rm-add-term:hover { border-color: var(--sw-red); color: var(--sw-red); }
-.rm-side { position: sticky; top: 16px; display: grid; gap: 10px; max-height: min(calc(100dvh - 32px), 900px); overflow: auto; padding: 14px; border: 1px dashed transparent; border-radius: 10px; background: #fff; box-shadow: 0 0 0 1px var(--sw-border); }
+/* Sticks below the sticky top bar; "+ Thêm vào học kỳ này" scrolls it into view when stacked, clear of that bar too. */
+.rm-side { position: sticky; top: calc(var(--sw-header-height, 92px) + 16px); display: grid; gap: 10px;
+  max-height: min(calc(100dvh - var(--sw-header-height, 92px) - 32px), 900px); overflow: auto; padding: 14px; border: 1px dashed transparent;
+  border-radius: 10px; background: #fff; box-shadow: 0 0 0 1px var(--sw-border); scroll-margin-top: calc(var(--sw-header-height, 92px) + 16px); }
+.rm-side:focus { outline: none; }
+.rm-side:focus-visible { box-shadow: 0 0 0 2px var(--sw-red); }
 .rm-target { display: grid; gap: 4px; font-size: 12px; font-weight: 600; color: #4a5465; }
 .rm-target select, .rm-search input { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid var(--sw-border); border-radius: 8px; background: #fff; font: inherit; font-size: 13px; }
 .rm-side-tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--sw-border); }

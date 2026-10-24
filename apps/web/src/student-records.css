@@ -145,27 +145,9 @@
     margin-top: 6px !important
 }
 
-.sr-file-label {
-    display: grid;
-    gap: 8px;
-    font-size: 12px;
-    font-weight: 700;
-    min-width: 200px;
-    color: #a0153a
-}
-
-.sr-file-label input {
-    max-width: 250px;
-    font-size: 11px
-}
-
-.sr-file-label input::file-selector-button {
-    border: 1px solid #e2c8d0;
-    background: #fff;
-    color: #a0153a;
-    border-radius: 5px;
-    padding: 9px 11px;
-    cursor: pointer
+/* "Chọn tệp PDF" of "Cập nhật bảng điểm mới": a button for the hidden file input, like the drop zone's. */
+.sr-upload .sr-upload-button {
+    flex-shrink: 0
 }
 
 .sr-pending {
@@ -392,14 +374,25 @@
     min-width: 0
 }
 
+/* Shown on phones only (below): the term tables are wider than the screen. */
+.sr-swipe-hint {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    font-size: 12px;
+    color: #647081
+}
+
+.sw-shell .sr-swipe-hint svg {
+    width: 16px;
+    height: 16px
+}
+
 @media(max-width:650px) {
     .sr-upload {
         flex-direction: column;
         align-items: stretch
-    }
-
-    .sr-file-label input {
-        max-width: 100%
     }
 
     .sr-form-fields {
@@ -439,6 +432,35 @@
     .sr-actions {
         flex-wrap: wrap
     }
+
+    .sr-swipe-hint {
+        display: flex
+    }
+
+    .sr-swipe-hint + .sr-term {
+        margin-top: 10px
+    }
+}
+
+/* Sections that Tổng quan opens (revealProfileSection): clear of the sticky header. */
+.sw-shell .sr-editor,
+.sw-shell .sr-transcript {
+    scroll-margin-top: calc(var(--sw-header-height, 72px) + 16px)
+}
+
+/* Chuyên ngành in "Mục tiêu học tập": required, with a warning while it is "Chưa xác định". */
+.sr-required {
+    color: #b51639
+}
+
+.sr-field-warning {
+    color: #704900;
+    font-weight: 600
+}
+
+.sr-field-note {
+    color: #647081;
+    font-size: 12px
 }
 
 .sr-dropzone {
@@ -462,7 +484,9 @@
     background: #fdf5f7;
 }
 
-.sr-dropzone-icon {
+/* .sw-shell svg (student-workspace.css) sets every icon to 20px: one more class keeps this one at 64px. */
+.sr-dropzone-icon,
+.sw-shell .sr-dropzone-icon {
     width: 64px;
     height: 64px;
     color: #242b39;

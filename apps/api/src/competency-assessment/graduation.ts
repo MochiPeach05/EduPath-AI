@@ -91,18 +91,40 @@ export function electiveQuotas(electives: readonly ElectiveGroup[], standard: Pi
 /** E1: the group code written in a group name ("Nhóm tự chọn TC306" → "TC306"), else null. */
 export const groupCode = (name: string): string | null => /\bTC\d{3}\b/i.exec(name)?.[0]?.toUpperCase() ?? null;
 
+/** "Nhóm tự chọn TC124 và nhóm tự chọn TC206": one group the source file names after two codes. */
+const COMBINED_GROUP = /\b(TC\d{3})\s+và\s+(?:nhóm\s+)?(?:tự\s+chọn\s+)?(TC\d{3})\b/iu;
+
 /**
- * E1: display label per group id. Groups are matched by their member courses, never by name, and a
- * name can repeat (K29 CNDL has two "Nhóm tự chọn TC102"), so a repeated name shows its course count
- * and first code in standard order, exactly as the old web helper did; a unique name stays as it is.
+ * A standard group name as a student reads it (audit 2026-10-25): the source files write "TC104 (4TC)_Tự chọn giáo dục
+ * thể chất", "TC533(27TC)-Tự chọn chuyên ngành" or "TC124 và nhóm tự chọn TC206", and these names reach the verdict
+ * sentence and the advice input. The credit note "(4TC)" goes (the requirement is shown on its own), a "_" or a "-"
+ * after the code becomes " – ", and a group named after two codes reads "TC124 + TC206". Codes stay as written.
+ * Mirrored in apps/web/src/student-graduation-data.ts (readableGroupName).
+ */
+export function readableGroupName(name: string): string {
+  let text = name.normalize("NFC")
+    .replace(/\s*\(\s*\d+(?:[.,]\d+)?\s*TC\s*\)/giu, " ")
+    .replace(/\s*_+\s*/g, " – ")
+    .replace(/\b(TC\d{3})\s*-\s*/giu, "$1 – ")
+    .replace(/\s+[-–—]\s+/g, " – ");
+  while (COMBINED_GROUP.test(text)) text = text.replace(COMBINED_GROUP, "$1 + $2");
+  return text.replace(/\s+/g, " ").replace(/^[\s–-]+|[\s–-]+$/g, "");
+}
+
+/**
+ * E1: display label per group id: the readable name (readableGroupName). Groups are matched by their member courses,
+ * never by name, and a name can repeat (K29 CNDL has two "Nhóm tự chọn TC102"), so a repeated name shows its course
+ * count and first code in standard order, exactly as the old web helper did; a unique name stays as it reads.
  */
 export function graduationGroupLabels(standard: Pick<GraduationData, "groups" | "courses">): Map<string, string> {
+  const readable = new Map(standard.groups.map((group) => [group.id, readableGroupName(group.name)]));
   const names = new Map<string, number>();
-  for (const group of standard.groups) names.set(group.name.trim(), (names.get(group.name.trim()) ?? 0) + 1);
+  for (const name of readable.values()) names.set(name, (names.get(name) ?? 0) + 1);
   return new Map(standard.groups.map((group) => {
-    if ((names.get(group.name.trim()) ?? 0) < 2) return [group.id, group.name];
+    const name = readable.get(group.id)!;
+    if ((names.get(name) ?? 0) < 2) return [group.id, name];
     const codes = standardGroupCodes(standard, group.id);
-    return [group.id, `${group.name} · ${codes.length} học phần${codes[0] ? `, trong đó có ${codes[0]}` : ""}`];
+    return [group.id, `${name} · ${codes.length} học phần${codes[0] ? `, trong đó có ${codes[0]}` : ""}`];
   }));
 }
 
@@ -150,12 +172,18 @@ export type GraduationInputs = {
   conditionCodes: ReadonlySet<string>;
   /** Standard courses counted as passed through a same-name course under another code (graduationCodeAliases). */
   transfers: CreditTransfer[];
+  /** Every transcript code → standard code the records were built with (graduationCodeAliases); absent = none. */
+  aliases?: ReadonlyMap<string, string>;
+  /** Standard 71PE electives filled by a passed GDTC course of the student's own programme (graduationCodeAliases); absent = none. */
+  substitutes?: CreditTransfer[];
 };
 
 /**
  * A standard course passed only under another code with the same name: a retake with a later cohort
  * ("học trả nợ với khóa sau"). It counts as passed, but the school still lists the course as owed until
  * the student has the grade transferred ("làm thủ tục chuyển điểm").
+ * The same shape describes a substitute: a 71PE elective of the standard (`code`) filled by a passed GDTC course of the
+ * student's own programme (`viaCode`); no transfer is needed for it.
  */
 export type CreditTransfer = { code: string; name: string; viaCode: string; viaName: string };
 
@@ -196,6 +224,22 @@ export function standardCodeAliases(standard: Pick<GraduationData, "courses"> | 
   return new Map([...owners].filter(([, set]) => set.size === 1).map(([key, set]) => [key, [...set][0]!]));
 }
 
+/** A 71PE elective of a standard: a 71PE… code marked (*) (conditionOnly, or "(*)" in its name). */
+const isPhysicalEducationElective = (course: StandardCourse) =>
+  /^71PE/.test(courseKey(course.code)) && (course.conditionOnly || /\(\s*\*\s*\)/.test(course.name));
+
+/** The standard's groups (in standard order) whose courses are all 71PE (*) electives (K27/K28 TC104, K29 TC002/TC102). */
+function physicalEducationGroups(courses: readonly StandardCourse[]): StandardCourse[][] {
+  const groups = new Map<string, StandardCourse[]>();
+  for (const course of courses) groups.set(course.groupId, [...(groups.get(course.groupId) ?? []), course]);
+  return [...groups.values()].filter((list) => list.every(isPhysicalEducationElective));
+}
+
+/** The GDTC courses K27/K28 students take: their CTĐT lists them, their standard lists only the 71PE electives (TC104). */
+const NUMBERED_PE_CODES: ReadonlySet<string> = new Set(["DGT0010", "DGT0020"]);
+/** "Giáo dục thể chất (1)", "Giáo dục thể chất 2 (*)", folded: a numbered GDTC course of a CTĐT. */
+const NUMBERED_PE_NAME = /^giao duc the chat\s*\(?\s*\d+\s*\)?(?:\s*\(\s*\*\s*\))?$/;
+
 /**
  * Every transcript code → standard code map of the graduation check: the standard's other codes
  * (standardCodeAliases), then, for each standard course not passed under its own codes, a passed
@@ -204,15 +248,21 @@ export function standardCodeAliases(standard: Pick<GraduationData, "courses"> | 
  * skipped. The second kind is returned as `transfers` too, unless the code is a course of the student's own
  * CTĐT (`curriculumCodes`): then the standard and the CTĐT only write the course differently (K26 standard
  * DQP0061, K26 CTĐT DQP0060) and no transfer is needed.
+ * Last, the numbered GDTC courses (audit 2026-10-25): a passed DGT0010/DGT0020, or a passed course of the own CTĐT named
+ * "Giáo dục thể chất (n)" (`curriculumNames`, else its transcript name), that the standard does not list fills one 71PE
+ * elective of a group whose courses are all 71PE (*) electives — K27/K28 students took GDTC (1)/(2) while their standard
+ * lists only the 71PE electives of TC104. It fills a course nobody took, in the group with the fewest passed courses
+ * (standard order on ties), for graduation only; it is returned as `substitutes` and needs no transfer.
  */
 export function graduationCodeAliases(
   standard: Pick<GraduationData, "courses"> | null,
   transcript: TranscriptData,
   curriculumCodes: ReadonlySet<string> = new Set(),
-): { aliases: Map<string, string>; transfers: CreditTransfer[] } {
+  curriculumNames: ReadonlyMap<string, string> = new Map(),
+): { aliases: Map<string, string>; transfers: CreditTransfer[]; substitutes: CreditTransfer[] } {
   const aliases = standardCodeAliases(standard);
   const courses = standard?.courses ?? [];
-  if (!courses.length) return { aliases, transfers: [] };
+  if (!courses.length) return { aliases, transfers: [], substitutes: [] };
   const records = transcriptCourses(transcript, aliases);
   const known = new Set(courses.flatMap((course) => [course.code, ...(course.alternativeCodes ?? [])].map(courseKey)));
   const names = new Map<string, string>();
@@ -244,7 +294,29 @@ export function graduationCodeAliases(
     aliases.set(via, code);
     if (!curriculumCodes.has(via)) transfers.push({ code, name: course.name, viaCode: via, viaName: names.get(via) ?? "" });
   }
-  return { aliases, transfers };
+  const substitutes: CreditTransfer[] = [];
+  const groups = physicalEducationGroups(courses);
+  if (groups.length) {
+    const numbered = (code: string) => NUMBERED_PE_CODES.has(code) ||
+      (curriculumCodes.has(code) && NUMBERED_PE_NAME.test(fold(curriculumNames.get(code) ?? names.get(code) ?? "")));
+    const candidates = [...records.keys()].filter((code) =>
+      !known.has(code) && !aliases.has(code) && isPassedState(records.get(code)!.state) && numbered(code)).sort();
+    const targets = new Set(aliases.values());
+    const filled = groups.map((group) => group.filter((course) => isPassedState(records.get(courseKey(course.code))?.state ?? "not_taken")).length);
+    const free = (course: StandardCourse) => !records.has(courseKey(course.code)) && !targets.has(courseKey(course.code));
+    for (const via of candidates) {
+      const index = groups.map((_, position) => position).sort((a, b) => filled[a]! - filled[b]! || a - b)
+        .find((position) => groups[position]!.some(free));
+      if (index === undefined) break;
+      const target = groups[index]!.find(free)!;
+      const code = courseKey(target.code);
+      targets.add(code);
+      filled[index] = filled[index]! + 1;
+      aliases.set(via, code);
+      substitutes.push({ code, name: target.name, viaCode: via, viaName: names.get(via) ?? "" });
+    }
+  }
+  return { aliases, transfers, substitutes };
 }
 
 /** The graduation inputs from the standard, the cohort's CTĐT courses ([] when there is none) and the transcript. */
@@ -254,14 +326,28 @@ export function graduationInputs(
   transcript: TranscriptData,
 ): GraduationInputs {
   const courses = uniqueCurriculumCourses(curriculumCourses);
-  const { aliases, transfers } = graduationCodeAliases(standard, transcript, new Set(courses.map((course) => courseKey(course.code))));
+  const { aliases, transfers, substitutes } = graduationCodeAliases(standard, transcript,
+    new Set(courses.map((course) => courseKey(course.code))), new Map(courses.map((course) => [courseKey(course.code), course.name])));
+  const records = transcriptCourses(transcript, aliases);
+  // A GDTC course that fills a 71PE elective keeps its own record as well: the CTĐT lists it, and the study plan reads
+  // these records. Nothing counts twice: the copy under the 71PE code is condition-only (no credits, no GPA), and the
+  // GDTC course itself counts in the credits and the GPA exactly as it did before it filled the elective.
+  if (substitutes.length) {
+    const own = transcriptCourses(transcript);
+    for (const substitute of substitutes) {
+      const record = own.get(substitute.viaCode);
+      if (record) records.set(substitute.viaCode, record);
+    }
+  }
   return {
     transcript,
-    records: transcriptCourses(transcript, aliases),
+    records,
     programCredits: programCreditMap(standard, curriculumCreditMap(courses)),
     electives: deriveElectiveGroups(courses),
     conditionCodes: conditionOnlyCodes(standard, courses),
     transfers,
+    aliases,
+    substitutes,
   };
 }
 

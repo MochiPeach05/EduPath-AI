@@ -1,9 +1,11 @@
 import { GRADUATION_CALC_VERSION } from "../competency-assessment/constants.js";
 import {
-  courseKey, currentTermCode, estimateProgramCredits, isConditionOnly, isPassedState, printedCumulativeCredits,
+  courseKey, currentTermCode, estimateProgramCredits, isConditionOnly, isPassedState, printedCumulativeCredits, transcriptCourses,
+  type TranscriptCourseRecord,
 } from "../competency-assessment/course-state.js";
 import {
-  assessGraduationStandard, countsInGpa, gpaAttempt, graduationInputs, standardCodesAmbiguous, standardCourseCredits, type GraduationInputs,
+  assessGraduationStandard, countsInGpa, gpaAttempt, graduationInputs, standardCodesAmbiguous, standardCourseCredits, type CreditTransfer,
+  type GraduationInputs,
 } from "../competency-assessment/graduation.js";
 import type { CurriculumCourseInput, GraduationStandardInput } from "../competency-assessment/types.js";
 import type { TranscriptData } from "../student/transcript-parser.js";
@@ -39,6 +41,29 @@ export interface GraduationCourseRow {
   term: string | null;
   /** Passed only under this other code with the same name (a retake with a later cohort): needs a credit transfer. */
   transferFrom?: string;
+  /**
+   * Only on a row of the student's own programme that is not a standard course: a passed GDTC course ("Giáo dục thể chất
+   * (1)", DGT0010) that fills the 71PE elective with this code (graduationCodeAliases), for graduation only and without a
+   * transfer. It is listed first in its group, with the elective's credits; the elective's own row reads "not_taken".
+   */
+  inPlaceOf?: string;
+}
+
+/** A passed transcript course that maps to no course of the standard: it counts toward no group (shown for the student to ask). */
+export interface GraduationOutsideCourse {
+  /** courseKey(code) as printed. */
+  code: string;
+  /** As printed on the transcript. */
+  name: string;
+  /** Credits of the selected attempt (> 0), else null. */
+  credits: number | null;
+  state: "passed" | "exempt";
+  /** Selected attempt (MT: null). */
+  score10: number | null;
+  score4: number | null;
+  letter: string | null;
+  /** HKyyS; null for "Điểm bảo lưu". */
+  term: string | null;
 }
 
 export interface GraduationGroupEvaluation {
@@ -64,7 +89,7 @@ export interface GraduationGroupEvaluation {
   accumulatedCredits: number | null;
   courseCount: number;
   passedCount: number;
-  /** Every standard course of the group, in standard order. */
+  /** Every standard course of the group, in standard order, after the own-programme courses that fill one of them (inPlaceOf). */
   courses: GraduationCourseRow[];
 }
 
@@ -122,6 +147,18 @@ export interface GraduationEvaluation {
    * They count as passed; the student still has to have the grades transferred. Absent when there is none.
    */
   creditTransfers?: { code: string; name: string; viaCode: string; viaName: string; credits: number | null }[];
+  /**
+   * The other codes a standard course was counted through, for the pages that list courses by code (#curriculum,
+   * #plans): the standard's other code of the course, a same-name course of the CTĐT, or a retake with a later cohort
+   * (`transfer`: needs a credit transfer, also in creditTransfers). Only codes printed on the transcript, ordered by
+   * code; a GDTC course that fills a 71PE elective is left out (that elective was not taken). Absent when there is none.
+   */
+  codeAliases?: { code: string; viaCode: string; transfer: boolean }[];
+  /**
+   * Passed transcript courses that map to no standard course (K26 DIT0410 and K28 71ITGR40106 "Khoá luận tốt nghiệp"),
+   * ordered by code: they count toward no group and change no condition (visibility only). Absent when there is none.
+   */
+  outsideStandard?: GraduationOutsideCourse[];
   warnings: GraduationWarning[];
 }
 
@@ -149,29 +186,50 @@ export function evaluateGraduation(input: GraduationEvaluationInput): Graduation
   const { records, programCredits, conditionCodes } = core;
   const result = assessGraduationStandard(data, core);
   const transferOf = new Map(core.transfers.map((transfer) => [transfer.code, transfer.viaCode]));
+  const substitutes = core.substitutes ?? [];
+  const filledBy = new Map(substitutes.map((substitute) => [substitute.code, substitute]));
 
-  const row = (course: StandardCourse): GraduationCourseRow => {
-    const code = courseKey(course.code);
-    const record = records.get(code);
+  /** Result fields of a record (the selected attempt; MT shows no score). */
+  const outcome = (record: TranscriptCourseRecord | undefined) => {
     const selected = record?.selected;
     const exempt = record?.state === "exempt";
     return {
-      code, name: course.name, credits: standardCourseCredits(course, programCredits, record),
-      conditionOnly: course.conditionOnly || isConditionOnly(code, conditionCodes), groupId: course.groupId,
       state: record?.state ?? "not_taken", inferred: record?.inferred ?? false, attempts: record?.attempts.length ?? 0,
       score10: selected && !exempt ? selected.score10 : null, score4: selected && !exempt ? selected.score4 : null,
       letter: selected?.letter ?? null, term: selected?.termCode ?? null,
+    } satisfies Partial<GraduationCourseRow>;
+  };
+  const row = (course: StandardCourse): GraduationCourseRow => {
+    const code = courseKey(course.code);
+    // An elective a GDTC course fills was not taken itself: its own row reads "not taken" (the GDTC row carries the result).
+    const record = filledBy.has(code) ? undefined : records.get(code);
+    return {
+      code, name: course.name, credits: standardCourseCredits(course, programCredits, records.get(code)),
+      conditionOnly: course.conditionOnly || isConditionOnly(code, conditionCodes), groupId: course.groupId, ...outcome(record),
       ...(transferOf.has(code) ? { transferFrom: transferOf.get(code)! } : {}),
     };
   };
+  /** The GDTC course of the student's own programme that fills a 71PE elective, as a row of the elective's group. */
+  const fillRow = (substitute: CreditTransfer, course: StandardCourse): GraduationCourseRow => {
+    const record = records.get(substitute.viaCode) ?? records.get(substitute.code);
+    return {
+      code: substitute.viaCode, name: substitute.viaName || course.name,
+      credits: standardCourseCredits(course, programCredits, records.get(substitute.code)), conditionOnly: true,
+      groupId: course.groupId, ...outcome(record), inPlaceOf: substitute.code,
+    };
+  };
   const rows = data.courses.map(row);
+  const fills = substitutes.flatMap((substitute) => {
+    const course = data.courses.find((item) => courseKey(item.code) === substitute.code);
+    return course ? [fillRow(substitute, course)] : [];
+  });
   // One row per code for the lists outside the groups (a code repeated in the standard is listed once).
   const listed = new Set<string>();
-  const distinct = rows.filter((item) => !listed.has(item.code) && Boolean(listed.add(item.code)));
+  const distinct = [...fills, ...rows].filter((item) => !listed.has(item.code) && Boolean(listed.add(item.code)));
 
   const groups: GraduationGroupEvaluation[] = data.groups.map((group, index) => {
     const check = result.groups[index]!;
-    const courses = rows.filter((item) => item.groupId === group.id);
+    const courses = [...fills, ...rows].filter((item) => item.groupId === group.id);
     return {
       id: group.id, name: group.name, label: check.label, kind: group.kind, code: check.code,
       curriculumElectiveCode: check.curriculumElectiveCode, unit: check.unit,
@@ -213,6 +271,32 @@ export function evaluateGraduation(input: GraduationEvaluationInput): Graduation
   if (core.transfers.length) warnings.push({ code: "credit_transfer_needed", count: core.transfers.length });
   const credit = new Map(distinct.map((item) => [item.code, item.credits]));
 
+  // The transcript as printed, code by code: which other code a standard course was counted through (for #curriculum
+  // and #plans), and which passed courses map to no standard course at all.
+  const aliases = core.aliases ?? new Map<string, string>();
+  const printedNames = new Map<string, string>();
+  for (const course of transcript.sections.flatMap((section) => section.courses)) {
+    const code = courseKey(course.code ?? "");
+    if (code && !printedNames.has(code)) printedNames.set(code, course.name?.trim() ?? "");
+  }
+  const filling = new Set(substitutes.map((substitute) => substitute.viaCode));
+  const transferred = new Set(core.transfers.map((transfer) => transfer.viaCode));
+  const codeAliases = [...aliases]
+    .filter(([via, code]) => via !== code && printedNames.has(via) && !filling.has(via))
+    .map(([via, code]) => ({ code, viaCode: via, transfer: transferred.has(via) }))
+    .sort((a, b) => compareCode(a.code, b.code) || compareCode(a.viaCode, b.viaCode));
+  const standardCodes = new Set(data.courses.map((course) => courseKey(course.code)));
+  const outsideStandard = [...transcriptCourses(transcript).values()]
+    .filter((record) => isPassedState(record.state) && !standardCodes.has(aliases.get(record.code) ?? record.code))
+    .sort((a, b) => compareCode(a.code, b.code))
+    .map((record): GraduationOutsideCourse => {
+      const { state, score10, score4, letter, term } = outcome(record);
+      return {
+        code: record.code, name: printedNames.get(record.code) ?? "", credits: record.selected.credits > 0 ? record.selected.credits : null,
+        state: state === "exempt" ? "exempt" : "passed", score10, score4, letter, term,
+      };
+    });
+
   return {
     calcVersion: GRADUATION_CALC_VERSION,
     status: result.status,
@@ -229,6 +313,8 @@ export function evaluateGraduation(input: GraduationEvaluationInput): Graduation
     ...(core.transfers.length
       ? { creditTransfers: core.transfers.map((transfer) => ({ ...transfer, credits: credit.get(transfer.code) ?? null })) }
       : {}),
+    ...(codeAliases.length ? { codeAliases } : {}),
+    ...(outsideStandard.length ? { outsideStandard } : {}),
     warnings,
   };
 }

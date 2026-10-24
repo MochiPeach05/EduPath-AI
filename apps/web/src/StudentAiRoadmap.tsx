@@ -203,8 +203,9 @@ function MonthsSection({ roadmap }: { roadmap: Roadmap }) {
 /* -------------------------------------------------------------------- page */
 
 /** The AI advises from the profile survey (user 2026-10-24), so a roadmap needs it first. */
+const SURVEY_NOTE_ID = "rm-survey-needed";
 function SurveyNeeded({ again = false }: { again?: boolean }) {
-  return <div className="rm-survey-needed" role="note">
+  return <div className="rm-survey-needed" id={SURVEY_NOTE_ID} role="note">
     <p><strong>Cần hoàn thành Khảo sát định hướng{again ? " trước khi tạo lại" : ""}.</strong> EduPath AI dùng mục tiêu, kinh nghiệm, thời gian tự học và thành tích của bạn để lộ trình sát với bạn hơn. Khảo sát chủ yếu gồm các câu chọn đáp án có sẵn, chỉ mất vài phút.</p>
     <a className="sw-primary" href="#profile">Làm khảo sát ở Hồ sơ và bảng điểm <Icon name="arrow" /></a>
   </div>;
@@ -225,11 +226,16 @@ function AiState({ roadmap, response, create, creating }: { roadmap: Roadmap; re
     return <div className="rm-ai-state rm-ai-problem">
       <strong>{roadmap.status === "failed" ? "Chưa soạn được lộ trình" : "Yêu cầu soạn lộ trình đã dừng"}</strong>
       <p>{roadmap.status === "failed" ? `${failureText(roadmap.errorCode)} ` : ""}Các học phần và kỹ năng do hệ thống tính bên dưới vẫn dùng được.</p>
-      <div className="rm-actions"><button type="button" className="sw-outline" disabled={creating} onClick={create}><Icon name="refresh" />{creating ? "Đang gửi…" : "Thử lại"}</button></div>
+      <div className="rm-actions"><button type="button" className="sw-outline" disabled={creating || !response.surveyDone}
+        aria-describedby={response.surveyDone ? undefined : SURVEY_NOTE_ID} onClick={create}><Icon name="refresh" />{creating ? "Đang gửi…" : "Thử lại"}</button></div>
     </div>;
   }
   return null;
 }
+
+/** "Bấm Tạo lại …", or, while the survey a new roadmap needs is not done (POST answers 409 survey_required), what comes first. */
+const regenerateText = (surveyDone: boolean, purpose: string) =>
+  surveyDone ? `Bấm Tạo lại ${purpose}` : `Hoàn thành Khảo sát định hướng rồi bấm Tạo lại ${purpose}`;
 
 function RoadmapView({ roadmap, response, create, creating, createError }: {
   roadmap: Roadmap; response: RoadmapResponse; create: () => void; creating: boolean; createError: string;
@@ -244,12 +250,14 @@ function RoadmapView({ roadmap, response, create, creating, createError }: {
           <h2 id="rm-title">Từ {dateText(roadmap.window.start)} đến {dateText(roadmap.window.end)}</h2>
           <p className="rm-hero-meta">{[roadmap.careerName && `Nghề mục tiêu: ${roadmap.careerName}`, roadmap.specialtyLabel && `Chuyên ngành: ${roadmap.specialtyLabel}`].filter(Boolean).join(" · ")}</p>
         </div>
-        {!pending && <button type="button" className="sw-outline" disabled={creating} onClick={create}><Icon name="refresh" />{creating ? "Đang gửi…" : "Tạo lại"}</button>}
+        {/* A new roadmap needs the survey (POST answers 409 survey_required): "Tạo lại" waits for it. */}
+        {!pending && <button type="button" className="sw-outline" disabled={creating || !response.surveyDone}
+          aria-describedby={response.surveyDone ? undefined : SURVEY_NOTE_ID} onClick={create}><Icon name="refresh" />{creating ? "Đang gửi…" : "Tạo lại"}</button>}
       </div>
       {createError && <p className="rm-error" role="alert">{createError}</p>}
       {!response.surveyDone && !pending && <SurveyNeeded again />}
-      {response.stale && <p className="rm-note">Kết quả Đánh giá năng lực của bạn đã thay đổi sau khi lộ trình này được soạn. Bấm Tạo lại để cập nhật theo kết quả mới.</p>}
-      {roadmap.ended && <p className="rm-note">Lộ trình này đã hết thời gian (đến {dateText(roadmap.window.end)}). Bấm Tạo lại để soạn lộ trình cho 3 tháng tiếp theo.</p>}
+      {response.stale && <p className="rm-note">Kết quả Đánh giá năng lực của bạn đã thay đổi sau khi lộ trình này được soạn. {regenerateText(response.surveyDone, "để cập nhật theo kết quả mới.")}</p>}
+      {roadmap.ended && <p className="rm-note">Lộ trình này đã hết thời gian (đến {dateText(roadmap.window.end)}). {regenerateText(response.surveyDone, "để soạn lộ trình cho 3 tháng tiếp theo.")}</p>}
       <AiState roadmap={roadmap} response={response} create={create} creating={creating} />
       {completed && roadmap.summary && <div className="rm-summary">
         <span className="rm-ai-icon" aria-hidden="true"><Icon name="spark" /></span>
