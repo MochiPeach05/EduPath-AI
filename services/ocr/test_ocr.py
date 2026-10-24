@@ -61,6 +61,33 @@ SUMMARY_FIELDS = [
 ]
 SUMMARY_LABELS = [(re.compile(r'\s*'.join(map(re.escape, label.split())) + r'$'), field, kind, upper)
                   for label, field, kind, upper in SUMMARY_FIELDS]
+# The dash in front of a summary field. The transcript sometimes prints two fields on one line, breaks a label
+# over two lines and sets the dashes apart ("Điểm TB học kỳ (Hệ 4): 2.46 - Xếp loại học tập\nHK: Trung bình").
+SUMMARY_DASH = re.compile(r'^-\s*|\s+-\s+|\s+-$')
+
+
+def known_summary_label(label):
+    return any(spec[0].match(folded(label)) for spec in SUMMARY_LABELS)
+
+
+def summary_lines(cell):
+    """A summary cell with one field per line, each "- Label: value". A piece without a colon is the start of the
+    next label when the two form a known label ("Xếp loại học tập" + "HK: Trung bình"), else the rest of the
+    value above it."""
+    pieces = [piece for line in (cell or '').split('\n') for piece in SUMMARY_DASH.split(clean(line)) if piece and piece != '-']
+    fields = []
+    for index, piece in enumerate(pieces):
+        if ':' in piece:
+            fields.append(piece)
+            continue
+        following = pieces[index + 1] if index + 1 < len(pieces) else ''
+        if ':' in following and known_summary_label(f"{piece} {following.partition(':')[0]}"):
+            pieces[index + 1] = f'{piece} {following}'
+        elif fields:
+            fields[-1] = f'{fields[-1]} {piece}'
+        else:
+            fields.append(piece)
+    return '\n'.join(f'- {field}' for field in fields)
 
 
 def clean(value):
@@ -318,7 +345,50 @@ def number(value, field, issues, upper=None, integer=False):
     return int(parsed) if integer else parsed
 
 
+def _filled(row):
+    return sum(1 for cell in row if clean(cell))
+
+
+def _course_row(row):
+    return len(row) >= 2 and clean(row[0]).isdigit() and bool(clean(row[1]))
+
+
+def _fragment(row):
+    """Part of a course row a page break cut off: eight cells, no number, no code, some text, not a summary
+    line, a semester title or the repeated table header."""
+    cells = [clean(c) for c in row]
+    text = folded(' '.join(cells))
+    return (len(cells) == 8 and not cells[0] and not cells[1] and any(cells[2:])
+            and not any(c.startswith('-') for c in cells) and 'hoc ky' not in text and 'ma mon' not in text)
+
+
+def join_page_breaks(pages):
+    """Mends course rows at page breaks, in place, before the rows are read.
+
+    A browser may cut a tall row across two pages: the part without the number and the code (the rest of a
+    long name, or the first line of it) joins the course row on the other side of the break. A row printed
+    again at the top of the next page (same number and code) is kept once, the copy with more cells filled.
+    """
+    for before, after in zip(pages, pages[1:]):
+        tail = next((i for i in range(len(before['rows']) - 1, -1, -1) if _filled(before['rows'][i])), None)
+        head = next((i for i, row in enumerate(after['rows']) if _filled(row)), None)
+        if tail is None or head is None:
+            continue
+        last, first = before['rows'][tail], after['rows'][head]
+        if _course_row(last) and _fragment(first):
+            before['rows'][tail] = [f'{a}\n{b}' if clean(a) and clean(b) else (a if clean(a) else b) for a, b in zip(last, first)]
+            del after['rows'][head]
+        elif _fragment(last) and _course_row(first) and len(first) == 8:
+            after['rows'][head] = [f'{a}\n{b}' if clean(a) and clean(b) else (a if clean(a) else b) for a, b in zip(last, first)]
+            del before['rows'][tail]
+        elif _course_row(last) and _course_row(first) and [clean(c) for c in last[:2]] == [clean(c) for c in first[:2]]:
+            if _filled(first) > _filled(last):
+                before['rows'][tail] = first
+            del after['rows'][head]
+
+
 def parse_pages(pages, catalog):
+    join_page_breaks(pages)
     courses, summaries, unparsed = [], [], []
     year = semester = None
     section = 'unknown'
@@ -332,8 +402,9 @@ def parse_pages(pages, catalog):
             is_summary = any(c.startswith('-') for c in cells)
             is_transfer = 'diem bao luu' in folded(text)
             if is_summary:
-                summaries.append({'academic_year': year, 'semester': semester,
-                                  'source_page': page['page'], 'raw_cells': raw_cells})
+                # The server shows each line as "label: value", so the fields go one per line.
+                summaries.append({'academic_year': year, 'semester': semester, 'source_page': page['page'],
+                                  'raw_cells': [summary_lines(c) if clean(c) else c for c in raw_cells]})
             if context:
                 year = context[1].replace(' ', '')
                 semester = f'HK{int(context[2]):02d}'

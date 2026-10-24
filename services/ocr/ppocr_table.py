@@ -15,6 +15,11 @@ from test_ocr import clean
 
 TICK, CROSS, UNKNOWN_MARK = '✓', '✗', '?'
 MIN_MARK_PIXELS = 12  # a 12 pt icon has ~40 coloured pixels even at 72 DPI
+# A row the page break left open (see _open_bands): taller than the ruling stubs a cut leaves at a page edge
+# (~7 px at 150 DPI), no taller than a quarter of the page, and at the top only within the first eighth.
+MIN_OPEN_BAND = 12
+MAX_OPEN_SHARE = .25
+EDGE_SHARE = .125
 
 
 def resolve_device(device):
@@ -197,6 +202,29 @@ def result_mark(patch):
     return UNKNOWN_MARK if ink >= MIN_MARK_PIXELS else ''
 
 
+def _open_bands(borders, verticals, left, right, height):
+    """Rows the page break left without a closing border, as (top, bottom) pairs.
+
+    A browser prints a long table over several pages without a border under the last row of a page (the
+    table goes on) and sometimes none above the first row of the next page; the final box of the table can
+    also have a border too light to find. Such a row has column rulings but only one border, so without
+    this its text fell outside every band and was dropped (the GDQP4 row at the foot of a K30 page,
+    2026-10-24). The band ends where the column rulings end, so the page number below stays outside. A
+    band at the top must start near the top edge of the page: rulings above the first border elsewhere
+    belong to other boxes (the notes above the table).
+    """
+    inside = [v for v in verticals if left - 6 <= v[0] <= right + 6]
+    first, last = borders[0][0], borders[-1][0]
+    bands = []
+    above = [y0 for _, y0, y1 in inside if y1 >= first - 6 and first - y0 > MIN_OPEN_BAND]
+    if above and min(above) < height * EDGE_SHARE and first - min(above) < height * MAX_OPEN_SHARE:
+        bands.append((min(above), first))
+    below = [y1 for _, y0, y1 in inside if y0 <= last + 6 and y1 - last > MIN_OPEN_BAND]
+    if below and max(below) - last < height * MAX_OPEN_SHARE:
+        bands.append((last, max(below)))
+    return bands
+
+
 def table_bands(image):
     """Rows of the ruled table: dicts with top, bottom, cells [(x0, x1)] and the result-column mark.
 
@@ -207,8 +235,11 @@ def table_bands(image):
         return [], ['table_grid_not_found']
     left = int(np.median([b[1] for b in borders]))
     right = int(np.median([b[2] for b in borders]))
+    edges = [(top, bottom) for (top, *_), (bottom, *_) in zip(borders, borders[1:])]
+    for top, bottom in _open_bands(borders, verticals, left, right, image.shape[0]):
+        edges.insert(0 if bottom == borders[0][0] else len(edges), (top, bottom))
     bands = []
-    for (top, *_), (bottom, *_) in zip(borders, borders[1:]):
+    for top, bottom in edges:
         cells = _cells(top, bottom, verticals, left, right)
         mark = ''
         if len(cells) == 8:  # course row; skip header, semester title and summary rows
@@ -261,6 +292,13 @@ def rows_from_lines(image, lines):
         x0, y0, x1, y1 = line['box']
         cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
         band = next((b for b in bands if b['top'] < cy < b['bottom']), None)
+        if band is None:
+            # A box centred on a ruling (two lines merged by the detector, a glyph touching the border) goes to the
+            # band holding most of it rather than being dropped.
+            overlap = lambda b: min(y1, b['bottom']) - max(y0, b['top'])
+            band = max(bands, key=overlap)
+            if overlap(band) < .5 * (y1 - y0):
+                band = None
         if band is None:
             line['cell'] = 'outside_table'
             continue

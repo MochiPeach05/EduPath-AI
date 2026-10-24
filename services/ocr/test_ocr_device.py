@@ -277,6 +277,160 @@ class ServerRuleTests(TestCase):
         self.assertEqual(worker.mask("Lê Văn 9,5"), "Aa Aaa 9,9")
 
 
+COLUMNS = [89, 151, 325, 645, 759, 838, 915, 1044, 1155]  # the eight VLU columns at 150 DPI
+
+
+def ruled_page(borders, verticals, columns=COLUMNS, height=1754, width=1241):
+    """A white RGB page with full-width borders and column rulings from verticals[0] to verticals[1] (synthetic)."""
+    import numpy as np
+
+    image = np.full((height, width, 3), 255, np.uint8)
+    for y in borders:
+        image[y - 1:y + 1, columns[0]:columns[-1] + 1] = 90
+    for x in columns:
+        image[verticals[0]:verticals[1], x - 1:x + 1] = 90
+    return image
+
+
+def line(cell, top, bottom, text, columns=COLUMNS):
+    """A recognised text line inside a column (synthetic)."""
+    return {"box": [columns[cell] + 5, top, columns[cell + 1] - 5, bottom], "text": text, "score": 0.99}
+
+
+class PageBreakBandTests(TestCase):
+    """Rows a page break leaves without a closing border (synthetic rulings, no student data)."""
+
+    BORDERS = [300, 350, 400, 450]
+
+    def test_the_last_row_of_a_page_without_a_bottom_border_is_a_band(self):
+        from ppocr_table import table_bands
+
+        bands, warnings = table_bands(ruled_page(self.BORDERS, (300, 506)))
+        self.assertEqual(warnings, [])
+        self.assertEqual([(b["top"], b["bottom"], len(b["cells"])) for b in bands][-1], (450, 506, 8))
+        self.assertEqual(len(bands), 4)
+
+    def test_ruling_stubs_at_a_page_edge_are_no_row(self):
+        from ppocr_table import table_bands
+
+        # The cut leaves ~7 px of rulings above the first border and below the last one.
+        bands, _ = table_bands(ruled_page([60, 110, 160], (53, 167)))
+        self.assertEqual([(b["top"], b["bottom"]) for b in bands], [(60, 110), (110, 160)])
+
+    def test_the_first_row_of_a_page_without_a_top_border_is_a_band_near_the_top_only(self):
+        from ppocr_table import table_bands
+
+        bands, _ = table_bands(ruled_page([120, 170, 220], (60, 220)))
+        self.assertEqual([(b["top"], b["bottom"], len(b["cells"])) for b in bands][0], (60, 120, 8))
+        # Rulings above a first border lower on the page belong to another box: no band.
+        bands, _ = table_bands(ruled_page([900, 950, 1000], (700, 1000)))
+        self.assertEqual([(b["top"], b["bottom"]) for b in bands], [(900, 950), (950, 1000)])
+
+    def test_the_final_box_with_a_border_too_light_to_find_is_a_band(self):
+        from ppocr_table import table_bands
+
+        image = ruled_page(self.BORDERS, (300, 450))
+        image[450:600, 758:760] = 90  # the summary box: one ruling between its halves, no bottom border
+        bands, _ = table_bands(image)
+        self.assertEqual([(b["top"], b["bottom"], len(b["cells"])) for b in bands][-1], (450, 600, 2))
+
+    def test_the_text_of_an_open_row_is_read_and_the_page_number_below_is_not(self):
+        from ppocr_table import rows_from_lines
+
+        lines = [line(0, 410, 440, "7"), line(1, 410, 440, "71NAD310032"), line(2, 410, 440, "GDQP3: Quân sự chung"),
+                 line(0, 465, 495, "8"), line(1, 465, 495, "71NAD410044"), line(2, 458, 478, "GDQP4: Kỹ thuật chiến đấu bộ binh"),
+                 line(2, 482, 502, "và chiến thuật"), line(3, 465, 495, "4"), line(6, 465, 495, "B+"),
+                 {"box": [1120, 1700, 1160, 1720], "text": "1/2", "score": 0.99}]
+        rows, _warnings, read = rows_from_lines(ruled_page(self.BORDERS, (300, 506)), lines)
+        self.assertEqual(rows[-1][:4], ["8", "71NAD410044", "GDQP4: Kỹ thuật chiến đấu bộ binh\nvà chiến thuật", "4"])
+        self.assertEqual(read[-1]["cell"], "outside_table")
+
+    def test_a_line_centred_on_a_ruling_goes_to_the_band_holding_most_of_it(self):
+        from ppocr_table import rows_from_lines
+
+        # Centre exactly on the border at 350, half the box in each row: it is kept, in the first of the two.
+        lines = [line(1, 320, 345, "71ENG110013"), line(2, 320, 380, "Anh văn 1"), line(1, 360, 390, "71ITBS10103")]
+        rows, _warnings, _read = rows_from_lines(ruled_page(self.BORDERS, (300, 450)), lines)
+        self.assertEqual([row[1:3] for row in rows], [["71ENG110013", "Anh văn 1"], ["71ITBS10103", ""]])
+
+
+class PageBreakRowTests(TestCase):
+    """Course rows cut or repeated by a page break (synthetic rows, no student data)."""
+
+    TERM = ["Năm học: 2024-2025 - Học kỳ: HK03"]
+
+    @staticmethod
+    def pages(*rows):
+        return [AdapterRuleTests.page(list(page_rows), number) for number, page_rows in enumerate(rows, 1)]
+
+    def test_the_rest_of_a_cut_row_joins_the_row_above_the_break(self):
+        import test_ocr
+
+        pages = self.pages(
+            [self.TERM, ["8", "71NAD410044", "GDQP4: Kỹ thuật chiến đấu bộ binh", "4", "8", "3.20", "B+", "✓"]],
+            [["", "", "và chiến thuật", "", "", "", "", ""], ["9", "71POLE10022", "Kinh tế chính trị Mác-Lênin", "2", "6.5", "2.60", "C+", "✓"]])
+        courses, _summaries, unparsed = test_ocr.parse_pages(pages, {})
+        self.assertEqual(unparsed, [])
+        self.assertEqual([(c["ordinal"], c["course_code"], c["course_name"], c["issues"]) for c in courses], [
+            (8, "71NAD410044", "GDQP4: Kỹ thuật chiến đấu bộ binh và chiến thuật", []),
+            (9, "71POLE10022", "Kinh tế chính trị Mác-Lênin", [])])
+
+    def test_the_first_line_of_a_cut_row_joins_the_row_below_the_break(self):
+        import test_ocr
+
+        pages = self.pages([self.TERM, ["", "", "GDQP4: Kỹ thuật chiến đấu bộ binh", "", "", "", "", ""]],
+                           [["8", "71NAD410044", "và chiến thuật", "4", "8", "3.20", "B+", "✓"]])
+        courses, _summaries, unparsed = test_ocr.parse_pages(pages, {})
+        self.assertEqual(unparsed, [])
+        self.assertEqual([(c["course_name"], c["source_page"]) for c in courses], [("GDQP4: Kỹ thuật chiến đấu bộ binh và chiến thuật", 2)])
+
+    def test_a_row_printed_again_after_the_break_is_kept_once(self):
+        import test_ocr
+
+        row = ["8", "71NAD410044", "GDQP4: Kỹ thuật chiến đấu bộ binh và chiến thuật", "4", "8", "3.20", "B+", "✓"]
+        pages = self.pages([self.TERM, row[:4] + ["", "", "", ""]], [row, ["9", "71POLE10022", "Kinh tế chính trị Mác-Lênin", "2", "6.5", "2.60", "C+", "✓"]])
+        courses, _summaries, _unparsed = test_ocr.parse_pages(pages, {})
+        self.assertEqual([(c["ordinal"], c["letter_grade"]) for c in courses], [(8, "B+"), (9, "C+")])
+
+    def test_summary_lines_and_titles_at_a_break_stay_as_they_are(self):
+        import test_ocr
+
+        pages = self.pages([self.TERM, ["1", "71ENG310033", "Anh văn 3 (AV3)", "3", "5.4", "2.16", "D", "✓"]],
+                           [["- Số tín chỉ đạt học kỳ: 3", "- Tổng số tín chỉ tích lũy: 3"], ["Năm học: 2025-2026 - Học kỳ: HK01"]])
+        courses, summaries, unparsed = test_ocr.parse_pages(pages, {})
+        self.assertEqual((len(courses), len(summaries), unparsed), (1, 1, []))
+
+
+class SummaryLineTests(TestCase):
+    """Summary boxes printed with fields run together (synthetic values, no student data)."""
+
+    def test_fields_on_one_line_a_label_over_two_lines_and_dashes_apart_are_split(self):
+        import test_ocr
+
+        self.assertEqual(test_ocr.summary_lines("- Số tín chỉ đạt học kỳ: 14\n- Điểm TB học kỳ (Hệ 4): 2.46 - Xếp loại học tập\nHK: Trung bình - Điểm rèn luyện học kỳ:"),
+                         "- Số tín chỉ đạt học kỳ: 14\n- Điểm TB học kỳ (Hệ 4): 2.46\n- Xếp loại học tập HK: Trung bình\n- Điểm rèn luyện học kỳ:")
+        self.assertEqual(test_ocr.summary_lines("Số tín chỉ đạt học kỳ: 9\n-\nĐiểm TB học kỳ (Hệ 4): 1.90 - Xếp loại học tập HK: Yếu\nĐiểm rèn luyện học kỳ:"),
+                         "- Số tín chỉ đạt học kỳ: 9\n- Điểm TB học kỳ (Hệ 4): 1.90\n- Xếp loại học tập HK: Yếu\n- Điểm rèn luyện học kỳ:")
+        # A value wrapped to the next line stays with its label; a box printed one field per line is unchanged.
+        self.assertEqual(test_ocr.summary_lines("- Xếp loại học tập tích lũy: Trung\nbình"), "- Xếp loại học tập tích lũy: Trung bình")
+        box = "- Tổng số tín chỉ đăng ký: 42\n- Điểm TB học tập (Hệ 4): 2.49"
+        self.assertEqual(test_ocr.summary_lines(box), box)
+
+    def test_a_run_together_box_checks_against_its_courses(self):
+        import test_ocr
+
+        rows = [["Năm học: 2024-2025 - Học kỳ: HK03"],
+                ["1", "71ENG310033", "Anh văn 3 (AV3)", "3", "5.4", "2.00", "D", "✓"],
+                ["2", "71ITSE30303", "Cấu trúc dữ liệu và giải thuật", "3", "6.7", "3.00", "C+", "✓"],
+                ["Số tín chỉ đạt học kỳ: 6\nĐiểm TB học kỳ (Hệ 4): 2.50 - Xếp loại học tập\nHK: Trung bình - Điểm rèn luyện học kỳ:",
+                 "- Tổng số tín chỉ tích lũy: 6"]]
+        courses, summaries, _unparsed = test_ocr.parse_pages([AdapterRuleTests.page(rows)], {})
+        [semester] = test_ocr.parse_semesters(summaries, courses)
+        self.assertEqual(semester["issues"], [])
+        self.assertEqual((semester["semester_gpa_4"], semester["semester_rank"]), (2.5, "Trung bình"))
+        self.assertIn("- Xếp loại học tập HK: Trung bình", summaries[0]["raw_cells"][0].split("\n"))
+
+
 if __name__ == "__main__":
     import unittest
 
