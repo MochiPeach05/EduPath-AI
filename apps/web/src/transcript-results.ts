@@ -118,7 +118,7 @@ export type CreditCheck = {
  * (e.g. preparatory English), so it widens the accepted range instead.
  */
 export function transcriptCreditCheck(
-  transcript: Transcript | null,
+  transcript: Pick<Transcript, "data"> | null,
   options: { conditionCodes?: Iterable<string>; programCodes?: Iterable<string> } = {},
 ): CreditCheck {
   const conditionCodes = new Set([...(options.conditionCodes ?? [])].map(key));

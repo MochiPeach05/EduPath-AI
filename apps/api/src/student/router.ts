@@ -137,7 +137,25 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
     const worker = await pool!.query<{ online: boolean }>("SELECT seen_at>now()-interval '60 seconds' AS online FROM transcript_worker_status WHERE id=1");
     const row = result.rows[0];
     // Marks of a stored transcript that are not errors (isSettledResultConflict) are left out, as a new upload does.
-    res.json({ transcript: row ? { ...row, data: withoutSettledConflicts(row.data) } : null, job: jobs.rows[0] ?? null, workerOnline: worker.rows[0]?.online ?? false, ocrEnabled });
+    // The policy version the student agreed to for the transcript: an older one asks again (2026-10-26: admins may see scores).
+    const consentVersion = row ? await activeConsentVersion(pool!, req.session.user!.userId, "transcript_processing") : null;
+    res.json({ transcript: row ? { ...row, data: withoutSettledConflicts(row.data) } : null, job: jobs.rows[0] ?? null, workerOnline: worker.rows[0]?.online ?? false, ocrEnabled, consentVersion });
+  });
+  // "Đồng ý" under the stored transcript: agreeing to the current policy without importing again (since 2026-10-26 the
+  // Khoa's admins may see the scores of a transcript agreed to under it, consent.ts allowsStaffTranscript).
+  router.post("/transcript/consent", async (req, res) => {
+    if (req.get("x-consent-policy-version") !== TRANSCRIPT_POLICY_VERSION) { res.status(409).json({ error: "policy_outdated" }); return; }
+    const client = await pool!.connect();
+    try {
+      await client.query("BEGIN");
+      await lockStudent(client, req.session.user!);
+      const stored = await client.query("SELECT 1 FROM student_transcripts WHERE user_id=$1", [req.session.user!.userId]);
+      if (!stored.rowCount) throw new TranscriptError("transcript_not_found", 404);
+      await recordTranscriptConsent(client, req.session.user!.userId);
+      await client.query("COMMIT");
+      res.json({ consentVersion: TRANSCRIPT_POLICY_VERSION });
+    } catch (error) { await client.query("ROLLBACK"); throw error; }
+    finally { client.release(); }
   });
   router.delete("/transcript/job", async (req, res) => {
     const input = z.object({ id: z.uuid() }).safeParse(req.body);

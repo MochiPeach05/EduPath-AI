@@ -4,6 +4,10 @@ import { useEffect, useState } from "react";
 import { useData, Status, Pagination, Modal } from "./admin-ui";
 import { Icon } from "./admin-account-shared";
 import { specialtyLabel } from "./competency-assessment-types";
+import TranscriptTables, { transcriptNotes } from "./TranscriptTables";
+import { formatUpdatedAt } from "./student-overview-data";
+import { policyUpdatedAt } from "./public-information";
+import type { Transcript } from "./StudentTranscript";
 import "./student-profiles.css";
 
 type ProfileStatus = "missing" | "incomplete" | "complete";
@@ -17,6 +21,28 @@ const date = (value: string | null) => value ? new Date(value).toLocaleString("v
 function ProfileBadge({ status }: { status: ProfileStatus }) {
   return <span className={`sp-badge sp-badge-${status}`}>{statusLabels[status]}</span>;
 }
+/** GET /api/admin/students/:id/transcript: the scores once the student agreed to the policy of 26/10/2026, else why not. */
+type AdminTranscript = { transcript: { updatedAt: string; data: Transcript["data"] } | null; reason: "no_transcript" | "consent_required" | null };
+/**
+ * The student's transcript as the student page shows it (user, 2026-10-25), read only and without the PDF; shown only when
+ * the student agreed to the privacy policy that allows it (26/10/2026).
+ */
+function StudentTranscriptView({ id }: { id: string }) {
+  const state = useData<AdminTranscript>(`/api/admin/students/${id}/transcript`);
+  const view = state.data;
+  const notes = view?.transcript ? transcriptNotes(view.transcript.data) : [];
+  return <section className="sp-transcript" aria-labelledby="sp-transcript-title">
+    <h3 id="sp-transcript-title">Bảng điểm</h3>
+    <Status {...state} />
+    {view && (view.transcript ? <>
+      <p className="sp-note">{view.transcript.data.pageCount} trang · {view.transcript.data.courseCount} học phần · Cập nhật lúc {formatUpdatedAt(view.transcript.updatedAt)}. Chỉ xem: quản trị viên không tải được tệp PDF và không sửa được bảng điểm.</p>
+      {notes.length > 0 && <div className="sr-review" role="note">{notes.join(" ")}</div>}
+      <TranscriptTables data={view.transcript.data} />
+    </> : <p className="sp-note">{view.reason === "consent_required"
+      ? `Sinh viên chưa đồng ý Chính sách bảo mật ngày ${policyUpdatedAt} (cho phép quản trị viên của Khoa xem điểm) nên chưa xem được bảng điểm. Bảng điểm sẽ hiện ở đây sau khi sinh viên đồng ý trong mục Bảng điểm của tôi.`
+      : "Sinh viên chưa tải bảng điểm lên EduPath AI."}</p>)}
+  </section>;
+}
 function StudentDetails({ id }: { id: string }) {
   const state = useData<{ student: StudentDetail }>(`/api/admin/students/${id}`);
   const student = state.data?.student;
@@ -28,7 +54,7 @@ function StudentDetails({ id }: { id: string }) {
     {student.interests?.trim() && <><h3>Sở thích (ghi trước đây)</h3><p className="sp-career-goal">{student.interests.trim()}</p></>}
     <h3>Vị trí nghề nghiệp mong muốn</h3><p className="sp-career-goal">{student.careerPosition ? `${student.careerPosition.nameVi} — ${student.careerPosition.nameEn}${student.careerPosition.deletedAt ? " (đã ngừng sử dụng)" : ""}` : "Chưa chọn vị trí nghề nghiệp."}</p>
     <h3>Thông tin cập nhật</h3><dl className="am-detail-grid">{Object.entries({ "Tạo tài khoản EduPath": date(student.accountCreatedAt), "Đăng nhập đầu tiên": date(student.firstLoginAt), "Đăng nhập gần nhất": date(student.lastLoginAt), "Tạo hồ sơ": date(student.profileCreatedAt), "Cập nhật hồ sơ gần nhất": date(student.profileUpdatedAt) }).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
-    <p className="sp-note"></p>
+    <StudentTranscriptView id={id} />
   </div>}</>;
 }
 
@@ -43,7 +69,7 @@ export default function StudentProfiles() {
   useEffect(() => { if (state.data) { setCohortYears(state.data.cohortYears); setCohortCodes(state.data.cohortCodes ?? []); } }, [state.data]);
   const filtered = Object.values(filters).some(Boolean);
   return <><section className="am-card" aria-labelledby="student-list-title">
-    <div className="am-card-heading"><div><h2 id="student-list-title">Danh sách sinh viên {state.data && <span className="am-count">{state.data.total}</span>}</h2><p>Tra cứu thông tin cá nhân, học tập và mục tiêu nghề nghiệp của sinh viên.</p></div><span className="sp-readonly">Chỉ xem hồ sơ</span></div>
+    <div className="am-card-heading"><div><h2 id="student-list-title">Danh sách sinh viên {state.data && <span className="am-count">{state.data.total}</span>}</h2><p>Tra cứu thông tin cá nhân, học tập, mục tiêu nghề nghiệp và bảng điểm của sinh viên.</p></div><span className="sp-readonly">Chỉ xem hồ sơ</span></div>
     <form className="am-filters sp-filters" onSubmit={(event) => { event.preventDefault(); flush(); }}>
       <label className="sp-search" htmlFor="student-search">Nhập từ khóa tìm kiếm<input id="student-search" maxLength={120} value={draft.q} onChange={(e) => setDraft({ ...draft, q: e.target.value })} placeholder="MSSV, họ tên, email, khóa, lớp, mục tiêu…" /></label>
       <label htmlFor="student-cohort">Năm nhập học<select id="student-cohort" value={draft.cohortYear} onChange={(e) => setDraft({ ...draft, cohortYear: e.target.value })}><option value="">Tất cả năm</option>{cohortYears.map((year) => <option key={year} value={year}>{year}</option>)}</select></label>

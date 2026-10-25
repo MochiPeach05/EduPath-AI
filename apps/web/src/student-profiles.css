@@ -141,3 +141,8 @@
         flex: 1;
     }
 }
+
+/* Bảng điểm in the student details (2026-10-25): TranscriptTables as on the student page; its notes outside the student shell. */
+.sp-transcript { display: grid; gap: 4px; margin-top: 8px; }
+.sp-transcript .sw-muted { color: #647081; font-size: 12px; line-height: 1.7; margin: 0; }
+.sp-transcript .sw-empty { padding: 24px; text-align: center; color: #647081; }

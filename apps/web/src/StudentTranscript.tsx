@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type DragEvent } from "react";
 import { Icon } from "./student-icons";
 import TranscriptProgress from "./TranscriptProgress";
-import { policyVersion } from "./public-information";
-import { INFERRED_RESULT_NOTE, attemptOutcome, isFailLetter, isRowWarning, reviewLabels, transcriptCreditCheck, type CreditCheck } from "./transcript-results";
-import { PROFILE_SECTIONS, foldText, formatUpdatedAt } from "./student-overview-data";
+import { policyUpdatedAt, policyVersion } from "./public-information";
+import TranscriptTables, { courseMatcher, transcriptNotes } from "./TranscriptTables";
+import { PROFILE_SECTIONS, formatUpdatedAt } from "./student-overview-data";
 import "./student-records.css";
 
 /** review/printed (2026-10-23): a row saved as printed although something in it did not fit a known form. */
@@ -30,7 +30,8 @@ const errors: Record<string, string> = {
   ownership_confirmation_required: "Hãy xác nhận đây là bảng điểm của bạn.",
   consent_required: "Hãy đồng ý để EduPath AI xử lý bảng điểm trước khi import.",
   policy_outdated: "Chính sách bảo mật vừa được cập nhật. Hãy tải lại trang, đọc chính sách mới rồi xác nhận lại.",
-  insufficient_role: "Tài khoản hiện không có quyền sinh viên.", invalid_origin: "Phiên thao tác không hợp lệ. Vui lòng tải lại trang."
+  insufficient_role: "Tài khoản hiện không có quyền sinh viên.", invalid_origin: "Phiên thao tác không hợp lệ. Vui lòng tải lại trang.",
+  transcript_not_found: "Bạn chưa có bảng điểm trên EduPath AI."
 };
 /** What each request says when the API gives no known reason or the network fails. */
 const FAILED = {
@@ -39,45 +40,18 @@ const FAILED = {
   upload: "Không import được bảng điểm. Vui lòng thử lại.",
   cancel: "Chưa hủy được tác vụ. Vui lòng thử lại.",
   remove: "Chưa xóa được bảng điểm. Vui lòng thử lại.",
+  consent: "Chưa ghi nhận được sự đồng ý. Vui lòng thử lại.",
 } as const;
 /** Why an import job failed, then (once) that the previous transcript is kept. */
 export function failedImportMessage(code: string | null): string {
   const reason = errors[code ?? ""] ?? "Không xử lý được bảng điểm. Hãy chọn lại PDF để thử lại.";
   return /giữ nguyên/.test(reason) ? reason : `${reason} Bảng điểm cũ (nếu có) vẫn được giữ nguyên.`;
 }
-/** Search by code or name, with or without Vietnamese marks ("lap trinh" finds "Lập trình"). */
-export function courseMatcher(search: string): (course: Pick<Course, "code" | "name">) => boolean {
-  const query = foldText(search.trim());
-  return course => foldText(`${course.code} ${course.name}`).includes(query);
-}
-/** Explicit pass/fail text uses its corresponding colour. MT exemptions are
-    displayed separately as passed without changing the imported source data. */
-function resultClass(result: string | null): string | undefined {
-  const text = (result ?? "").trim().toLowerCase();
-  if (/^(không|khong|chưa|chua|ko)\s*đạt|^(rớt|trượt)|^✗/.test(text)) return "sr-result-fail";
-  if (/^đạt/.test(text) || text === "✓") return "sr-result-pass";
-  return undefined;
-}
-/** The printed result as read, MT as an exemption, or, for a blank cell, the
-    result decided from the official letter grade with a short text note. */
-function ResultCell({ course }: { course: Course }) {
-  const outcome = attemptOutcome(course);
-  if (outcome.exempt) return <td className="sr-result-pass">Đạt (miễn thi)</td>;
-  if (course.result?.trim()) return <td className={resultClass(course.result)}>{course.result}</td>;
-  if (!outcome.inferred) return <td>—</td>;
-  return <td className={`sr-result-${outcome.status}`}>{outcome.status === "pass" ? "Đạt" : "Không đạt"}<small className="sr-result-note">{INFERRED_RESULT_NOTE}</small></td>;
-}
-const credits = (n: number) => `${n.toLocaleString("vi-VN")} TC`;
-/** Passed credits (without GDTC/GDQP) disagree with the printed "Tổng số tín chỉ tích lũy". */
-function CreditMismatch({ check }: { check: CreditCheck }) {
-  const counted = check.uncertain
-    ? `${credits(check.computed)} (hoặc ${credits(check.computed + check.uncertain)} nếu tính cả học phần bảo lưu)`
-    : credits(check.computed);
-  return <div className="sr-review" role="note"><strong>Tổng tín chỉ chưa khớp với bảng điểm.</strong> Tổng số tín chỉ tích lũy in trên bảng điểm là {credits(check.printed ?? 0)}, nhưng các môn có kết quả Đạt (không tính môn điều kiện GDTC/GDQP) cộng lại được {counted}. Kết quả Đạt/Không đạt của một số môn có thể chưa chính xác; hãy đối chiếu với PDF gốc.</div>;
-}
+/** Kept here for the callers of this module (TranscriptTables owns it). */
+export { courseMatcher };
 /** A request the API refused, carrying the message to show; anything else (a network error's own text is English) gets the request's fallback. */
 class TranscriptRequestError extends Error {}
-async function read(response: Response, fallback: string): Promise<{ transcript?: Transcript | null; job?: ImportJob | null; workerOnline?: boolean; ocrEnabled?: boolean }> {
+async function read(response: Response, fallback: string): Promise<{ transcript?: Transcript | null; job?: ImportJob | null; workerOnline?: boolean; ocrEnabled?: boolean; consentVersion?: string | null }> {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new TranscriptRequestError(errors[data.error] ?? fallback);
   return data;
@@ -122,8 +96,8 @@ export default function StudentTranscript() {
   const [message, setMessage] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteError, setDeleteError] = useState("");
-  const [filter, setFilter] = useState("all");
-  const [search, setSearch] = useState("");
+  // The policy version the student agreed to for the transcript; an older one asks again (2026-10-26: admins may see scores).
+  const [consentVersion, setConsentVersion] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const confirmBox = useRef<HTMLInputElement>(null);
@@ -138,7 +112,7 @@ export default function StudentTranscript() {
   const load = useCallback(async () => {
     controller.current?.abort(); const pending = new AbortController(); controller.current = pending;
     setLoading(true); setLoadError(""); setLoaded(false);
-    try { const data = await read(await fetch("/api/student/transcript", { credentials: "include", signal: pending.signal }), FAILED.load); if (!pending.signal.aborted) { setTranscript(data.transcript ?? null); setJob(data.job ?? null); setWorkerOnline(data.workerOnline ?? false); setLoaded(true); } }
+    try { const data = await read(await fetch("/api/student/transcript", { credentials: "include", signal: pending.signal }), FAILED.load); if (!pending.signal.aborted) { setTranscript(data.transcript ?? null); setJob(data.job ?? null); setWorkerOnline(data.workerOnline ?? false); setConsentVersion(data.consentVersion ?? null); setLoaded(true); } }
     catch (e) { if (!pending.signal.aborted) setLoadError(messageOf(e, FAILED.load)); }
     finally { if (!pending.signal.aborted) setLoading(false); }
   }, []);
@@ -151,7 +125,7 @@ export default function StudentTranscript() {
         const data = await read(await fetch("/api/student/transcript", { credentials: "include", signal: pending.signal }), FAILED.poll);
         if (!pending.signal.aborted) {
           setJob(data.job ?? null); setWorkerOnline(data.workerOnline ?? false);
-          setTranscript(data.transcript ?? null); setError("");
+          setTranscript(data.transcript ?? null); setConsentVersion(data.consentVersion ?? null); setError("");
           // The 100% bar says it was saved (TranscriptProgress); no second message.
           if (data.job?.status === "completed") { setImportCompleted(true); setMessage(""); }
         }
@@ -200,7 +174,8 @@ export default function StudentTranscript() {
       // Queued: the job box follows; saved at once: the 100% bar says so (one success message).
       if (data.job) setJob(data.job);
       else { setJob(null); setTranscript(data.transcript ?? null); setImportCompleted(true); }
-      clearFile(); setFilter("all"); setSearch("");
+      setConsentVersion(policyVersion);
+      clearFile();
       focusNext.current = () => heading.current;
     } catch (e) { setError(messageOf(e, FAILED.upload)); }
     finally { setBusy(false); setUploading(false); }
@@ -210,20 +185,26 @@ export default function StudentTranscript() {
     setBusy(true); setDeleteError(""); setError(""); setMessage("");
     try {
       await read(await fetch("/api/student/transcript", { method: "DELETE", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ version: transcript.version, confirmed: true }) }), FAILED.remove);
-      setDeleteOpen(false); setTranscript(null); setImportCompleted(false); clearFile(); setFilter("all"); setMessage("Đã xóa PDF và dữ liệu bảng điểm.");
+      setDeleteOpen(false); setTranscript(null); setImportCompleted(false); clearFile(); setMessage("Đã xóa PDF và dữ liệu bảng điểm.");
       // The delete button went with the transcript: back to the heading, the message just below it.
       focusNext.current = () => heading.current;
     }
     catch (e) { setDeleteError(messageOf(e, FAILED.remove)); }
     finally { setBusy(false); }
   };
-  const sections = transcript?.data.sections.filter(s => filter === "all" || s.id === filter) ?? [];
-  const creditCheck = transcriptCreditCheck(transcript);
-  const inferredRows = transcript?.data.sections.reduce((n, s) => n + s.courses.filter(c => attemptOutcome(c).inferred).length, 0) ?? 0;
-  const matches = courseMatcher(search);
-  const count = sections.reduce((n, s) => n + s.courses.filter(matches).length, 0);
-  // OCR imports show all their notes; a text-layer import only the rows it marked or skipped.
-  const transcriptWarnings = transcript ? transcript.data.warnings.filter(w => transcript.data.parserVersion === "vlu-ocr-1.1" || isRowWarning(w)) : [];
+  // "Tôi đồng ý" under a transcript agreed to under an older policy (2026-10-26: the Khoa's admins may then see its scores).
+  const agree = async () => {
+    if (busy) return;
+    setBusy(true); setError(""); setMessage("");
+    try {
+      const data = await read(await fetch("/api/student/transcript/consent", { method: "POST", credentials: "include", headers: { "X-Consent-Policy-Version": policyVersion } }), FAILED.consent);
+      setConsentVersion(data.consentVersion ?? policyVersion);
+      setMessage("Đã ghi nhận bạn đồng ý Chính sách bảo mật mới cho bảng điểm.");
+      focusNext.current = () => heading.current;
+    } catch (e) { setError(messageOf(e, FAILED.consent)); }
+    finally { setBusy(false); }
+  };
+  const transcriptWarnings = transcript ? transcriptNotes(transcript.data) : [];
   return <section className="sw-panel sr-transcript" id={PROFILE_SECTIONS.transcript} aria-labelledby="transcript-title" aria-busy={loading}><div className="sw-section-heading"><div><h2 id="transcript-title" ref={heading} tabIndex={-1}>Bảng điểm của tôi</h2><p className="sw-muted">Import PDF từ cổng đào tạo để theo dõi kết quả học tập.</p></div><span className="sw-tag">PDF · tối đa 5 MB</span></div>
     {loading && <p role="status">Đang tải bảng điểm…</p>}
     {loadError && <div className="sr-error" role="alert">{loadError}<button type="button" disabled={busy || loading} onClick={() => void load()}>Thử lại</button></div>}
@@ -235,10 +216,7 @@ export default function StudentTranscript() {
     {transcriptWarnings.length > 0 && <div className="sr-review" role="note">{transcriptWarnings.join(" ")}</div>}
     {loaded && <>{transcript && <div className="sr-upload"><div><strong>Cập nhật bảng điểm mới</strong><p>Dùng PDF rõ, lưu từ cổng đào tạo. Hệ thống đọc chữ trước, tự nhận dạng khi cần.</p></div><button type="button" className="sr-secondary sr-upload-button" disabled={busy || pendingJob} onClick={() => input.current?.click()}><Icon name="upload" />Chọn tệp PDF</button><input ref={input} type="file" accept=".pdf,application/pdf" hidden disabled={busy || pendingJob} onChange={e => pick(e.target.files?.[0])} /></div>}
       {file && <div className="sr-pending"><p><strong>{file.name}</strong> · {(file.size / 1024).toFixed(0)} KB</p>{transcript && <p>Bảng điểm mới sẽ thay thế PDF và toàn bộ dữ liệu bảng điểm hiện tại sau khi đọc thành công. Kết quả Đánh giá năng lực, các nhận xét của AI và Lộ trình AI tính từ bảng điểm hiện tại cũng sẽ bị xóa.</p>}<label className="sr-confirm"><input ref={confirmBox} type="checkbox" checked={confirmed} disabled={busy || pendingJob} onChange={e => setConfirmed(e.target.checked)} /><span>Tôi xác nhận đây là bảng điểm của mình và đồng ý để EduPath AI lưu trữ, xử lý bảng điểm theo <a href="/chinh-sach-va-dieu-khoan#bao-mat-bang-diem" target="_blank" rel="noreferrer">Chính sách bảo mật</a>.</span></label><div className="sr-actions sr-form-actions"><button type="button" className="sr-secondary" disabled={busy || pendingJob} onClick={clearFile}>Hủy chọn</button><button type="button" className="sw-primary" disabled={busy || pendingJob || !confirmed} onClick={() => void upload()}><Icon name="upload" />{busy ? "Đang đọc và lưu PDF…" : transcript ? "Cập nhật bảng điểm" : "Import bảng điểm"}</button></div></div>}
-      {transcript ? <><div className="sr-file-info"><div><strong>{transcript.filename}</strong><p>{transcript.data.pageCount} trang · {transcript.data.courseCount} học phần · Cập nhật lúc {formatUpdatedAt(transcript.updatedAt)}</p></div><div className="sr-file-actions"><button className="sr-secondary sr-danger" disabled={busy || pendingJob} onClick={() => { setDeleteError(""); setDeleteOpen(true); }}><Icon name="trash" />Xóa bảng điểm</button></div></div>{creditCheck.status === "mismatch" && <CreditMismatch check={creditCheck} />}<div className="sr-table-filters"><label>Học kỳ<select value={filter} onChange={e => setFilter(e.target.value)}><option value="all">Tất cả học kỳ</option>{transcript.data.sections.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}</select></label><label>Tìm học phần<input value={search} onChange={e => setSearch(e.target.value)} placeholder="Mã hoặc tên học phần…" /></label><span>{count} dòng học phần</span></div>
-        {/* Phones: the grade columns sit right of the screen (the tables keep one column layout across terms). */}
-        {count > 0 && <p className="sr-swipe-hint" aria-hidden="true">Vuốt ngang để xem điểm <Icon name="arrow" /></p>}
-        {sections.map(section => { const courses = section.courses.filter(matches); if (!courses.length) return null; return <section className="sr-term" key={section.id}><h3>{section.label}</h3><div className="sr-table-scroll" tabIndex={0} role="region" aria-label={`Bảng điểm ${section.label}`}><table><thead><tr><th scope="col">STT</th><th scope="col">Mã môn học</th><th scope="col">Tên môn học</th><th scope="col">Tín chỉ</th><th scope="col">Hệ 10</th><th scope="col">Hệ 4</th><th scope="col">Điểm chữ</th><th scope="col">Kết quả</th></tr></thead><tbody>{courses.map((course, index) => <tr key={`${course.sourcePage}-${course.ordinal}-${index}`} className={course.review?.length ? "sr-row-review" : undefined}><td>{course.ordinal}</td><td>{course.code || "—"}</td><td>{course.name}{course.review?.length ? <small className="sr-review-reasons">Cần kiểm tra: {reviewLabels(course.review).join(", ")}</small> : null}</td><td>{course.printed?.credits !== undefined ? course.printed.credits || "—" : course.credits}</td><td>{course.score10 ?? course.printed?.score10 ?? "—"}</td><td>{course.score4 === null ? course.printed?.score4 ?? "—" : course.score4.toFixed(2)}</td><td><span className={isFailLetter(course.letter) ? "sr-grade-fail" : "sr-grade"}>{course.letter ?? "—"}</span></td><ResultCell course={course} /></tr>)}</tbody></table></div>{section.summaries.length > 0 && <dl className="sr-summaries">{section.summaries.map((summary, i) => <div key={i}><dt>{summary.label}</dt><dd>{summary.value ?? "—"}</dd></div>)}</dl>}</section>; })}{!count && <p className="sw-empty">Không tìm thấy học phần phù hợp.</p>}<p className="sw-muted">(*) Môn điều kiện theo ghi chú PDF. Các tổng kết học kỳ được lấy nguyên từ bảng điểm của trường, không tính lại theo các dòng đang lọc.</p>{inferredRows > 0 && <p className="sw-muted">Nếu ô Kết quả trong PDF chỉ có biểu tượng, hệ thống xem ô đó là trống. Khi đó Đạt/Không đạt được suy ra từ điểm chữ chính thức: A+ đến D là Đạt, F và VT là Không đạt.{creditCheck.status === "match" ? ` Tổng tín chỉ các môn Đạt khớp với Tổng số tín chỉ tích lũy ${credits(creditCheck.printed ?? 0)} in trên bảng điểm.` : ""}</p>}
+      {transcript ? <><div className="sr-file-info"><div><strong>{transcript.filename}</strong><p>{transcript.data.pageCount} trang · {transcript.data.courseCount} học phần · Cập nhật lúc {formatUpdatedAt(transcript.updatedAt)}</p></div><div className="sr-file-actions"><button className="sr-secondary sr-danger" disabled={busy || pendingJob} onClick={() => { setDeleteError(""); setDeleteOpen(true); }}><Icon name="trash" />Xóa bảng điểm</button></div></div>{consentVersion !== policyVersion && <div className="sr-consent-update" role="note"><p><strong>Chính sách bảo mật cập nhật ngày {policyUpdatedAt}.</strong> Quản trị viên của Khoa Công nghệ Thông tin xem được điểm và kết quả từng môn trong bảng điểm của bạn (không gồm tệp PDF) để hỗ trợ học tập, sau khi bạn đồng ý. Nếu chưa đồng ý, bạn vẫn dùng bảng điểm như bình thường nhưng quản trị viên không xem được. <a href="/chinh-sach-va-dieu-khoan#bao-mat-bang-diem" target="_blank" rel="noreferrer">Đọc Chính sách bảo mật</a></p><button type="button" className="sw-primary" disabled={busy || pendingJob} onClick={() => void agree()}>Tôi đồng ý</button></div>}<TranscriptTables key={transcript.version} data={transcript.data} />
       </> : !file && !pendingJob && <div className={`sr-dropzone${dragging ? " is-dragging" : ""}`} onClick={() => { if (!busy) input.current?.click(); }} onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = busy ? "none" : "copy"; setDragging(true); }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false); }} onDrop={onDrop}>
         <svg className="sr-dropzone-icon" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M18 16V6h24l12 12v20" /><path d="M42 6v12h12" /><path d="M18 30v28h22" /><rect x="8" y="16" width="26" height="14" rx="2" /><text x="21" y="26.5" fill="currentColor" stroke="none" fontSize="9" fontWeight="700" textAnchor="middle" fontFamily="inherit">PDF</text><path d="M26 40h12M26 47h8" /><path d="M50 60V44M44 50l6-6 6 6" /></svg>
         <h3>{dragging ? "Thả tệp PDF vào đây" : "Chưa có bảng điểm"}</h3>

@@ -4,7 +4,8 @@ import type { DatabasePool } from "../db/pool.js";
 import type { AuthenticatedUser } from "../auth/types.js";
 import { requireAdminAccess } from "../middleware/authorization.js";
 import { AccountError, type AdminAccountRepository } from "./accounts.js";
-import { TRANSCRIPT_POLICY_VERSION } from "../student/consent.js";
+import { allowsStaffTranscript, TRANSCRIPT_POLICY_VERSION } from "../student/consent.js";
+import { withoutSettledConflicts, type TranscriptData } from "../student/transcript-parser.js";
 
 export interface StudentProfileQuery {
   q: string; page: number; pageSize: number;
@@ -36,9 +37,23 @@ export interface StudentProfileDetail extends StudentProfileSummary {
   profileCreatedAt: string | null; profileUpdatedAt: string | null;
 }
 export interface StudentProfilePage { items: StudentProfileSummary[]; total: number; cohortYears: number[]; cohortCodes: string[] }
+/**
+ * A student's transcript for the admin portal (user, 2026-10-25, policy 2026-10-26): the scores as the student page shows
+ * them, never the PDF, and only once the student agreed to a policy that allows it; otherwise why there is nothing.
+ */
+export type AdminTranscriptView =
+  | { transcript: { updatedAt: string; data: TranscriptData }; reason: null }
+  | { transcript: null; reason: "no_transcript" | "consent_required" };
 export interface StudentProfileRepository {
   list(actor: AuthenticatedUser, query: StudentProfileQuery): Promise<StudentProfilePage>;
   detail(actor: AuthenticatedUser, id: string): Promise<StudentProfileDetail>;
+  transcript(actor: AuthenticatedUser, id: string): Promise<AdminTranscriptView>;
+}
+/** What the admin may see of a stored transcript, given the student's active transcript consent (consent.ts). */
+export function adminTranscriptView(stored: { updatedAt: string; data: TranscriptData } | null, consentVersion: string | null): AdminTranscriptView {
+  if (!stored) return { transcript: null, reason: "no_transcript" };
+  if (!allowsStaffTranscript(consentVersion)) return { transcript: null, reason: "consent_required" };
+  return { transcript: { updatedAt: stored.updatedAt, data: withoutSettledConflicts(stored.data) }, reason: null };
 }
 // The survey counts when it holds the interest lists and the strengths (survey-v3, 050, 051) and the student agreed to the current policy for it
 // (the constant is code, not input).
@@ -94,6 +109,20 @@ export class PostgresStudentProfileRepository implements StudentProfileRepositor
     if (!result.rows[0]) throw new AccountError("student_not_found", 404);
     return result.rows[0];
   }
+  async transcript(_actor: AuthenticatedUser, id: string): Promise<AdminTranscriptView> {
+    const found = await this.pool.query<{ consentVersion: string | null; hasTranscript: boolean }>(`SELECT
+      (SELECT c.policy_version FROM data_consents c WHERE c.user_id = u.id AND c.purpose = 'transcript_processing' AND c.ended_at IS NULL) AS "consentVersion",
+      EXISTS (SELECT 1 FROM student_transcripts t WHERE t.user_id = u.id) AS "hasTranscript"
+      FROM users u WHERE u.id = $1 AND ${studentScope}`, [id]);
+    const student = found.rows[0];
+    if (!student) throw new AccountError("student_not_found", 404);
+    // The scores are read only when the student agreed to show them.
+    if (!student.hasTranscript) return { transcript: null, reason: "no_transcript" };
+    if (!allowsStaffTranscript(student.consentVersion)) return { transcript: null, reason: "consent_required" };
+    const stored = await this.pool.query<{ updatedAt: string; data: TranscriptData }>(
+      `SELECT updated_at AS "updatedAt", parsed_data AS data FROM student_transcripts WHERE user_id = $1`, [id]);
+    return adminTranscriptView(stored.rows[0] ?? null, student.consentVersion);
+  }
 }
 
 export function createStudentProfilesRouter(repository: StudentProfileRepository | undefined, authorization: Pick<AdminAccountRepository, "canAccessAdmin"> | undefined) {
@@ -123,6 +152,11 @@ export function createStudentProfilesRouter(repository: StudentProfileRepository
     const id = z.guid().safeParse(request.params.id);
     if (!id.success) { response.status(400).json({ error: "invalid_student_id" }); return; }
     response.json({ student: await repository!.detail(request.session.user!, id.data) });
+  });
+  router.get("/:id/transcript", async (request, response) => {
+    const id = z.guid().safeParse(request.params.id);
+    if (!id.success) { response.status(400).json({ error: "invalid_student_id" }); return; }
+    response.json(await repository!.transcript(request.session.user!, id.data));
   });
   const errorHandler: ErrorRequestHandler = (error, _req, res, next) => {
     if (error instanceof AccountError) { res.status(error.status).json({ error: error.code }); return; }

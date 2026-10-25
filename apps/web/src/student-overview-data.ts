@@ -5,7 +5,7 @@ type Semester = Transcript["data"]["sections"][number];
 /** Lower case without Vietnamese marks, đ read as d: for matching printed labels and searches. */
 export const foldText = (text: string) => text.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[đĐ]/g, "d").toLowerCase();
 
-export function academicSections(transcript: Transcript | null): Semester[] {
+export function academicSections(transcript: Pick<Transcript, "data"> | null): Semester[] {
   return (transcript?.data.sections ?? [])
     .filter(section => section.academicYear !== null && section.semester !== null)
     .slice()
