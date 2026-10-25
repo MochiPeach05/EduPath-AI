@@ -5,32 +5,41 @@ import { buildRoadmapInput, ROADMAP_OPTIONS, ROADMAP_PROMPT_VERSION, ROADMAP_THI
 import { NONE, ROADMAP_LIMITS } from "./schema.js";
 import { ROADMAP_ASSESSMENT, ROADMAP_NOW, syntheticRoadmapFacts, syntheticRoadmapResult } from "./test-fixture.js";
 import { cleanCourseCodes, roadmapContextFromAiInput, validateRoadmapOutput } from "./validate.js";
-import { dateText, roadmapWindow } from "./window.js";
+import { dateText, roadmapWindow, vietnamToday } from "./window.js";
 import type { RoadmapRow } from "./jobs.js";
 
 // Synthetic K29 data only (fixtures/synthetic-k29.json plus invented grades); no real student record.
 
 describe("roadmapWindow", () => {
-  it("starts on the Vietnam date and covers three calendar months", () => {
+  it("covers the next term of the school calendar, split into months (user, 2026-10-25)", () => {
+    // HK1 2026–2027 is under way on 24/10/2026, so the roadmap prepares HK2: 21/12/2026 to 04/04/2027.
     expect(roadmapWindow(ROADMAP_NOW)).toEqual({
-      start: "2026-10-24", end: "2027-01-23",
+      start: "2026-12-21", end: "2027-04-04", term: "HK262",
       months: [
-        { index: 1, start: "2026-10-24", end: "2026-11-23" },
-        { index: 2, start: "2026-11-24", end: "2026-12-23" },
-        { index: 3, start: "2026-12-24", end: "2027-01-23" },
+        { index: 1, start: "2026-12-21", end: "2027-01-20" },
+        { index: 2, start: "2027-01-21", end: "2027-02-20" },
+        { index: 3, start: "2027-02-21", end: "2027-03-20" },
+        { index: 4, start: "2027-03-21", end: "2027-04-04" },
       ],
     });
     // 17:30 UTC is already the next day in Vietnam.
-    expect(roadmapWindow(new Date("2026-10-23T17:30:00Z")).start).toBe("2026-10-24");
+    expect(vietnamToday(new Date("2026-10-23T17:30:00Z"))).toBe("2026-10-24");
     expect(dateText("2027-01-23")).toBe("23/01/2027");
   });
 
-  it("clamps to the last day of a shorter month", () => {
-    const window = roadmapWindow(new Date("2027-01-31T03:00:00Z"));
-    expect(window.months.map((month) => [month.start, month.end])).toEqual([
-      ["2027-01-31", "2027-02-27"], ["2027-02-28", "2027-03-30"], ["2027-03-31", "2027-04-29"],
+  it("moves on once a term has started, merges a short last month and repeats the calendar in later years", () => {
+    // HK2 under way: HK3, 03/05 to 15/08/2027, its last 13 days joined to July.
+    const summer = roadmapWindow(new Date("2027-01-31T03:00:00Z"));
+    expect([summer.term, summer.start, summer.end]).toEqual(["HK263", "2027-05-03", "2027-08-15"]);
+    expect(summer.months.map((month) => [month.start, month.end])).toEqual([
+      ["2027-05-03", "2027-06-02"], ["2027-06-03", "2027-07-02"], ["2027-07-03", "2027-08-15"],
     ]);
-    expect(window.end).toBe("2027-04-29");
+    // HK1 2027–2028: 05/09/2027 to 22/01/2028, five months.
+    const autumn = roadmapWindow(new Date("2027-06-01T03:00:00Z"));
+    expect([autumn.term, autumn.start, autumn.end, autumn.months.length]).toEqual(["HK271", "2027-09-05", "2028-01-22", 5]);
+    // After the table: HK272 is HK262 a year later; a term starting today is the one prepared.
+    expect(roadmapWindow(new Date("2027-10-01T03:00:00Z"))).toMatchObject({ term: "HK272", start: "2027-12-21", end: "2028-04-04" });
+    expect(roadmapWindow(new Date("2026-12-21T03:00:00Z")).term).toBe("HK262");
   });
 });
 
@@ -144,8 +153,9 @@ describe("buildRoadmapInput", () => {
     expect(input.think).toBe(ROADMAP_THINK);
     expect(input.options).toEqual(ROADMAP_OPTIONS);
     expect(input.options.num_ctx).toBe(16384);
-    expect(input.user).toContain("Từ ngày 24/10/2026 đến ngày 23/01/2027.");
-    expect(input.user).toContain("Tháng 2: từ 24/11/2026 đến 23/12/2026");
+    expect(input.user).toContain("Học kỳ của lộ trình: học kỳ 2 năm học 2026–2027 (ngày dự kiến theo lịch của trường).");
+    expect(input.user).toContain("Từ ngày 21/12/2026 đến ngày 04/04/2027.");
+    expect(input.user).toContain("Tháng 2: từ 21/01/2027 đến 20/02/2027");
     expect(input.user).toContain("- 71ITBS10203 Cơ sở lập trình (3 TC): điểm 3,2 (F) — học lại; giúp kỹ năng nghề: Lập trình cơ bản");
     expect(input.user).toContain("Theo kế hoạch học kỳ 2 năm học 2025–2026 (học kỳ tiếp theo, cần chuẩn bị đăng ký):");
     expect(input.user).toContain("[3. HỌC PHẦN ĐANG HỌC] (học kỳ 1 năm học 2025–2026, chưa có kết quả)");
@@ -168,8 +178,8 @@ describe("buildRoadmapInput", () => {
     expect(schema.properties.improve!.items.properties.code!.enum).toEqual(["71ITBS10203", "71ITSE30603", "71ITAI40103"]);
     expect(schema.properties.skills!.items.properties.key!.enum).toEqual(["S01", "S02", "S03", "S04"]);
     expect(schema.properties.skills!.maxItems).toBe(ROADMAP_LIMITS.skillsMax);
-    expect(schema.properties.months!.items.properties.month!.enum).toEqual(["1", "2", "3"]);
-    expect([schema.properties.months!.minItems, schema.properties.months!.maxItems]).toEqual([3, 3]);
+    expect(schema.properties.months!.items.properties.month!.enum).toEqual(["1", "2", "3", "4"]);
+    expect([schema.properties.months!.minItems, schema.properties.months!.maxItems]).toEqual([4, 4]);
     const text = JSON.stringify(input.schema);
     expect(text).not.toMatch(/"(pattern|format|minimum|maximum|uniqueItems|\$ref)"/);
     const walk = (node: unknown): void => {
@@ -238,7 +248,7 @@ describe("validateRoadmapOutput", () => {
 
   it("keeps numbers and course codes of the data block, and the term codes it writes in words", () => {
     const checked = validateRoadmapOutput(output({
-      study: [{ code: "71ITIN40304", advice: "Đồ án thực tập (4 TC, 71ITIN40304) theo kế hoạch HK252, đăng ký trước 23/01/2027." }],
+      study: [{ code: "71ITIN40304", advice: "Đồ án thực tập (4 TC, 71ITIN40304) theo kế hoạch HK252, đăng ký trước 21/12/2026." }],
     }), context);
     if (!checked.ok) throw new Error("expected ok");
     expect(checked.output.study).toHaveLength(1);
@@ -321,13 +331,13 @@ describe("presentRoadmap", () => {
     expect(view.skills.map((skill) => [skill.key, skill.picked])).toEqual([["S02", true], ["S01", false], ["S03", false], ["S04", false]]);
     expect(view.skills[0]).not.toHaveProperty("score");
     expect(view.months.map((month) => [month.month, month.start, month.focus, month.tasks])).toEqual([
-      [1, "2026-10-24", null, []], [2, "2026-11-24", "Tập trung.", ["Học lại."]], [3, "2026-12-24", null, []],
+      [1, "2026-12-21", null, []], [2, "2027-01-21", "Tập trung.", ["Học lại."]], [3, "2027-02-21", null, []], [4, "2027-03-21", null, []],
     ]);
     expect([view.summary, view.ended, view.createdAt]).toEqual(["Tóm tắt.", false, "2026-10-24T03:00:00.000Z"]);
   });
 
   it("shows only the facts until the AI is done, and marks a window that has ended", () => {
-    const view = presentRoadmap(row({ status: "processing", completedAt: null }), "2027-01-24");
+    const view = presentRoadmap(row({ status: "processing", completedAt: null }), "2027-04-05");
     expect(view.summary).toBeNull();
     expect(view.study.every((item) => item.advice === null)).toBe(true);
     expect(view.skills.every((skill) => !skill.picked)).toBe(true);

@@ -21,7 +21,8 @@ export type RoadmapSkill = {
 export type RoadmapMonth = { month: number; start: string; end: string; focus: string | null; tasks: string[] };
 export type Roadmap = {
   id: string; assessmentId: string; status: RoadmapStatus; errorCode: string | null; createdAt: string; completedAt: string | null; model: string | null;
-  window: { start: string; end: string; months: { index: number; start: string; end: string }[] };
+  /** term: the term of the school calendar the window covers (roadmap-v7); none for a 3-month roadmap made before. */
+  window: { start: string; end: string; months: { index: number; start: string; end: string }[]; term?: string };
   ended: boolean; careerName: string | null; specialtyLabel: string | null; summary: string | null;
   /** Key advice points (roadmap-v3); empty for a roadmap written before. */
   advice: string[];
@@ -35,7 +36,17 @@ export type RoadmapResponse = {
   surveyDone: boolean;
   aiEnabled: boolean;
   worker: { online: boolean; supportsRoadmap: boolean };
+  /** The term a roadmap made now would cover (null from an older API). */
+  upcoming: { term: string | null; start: string; end: string } | null;
 };
+/** "HK262" → "HK2 · 2026–2027". */
+export function roadmapTermLabel(code: string): string {
+  const year = 2000 + Number(code.slice(2, 4));
+  return `HK${code.slice(4)} · ${year}–${year + 1}`;
+}
+/** The eyebrow of a roadmap: its term, or "Lộ trình 3 tháng" for one made before roadmaps followed the school calendar. */
+export const roadmapWindowTitle = (window: { term?: string | null }) =>
+  window.term ? `Lộ trình ${roadmapTermLabel(window.term)}` : "Lộ trình 3 tháng";
 export type RoadmapStatusResponse = { id: string | null; status: RoadmapStatus | null; errorCode: string | null; worker: RoadmapResponse["worker"] };
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -63,7 +74,9 @@ export function normalizeRoadmapResponse(value: unknown): RoadmapResponse {
   const data = isRecord(value) ? value : {};
   const assessment = isRecord(data.assessment) && typeof data.assessment.id === "string"
     ? { id: data.assessment.id, createdAt: String(data.assessment.createdAt ?? ""), hasCareer: data.assessment.hasCareer === true } : null;
-  return { roadmap: normalizeRoadmap(data.roadmap), assessment, stale: data.stale === true, surveyDone: data.surveyDone !== false, aiEnabled: data.aiEnabled === true, worker: worker(data.worker) };
+  const upcoming = isRecord(data.upcoming) && typeof data.upcoming.start === "string" && typeof data.upcoming.end === "string"
+    ? { term: typeof data.upcoming.term === "string" && data.upcoming.term ? data.upcoming.term : null, start: data.upcoming.start, end: data.upcoming.end } : null;
+  return { roadmap: normalizeRoadmap(data.roadmap), assessment, stale: data.stale === true, surveyDone: data.surveyDone !== false, aiEnabled: data.aiEnabled === true, worker: worker(data.worker), upcoming };
 }
 
 export function normalizeRoadmapStatus(value: unknown): RoadmapStatusResponse {

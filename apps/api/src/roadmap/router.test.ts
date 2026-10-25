@@ -95,7 +95,9 @@ describe("GET /", () => {
     expect(res.body).toMatchObject({
       assessment: { id: ROADMAP_ASSESSMENT, createdAt: "2026-10-24T01:00:00.000Z", hasCareer: true },
       stale: false, surveyDone: true, aiEnabled: true, worker: { online: true, supportsRoadmap: true },
-      roadmap: { id: ROADMAP, status: "queued", summary: null, window: { start: "2026-10-24", end: "2027-01-23" } },
+      roadmap: { id: ROADMAP, status: "queued", summary: null, window: { start: "2026-12-21", end: "2027-04-04", term: "HK262" } },
+      // The term a new roadmap would cover (from the real clock).
+      upcoming: { term: expect.stringMatching(/^HK\d{3}$/), start: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), end: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) },
     });
     expect(res.body.roadmap.study.map((item: { code: string }) => item.code)).toEqual(["71ITSE41203", "71ITIS30203", "71ITIN40304"]);
     // Nothing server-only leaves: no ai_input, no scores of the skills.

@@ -76,16 +76,22 @@ describe("Lộ trình AI đề xuất", () => {
   const response = (surveyDone: boolean): RoadmapResponse => ({
     roadmap: {
       id: "r1", assessmentId: "a1", status: "completed", errorCode: null, createdAt: "2026-10-24T03:00:00.000Z", completedAt: "2026-10-24T03:05:00.000Z", model: "gemma4:e4b",
-      window: { start: "2026-10-24", end: "2027-01-23", months: [] }, ended: false, careerName: null, specialtyLabel: null, summary: null, advice: [],
+      window: { start: "2026-12-21", end: "2027-04-04", months: [], term: "HK262" }, ended: false, careerName: null, specialtyLabel: null, summary: null, advice: [],
       study: [], choices: [], improve: [], skills: [], months: [],
     },
     assessment: { id: "a2", createdAt: "2026-10-25T03:00:00.000Z", hasCareer: true }, stale: true, surveyDone, aiEnabled: true,
-    worker: { online: false, supportsRoadmap: false },
+    worker: { online: false, supportsRoadmap: false }, upcoming: { term: "HK262", start: "2026-12-21", end: "2027-04-04" },
   });
   const page = (surveyDone: boolean) => {
     liveData.mockReturnValue({ data: response(surveyDone), error: null, loading: false });
     return renderToStaticMarkup(createElement(StudentAiRoadmap));
   };
+
+  it("names the term of the school calendar the roadmap covers (user, 2026-10-25)", () => {
+    const html = page(true);
+    expect(html).toContain("Lộ trình HK2 · 2026–2027");
+    expect(html).toContain("Từ 21/12/2026 đến 04/04/2027");
+  });
 
   it("keeps Tạo lại for after Khảo sát định hướng, which a new roadmap needs", () => {
     const waiting = page(false);

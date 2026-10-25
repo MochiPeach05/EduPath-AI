@@ -43,7 +43,7 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
     question: "EduPath AI dùng AI vào việc gì?",
     answer: [
       "EduPath AI dùng mô hình ngôn ngữ Gemma 4 E4B ở ba trang. Trong Đánh giá năng lực, mô hình viết nhận xét học tập giúp bạn hiểu kết quả của mình: điểm mạnh nằm ở đâu, kỹ năng nào còn thiếu so với nghề mục tiêu, nên ưu tiên học phần nào trong danh sách hệ thống gợi ý và nên tự học thêm những gì.",
-      "Mô hình cũng soạn Lộ trình AI (lộ trình 3 tháng) trong trang Lộ trình học tập: học phần nên học, học phần cần cải thiện, kỹ năng nên tự học và lời khuyên theo mục tiêu của bạn, dựa trên kết quả đánh giá năng lực và Khảo sát định hướng trong hồ sơ. Các học phần được đề xuất được thêm vào Kế hoạch học kỳ để bạn điều chỉnh.",
+      "Mô hình cũng soạn Lộ trình AI (lộ trình cho học kỳ tới) trong trang Lộ trình học tập: học phần nên học, học phần cần cải thiện, kỹ năng nên tự học và lời khuyên theo mục tiêu của bạn, dựa trên kết quả đánh giá năng lực và Khảo sát định hướng trong hồ sơ. Các học phần được đề xuất được thêm vào Kế hoạch học kỳ để bạn điều chỉnh.",
       "Trong Điều kiện xét tốt nghiệp, mục Lời khuyên từ EduPath AI gợi ý cách hoàn thành những điều kiện còn thiếu, dựa trên kết quả đối chiếu bảng điểm của bạn với tiêu chuẩn xét tốt nghiệp của khóa và chuyên ngành.",
       "Mọi con số như điểm kỹ năng, mức năng lực, khoảng trống kỹ năng, mức phù hợp nghề và kết quả đối chiếu xét tốt nghiệp đều do hệ thống tính (điểm kỹ năng theo trọng số học phần mà Khoa cấu hình), không do AI đưa ra. Mô hình chạy cục bộ trên một máy tính do nhóm phát triển EduPath AI quản lý, nên dữ liệu của bạn không được gửi tới dịch vụ AI đám mây nào."
     ],

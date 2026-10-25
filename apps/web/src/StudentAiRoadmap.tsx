@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { Icon } from "./student-icons";
 import { useLiveData } from "./use-live-data";
 import {
-  ROADMAP_API, ROADMAP_POLL_MS, choiceText, dateText, failureText, formatDateTime, helpsText, improveTag, isPending, modelLabel,
+  ROADMAP_API, ROADMAP_POLL_MS, choiceText, dateText, failureText, roadmapTermLabel, roadmapWindowTitle, formatDateTime, helpsText, improveTag, isPending, modelLabel,
   monthTitle, normalizeRoadmap, normalizeRoadmapResponse, normalizeRoadmapStatus, pendingCopy, requestErrorMessage, sentence, skillTags, studyTag,
   type Roadmap, type RoadmapImprove, type RoadmapResponse, type RoadmapSkill, type RoadmapStatus, type RoadmapStudy,
 } from "./student-roadmap-data";
 import "./student-roadmap.css";
 
-// "Lên kế hoạch (AI)" of #roadmap (user, 2026-10-24): a 3-month study roadmap that EduPath AI writes as an academic advisor — the courses to
+// "Lên kế hoạch (AI)" of #roadmap (user, 2026-10-24): a study roadmap for the next term of the school calendar (user, 2026-10-25;
+// before, 3 months from the day it was made) that EduPath AI writes as an academic advisor — the courses to
 // take, the courses to improve and the skills of the target career to study on one's own — from the newest competency
 // assessment. What the system computed shows at once; the AI's advice and month plan fill in once they are written.
 
@@ -153,7 +154,8 @@ function ImproveSection({ roadmap }: { roadmap: Roadmap }) {
   </section>;
 }
 
-function SkillItem({ skill }: { skill: RoadmapSkill }) {
+/** outcomeTitle: "Cuối học kỳ", or "Sau 3 tháng" for a roadmap made before roadmaps followed the school calendar. */
+function SkillItem({ skill, outcomeTitle }: { skill: RoadmapSkill; outcomeTitle: string }) {
   return <li className="rm-skill">
     <div className="rm-item-head">
       <strong>{skill.name}</strong>
@@ -162,7 +164,7 @@ function SkillItem({ skill }: { skill: RoadmapSkill }) {
     <p className="rm-item-meta">{sentence(skill.statusLabel)}</p>
     {skill.why && <p className="rm-advice">{skill.why}</p>}
     {skill.steps.length > 0 && <div className="rm-skill-block"><h4>Cách học</h4><ol>{skill.steps.map((step, index) => <li key={index}>{step}</li>)}</ol></div>}
-    {skill.outcome && <div className="rm-skill-block"><h4>Sau 3 tháng</h4><p>{skill.outcome}</p></div>}
+    {skill.outcome && <div className="rm-skill-block"><h4>{outcomeTitle}</h4><p>{skill.outcome}</p></div>}
     {skill.courses.length > 0 && <p className="rm-item-meta">Học phần trong chương trình giúp bổ sung: {skill.courses.map((course) => course.name).join(", ")}.</p>}
   </li>;
 }
@@ -176,7 +178,7 @@ function SkillsSection({ roadmap, completed }: { roadmap: Roadmap; completed: bo
       <p>{roadmap.careerName ? `Để nâng cao trình độ và tăng khả năng làm việc ở vị trí ${roadmap.careerName}.` : "Để nâng cao trình độ và tăng khả năng làm việc."}</p>
     </div></header>
     {!roadmap.skills.length && <p className="rm-empty">Bạn đã đạt các kỹ năng của nghề mục tiêu theo kết quả hiện có.</p>}
-    {picked.length > 0 && <ul className="rm-skills">{picked.map((skill) => <SkillItem key={skill.key} skill={skill} />)}</ul>}
+    {picked.length > 0 && <ul className="rm-skills">{picked.map((skill) => <SkillItem key={skill.key} skill={skill} outcomeTitle={roadmap.window.term ? "Cuối học kỳ" : "Sau 3 tháng"} />)}</ul>}
     {others.length > 0 && (completed && picked.length
       ? <p className="rm-others">Kỹ năng khác của nghề còn có thể bổ sung: {others.map((skill) => skill.name).join(", ")}.</p>
       : <ul className="rm-items rm-items-compact">{others.map((skill) => <li key={skill.key} className="rm-item rm-item-plain">
@@ -246,7 +248,7 @@ function RoadmapView({ roadmap, response, create, creating, createError }: {
     <section className="sw-panel rm-hero" aria-labelledby="rm-title">
       <div className="rm-hero-head">
         <div>
-          <p className="rm-eyebrow">Lộ trình 3 tháng</p>
+          <p className="rm-eyebrow">{roadmapWindowTitle(roadmap.window)}</p>
           <h2 id="rm-title">Từ {dateText(roadmap.window.start)} đến {dateText(roadmap.window.end)}</h2>
           <p className="rm-hero-meta">{[roadmap.careerName && `Nghề mục tiêu: ${roadmap.careerName}`, roadmap.specialtyLabel && `Chuyên ngành: ${roadmap.specialtyLabel}`].filter(Boolean).join(" · ")}</p>
         </div>
@@ -257,7 +259,7 @@ function RoadmapView({ roadmap, response, create, creating, createError }: {
       {createError && <p className="rm-error" role="alert">{createError}</p>}
       {!response.surveyDone && !pending && <SurveyNeeded again />}
       {response.stale && <p className="rm-note">Kết quả Đánh giá năng lực của bạn đã thay đổi sau khi lộ trình này được soạn. {regenerateText(response.surveyDone, "để cập nhật theo kết quả mới.")}</p>}
-      {roadmap.ended && <p className="rm-note">Lộ trình này đã hết thời gian (đến {dateText(roadmap.window.end)}). {regenerateText(response.surveyDone, "để soạn lộ trình cho 3 tháng tiếp theo.")}</p>}
+      {roadmap.ended && <p className="rm-note">Lộ trình này đã hết thời gian (đến {dateText(roadmap.window.end)}). {regenerateText(response.surveyDone, "để soạn lộ trình cho học kỳ tiếp theo.")}</p>}
       <AiState roadmap={roadmap} response={response} create={create} creating={creating} />
       {completed && roadmap.summary && <div className="rm-summary">
         <span className="rm-ai-icon" aria-hidden="true"><Icon name="spark" /></span>
@@ -295,8 +297,8 @@ export default function StudentAiRoadmap() {
   if (!roadmap) return <section className="sw-panel rm-start">
     {live}
     <span className="rm-start-icon" aria-hidden="true"><Icon name="route" /></span>
-    <h2>Lộ trình học tập 3 tháng của bạn</h2>
-    <p>EduPath AI đóng vai cố vấn học tập, soạn cho bạn kế hoạch 3 tháng tới, tính từ hôm nay:</p>
+    <h2>Lộ trình học tập cho học kỳ tới</h2>
+    <p>EduPath AI đóng vai cố vấn học tập, soạn cho bạn kế hoạch {response.upcoming?.term ? roadmapTermLabel(response.upcoming.term) : "học kỳ tới"}{response.upcoming ? ` (dự kiến từ ${dateText(response.upcoming.start)} đến ${dateText(response.upcoming.end)})` : ""}:</p>
     <ul className="rm-start-list">
       <li><Icon name="book" /><span><strong>Môn bạn cần học</strong> theo kế hoạch đào tạo: học phần đang học, học phần trễ và học phần của học kỳ tới.</span></li>
       <li><Icon name="refresh" /><span><strong>Môn bạn cần cải thiện</strong>: học lại học phần chưa đạt, học cải thiện học phần điểm D, D+.</span></li>

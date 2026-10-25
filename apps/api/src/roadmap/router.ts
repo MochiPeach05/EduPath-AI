@@ -13,7 +13,7 @@ import { activeConsentVersion, TRANSCRIPT_POLICY_VERSION } from "../student/cons
 import { readSurvey } from "../student/survey.js";
 import { createRoadmap, createRoadmapExpiry, newestAssessmentInfo, readNewestRoadmap, RoadmapError, type RoadmapStatus } from "./jobs.js";
 import { presentRoadmap } from "./present.js";
-import { roadmapWindow } from "./window.js";
+import { roadmapWindow, vietnamToday } from "./window.js";
 
 type RoadmapRouterOptions = {
   /** AI_WORKER_KEY is configured; otherwise nothing is queued. */
@@ -22,8 +22,13 @@ type RoadmapRouterOptions = {
 
 const emptyObject = z.object({}).strict();
 const iso = (value: Date | string) => new Date(value).toISOString();
-/** Today in Vietnam time ("YYYY-MM-DD"), the calendar of the roadmap window. */
-const today = () => roadmapWindow(new Date()).start;
+/** Today in Vietnam time ("YYYY-MM-DD"), the calendar of the roadmap window (no longer its start: a window is a coming term). */
+const today = () => vietnamToday(new Date());
+/** The term a roadmap made now would cover, shown before one exists and in the "Tạo lại" notes. */
+function upcomingTerm() {
+  const window = roadmapWindow(new Date());
+  return { term: window.term ?? null, start: window.start, end: window.end };
+}
 
 async function inTransaction<T>(pool: DatabasePool, work: (client: PoolClient) => Promise<T>): Promise<T> {
   const client = await pool.connect();
@@ -97,6 +102,7 @@ export function createRoadmapRouter(pool: DatabasePool | undefined, webOrigin: s
       surveyDone: survey?.complete === true && surveyConsent === TRANSCRIPT_POLICY_VERSION,
       aiEnabled: enabled,
       worker: await workerStatus(),
+      upcoming: upcomingTerm(),
     });
   });
 

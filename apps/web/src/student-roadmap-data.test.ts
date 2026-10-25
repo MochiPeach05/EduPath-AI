@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  choiceText, failureText, monthTitle, normalizeRoadmapResponse, normalizeRoadmapStatus, pendingCopy, requestErrorMessage, skillTags, studyTag, termShort,
+  choiceText, failureText, monthTitle, normalizeRoadmapResponse, normalizeRoadmapStatus, pendingCopy, requestErrorMessage, roadmapWindowTitle, skillTags, studyTag, termShort,
 } from "./student-roadmap-data";
 
 describe("normalizeRoadmapResponse", () => {
@@ -13,7 +13,10 @@ describe("normalizeRoadmapResponse", () => {
       skills: [{ key: "S01", courses: [], steps: [] }] });
     expect(data).toMatchObject({ stale: true, aiEnabled: true, worker: { online: true, supportsRoadmap: false }, assessment: { id: "a1", hasCareer: true } });
     // An API without surveyDone (before the profile survey) never blocks "Tạo lộ trình".
-    expect(normalizeRoadmapResponse(null)).toEqual({ roadmap: null, assessment: null, stale: false, surveyDone: true, aiEnabled: false, worker: { online: false, supportsRoadmap: false } });
+    expect(normalizeRoadmapResponse(null)).toEqual({ roadmap: null, assessment: null, stale: false, surveyDone: true, aiEnabled: false, worker: { online: false, supportsRoadmap: false }, upcoming: null });
+    // The term a new roadmap would cover (2026-10-25); a 3-month roadmap made before has no term.
+    expect(normalizeRoadmapResponse({ upcoming: { term: "HK262", start: "2026-12-21", end: "2027-04-04" } }).upcoming).toEqual({ term: "HK262", start: "2026-12-21", end: "2027-04-04" });
+    expect([roadmapWindowTitle({ term: "HK262" }), roadmapWindowTitle({})]).toEqual(["Lộ trình HK2 · 2026–2027", "Lộ trình 3 tháng"]);
     expect(normalizeRoadmapResponse({ surveyDone: false }).surveyDone).toBe(false);
     expect(normalizeRoadmapResponse({ roadmap: { id: 1 } }).roadmap).toBeNull();
     expect(normalizeRoadmapStatus({ id: "r1", status: "processing" })).toEqual({ id: "r1", status: "processing", errorCode: null, worker: { online: false, supportsRoadmap: false } });

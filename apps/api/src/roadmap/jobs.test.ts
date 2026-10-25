@@ -58,14 +58,14 @@ describe("createRoadmap", () => {
     expect(expire).toHaveBeenCalledWith(client);
     expect(outcome.created).toBe(true);
     expect(outcome.row).toMatchObject({ assessmentId: ROADMAP_ASSESSMENT, status: "queued", output: null, recent: true });
-    expect(outcome.row.facts.window.start).toBe("2026-10-24");
+    expect(outcome.row.facts.window.start).toBe("2026-12-21");
 
     const [cancel, insert, prune] = writes(sql());
     expect(cancel).toContain("UPDATE stu_roadmaps SET status='cancelled',ai_input=NULL");
     expect(insert).toContain("INSERT INTO stu_roadmaps");
     expect(prune).toContain("DELETE FROM stu_roadmaps WHERE user_id=$1 AND status NOT IN ('queued','processing')");
     const params = calls().find(([text]) => text.startsWith("INSERT INTO stu_roadmaps"))![1] as unknown[];
-    expect(params.slice(1, 5)).toEqual([USER, ROADMAP_ASSESSMENT, "2026-10-24", "2027-01-23"]);
+    expect(params.slice(1, 5)).toEqual([USER, ROADMAP_ASSESSMENT, "2026-12-21", "2027-04-04"]);
     expect(JSON.parse(params[5] as string)).toEqual(facts);
     expect(JSON.parse(params[6] as string)).toEqual(aiInput);
     expect(params[7]).toBe(ROADMAP_PROMPT_VERSION);

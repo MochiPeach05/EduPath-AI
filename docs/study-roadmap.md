@@ -38,7 +38,15 @@ Nguyên tắc chung của dự án vẫn giữ: **hệ thống tính, AI diễn 
 
 ## Thời gian của lộ trình
 
-`roadmapWindow(now)` lấy ngày hiện tại theo giờ Việt Nam làm ngày bắt đầu và cộng 3 tháng lịch; tháng *i* kéo dài đến ngày trước ngày bắt đầu tháng *i+1* (24/10/2026 → tháng 1: 24/10–23/11/2026, tháng 2: 24/11–23/12/2026, tháng 3: 24/12/2026–23/01/2027; ngày 31 rơi vào tháng ngắn hơn thì lấy ngày cuối tháng). Người dùng sẽ cung cấp mốc thời gian chính thức sau; khi có, chỉ cần sửa hàm này, mọi phần khác đọc kết quả của nó. Lộ trình lưu ngày bắt đầu và kết thúc (`window_start`, `window_end`); qua ngày kết thúc, trang ghi "đã hết thời gian" và mời **Tạo lại**.
+Từ 25/10/2026 (người dùng: "HK1 giờ đang học dở rồi nên chúng ta sẽ đi đến HK2 luôn"), lộ trình chuẩn bị **học kỳ tiếp theo theo lịch của trường**, không còn là 3 tháng tính từ ngày tạo. `roadmapWindow(now)` (`apps/api/src/roadmap/window.ts`) lấy học kỳ đầu tiên chưa bắt đầu (ngày bắt đầu ≥ hôm nay theo giờ Việt Nam) trong lịch dự kiến `TERM_CALENDAR`:
+
+| Học kỳ | Bắt đầu | Kết thúc |
+|---|---|---|
+| HK2 2026–2027 (HK262) | 21/12/2026 | 04/04/2027 |
+| HK3 2026–2027 (HK263) | 03/05/2027 | 15/08/2027 |
+| HK1 2027–2028 (HK271) | 05/09/2027 | 22/01/2028 |
+
+Học kỳ không có trong bảng lặp lại ngày của cùng học kỳ ở năm tương ứng (HK272 = HK262 cộng một năm); không có học kỳ nào thì lấy 20 tuần từ hôm nay (`DEFAULT_TERM_WEEKS`, "dự kiến chung chung sẽ là 20 tuần"). Học kỳ được chia theo tháng lịch tính từ ngày bắt đầu, tháng cuối dừng ở ngày kết thúc; tháng cuối ngắn hơn 15 ngày được gộp vào tháng trước. Ví dụ HK2: 21/12–20/01, 21/01–20/02, 21/02–20/03, 21/03–04/04 (4 tháng); HK3 có 3 tháng (13 ngày cuối tháng 8 gộp vào tháng 7); HK1 2027–2028 có 5 tháng. Mô hình viết đúng một mục "Kế hoạch theo tháng" cho mỗi tháng (schema lấy số tháng từ cửa sổ; prompt `roadmap-v7`). Cửa sổ lưu `term`; trang ghi "Lộ trình HK2 · 2026–2027". Lộ trình tạo trước 25/10/2026 không có `term`, vẫn hiện "Lộ trình 3 tháng" đến khi Tạo lại. API trả thêm `upcoming` (học kỳ mà lộ trình mới sẽ soạn) cho màn hình chưa có lộ trình. Lộ trình lưu ngày bắt đầu và kết thúc (`window_start`, `window_end`); qua ngày kết thúc, trang ghi "đã hết thời gian" và mời **Tạo lại** cho học kỳ tiếp theo. Câu "lộ trình 3 tháng" trong Chính sách bảo mật chưa đổi (văn bản chính sách cần người dùng duyệt).
 
 ## Dữ kiện (hệ thống tính)
 
