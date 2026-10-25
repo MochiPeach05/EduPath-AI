@@ -31,13 +31,13 @@ const pages = [
   { id: "roadmap", label: "Lộ trình học tập", icon: "route" },
   { id: "curriculum", label: "Chương trình đào tạo", icon: "book" },
   { id: "plans", label: "Kế hoạch đào tạo", icon: "clock" },
-  { id: "assistant", label: "Trợ lý AI", icon: "spark" },
-  { id: "graduation", label: "Điều kiện xét tốt nghiệp", icon: "shield" }
+  { id: "graduation", label: "Điều kiện xét tốt nghiệp", icon: "shield" },
+  { id: "assistant", label: "Trợ lý AI", icon: "spark" }
 ] as const;
 export type StudentPage = typeof pages[number]["id"];
 type Page = StudentPage;
-// The main nav carries the core journey, Điều kiện xét tốt nghiệp next to Trợ lý AI (user, 2026-10-25: moved out of the
-// account menu); profile, curriculum and plans live in the account menu.
+// The main nav carries the core journey, Điều kiện xét tốt nghiệp just before Trợ lý AI (user, 2026-10-25: moved out of
+// the account menu, then ahead of Trợ lý AI); profile, curriculum and plans live in the account menu.
 const navPageIds = new Set<Page>(["overview", "competency", "skill-gap", "career", "roadmap", "assistant", "graduation"]);
 const navPages = pages.filter(p => navPageIds.has(p.id));
 const accountPages = pages.filter(p => !navPageIds.has(p.id));
