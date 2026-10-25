@@ -24,6 +24,33 @@ export const KNOWN_LETTER = /^(A\+?|B\+?|C\+?|D\+?|F|MT|VT)$/;
 /** One warning for the rows marked for review, shown with the transcript. */
 export const reviewWarning = (rows: number) =>
   `Có ${rows} dòng có mã môn, ký hiệu hoặc ô khác dạng thường gặp. Hệ thống vẫn lưu đúng như in trên PDF và đánh dấu các dòng này; hãy đối chiếu với PDF gốc.`;
+const REVIEW_WARNING = /^Có \d+ dòng có mã môn, ký hiệu hoặc ô khác dạng thường gặp\./;
+
+/**
+ * Older cohorts passed a course from 4,0 on the 10-point scale (user, 2026-10-25: "khóa trước chỉ có 4đ thôi là đạt"), so
+ * a row printed "Đạt" with 4,0 or more is right whatever its letter (4,1 · F · Đạt): the OCR worker's
+ * result_conflicts_with_grade is not an error there. The printed result already decides the outcome on every page
+ * (attemptOutcome: "Đạt" is passed), so only the review mark goes.
+ */
+export const OLD_PASS_SCORE_10 = 4;
+export const isSettledResultConflict = (course: { result: string | null; score10: number | null }) =>
+  /^đạt\b/.test((course.result ?? "").normalize("NFC").trim().toLowerCase()) && course.score10 !== null && course.score10 >= OLD_PASS_SCORE_10;
+
+/** A stored transcript without the marks isSettledResultConflict clears, its review warning recounted (read as uploaded now). */
+export function withoutSettledConflicts(data: TranscriptData): TranscriptData {
+  let changed = false;
+  const sections = data.sections.map((section) => ({ ...section, courses: section.courses.map((course): TranscriptCourse => {
+    if (!course.review?.includes("result_conflicts_with_grade") || !isSettledResultConflict(course)) return course;
+    changed = true;
+    const { review, ...rest } = course;
+    const left = review.filter((code) => code !== "result_conflicts_with_grade");
+    return left.length ? { ...rest, review: left } : rest;
+  }) }));
+  if (!changed) return data;
+  const reviewed = sections.reduce((sum, section) => sum + section.courses.filter((course) => course.review?.length).length, 0);
+  const warnings = data.warnings.flatMap((warning) => (REVIEW_WARNING.test(warning) ? (reviewed ? [reviewWarning(reviewed)] : []) : [warning]));
+  return { ...data, sections, warnings };
+}
 export type TranscriptData = { schemaVersion: 1; parserVersion: "vlu-native-1" | "vlu-ocr-1.1"; pageCount: number; courseCount: number; sections: TranscriptSection[]; warnings: string[]; ocr?: { needsReview: boolean; pages: { page: number; method: string; warnings: string[] }[]; semesters: Record<string, unknown>[] } };
 const clean = (s: string) => s.normalize("NFC").replace(/\s+/g, " ").trim();
 const fold = (s: string) => clean(s).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/đ/g, "d");

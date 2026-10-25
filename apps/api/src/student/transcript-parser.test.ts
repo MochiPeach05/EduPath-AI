@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COURSE_CODE_PATTERN, parsePages } from "./transcript-parser.js";
+import { COURSE_CODE_PATTERN, parsePages, reviewWarning, withoutSettledConflicts, type TranscriptCourse, type TranscriptData } from "./transcript-parser.js";
 
 // Synthetic text items laid out like the VLU transcript (612×792 points); no real transcript.
 const item = (text: string, x: number, y: number) => ({ text, x, y, width: text.length * 3.5 });
@@ -52,5 +52,32 @@ describe("native transcript parser", () => {
   it("knows both code formats and nothing else", () => {
     for (const code of ["71ITBS10103", "71ENG110013", "71PEBA10052", "DIT0070", "DGT0010", "DTA0015"]) expect(COURSE_CODE_PATTERN.test(code), code).toBe(true);
     for (const code of ["DIT007", "dit0070", "DIT00700", "71IT1010", "Đạt", "2023"]) expect(COURSE_CODE_PATTERN.test(code), code).toBe(false);
+  });
+});
+
+// 2026-10-25 (user): Đạt with 4,0 or more is right for older cohorts whatever the letter; a stored transcript reads as a new upload.
+describe("withoutSettledConflicts", () => {
+  const course = (ordinal: number, changes: Partial<TranscriptCourse>): TranscriptCourse => ({
+    ordinal, code: `71ITNW3010${ordinal}`, name: "Môn", credits: 3, score10: 4.1, score4: 1.64, letter: "F", result: "Đạt", conditional: false, sourcePage: 1, ...changes });
+  const data = (courses: TranscriptCourse[], reviewed: number): TranscriptData => ({
+    schemaVersion: 1, parserVersion: "vlu-ocr-1.1", pageCount: 1, courseCount: courses.length,
+    sections: [{ id: "2021-2022-HK02", academicYear: "2021-2022", semester: "HK02", label: "2021-2022 · HK02", courses, summaries: [] }],
+    warnings: ["Bảng điểm do sinh viên tải lên; chưa được nhà trường xác minh.", reviewWarning(reviewed)],
+  });
+
+  it("drops the mark of Đạt with 4,0 or more and recounts the warning", () => {
+    const stored = data([course(1, { review: ["result_conflicts_with_grade"] }), course(2, { review: ["result_conflicts_with_grade", "invalid_course_code"] }),
+      course(3, { score10: 3.5, review: ["result_conflicts_with_grade"] })], 3);
+    const read = withoutSettledConflicts(stored);
+    expect(read.sections[0]!.courses.map((row) => row.review ?? null)).toEqual([null, ["invalid_course_code"], ["result_conflicts_with_grade"]]);
+    expect(read.sections[0]!.courses[0]).not.toHaveProperty("review");
+    expect(read.warnings).toEqual(["Bảng điểm do sinh viên tải lên; chưa được nhà trường xác minh.", reviewWarning(2)]);
+  });
+
+  it("removes the warning when no row is left to check, and leaves other transcripts as they are", () => {
+    const read = withoutSettledConflicts(data([course(1, { review: ["result_conflicts_with_grade"] })], 1));
+    expect(read.warnings).toEqual(["Bảng điểm do sinh viên tải lên; chưa được nhà trường xác minh."]);
+    const untouched = data([course(1, { result: "Không đạt", letter: "D", score10: 5, review: ["result_conflicts_with_grade"] })], 1);
+    expect(withoutSettledConflicts(untouched)).toBe(untouched);
   });
 });

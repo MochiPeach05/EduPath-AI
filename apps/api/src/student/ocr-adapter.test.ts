@@ -38,6 +38,23 @@ describe("OCR result boundary", () => {
     f.courses = []; f.course_count = 0;
     expect(() => mapOcrTranscript(f)).toThrow("unsupported_layout");
   });
+  // 2026-10-25 (user): "4.1 điểm F nhưng vẫn đạt là do khóa trước chỉ có 4đ thôi là đạt rồi nên đây không phải lỗi".
+  it("does not mark Đạt with 4,0 or more as conflicting with an F letter (older cohorts passed from 4,0)", () => {
+    const f = fixture();
+    const row = (ordinal: number, changes: Record<string, unknown>) => ({ ...f.courses[0]!, ordinal, issues: [] as string[], ...changes }) as typeof f.courses[number];
+    f.courses = [
+      row(1, { course_code: "71ITNW30103", score_10: 4.1, score_4: 1.64, letter_grade: "F", result: "passed", issues: ["result_conflicts_with_grade"] }),
+      row(2, { course_code: "71ITIS30103", score_10: 3.5, score_4: 1.4, letter_grade: "F", result: "passed", issues: ["result_conflicts_with_grade"] }),
+      row(3, { course_code: "71ITSE30103", score_10: 5, score_4: 2, letter_grade: "D", result: "failed", issues: ["result_conflicts_with_grade"] }),
+    ];
+    f.course_count = 3;
+    const data = mapOcrTranscript(f);
+    const courses = data.sections[0]!.courses;
+    // The printed result stays (Đạt counts as passed everywhere); only the 4,1 row loses its mark.
+    expect(courses.map((c) => [c.code, c.result, c.review ?? null])).toEqual([
+      ["71ITNW30103", "Đạt", null], ["71ITIS30103", "Đạt", ["result_conflicts_with_grade"]], ["71ITSE30103", "Không đạt", ["result_conflicts_with_grade"]]]);
+    expect(data.warnings.some((w) => w.startsWith("Có 2 dòng có mã môn, ký hiệu"))).toBe(true);
+  });
   // 2026-10-23 (user): same frame, new codes, names or marks → save everything, mark it for review.
   it("keeps rows that do not fit a known form and marks them for review", () => {
     const f = fixture();
