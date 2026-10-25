@@ -78,8 +78,17 @@ describe("student shell", () => {
 
   it("marks the avatar while a page of the account menu is open", () => {
     expect(render("#plans")).toContain('class="sw-avatar sw-avatar-here"');
-    expect(render("#graduation")).toContain('class="sw-avatar sw-avatar-here"');
+    expect(render("#curriculum")).toContain('class="sw-avatar sw-avatar-here"');
     expect(render("#competency")).not.toContain("sw-avatar-here");
+  });
+
+  it("puts Điều kiện xét tốt nghiệp in the main nav next to Trợ lý AI, not in the account menu", () => {
+    const html = render("#graduation");
+    const nav = html.slice(html.indexOf('id="student-navigation"'), html.indexOf("</nav>", html.indexOf('id="student-navigation"')));
+    expect(nav.indexOf("Trợ lý AI")).toBeGreaterThan(-1);
+    expect(nav.indexOf("Điều kiện xét tốt nghiệp")).toBeGreaterThan(nav.indexOf("Trợ lý AI"));
+    expect(nav).toMatch(/href="#graduation" aria-current="page"/);
+    expect(html).not.toContain("sw-avatar-here");
   });
 
   it("points aria-controls only at panels that exist", () => {

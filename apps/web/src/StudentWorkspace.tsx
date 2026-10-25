@@ -31,13 +31,14 @@ const pages = [
   { id: "roadmap", label: "Lộ trình học tập", icon: "route" },
   { id: "curriculum", label: "Chương trình đào tạo", icon: "book" },
   { id: "plans", label: "Kế hoạch đào tạo", icon: "clock" },
-  { id: "graduation", label: "Điều kiện xét tốt nghiệp", icon: "shield" },
-  { id: "assistant", label: "Trợ lý AI", icon: "spark" }
+  { id: "assistant", label: "Trợ lý AI", icon: "spark" },
+  { id: "graduation", label: "Điều kiện xét tốt nghiệp", icon: "shield" }
 ] as const;
 export type StudentPage = typeof pages[number]["id"];
 type Page = StudentPage;
-// The main nav only carries the core journey; profile, curriculum, plans and graduation live in the account menu instead.
-const navPageIds = new Set<Page>(["overview", "competency", "skill-gap", "career", "roadmap", "assistant"]);
+// The main nav carries the core journey, Điều kiện xét tốt nghiệp next to Trợ lý AI (user, 2026-10-25: moved out of the
+// account menu); profile, curriculum and plans live in the account menu.
+const navPageIds = new Set<Page>(["overview", "competency", "skill-gap", "career", "roadmap", "assistant", "graduation"]);
 const navPages = pages.filter(p => navPageIds.has(p.id));
 const accountPages = pages.filter(p => !navPageIds.has(p.id));
 // Below the desktop zoom (1200px, styles.css) the header nav does not fit: the drawer is the menu and overlays the page.
@@ -87,7 +88,8 @@ const helpSteps: [string, string][] = [
   ["Đánh giá năng lực", "bấm Đánh giá năng lực để xem điểm theo nhóm năng lực và mức thành thạo từng kỹ năng."],
   ["Khoảng trống kỹ năng", "xem kỹ năng còn thiếu so với nghề mục tiêu và học phần nên học."],
   ["Lộ trình học tập", "theo dõi tiến độ, nhờ EduPath AI soạn lộ trình 3 tháng và lên kế hoạch các học kỳ tới."],
-  ["Chương trình đào tạo, Kế hoạch đào tạo và Điều kiện xét tốt nghiệp", "tra cứu học phần, kế hoạch từng học kỳ và tự kiểm tra điều kiện xét tốt nghiệp (trong menu tài khoản)."]
+  ["Điều kiện xét tốt nghiệp", "tự kiểm tra các điều kiện xét tốt nghiệp và đọc lời khuyên của EduPath AI."],
+  ["Chương trình đào tạo và Kế hoạch đào tạo", "tra cứu học phần và kế hoạch từng học kỳ (trong menu tài khoản)."]
 ];
 
 export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) {
