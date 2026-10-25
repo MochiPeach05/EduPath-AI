@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type DragEvent } from "react";
 import { Icon } from "./student-icons";
 import TranscriptProgress from "./TranscriptProgress";
-import { policyUpdatedAt, policyVersion } from "./public-information";
+import { policyVersion } from "./public-information";
 import TranscriptTables, { courseMatcher, transcriptNotes } from "./TranscriptTables";
 import { PROFILE_SECTIONS, formatUpdatedAt } from "./student-overview-data";
 import "./student-records.css";
@@ -30,8 +30,7 @@ const errors: Record<string, string> = {
   ownership_confirmation_required: "Hãy xác nhận đây là bảng điểm của bạn.",
   consent_required: "Hãy đồng ý để EduPath AI xử lý bảng điểm trước khi import.",
   policy_outdated: "Chính sách bảo mật vừa được cập nhật. Hãy tải lại trang, đọc chính sách mới rồi xác nhận lại.",
-  insufficient_role: "Tài khoản hiện không có quyền sinh viên.", invalid_origin: "Phiên thao tác không hợp lệ. Vui lòng tải lại trang.",
-  transcript_not_found: "Bạn chưa có bảng điểm trên EduPath AI."
+  insufficient_role: "Tài khoản hiện không có quyền sinh viên.", invalid_origin: "Phiên thao tác không hợp lệ. Vui lòng tải lại trang."
 };
 /** What each request says when the API gives no known reason or the network fails. */
 const FAILED = {
@@ -40,7 +39,6 @@ const FAILED = {
   upload: "Không import được bảng điểm. Vui lòng thử lại.",
   cancel: "Chưa hủy được tác vụ. Vui lòng thử lại.",
   remove: "Chưa xóa được bảng điểm. Vui lòng thử lại.",
-  consent: "Chưa ghi nhận được sự đồng ý. Vui lòng thử lại.",
 } as const;
 /** Why an import job failed, then (once) that the previous transcript is kept. */
 export function failedImportMessage(code: string | null): string {
@@ -51,7 +49,7 @@ export function failedImportMessage(code: string | null): string {
 export { courseMatcher };
 /** A request the API refused, carrying the message to show; anything else (a network error's own text is English) gets the request's fallback. */
 class TranscriptRequestError extends Error {}
-async function read(response: Response, fallback: string): Promise<{ transcript?: Transcript | null; job?: ImportJob | null; workerOnline?: boolean; ocrEnabled?: boolean; consentVersion?: string | null }> {
+async function read(response: Response, fallback: string): Promise<{ transcript?: Transcript | null; job?: ImportJob | null; workerOnline?: boolean; ocrEnabled?: boolean }> {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new TranscriptRequestError(errors[data.error] ?? fallback);
   return data;
@@ -96,8 +94,6 @@ export default function StudentTranscript() {
   const [message, setMessage] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteError, setDeleteError] = useState("");
-  // The policy version the student agreed to for the transcript; an older one asks again (2026-10-26: admins may see scores).
-  const [consentVersion, setConsentVersion] = useState<string | null>(null);
   const input = useRef<HTMLInputElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const confirmBox = useRef<HTMLInputElement>(null);
@@ -112,7 +108,7 @@ export default function StudentTranscript() {
   const load = useCallback(async () => {
     controller.current?.abort(); const pending = new AbortController(); controller.current = pending;
     setLoading(true); setLoadError(""); setLoaded(false);
-    try { const data = await read(await fetch("/api/student/transcript", { credentials: "include", signal: pending.signal }), FAILED.load); if (!pending.signal.aborted) { setTranscript(data.transcript ?? null); setJob(data.job ?? null); setWorkerOnline(data.workerOnline ?? false); setConsentVersion(data.consentVersion ?? null); setLoaded(true); } }
+    try { const data = await read(await fetch("/api/student/transcript", { credentials: "include", signal: pending.signal }), FAILED.load); if (!pending.signal.aborted) { setTranscript(data.transcript ?? null); setJob(data.job ?? null); setWorkerOnline(data.workerOnline ?? false); setLoaded(true); } }
     catch (e) { if (!pending.signal.aborted) setLoadError(messageOf(e, FAILED.load)); }
     finally { if (!pending.signal.aborted) setLoading(false); }
   }, []);
@@ -125,7 +121,7 @@ export default function StudentTranscript() {
         const data = await read(await fetch("/api/student/transcript", { credentials: "include", signal: pending.signal }), FAILED.poll);
         if (!pending.signal.aborted) {
           setJob(data.job ?? null); setWorkerOnline(data.workerOnline ?? false);
-          setTranscript(data.transcript ?? null); setConsentVersion(data.consentVersion ?? null); setError("");
+          setTranscript(data.transcript ?? null); setError("");
           // The 100% bar says it was saved (TranscriptProgress); no second message.
           if (data.job?.status === "completed") { setImportCompleted(true); setMessage(""); }
         }
@@ -174,7 +170,6 @@ export default function StudentTranscript() {
       // Queued: the job box follows; saved at once: the 100% bar says so (one success message).
       if (data.job) setJob(data.job);
       else { setJob(null); setTranscript(data.transcript ?? null); setImportCompleted(true); }
-      setConsentVersion(policyVersion);
       clearFile();
       focusNext.current = () => heading.current;
     } catch (e) { setError(messageOf(e, FAILED.upload)); }
@@ -192,18 +187,6 @@ export default function StudentTranscript() {
     catch (e) { setDeleteError(messageOf(e, FAILED.remove)); }
     finally { setBusy(false); }
   };
-  // "Tôi đồng ý" under a transcript agreed to under an older policy (2026-10-26: the Khoa's admins may then see its scores).
-  const agree = async () => {
-    if (busy) return;
-    setBusy(true); setError(""); setMessage("");
-    try {
-      const data = await read(await fetch("/api/student/transcript/consent", { method: "POST", credentials: "include", headers: { "X-Consent-Policy-Version": policyVersion } }), FAILED.consent);
-      setConsentVersion(data.consentVersion ?? policyVersion);
-      setMessage("Đã ghi nhận bạn đồng ý Chính sách bảo mật mới cho bảng điểm.");
-      focusNext.current = () => heading.current;
-    } catch (e) { setError(messageOf(e, FAILED.consent)); }
-    finally { setBusy(false); }
-  };
   const transcriptWarnings = transcript ? transcriptNotes(transcript.data) : [];
   return <section className="sw-panel sr-transcript" id={PROFILE_SECTIONS.transcript} aria-labelledby="transcript-title" aria-busy={loading}><div className="sw-section-heading"><div><h2 id="transcript-title" ref={heading} tabIndex={-1}>Bảng điểm của tôi</h2><p className="sw-muted">Import PDF từ cổng đào tạo để theo dõi kết quả học tập.</p></div><span className="sw-tag">PDF · tối đa 5 MB</span></div>
     {loading && <p role="status">Đang tải bảng điểm…</p>}
@@ -216,7 +199,7 @@ export default function StudentTranscript() {
     {transcriptWarnings.length > 0 && <div className="sr-review" role="note">{transcriptWarnings.join(" ")}</div>}
     {loaded && <>{transcript && <div className="sr-upload"><div><strong>Cập nhật bảng điểm mới</strong><p>Dùng PDF rõ, lưu từ cổng đào tạo. Hệ thống đọc chữ trước, tự nhận dạng khi cần.</p></div><button type="button" className="sr-secondary sr-upload-button" disabled={busy || pendingJob} onClick={() => input.current?.click()}><Icon name="upload" />Chọn tệp PDF</button><input ref={input} type="file" accept=".pdf,application/pdf" hidden disabled={busy || pendingJob} onChange={e => pick(e.target.files?.[0])} /></div>}
       {file && <div className="sr-pending"><p><strong>{file.name}</strong> · {(file.size / 1024).toFixed(0)} KB</p>{transcript && <p>Bảng điểm mới sẽ thay thế PDF và toàn bộ dữ liệu bảng điểm hiện tại sau khi đọc thành công. Kết quả Đánh giá năng lực, các nhận xét của AI và Lộ trình AI tính từ bảng điểm hiện tại cũng sẽ bị xóa.</p>}<label className="sr-confirm"><input ref={confirmBox} type="checkbox" checked={confirmed} disabled={busy || pendingJob} onChange={e => setConfirmed(e.target.checked)} /><span>Tôi xác nhận đây là bảng điểm của mình và đồng ý để EduPath AI lưu trữ, xử lý bảng điểm theo <a href="/chinh-sach-va-dieu-khoan#bao-mat-bang-diem" target="_blank" rel="noreferrer">Chính sách bảo mật</a>.</span></label><div className="sr-actions sr-form-actions"><button type="button" className="sr-secondary" disabled={busy || pendingJob} onClick={clearFile}>Hủy chọn</button><button type="button" className="sw-primary" disabled={busy || pendingJob || !confirmed} onClick={() => void upload()}><Icon name="upload" />{busy ? "Đang đọc và lưu PDF…" : transcript ? "Cập nhật bảng điểm" : "Import bảng điểm"}</button></div></div>}
-      {transcript ? <><div className="sr-file-info"><div><strong>{transcript.filename}</strong><p>{transcript.data.pageCount} trang · {transcript.data.courseCount} học phần · Cập nhật lúc {formatUpdatedAt(transcript.updatedAt)}</p></div><div className="sr-file-actions"><button className="sr-secondary sr-danger" disabled={busy || pendingJob} onClick={() => { setDeleteError(""); setDeleteOpen(true); }}><Icon name="trash" />Xóa bảng điểm</button></div></div>{consentVersion !== policyVersion && <div className="sr-consent-update" role="note"><p><strong>Chính sách bảo mật cập nhật ngày {policyUpdatedAt}.</strong> Quản trị viên của Khoa Công nghệ Thông tin xem được điểm và kết quả từng môn trong bảng điểm của bạn (không gồm tệp PDF) để hỗ trợ học tập, sau khi bạn đồng ý. Nếu chưa đồng ý, bạn vẫn dùng bảng điểm như bình thường nhưng quản trị viên không xem được. <a href="/chinh-sach-va-dieu-khoan#bao-mat-bang-diem" target="_blank" rel="noreferrer">Đọc Chính sách bảo mật</a></p><button type="button" className="sw-primary" disabled={busy || pendingJob} onClick={() => void agree()}>Tôi đồng ý</button></div>}<TranscriptTables key={transcript.version} data={transcript.data} />
+      {transcript ? <><div className="sr-file-info"><div><strong>{transcript.filename}</strong><p>{transcript.data.pageCount} trang · {transcript.data.courseCount} học phần · Cập nhật lúc {formatUpdatedAt(transcript.updatedAt)}</p></div><div className="sr-file-actions"><button className="sr-secondary sr-danger" disabled={busy || pendingJob} onClick={() => { setDeleteError(""); setDeleteOpen(true); }}><Icon name="trash" />Xóa bảng điểm</button></div></div><TranscriptTables key={transcript.version} data={transcript.data} />
       </> : !file && !pendingJob && <div className={`sr-dropzone${dragging ? " is-dragging" : ""}`} onClick={() => { if (!busy) input.current?.click(); }} onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = busy ? "none" : "copy"; setDragging(true); }} onDragLeave={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false); }} onDrop={onDrop}>
         <svg className="sr-dropzone-icon" viewBox="0 0 64 64" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M18 16V6h24l12 12v20" /><path d="M42 6v12h12" /><path d="M18 30v28h22" /><rect x="8" y="16" width="26" height="14" rx="2" /><text x="21" y="26.5" fill="currentColor" stroke="none" fontSize="9" fontWeight="700" textAnchor="middle" fontFamily="inherit">PDF</text><path d="M26 40h12M26 47h8" /><path d="M50 60V44M44 50l6-6 6 6" /></svg>
         <h3>{dragging ? "Thả tệp PDF vào đây" : "Chưa có bảng điểm"}</h3>

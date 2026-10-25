@@ -3,7 +3,7 @@
 // required. The questions and
 // interest lists come from the API (apps/api/src/student/survey.ts, interests.ts).
 import { interestProblem, type InterestOption } from "./profile-interests";
-import { policyVersion } from "./public-information";
+import { isValidConsent } from "./public-information";
 
 export const SURVEY_API = "/api/student/survey";
 
@@ -79,7 +79,7 @@ export function surveyGaps(questions: SurveyQuestion[], survey: StudentSurvey | 
   if (!survey.interestTech.length) gaps.push("Chọn công nghệ trong Thế mạnh của bạn");
   if (!survey.strengths?.trim()) gaps.push("Bổ sung mô tả thế mạnh");
   if (!survey.interestHobbies.length) gaps.push("Chọn sở trường");
-  if (consentVersion !== policyVersion) gaps.push(consentVersion ? "Xác nhận lại theo chính sách mới" : "Đánh dấu ô đồng ý cho EduPath AI dùng câu trả lời");
+  if (!isValidConsent(consentVersion)) gaps.push(consentVersion ? "Xác nhận lại theo chính sách mới" : "Đánh dấu ô đồng ý cho EduPath AI dùng câu trả lời");
   return gaps;
 }
 

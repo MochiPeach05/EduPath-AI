@@ -60,6 +60,9 @@ describe("profile survey form", () => {
     const answered = { ...survey, answers: { goal: "work", english: "reading" }, complete: true };
     expect(surveyGaps(questions, null, null)).toEqual([]);
     expect(surveyGaps(questions, answered, policyVersion)).toEqual([]);
+    // A consent to 2026-10-25 still counts (consentValidSince); an older one asks again.
+    expect(surveyGaps(questions, answered, "2026-10-25")).toEqual([]);
+    expect(surveyGaps(questions, answered, "2026-10-24")).toEqual(["Xác nhận lại theo chính sách mới"]);
     // survey-v2 (no description of the strengths), agreed to under an older policy.
     const v2 = { ...answered, version: "survey-v2", strengths: null, complete: false };
     expect(surveyGaps(questions, v2, "2026-10-24")).toEqual(["Bổ sung mô tả thế mạnh", "Xác nhận lại theo chính sách mới"]);

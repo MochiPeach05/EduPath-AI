@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from "react";
 import { Icon } from "./student-icons";
-import { policyVersion, surveyPolicyHref } from "./public-information";
+import { isValidConsent, policyVersion, surveyPolicyHref } from "./public-information";
 import {
   SURVEY_API, answerLabel, draftOf, problemSummary, surveyErrorMessage, surveyGaps, surveyProblems,
   type SurveyAction, type SurveyDraft, type SurveyField, type SurveyResponse,
@@ -83,7 +83,7 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
       setData(value);
       setDraft(draftOf(value.survey, value.previous));
       // Open while incomplete, or while the answers wait for consent to a newer policy.
-      setEditing(!value.survey?.complete || value.consentVersion !== policyVersion);
+      setEditing(!value.survey?.complete || !isValidConsent(value.consentVersion));
     }, (failure: Error) => alive && setLoadError(failure.message));
     return () => { alive = false; };
   }, [reload]);
@@ -96,7 +96,7 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
   if (!data) return <section className="sw-panel ps-survey" id={PROFILE_SECTIONS.survey} aria-busy="true"><p role="status">Đang tải khảo sát định hướng…</p></section>;
 
   const { questions, survey, achievementsMax, interests } = data;
-  const needsConsent = data.consentVersion !== policyVersion;
+  const needsConsent = !isValidConsent(data.consentVersion);
   const done = survey?.complete === true && !needsConsent;
   // Stored answers that no longer count: what to add before they do.
   const gaps = surveyGaps(questions, survey, data.consentVersion);

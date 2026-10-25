@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import { AccountError } from "./accounts.js";
-import { adminTranscriptView, createStudentProfilesRouter, PostgresStudentProfileRepository } from "./student-profiles.js";
+import { createStudentProfilesRouter, PostgresStudentProfileRepository } from "./student-profiles.js";
 import type { TranscriptData } from "../student/transcript-parser.js";
 import type { AuthenticatedUser, AppRole } from "../auth/types.js";
 import type { DatabasePool } from "../db/pool.js";
@@ -15,7 +15,7 @@ const id = seedId(1);
 const actor = { userId: "admin", tenantId: "tenant", role: "admin" } as AuthenticatedUser;
 function setup(role: AppRole | null = "admin", available = true) {
   const repository = { list: vi.fn().mockResolvedValue({ items: [], total: 0, cohortYears: [2023], cohortCodes: ["K29"] }), detail: vi.fn().mockResolvedValue({ id, profileStatus: "missing" }),
-    transcript: vi.fn().mockResolvedValue({ transcript: null, reason: "consent_required" }) };
+    transcript: vi.fn().mockResolvedValue({ transcript: null }) };
   const authorization = { canAccessAdmin: vi.fn().mockResolvedValue(true) };
   const app = express();
   app.use((req, _res, next) => { req.session = { user: role ? { ...actor, role } : undefined } as typeof req.session; next(); });
@@ -100,42 +100,31 @@ describe("student profile SQL safety", () => {
   });
 });
 
-// User, 2026-10-25: admins see a student's transcript like the student page, once the student agreed to policy 2026-10-26.
+// User, 2026-10-25: admins see a student's transcript like the student page; 2026-10-26: every stored transcript, those
+// imported before policy 2026-10-26 included ("Những bảng điểm trước đó auto duyệt hết đi").
 describe("student transcript for admins", () => {
   const data = (): TranscriptData => ({
     schemaVersion: 1, parserVersion: "vlu-ocr-1.1", pageCount: 1, courseCount: 1, warnings: [],
     sections: [{ id: "2021-2022-HK02", academicYear: "2021-2022", semester: "HK02", label: "2021-2022 · HK02", summaries: [],
       courses: [{ ordinal: 3, code: "71ITNW30103", name: "Nhập môn mạng", credits: 3, score10: 4.1, score4: 1.64, letter: "F", result: "Đạt", conditional: false, sourcePage: 1, review: ["result_conflicts_with_grade"] }] }],
   });
-  it("shows the scores only under a consent to 2026-10-26 or later, without marks that are not errors", () => {
-    expect(adminTranscriptView(null, "2026-10-26")).toEqual({ transcript: null, reason: "no_transcript" });
-    expect(adminTranscriptView({ updatedAt: "2026-10-25T10:00:00.000Z", data: data() }, "2026-10-25")).toEqual({ transcript: null, reason: "consent_required" });
-    expect(adminTranscriptView({ updatedAt: "2026-10-25T10:00:00.000Z", data: data() }, null)).toEqual({ transcript: null, reason: "consent_required" });
-    const view = adminTranscriptView({ updatedAt: "2026-10-25T10:00:00.000Z", data: data() }, "2026-10-26");
-    expect(view.reason).toBeNull();
-    expect(view.transcript?.data.sections[0]?.courses[0]).not.toHaveProperty("review");
-    expect(Object.keys(view.transcript ?? {})).toEqual(["updatedAt", "data"]);
-  });
   it("serves GET /:id/transcript to admins only, by student id", async () => {
     const { app, repository } = setup();
-    expect((await request(app).get(`/students/${id}/transcript`).expect(200)).body).toEqual({ transcript: null, reason: "consent_required" });
+    expect((await request(app).get(`/students/${id}/transcript`).expect(200)).body).toEqual({ transcript: null });
     expect(repository.transcript).toHaveBeenCalledWith(actor, id);
     await request(app).get("/students/not-uuid/transcript").expect(400);
     const student = setup("student");
     await request(student.app).get(`/students/${id}/transcript`).expect(403);
     expect(student.repository.transcript).not.toHaveBeenCalled();
   });
-  it("never reads the scores of a student who has not agreed", async () => {
-    const query = vi.fn().mockResolvedValueOnce({ rows: [{ consentVersion: "2026-10-25", hasTranscript: true }] });
-    const repo = new PostgresStudentProfileRepository({ query } as unknown as DatabasePool);
-    expect(await repo.transcript(actor, id)).toEqual({ transcript: null, reason: "consent_required" });
-    expect(query).toHaveBeenCalledTimes(1);
-    expect(String(query.mock.calls[0]![0])).not.toContain("parsed_data");
-    const agreed = vi.fn().mockResolvedValueOnce({ rows: [{ consentVersion: "2026-10-26", hasTranscript: true }] })
-      .mockResolvedValueOnce({ rows: [{ updatedAt: "2026-10-25T10:00:00.000Z", data: data() }] });
-    const view = await new PostgresStudentProfileRepository({ query: agreed } as unknown as DatabasePool).transcript(actor, id);
-    expect(view.transcript?.data.courseCount).toBe(1);
-    expect(String(agreed.mock.calls[1]![0])).toContain("parsed_data");
+  it("reads every stored transcript whatever policy the student agreed to, without marks that are not errors", async () => {
+    const query = vi.fn().mockResolvedValueOnce({ rows: [{ updatedAt: "2026-10-25T10:00:00.000Z", data: data() }] });
+    const view = await new PostgresStudentProfileRepository({ query } as unknown as DatabasePool).transcript(actor, id);
+    expect(Object.keys(view.transcript ?? {})).toEqual(["updatedAt", "data"]);
+    expect(view.transcript?.data.sections[0]?.courses[0]).not.toHaveProperty("review");
+    expect(String(query.mock.calls[0]![0])).not.toContain("data_consents");
+    const none = vi.fn().mockResolvedValueOnce({ rows: [{ updatedAt: null, data: null }] });
+    expect(await new PostgresStudentProfileRepository({ query: none } as unknown as DatabasePool).transcript(actor, id)).toEqual({ transcript: null });
     const missing = vi.fn().mockResolvedValueOnce({ rows: [] });
     await expect(new PostgresStudentProfileRepository({ query: missing } as unknown as DatabasePool).transcript(actor, id)).rejects.toMatchObject({ code: "student_not_found" });
   });

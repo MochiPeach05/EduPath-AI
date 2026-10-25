@@ -108,7 +108,7 @@ describe("/student/survey", () => {
     expect(older.body.survey).toMatchObject({ version: "survey-v1", complete: false });
   });
 
-  it("saves only with consent to the current policy, given now or still active", async () => {
+  it("saves only with consent to the current policy given now, or an active one that still counts", async () => {
     const body = { answers, ...interests, hasAchievements: true, achievements: "Giải Nhì Hackathon khoa" };
     const none = setup();
     await put(none.app, body).expect(400, { error: "consent_required" });
@@ -131,6 +131,10 @@ describe("/student/survey", () => {
     expect(again.sql().some((sql) => sql.includes("INSERT INTO data_consents"))).toBe(false);
     // An older consent does not cover the new policy.
     await put(setup({ survey: true, consent: "2026-10-24" }).app, body).expect(400, { error: "consent_required" });
+    // A consent to 2026-10-25 still counts (CONSENT_VALID_SINCE): saved without asking again, the record kept.
+    const kept = setup({ survey: true, consent: "2026-10-25" });
+    expect((await put(kept.app, body).expect(200)).body.consentVersion).toBe("2026-10-25");
+    expect(kept.sql().some((sql) => sql.includes("INSERT INTO data_consents"))).toBe(false);
   });
 
   it("deletes the answers with every AI roadmap and withdraws the consent", async () => {

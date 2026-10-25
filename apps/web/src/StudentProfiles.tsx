@@ -6,7 +6,6 @@ import { Icon } from "./admin-account-shared";
 import { specialtyLabel } from "./competency-assessment-types";
 import TranscriptTables, { transcriptNotes } from "./TranscriptTables";
 import { formatUpdatedAt } from "./student-overview-data";
-import { policyUpdatedAt } from "./public-information";
 import type { Transcript } from "./StudentTranscript";
 import "./student-profiles.css";
 
@@ -21,12 +20,9 @@ const date = (value: string | null) => value ? new Date(value).toLocaleString("v
 function ProfileBadge({ status }: { status: ProfileStatus }) {
   return <span className={`sp-badge sp-badge-${status}`}>{statusLabels[status]}</span>;
 }
-/** GET /api/admin/students/:id/transcript: the scores once the student agreed to the policy of 26/10/2026, else why not. */
-type AdminTranscript = { transcript: { updatedAt: string; data: Transcript["data"] } | null; reason: "no_transcript" | "consent_required" | null };
-/**
- * The student's transcript as the student page shows it (user, 2026-10-25), read only and without the PDF; shown only when
- * the student agreed to the privacy policy that allows it (26/10/2026).
- */
+/** GET /api/admin/students/:id/transcript: the stored transcript's scores, null when the student has none. */
+type AdminTranscript = { transcript: { updatedAt: string; data: Transcript["data"] } | null };
+/** The student's transcript as the student page shows it (user, 2026-10-25), read only and without the PDF. */
 function StudentTranscriptView({ id }: { id: string }) {
   const state = useData<AdminTranscript>(`/api/admin/students/${id}/transcript`);
   const view = state.data;
@@ -35,12 +31,10 @@ function StudentTranscriptView({ id }: { id: string }) {
     <h3 id="sp-transcript-title">Bảng điểm</h3>
     <Status {...state} />
     {view && (view.transcript ? <>
-      <p className="sp-note">{view.transcript.data.pageCount} trang · {view.transcript.data.courseCount} học phần · Cập nhật lúc {formatUpdatedAt(view.transcript.updatedAt)}. Chỉ xem: quản trị viên không tải được tệp PDF và không sửa được bảng điểm.</p>
+      <p className="sp-note">{view.transcript.data.pageCount} trang · {view.transcript.data.courseCount} học phần · Cập nhật lúc {formatUpdatedAt(view.transcript.updatedAt)}</p>
       {notes.length > 0 && <div className="sr-review" role="note">{notes.join(" ")}</div>}
       <TranscriptTables data={view.transcript.data} />
-    </> : <p className="sp-note">{view.reason === "consent_required"
-      ? `Sinh viên chưa đồng ý Chính sách bảo mật ngày ${policyUpdatedAt} (cho phép quản trị viên của Khoa xem điểm) nên chưa xem được bảng điểm. Bảng điểm sẽ hiện ở đây sau khi sinh viên đồng ý trong mục Bảng điểm của tôi.`
-      : "Sinh viên chưa tải bảng điểm lên EduPath AI."}</p>)}
+    </> : <p className="sp-note">Sinh viên chưa tải bảng điểm lên EduPath AI.</p>)}
   </section>;
 }
 function StudentDetails({ id }: { id: string }) {

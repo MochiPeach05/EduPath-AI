@@ -4,7 +4,7 @@ import type { DatabasePool } from "../db/pool.js";
 import type { AuthenticatedUser } from "../auth/types.js";
 import { requireAdminAccess } from "../middleware/authorization.js";
 import { AccountError, type AdminAccountRepository } from "./accounts.js";
-import { allowsStaffTranscript, TRANSCRIPT_POLICY_VERSION } from "../student/consent.js";
+import { CONSENT_VALID_SINCE } from "../student/consent.js";
 import { withoutSettledConflicts, type TranscriptData } from "../student/transcript-parser.js";
 
 export interface StudentProfileQuery {
@@ -38,29 +38,22 @@ export interface StudentProfileDetail extends StudentProfileSummary {
 }
 export interface StudentProfilePage { items: StudentProfileSummary[]; total: number; cohortYears: number[]; cohortCodes: string[] }
 /**
- * A student's transcript for the admin portal (user, 2026-10-25, policy 2026-10-26): the scores as the student page shows
- * them, never the PDF, and only once the student agreed to a policy that allows it; otherwise why there is nothing.
+ * A student's transcript for the admin portal (user, 2026-10-25): the scores as the student page shows them, never the PDF;
+ * null when none is stored. Every stored transcript counts, those imported before policy 2026-10-26 included (user,
+ * 2026-10-26: "Những bảng điểm trước đó auto duyệt hết đi"); a new import agrees to that policy.
  */
-export type AdminTranscriptView =
-  | { transcript: { updatedAt: string; data: TranscriptData }; reason: null }
-  | { transcript: null; reason: "no_transcript" | "consent_required" };
+export interface AdminTranscriptView { transcript: { updatedAt: string; data: TranscriptData } | null }
 export interface StudentProfileRepository {
   list(actor: AuthenticatedUser, query: StudentProfileQuery): Promise<StudentProfilePage>;
   detail(actor: AuthenticatedUser, id: string): Promise<StudentProfileDetail>;
   transcript(actor: AuthenticatedUser, id: string): Promise<AdminTranscriptView>;
 }
-/** What the admin may see of a stored transcript, given the student's active transcript consent (consent.ts). */
-export function adminTranscriptView(stored: { updatedAt: string; data: TranscriptData } | null, consentVersion: string | null): AdminTranscriptView {
-  if (!stored) return { transcript: null, reason: "no_transcript" };
-  if (!allowsStaffTranscript(consentVersion)) return { transcript: null, reason: "consent_required" };
-  return { transcript: { updatedAt: stored.updatedAt, data: withoutSettledConflicts(stored.data) }, reason: null };
-}
-// The survey counts when it holds the interest lists and the strengths (survey-v3, 050, 051) and the student agreed to the current policy for it
-// (the constant is code, not input).
+// The survey counts when it holds the interest lists and the strengths (survey-v3, 050, 051) and the student's consent for it
+// still counts (consent.ts isValidConsent; the constant is code, not input).
 const surveyComplete = `EXISTS (SELECT 1 FROM stu_profile_surveys s WHERE s.user_id = u.id
     AND cardinality(s.interest_tech) > 0 AND cardinality(s.interest_hobbies) > 0 AND s.strengths IS NOT NULL
     AND EXISTS (SELECT 1 FROM data_consents c WHERE c.user_id = s.user_id AND c.purpose = 'profile_survey' AND c.ended_at IS NULL
-      AND c.policy_version = '${TRANSCRIPT_POLICY_VERSION}'))`;
+      AND c.policy_version >= '${CONSENT_VALID_SINCE}'))`;
 // Derive completion from saved data so profile edits and transcript deletion stay in sync. Since 2026-10-24 the
 // specialty and the profile survey count too (the student portal asks for both before its AI features); the interests
 // (technologies and free-time interests) are part of the survey.
@@ -110,18 +103,12 @@ export class PostgresStudentProfileRepository implements StudentProfileRepositor
     return result.rows[0];
   }
   async transcript(_actor: AuthenticatedUser, id: string): Promise<AdminTranscriptView> {
-    const found = await this.pool.query<{ consentVersion: string | null; hasTranscript: boolean }>(`SELECT
-      (SELECT c.policy_version FROM data_consents c WHERE c.user_id = u.id AND c.purpose = 'transcript_processing' AND c.ended_at IS NULL) AS "consentVersion",
-      EXISTS (SELECT 1 FROM student_transcripts t WHERE t.user_id = u.id) AS "hasTranscript"
-      FROM users u WHERE u.id = $1 AND ${studentScope}`, [id]);
-    const student = found.rows[0];
-    if (!student) throw new AccountError("student_not_found", 404);
-    // The scores are read only when the student agreed to show them.
-    if (!student.hasTranscript) return { transcript: null, reason: "no_transcript" };
-    if (!allowsStaffTranscript(student.consentVersion)) return { transcript: null, reason: "consent_required" };
-    const stored = await this.pool.query<{ updatedAt: string; data: TranscriptData }>(
-      `SELECT updated_at AS "updatedAt", parsed_data AS data FROM student_transcripts WHERE user_id = $1`, [id]);
-    return adminTranscriptView(stored.rows[0] ?? null, student.consentVersion);
+    const result = await this.pool.query<{ updatedAt: string | null; data: TranscriptData | null }>(`SELECT t.updated_at AS "updatedAt", t.parsed_data AS data
+      FROM users u LEFT JOIN student_transcripts t ON t.user_id = u.id WHERE u.id = $1 AND ${studentScope}`, [id]);
+    const row = result.rows[0];
+    if (!row) throw new AccountError("student_not_found", 404);
+    // Marks that are not errors are left out, as on the student page (isSettledResultConflict).
+    return { transcript: row.updatedAt && row.data ? { updatedAt: row.updatedAt, data: withoutSettledConflicts(row.data) } : null };
   }
 }
 

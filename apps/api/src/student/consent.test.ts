@@ -4,7 +4,7 @@ import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "../auth/types.js";
 import type { DatabasePool } from "../db/pool.js";
-import { TRANSCRIPT_POLICY_VERSION } from "./consent.js";
+import { CONSENT_VALID_SINCE, isValidConsent, TRANSCRIPT_POLICY_VERSION } from "./consent.js";
 import { createStudentDataRouter } from "./router.js";
 
 const studentId = "11111111-1111-4111-8111-111111111111";
@@ -98,5 +98,12 @@ describe("transcript processing consent", () => {
   it("matches the policy version shown on the web policy page", async () => {
     const source = await readFile(new URL("../../../web/src/public-information.ts", import.meta.url), "utf8");
     expect(source).toContain(`export const policyVersion = "${TRANSCRIPT_POLICY_VERSION}";`);
+  });
+
+  it("keeps consents from 2026-10-25 on (policy 2026-10-26 asks no one again), the same date on the web", async () => {
+    expect([null, undefined, "2026-10-11", "2026-10-24"].map((version) => isValidConsent(version))).toEqual([false, false, false, false]);
+    expect(["2026-10-25", TRANSCRIPT_POLICY_VERSION].map((version) => isValidConsent(version))).toEqual([true, true]);
+    const source = await readFile(new URL("../../../web/src/public-information.ts", import.meta.url), "utf8");
+    expect(source).toContain(`export const consentValidSince = "${CONSENT_VALID_SINCE}";`);
   });
 });

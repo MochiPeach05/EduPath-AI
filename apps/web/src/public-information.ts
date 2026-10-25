@@ -175,7 +175,7 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
     question: "Ai có thể xem bảng điểm và thông tin cá nhân của tôi?",
     answer: [
       "Bạn xem được tệp bảng điểm, điểm, kết quả từng môn và kết quả đánh giá năng lực khi đăng nhập bằng tài khoản của mình. Sinh viên khác không xem được hồ sơ hay bảng điểm của bạn.",
-      "Trong nhà trường, chỉ cán bộ, giảng viên có nhiệm vụ liên quan mới được xem những thông tin hồ sơ cần thiết để hỗ trợ học tập và quản lý đào tạo. Từ bản chính sách ngày 26/10/2026, quản trị viên của Khoa Công nghệ Thông tin xem được thêm điểm và kết quả từng môn trong bảng điểm của bạn (không gồm tệp PDF) để hỗ trợ học tập, sau khi bạn đồng ý bản chính sách này. Cán bộ không xem kết quả đánh giá năng lực của bạn."
+      "Trong nhà trường, chỉ cán bộ, giảng viên có nhiệm vụ liên quan mới được xem những thông tin hồ sơ cần thiết để hỗ trợ học tập và quản lý đào tạo. Từ ngày 26/10/2026, quản trị viên của Khoa Công nghệ Thông tin xem được thêm điểm và kết quả từng môn trong bảng điểm bạn đã tải lên (không gồm tệp PDF) để hỗ trợ học tập. Cán bộ không xem kết quả đánh giá năng lực của bạn."
     ],
     note: "EduPath AI không bán dữ liệu, không dùng thông tin của bạn để quảng cáo và không cung cấp cho bên ngoài nhà trường vì mục đích thương mại. Chi tiết xem mục Chia sẻ thông tin trong Chính sách bảo mật."
   },
@@ -218,6 +218,10 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
 // TRANSCRIPT_POLICY_VERSION in apps/api/src/student/consent.ts.
 export const policyVersion = "2026-10-26";
 export const policyUpdatedAt = policyVersion.split("-").reverse().join("/");
+// Consents given under this version or later still count, so policy 2026-10-26 asks no one again (user, 2026-10-26).
+// Must equal CONSENT_VALID_SINCE in apps/api/src/student/consent.ts.
+export const consentValidSince = "2026-10-25";
+export const isValidConsent = (version: string | null | undefined) => typeof version === "string" && version >= consentValidSince;
 
 // Privacy category that explains competency assessment and the AI commentary. The consent dialog on
 // the competency page links here; PublicInformationPage renders privacy categories as #bao-mat-<id>.
@@ -251,7 +255,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
             title: "Những điểm chính",
             paragraphs: [[
               "Bạn đăng nhập bằng tài khoản Microsoft của trường. EduPath AI không biết và không lưu mật khẩu của bạn.",
-              "Bạn xem được bảng điểm, điểm từng môn và kết quả đánh giá năng lực của mình. Quản trị viên của Khoa Công nghệ Thông tin xem được điểm và kết quả từng môn trong bảng điểm (không gồm tệp PDF) khi bạn đã đồng ý bản chính sách ngày 26/10/2026; kết quả đánh giá năng lực chỉ bạn xem được.",
+              "Bạn xem được bảng điểm, điểm từng môn và kết quả đánh giá năng lực của mình. Quản trị viên của Khoa Công nghệ Thông tin xem được điểm và kết quả từng môn trong bảng điểm (không gồm tệp PDF); kết quả đánh giá năng lực chỉ bạn xem được.",
               "Chuyên ngành, mục tiêu nghề nghiệp, khảo sát định hướng (gồm thế mạnh, mô tả công nghệ bạn thành thạo và sở trường), thành tích và bảng điểm do bạn tự cung cấp, và bạn có thể sửa hoặc xóa bất cứ lúc nào.",
               "Đánh giá năng lực chỉ chạy khi bạn yêu cầu và đồng ý. Điểm và mức năng lực do hệ thống tính; AI chỉ viết nhận xét để bạn tham khảo.",
               "Lộ trình học tập cho học kỳ tới do AI soạn dùng kết quả đánh giá năng lực, câu trả lời khảo sát định hướng (kể cả thế mạnh, phần mô tả công nghệ bạn thành thạo và sở trường) và thành tích bạn liệt kê, khi bạn yêu cầu và đã đồng ý.",
@@ -373,7 +377,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
           },
           {
             title: "Ai xem được bảng điểm của bạn?",
-            paragraphs: ["Bạn xem được tệp bảng điểm, điểm và kết quả từng môn khi đăng nhập bằng tài khoản của mình. Sinh viên khác không xem được bảng điểm của bạn.", "Quản trị viên của Khoa Công nghệ Thông tin (cán bộ được cấp quyền quản trị EduPath AI) xem được điểm và kết quả từng môn trong bảng điểm của bạn để hỗ trợ học tập và tư vấn, sau khi bạn đồng ý bản chính sách ngày 26/10/2026. Quản trị viên không tải được tệp PDF và không sửa được bảng điểm của bạn. Nếu bạn chưa đồng ý bản này, quản trị viên không xem được bảng điểm của bạn."]
+            paragraphs: ["Bạn xem được tệp bảng điểm, điểm và kết quả từng môn khi đăng nhập bằng tài khoản của mình. Sinh viên khác không xem được bảng điểm của bạn.", "Quản trị viên của Khoa Công nghệ Thông tin (cán bộ được cấp quyền quản trị EduPath AI) xem được điểm và kết quả từng môn trong bảng điểm của bạn để hỗ trợ học tập và tư vấn. Quản trị viên không tải được tệp PDF và không sửa được bảng điểm của bạn."]
           },
           {
             title: "Lưu, thay thế và xóa bảng điểm",
@@ -498,7 +502,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
             title: "Ai có thể xem thông tin của bạn?",
             paragraphs: [
               "Bạn xem được toàn bộ thông tin của mình. Sinh viên khác không xem được hồ sơ, bảng điểm, kết quả đánh giá năng lực, khảo sát định hướng hay lộ trình của bạn.",
-              "Trong nhà trường, chỉ cán bộ, giảng viên có nhiệm vụ liên quan mới được xem những thông tin hồ sơ cần thiết để hỗ trợ học tập và quản lý đào tạo. Quản trị viên của Khoa Công nghệ Thông tin còn xem được điểm và kết quả từng môn trong bảng điểm của bạn (không gồm tệp PDF) khi bạn đã đồng ý bản chính sách ngày 26/10/2026. Cán bộ không xem kết quả đánh giá năng lực, câu trả lời khảo sát, thành tích và lộ trình của bạn, và không được chia sẻ thông tin của bạn ra ngoài."
+              "Trong nhà trường, chỉ cán bộ, giảng viên có nhiệm vụ liên quan mới được xem những thông tin hồ sơ cần thiết để hỗ trợ học tập và quản lý đào tạo. Quản trị viên của Khoa Công nghệ Thông tin còn xem được điểm và kết quả từng môn trong bảng điểm của bạn (không gồm tệp PDF). Cán bộ không xem kết quả đánh giá năng lực, câu trả lời khảo sát, thành tích và lộ trình của bạn, và không được chia sẻ thông tin của bạn ra ngoài."
             ]
           },
           {
@@ -635,7 +639,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
               "Bản cập nhật ngày 11/10/2026 bổ sung tính năng Đánh giá năng lực, nhận xét học tập bằng AI và thông tin chuyên ngành trong hồ sơ.",
               "Bản cập nhật ngày 24/10/2026 bổ sung trang Lộ trình học tập (kế hoạch học kỳ và lộ trình 3 tháng do AI soạn), khảo sát định hướng và thành tích trong hồ sơ, và việc mô hình AI dùng các câu trả lời này để tư vấn lộ trình.",
               "Bản cập nhật ngày 25/10/2026 đưa Thế mạnh của bạn (công nghệ bạn thành thạo, kèm phần tự mô tả) và Sở trường vào Khảo sát định hướng (thay mục Sở thích trong Thông tin cá nhân) và cho Lộ trình AI dùng các phần này; bạn được đề nghị đồng ý lại khi lưu khảo sát.",
-              "Bản cập nhật ngày 26/10/2026 cho phép quản trị viên của Khoa Công nghệ Thông tin xem điểm và kết quả từng môn trong bảng điểm (không gồm tệp PDF) của sinh viên đã đồng ý bản này, để hỗ trợ học tập và tư vấn, và ghi Lộ trình AI theo học kỳ tới của lịch trường thay cho 3 tháng; bạn được đề nghị đồng ý lại ở mục Bảng điểm của tôi và khi lưu khảo sát. Chưa đồng ý thì quản trị viên không xem được bảng điểm của bạn."
+              "Bản cập nhật ngày 26/10/2026 cho phép quản trị viên của Khoa Công nghệ Thông tin xem điểm và kết quả từng môn trong bảng điểm (không gồm tệp PDF) của sinh viên, kể cả bảng điểm đã tải lên trước ngày này, để hỗ trợ học tập và tư vấn, và ghi Lộ trình AI theo học kỳ tới của lịch trường thay cho 3 tháng. Sự đồng ý bạn đã đưa ra theo bản ngày 25/10/2026 vẫn còn hiệu lực."
             ]
           }
         ]

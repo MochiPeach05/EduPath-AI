@@ -20,18 +20,16 @@ The table has RLS enabled and no public/Data API grants. Access goes through the
 | POST | `/api/student/transcript` | Import or replace a PDF |
 | GET | `/api/student/transcript/file` | Download own original PDF |
 | DELETE | `/api/student/transcript` | Delete own PDF and parsed data |
-| POST | `/api/student/transcript/consent` | Agree to the current privacy policy for the stored transcript (`X-Consent-Policy-Version`) |
-| GET | `/api/admin/students/:id/transcript` | Admin portal: a student's parsed transcript (no PDF), only under consent ≥ 2026-10-26 |
+| GET | `/api/admin/students/:id/transcript` | Admin portal: a student's parsed transcript (no PDF) |
 
 Upload uses an `application/pdf` body, `X-File-Name` (URI-encoded), `X-Confirm-Own-Transcript: true` and, for replacement, the current `X-Transcript-Version`. Delete uses JSON `{ "version": "<current UUID>", "confirmed": true }`. Stale versions return 409. Parsing and validation finish before an atomic database replacement; invalid imports preserve existing data.
 
 ## Admin view (policy 2026-10-26)
 
-User, 2026-10-25: "ở trong phần xem chi tiết sinh viên của quản trị viên có thể xem thêm bảng điểm của sinh viên định dạng giống như của bên sinh viên". The approved policy said only the student sees the scores, so the user chose a new policy version (2026-10-26) that lets the Khoa's admins see the scores and results (never the PDF) of students who agreed to it:
+User, 2026-10-25: "ở trong phần xem chi tiết sinh viên của quản trị viên có thể xem thêm bảng điểm của sinh viên định dạng giống như của bên sinh viên". The policy then said only the student sees the scores, so policy 2026-10-26 lets the Khoa's admins see the scores and results (never the PDF). User, 2026-10-26: "Những bảng điểm trước đó auto duyệt hết đi bảng điểm sau này mới cần phải đồng ý, không để lại ghi chú gì hết": every stored transcript is shown, those imported earlier included, and no one is asked again; a new import agrees to the current policy as before.
 
-- `consent.ts`: `TRANSCRIPT_POLICY_VERSION = "2026-10-26"`, `STAFF_TRANSCRIPT_SINCE`, `allowsStaffTranscript(version)`.
-- `GET /api/student/transcript` returns `consentVersion` (the active `transcript_processing` consent). Under an older version, "Bảng điểm của tôi" shows "Chính sách bảo mật cập nhật ngày …" with **Tôi đồng ý** (`POST /api/student/transcript/consent`); a new import also records consent to the current version.
-- `GET /api/admin/students/:id/transcript` (admin portal roles, `adminTranscriptView`): `{ transcript: { updatedAt, data }, reason: null }`, or `{ transcript: null, reason: "no_transcript" | "consent_required" }`. Without the consent the scores are not even read from the database.
+- `GET /api/admin/students/:id/transcript` (admin portal roles): `{ transcript: { updatedAt, data } }`, or `{ transcript: null }` when none is stored.
+- `consent.ts` `CONSENT_VALID_SINCE = "2026-10-25"` (= web `consentValidSince`; `isValidConsent`): consents given under 2026-10-25 still count for the survey, the AI roadmap, career guidance and a new competency assessment; new consents are recorded under 2026-10-26.
 - Web: the tables of the student page are `TranscriptTables.tsx` (term and search filters, eight columns, printed summaries, notes), shared by `StudentTranscript.tsx` and the admin student details (`StudentProfiles.tsx`, section **Bảng điểm**).
 
 ## Extraction and display

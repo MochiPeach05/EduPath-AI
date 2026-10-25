@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { AuthenticatedUser } from "../auth/types.js";
 import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
-import { activeConsentVersion, recordConsent, TRANSCRIPT_POLICY_VERSION, withdrawConsent } from "../student/consent.js";
+import { activeConsentVersion, isValidConsent, recordConsent, TRANSCRIPT_POLICY_VERSION, withdrawConsent } from "../student/consent.js";
 import { calculateAssessment } from "./calculate.js";
 import { AssessmentError, loadAssessmentInputs } from "./inputs.js";
 import {
@@ -81,11 +81,13 @@ export function createCompetencyAssessmentRouter(
   });
 
   router.post("/", async (req, res) => {
+    // Consent given with this request (the dialog sends X-Consent-Policy-Version), or an active one that still counts
+    // (isValidConsent: policy 2026-10-26 asks no one again).
     const consentVersion = req.get("x-consent-policy-version");
-    if (!consentVersion) { res.status(400).json({ error: "consent_required" }); return; }
-    if (consentVersion !== TRANSCRIPT_POLICY_VERSION) { res.status(409).json({ error: "policy_outdated" }); return; }
+    if (consentVersion && consentVersion !== TRANSCRIPT_POLICY_VERSION) { res.status(409).json({ error: "policy_outdated" }); return; }
     if (!z.object({}).strict().safeParse(req.body ?? {}).success) { res.status(400).json({ error: "invalid_input" }); return; }
     const user = req.session.user!;
+    if (!consentVersion && !isValidConsent(await activeConsentVersion(pool!, user.userId, "competency_assessment"))) { res.status(400).json({ error: "consent_required" }); return; }
     // Cheap pre-check so a repeated click does not compute a snapshot; the write transaction re-checks.
     if (await withinCooldown(pool!, user.userId)) { res.status(429).json({ error: "assessment_too_frequent" }); return; }
     const inputs = await loadInputs(pool!, user.userId, options.promptVersion ? { promptVersion: options.promptVersion } : {});
@@ -95,7 +97,9 @@ export function createCompetencyAssessmentRouter(
       const transcript = await client.query<{ version: string }>("SELECT version FROM student_transcripts WHERE user_id=$1", [user.userId]);
       if (transcript.rows[0]?.version !== inputs.transcript.version) throw new AssessmentError("transcript_changed", 409);
       if (await withinCooldown(client, user.userId)) throw new AssessmentError("assessment_too_frequent", 429);
-      await recordConsent(client, user.userId, "competency_assessment");
+      // A consent withdrawn since the check above stops here.
+      if (consentVersion) await recordConsent(client, user.userId, "competency_assessment");
+      else if (!isValidConsent(await activeConsentVersion(client, user.userId, "competency_assessment"))) throw new AssessmentError("consent_required", 400);
       const id = await insertAssessment(client, { userId: user.userId, transcriptVersion: inputs.transcript.version, result });
       if (aiEnabled) await aiQueue!.enqueue(client, { assessmentId: id, userId: user.userId, result });
       await pruneAssessments(client, user.userId);

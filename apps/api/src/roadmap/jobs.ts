@@ -14,7 +14,7 @@ import {
 } from "../competency-assessment/ai/worker-protocol.js";
 import type { AssessmentResult } from "../competency-assessment/types.js";
 import type { DatabasePool } from "../db/pool.js";
-import { activeConsentVersion, TRANSCRIPT_POLICY_VERSION } from "../student/consent.js";
+import { activeConsentVersion, isValidConsent } from "../student/consent.js";
 import { readSurvey, surveyFacts } from "../student/survey.js";
 import { buildRoadmapFacts, type RoadmapFacts } from "./facts.js";
 import { buildRoadmapInput } from "./prompt.js";
@@ -149,7 +149,7 @@ export async function createRoadmap(client: PoolClient, userId: string, options:
   if (!assessment) throw new RoadmapError("assessment_required", 409);
   // The answers go to the AI only under consent to the current policy (2026-10-25 added the interests).
   const survey = await readSurvey(client, userId);
-  if (!survey?.complete || await activeConsentVersion(client, userId, "profile_survey") !== TRANSCRIPT_POLICY_VERSION) {
+  if (!survey?.complete || !isValidConsent(await activeConsentVersion(client, userId, "profile_survey"))) {
     throw new RoadmapError("survey_required", 409);
   }
   const rows = await readRoadmapRows(client, userId);

@@ -9,7 +9,7 @@ import { WORKER_ONLINE_SECONDS } from "../competency-assessment/ai/queue.js";
 import { STUDY_ROADMAP_KIND } from "../competency-assessment/ai/worker-protocol.js";
 import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
-import { activeConsentVersion, TRANSCRIPT_POLICY_VERSION } from "../student/consent.js";
+import { activeConsentVersion, isValidConsent } from "../student/consent.js";
 import { readSurvey } from "../student/survey.js";
 import { createRoadmap, createRoadmapExpiry, newestAssessmentInfo, readNewestRoadmap, RoadmapError, type RoadmapStatus } from "./jobs.js";
 import { presentRoadmap } from "./present.js";
@@ -99,7 +99,7 @@ export function createRoadmapRouter(pool: DatabasePool | undefined, webOrigin: s
       assessment: assessment && { id: assessment.id, createdAt: iso(assessment.createdAt), hasCareer: assessment.hasCareer === true },
       stale: Boolean(row && assessment && row.assessmentId !== assessment.id),
       // A new roadmap needs the answered profile survey, agreed to under the current policy.
-      surveyDone: survey?.complete === true && surveyConsent === TRANSCRIPT_POLICY_VERSION,
+      surveyDone: survey?.complete === true && isValidConsent(surveyConsent),
       aiEnabled: enabled,
       worker: await workerStatus(),
       upcoming: upcomingTerm(),

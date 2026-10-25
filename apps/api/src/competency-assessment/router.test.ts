@@ -139,6 +139,13 @@ describe("POST /", () => {
     expect(missing.connect).not.toHaveBeenCalled();
   });
 
+  it("runs without asking again while the active consent still counts (2026-10-25 or later)", async () => {
+    const kept = setup({ state: { consent: "2026-10-25" } });
+    await create(kept.app, "").expect(201);
+    expect(kept.sql().some((sql) => sql.includes("INSERT INTO data_consents"))).toBe(false);
+    await create(setup({ state: { consent: "2026-10-24" } }).app, "").expect(400, { error: "consent_required" });
+  });
+
   it("rejects unexpected body fields", async () => {
     await create(setup().app).send({ userId: "someone" }).expect(400, { error: "invalid_input" });
   });

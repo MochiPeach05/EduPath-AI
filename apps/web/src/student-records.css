@@ -649,8 +649,3 @@
 
 .sr-file-actions .sr-danger { color: #b42318; border: 1px solid #efc3bf; background: #fff5f4; border-radius: 6px; padding: 10px 14px; }
 .sr-file-actions .sr-danger:hover:not(:disabled) { background: #ffe5e2; }
-
-/* "Tôi đồng ý" under a transcript agreed to under an older policy (2026-10-26: the Khoa's admins may then see its scores). */
-.sr-consent-update { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; justify-content: space-between; padding: 16px 20px; margin-block: 16px; background: #eef4fb; color: #1d3b5e; border: 1px solid #c9dbef; border-radius: 10px; }
-.sr-consent-update p { flex: 1 1 420px; margin: 0; line-height: 1.6; }
-.sr-consent-update a { color: inherit; font-weight: 600; }

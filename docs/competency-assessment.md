@@ -116,8 +116,8 @@ API sinh viên `/api/student/competency-assessments` (cần đăng nhập, `Cach
 
 | Lệnh | Kết quả |
 |---|---|
-| `POST /` + header `X-Consent-Policy-Version` | 201 `{ assessment }`; lỗi `consent_required` (400), `policy_outdated`, `transcript_required`, `cohort_unknown`, `career_required`, `specialty_required`, `curriculum_unavailable`, `curriculum_ambiguous`, `competency_weights_unavailable`, `transcript_changed` (409), `assessment_too_frequent` (429, 60 giây) |
-| `GET /latest` | `{ assessment, aiEnabled, workerOnline, consentVersion }` — `consentVersion` là phiên bản chính sách của đồng ý `competency_assessment` đang hiệu lực của chính sinh viên (null nếu chưa có / đã rút). Trang chỉ bỏ qua hộp thoại đồng ý khi giá trị này bằng phiên bản chính sách hiện tại (không lưu đồng ý theo trình duyệt). |
+| `POST /` + header `X-Consent-Policy-Version` (khi sinh viên vừa đồng ý trong hộp thoại; bỏ trống nếu đồng ý đang hiệu lực còn được tính, `isValidConsent`) | 201 `{ assessment }`; lỗi `consent_required` (400), `policy_outdated`, `transcript_required`, `cohort_unknown`, `career_required`, `specialty_required`, `curriculum_unavailable`, `curriculum_ambiguous`, `competency_weights_unavailable`, `transcript_changed` (409), `assessment_too_frequent` (429, 60 giây) |
+| `GET /latest` | `{ assessment, aiEnabled, workerOnline, consentVersion }` — `consentVersion` là phiên bản chính sách của đồng ý `competency_assessment` đang hiệu lực của chính sinh viên (null nếu chưa có / đã rút). Trang chỉ bỏ qua hộp thoại đồng ý khi giá trị này còn được tính (từ 2026-10-25, `consentValidSince`; không lưu đồng ý theo trình duyệt). |
 | `GET /latest/status` | `{ id, aiStatus, aiErrorCode, workerOnline }` |
 | `POST /:id/ai` | 202 `{ aiStatus }`; `ai_disabled`, `ai_not_regenerable` (409), `queue_full` (429), `assessment_not_found` (404) |
 | `DELETE /:id/ai` | `{ cancelled }` |

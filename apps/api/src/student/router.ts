@@ -7,7 +7,7 @@ import type { AuthenticatedUser } from "../auth/types.js";
 import { requireAuthentication } from "../middleware/authorization.js";
 import { parseTranscript, TranscriptError, withoutSettledConflicts, type TranscriptData } from "./transcript-parser.js";
 import { enqueueTranscript, expireJobs, jobColumns, runAfterTranscriptImport, type TranscriptImportOptions } from "./transcript-jobs.js";
-import { activeConsentVersion, recordConsent, recordTranscriptConsent, TRANSCRIPT_POLICY_VERSION, withdrawConsent, withdrawTranscriptConsent } from "./consent.js";
+import { activeConsentVersion, isValidConsent, recordConsent, recordTranscriptConsent, TRANSCRIPT_POLICY_VERSION, withdrawConsent, withdrawTranscriptConsent } from "./consent.js";
 import { ACHIEVEMENTS_MAX, deleteSurvey, parseSurveyInput, readPreviousInterests, readSurvey, saveSurvey, STRENGTHS_MAX, SURVEY_QUESTIONS } from "./survey.js";
 import { bothOrNeither, INTEREST_HOBBIES, INTEREST_MAX, INTEREST_TECH, interestFields } from "./interests.js";
 import { deleteCompetencyData } from "../competency-assessment/repository.js";
@@ -95,7 +95,8 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
       consentVersion: await activeConsentVersion(pool!, userId, "profile_survey"),
     });
   });
-  // Saving needs consent to the current policy: given with this request (X-Consent-Policy-Version) or already active.
+  // Saving needs consent: to the current policy with this request (X-Consent-Policy-Version), or an active one that still
+  // counts (isValidConsent).
   router.put("/survey", async (req, res) => {
     const input = parseSurveyInput(req.body);
     if ("error" in input) { res.status(400).json({ error: input.error }); return; }
@@ -107,10 +108,11 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
       await client.query("BEGIN");
       await lockStudent(client, req.session.user!);
       if (consentVersion) await recordConsent(client, userId, "profile_survey");
-      else if (await activeConsentVersion(client, userId, "profile_survey") !== TRANSCRIPT_POLICY_VERSION) throw new TranscriptError("consent_required", 400);
+      const agreed = consentVersion ?? await activeConsentVersion(client, userId, "profile_survey");
+      if (!isValidConsent(agreed)) throw new TranscriptError("consent_required", 400);
       const survey = await saveSurvey(client, userId, input.value);
       await client.query("COMMIT");
-      res.json({ survey, consentVersion: TRANSCRIPT_POLICY_VERSION });
+      res.json({ survey, consentVersion: agreed });
     } catch (error) { await client.query("ROLLBACK"); throw error; }
     finally { client.release(); }
   });
@@ -137,25 +139,7 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
     const worker = await pool!.query<{ online: boolean }>("SELECT seen_at>now()-interval '60 seconds' AS online FROM transcript_worker_status WHERE id=1");
     const row = result.rows[0];
     // Marks of a stored transcript that are not errors (isSettledResultConflict) are left out, as a new upload does.
-    // The policy version the student agreed to for the transcript: an older one asks again (2026-10-26: admins may see scores).
-    const consentVersion = row ? await activeConsentVersion(pool!, req.session.user!.userId, "transcript_processing") : null;
-    res.json({ transcript: row ? { ...row, data: withoutSettledConflicts(row.data) } : null, job: jobs.rows[0] ?? null, workerOnline: worker.rows[0]?.online ?? false, ocrEnabled, consentVersion });
-  });
-  // "Đồng ý" under the stored transcript: agreeing to the current policy without importing again (since 2026-10-26 the
-  // Khoa's admins may see the scores of a transcript agreed to under it, consent.ts allowsStaffTranscript).
-  router.post("/transcript/consent", async (req, res) => {
-    if (req.get("x-consent-policy-version") !== TRANSCRIPT_POLICY_VERSION) { res.status(409).json({ error: "policy_outdated" }); return; }
-    const client = await pool!.connect();
-    try {
-      await client.query("BEGIN");
-      await lockStudent(client, req.session.user!);
-      const stored = await client.query("SELECT 1 FROM student_transcripts WHERE user_id=$1", [req.session.user!.userId]);
-      if (!stored.rowCount) throw new TranscriptError("transcript_not_found", 404);
-      await recordTranscriptConsent(client, req.session.user!.userId);
-      await client.query("COMMIT");
-      res.json({ consentVersion: TRANSCRIPT_POLICY_VERSION });
-    } catch (error) { await client.query("ROLLBACK"); throw error; }
-    finally { client.release(); }
+    res.json({ transcript: row ? { ...row, data: withoutSettledConflicts(row.data) } : null, job: jobs.rows[0] ?? null, workerOnline: worker.rows[0]?.online ?? false, ocrEnabled });
   });
   router.delete("/transcript/job", async (req, res) => {
     const input = z.object({ id: z.uuid() }).safeParse(req.body);

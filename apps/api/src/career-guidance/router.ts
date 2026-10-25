@@ -12,7 +12,7 @@ import { AssessmentError, readAssessmentInputs } from "../competency-assessment/
 import type { AssessmentInputs, CareerInput, CareerRequirementResult, CareerResult, FitCode, GapStatus } from "../competency-assessment/types.js";
 import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
-import { activeConsentVersion, TRANSCRIPT_POLICY_VERSION } from "../student/consent.js";
+import { activeConsentVersion, isValidConsent } from "../student/consent.js";
 import { readSurvey, type StudentSurvey } from "../student/survey.js";
 import { interestMatch, type InterestMatch } from "./interests.js";
 
@@ -99,7 +99,7 @@ export function guidanceCareers(catalog: CatalogRow[], inputs: AssessmentInputs 
  * of the AI roadmap (roadmap/router.ts surveyDone); older or partial answers are left out and the page asks for the survey.
  */
 export function surveyAnswers(survey: StudentSurvey | null, consentVersion: string | null): { done: boolean; field: string | null; tech: string[] } {
-  if (survey?.complete !== true || consentVersion !== TRANSCRIPT_POLICY_VERSION) return { done: false, field: null, tech: [] };
+  if (survey?.complete !== true || !isValidConsent(consentVersion)) return { done: false, field: null, tech: [] };
   const field = survey.answers.field;
   return { done: true, field: field && field !== "unsure" ? field : null, tech: survey.interestTech };
 }

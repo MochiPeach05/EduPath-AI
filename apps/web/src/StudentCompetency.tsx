@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode, type SyntheticEvent } from "react";
 import { Icon } from "./student-icons";
 import { useLiveData } from "./use-live-data";
-import { competencyPolicyHref, policyVersion } from "./public-information";
+import { competencyPolicyHref, isValidConsent, policyVersion } from "./public-information";
 import type { StudentProfile } from "./StudentOverview";
 import { specialtyLabel, type AiStatus, type AssessmentResult, type AssessmentStatusResponse, type CareerRequirementResult, type CourseSuggestion, type LatestAssessmentResponse, type LevelCode, type SkillPlan, type SkillResult, type StoredAssessment, type SupportCourse } from "./competency-assessment-types";
 import {
@@ -918,13 +918,13 @@ export default function StudentCompetency({ profile, view = "competency", notice
     return () => { pending.abort(); clearTimeout(timer); };
   }, [assessmentId, aiStatus]);
 
-  const run = async () => {
+  const run = async (consented: boolean) => {
     setConsentOpen(false); setBusy("run"); setError(""); setAnnouncement("Đang tính kết quả đánh giá năng lực…");
     try {
-      const response = await send<{ assessment: StoredAssessment }>(`${COMPETENCY_API}`, { method: "POST", headers: { "Content-Type": "application/json", "X-Consent-Policy-Version": policyVersion }, body: "{}" });
+      const response = await send<{ assessment: StoredAssessment }>(`${COMPETENCY_API}`, { method: "POST", headers: { "Content-Type": "application/json", ...(consented ? { "X-Consent-Policy-Version": policyVersion } : {}) }, body: "{}" });
       setBlocked(null);
       previous.current = { id: response.assessment.id, status: response.assessment.ai.status };
-      setCurrent((value) => ({ assessment: response.assessment, aiEnabled: value?.aiEnabled ?? data?.aiEnabled ?? false, workerOnline: value?.workerOnline ?? data?.workerOnline ?? false, consentVersion: policyVersion }));
+      setCurrent((value) => ({ assessment: response.assessment, aiEnabled: value?.aiEnabled ?? data?.aiEnabled ?? false, workerOnline: value?.workerOnline ?? data?.workerOnline ?? false, consentVersion: consented ? policyVersion : value?.consentVersion ?? data?.consentVersion ?? null }));
       setAnnouncement("Đã cập nhật kết quả đánh giá năng lực.");
     } catch (e) {
       const failure = e as ApiError;
@@ -942,12 +942,13 @@ export default function StudentCompetency({ profile, view = "competency", notice
   };
   const hasTranscript = transcript.loading ? null : transcript.error ? null : transcript.data;
   const missing = missingRequirements(hasTranscript, profile);
-  // Consent is per student and kept by the server (GET /latest consentVersion), never per browser.
+  // Consent is per student and kept by the server (GET /latest consentVersion), never per browser; one that still counts
+  // (from 2026-10-25) is not asked again.
   const start = () => {
     if (missing.length) { setAnnouncement(""); setError(missingRequirementsMessage(missing)); return; }
-    if (data?.consentVersion === policyVersion) void run(); else setConsentOpen(true);
+    if (isValidConsent(data?.consentVersion)) void run(false); else setConsentOpen(true);
   };
-  const confirmConsent = () => { void run(); };
+  const confirmConsent = () => { void run(true); };
   const regenerate = async () => {
     if (!assessment) return;
     setBusy("ai"); setError("");
