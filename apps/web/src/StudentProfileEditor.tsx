@@ -10,6 +10,8 @@ import "./student-records.css";
 // and saved at once, so the form opened by "Chỉnh sửa thông tin" holds only what Hủy can undo: the specialty and
 // clearing the career.
 type EditableStudentProfile = {
+  /** The programme of the MSSV (052): the specialties offered are those of this major. */
+  majorCode?: string | null;
   careerPositionId?: string | null;
   careerPosition?: CareerSelection | null;
   /** Absent until the API returns it; the field is hidden then so saving keeps working. */
