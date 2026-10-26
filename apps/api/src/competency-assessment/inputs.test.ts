@@ -125,6 +125,23 @@ describe("readAssessmentInputs", () => {
     const byIdentity = await readAssessmentInputs(fakeDb({ plans: [{ linked: false, major: "Khác" }, { linked: false, major: "Công nghệ thông tin" }] }), userId);
     expect(byIdentity.plan.revision?.id).toBe("plan-1");
   });
+
+  // 2026-10-27: a cohort may have a CTĐT and a KHĐT per major; the student's are those of the major of the MSSV (052).
+  it("reads the CTĐT, KHĐT and standard of the student's major", async () => {
+    const db = fakeDb({ profile: { cohort_code: "K29", specialty: "CNDL", career_position_id: "p1", major_code: "7480104" } });
+    await readAssessmentInputs(db, userId).catch(() => undefined);
+    const call = (table: string) => db.query.mock.calls.find(([sql]) => String(sql).includes(`FROM ${table}`))!;
+    expect(String(call("curricula")[0])).toContain("split_part(c.identity_key, ':', 1)");
+    expect(call("curricula")[1]).toEqual(["K29", "he thong thong tin"]);
+    expect(call("training_plans")[1]).toEqual(["K29", curriculumId, "he thong thong tin"]);
+    // CNTT's standards are not those of HTTT: no standard until the Faculty adds one.
+    const inputs = await readAssessmentInputs(fakeDb({ profile: { cohort_code: "K29", specialty: "CNDL", career_position_id: "p1", major_code: "7480104" } }), userId);
+    expect(inputs.graduation.resolution).toBe("not_found");
+    // Without a major (no MSSV) any framework of the cohort, as before.
+    const unknown = fakeDb();
+    await readAssessmentInputs(unknown, userId);
+    expect(unknown.query.mock.calls.find(([sql]) => String(sql).includes("FROM curricula"))![1]).toEqual(["K29", null]);
+  });
 });
 
 describe("loadAssessmentInputs", () => {

@@ -112,7 +112,7 @@ function setup(options: SetupOptions = {}) {
         rows: options.active === false ? [] : [{ id: studentId }],
       };
     }
-    if (sql.includes("SELECT cohort_code FROM student_profiles")) {
+    if (sql.includes("SELECT cohort_code,major_code FROM student_profiles")) {
       return {
         rowCount: options.profileCohort ? 1 : 0,
         rows: options.profileCohort

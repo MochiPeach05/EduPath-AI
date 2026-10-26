@@ -56,7 +56,7 @@ describe("readStudentGraduation", () => {
     const db = fakeDb();
     const loaded = await readStudentGraduation(db, userId);
     const standard = syntheticStandards()[0]!;
-    expect(loaded.profile).toEqual({ cohortCode: "K29", specialty: "CNPM" });
+    expect(loaded.profile).toEqual({ cohortCode: "K29", specialty: "CNPM", majorCode: null });
     expect(loaded.resolution).toBe("specialty");
     expect(loaded.standard).toEqual({ ...standard, data: { ...standard.data, gpaScale: 4 } });
     expect(loaded.transcript).toEqual({ version: transcriptVersion, updatedAt: "2026-10-01T08:00:00.000Z" });

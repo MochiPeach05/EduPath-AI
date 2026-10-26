@@ -6,6 +6,7 @@ import { choiceRule } from "../competency-assessment/plan-progress.js";
 import { classifyCurriculumSpecialty, fold, specialtyLabel } from "../competency-assessment/specialty.js";
 import type { CourseState, CurriculumCourseInput, GraduationStandardInput, SpecialtyCode, TriState } from "../competency-assessment/types.js";
 import type { CurriculumData } from "../curricula/model.js";
+import { majorCondition, majorIdentity } from "../curricula/majors.js";
 import { normalizeCohortCode, profileSpecialty, resolveStudentStandard } from "../graduation/resolve.js";
 import type { TranscriptData } from "../student/transcript-parser.js";
 import { calendarTermCode, creditLimits, termIndex } from "./model.js";
@@ -130,15 +131,15 @@ export type StudyPlanFacts = {
 
 const EMPTY_TRANSCRIPT: TranscriptData = { schemaVersion: 1, parserVersion: "vlu-native-1", pageCount: 0, courseCount: 0, sections: [], warnings: [] };
 
-/** The cohort's single active CTĐT (current revision), or null when there is none or several. */
-async function readCurriculum(db: Db, cohortCode: string): Promise<CurriculumData | null> {
+/** The single active CTĐT of the cohort and major (current revision), or null when there is none or several. */
+async function readCurriculum(db: Db, cohortCode: string, major: string | null): Promise<CurriculumData | null> {
   const rows = (await db.query<{ data: CurriculumData }>(
     `SELECT r.data FROM curricula c JOIN curriculum_revisions r ON r.id=c.current_revision
-     WHERE c.is_active AND c.cohort_code=$1 ORDER BY c.id`, [cohortCode])).rows;
+     WHERE c.is_active AND c.cohort_code=$1 AND ${majorCondition("c", 2)} ORDER BY c.id`, [cohortCode, major])).rows;
   return rows.length === 1 ? rows[0]!.data : null;
 }
 
-type PlanOffering = { cohort_code: string; code: string; name: string; term_code: string; section_label?: string | null };
+type PlanOffering = { cohort_code: string; major_key?: string; code: string; name: string; term_code: string; section_label?: string | null };
 
 /**
  * Items of every active training plan (kế hoạch đào tạo): which course each cohort's plan opens in which term, with the
@@ -146,7 +147,7 @@ type PlanOffering = { cohort_code: string; code: string; name: string; term_code
  */
 async function readPlanOfferings(db: Db) {
   return (await db.query<PlanOffering>(
-    `SELECT tp.cohort_code,i.code,i.name,i.term_code,
+    `SELECT tp.cohort_code,split_part(tp.identity_key, ':', 1) AS major_key,i.code,i.name,i.term_code,
        (SELECT s->>'label' FROM training_plan_revisions r,
           jsonb_array_elements(CASE WHEN jsonb_typeof(r.data->'sections')='array' THEN r.data->'sections' ELSE '[]'::jsonb END) s
         WHERE r.id=tp.current_revision AND s->>'id'=i.section_id LIMIT 1) AS section_label
@@ -198,13 +199,16 @@ const laterTerm = (a: string, b: string | null) => (b && termIndex(b) > termInde
 
 /** Reads everything the page needs for one student with plain SELECTs (the caller holds a snapshot). */
 export async function readStudyPlanFacts(db: Db, userId: string, now = new Date()): Promise<StudyPlanFacts> {
-  const profileRow = (await db.query<{ cohort_code: string | null; specialty: string | null }>(
-    "SELECT cohort_code,specialty FROM student_profiles WHERE user_id=$1", [userId])).rows[0];
+  const profileRow = (await db.query<{ cohort_code: string | null; specialty: string | null; major_code: string | null }>(
+    "SELECT cohort_code,specialty,major_code FROM student_profiles WHERE user_id=$1", [userId])).rows[0];
   const cohortCode = normalizeCohortCode(profileRow?.cohort_code);
   const specialty = profileSpecialty(profileRow?.specialty);
+  // The CTĐT, KHĐT and standard of the student's major (052; user, 2026-10-27).
+  const majorCode = profileRow?.major_code?.trim() || null, major = majorIdentity(majorCode);
+  const ownPlan = (row: PlanOffering) => normalizeCohortCode(row.cohort_code) === cohortCode && (!major || row.major_key === major);
   const transcript = (await db.query<{ data: TranscriptData }>("SELECT parsed_data AS data FROM student_transcripts WHERE user_id=$1", [userId])).rows[0]?.data ?? null;
-  const curriculum = cohortCode ? await readCurriculum(db, cohortCode) : null;
-  const { standard } = await resolveStudentStandard(db, { cohortCode, specialty });
+  const curriculum = cohortCode ? await readCurriculum(db, cohortCode, major) : null;
+  const { standard } = await resolveStudentStandard(db, { cohortCode, specialty, majorCode });
   const offerings = await readPlanOfferings(db);
   const cohortNumber = Number(/^K(\d{2})$/.exec(cohortCode ?? "")?.[1]);
   // The CTĐT's intake year, else the cohort's as the student identity reads it (K29 → 2023).
@@ -223,7 +227,7 @@ export async function readStudyPlanFacts(db: Db, userId: string, now = new Date(
   const termsOf = (rows: typeof offerings) => [...new Set(rows.map((row) => row.term_code))].sort((a, b) => termIndex(a) - termIndex(b));
   // A course matches a plan row by code, or by name when cohorts carry different codes for it.
   const planRows = (code: string, name: string) => offerings.filter((row) => courseKey(row.code) === code || fold(row.name) === fold(name));
-  const planTermOf = (code: string, name: string) => termsOf(planRows(code, name).filter((row) => normalizeCohortCode(row.cohort_code) === cohortCode))[0] ?? null;
+  const planTermOf = (code: string, name: string) => termsOf(planRows(code, name).filter(ownPlan))[0] ?? null;
 
   // The other code a course is counted through: an older code of the standard (K26 "DIT0091 / 71ITDS30103"), or a
   // same-name course of another cohort ("học trả nợ với khóa sau").
@@ -276,7 +280,7 @@ export async function readStudyPlanFacts(db: Db, userId: string, now = new Date(
     course.prerequisites = course.prerequisites.filter((code) => !otherSpecialty.has(code));
     course.prior = course.prior.filter((code) => !otherSpecialty.has(code));
   }
-  const choices = planChoices(offerings.filter((row) => normalizeCohortCode(row.cohort_code) === cohortCode), courses);
+  const choices = planChoices(offerings.filter(ownPlan), courses);
 
   let graduation: StudyPlanContext["graduation"] = null;
   // Without a standard the GPA is read on the 4-point scale, with no minimum.

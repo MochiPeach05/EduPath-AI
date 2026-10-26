@@ -6,6 +6,7 @@ import type { TranscriptData } from "../student/transcript-parser.js";
 import { courseKey, transcriptCourses } from "./course-state.js";
 import { physicalEducationGroupsFor } from "./plan-progress.js";
 import { SCOPE_MAX_LENGTH } from "./constants.js";
+import { majorCondition, majorIdentity } from "../curricula/majors.js";
 import type {
   AssessmentInputs, CareerInput, CurriculumCourseInput, CurriculumRelationInput,
   PlanResolution, PlanRevisionInput, WeightsInput,
@@ -26,8 +27,8 @@ const num = (value: unknown) => value === null || value === undefined ? null : N
  */
 /** careerOptional: no target career needed ("Định hướng nghề nghiệp" sets each catalog career itself); career is null then. */
 export async function readAssessmentInputs(db: Db, userId: string, options: { promptVersion?: string; careerOptional?: boolean } = {}): Promise<AssessmentInputs> {
-  const student = await db.query<{ cohort_code: string | null; specialty: string | null; career_position_id: string | null }>(
-    "SELECT cohort_code,specialty,career_position_id FROM student_profiles WHERE user_id=$1", [userId]);
+  const student = await db.query<{ cohort_code: string | null; specialty: string | null; career_position_id: string | null; major_code: string | null }>(
+    "SELECT cohort_code,specialty,career_position_id,major_code FROM student_profiles WHERE user_id=$1", [userId]);
   const transcript = await db.query<{ version: string; data: TranscriptData }>(
     "SELECT version,parsed_data AS data FROM student_transcripts WHERE user_id=$1", [userId]);
   if (!transcript.rows[0]) throw new AssessmentError("transcript_required", 409);
@@ -39,11 +40,12 @@ export async function readAssessmentInputs(db: Db, userId: string, options: { pr
   if (!profile?.career_position_id && !options.careerOptional) throw new AssessmentError("career_required", 409);
   if (!specialty) throw new AssessmentError("specialty_required", 409);
 
-  /* Curriculum: the single active one of the cohort, current revision. */
+  /* Curriculum: the single active one of the cohort and the student's major (052), current revision. */
+  const major = majorIdentity(profile?.major_code);
   const curricula = await db.query<{ id: string; identity_key: string; revision_id: string; version: number; name: string | null; admission_year: unknown }>(
     `SELECT c.id,c.identity_key,c.current_revision AS revision_id,r.version,r.data->>'name' AS name,r.data->'admissionYear' AS admission_year
      FROM curricula c JOIN curriculum_revisions r ON r.id=c.current_revision
-     WHERE c.is_active AND c.cohort_code=$1 ORDER BY c.id`, [cohortCode]);
+     WHERE c.is_active AND c.cohort_code=$1 AND ${majorCondition("c", 2)} ORDER BY c.id`, [cohortCode, major]);
   if (!curricula.rowCount) throw new AssessmentError("curriculum_unavailable", 409);
   if (curricula.rows.length > 1) throw new AssessmentError("curriculum_ambiguous", 409);
   const curriculumRow = curricula.rows[0]!;
@@ -96,14 +98,14 @@ export async function readAssessmentInputs(db: Db, userId: string, options: { pr
   };
 
   /* Graduation standard: active, same cohort, current revision; resolved by specialty (shared resolver, D3). */
-  const resolved = await resolveCohortStandard(db, cohortCode, specialty);
+  const resolved = await resolveCohortStandard(db, cohortCode, specialty, profile?.major_code ?? null);
 
   /* Training plan: active, same cohort; several -> the one linked to this curriculum. */
   const plans = await db.query<{ id: string; revision_id: string; version: number; data: PlanData; linked: boolean }>(
     `SELECT p.id,p.current_revision AS revision_id,r.version,r.data,
        COALESCE(r.curriculum_revision_id IN (SELECT id FROM curriculum_revisions WHERE curriculum_id=$2),false) AS linked
      FROM training_plans p JOIN training_plan_revisions r ON r.id=p.current_revision
-     WHERE p.is_active AND p.cohort_code=$1 ORDER BY p.id`, [cohortCode, curriculumRow.id]);
+     WHERE p.is_active AND p.cohort_code=$1 AND ${majorCondition("p", 3)} ORDER BY p.id`, [cohortCode, curriculumRow.id, major]);
   let planRows = plans.rows;
   if (planRows.length > 1) {
     const linked = planRows.filter((row) => row.linked);

@@ -34,10 +34,17 @@ export const majorKey = (name: string) =>
   name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").toLowerCase().replace(/\s+/g, " ").trim();
 
 /**
- * The identity part of the frameworks and plans of a student's major, or null when the major is not known (no MSSV, a
- * major the Faculty does not teach): then the cohort's only framework is used, as before majors.
+ * The identity part of the frameworks and plans of a student's major (user, 2026-10-27: "Chọn khung ok như vậy đi"), or
+ * null when the profile has no major (no MSSV): then the cohort's only framework is used, as before majors. A programme
+ * the Faculty does not teach matches no framework.
  */
 export function majorIdentity(code: string | null | undefined): string | null {
-  const major = MAJORS.find((item) => item.code === code?.trim());
-  return major ? majorKey(major.name) : null;
+  const value = code?.trim();
+  if (!value) return null;
+  const major = MAJORS.find((item) => item.code === value);
+  return major ? majorKey(major.name) : `ma nganh ${value}`;
 }
+
+/** SQL: the framework or plan `alias` is of the major given as parameter $n (majorIdentity); a null major takes any. */
+export const majorCondition = (alias: string, param: number) =>
+  `($${param}::text IS NULL OR split_part(${alias}.identity_key, ':', 1) = $${param})`;

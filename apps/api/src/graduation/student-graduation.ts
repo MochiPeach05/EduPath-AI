@@ -8,6 +8,7 @@ import type { TranscriptData } from "../student/transcript-parser.js";
 import { GRADUATION_ADVICE_PROMPT_VERSION } from "./advice/prompt.js";
 import { evaluateGraduation, type GraduationEvaluation } from "./evaluation.js";
 import { normalizeCohortCode, profileSpecialty, resolveStudentStandard, type StudentGraduationResolution } from "./resolve.js";
+import { majorCondition, majorIdentity } from "../curricula/majors.js";
 
 // The student graduation page's data (design §4), shared by the read-only graduation router and
 // the graduation advice router: one snapshot of profile, resolved standard, transcript and CTĐT,
@@ -20,6 +21,8 @@ export type StudentGraduationProfile = {
   cohortCode: string | null;
   /** student_profiles.specialty (student-declared); null = "Chưa xác định". */
   specialty: SpecialtyCode | null;
+  /** student_profiles.major_code (the programme of the MSSV, 052): the CTĐT and standard are of this major. */
+  majorCode: string | null;
 };
 
 export type StudentGraduationSpecialtySuggestion = { code: SpecialtyCode; label: string; count: number };
@@ -38,11 +41,11 @@ export type StudentGraduation = {
   specialtySuggestion: StudentGraduationSpecialtySuggestion | null;
 };
 
-/** Courses of the cohort's single active CTĐT (current revision); [] when there is none or several. */
-async function readCohortCurriculumCourses(db: Db, cohortCode: string): Promise<CurriculumCourseInput[]> {
+/** Courses of the single active CTĐT of the cohort and major (current revision); [] when there is none or several. */
+async function readCohortCurriculumCourses(db: Db, cohortCode: string, majorCode: string | null): Promise<CurriculumCourseInput[]> {
   const curricula = await db.query<{ revision_id: string }>(
     `SELECT c.current_revision AS revision_id FROM curricula c JOIN curriculum_revisions r ON r.id=c.current_revision
-     WHERE c.is_active AND c.cohort_code=$1 ORDER BY c.id`, [cohortCode]);
+     WHERE c.is_active AND c.cohort_code=$1 AND ${majorCondition("c", 2)} ORDER BY c.id`, [cohortCode, majorIdentity(majorCode)]);
   if (curricula.rows.length !== 1) return [];
   const courses = await db.query<{ code: string; name: string; credits: string | number; type: string; block: string; specialty: string; semester: number | null; study_year: number | null }>(
     `SELECT code,name,credits,course_type AS type,block,specialty,semester,study_year FROM curriculum_courses
@@ -70,10 +73,11 @@ function specialtySuggestionFor(courses: readonly CurriculumCourseInput[], trans
  * (loadStudentGraduation); no row locks are taken.
  */
 export async function readStudentGraduation(db: Db, userId: string): Promise<StudentGraduation> {
-  const profileRow = (await db.query<{ cohort_code: string | null; specialty: string | null }>(
-    "SELECT cohort_code,specialty FROM student_profiles WHERE user_id=$1", [userId])).rows[0];
+  const profileRow = (await db.query<{ cohort_code: string | null; specialty: string | null; major_code: string | null }>(
+    "SELECT cohort_code,specialty,major_code FROM student_profiles WHERE user_id=$1", [userId])).rows[0];
   const profile: StudentGraduationProfile = {
     cohortCode: normalizeCohortCode(profileRow?.cohort_code), specialty: profileSpecialty(profileRow?.specialty),
+    majorCode: profileRow?.major_code?.trim() || null,
   };
   const { resolution, standard } = await resolveStudentStandard(db, profile);
   const transcriptRow = (await db.query<{ version: string; data: TranscriptData; updated_at: Date | string }>(
@@ -83,7 +87,7 @@ export async function readStudentGraduation(db: Db, userId: string): Promise<Stu
     : null;
   // The CTĐT only refines credits and elective codes, or suggests a specialty; missing or ambiguous → none.
   const curriculumCourses = transcript && profile.cohortCode && (standard || resolution === "specialty_unset")
-    ? await readCohortCurriculumCourses(db, profile.cohortCode) : [];
+    ? await readCohortCurriculumCourses(db, profile.cohortCode, profile.majorCode) : [];
   const evaluation = standard && transcript ? evaluateGraduation({ standard, transcript, curriculumCourses }) : null;
   return {
     profile,

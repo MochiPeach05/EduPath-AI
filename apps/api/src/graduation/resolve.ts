@@ -1,5 +1,6 @@
 import type { PoolClient } from "pg";
 import { isSpecialtyCode, resolveGraduationStandard } from "../competency-assessment/specialty.js";
+import { CNTT_MAJOR } from "../curricula/majors.js";
 import type { GraduationResolution, GraduationStandardInput, SpecialtyCode } from "../competency-assessment/types.js";
 import type { GraduationData } from "./model.js";
 
@@ -24,6 +25,19 @@ export const standardIdentity = (data: Pick<GraduationData, "specialty" | "class
   specialty: data.specialty ?? "", classBlock: data.classBlock ?? "", standardCode: data.standardCode ?? "",
 });
 
+/**
+ * The major a graduation standard is for (2026-10-27): the programme of its code ("71K29CNTT_7480201-03" → 7480201), else
+ * HTTT or MMT named in it, else Công nghệ thông tin, the major of every standard before the other majors came.
+ */
+export function standardMajor(identity: { specialty: string; classBlock: string; standardCode: string }): string {
+  const text = `${identity.specialty} ${identity.classBlock} ${identity.standardCode}`;
+  const programme = /(?<!\d)(\d{7})-\d{2}(?!\d)/.exec(text)?.[1];
+  if (programme) return programme;
+  if (/HTTT/i.test(text)) return "7480104";
+  if (/MMT/i.test(text)) return "7480102";
+  return CNTT_MAJOR;
+}
+
 /** Active standards of a cohort (normalized code), current revision, in a deterministic order. */
 async function readCohortStandards(db: Db, cohortCode: string): Promise<GraduationStandardInput[]> {
   const standards = await db.query<{ id: string; revision_id: string; version: number; data: GraduationData }>(
@@ -33,13 +47,16 @@ async function readCohortStandards(db: Db, cohortCode: string): Promise<Graduati
 }
 
 /**
- * The standard of a cohort for a specialty (resolveGraduationStandard with the full identity).
- * The picked standard's missing gpaScale reads 4, as everywhere else.
+ * The standard of a cohort for a specialty (resolveGraduationStandard with the full identity), among the standards of the
+ * student's major (standardMajor; a profile without a major takes the cohort's, as before majors). The picked standard's
+ * missing gpaScale reads 4, as everywhere else.
  */
-export async function resolveCohortStandard(db: Db, cohortCode: string, specialty: SpecialtyCode | null): Promise<{
+export async function resolveCohortStandard(db: Db, cohortCode: string, specialty: SpecialtyCode | null, majorCode: string | null = null): Promise<{
   resolution: GraduationResolution; standard: GraduationStandardInput | null;
 }> {
-  const resolved = resolveGraduationStandard(await readCohortStandards(db, cohortCode), specialty, (candidate) => standardIdentity(candidate.data));
+  const major = majorCode?.trim() || null;
+  const candidates = (await readCohortStandards(db, cohortCode)).filter((candidate) => !major || standardMajor(standardIdentity(candidate.data)) === major);
+  const resolved = resolveGraduationStandard(candidates, specialty, (candidate) => standardIdentity(candidate.data));
   const standard = resolved.standard
     ? { ...resolved.standard, data: { ...resolved.standard.data, gpaScale: resolved.standard.data.gpaScale ?? 4 } }
     : null;
@@ -47,10 +64,10 @@ export async function resolveCohortStandard(db: Db, cohortCode: string, specialt
 }
 
 /** The standard of a profile; a profile without a cohort is "cohort_unknown" and reads no standard. */
-export async function resolveStudentStandard(db: Db, profile: { cohortCode: string | null; specialty: SpecialtyCode | null }): Promise<{
+export async function resolveStudentStandard(db: Db, profile: { cohortCode: string | null; specialty: SpecialtyCode | null; majorCode?: string | null }): Promise<{
   resolution: StudentGraduationResolution; standard: GraduationStandardInput | null;
 }> {
   const cohortCode = normalizeCohortCode(profile.cohortCode);
   if (!cohortCode) return { resolution: "cohort_unknown", standard: null };
-  return resolveCohortStandard(db, cohortCode, profile.specialty);
+  return resolveCohortStandard(db, cohortCode, profile.specialty, profile.majorCode ?? null);
 }

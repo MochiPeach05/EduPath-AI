@@ -2,6 +2,7 @@ import { Router, type ErrorRequestHandler } from "express";
 import { z } from "zod";
 import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
+import { majorIdentity, majorKey } from "../curricula/majors.js";
 import { identity, type PlanData } from "./model.js";
 
 function studentPlanData(data: PlanData) {
@@ -91,13 +92,15 @@ export function createStudentPlansRouter(pool: DatabasePool | undefined) {
         jsonb_array_length(r.data->'items') AS "itemCount",r.version
         FROM training_plans c JOIN training_plan_revisions r ON r.id=c.current_revision
         WHERE c.is_active ORDER BY c.cohort_code DESC,r.data->>'major',c.id`),
-      pool!.query("SELECT cohort_code FROM student_profiles WHERE user_id=$1", [
+      pool!.query("SELECT cohort_code,major_code FROM student_profiles WHERE user_id=$1", [
         req.session.user!.userId,
       ]),
     ]);
     const profileCohort = profile.rows[0]?.cohort_code ?? null;
+    // The cohort's framework of the student's major (052; user, 2026-10-27).
+    const major = majorIdentity(profile.rows[0]?.major_code);
     const matches = result.rows.filter(
-      (row) => row.cohortCode === profileCohort,
+      (row) => row.cohortCode === profileCohort && (!major || majorKey(row.major ?? "") === major),
     );
     res.json({
       items: result.rows,

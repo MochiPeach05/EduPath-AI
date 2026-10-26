@@ -95,6 +95,7 @@ type SetupOptions = {
   sessionUser?: AuthenticatedUser | null;
   active?: boolean;
   profileCohort?: string | null;
+  profileMajor?: string | null;
   listRows?: unknown[];
   detailRows?: unknown[];
 };
@@ -110,8 +111,8 @@ function setup(options: SetupOptions = {}) {
         rows: options.active === false ? [] : [{ id: studentId }],
       };
     }
-    if (sql.includes("SELECT cohort_code FROM student_profiles")) {
-      return { rowCount: options.profileCohort ? 1 : 0, rows: options.profileCohort ? [{ cohort_code: options.profileCohort }] : [] };
+    if (sql.includes("SELECT cohort_code,major_code FROM student_profiles")) {
+      return { rowCount: options.profileCohort ? 1 : 0, rows: options.profileCohort ? [{ cohort_code: options.profileCohort, major_code: options.profileMajor ?? null }] : [] };
     }
     if (sql.includes("SELECT c.id,c.cohort_code")) return { rowCount: listRows.length, rows: listRows };
     if (sql.includes("SELECT c.id,r.version,r.data")) return { rowCount: detailRows.length, rows: detailRows };
@@ -156,6 +157,18 @@ describe("student curriculum API", () => {
     });
     expect(queryText(query)).toContain("WHERE c.is_active");
     expect(queryText(query)).toContain("JOIN curriculum_revisions r ON r.id=c.current_revision");
+  });
+
+  // 2026-10-27: a cohort may have a framework per major; the student's is the one of the major in the MSSV.
+  it("suggests the framework of the student's major when the cohort has several", async () => {
+    const cntt = { ...activeListRow, major: "CÔNG NGHỆ THÔNG TIN" };
+    const httt = { ...activeListRow, id: "11111111-2222-4333-8444-555555555555", major: "HỆ THỐNG THÔNG TIN" };
+    const asHttt = (await request(setup({ listRows: [cntt, httt], profileCohort: "K29", profileMajor: "7480104" }).app).get("/curricula").expect(200)).body;
+    expect(asHttt.suggestedId).toBe(httt.id);
+    const asCntt = (await request(setup({ listRows: [cntt, httt], profileCohort: "K29", profileMajor: "7480201" }).app).get("/curricula").expect(200)).body;
+    expect(asCntt.suggestedId).toBe(curriculumId);
+    // Without a major (no MSSV) a cohort with two frameworks suggests none, as before.
+    expect((await request(setup({ listRows: [cntt, httt], profileCohort: "K29" }).app).get("/curricula").expect(200)).body.suggestedId).toBeNull();
   });
 
   it("does not fall back to another cohort when the profile cohort is unmatched", async () => {

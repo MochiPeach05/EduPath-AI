@@ -1,7 +1,7 @@
 import type { PoolClient } from "pg";
 import { describe, expect, it, vi } from "vitest";
 import type { GraduationData } from "./model.js";
-import { normalizeCohortCode, profileSpecialty, resolveCohortStandard, resolveStudentStandard, standardIdentity } from "./resolve.js";
+import { normalizeCohortCode, profileSpecialty, resolveCohortStandard, resolveStudentStandard, standardIdentity, standardMajor } from "./resolve.js";
 
 // Synthetic standards only: ids and names are invented, program codes follow the public 7480201-0x scheme.
 type Row = { id: string; revision_id: string; version: number; cohort: string; data: Partial<GraduationData> };
@@ -78,5 +78,22 @@ describe("resolveStudentStandard", () => {
     const db = fakeDb([cnpm, cndl]);
     expect(await resolveStudentStandard(db, { cohortCode: " k29 ", specialty: "CNPM" })).toMatchObject({ resolution: "specialty", standard: { id: "std-cnpm" } });
     expect(db.query.mock.calls[0]![1]).toEqual(["K29"]);
+  });
+});
+
+// 2026-10-27: the Faculty's majors; a student only sees the standards of the major of the MSSV.
+describe("standards of a major", () => {
+  it("reads the major of a standard from its programme code, else its names, else Công nghệ thông tin", () => {
+    expect(standardMajor({ specialty: "Công nghệ phần mềm (7480201-03)", classBlock: "71K29CNTT_7480201-03", standardCode: "" })).toBe("7480201");
+    expect(standardMajor({ specialty: "", classBlock: "K26T-CN", standardCode: "K26T-CN_TN02" })).toBe("7480201");
+    expect(standardMajor({ specialty: "", classBlock: "71K29HTTT", standardCode: "71K29HTTT_TN04" })).toBe("7480104");
+    expect(standardMajor({ specialty: "IoT (7480102-01)", classBlock: "71K29MMT", standardCode: "" })).toBe("7480102");
+  });
+
+  it("gives a student only the standards of the major, none to a major without standards", async () => {
+    const db = fakeDb([cnpm, cndl]);
+    expect((await resolveCohortStandard(db, "K29", "CNPM", "7480201")).standard?.id).toBe("std-cnpm");
+    expect(await resolveCohortStandard(db, "K29", "CNPM", "7480104")).toEqual({ resolution: "not_found", standard: null });
+    expect((await resolveStudentStandard(db, { cohortCode: "K29", specialty: "CNPM", majorCode: null })).standard?.id).toBe("std-cnpm");
   });
 });

@@ -173,7 +173,7 @@ describe("GET /api/student/graduation", () => {
   it("gives standard: null in K29 while the specialty is unset, with a suggestion", async () => {
     const response = await request(setup({ profile: { cohort_code: "K29", specialty: null } }).app).get("/graduation").expect(200);
     expect(response.body).toEqual({
-      profile: { cohortCode: "K29", specialty: null }, resolution: "specialty_unset", standard: null,
+      profile: { cohortCode: "K29", specialty: null, majorCode: null }, resolution: "specialty_unset", standard: null,
       transcript: { version: "00000000-0000-4000-8000-0000000000f1", updatedAt: "2026-10-01T08:00:00.000Z" }, evaluation: null,
       specialtySuggestion: { code: "CNPM", label: "Công nghệ phần mềm", count: 1 },
     });
