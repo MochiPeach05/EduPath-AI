@@ -171,6 +171,11 @@ export function afterHeading(label: string, state: { block: string; specialty: s
   if (/^(thuc tap tot nghiep|khoa luan|do an tot nghiep|hoc phan tot nghiep)/.test(f)) return { block: BLOCKS.thesis, specialty: "" };
   if (/^(chuyen nganh|dinh huong)\s+(?!bat buoc|hoac\b)/.test(f) && named) return { block: BLOCKS.specialty, specialty: clean(named) };
   if (/^cac (mon|hoc phan|hp) tu chon chuyen nganh/.test(f)) return { block: BLOCKS.specialty, specialty: "Tự chọn Chuyên ngành" };
+  // K29 MMT&TTDL (2026-10-26): "Các môn Bắt buộc - Chuyên ngành IoT (Khối kiến thức chuyên ngành)" and the electives of the
+  // whole block, "Các môn Tự chọn (Khối kiến thức Chuyên ngành)".
+  if (/^cac (mon|hoc phan|hp) bat buoc\b.*\bchuyen nganh\s/.test(f) && named && !/^(bat buoc|tu chon|hoac)\b/.test(fold(named)))
+    return { block: BLOCKS.specialty, specialty: clean(named) };
+  if (/^cac (mon|hoc phan|hp) tu chon\b.*\bchuyen nganh\b/.test(f)) return { block: BLOCKS.specialty, specialty: "Tự chọn Chuyên ngành" };
   if (/^kien thuc chuyen nganh(?!\s*bat buoc)/.test(f)) return { block: BLOCKS.specialty, specialty: "" };
   if (/^kien thuc co so (nhom|khoi) nganh/.test(f)) return { block: BLOCKS.groupBasis, specialty: "" };
   if (/^kien thuc co so nganh/.test(f)) return { block: BLOCKS.basis, specialty: "" };
@@ -181,6 +186,84 @@ export function afterHeading(label: string, state: { block: string; specialty: s
 
 const number = (value: string) => (/^\d+(\.\d+)?$/.test(value) ? Number(value) : null);
 const endOfTable = (label: string) => /^ghi chu\b/.test(fold(label)) || /TP\.\s*Hồ Chí Minh|TRƯỞNG KHOA/i.test(label);
+
+/** The fill colour of a cell ("theme:5:0.8", "argb:FFFFFF00"), or "" when it has none. */
+function fillColour(cell: Cell): string {
+  const fill = cell.fill;
+  if (!fill || fill.type !== "pattern" || fill.pattern === "none" || !fill.fgColor) return "";
+  const { argb, theme, tint } = fill.fgColor as { argb?: string; theme?: number; tint?: number };
+  if (argb) return /^(00000000|FFFFFFFF)$/i.test(argb) ? "" : `argb:${argb.toUpperCase()}`;
+  return theme === undefined ? "" : `theme:${theme}:${Math.round((tint ?? 0) * 100) / 100}`;
+}
+
+/**
+ * The specialty course lists written in a cell, as the K29 frameworks do in the prerequisites of their graduation project
+ * ("Chuyên ngành HTTT Chuyển đổi số: ⏎ Hoạch định nguồn lực doanh nghiệp …", "CN IoT: ⏎ - Nhập môn hệ thống nhúng …"):
+ * folded course name → specialty.
+ */
+export function specialtyLists(texts: readonly string[]): Map<string, string> {
+  const listed = new Map<string, string>();
+  for (const text of texts) {
+    let specialty = "";
+    for (const raw of text.split(/\r?\n/)) {
+      const line = clean(raw).replace(/^[-–•+]\s*/, "");
+      const heading = /^(?:chuyên ngành|cn)\s+(.+?)\s*:\s*(.*)$/iu.exec(line);
+      if (heading) {
+        specialty = clean(heading[1]!);
+        if (heading[2]) listed.set(fold(heading[2]), specialty);
+      } else if (specialty && line) listed.set(fold(line), specialty);
+    }
+  }
+  return listed;
+}
+
+/**
+ * The K29 frameworks of the other majors (user, 2026-10-26: "có 2 phong cách ghi môn này thuộc chuyên ngành nào") mark a
+ * specialty by a heading row (MMT&TTDL) or only by the colour of its rows (HTTT, CNTT). A colour is named by the specialty of
+ * its headed or listed courses: at least two of them, none of another specialty. It names the run of rows of that colour
+ * holding such a course, and the specialty electives of that colour (MMT&TTDL colours its IoT and An ninh Mạng electives).
+ * The same colour also paints unrelated rows (HTTT: general education and Chuyển đổi số), hence runs, not the whole sheet.
+ * Returns the number of courses named per specialty.
+ */
+function nameSpecialtiesByColour(courses: CurriculumCourse[], colours: readonly string[], listed: ReadonlyMap<string, string>) {
+  const specific = (course: CurriculumCourse) => course.block === BLOCKS.specialty && course.specialty && course.specialty !== "Tự chọn Chuyên ngành";
+  const vote = (course: CurriculumCourse) => (specific(course) ? course.specialty : listed.get(fold(course.name)) ?? "");
+  const votes = new Map<string, Map<string, number>>();
+  courses.forEach((course, index) => {
+    const specialty = vote(course), colour = colours[index]!;
+    if (!specialty || !colour) return;
+    const counts = votes.get(colour) ?? new Map<string, number>();
+    counts.set(fold(specialty), (counts.get(fold(specialty)) ?? 0) + 1);
+    votes.set(colour, counts);
+  });
+  const names = new Map<string, string>();
+  for (const [colour, counts] of votes) {
+    const [only] = [...counts];
+    if (counts.size !== 1 || only![1] < 2) continue;
+    const course = courses.find((item, index) => colours[index] === colour && fold(vote(item)) === only![0])!;
+    names.set(colour, vote(course));
+  }
+  const named = new Map<string, number>();
+  const setSpecialty = (course: CurriculumCourse, specialty: string) => {
+    if (specific(course)) return;
+    course.block = BLOCKS.specialty;
+    course.specialty = specialty;
+    named.set(specialty, (named.get(specialty) ?? 0) + 1);
+  };
+  for (let start = 0; start < courses.length;) {
+    let end = start;
+    while (end + 1 < courses.length && colours[end + 1] === colours[start] && courses[end + 1]!.groupId === courses[start]!.groupId) end++;
+    const name = names.get(colours[start]!);
+    if (name && courses.slice(start, end + 1).some((course) => fold(vote(course)) === fold(name)))
+      for (const course of courses.slice(start, end + 1)) setSpecialty(course, name);
+    start = end + 1;
+  }
+  courses.forEach((course, index) => {
+    const name = names.get(colours[index]!);
+    if (name && course.block === BLOCKS.specialty && course.specialty === "Tự chọn Chuyên ngành") setSpecialty(course, name);
+  });
+  return named;
+}
 
 /** A curriculum of an older template, or null when the workbook has none (then it is no known template). */
 export function readLegacyCurriculum(workbook: Workbook, text: CellText): CurriculumData | null {
@@ -216,6 +299,7 @@ export function readLegacyCurriculum(workbook: Workbook, text: CellText): Curric
       message: "Cột Học kỳ triển khai ghi số thứ tự học kỳ của khóa (1–3: HK1, HK2, HK hè năm thứ nhất; 4–6: năm thứ hai …); năm và học kỳ được tính theo thứ tự đó.",
     });
   let groupId = "", state = { block: "", specialty: "" };
+  const colours: string[] = [], texts: string[] = [];
   for (let row = header.dataRow; row <= sheet.rowCount; row++) {
     const cells = rowCells(sheet, text, row);
     const get = (role: Role) => (columns[role] ? cells[String.fromCharCode(64 + columns[role]!)] ?? "" : "");
@@ -237,6 +321,11 @@ export function readLegacyCurriculum(workbook: Workbook, text: CellText): Curric
     const type = courseType(get("type"));
     if (!/^(|BB(?:KTL)?|TC\d*(?:\s*\(.*\))?)$/.test(type)) throw new CurriculumError("invalid_course_type", 422, [code]);
     const term = yysTerm(get("term"), admissionYear) ?? indexTerm(get("termIndex"));
+    // A mandatory course after the electives of a specialty block, without a heading of its own (the internship and the
+    // graduation project of K29 MMT&TTDL), is no elective of that block.
+    const place = state.specialty === "Tự chọn Chuyên ngành" && type.startsWith("BB")
+      ? { block: /^(do an (thuc tap|tot nghiep)|khoa luan|thuc tap tot nghiep)\b/.test(fold(name)) ? BLOCKS.thesis : "", specialty: "" }
+      : state;
     const course: CurriculumCourse = {
       position: data.courses.length + 1,
       code: code.toUpperCase(),
@@ -244,8 +333,8 @@ export function readLegacyCurriculum(workbook: Workbook, text: CellText): Curric
       englishName: get("englishName"),
       credits,
       type,
-      block: state.block,
-      specialty: state.specialty,
+      block: place.block,
+      specialty: place.specialty,
       prerequisite: get("prerequisite"),
       prior: get("prior"),
       notes: get("notes"),
@@ -261,7 +350,19 @@ export function readLegacyCurriculum(workbook: Workbook, text: CellText): Curric
     };
     if (!courseSchema.safeParse(course).success) throw new CurriculumError("invalid_course_row", 422, [`${sheet.name}!${row}: ${code}`]);
     data.courses.push(course);
+    colours.push(fillColour(sheet.getCell(row, columns.code!)));
+    // As written, line breaks kept: the specialty lists put one course on a line.
+    for (let column = 1; column <= Math.min(sheet.columnCount, 26); column++) texts.push(text(sheet.getCell(row, column)));
   }
   if (!data.courses.length) throw new CurriculumError("no_courses");
+  // The K29 frameworks sent for the other majors (the template with a term number) mark specialties by colour too.
+  if (columns.termIndex) {
+    const named = nameSpecialtiesByColour(data.courses, colours, specialtyLists(texts));
+    if (named.size)
+      data.sourceWarnings.push({
+        row: null,
+        message: `Chuyên ngành của một số môn lấy theo màu tô trong tệp (${[...named].map(([name, count]) => `${name}: ${count} môn`).join(", ")}), đặt tên theo dòng tiêu đề chuyên ngành hoặc danh sách môn từng chuyên ngành ghi trong tệp. Hãy rà soát.`,
+      });
+  }
   return data;
 }

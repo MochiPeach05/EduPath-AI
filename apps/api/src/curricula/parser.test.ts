@@ -391,12 +391,76 @@ describe("older Faculty templates (K26–K28, 2026-10-23)", () => {
 
 // 2026-10-26 (user): frameworks of the other majors, HTTT and MMT&TTDL. Synthetic workbooks laid out like the teacher's files.
 describe("frameworks of the other majors (HTTT, MMT&TTDL)", () => {
-  async function workbook(name: string, rows: (string | number | null)[][]) {
+  /** `fills`: row number → ARGB colour of the code cell. */
+  async function workbook(name: string, rows: (string | number | null)[][], fills: Record<number, string> = {}) {
     const book = new ExcelJS.Workbook();
     const sheet = book.addWorksheet(name);
     rows.forEach((row, r) => row.forEach((value, c) => { if (value !== null) sheet.getCell(r + 1, c + 1).value = value; }));
+    for (const [row, argb] of Object.entries(fills)) sheet.getCell(Number(row), 2).fill = { type: "pattern", pattern: "solid", fgColor: { argb } };
     return Buffer.from(await book.xlsx.writeBuffer());
   }
+  const k29Header = (major: string) => [
+    [],
+    [`PHÂN BỐ KIẾN THỨC TRONG CTĐT KHÓA 29 - NGÀNH ${major}`],
+    [null, null, null, null, 126],
+    ["TT", "Mã học phần mới", "Tên học phần (Tiếng Việt)", "Tên học phần (Tiếng Anh)", "Số tín chỉ", "Số tiết/giờ", null, null,
+      "Bắt buộc/Tự chọn", "ĐK tiên quyết", "ĐK học trước", "Mã BM", "BM Phụ trách", "Học kỳ triển khai"],
+    [null, "Mã học phần mới", null, null, null, "LT", "TH", "TT"],
+  ];
+  const course = (n: number, code: string, name: string, type: string, term: number, prerequisite = "Không") =>
+    [n, code, name, name, 3, 30, 30, 0, type, prerequisite, "Không", null, null, term];
+
+  it("names the specialties of the K29 MMT&TTDL headings, and its electives by their colour", async () => {
+    const IOT = "FFE2EFDA", ANM = "FFFCE4D6", TOPIC = "FFFFFF00";
+    const data = await readWorkbook(await workbook("CTĐT_MMT_K29 (2023)", [
+      ...k29Header("MẠNG MÁY TÍNH VÀ TRUYỀN THÔNG DỮ LIỆU"),
+      ["Các môn Bắt buộc - Chuyên ngành IoT (Khối kiến thức chuyên ngành)"],
+      course(1, "71NWSE40103", "Nhập môn hệ thống nhúng", "BB", 6),
+      course(2, "71NWSE40203", "Lập trình ứng dụng IoT cơ bản", "BB", 7),
+      ["Các môn Bắt buộc - Chuyên ngành An ninh Mạng (Khối kiến thức chuyên ngành)"],
+      course(3, "71NWCS40103", "An ninh Hạ tầng mạng", "BB", 6),
+      course(4, "71NWCS40203", "An ninh Mạng không dây", "BB", 7),
+      ["Các môn Tự chọn (Khối kiến thức Chuyên ngành)"],
+      course(5, "71NWSE40603", "Lập trình ứng dụng mạng", "TC209", 8),
+      course(6, "71NWCS40703", "Điều tra mạng", "TC309", 8),
+      course(7, "71NWGR40203", "Chuyên đề chiến lược quản lý dịch vụ IT", "TC309", 8),
+      course(8, "71NWGR40106", "Đồ án tốt nghiệp", "BB", 10),
+    ], { 7: IOT, 8: IOT, 10: ANM, 11: ANM, 13: IOT, 14: ANM, 15: TOPIC }));
+    expect(data.courses.map((item) => [item.code, item.specialty])).toEqual([
+      ["71NWSE40103", "IoT"], ["71NWSE40203", "IoT"], ["71NWCS40103", "An ninh Mạng"], ["71NWCS40203", "An ninh Mạng"],
+      // The electives of the whole block take the specialty of their colour; the topic open to both keeps the block's value.
+      ["71NWSE40603", "IoT"], ["71NWCS40703", "An ninh Mạng"], ["71NWGR40203", "Tự chọn Chuyên ngành"],
+      // A mandatory course after the electives without a heading of its own is no elective.
+      ["71NWGR40106", ""],
+    ]);
+    expect(data.courses.at(-1)!.block).toBe("Khóa luận/đồ án tốt nghiệp; hoặc học phần thay thế KL/ĐA TN");
+  });
+
+  it("names the colour runs of the K29 HTTT specialties by the course lists of its graduation project", async () => {
+    // One colour paints general education and the Chuyển đổi số courses: only the run holding listed courses is named.
+    const SHARED = "FFDDEBF7", CORE = "FFFFF2CC", GIS = "FFE2EFDA";
+    const lists = "Chuyên ngành HTTT Chuyển đổi số:\nHoạch định nguồn lực doanh nghiệp\nQuản lý quy trình nghiệp vụ\n"
+      + "Chuyên ngành HTTT Địa lý:\nQuản lý và Xử lý dữ liệu địa không gian\nCông nghệ web cho các hệ thống thông tin địa lý";
+    const data = await readWorkbook(await workbook("CTĐT_HTTT_K29 (2024)", [
+      ...k29Header("HỆ THỐNG THÔNG TIN"),
+      course(1, "71POLP10013", "Triết học Mác Lênin", "BB", 2),
+      course(2, "71ITBS10203", "Cơ sở lập trình", "BB", 1),
+      course(3, "71ISDT40103", "Nhập môn chuyển đổi số", "", 6),
+      course(4, "71ISDT40203", "Quản lý quy trình nghiệp vụ", "", 7),
+      course(5, "71ISDT40403", "Hoạch định nguồn lực doanh nghiệp", "", 7),
+      course(6, "71ISGS40103", "Các hệ thống GIS nguồn mở", "BB", 8),
+      course(7, "71ISGS40503", "Quản lý và Xử lý dữ liệu địa không gian", "BB", 7),
+      course(8, "71ISGS40303", "Công nghệ web cho các hệ thống thông tin địa lý", "BB", 7),
+      course(9, "71ISGR40106", "Đồ án TN", "BB", 10, lists),
+    ], { 6: SHARED, 7: CORE, 8: SHARED, 9: SHARED, 10: SHARED, 11: GIS, 12: GIS, 13: GIS }));
+    expect(data.courses.map((item) => [item.code, item.specialty])).toEqual([
+      ["71POLP10013", ""], ["71ITBS10203", ""],
+      ["71ISDT40103", "HTTT Chuyển đổi số"], ["71ISDT40203", "HTTT Chuyển đổi số"], ["71ISDT40403", "HTTT Chuyển đổi số"],
+      ["71ISGS40103", "HTTT Địa lý"], ["71ISGS40503", "HTTT Địa lý"], ["71ISGS40303", "HTTT Địa lý"],
+      ["71ISGR40106", ""],
+    ]);
+    expect(data.warnings.some((warning) => warning.message.startsWith("Chuyên ngành của một số môn lấy theo màu tô trong tệp (HTTT Chuyển đổi số: 3 môn, HTTT Địa lý: 3 môn)"))).toBe(true);
+  });
 
   it("reads a framework without a total, and not the column numbers under the signature", async () => {
     // K32 HTTT names no "Tổng tín chỉ"; K31 MMT&TTDL repeats 1, 2, 3 … under its signature.
