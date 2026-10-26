@@ -63,6 +63,16 @@ describe("student specialty", () => {
       expect(query).toHaveBeenCalledWith("ROLLBACK");
     }
   });
+  // 2026-10-27: each major has its own specialties (052, 053).
+  it.each([
+    ["HTTT_CDS", "7480104", 200], ["MMT_IOT", "7480102", 200], ["HTTT_CDS", "7480201", 409], ["CNPM", "7480104", 409], ["HTTT_GIS", null, 409],
+  ] as const)("saves %s only for its major (major %s)", async (specialty, major, status) => {
+    const { app, query } = setup();
+    query.mockImplementation(async (sql: string) => String(sql).startsWith("SELECT cohort_code,major_code")
+      ? { rowCount: 1, rows: [{ cohort_code: "K31", major_code: major }] } : { rowCount: 1, rows: [] });
+    await request(app).patch("/student/profile").set("Origin", "https://edupath.example").send({ ...profile, specialty }).expect(status);
+    expect(query.mock.calls.some(([sql]) => String(sql).startsWith("UPDATE student_profiles SET specialty"))).toBe(status === 200);
+  });
   it("keeps the stored specialty when the field is absent", async () => {
     const { app, query } = setup();
     await request(app).patch("/student/profile").set("Origin", "https://edupath.example").send(profile).expect(200);

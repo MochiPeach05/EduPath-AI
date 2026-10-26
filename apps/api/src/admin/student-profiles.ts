@@ -4,6 +4,7 @@ import type { DatabasePool } from "../db/pool.js";
 import type { AuthenticatedUser } from "../auth/types.js";
 import { requireAdminAccess } from "../middleware/authorization.js";
 import { AccountError, type AdminAccountRepository } from "./accounts.js";
+import type { SpecialtyCode } from "../competency-assessment/types.js";
 import { CONSENT_VALID_SINCE } from "../student/consent.js";
 import { withoutSettledReviews, type TranscriptData } from "../student/transcript-parser.js";
 
@@ -24,7 +25,7 @@ export interface StudentProfileDetail extends StudentProfileSummary {
   /** student_profiles.major_code: the programme code of the MSSV (7480201 CNTT, 7480104 HTTT, 7480102 MMT&TTDL; 052). */
   majorCode?: string | null;
   /** student_profiles.specialty; null = "Chưa xác định". */
-  specialty?: "CNPM" | "CNDL" | "TTNT" | "ANM" | "KCN" | null;
+  specialty?: SpecialtyCode | null;
   careerPositionId?: string | null;
   careerPosition?: { id: string; nameVi: string; nameEn: string; deletedAt: string | null } | null;
   interests: string | null;

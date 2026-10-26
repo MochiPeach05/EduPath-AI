@@ -8,7 +8,8 @@ import type { TranscriptData } from "../student/transcript-parser.js";
 /* ------------------------------------------------------------------------ */
 
 /** student_profiles.specialty (migration 028). NULL = "Chưa xác định". */
-export type SpecialtyCode = "CNPM" | "CNDL" | "TTNT" | "ANM" | "KCN";
+/** CNTT: CNPM, CNDL, TTNT, ANM (K27), KCN (K28 and earlier); HTTT: HTTT_CDS, HTTT_GIS; MMT&TTDL: MMT_IOT, MMT_ANM (2026-10-27). */
+export type SpecialtyCode = "CNPM" | "CNDL" | "TTNT" | "ANM" | "KCN" | "HTTT_CDS" | "HTTT_GIS" | "MMT_IOT" | "MMT_ANM";
 
 /** One curriculum_courses row of the active curriculum's current revision (ORDER BY position, code). */
 export type CurriculumCourseInput = {

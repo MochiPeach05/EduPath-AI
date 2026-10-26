@@ -13,8 +13,13 @@ describe("specialty mapping (spec §4)", () => {
       ["TTNT", "Trí tuệ nhân tạo", "7480201-04", "tri tue nhan tao", "Chuyên ngành Trí tuệ Nhân tạo"],
       ["ANM", "An ninh Mạng và IoTs", "7480201-01", "an ninh mang va iot", "Chuyên ngành An ninh Mạng và IoT"],
       ["KCN", "Không theo chuyên ngành", "", "", ""],
+      ["HTTT_CDS", "HTTT Chuyển đổi số", "", "httt chuyen doi so", "Chuyên ngành HTTT Chuyển đổi số"],
+      ["HTTT_GIS", "HTTT Địa lý", "", "httt dia ly", "Chuyên ngành HTTT Địa lý"],
+      ["MMT_IOT", "IoT", "", "iot", "Chuyên ngành IoT"],
+      ["MMT_ANM", "An ninh mạng", "", "an ninh mang", "Chuyên ngành An ninh mạng"],
     ]);
-    expect(SPECIALTIES.filter((item) => specialtyHasCourses(item.code)).map((item) => item.code)).toEqual(["CNPM", "CNDL", "TTNT", "ANM"]);
+    expect(SPECIALTIES.filter((item) => specialtyHasCourses(item.code)).map((item) => item.code))
+      .toEqual(["CNPM", "CNDL", "TTNT", "ANM", "HTTT_CDS", "HTTT_GIS", "MMT_IOT", "MMT_ANM"]);
     expect(isSpecialtyCode("CNPM")).toBe(true);
     expect(isSpecialtyCode("ANM")).toBe(true);
     expect(isSpecialtyCode("THQT")).toBe(false);
@@ -52,6 +57,28 @@ describe("specialty mapping (spec §4)", () => {
   it("treats unknown values as common but flags them for a warning", () => {
     expect(classifyCurriculumSpecialty("An ninh Mạng và IoTs")).toEqual({ kind: "common", known: false });
     expect(classifyCurriculumSpecialty("Tin học Quản trị", "K27")).toEqual({ kind: "common", known: false });
+  });
+
+  // 2026-10-27: the specialties of the other majors, as their CTĐT name them.
+  it("offers each major its own specialties; a profile without a major has those of Công nghệ thông tin", () => {
+    expect(specialtyOffered("HTTT_CDS", "K31", "7480104")).toBe(true);
+    expect(specialtyOffered("MMT_IOT", "K29", "7480102")).toBe(true);
+    for (const major of ["7480201", null]) expect(specialtyOffered("HTTT_CDS", "K31", major)).toBe(false);
+    expect(specialtyOffered("CNPM", "K31", null)).toBe(true);
+    expect(specialtyOffered("CNPM", "K31", "7480104")).toBe(false);
+    // Without a major the curriculum's own names decide (classifyCurriculumSpecialty).
+    expect(specialtyOffered("MMT_ANM", "K31")).toBe(true);
+  });
+
+  it("maps the specialty names of the HTTT and MMT&TTDL frameworks, a course of both HTTT specialties as common", () => {
+    expect(classifyCurriculumSpecialty("HTTT Chuyển đổi số", "K31")).toEqual({ kind: "specialty", code: "HTTT_CDS" });
+    expect(classifyCurriculumSpecialty("HTTT Địa lý", "K29")).toEqual({ kind: "specialty", code: "HTTT_GIS" });
+    expect(classifyCurriculumSpecialty("HTTT Chuyển đổi số & HTTT Địa lý", "K31")).toEqual({ kind: "common", known: true });
+    expect(classifyCurriculumSpecialty("IoT", "K29")).toEqual({ kind: "specialty", code: "MMT_IOT" });
+    expect(classifyCurriculumSpecialty("An Ninh Mạng", "K31")).toEqual({ kind: "specialty", code: "MMT_ANM" });
+    // "An ninh Mạng và IoT" stays the CNTT specialty of K27 and an unknown value elsewhere.
+    expect(classifyCurriculumSpecialty("An ninh Mạng và IoT", "K27")).toEqual({ kind: "specialty", code: "ANM" });
+    expect(classifyCurriculumSpecialty("An ninh Mạng và IoT", "K26")).toEqual({ kind: "common", known: false });
   });
 
   it("maps 'An ninh Mạng và IoT' to ANM only in the K27 curriculum", () => {
@@ -136,7 +163,7 @@ describe("specialty suggestion and conflict", () => {
 
   it("suggests the only specialty with passed mandatory courses", () => {
     const counts = specialtyCounts([course("BB", "CNPM", true), course("BB", "CNPM", true), course("BB", "CNDL", false), course("TC309", "TTNT", true), course("BB", null, true)]);
-    expect(counts).toEqual({ CNPM: 2, CNDL: 0, TTNT: 0, ANM: 0, KCN: 0 });
+    expect(counts).toEqual({ CNPM: 2, CNDL: 0, TTNT: 0, ANM: 0, KCN: 0, HTTT_CDS: 0, HTTT_GIS: 0, MMT_IOT: 0, MMT_ANM: 0 });
     expect(suggestSpecialty(counts)).toEqual({ code: "CNPM", label: "Công nghệ phần mềm", passedCount: 2, text: "Gợi ý: Công nghệ phần mềm (2 học phần chuyên ngành đã học)" });
   });
 

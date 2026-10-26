@@ -151,7 +151,7 @@ export default function StudentProfileEditor({
               <select ref={specialtyField} value={draft.specialty} aria-required="true" aria-labelledby="sr-specialty-label"
                 aria-describedby={`sr-specialty-hint${draft.specialty ? "" : " sr-specialty-warning"}`}
                 onChange={(e) => setDraft({ ...draft, specialty: e.target.value })}>
-                {specialtiesFor(profile.cohortCode).map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}
+                {specialtiesFor(profile.cohortCode, profile.majorCode).map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}
                 <option value="">Chưa xác định</option>
               </select>
               <small id="sr-specialty-hint">Cùng với khóa, dùng để chọn tiêu chuẩn xét tốt nghiệp của bạn và học phần chuyên ngành khi đánh giá năng lực.</small>

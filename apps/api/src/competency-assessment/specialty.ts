@@ -1,3 +1,4 @@
+import { CNTT_MAJOR } from "../curricula/majors.js";
 import type { GraduationResolution, SpecialtyCode, SpecialtySuggestion } from "./types.js";
 
 /** Lower-case, accent-free, single-spaced text for comparisons. */
@@ -7,6 +8,10 @@ export const fold = (value: string) =>
 type SpecialtyInfo = {
   code: SpecialtyCode;
   label: string;
+  /** The major (programme code of the MSSV, 052) whose students choose it. */
+  major: string;
+  /** Matched only as a whole value of the CTĐT ("IoT", "An ninh Mạng"), never inside another major's names. */
+  exact?: boolean;
   /** Program code matched in graduation standards (data.specialty / classBlock / standardCode). */
   programCode: string;
   /** Folded curriculum_courses.specialty value. */
@@ -19,14 +24,20 @@ type SpecialtyInfo = {
 
 /** Specialty mapping (spec §4). The web keeps a copy of the labels. */
 export const SPECIALTIES: readonly SpecialtyInfo[] = [
-  { code: "CNPM", label: "Công nghệ phần mềm", programCode: "7480201-03", curriculumName: "cong nghe phan mem", planSectionLabel: "Chuyên ngành CNPM" },
-  { code: "CNDL", label: "Công nghệ dữ liệu", programCode: "7480201-02", curriculumName: "cong nghe du lieu", planSectionLabel: "Chuyên ngành CNDL" },
-  { code: "TTNT", label: "Trí tuệ nhân tạo", programCode: "7480201-04", curriculumName: "tri tue nhan tao", planSectionLabel: "Chuyên ngành Trí tuệ Nhân tạo" },
+  { code: "CNPM", label: "Công nghệ phần mềm", major: CNTT_MAJOR, programCode: "7480201-03", curriculumName: "cong nghe phan mem", planSectionLabel: "Chuyên ngành CNPM" },
+  { code: "CNDL", label: "Công nghệ dữ liệu", major: CNTT_MAJOR, programCode: "7480201-02", curriculumName: "cong nghe du lieu", planSectionLabel: "Chuyên ngành CNDL" },
+  { code: "TTNT", label: "Trí tuệ nhân tạo", major: CNTT_MAJOR, programCode: "7480201-04", curriculumName: "tri tue nhan tao", planSectionLabel: "Chuyên ngành Trí tuệ Nhân tạo" },
   // K27 only (2026-10-23): the K27 standard 71K27CNTT_7480201-01 and the K27 CTĐT courses "An ninh Mạng và IoT".
-  { code: "ANM", label: "An ninh Mạng và IoTs", programCode: "7480201-01", curriculumName: "an ninh mang va iot", planSectionLabel: "Chuyên ngành An ninh Mạng và IoT", cohorts: { from: 27, to: 27 } },
+  { code: "ANM", label: "An ninh Mạng và IoTs", major: CNTT_MAJOR, programCode: "7480201-01", curriculumName: "an ninh mang va iot", planSectionLabel: "Chuyên ngành An ninh Mạng và IoT", cohorts: { from: 27, to: 27 } },
   // K28 and earlier (2026-10-23): no program code and no courses of its own; the student takes the
   // cohort's general standard (the "không chuyên ngành" files) and its course list.
-  { code: "KCN", label: "Không theo chuyên ngành", programCode: "", curriculumName: "", planSectionLabel: "", cohorts: { to: 28 } },
+  { code: "KCN", label: "Không theo chuyên ngành", major: CNTT_MAJOR, programCode: "", curriculumName: "", planSectionLabel: "", cohorts: { to: 28 } },
+  // The other majors (2026-10-27), as their CTĐT name them; no graduation standard yet ("Chuẩn xét tốt nghiệp tôi sẽ
+  // bổ sung sau").
+  { code: "HTTT_CDS", label: "HTTT Chuyển đổi số", major: "7480104", exact: true, programCode: "", curriculumName: "httt chuyen doi so", planSectionLabel: "Chuyên ngành HTTT Chuyển đổi số" },
+  { code: "HTTT_GIS", label: "HTTT Địa lý", major: "7480104", exact: true, programCode: "", curriculumName: "httt dia ly", planSectionLabel: "Chuyên ngành HTTT Địa lý" },
+  { code: "MMT_IOT", label: "IoT", major: "7480102", exact: true, programCode: "", curriculumName: "iot", planSectionLabel: "Chuyên ngành IoT" },
+  { code: "MMT_ANM", label: "An ninh mạng", major: "7480102", exact: true, programCode: "", curriculumName: "an ninh mang", planSectionLabel: "Chuyên ngành An ninh mạng" },
 ];
 
 export const isSpecialtyCode = (value: unknown): value is SpecialtyCode =>
@@ -35,10 +46,14 @@ export const isSpecialtyCode = (value: unknown): value is SpecialtyCode =>
 export const specialtyLabel = (code: SpecialtyCode | null): string | null =>
   SPECIALTIES.find((item) => item.code === code)?.label ?? null;
 
-/** Whether a student of the cohort can choose it (An ninh Mạng và IoTs: K27; Không theo chuyên ngành: K28 and earlier). */
-export function specialtyOffered(code: SpecialtyCode, cohortCode: string | null | undefined): boolean {
+/**
+ * Whether a student of the cohort can choose it (An ninh Mạng và IoTs: K27; Không theo chuyên ngành: K28 and earlier);
+ * given a major (a profile's, null without one: Công nghệ thông tin), only the specialties of that major.
+ */
+export function specialtyOffered(code: SpecialtyCode, cohortCode: string | null | undefined, majorCode?: string | null): boolean {
   const item = SPECIALTIES.find((entry) => entry.code === code);
   if (!item) return false;
+  if (majorCode !== undefined && item.major !== (majorCode?.trim() || CNTT_MAJOR)) return false;
   if (!item.cohorts) return true;
   const cohort = Number(/^K(\d{2,3})$/.exec((cohortCode ?? "").trim().toUpperCase())?.[1] ?? Number.NaN);
   return cohort >= (item.cohorts.from ?? 0) && cohort <= (item.cohorts.to ?? Number.POSITIVE_INFINITY);
@@ -63,8 +78,12 @@ export type CurriculumSpecialtyClass =
 export function classifyCurriculumSpecialty(raw: string, cohortCode?: string | null): CurriculumSpecialtyClass {
   const value = fold(raw);
   if (COMMON_SPECIALTY_VALUES.includes(value) || value.startsWith("hoc phan thay the")) return { kind: "common", known: true };
-  const match = SPECIALTIES.find((item) => item.curriculumName && specialtyOffered(item.code, cohortCode) &&
-    (value === item.curriculumName || value === fold(item.code) || value.includes(item.curriculumName)));
+  const offered = SPECIALTIES.filter((item) => item.curriculumName && specialtyOffered(item.code, cohortCode));
+  // A course of two specialties of a major ("HTTT Chuyển đổi số & HTTT Địa lý", K31 HTTT) is common to them.
+  const parts = value.split(/\s*[&,;]\s*/).filter(Boolean);
+  if (parts.length > 1 && parts.every((part) => offered.some((item) => item.curriculumName === part))) return { kind: "common", known: true };
+  const match = offered.find((item) => value === item.curriculumName || value === fold(item.code))
+    ?? offered.find((item) => !item.exact && value.includes(item.curriculumName));
   return match ? { kind: "specialty", code: match.code } : { kind: "common", known: false };
 }
 
@@ -139,7 +158,7 @@ type SpecialtyCounts = Record<SpecialtyCode, number>;
 
 /** Passed (or MT) mandatory specialty courses per specialty. */
 export function specialtyCounts(courses: readonly { type: string; specialty: CurriculumSpecialtyClass; passed: boolean }[]): SpecialtyCounts {
-  const counts: SpecialtyCounts = { CNPM: 0, CNDL: 0, TTNT: 0, ANM: 0, KCN: 0 };
+  const counts = Object.fromEntries(SPECIALTIES.map((item) => [item.code, 0])) as SpecialtyCounts;
   for (const course of courses) {
     if (course.passed && course.specialty.kind === "specialty" && /^BB/i.test(course.type.trim())) counts[course.specialty.code]++;
   }

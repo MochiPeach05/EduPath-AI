@@ -3,25 +3,33 @@
 // with the engine: the page only reads these shapes, it never recomputes them.
 
 /** student_profiles.specialty. null = "Chưa xác định". */
-export type SpecialtyCode = "CNPM" | "CNDL" | "TTNT" | "ANM" | "KCN";
+export type SpecialtyCode = "CNPM" | "CNDL" | "TTNT" | "ANM" | "KCN" | "HTTT_CDS" | "HTTT_GIS" | "MMT_IOT" | "MMT_ANM";
 
 /**
- * Labels copied from the engine's specialty mapping (spec §4); `cohorts` (K numbers, inclusive) limits who can
- * choose it, absent for everyone.
+ * Labels copied from the engine's specialty mapping (spec §4); `major` is the programme of the MSSV whose students
+ * choose it (2026-10-27), `cohorts` (K numbers, inclusive) limits who can choose it, absent for everyone.
  */
-export const SPECIALTIES: readonly { code: SpecialtyCode; label: string; cohorts?: { from?: number; to?: number } }[] = [
-  { code: "CNPM", label: "Công nghệ phần mềm" },
-  { code: "CNDL", label: "Công nghệ dữ liệu" },
-  { code: "TTNT", label: "Trí tuệ nhân tạo" },
-  { code: "ANM", label: "An ninh Mạng và IoTs", cohorts: { from: 27, to: 27 } },
-  { code: "KCN", label: "Không theo chuyên ngành", cohorts: { to: 28 } },
+export const SPECIALTIES: readonly { code: SpecialtyCode; label: string; major: string; cohorts?: { from?: number; to?: number } }[] = [
+  { code: "CNPM", label: "Công nghệ phần mềm", major: "7480201" },
+  { code: "CNDL", label: "Công nghệ dữ liệu", major: "7480201" },
+  { code: "TTNT", label: "Trí tuệ nhân tạo", major: "7480201" },
+  { code: "ANM", label: "An ninh Mạng và IoTs", major: "7480201", cohorts: { from: 27, to: 27 } },
+  { code: "KCN", label: "Không theo chuyên ngành", major: "7480201", cohorts: { to: 28 } },
+  { code: "HTTT_CDS", label: "HTTT Chuyển đổi số", major: "7480104" },
+  { code: "HTTT_GIS", label: "HTTT Địa lý", major: "7480104" },
+  { code: "MMT_IOT", label: "IoT", major: "7480102" },
+  { code: "MMT_ANM", label: "An ninh mạng", major: "7480102" },
 ];
 
-/** The choices of a student of the cohort (An ninh Mạng và IoTs: K27; Không theo chuyên ngành: K28 and earlier). */
-export function specialtiesFor(cohortCode: string | null | undefined) {
+/**
+ * The choices of a student of the cohort and major (An ninh Mạng và IoTs: K27; Không theo chuyên ngành: K28 and earlier;
+ * a profile without a major: Công nghệ thông tin).
+ */
+export function specialtiesFor(cohortCode: string | null | undefined, majorCode?: string | null) {
   const cohort = Number(/^K(\d{2,3})$/.exec((cohortCode ?? "").trim().toUpperCase())?.[1] ?? Number.NaN);
-  return SPECIALTIES.filter((item) => !item.cohorts
-    || (cohort >= (item.cohorts.from ?? 0) && cohort <= (item.cohorts.to ?? Number.POSITIVE_INFINITY)));
+  const major = majorCode?.trim() || "7480201";
+  return SPECIALTIES.filter((item) => item.major === major && (!item.cohorts
+    || (cohort >= (item.cohorts.from ?? 0) && cohort <= (item.cohorts.to ?? Number.POSITIVE_INFINITY))));
 }
 
 export function specialtyLabel(code: string | null | undefined): string {

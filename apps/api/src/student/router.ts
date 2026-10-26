@@ -40,7 +40,7 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
       careerGoal: z.string().trim().max(2000).nullable().optional(),
       careerPositionId: z.uuid().nullable().optional(),
       currentSemester: z.number().int().min(1).max(3).nullable().optional(),
-      specialty: z.enum(["CNPM", "CNDL", "TTNT", "ANM", "KCN"]).nullable().optional(),
+      specialty: z.enum(["CNPM", "CNDL", "TTNT", "ANM", "KCN", "HTTT_CDS", "HTTT_GIS", "MMT_IOT", "MMT_ANM"]).nullable().optional(),
       // Older pages: the free text above and these choices only prefill the survey now (interests.ts).
       ...interestFields,
     }).strict().refine(bothOrNeither).safeParse(req.body);
@@ -64,11 +64,13 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
         await client.query("UPDATE student_profiles SET career_position_id=$2 WHERE user_id=$1", [req.session.user!.userId, selected]);
       }
       // Absent keeps the specialty, null clears it ("Chưa xác định"). An ninh Mạng và IoTs is offered to K27 only,
-      // "Không theo chuyên ngành" to K28 and earlier (specialtyOffered).
+      // "Không theo chuyên ngành" to K28 and earlier, and each major has its own specialties (specialtyOffered, 052).
       if (input.data.specialty !== undefined) {
         if (input.data.specialty) {
-          const cohort = await client.query<{ cohort_code: string | null }>("SELECT cohort_code FROM student_profiles WHERE user_id=$1", [req.session.user!.userId]);
-          if (!specialtyOffered(input.data.specialty, cohort.rows[0]?.cohort_code)) throw new TranscriptError("specialty_unavailable", 409);
+          const profile = await client.query<{ cohort_code: string | null; major_code: string | null }>(
+            "SELECT cohort_code,major_code FROM student_profiles WHERE user_id=$1", [req.session.user!.userId]);
+          if (!specialtyOffered(input.data.specialty, profile.rows[0]?.cohort_code, profile.rows[0]?.major_code ?? null))
+            throw new TranscriptError("specialty_unavailable", 409);
         }
         await client.query("UPDATE student_profiles SET specialty=$2 WHERE user_id=$1", [req.session.user!.userId, input.data.specialty]);
       }
