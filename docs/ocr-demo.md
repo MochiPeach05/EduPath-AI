@@ -56,6 +56,7 @@ Giữ cửa sổ worker và mạng hoạt động. Ctrl+C dừng worker. Website
 ## Quy tắc đọc bảng điểm (21/10/2026)
 
 - **VT (vắng thi)** in ở cả cột điểm hệ 10, hệ 4 và điểm chữ: worker ghi điểm số rỗng, điểm chữ `VT`, kết quả rớt, không đánh dấu lỗi; server chấp nhận `VT` trong `letter_grade`. Phép đối chiếu điểm TB học kỳ tính VT là 0 như bảng điểm của trường. Trước đó một bảng điểm có VT bị từ chối với `invalid_ocr_result` ("Kết quả nhận dạng chưa hợp lệ").
+- **CT (cấm thi, 26/10/2026)** xử lý y như VT (`NO_SCORE_LETTERS = {'VT', 'CT'}`): điểm số rỗng, điểm chữ `CT`, kết quả rớt, không đánh dấu lỗi, tính 0 trong phép đối chiếu điểm TB học kỳ.
 - **Trang chỉ có ô tổng kết** (tổng kết của học kỳ cuối rơi sang trang mới, không có mã môn) được đọc bằng lớp chữ như các trang khác; trước đó trang này bị coi là không có lớp chữ và phải chạy OCR hình ảnh. Trang scan (ảnh phủ phần lớn trang) vẫn chạy OCR.
 - Xếp loại học kỳ **KXL** (không xếp loại, học kỳ đang học) là giá trị hợp lệ.
 - **Mã môn cũ** (23/10/2026): worker nhận cả mã hiện hành (`71ITBS10103`) lẫn mã cũ 3 chữ + 4 số của K26 và GDTC K27/K28 (`DIT0070`, `DGT0010`), giống `COURSE_CODE_PATTERN` của server. Trước đó mọi dòng mã cũ bị gắn `invalid_course_code`, server từ chối cả bảng điểm K26/K27 với `unreadable_grades` ("Có ô tín chỉ hoặc điểm không đọc được chính xác"). Phép đối chiếu điểm TB học kỳ bỏ `DGT…`/`DQP…` như `71PE…`/`71NAD…`.

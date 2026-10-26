@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COURSE_CODE_PATTERN, parsePages, reviewWarning, withoutSettledConflicts, type TranscriptCourse, type TranscriptData } from "./transcript-parser.js";
+import { COURSE_CODE_PATTERN, parsePages, reviewWarning, withoutSettledReviews, type TranscriptCourse, type TranscriptData } from "./transcript-parser.js";
 
 // Synthetic text items laid out like the VLU transcript (612×792 points); no real transcript.
 const item = (text: string, x: number, y: number) => ({ text, x, y, width: text.length * 3.5 });
@@ -42,6 +42,16 @@ describe("native transcript parser", () => {
     expect(data.warnings.at(-1)).toMatch(/^Có 4 dòng có mã môn, ký hiệu/);
   });
 
+  it("reads CT (cấm thi) like VT: a failed attempt printed without a score, nothing to check (2026-10-26)", () => {
+    const items = [...header, term("Năm học 2023-2024 - HK1", 120),
+      ...row(140, 1, "71ENG310033", "Anh văn 3 (AV3)", 3, "CT", "CT", "CT", "Không đạt"),
+      ...row(160, 2, "71ITSE30503", "Lập trình ứng dụng web", 3, "6.8", "2.72", "C+", "Đạt")];
+    const [barred] = parsePages([{ page: 1, items }]).sections[0]!.courses;
+    expect(barred).toMatchObject({ score10: null, score4: null, letter: "CT", result: "Không đạt" });
+    expect(barred).not.toHaveProperty("review");
+    expect(barred).not.toHaveProperty("printed");
+  });
+
   it("keeps rows before any term heading in a section of their own, and refuses a page without course rows", () => {
     const items = [...header, ...row(140, 1, "DIT0070", "Cơ sở dữ liệu", 3, "7.5", "3.0", "B", "Đạt")];
     const data = parsePages([{ page: 1, items }]);
@@ -56,7 +66,7 @@ describe("native transcript parser", () => {
 });
 
 // 2026-10-25 (user): Đạt with 4,0 or more is right for older cohorts whatever the letter; a stored transcript reads as a new upload.
-describe("withoutSettledConflicts", () => {
+describe("withoutSettledReviews", () => {
   const course = (ordinal: number, changes: Partial<TranscriptCourse>): TranscriptCourse => ({
     ordinal, code: `71ITNW3010${ordinal}`, name: "Môn", credits: 3, score10: 4.1, score4: 1.64, letter: "F", result: "Đạt", conditional: false, sourcePage: 1, ...changes });
   const data = (courses: TranscriptCourse[], reviewed: number): TranscriptData => ({
@@ -68,16 +78,28 @@ describe("withoutSettledConflicts", () => {
   it("drops the mark of Đạt with 4,0 or more and recounts the warning", () => {
     const stored = data([course(1, { review: ["result_conflicts_with_grade"] }), course(2, { review: ["result_conflicts_with_grade", "invalid_course_code"] }),
       course(3, { score10: 3.5, review: ["result_conflicts_with_grade"] })], 3);
-    const read = withoutSettledConflicts(stored);
+    const read = withoutSettledReviews(stored);
     expect(read.sections[0]!.courses.map((row) => row.review ?? null)).toEqual([null, ["invalid_course_code"], ["result_conflicts_with_grade"]]);
     expect(read.sections[0]!.courses[0]).not.toHaveProperty("review");
     expect(read.warnings).toEqual(["Bảng điểm do sinh viên tải lên; chưa được nhà trường xác minh.", reviewWarning(2)]);
   });
 
   it("removes the warning when no row is left to check, and leaves other transcripts as they are", () => {
-    const read = withoutSettledConflicts(data([course(1, { review: ["result_conflicts_with_grade"] })], 1));
+    const read = withoutSettledReviews(data([course(1, { review: ["result_conflicts_with_grade"] })], 1));
     expect(read.warnings).toEqual(["Bảng điểm do sinh viên tải lên; chưa được nhà trường xác minh."]);
     const untouched = data([course(1, { result: "Không đạt", letter: "D", score10: 5, review: ["result_conflicts_with_grade"] })], 1);
-    expect(withoutSettledConflicts(untouched)).toBe(untouched);
+    expect(withoutSettledReviews(untouched)).toBe(untouched);
+  });
+
+  // 2026-10-26 (user): "CT … là chữ cấm thi cũng là không đạt"; rows stored before were marked as unknown marks.
+  it("drops the marks of a stored CT row with its printed mark, and keeps a row whose cells say something else", () => {
+    const barred = { score10: null, score4: null, letter: "CT", result: "Không đạt", printed: { score10: "CT", score4: "CT" },
+      review: ["invalid_score_10", "invalid_score_4", "unrecognized_letter_grade"] };
+    const read = withoutSettledReviews(data([course(1, barred), course(2, { ...barred, printed: { score10: "CT", score4: "2,5x" } })], 2));
+    expect(read.sections[0]!.courses[0]).toMatchObject({ letter: "CT", score10: null, score4: null });
+    expect(read.sections[0]!.courses[0]).not.toHaveProperty("review");
+    expect(read.sections[0]!.courses[0]).not.toHaveProperty("printed");
+    expect(read.sections[0]!.courses[1]).toMatchObject({ review: barred.review, printed: { score10: "CT", score4: "2,5x" } });
+    expect(read.warnings).toEqual(["Bảng điểm do sinh viên tải lên; chưa được nhà trường xác minh.", reviewWarning(1)]);
   });
 });

@@ -129,6 +129,26 @@ class AdapterRuleTests(TestCase):
         self.assertEqual(semester["computed_from_courses"]["semester_gpa_4"], 1.2)
         self.assertEqual(semester["issues"], [])
 
+    def test_barred_ct_is_a_failed_attempt_without_a_score_counting_zero(self):
+        import test_ocr
+
+        # CT (cấm thi, user 2026-10-26) is read like VT: the semester GPA (0 × 3 + 2.72 × 3 + 2.52 × 3) / 9 = 1.75.
+        rows = [
+            ["Năm học: 2023-2024 - Học kỳ: HK01"],
+            ["1", "71ENG310033", "Anh văn 3 (AV3)", "3", "CT", "CT", "CT", "✗"],
+            ["2", "71ITSE30503", "Lập trình ứng dụng web", "3", "6.8", "2.72", "C+", "✓"],
+            ["3", "71ITSE41003", "Nhập môn công nghệ phần mềm", "3", "6.3", "2.52", "C", "✓"],
+            ["- Số tín chỉ đạt học kỳ: 6\n- Điểm TB học kỳ (Hệ 4): 1.75", "- Tổng số tín chỉ tích lũy: 6"],
+        ]
+        courses, summaries, unparsed = test_ocr.parse_pages([self.page(rows)], {})
+        barred = courses[0]
+        self.assertEqual(unparsed, [])
+        self.assertEqual(barred["issues"], [])
+        self.assertEqual((barred["score_10"], barred["score_4"], barred["letter_grade"], barred["result"]), (None, None, "CT", "failed"))
+        [semester] = test_ocr.parse_semesters(summaries, courses)
+        self.assertEqual(semester["computed_from_courses"]["semester_gpa_4"], 1.75)
+        self.assertEqual(semester["issues"], [])
+
     def test_a_passing_mark_on_vt_conflicts_with_the_grade(self):
         import test_ocr
 

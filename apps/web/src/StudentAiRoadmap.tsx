@@ -146,7 +146,7 @@ function ImproveSection({ roadmap }: { roadmap: Roadmap }) {
   return <section className="sw-panel rm-section" aria-labelledby="rm-improve">
     <header className="rm-section-head"><span className="rm-section-icon" aria-hidden="true"><Icon name="refresh" /></span><div>
       <h2 id="rm-improve">Môn bạn cần cải thiện</h2>
-      <p>Học lại học phần chưa đạt (F, VT); học cải thiện học phần điểm D hoặc D+.</p>
+      <p>Học lại học phần chưa đạt (F, VT, CT); học cải thiện học phần điểm D hoặc D+.</p>
     </div></header>
     {roadmap.improve.length
       ? <ul className="rm-items">{roadmap.improve.map((item) => <ImproveItem key={item.code} item={item} />)}</ul>

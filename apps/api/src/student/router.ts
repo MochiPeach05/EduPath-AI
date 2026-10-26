@@ -5,7 +5,7 @@ import type { PoolClient } from "pg";
 import type { DatabasePool } from "../db/pool.js";
 import type { AuthenticatedUser } from "../auth/types.js";
 import { requireAuthentication } from "../middleware/authorization.js";
-import { parseTranscript, TranscriptError, withoutSettledConflicts, type TranscriptData } from "./transcript-parser.js";
+import { parseTranscript, TranscriptError, withoutSettledReviews, type TranscriptData } from "./transcript-parser.js";
 import { enqueueTranscript, expireJobs, jobColumns, runAfterTranscriptImport, type TranscriptImportOptions } from "./transcript-jobs.js";
 import { activeConsentVersion, isValidConsent, recordConsent, recordTranscriptConsent, TRANSCRIPT_POLICY_VERSION, withdrawConsent, withdrawTranscriptConsent } from "./consent.js";
 import { ACHIEVEMENTS_MAX, deleteSurvey, parseSurveyInput, readPreviousInterests, readSurvey, saveSurvey, STRENGTHS_MAX, SURVEY_QUESTIONS } from "./survey.js";
@@ -138,8 +138,8 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
     const jobs = await pool!.query(`SELECT ${jobColumns} FROM transcript_jobs WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1`, [req.session.user!.userId]);
     const worker = await pool!.query<{ online: boolean }>("SELECT seen_at>now()-interval '60 seconds' AS online FROM transcript_worker_status WHERE id=1");
     const row = result.rows[0];
-    // Marks of a stored transcript that are not errors (isSettledResultConflict) are left out, as a new upload does.
-    res.json({ transcript: row ? { ...row, data: withoutSettledConflicts(row.data) } : null, job: jobs.rows[0] ?? null, workerOnline: worker.rows[0]?.online ?? false, ocrEnabled });
+    // Marks of a stored transcript that are not errors (withoutSettledReviews) are left out, as a new upload does.
+    res.json({ transcript: row ? { ...row, data: withoutSettledReviews(row.data) } : null, job: jobs.rows[0] ?? null, workerOnline: worker.rows[0]?.online ?? false, ocrEnabled });
   });
   router.delete("/transcript/job", async (req, res) => {
     const input = z.object({ id: z.uuid() }).safeParse(req.body);

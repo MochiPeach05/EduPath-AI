@@ -5,7 +5,7 @@ import type { AuthenticatedUser } from "../auth/types.js";
 import { requireAdminAccess } from "../middleware/authorization.js";
 import { AccountError, type AdminAccountRepository } from "./accounts.js";
 import { CONSENT_VALID_SINCE } from "../student/consent.js";
-import { withoutSettledConflicts, type TranscriptData } from "../student/transcript-parser.js";
+import { withoutSettledReviews, type TranscriptData } from "../student/transcript-parser.js";
 
 export interface StudentProfileQuery {
   q: string; page: number; pageSize: number;
@@ -107,8 +107,8 @@ export class PostgresStudentProfileRepository implements StudentProfileRepositor
       FROM users u LEFT JOIN student_transcripts t ON t.user_id = u.id WHERE u.id = $1 AND ${studentScope}`, [id]);
     const row = result.rows[0];
     if (!row) throw new AccountError("student_not_found", 404);
-    // Marks that are not errors are left out, as on the student page (isSettledResultConflict).
-    return { transcript: row.updatedAt && row.data ? { updatedAt: row.updatedAt, data: withoutSettledConflicts(row.data) } : null };
+    // Marks that are not errors are left out, as on the student page (withoutSettledReviews).
+    return { transcript: row.updatedAt && row.data ? { updatedAt: row.updatedAt, data: withoutSettledReviews(row.data) } : null };
   }
 }
 

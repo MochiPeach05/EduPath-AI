@@ -25,6 +25,13 @@ describe("OCR result boundary", () => {
     Object.assign(f.courses[0]!, { score_10: null, score_4: null, letter_grade: "VT", result: "failed" });
     expect(mapOcrTranscript(f).sections[0]?.courses[0]).toMatchObject({ score10: null, score4: null, letter: "VT", result: "Không đạt" });
   });
+  it("accepts CT (cấm thi, 2026-10-26) the same way, with nothing to check", () => {
+    const f = fixture();
+    Object.assign(f.courses[0]!, { score_10: null, score_4: null, letter_grade: "CT", result: "failed", issues: [] });
+    const [barred] = mapOcrTranscript(f).sections[0]!.courses;
+    expect(barred).toMatchObject({ score10: null, score4: null, letter: "CT", result: "Không đạt" });
+    expect(barred).not.toHaveProperty("review");
+  });
   it.each(["count", "score", "page", "type"])("rejects a result that breaks the worker contract (%s)", kind => {
     const f = fixture();
     if (kind === 'count') f.course_count = 2;

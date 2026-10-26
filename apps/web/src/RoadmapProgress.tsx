@@ -139,6 +139,6 @@ export function RoadmapLegend() {
       <tbody>{rows.map(([mark, name, text]) => <tr key={name}><td><Mark {...mark} /></td><th scope="row">{name}</th><td>{text}</td></tr>)}</tbody>
     </table>
     <h3>Học phần không được tính</h3>
-    <p>Cuối mục Theo dõi tiến độ là các học phần đã học hoặc đã đăng ký nhưng không thuộc yêu cầu nào của chương trình, ví dụ học phần của chuyên ngành khác hoặc học phần ngoài chương trình đào tạo. Học phần chưa đạt (F, VT) vẫn nằm trong yêu cầu tương ứng, với ký hiệu Còn thiếu.</p>
+    <p>Cuối mục Theo dõi tiến độ là các học phần đã học hoặc đã đăng ký nhưng không thuộc yêu cầu nào của chương trình, ví dụ học phần của chuyên ngành khác hoặc học phần ngoài chương trình đào tạo. Học phần chưa đạt (F, VT, CT) vẫn nằm trong yêu cầu tương ứng, với ký hiệu Còn thiếu.</p>
   </details>;
 }

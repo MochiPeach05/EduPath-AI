@@ -27,7 +27,7 @@ Phần "Xét tốt nghiệp (tham khảo)" của trang `#competency` **không** 
 
 | Chức năng | Thành phần |
 |---|---|
-| Suy ra Đạt/Không đạt từ điểm chữ khi cột kết quả trống (A+…D, MT đạt; F và VT — vắng thi, không có điểm số — không đạt) | `course-state.ts` (API; cũng là nguồn trạng thái học phần của trang Điều kiện xét tốt nghiệp), `apps/web/src/transcript-results.ts` (trang bảng điểm, CTĐT, KHĐT); bảng ca chung `fixtures/result-cases.json` |
+| Suy ra Đạt/Không đạt từ điểm chữ khi cột kết quả trống (A+…D, MT đạt; F, VT — vắng thi — và CT — cấm thi; hai ký hiệu này không có điểm số — không đạt) | `course-state.ts` (API; cũng là nguồn trạng thái học phần của trang Điều kiện xét tốt nghiệp), `apps/web/src/transcript-results.ts` (trang bảng điểm, CTĐT, KHĐT); bảng ca chung `fixtures/result-cases.json` |
 | Điểm, độ phủ, độ tin cậy kỹ năng; điểm nhóm; điểm tổng | `calculate.ts` |
 | Khoảng trống so với nghề, mức phù hợp, học phần hỗ trợ, tự học | `calculate.ts` |
 | Tiến độ theo KHĐT | `plan-progress.ts` |

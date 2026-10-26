@@ -2,6 +2,7 @@
 // explains). Pure: read from one competency assessment result (it already holds the course states and grades, the
 // training-plan progress and the gaps to the target career) and the roadmap window. No names, student codes,
 // emails, classes or interests (the privacy policy of 2026-10-11 keeps interests away from the model).
+import { FAIL_LETTERS } from "../competency-assessment/constants.js";
 import { fold } from "../competency-assessment/specialty.js";
 import type { AssessmentResult, CourseFact, GapStatus, PlanCourseRef } from "../competency-assessment/types.js";
 import { THESIS_NAME_PATTERN } from "../graduation/thesis.js";
@@ -23,7 +24,7 @@ export type RoadmapChoice = {
   label: string; source: "next" | "late"; termCode: string | null; need: string; options: RoadmapOption[];
   thesis: { thesis: RoadmapOption | null; topics: RoadmapOption[] } | null;
 };
-/** F/VT: must be taken again; D, D+: worth improving (user, 2026-10-24), never an English course (Anh văn, user 2026-10-24). */
+/** F/VT/CT: must be taken again; D, D+: worth improving (user, 2026-10-24), never an English course (Anh văn, user 2026-10-24). */
 export type RoadmapImprove = { code: string; name: string; credits: number; letter: string; score10: number | null; action: "retake" | "improve"; careerSkills: string[] };
 /** A skill of the target career to build up: a gap, one only self-study can cover, or a met one worth deepening. key: S01… (the prompt's key). */
 export type RoadmapSkill = {
@@ -71,7 +72,7 @@ const isEnglish = (item: Pick<CourseFact, "code" | "name">) => /^71ENG/i.test(it
 const TOPIC_NAME_PATTERN = /\bchuyen de tot nghiep\b/;
 /** The levels in order, to name the next one a met skill can reach. */
 const LEVEL_LADDER = ["Yếu", "Trung bình", "Khá", "Giỏi", "Xuất sắc"];
-const RETAKE_LETTERS = new Set(["F", "VT"]);
+const RETAKE_LETTERS = new Set(FAIL_LETTERS);
 /** The order a gap is worth working on: below the threshold, not studied, only self-study, then still to come. */
 const STATUS_ORDER: Record<string, number> = { below: 0, not_studied: 1, no_data: 2, upcoming: 3, met: 4 };
 

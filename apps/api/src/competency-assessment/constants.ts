@@ -1,3 +1,4 @@
+import { NO_SCORE_LETTERS } from "../student/transcript-parser.js";
 import type { Confidence, FitCode, GapStatus } from "./types.js";
 
 // Every threshold and band used by the competency calculation lives here.
@@ -174,11 +175,10 @@ export const MAX_RELATED_SKILLS = 3;
 /** Same pass letters as the OCR pipeline (services/ocr/test_ocr.py PASS_LETTERS). */
 export const PASS_LETTERS: readonly string[] = ["A+", "A", "B+", "B", "C+", "C", "D+", "D"];
 /**
- * "VT" (vắng thi, absent from the exam) is printed in the score and letter columns alike: a failed
- * attempt without a score, worth 0 in the printed semester GPA like an F (services/ocr FAIL_LETTERS).
+ * "VT" (vắng thi) and "CT" (cấm thi, 2026-10-26) are printed in the score and letter columns alike: a failed attempt
+ * without a score, worth 0 in the printed semester GPA like an F (transcript-parser NO_SCORE_LETTERS, services/ocr).
  */
-export const ABSENT_LETTER = "VT";
-export const FAIL_LETTERS: readonly string[] = ["F", ABSENT_LETTER];
+export const FAIL_LETTERS: readonly string[] = ["F", ...NO_SCORE_LETTERS];
 /** Exemption/recognition letter. Counts as passed; never inferred. */
 export const EXEMPT_LETTER = "MT";
 

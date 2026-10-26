@@ -91,6 +91,17 @@ describe("graduation port: shared web/API cases (spec §7.9)", () => {
     expect(assessGraduationGpa({ minimumGpa: 2, gpaScale: 4 }, transcript, records, new Set())).toMatchObject({ actual: 1.75, status: "fail", source: "calculated" });
   });
 
+  it("counts a barred CT attempt (cấm thi, 2026-10-26) at 0 too: (0 × 3 + 2.72 × 3 + 2.52 × 3) / 9 = 1.75", () => {
+    const transcript = syntheticTranscript([{ year: "2023-2024", semester: "HK01", rows: [
+      ["71ENG310033", 3, null, null, "CT", "Không đạt"], ["71ITSE30503", 3, 6.8, 2.72, "C+", "Đạt"], ["71ITSE41003", 3, 6.3, 2.52, "C", "Đạt"],
+    ] }]);
+    const records = transcriptCourses(transcript);
+    expect(records.get("71ENG310033")?.state).toBe("failed");
+    const gpa = assessGraduationGpa({ minimumGpa: 2, gpaScale: 4 }, transcript, records, new Set());
+    expect(gpa).toMatchObject({ status: "fail", source: "calculated" });
+    expect(gpa.actual).toBeCloseTo(15.72 / 9, 10); // 1,75 once rounded, as the transcript prints it
+  });
+
   it("keeps the GPA scale at 4 when the standard has none (K29)", () => {
     const transcript = syntheticTranscript([{ year: "2024-2025", semester: "HK01", rows: [["71ITBS10103", 3, 8, 3.5, "B+", "Đạt"]] }]);
     const gpa = assessGraduationGpa({ minimumGpa: 2, gpaScale: null }, transcript, transcriptCourses(transcript), new Set());

@@ -30,10 +30,10 @@ DEFAULT_REC_MODEL = ROOT / 'models/f3'
 DEFAULT_DPI = {'ppocr': 150, 'vl': 300}
 DEFAULT_DET_MODEL = 'PP-OCRv5_server_det'
 PASS_LETTERS = {'A+', 'A', 'B+', 'B', 'C+', 'C', 'D+', 'D'}
-# VT (vắng thi, absent from the exam) is printed in the score and letter columns alike: a failed
-# attempt without a score (it counts 0 in the printed semester GPA, like F).
-ABSENT_LETTER = 'VT'
-FAIL_LETTERS = {'F', ABSENT_LETTER}
+# VT (vắng thi, absent from the exam) and CT (cấm thi, barred from the exam; user 2026-10-26) are printed in the score
+# and letter columns alike: a failed attempt without a score (it counts 0 in the printed semester GPA, like F).
+NO_SCORE_LETTERS = {'VT', 'CT'}
+FAIL_LETTERS = {'F'} | NO_SCORE_LETTERS
 LETTERS = PASS_LETTERS | FAIL_LETTERS | {'MT'}
 RESULT_MARKS = {'✓': 'passed', '✗': 'failed'}  # written into the result cell by ppocr_table.result_mark
 RESULT_WORDS = {'dat': 'passed', 'dau': 'passed', 'khong dat': 'failed', 'rot': 'failed', 'truot': 'failed'}
@@ -239,10 +239,10 @@ def parse_semesters(summaries, courses):
             else:
                 record[field] = parsed
     for record in semesters.values():
-        # A VT attempt enters the printed semester GPA at 0, like an F.
+        # A VT or CT attempt enters the printed semester GPA at 0, like an F.
         graded = [c for c in courses if (c['academic_year'], c['semester']) ==
                   (record['academic_year'], record['semester'])
-                  and (c['score_4'] is not None or c['letter_grade'] == ABSENT_LETTER)
+                  and (c['score_4'] is not None or c['letter_grade'] in NO_SCORE_LETTERS)
                   and c['credits'] and not c['course_code'].startswith(CONDITIONAL_PREFIXES)]
         issues = record['issues']
         if record['academic_year'] is None:
@@ -434,10 +434,10 @@ def parse_pages(pages, catalog):
             if credits is None:
                 issues.append('missing_credits')
             letter = cells[6] or None
-            # "VT" in a score column is the absence mark, not an unreadable number.
-            absent = letter == ABSENT_LETTER
-            score10 = None if absent and cells[4] in ('', ABSENT_LETTER) else number(cells[4], 'score_10', issues, upper=10)
-            score4 = None if absent and cells[5] in ('', ABSENT_LETTER) else number(cells[5], 'score_4', issues, upper=4)
+            # "VT"/"CT" in a score column is the mark itself, not an unreadable number.
+            no_score = letter in NO_SCORE_LETTERS
+            score10 = None if no_score and cells[4] in ('', letter) else number(cells[4], 'score_10', issues, upper=10)
+            score4 = None if no_score and cells[5] in ('', letter) else number(cells[5], 'score_4', issues, upper=4)
             if letter is None and (score10 is not None or score4 is not None):
                 issues.append('missing_letter_grade')
             if (score10 is None) != (score4 is None):

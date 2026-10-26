@@ -21,8 +21,8 @@ export type CourseOutcome = {
 
 /** Passing letter grades; the OCR pipeline uses the same set (services/ocr/test_ocr.py PASS_LETTERS). */
 export const PASS_LETTERS: readonly string[] = ["A+", "A", "B+", "B", "C+", "C", "D+", "D"];
-/** Failing letter grades: F and VT (vắng thi, absent from the exam: printed without a score). */
-export const FAIL_LETTERS: readonly string[] = ["F", "VT"];
+/** Failing letter grades: F, VT (vắng thi, absent) and CT (cấm thi, barred; 2026-10-26), the last two printed without a score. */
+export const FAIL_LETTERS: readonly string[] = ["F", "VT", "CT"];
 export const isFailLetter = (letter: string | null | undefined) => FAIL_LETTERS.includes(letter?.trim().toUpperCase() ?? "");
 
 /**

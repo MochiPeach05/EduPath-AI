@@ -124,6 +124,9 @@ describe("letter grade fallback for blank result cells", () => {
   it("fails an absent VT (vắng thi) attempt and shows it like an F", () => {
     expect(attemptOutcome({ code: "X", result: null, letter: "VT", score10: null })).toEqual({ status: "fail", inferred: true, exempt: false });
     expect(["F", " vt ", "VT"].map(isFailLetter)).toEqual([true, true, true]);
+    // CT (cấm thi, 2026-10-26) the same way.
+    expect(attemptOutcome({ code: "X", result: null, letter: "CT", score10: null })).toEqual({ status: "fail", inferred: true, exempt: false });
+    expect(["CT", " ct "].map(isFailLetter)).toEqual([true, true]);
     expect(["D", "MT", null].map(isFailLetter)).toEqual([false, false, false]);
   });
 

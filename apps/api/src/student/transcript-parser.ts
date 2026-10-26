@@ -19,8 +19,13 @@ export type TranscriptCourse = {
 export type TranscriptSection = { id: string; academicYear: string | null; semester: string | null; label: string; courses: TranscriptCourse[]; summaries: { label: string; value: string | null }[] };
 /** Rows found before any term heading (2026-10-23): kept in their own section instead of refusing the transcript. */
 export const UNKNOWN_TERM_SECTION = { id: "unknown", academicYear: null, semester: null, label: "Chưa rõ học kỳ" } as const;
-/** The letter marks the pages know (pass, fail, VT absent, MT exempt); another printed mark is kept and marked for review. */
-export const KNOWN_LETTER = /^(A\+?|B\+?|C\+?|D\+?|F|MT|VT)$/;
+/**
+ * "VT" (vắng thi, absent from the exam) and "CT" (cấm thi, barred from the exam; user 2026-10-26: "CT … là chữ cấm thi
+ * cũng là không đạt") are printed in the score and letter columns alike: a failed attempt without a score, 0 in the GPA.
+ */
+export const NO_SCORE_LETTERS: readonly string[] = ["VT", "CT"];
+/** The letter marks the pages know (pass, fail, VT absent, CT barred, MT exempt); another printed mark is kept and marked for review. */
+export const KNOWN_LETTER = /^(A\+?|B\+?|C\+?|D\+?|F|MT|VT|CT)$/;
 /** One warning for the rows marked for review, shown with the transcript. */
 export const reviewWarning = (rows: number) =>
   `Có ${rows} dòng có mã môn, ký hiệu hoặc ô khác dạng thường gặp. Hệ thống vẫn lưu đúng như in trên PDF và đánh dấu các dòng này; hãy đối chiếu với PDF gốc.`;
@@ -36,15 +41,32 @@ export const OLD_PASS_SCORE_10 = 4;
 export const isSettledResultConflict = (course: { result: string | null; score10: number | null }) =>
   /^đạt\b/.test((course.result ?? "").normalize("NFC").trim().toLowerCase()) && course.score10 !== null && course.score10 >= OLD_PASS_SCORE_10;
 
-/** A stored transcript without the marks isSettledResultConflict clears, its review warning recounted (read as uploaded now). */
-export function withoutSettledConflicts(data: TranscriptData): TranscriptData {
+/**
+ * A VT/CT row stored before CT was known (2026-10-26): no score, and the mark (or nothing) in its printed score cells,
+ * which were read as "not a number" and the mark as unknown.
+ */
+const isNoScoreRow = (course: TranscriptCourse) => course.letter !== null && NO_SCORE_LETTERS.includes(course.letter)
+  && course.score10 === null && course.score4 === null
+  && [course.printed?.score10, course.printed?.score4].every((cell) => cell === undefined || cell === course.letter);
+const NO_SCORE_REVIEW = ["invalid_score_10", "invalid_score_4", "incomplete_scores", "unrecognized_letter_grade"];
+
+/**
+ * A stored transcript read as if uploaded now: without the review marks that are not errors (Đạt with 4,0 or more,
+ * isSettledResultConflict; a VT/CT row, isNoScoreRow, whose printed mark goes too), its review warning recounted.
+ */
+export function withoutSettledReviews(data: TranscriptData): TranscriptData {
   let changed = false;
   const sections = data.sections.map((section) => ({ ...section, courses: section.courses.map((course): TranscriptCourse => {
-    if (!course.review?.includes("result_conflicts_with_grade") || !isSettledResultConflict(course)) return course;
+    if (!course.review?.length) return course;
+    const noScore = isNoScoreRow(course);
+    const settled = new Set([...(isSettledResultConflict(course) ? ["result_conflicts_with_grade"] : []), ...(noScore ? NO_SCORE_REVIEW : [])]);
+    if (!course.review.some((code) => settled.has(code))) return course;
     changed = true;
-    const { review, ...rest } = course;
-    const left = review.filter((code) => code !== "result_conflicts_with_grade");
-    return left.length ? { ...rest, review: left } : rest;
+    const { review, printed, ...rest } = course;
+    const left = review.filter((code) => !settled.has(code));
+    let kept = printed;
+    if (noScore && printed) { kept = { ...printed }; delete kept.score10; delete kept.score4; }
+    return { ...rest, ...(left.length ? { review: left } : {}), ...(kept && Object.keys(kept).length ? { printed: kept } : {}) };
   }) }));
   if (!changed) return data;
   const reviewed = sections.reduce((sum, section) => sum + section.courses.filter((course) => course.review?.length).length, 0);
@@ -193,8 +215,8 @@ export function parsePages(pages: Page[]): TranscriptData {
       const wholeCredits = typeof credits === "number" && Number.isInteger(credits);
       if (!wholeCredits) { review.push(credits === null ? "missing_credits" : "invalid_credits"); printed.credits = cells[3]!; }
       const letter = cells[6] || null;
-      // "VT" (vắng thi) fills the score columns too: a failed attempt without a score.
-      const absent = letter === "VT", blank = (cell: string) => absent && (cell === "" || cell === "VT");
+      // "VT" (vắng thi) and "CT" (cấm thi) fill the score columns too: a failed attempt without a score.
+      const noScore = letter !== null && NO_SCORE_LETTERS.includes(letter), blank = (cell: string) => noScore && (cell === "" || cell === letter);
       const score = (cell: string, max: number, field: "score10" | "score4") => {
         if (blank(cell)) return null;
         const value = numeric(cell, max);
@@ -216,7 +238,7 @@ export function parsePages(pages: Page[]): TranscriptData {
   }
   if (!count) throw new TranscriptError("unsupported_layout");
   if (count > 1000) throw new TranscriptError("unreadable_rows");
-  const warnings = ["Bảng điểm do sinh viên tải lên; chưa được nhà trường xác minh.", "Ô Kết quả chỉ có biểu tượng (không có chữ) được xem là trống; khi ô Kết quả trống, Đạt/Không đạt được xác định theo điểm chữ chính thức: A+ đến D là Đạt, F và VT là Không đạt."];
+  const warnings = ["Bảng điểm do sinh viên tải lên; chưa được nhà trường xác minh.", "Ô Kết quả chỉ có biểu tượng (không có chữ) được xem là trống; khi ô Kết quả trống, Đạt/Không đạt được xác định theo điểm chữ chính thức: A+ đến D là Đạt, F, VT và CT là Không đạt."];
   if (reviewed) warnings.push(reviewWarning(reviewed));
   if (skipped) warnings.push(skippedRowsWarning(skipped));
   return { schemaVersion: 1, parserVersion: "vlu-native-1", pageCount: pages.length, courseCount: count, sections: sections.filter(s => s.courses.length), warnings };
