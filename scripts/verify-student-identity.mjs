@@ -66,6 +66,20 @@ try {
   const twin = await addUser("207CT99901 - Sinh Viên Trùng Mã - K26T-IT11");
   assert.equal((await profile(twin)).code, null);
   checks.push("a renamed account keeps the fields it already has; a student code another account owns is not reassigned");
+
+  // 052 (2026-10-27): the major is the programme code of the MSSV; K26 "207CT…" is Công nghệ thông tin.
+  const major = async (id) => (await pool.query("SELECT major_code FROM student_profiles WHERE user_id=$1", [id])).rows[0]?.major_code ?? null;
+  assert.equal(await major(before045), "7480201");
+  for (const [name, expected] of [
+    ["2374802019998 - Sinh Viên CNTT - 71K29CNTT08", "7480201"],
+    ["2174801049998 - Sinh Viên HTTT - 71K27HTTT01", "7480104"],
+    ["2374801029998 - Sinh Viên MMT - 71K29MMT01", "7480102"],
+    ["207CT99906 - Sinh Viên Thử Sáu - K26T-IT06", "7480201"],
+    ["207LH99907 - Sinh Viên Thử Bảy - K26D-LH07", null],
+  ]) assert.equal(await major(await addUser(name)), expected, name);
+  await pool.query("UPDATE student_profiles SET student_code='2374801049997' WHERE user_id=$1", [kept]);
+  assert.equal(await major(kept), "7480104");
+  checks.push("052 fills the major from the MSSV (7480201, 7480104, 7480102; 207CT… is 7480201), for profiles made before it too, and follows a changed MSSV");
   console.log(checks.map((check) => `PASS ${check}`).join("\n"));
 } finally {
   await pool.end();

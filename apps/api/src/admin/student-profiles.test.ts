@@ -97,6 +97,8 @@ describe("student profile SQL safety", () => {
     const repo = new PostgresStudentProfileRepository({ query } as unknown as DatabasePool);
     await expect(repo.detail(actor, id)).resolves.toMatchObject({ specialty: "CNDL" });
     expect(String(query.mock.calls[0]![0])).toContain("p.specialty");
+    // The major of the MSSV (migration 052) is shown to the student and the admin.
+    expect(String(query.mock.calls[0]![0])).toContain('p.major_code AS "majorCode"');
   });
 });
 

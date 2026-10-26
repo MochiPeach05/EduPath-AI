@@ -21,6 +21,8 @@ interface StudentProfileSummary {
   profileStatus: "missing" | "incomplete" | "complete";
 }
 export interface StudentProfileDetail extends StudentProfileSummary {
+  /** student_profiles.major_code: the programme code of the MSSV (7480201 CNTT, 7480104 HTTT, 7480102 MMT&TTDL; 052). */
+  majorCode?: string | null;
   /** student_profiles.specialty; null = "Chưa xác định". */
   specialty?: "CNPM" | "CNDL" | "TTNT" | "ANM" | "KCN" | null;
   careerPositionId?: string | null;
@@ -92,7 +94,7 @@ export class PostgresStudentProfileRepository implements StudentProfileRepositor
   }
   async detail(_actor: AuthenticatedUser, id: string): Promise<StudentProfileDetail> {
     const result = await this.pool.query<StudentProfileDetail>(`SELECT ${summaryColumns}, u.username,
-      p.career_goal AS "careerGoal", p.career_position_id AS "careerPositionId", p.specialty,
+      p.career_goal AS "careerGoal", p.career_position_id AS "careerPositionId", p.specialty, p.major_code AS "majorCode",
       (SELECT json_build_object('id',c.id,'nameVi',c.name_vi,'nameEn',c.name_en,'deletedAt',c.deleted_at) FROM career_positions c WHERE c.id=p.career_position_id) AS "careerPosition", p.interests,
       (SELECT s.updated_at FROM stu_profile_surveys s WHERE s.user_id=u.id) AS "surveyUpdatedAt", ${surveyComplete} AS "surveyComplete",
       EXISTS (SELECT 1 FROM student_transcripts t WHERE t.user_id = u.id) AS "hasTranscript", u.created_at AS "accountCreatedAt", u.first_login_at AS "firstLoginAt",

@@ -422,7 +422,8 @@
 
 .so-student-strip dl {
   display: flex;
-  gap: 32px;
+  flex-wrap: wrap;
+  gap: 12px 32px;
   margin: 0;
 }
 

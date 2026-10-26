@@ -9,6 +9,7 @@ import StudentTranscript from "./StudentTranscript";
 import StudentCurriculum from "./StudentCurriculum";
 import StudentOverview, { requiredProfileItems, revealProfileSection, type StudentProfile } from "./StudentOverview";
 import { profileSectionOf } from "./student-overview-data";
+import { majorLabel } from "./majors";
 import { logout } from "./auth-api";
 import { publicInformationLinks, supportEmail } from "./public-information";
 import { Icon } from "./student-icons";
@@ -261,7 +262,7 @@ export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) 
       if (section) revealProfileSection(section);
     }}>Hoàn thành hồ sơ</button>
   </div> : null;
-  const fields = { "Mã sinh viên": profile?.studentCode, "Khóa học": profile?.cohortCode, "Lớp học": profile?.className, "Năm nhập học": profile?.cohortYear, "Email": email };
+  const fields = { "Mã sinh viên": profile?.studentCode, "Ngành": majorLabel(profile?.majorCode), "Khóa học": profile?.cohortCode, "Lớp học": profile?.className, "Năm nhập học": profile?.cohortYear, "Email": email };
   const profileCard = <section className="sw-panel sw-profile"><div className="sw-section-heading"><h2>Thông tin học tập</h2><span className="sw-tag">Hồ sơ của bạn</span></div><div className="sw-profile-intro"><span className="sw-avatar sw-avatar-large">{avatar}</span><div><h3>{name}</h3><p>{email ?? "Chưa cập nhật email"}</p></div></div><dl className="sw-fields">{Object.entries(fields).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{loading ? "Đang tải…" : value ?? "Chưa cập nhật"}</dd></div>)}</dl></section>;
   const popoverOpen = panel === "help" || panel === "notifications";
   return <div className="sw-shell">
@@ -317,7 +318,7 @@ export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) 
           {page === "overview" ? <StudentOverview profile={profile} loading={loading} navigate={navigate} identity={
             <section className="so-student-strip" aria-label="Thông tin sinh viên">
               <div className="so-student-identity"><span className="sw-avatar sw-avatar-large">{avatar}</span><div><strong>{name}</strong><span>{email ?? "Chưa cập nhật email"}</span></div></div>
-              <dl><div><dt>Mã sinh viên</dt><dd>{loading ? "Đang tải…" : profile?.studentCode ?? "Chưa cập nhật"}</dd></div><div><dt>Khóa · Lớp</dt><dd>{loading ? "Đang tải…" : [profile?.cohortCode, profile?.className].filter(Boolean).join(" · ") || "Chưa cập nhật"}</dd></div><div><dt>Năm nhập học</dt><dd>{loading ? "Đang tải…" : profile?.cohortYear ?? "Chưa cập nhật"}</dd></div></dl>
+              <dl><div><dt>Mã sinh viên</dt><dd>{loading ? "Đang tải…" : profile?.studentCode ?? "Chưa cập nhật"}</dd></div><div><dt>Ngành</dt><dd>{loading ? "Đang tải…" : majorLabel(profile?.majorCode) ?? "Chưa cập nhật"}</dd></div><div><dt>Khóa · Lớp</dt><dd>{loading ? "Đang tải…" : [profile?.cohortCode, profile?.className].filter(Boolean).join(" · ") || "Chưa cập nhật"}</dd></div><div><dt>Năm nhập học</dt><dd>{loading ? "Đang tải…" : profile?.cohortYear ?? "Chưa cập nhật"}</dd></div></dl>
             </section>} />
           : page === "profile" ? <div className="sr-profile-layout">{profileCard}{profile && <StudentProfileEditor profile={profile} onSaved={() => setReload(n => n + 1)} />}{profile && <StudentProfileSurvey onSaved={() => setReload(n => n + 1)} />}<StudentTranscript /></div> : page === "curriculum" ? <StudentCurriculum /> : page === "plans" ? <StudentPlans /> : page === "graduation" ? <StudentGraduation /> : page === "roadmap" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">Đang tải lộ trình học tập…</p></section>}><StudentRoadmap notice={reminder} /></Suspense> : page === "career" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">Đang tải định hướng nghề nghiệp…</p></section>}><StudentCareerGuidance onProfileChanged={() => setReload(n => n + 1)} /></Suspense> : page === "competency" || page === "skill-gap" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">{page === "skill-gap" ? "Đang tải trang khoảng trống kỹ năng…" : "Đang tải trang đánh giá năng lực…"}</p></section>}><StudentCompetency key={page} profile={profile} view={page === "skill-gap" ? "gap" : "competency"} notice={reminder} /></Suspense> : <section className="sw-panel sw-feature"><span className="sw-card-icon"><Icon name={selected.icon} /></span><span className="sw-tag">Sắp ra mắt</span><h2>{featureCopy[page]?.title}</h2><p>{featureCopy[page]?.text}</p><div className="sw-feature-steps">{featureCopy[page]?.steps.map((step, i) => <div key={step}><span>0{i + 1}</span><h3>{step}</h3></div>)}</div><p className="sw-muted">Chức năng này chưa sẵn sàng sử dụng. Bạn có thể xem thông tin học tập hiện có trong Hồ sơ và bảng điểm.</p><button className="sw-primary" onClick={() => navigate("profile")}>Xem Hồ sơ và bảng điểm <Icon name="arrow" /></button></section>}
           <footer className="sw-footer">

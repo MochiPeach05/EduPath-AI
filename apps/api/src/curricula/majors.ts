@@ -16,3 +16,28 @@ export function fullMajorName(name: string) {
   const key = name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").toLowerCase().replace(/[^a-z]/g, "");
   return FULL_NAMES[key] ?? name;
 }
+
+/**
+ * The majors by the programme code a student's MSSV holds (student_profiles.major_code, migration 052;
+ * user, 2026-10-27: "Điền ngành đúng nè").
+ */
+export const MAJORS = [
+  { code: "7480201", name: "CÔNG NGHỆ THÔNG TIN", label: "Công nghệ thông tin" },
+  { code: "7480104", name: "HỆ THỐNG THÔNG TIN", label: "Hệ thống thông tin" },
+  { code: "7480102", name: "MẠNG MÁY TÍNH VÀ TRUYỀN THÔNG DỮ LIỆU", label: "Mạng máy tính và truyền thông dữ liệu" },
+] as const;
+export type MajorCode = (typeof MAJORS)[number]["code"];
+export const CNTT_MAJOR: MajorCode = "7480201";
+
+/** A CTĐT/KHĐT identity names its major folded ("cong nghe thong tin" of "cong nghe thong tin:K29"). */
+export const majorKey = (name: string) =>
+  name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").toLowerCase().replace(/\s+/g, " ").trim();
+
+/**
+ * The identity part of the frameworks and plans of a student's major, or null when the major is not known (no MSSV, a
+ * major the Faculty does not teach): then the cohort's only framework is used, as before majors.
+ */
+export function majorIdentity(code: string | null | undefined): string | null {
+  const major = MAJORS.find((item) => item.code === code?.trim());
+  return major ? majorKey(major.name) : null;
+}

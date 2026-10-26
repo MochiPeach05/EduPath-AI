@@ -8,6 +8,8 @@ import { isFailLetter } from "./transcript-results";
 
 export type StudentProfile = {
   careerPositionId?: string | null; careerPosition?: CareerSelection | null;
+  /** Ngành: the programme code of the MSSV (7480201 CNTT, 7480104 HTTT, 7480102 MMT&TTDL); absent on older APIs. */
+  majorCode?: string | null;
   /** Chuyên ngành (CNPM/CNDL/TTNT; K27 còn có ANM); null = chưa xác định, absent on older APIs. */
   specialty?: string | null;
   name: string; studentCode: string | null; cohortCode: string | null;
