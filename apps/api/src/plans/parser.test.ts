@@ -178,3 +178,65 @@ describe("older Faculty templates (K26–K28, 2026-10-23)", () => {
     await expect(read("curricula/Khung CTĐT K28 CNTT (Gởi SV-CVHT).xlsx")).rejects.toThrow("unsupported_plan_template");
   });
 });
+
+// 2026-10-26 (user): plans of the other majors, HTTT and MMT&TTDL. Synthetic workbooks laid out like the teacher's files.
+describe("plans of the other majors (HTTT, MMT&TTDL)", () => {
+  async function workbook(rows: (string | number | null)[][]) {
+    const book = new ExcelJS.Workbook();
+    const sheet = book.addWorksheet("KeHoachĐT");
+    rows.forEach((row, r) => row.forEach((value, c) => { if (value !== null) sheet.getCell(r + 1, c + 1).value = value; }));
+    return Buffer.from(await book.xlsx.writeBuffer());
+  }
+
+  it("finds the columns by their names, the title in any column and the major by its short name", async () => {
+    // K31 HTTT has no "Năm Thứ" column; the K31 MMT&TTDL title names the major after the cohort, the total a row below.
+    const data = await readWorkbook(await workbook([
+      [null, null, "KẾ HOẠCH ĐÀO TẠO THỰC TẾ - KHÓA 31 - MMT & TTDL"],
+      [null, null, null, null, null, null, null, null, null, null, null, null, 126],
+      ["TT", "Phân bổ học kỳ", "Mã học phần", "Tên học phần (Tiếng Việt)", "Số tín chỉ", "Số tiết/giờ", null, null, null,
+        "Bắt buộc/Tự chọn", "ĐK tiên quyết", "ĐK học trước", "Số TC/ HK", "Ghi chú"],
+      ["TT", null, null, null, null, "LT", "TH", "DA", "TT"],
+      ["HK251\n1", 1, "71ENG110013", "Anh văn 1 (AV1)", 3, 30, 30, 0, 0, "BB", "Không", "Không", 12],
+      ["HK251\n1", null, "GDTC1"],
+      ["HK261\n4", null, "Chọn 1 trong 2 môn sau"],
+      ["HK261\n4", 1, "71ITSE30503", "Lập trình ứng dụng Web", 3, 30, 30, 0, 0, "TC201 (3TC)", "Không", "Không", 6],
+      ["HK261\n4", 1, "71ITSE30603", "Lập trình ứng dụng di động", 3, 30, 30, 0, 0, "TC201 (3TC)", "Không", "Không"],
+      ["HK262\n5", null, "Nhóm tự chọn Chuyên ngành IoTs: Chọn 1 trong các HP sau"],
+      ["HK262\n5", 2, "71NWIO40103", "Lập trình IoT", 3, 30, 30, 0, 0, "TC301", "Không", "Không", 3],
+    ]));
+    expect(data).toMatchObject({ major: "MẠNG MÁY TÍNH VÀ TRUYỀN THÔNG DỮ LIỆU", cohortCode: "K31", admissionYear: 2025, totalCredits: 126 });
+    expect(data.items.map((item) => [item.code, item.name, item.termCode, item.credits, item.type, item.hours.internship, item.sectionId])).toEqual([
+      ["71ENG110013", "Anh văn 1 (AV1)", "HK251", 3, "BB", 0, ""],
+      // A GDTC slot in the code column is the slot of the name column.
+      ["", "GDTC1", "HK251", null, "", null, ""],
+      ["71ITSE30503", "Lập trình ứng dụng Web", "HK261", 3, "TC201 (3TC)", 0, "section-7"],
+      ["71ITSE30603", "Lập trình ứng dụng di động", "HK261", 3, "TC201 (3TC)", 0, "section-7"],
+      ["71NWIO40103", "Lập trình IoT", "HK262", 3, "TC301", 0, "section-10"],
+    ]);
+    expect(data.sections.map((section) => [section.termCode, section.kind, section.label])).toEqual([
+      ["HK261", "choice", "Chọn 1 trong 2 môn sau"],
+      ["HK262", "choice", "Nhóm tự chọn Chuyên ngành IoTs: Chọn 1 trong các HP sau"],
+    ]);
+    expect(data.terms.map((term) => [term.code, term.studyYear, term.sourceCredits])).toEqual([["HK251", 1, 12], ["HK261", 2, 6], ["HK262", 2, 3]]);
+    for (const item of data.items) expect(itemSchema.safeParse(item).success, item.id).toBe(true);
+  });
+
+  it("reads the allocation as the semester or the term's number, and keeps a contradicting year for review", async () => {
+    // K32 HTTT numbers its terms in "Phân bổ học kỳ" (HK271 = 4); K31 MMT&TTDL prints HK273 with year 4.
+    const data = await readWorkbook(await workbook([
+      ["KẾ HOẠCH ĐÀO TẠO NGÀNH HỆ THỐNG THÔNG TIN - KHÓA 32", null, null, null, null, null, null, null, null, null, null, null, null, 126],
+      [],
+      ["TT", "Phân bổ học kỳ", "Năm Thứ", "Mã học phần", "Tên học phần (Tiếng Việt)", "Số tín chỉ", "Số tiết/giờ", null, null, null,
+        "Bắt buộc/Tự chọn", "ĐK tiên quyết", "ĐK học trước", "Số TC/ HK", "Ghi chú"],
+      [null, null, null, null, null, null, "LT", "TH", "ĐA", "TT"],
+      ["HK271\n4", 4, 2, "71ENG410043", "Anh văn 4 (AV4)", 3, 30, 30, 0, 0, "BB"],
+      ["HK273\n6", 3, 4, "71ISIN40104", "Đồ án thực tập", 4, 0, 0, 0, 60, "BB"],
+    ]));
+    expect(data).toMatchObject({ major: "HỆ THỐNG THÔNG TIN", cohortCode: "K32", totalCredits: 126 });
+    expect(data.items.map((item) => [item.code, item.termCode, item.studyYear, item.semester])).toEqual([
+      ["71ENG410043", "HK271", 2, 1], ["71ISIN40104", "HK273", 2, 3],
+    ]);
+    expect(data.warnings.map((warning) => warning.message)).toContain("Đồ án thực tập: năm/học kỳ ghi ở cột phân bổ khác HK273; giữ theo HK273.");
+    expect(data.warnings.some((warning) => /Anh văn 4.*để trống/.test(warning.message))).toBe(false);
+  });
+});

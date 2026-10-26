@@ -1,8 +1,51 @@
 import { Worker } from "node:worker_threads";
-import { MIN_COHORT, visibleSheets } from "../curricula/legacy.js";
+import { MIN_COHORT, isCourseCode, visibleSheets } from "../curricula/legacy.js";
+import { fullMajorName } from "../curricula/majors.js";
 import { checkArchive } from "../curricula/parser.js";
 import { readLegacyPlan } from "./legacy.js";
 import { PlanError, fold, reviewPlan, type PlanData } from "./model.js";
+
+type Column = "semester" | "year" | "code" | "name" | "credits" | "lecture" | "practice" | "project" | "internship"
+  | "type" | "prerequisite" | "prior" | "termCredits" | "notes";
+const HOURS: Record<string, Column> = { lt: "lecture", th: "practice", da: "project", tt: "internship" };
+/** A GDTC slot ("GDTC1", "GDTC 1"): the student picks the course, so it has no code of its own. */
+const GDTC_SLOT = /^GDTC\s*\d$/i;
+type CellText = (cell: import("exceljs").Cell) => string;
+
+/**
+ * The header of a 2025-template plan and its columns, found by their names (2026-10-26: the K31 HTTT plan has no
+ * "Năm Thứ" column, so the code is in C instead of D). The template labels each term in column A ("HK251" and its
+ * number); the older templates have YYS codes instead and keep their own reader.
+ */
+function planHeader(sheet: import("exceljs").Worksheet, value: CellText) {
+  const width = Math.min(sheet.columnCount, 30);
+  const label = (row: number, column: number) => fold(value(sheet.getCell(row, column)));
+  for (let row = 1; row <= Math.min(40, sheet.rowCount); row++) {
+    let code = 0;
+    for (let column = 1; column < width && !code; column++)
+      if (label(row, column) === "ma hoc phan" && label(row, column + 1).includes("ten hoc phan")) code = column;
+    if (!code) continue;
+    if (!Array.from({ length: 10 }, (_, n) => value(sheet.getCell(row + 1 + n, 1)).trim()).some((text) => /^HK\d{3}/i.test(text))) continue;
+    const columns: Partial<Record<Column, number>> = { code, name: code + 1 };
+    for (let column = 1; column <= width; column++) {
+      if (column === code || column === code + 1) continue;
+      // "LT", "TH", "ĐA", "TT" under "Số tiết/giờ"; the "TT" (số thứ tự) header merged over both rows is no hour column.
+      const top = label(row, column), sub = label(row + 1, column), hours = sub !== top ? HOURS[sub.replace(/\s/g, "")] : undefined;
+      if (hours && !columns[hours]) columns[hours] = column;
+      else if (!top) continue;
+      else if (top === "phan bo hoc ky") columns.semester = column;
+      else if (top === "nam thu") columns.year = column;
+      else if (!columns.credits && top === "so tin chi") columns.credits = column;
+      else if (!columns.type && top.includes("bat buoc")) columns.type = column;
+      else if (!columns.prerequisite && top.includes("tien quyet")) columns.prerequisite = column;
+      else if (!columns.prior && top.includes("hoc truoc")) columns.prior = column;
+      else if (!columns.termCredits && /^so tc\b/.test(top)) columns.termCredits = column;
+      else if (!columns.notes && top.startsWith("ghi chu")) columns.notes = column;
+    }
+    return { row, columns };
+  }
+  return null;
+}
 
 /** Choice counts ("chọn 1 trong 3") are kept as written: a different number of rows is only a warning. */
 function finish(data: PlanData) {
@@ -41,23 +84,15 @@ export async function readWorkbook(buffer: Buffer): Promise<PlanData> {
   };
   if (workbook.worksheets.length > 20)
     throw new PlanError("workbook_too_large");
-  const candidates: { sheet: import("exceljs").Worksheet; header: number }[] =
-    [];
+  const candidates: { sheet: import("exceljs").Worksheet; header: number; columns: Partial<Record<Column, number>> }[] = [];
   const visible = visibleSheets(workbook);
   for (const sheet of workbook.worksheets) {
     if (sheet.rowCount > 2000 || sheet.columnCount > 150)
       throw new PlanError("workbook_too_large");
     // Hidden sheets hold other templates (a K28 curriculum workbook hides a K27 plan).
     if (!visible.includes(sheet)) continue;
-    for (let r = 1; r <= Math.min(40, sheet.rowCount); r++) {
-      if (
-        fold(value(sheet.getCell(r, 4))) === "ma hoc phan" &&
-        fold(value(sheet.getCell(r, 5))).includes("ten hoc phan")
-      ) {
-        if (!candidates.some((c) => c.sheet === sheet))
-          candidates.push({ sheet, header: r });
-      }
-    }
+    const found = planHeader(sheet, value);
+    if (found) candidates.push({ sheet, header: found.row, columns: found.columns });
   }
   // No 2025-template sheet: an older template (K26–K28), read by its header names.
   if (!candidates.length) {
@@ -65,20 +100,23 @@ export async function readWorkbook(buffer: Buffer): Promise<PlanData> {
     if (legacy) return finish(legacy);
   }
   if (candidates.length !== 1) throw new PlanError("unsupported_plan_template");
-  const { sheet, header } = candidates[0]!;
-  const title =
-    Array.from({ length: header - 1 }, (_, r) =>
-      value(sheet.getCell(r + 1, 1)),
-    ).find((t) => /KẾ HOẠCH.*KHÓA\s*\d+/i.test(t)) ?? "";
-  const match = title.match(/KẾ HOẠCH.*?NGÀNH\s+(.+?)\s*[-–]?\s*KHÓA\s*(\d+)/i);
-  if (!match || Number(match[2]) < MIN_COHORT || Number(match[2]) > 99)
+  const { sheet, header, columns } = candidates[0]!;
+  const above = Array.from({ length: header - 1 }, (_, r) => r + 1);
+  const title = above.flatMap((r) => Array.from({ length: Math.min(sheet.columnCount, 20) }, (_, c) => value(sheet.getCell(r, c + 1)).trim()))
+    .find((t) => /KẾ HOẠCH.*KHÓA\s*\d+/i.test(t)) ?? "";
+  // "… NGÀNH CÔNG NGHỆ THÔNG TIN - KHÓA 31", or the major after the cohort ("… THỰC TẾ - KHÓA 31 - MMT & TTDL", 2026-10-26).
+  const before = title.match(/KẾ HOẠCH.*?NGÀNH\s+(.+?)\s*[-–]?\s*KHÓA\s*(\d+)/i);
+  const after = before ? null : title.match(/KẾ HOẠCH.*?KHÓA\s*(\d+)\s*[-–]\s*(?:NGÀNH\s+)?(.+?)\s*$/i);
+  const cohort = Number(before?.[2] ?? after?.[1]);
+  const major = (before?.[1] ?? after?.[2] ?? "").replace(/[-–]\s*$/, "").trim();
+  if (!major || !(cohort >= MIN_COHORT && cohort <= 99))
     throw new PlanError("missing_plan_metadata");
   const data: PlanData = {
     schemaVersion: 1,
-    name: title.trim(),
-    major: match[1]!.replace(/[-–]\s*$/, "").trim(),
-    cohortCode: `K${match[2]}`,
-    admissionYear: Number(match[2]) + 1994,
+    name: title,
+    major: fullMajorName(major),
+    cohortCode: `K${cohort}`,
+    admissionYear: cohort + 1994,
     totalCredits: null,
     notes: "",
     items: [],
@@ -98,36 +136,36 @@ export async function readWorkbook(buffer: Buffer): Promise<PlanData> {
     }
     return Number(v.replace(",", "."));
   };
-  const titleRow = Array.from({ length: header - 1 }, (_, r) => r + 1).find(
-    (r) => value(sheet.getCell(r, 1)) === title,
-  )!;
-  data.totalCredits = number(
-    value(sheet.getCell(titleRow, 14)),
-    titleRow,
-    "Tổng tín chỉ",
-  );
+  // The program total sits above the header in the term-credit column ("Số TC/ HK"): on the title row (CNTT) or on
+  // the row below it (MMT & TTDL).
+  const totalColumn = columns.termCredits ?? 14;
+  const total = above.map((r) => ({ r, text: value(sheet.getCell(r, totalColumn)).trim() })).find(({ text }) => /^\d+(?:[.,]\d+)?$/.test(text));
+  data.totalCredits = total ? number(total.text, total.r, "Tổng tín chỉ") : null;
   if (data.totalCredits !== null && data.totalCredits > 400)
     throw new PlanError("invalid_plan_row");
+  const lastColumn = Math.max(15, ...Object.values(columns));
+  const letter = (column: number) => String.fromCharCode(64 + column);
   let termCode = "",
     sectionId = "";
   let external = false;
   for (let r = header + 1; r <= sheet.rowCount; r++) {
-    const cells = Object.fromEntries(
-      Array.from({ length: 15 }, (_, c) => [
-        String.fromCharCode(65 + c),
+    const cells: Record<string, string> = Object.fromEntries(
+      Array.from({ length: lastColumn }, (_, c) => [
+        letter(c + 1),
         value(sheet.getCell(r, c + 1))
           .replace(/\u00a0/g, " ")
           .trim(),
       ]),
     );
+    const get = (column: Column) => (columns[column] ? cells[letter(columns[column]!)]! : "");
     const joined = Object.values(cells).join(" ");
     if (/TP\.\s*Hồ Chí Minh|TRƯỞNG KHOA/i.test(joined)) {
-      if (cells.D)
+      if (get("code"))
         warn(r, "Bỏ qua mã ghi ngoài vùng kế hoạch tại phần ký tên.");
       break;
     }
-    if (fold(cells.D!) === "ma hoc phan") continue;
-    for (let c = 5; c <= 13; c++) {
+    if (fold(get("code")) === "ma hoc phan") continue;
+    for (let c = columns.name!; c <= lastColumn; c++) {
       const v = sheet.getCell(r, c).value;
       if (
         v &&
@@ -141,17 +179,24 @@ export async function readWorkbook(buffer: Buffer): Promise<PlanData> {
       throw new PlanError("invalid_plan_row", 422, [
         `${sheet.name}!${r}: mã học kỳ không hợp lệ.`,
       ]);
+    let code = get("code"), name = get("name");
+    // A GDTC slot written in the code column ("GDTC1", K32 HTTT) is the slot "GDTC1" of the name column (K31 CNTT).
+    if (GDTC_SLOT.test(code) && !name) [code, name] = ["", code];
+    const semesterText = get("semester"), yearText = get("year");
     if (
-      (cells.D || cells.E) &&
-      ((cells.B && !/^[123]$/.test(cells.B)) ||
-        (cells.C && (!/^\d{1,2}$/.test(cells.C) || Number(cells.C) < 1)))
+      (code || name) &&
+      ((semesterText && (!/^\d{1,2}$/.test(semesterText) || Number(semesterText) < 1)) ||
+        (yearText && (!/^\d{1,2}$/.test(yearText) || Number(yearText) < 1)))
     )
       throw new PlanError("invalid_plan_row", 422, [
-        `${sheet.name}!${r}: học kỳ chỉ nhận 1–3, năm học phải là số.`,
+        `${sheet.name}!${r}: học kỳ và năm học phải là số.`,
       ]);
     const explicit = cells.A!.match(/HK\d{2}[123]/i)?.[0]?.toUpperCase();
-    const b = /^[123]$/.test(cells.B!) ? Number(cells.B) : null;
-    const y = /^\d{1,2}$/.test(cells.C!) ? Number(cells.C) : null;
+    // "Phân bổ học kỳ" is the semester of the year (1–3, CNTT and K31 HTTT) or the term's number in the cohort (K32 HTTT:
+    // HK271 is 4); only the first gives a term on its own.
+    const allocated = /^\d{1,2}$/.test(semesterText) ? Number(semesterText) : null;
+    const b = allocated !== null && allocated <= 3 ? allocated : null;
+    const y = /^\d{1,2}$/.test(yearText) ? Number(yearText) : null;
     // A small number of source rows have an unmerged/blank term label. B/C
     // explicitly identify their year and semester, so retain that provenance.
     const derived =
@@ -164,7 +209,7 @@ export async function readWorkbook(buffer: Buffer): Promise<PlanData> {
       sectionId = "";
     }
     if (!termCode) {
-      if (cells.D || cells.E)
+      if (code || name)
         throw new PlanError("invalid_plan_row", 422, [
           `${sheet.name}!${r}: chưa xác định được học kỳ của môn.`,
         ]);
@@ -176,67 +221,76 @@ export async function readWorkbook(buffer: Buffer): Promise<PlanData> {
       throw new PlanError("invalid_plan_row", 422, [
         `${sheet.name}!${r}: học kỳ không thuộc khóa.`,
       ]);
-    if ((b && b !== semester) || (y && y !== studyYear))
-      throw new PlanError("invalid_plan_row", 422, [
-        `${sheet.name}!${r}: năm/học kỳ mâu thuẫn với ${termCode}.`,
-      ]);
+    // The term label of column A decides; a contradicting allocation (K31 MMT&TTDL prints HK273 with year 4) is kept
+    // for review.
+    if ((allocated !== null && allocated !== semester && allocated !== (studyYear - 1) * 3 + semester) || (y && y !== studyYear))
+      warn(r, `${name || code}: năm/học kỳ ghi ở cột phân bổ khác ${termCode}; giữ theo ${termCode}.`);
     let term = data.terms.find((t) => t.code === termCode);
     if (!term) {
       term = { code: termCode, semester, studyYear, sourceCredits: null };
       data.terms.push(term);
     }
-    if (cells.N && !sheet.getCell(r, 14).isMerged) {
-      const credits = number(cells.N, r, "Tín chỉ học kỳ");
+    const termCredits = columns.termCredits ? cells[letter(columns.termCredits)]! : "";
+    const termCell = columns.termCredits ? sheet.getCell(r, columns.termCredits) : null;
+    if (termCredits && !termCell!.isMerged) {
+      const credits = number(termCredits, r, "Tín chỉ học kỳ");
       if (credits !== null) term.sourceCredits = credits;
-    } else if (
-      cells.N &&
-      sheet.getCell(r, 14).master.address === sheet.getCell(r, 14).address
-    )
-      term.sourceCredits = number(cells.N, r, "Tín chỉ học kỳ");
-    if (cells.C && !/^\d+$/.test(cells.C) && !cells.D && !cells.E) {
+    } else if (termCredits && termCell!.master.address === termCell!.address)
+      term.sourceCredits = number(termCredits, r, "Tín chỉ học kỳ");
+    const credits = get("credits");
+    // A row without a course code and credits names the courses below it ("Chọn 1 trong 4 môn sau", "Chuyên ngành IoT"):
+    // in the year column (K29–K31 CNTT), or in the code or name column (2026-10-26 workbooks).
+    const label = yearText && !/^\d+$/.test(yearText) && !code && !name ? yearText
+      : !credits && !isCourseCode(code) && !GDTC_SLOT.test(name) && (code || name) ? [code, name].filter(Boolean).join(" ") : "";
+    if (label) {
+      const folded = fold(label);
       sectionId = `section-${r}`;
       data.sections.push({
         id: sectionId,
         termCode,
-        label: cells.C,
-        kind: /chuyen nganh/.test(fold(cells.C))
-          ? "specialty"
-          : /chon/.test(fold(cells.C))
-            ? "choice"
-            : "note",
+        label,
+        // "Nhóm tự chọn Chuyên ngành IoTs: Chọn 1 trong các HP sau" is a choice inside a specialty.
+        kind: /chon\s*\d*\s*trong/.test(folded)
+          ? "choice"
+          : /chuyen nganh/.test(folded)
+            ? "specialty"
+            : /chon/.test(folded)
+              ? "choice"
+              : "note",
         sourceRow: r,
       });
       continue;
     }
-    if (!cells.D && !cells.E) continue;
-    if (!cells.E || /^#/.test(cells.E))
+    if (!code && !name) continue;
+    if (!name || /^#/.test(name))
       throw new PlanError("invalid_plan_row", 422, [
         `${sheet.name}!${r}: thiếu tên môn hoặc công thức chưa tính.`,
       ]);
-    if (!explicit || !b || !y)
+    // A plan without a "Năm Thứ" column (K31 HTTT) takes the year from the term label.
+    if (!explicit || allocated === null || (columns.year && !y))
       warn(
         r,
-        `${cells.E}: xác định năm ${studyYear}, học kỳ ${semester} từ vùng ${termCode}; có ô phân bổ gốc để trống.`,
+        `${name}: xác định năm ${studyYear}, học kỳ ${semester} từ vùng ${termCode}; có ô phân bổ gốc để trống.`,
       );
     const item = {
       id: `row-${r}`,
       position: data.items.length + 1,
-      code: cells.D!,
-      name: cells.E!,
-      credits: number(cells.F!, r, "Tín chỉ"),
-      type: cells.K!,
+      code,
+      name,
+      credits: number(credits, r, "Tín chỉ"),
+      type: get("type"),
       termCode,
       semester,
       studyYear,
       sectionId,
-      prerequisite: cells.L!,
-      prior: cells.M!,
-      notes: cells.O!,
+      prerequisite: get("prerequisite"),
+      prior: get("prior"),
+      notes: get("notes"),
       hours: {
-        lecture: number(cells.G!, r, "LT"),
-        practice: number(cells.H!, r, "TH"),
-        project: number(cells.I!, r, "ĐA"),
-        internship: number(cells.J!, r, "TT"),
+        lecture: number(get("lecture"), r, "LT"),
+        practice: number(get("practice"), r, "TH"),
+        project: number(get("project"), r, "ĐA"),
+        internship: number(get("internship"), r, "TT"),
       },
       sourceRow: r,
       sourceSheet: sheet.name,

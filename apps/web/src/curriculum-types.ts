@@ -32,7 +32,8 @@ export interface CurriculumData {
   major: string;
   cohortCode: string;
   admissionYear: number;
-  totalCredits: number;
+  /** Null when the workbook names no total (K32 HTTT, 2026-10-26). */
+  totalCredits: number | null;
   notes: string;
   courses: CurriculumCourse[];
   groups: {
@@ -78,7 +79,7 @@ export interface CurriculumList {
     cohortCode: string;
     isActive: boolean;
     version: number;
-    totalCredits: number;
+    totalCredits: number | null;
     courseCount: number;
     warningCount: number;
     updatedAt: string;

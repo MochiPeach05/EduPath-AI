@@ -49,7 +49,7 @@ export function curriculumCredits(data: CurriculumData) {
     accumulated.some((course) => accumulated.some((other) => other.code === course.code && (other.type !== course.type || other.credits !== course.credits)));
   const sameSpecialtyCredits = specialtyCredits.every((credits) => credits === specialtyCredits[0]);
   const requiredCredits = ambiguousCourses || !sameSpecialtyCredits ? null : sum(common) + (specialtyCredits[0] ?? 0);
-  const remainder = requiredCredits === null ? null : data.totalCredits - requiredCredits;
+  const remainder = requiredCredits === null || data.totalCredits === null ? null : data.totalCredits - requiredCredits;
   const electiveBlocks = blocks.filter((block) => !block.conditionOnly && block.electives.length);
   const knownElectiveCredits = electiveBlocks.reduce((total, block) => total + (block.electiveCredits ?? 0), 0);
   const allQuotasKnown = electiveBlocks.every((block) => block.electiveCredits !== null);

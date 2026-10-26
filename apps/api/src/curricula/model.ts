@@ -54,7 +54,8 @@ export type CurriculumData = {
   major: string;
   cohortCode: string;
   admissionYear: number;
-  totalCredits: number;
+  /** Null when the workbook names no total (K32 HTTT, 2026-10-26); the administrator enters it. */
+  totalCredits: number | null;
   notes: string;
   courses: CurriculumCourse[];
   groups: {
@@ -264,6 +265,6 @@ function reviewCredits(
     : data.courses.some((c) => c.specialty) ? null : creditsFor(data.courses);
   if (calculated === null)
     warn(null, "Chưa đủ quy định tín chỉ khối/tự chọn để đối chiếu tổng tín chỉ CTĐT; cần rà soát tệp nguồn. Vẫn cho phép import.");
-  else if (Math.abs(calculated - data.totalCredits) > 0.001)
+  else if (data.totalCredits !== null && Math.abs(calculated - data.totalCredits) > 0.001)
     warn(null, `Tổng tín chỉ CTĐT ghi ${data.totalCredits}, nhưng tổng tín chỉ yêu cầu ${roots.length ? "các khối cấp cao nhất" : "các môn và nhóm tự chọn"} là ${calculated}. Vẫn cho phép import; cần rà soát.`);
 }

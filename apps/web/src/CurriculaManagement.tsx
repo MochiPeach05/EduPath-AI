@@ -254,7 +254,7 @@ export default function CurriculaManagement({
                       <td>
                         <strong>{c.name}</strong>
                         <small>
-                          {c.major} · {c.totalCredits} tín chỉ
+                          {c.major} · {c.totalCredits === null ? "chưa có tổng tín chỉ" : `${c.totalCredits} tín chỉ`}
                         </small>
                         {c.warningCount > 0 && (
                           <small className="cm-warning-text">
@@ -1306,7 +1306,7 @@ function MetadataDialog({
             required
             min={1}
             max={400}
-            value={form.totalCredits}
+            value={form.totalCredits ?? ""}
             onChange={(e) =>
               setForm({ ...form, totalCredits: Number(e.target.value) })
             }

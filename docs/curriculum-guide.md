@@ -51,6 +51,18 @@ Theo yêu cầu "những khóa cũ thì code hiện tại nó chưa có định 
 - "BB/KTL" ghi thành `BBKTL` như mẫu 2025.
 - Khóa nhỏ nhất được nhận là K20 (trước là K27).
 
+## Khung CTĐT các ngành HTTT và MMT&TTDL (từ 26/10/2026)
+
+Giáo viên gửi thêm CTĐT, KHĐT của hai ngành **Hệ thống thông tin** và **Mạng máy tính và truyền thông dữ liệu**. Người dùng nhắc: "CNTT, HTTT và MMT & TTDT là 3 ngành khác nhau nha không phải chuyên ngành của CNTT". Các tệp nằm trong `apps/api/data/CTĐT_KHDT/` (không commit): CTĐT K29 (CNTT, HTTT, MMT&TTDL, "Mẫu gởi ĐT" 08.03.2024), CTĐT K31 (CNTT, HTTT, MMT&TTDL, 22/01/2025), CTĐT K32 HTTT, KHĐT K31 (CNTT, HTTT, MMT&TTDL), KHĐT K32 HTTT.
+
+- Mỗi ngành của một khóa là một khung riêng (khóa nhận diện `ngành:khóa`). Tên viết tắt "CNTT", "HTTT", "MMT & TTDL" được đổi thành tên đầy đủ (`apps/api/src/curricula/majors.ts`) để CTĐT và KHĐT cùng ngành, cùng khóa liên kết được với nhau.
+- CTĐT K29 "Mẫu gởi ĐT" đọc theo mẫu cũ. Cột "Học kỳ triển khai" (HTTT), "HK triển khai" (CNTT), "HK GD" (MMT&TTDL) ghi **số thứ tự học kỳ** của khóa, kể cả học kỳ hè: 1–3 là HK1, HK2, HK3 năm thứ nhất, 4–6 là năm thứ hai… Trang KHĐT ẩn trong tệp HTTT xác nhận cách đếm này (231 → 1, 233 → 3, 241 → 4, 261 → 10). Tệp không có dòng tiêu đề khối nên khối kiến thức để trống; các môn của chuyên ngành HTTT (Chuyển đổi số, Địa lý) không ghi chuyên ngành. Hai điểm này cần rà soát.
+- CTĐT K31 MMT&TTDL lặp dòng số cột (1, 2, 3 …) dưới phần chữ ký; dòng này không còn bị đọc thành môn mã "1".
+- CTĐT K32 HTTT không ghi "Tổng tín chỉ của CTĐT". Tổng tín chỉ để trống ("Chưa xác định") kèm cảnh báo; quản trị viên nhập ở **Sửa thông tin**. Khung K32 cũng chưa ghi học kỳ/năm của môn; học kỳ lấy từ KHĐT K32.
+- Import thử trên máy (schema `e2e_k26k31`, 27/10/2026, qua đúng API quản trị): tạo được 5 khung mới (K29 HTTT 62 môn, K29 MMT&TTDL 64, K31 HTTT 78, K31 MMT&TTDL 79, K32 HTTT 66). CTĐT K29 CNTT và K31 CNTT của giáo viên báo `curriculum_exists` vì hệ thống đã có khung CNTT của hai khóa này (không ghi đè). Sau khi thử, schema được trả về như cũ.
+- **Chưa dùng được cho sinh viên.** Hồ sơ sinh viên chưa có ngành, nên khi một khóa có nhiều khung đang mở, đánh giá năng lực báo `curriculum_ambiguous` ("Khóa của bạn đang có nhiều chương trình đào tạo"), trang CTĐT không gợi ý được khung, kế hoạch học kỳ không có CTĐT, kể cả với sinh viên CNTT. Phải thêm ngành vào hồ sơ trước khi đưa các khung này lên Supabase. MSSV có sẵn mã ngành (2374802010145: 7480201 là CNTT), có thể dùng để điền ngành.
+- **Cấu hình môn học:** import tạo thêm 57 môn năng lực; 8 môn trùng mã với môn đã có nhưng khác tên ("Đồ án TN" và "Đồ án Tốt nghiệp", "Ảo hoá" và "Ảo hóa"…). Cần gộp các môn này (gộp môn cùng mã) và cấu hình kỹ năng cho các môn mới.
+
 ## Các điểm cần rà soát trong nguồn
 
 - K29: ô tổng khối `#REF!`, các dòng chuyên đề tốt nghiệp bị lệch cột và một số lịch học chưa xác định.

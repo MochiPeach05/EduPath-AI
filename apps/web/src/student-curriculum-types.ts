@@ -34,7 +34,7 @@ export interface StudentCurriculumData {
   major: string;
   cohortCode: string;
   admissionYear: number;
-  totalCredits: number;
+  totalCredits: number | null;
   groups: { id: string; label: string; credits: number | null }[];
   electives: {
     code: string;
@@ -50,7 +50,7 @@ export interface StudentCurriculumList {
     name: string;
     major: string;
     cohortCode: string;
-    totalCredits: number;
+    totalCredits: number | null;
     courseCount: number;
   }[];
   profileCohort: string | null;

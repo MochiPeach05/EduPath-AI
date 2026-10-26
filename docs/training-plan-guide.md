@@ -16,7 +16,15 @@ Ba bản Excel người dùng cung cấp được lưu nguyên bản trong `apps
 
 Số dòng phân bổ không phải số môn duy nhất hay số môn sinh viên phải học: có các nhóm lựa chọn, chuyên ngành và môn xuất hiện ở nhiều kỳ.
 
-Parser đọc sheet có tiêu đề mã/tên học phần đúng mẫu kế hoạch của khoa. Không phụ thuộc tên file. Giữ các cột mã môn, tên, tín chỉ, loại môn, giờ LT/TH/ĐA/TT, tiên quyết, học trước, ghi chú, học kỳ và năm thứ. Học kỳ chỉ nhận 1–3; số thứ tự kỳ tích lũy trong cột A không dùng làm học kỳ.
+Parser đọc sheet có tiêu đề mã/tên học phần đúng mẫu kế hoạch của khoa. Không phụ thuộc tên file. Giữ các cột mã môn, tên, tín chỉ, loại môn, giờ LT/TH/ĐA/TT, tiên quyết, học trước, ghi chú, học kỳ và năm thứ. Học kỳ của môn lấy từ nhãn "HK251" ở cột A; số thứ tự kỳ tích lũy đi kèm nhãn không dùng làm học kỳ.
+
+Kế hoạch các ngành HTTT, MMT&TTDL (từ 26/10/2026, xem `docs/curriculum-guide.md`):
+
+- Cột tìm theo tên tiêu đề, không theo vị trí: KHĐT K31 HTTT không có cột "Năm Thứ" nên mã môn nằm ở cột C. Tiêu đề có thể nằm ở cột bất kỳ và ghi ngành sau khóa ("KẾ HOẠCH ĐÀO TẠO THỰC TẾ - KHÓA 31 - MMT & TTDL"). Tổng tín chỉ đọc ở cột "Số TC/ HK" phía trên tiêu đề.
+- "Phân bổ học kỳ" là học kỳ trong năm (1–3, CNTT và K31 HTTT) hoặc số thứ tự học kỳ của khóa (K32 HTTT: HK271 là 4).
+- Dòng nhóm ("Chọn 1 trong 4 môn sau", "Chuyên ngành IoT", "Nhóm tự chọn Chuyên ngành IoTs: Chọn 1 trong các HP sau") có thể nằm ở cột năm, cột mã hoặc cột tên. Nhóm ghi "Chọn … trong" là nhóm lựa chọn, kể cả khi nhắc tên chuyên ngành. "GDTC1" ghi ở cột mã là suất GDTC như "GDTC1" ở cột tên.
+- Nhãn HK ở cột A quyết định học kỳ. Cột phân bổ/năm mâu thuẫn với nhãn chỉ tạo cảnh báo (KHĐT K31 MMT&TTDL ghi Đồ án thực tập HK273 với năm 4), không từ chối cả tệp.
+- Import thử trên máy (27/10/2026): KHĐT K31 HTTT (69 dòng), K31 MMT&TTDL (62), K32 HTTT (51) đều tạo được và liên kết với CTĐT cùng ngành, cùng khóa. KHĐT K31 CNTT báo `plan_exists` vì đã có.
 
 Các công thức Excel được đọc từ kết quả đã lưu trong file, không gọi nguồn liên kết bên ngoài. File không có dữ liệu cần thiết hoặc lỗi công thức ở tên môn sẽ bị từ chối. Giới hạn upload 5 MB; có kiểm tra kích thước giải nén và thời gian parse.
 

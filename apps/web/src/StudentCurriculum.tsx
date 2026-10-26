@@ -221,7 +221,7 @@ function CurriculumContent({
           <div>
             <dt>Tín chỉ chương trình</dt>
             <dd>
-              {data.totalCredits}
+              {data.totalCredits ?? "Chưa xác định"}
               <small>Theo quy định của khung</small>
             </dd>
           </div>

@@ -1,4 +1,5 @@
 import type { Cell, Workbook, Worksheet } from "exceljs";
+import { fullMajorName } from "./majors.js";
 import {
   CurriculumError,
   courseSchema,
@@ -34,8 +35,20 @@ export function yysTerm(value: string, admissionYear: number): { code: string; s
   return studyYear >= 1 && studyYear <= 10 ? { code: `HK${match[1]}${match[2]}`, semester: Number(match[2]), studyYear } : null;
 }
 
+/**
+ * A term numbered from the cohort's first one, summer terms included: the "Học kỳ triển khai" of the K29 HTTT, MMT&TTDL
+ * and CNTT frameworks (2026-10-26) runs 1–3 for HK1, HK2 and HK3 of year 1, 4–6 for year 2 … (its hidden plan sheet
+ * pairs 231 with 1, 233 with 3, 241 with 4 and 261 with 10).
+ */
+export function indexTerm(value: string): { semester: number; studyYear: number } | null {
+  const match = /^(\d{1,2})$/.exec(clean(value));
+  if (!match) return null;
+  const n = Number(match[1]), studyYear = Math.floor((n - 1) / 3) + 1;
+  return n >= 1 && studyYear <= 10 ? { semester: ((n - 1) % 3) + 1, studyYear } : null;
+}
+
 export type Role = "code" | "name" | "englishName" | "credits" | "lecture" | "practice" | "project" | "internship"
-  | "type" | "prerequisite" | "prior" | "notes" | "term";
+  | "type" | "prerequisite" | "prior" | "notes" | "term" | "termIndex";
 export type LegacyHeader = {
   row: number;
   /** First row after the one or two header rows. */
@@ -77,6 +90,8 @@ export function findLegacyHeader(sheet: Worksheet, text: CellText): LegacyHeader
       else if (!columns.prior && top.includes("hoc truoc")) columns.prior = column;
       else if (!columns.notes && top.startsWith("ghi chu")) columns.notes = column;
       else if (!columns.term && top.includes("hk to chuc")) columns.term = column;
+      // "Học kỳ triển khai" (K29 HTTT), "HK triển khai" (K29 CNTT), "HK GD" (K29 MMT&TTDL).
+      else if (!columns.termIndex && /^(hoc ky|hk) (trien khai|gd|giang day)$/.test(top)) columns.termIndex = column;
     }
     if (columns.credits) return { row, dataRow: row + (two ? 2 : 1), columns, termColumns };
   }
@@ -176,10 +191,11 @@ export function readLegacyCurriculum(workbook: Workbook, text: CellText): Curric
   if (!meta || meta.totalCredits === null) throw new CurriculumError("missing_curriculum_metadata");
   const { columns } = header;
   const admissionYear = 1994 + meta.cohort;
+  const major = fullMajorName(meta.major);
   const data: CurriculumData = {
     schemaVersion: 1,
-    name: `KHUNG CHƯƠNG TRÌNH ĐÀO TẠO NGÀNH ${meta.major} KHÓA ${meta.cohort}`,
-    major: meta.major,
+    name: `KHUNG CHƯƠNG TRÌNH ĐÀO TẠO NGÀNH ${major} KHÓA ${meta.cohort}`,
+    major,
     cohortCode: `K${meta.cohort}`,
     admissionYear,
     totalCredits: meta.totalCredits,
@@ -194,6 +210,11 @@ export function readLegacyCurriculum(workbook: Workbook, text: CellText): Curric
       message: "Mẫu khung CTĐT cũ: khối kiến thức và chuyên ngành lấy theo các dòng tiêu đề nhóm, năm và học kỳ lấy từ cột HK tổ chức; mẫu không có bộ môn phụ trách. Hãy rà soát trước khi lưu.",
     }],
   };
+  if (columns.termIndex)
+    data.sourceWarnings.push({
+      row: null,
+      message: "Cột Học kỳ triển khai ghi số thứ tự học kỳ của khóa (1–3: HK1, HK2, HK hè năm thứ nhất; 4–6: năm thứ hai …); năm và học kỳ được tính theo thứ tự đó.",
+    });
   let groupId = "", state = { block: "", specialty: "" };
   for (let row = header.dataRow; row <= sheet.rowCount; row++) {
     const cells = rowCells(sheet, text, row);
@@ -215,7 +236,7 @@ export function readLegacyCurriculum(workbook: Workbook, text: CellText): Curric
     if (credits === null || credits > 30) throw new CurriculumError("invalid_course_credits", 422, [code]);
     const type = courseType(get("type"));
     if (!/^(|BB(?:KTL)?|TC\d*(?:\s*\(.*\))?)$/.test(type)) throw new CurriculumError("invalid_course_type", 422, [code]);
-    const term = yysTerm(get("term"), admissionYear);
+    const term = yysTerm(get("term"), admissionYear) ?? indexTerm(get("termIndex"));
     const course: CurriculumCourse = {
       position: data.courses.length + 1,
       code: code.toUpperCase(),

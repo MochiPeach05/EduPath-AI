@@ -1,6 +1,7 @@
 import { Worker } from "node:worker_threads";
 import { courseCode } from "./course-codes.js";
 import { MIN_COHORT, readLegacyCurriculum, visibleSheets } from "./legacy.js";
+import { fullMajorName } from "./majors.js";
 import {
   CurriculumError,
   courseSchema,
@@ -112,7 +113,6 @@ export async function readWorkbook(buffer: Buffer): Promise<CurriculumData> {
   if (
     !cohort ||
     !major ||
-    !total ||
     Number(cohort[1]) < MIN_COHORT ||
     Number(cohort[1]) > 99
   )
@@ -120,10 +120,10 @@ export async function readWorkbook(buffer: Buffer): Promise<CurriculumData> {
   const data: CurriculumData = {
     schemaVersion: 1,
     name: clean(title),
-    major: clean(major),
+    major: fullMajorName(clean(major)),
     cohortCode: `K${cohort[1]}`,
     admissionYear: 1994 + Number(cohort[1]),
-    totalCredits: Number(total),
+    totalCredits: total ? Number(total) : null,
     notes: "",
     courses: [],
     groups: [],
@@ -132,6 +132,12 @@ export async function readWorkbook(buffer: Buffer): Promise<CurriculumData> {
     warnings: [],
     sourceWarnings: [],
   };
+  // The K32 HTTT workbook (2026-10-26) has no "Tổng tín chỉ của CTĐT" line: the total is left for the review.
+  if (!total)
+    data.sourceWarnings.push({
+      row: null,
+      message: "Tệp không ghi Tổng tín chỉ của CTĐT; hãy nhập tổng tín chỉ khi rà soát khung.",
+    });
   let groupId = "";
   for (let row = header + 1; row <= sheet.rowCount; row++) {
     const cells: Record<string, string> = {};
@@ -147,6 +153,8 @@ export async function readWorkbook(buffer: Buffer): Promise<CurriculumData> {
         });
     const sourceCode = cells.B!,
       name = cells.C!;
+    // The column numbers (1, 2, 3 …) the K31 MMT&TTDL workbook repeats under its signature are no course.
+    if (/^\d+$/.test(sourceCode) && /^\d+$/.test(name)) continue;
     if (!sourceCode) {
       if (cells.A && !/^\d+$/.test(cells.A)) {
         groupId = `row-${row}`;

@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { checkArchive, parseCurriculum, readWorkbook } from "./parser.js";
 import { courseSchema, rebuild, type CurriculumData } from "./model.js";
 import { identity } from "./repository.js";
+import { fullMajorName } from "./majors.js";
 let k29: CurriculumData, k30: CurriculumData, k31: CurriculumData;
 beforeAll(async () => {
   [k29, k30, k31] = await Promise.all(
@@ -385,5 +386,59 @@ describe("older Faculty templates (K26–K28, 2026-10-23)", () => {
   it("does not take a training plan or a hidden template for a framework", async () => {
     await expect(readWorkbook(await readFile(new URL("../../data/plans/Ke hoach giảng dạy CNTT K28.xlsx", import.meta.url))))
       .rejects.toThrow("unsupported_curriculum_template");
+  });
+});
+
+// 2026-10-26 (user): frameworks of the other majors, HTTT and MMT&TTDL. Synthetic workbooks laid out like the teacher's files.
+describe("frameworks of the other majors (HTTT, MMT&TTDL)", () => {
+  async function workbook(name: string, rows: (string | number | null)[][]) {
+    const book = new ExcelJS.Workbook();
+    const sheet = book.addWorksheet(name);
+    rows.forEach((row, r) => row.forEach((value, c) => { if (value !== null) sheet.getCell(r + 1, c + 1).value = value; }));
+    return Buffer.from(await book.xlsx.writeBuffer());
+  }
+
+  it("reads a framework without a total, and not the column numbers under the signature", async () => {
+    // K32 HTTT names no "Tổng tín chỉ"; K31 MMT&TTDL repeats 1, 2, 3 … under its signature.
+    const data = await readWorkbook(await workbook("CTĐT_HTTT_K32 (2025)", [
+      ["KHUNG CHƯƠNG TRÌNH ĐÀO TẠO NGÀNH HỆ THỐNG THÔNG TIN KHÓA 32"],
+      [],
+      ["TT", "Mã học phần", "Tên học phần tiếng Việt", "Tên học phần tiếng Anh", "Số tín chỉ", "LT", "TH", "ĐA", "TT", "BB/TC",
+        "Điều kiện tiên quyết", "Điều kiện học trước", "Khối kiến thức", "Tên chuyên ngành/chuyên sâu", "Ghi chú", "Mã BM", "BM Phụ trách", "Học kỳ", "Năm"],
+      [1, "71POLP10013", "Triết học Mác-Lênin", "Philosophy of Marxism and Leninism", 3, 45, 0, 0, null, "BB", "Không", "Không",
+        "Kiến thức giáo dục đại cương", null, null, "200111206", "Bộ môn Triết học", 2, 1],
+      [],
+      [null, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+    ]));
+    expect(data).toMatchObject({ major: "HỆ THỐNG THÔNG TIN", cohortCode: "K32", totalCredits: null });
+    expect(data.courses.map((course) => [course.code, course.semester, course.studyYear])).toEqual([["71POLP10013", 2, 1]]);
+    expect(data.warnings.map((warning) => warning.message)).toContain("Tệp không ghi Tổng tín chỉ của CTĐT; hãy nhập tổng tín chỉ khi rà soát khung.");
+  });
+
+  it("takes the term of a course from the term number of the K29 frameworks (Học kỳ triển khai)", async () => {
+    const data = await readWorkbook(await workbook("CTĐT_HTTT_K29 (2024)", [
+      [],
+      ["PHÂN BỐ KIẾN THỨC TRONG CTĐT KHÓA 29 - NGÀNH HỆ THỐNG THÔNG TIN"],
+      [null, null, null, null, 126],
+      ["TT", "Mã học phần mới", "Tên học phần (Tiếng Việt)", "Tên học phần (Tiếng Anh)", "Số tín chỉ", "Số tiết/giờ", null, null,
+        "Bắt buộc/Tự chọn", "ĐK tiên quyết", "ĐK học trước", "Mã BM", "BM Phụ trách", "Học kỳ triển khai"],
+      [null, "Mã học phần mới", null, null, null, "LT", "TH", "TT"],
+      [1, "71POLP10013", "Triết học Mác Lênin", "Philosophy of Marxism and Leninism", 3, 45, 0, 0, "BB", "Không", "Không", "200111207", "Bộ môn", 2],
+      [2, "71ISIN40104", "Đồ án thực tập", "Internship Project", 4, 0, 0, 60, "BB", "Không", "Không", null, null, 9],
+      [3, "71ISGR40106", "Đồ án TN", "Graduation Projects", 6, 0, 0, 180, "BB", "Không", "Không", null, null, 10],
+    ]));
+    expect(data).toMatchObject({ major: "HỆ THỐNG THÔNG TIN", cohortCode: "K29", totalCredits: 126 });
+    // 1–3 are HK1, HK2 and HK3 of year 1: 9 is HK3 of year 3 (253), 10 HK1 of year 4 (261).
+    expect(data.courses.map((course) => [course.code, course.semester, course.studyYear])).toEqual([
+      ["71POLP10013", 2, 1], ["71ISIN40104", 3, 3], ["71ISGR40106", 1, 4],
+    ]);
+    expect(data.warnings.some((warning) => warning.message.startsWith("Cột Học kỳ triển khai ghi số thứ tự học kỳ"))).toBe(true);
+  });
+
+  it("names a major written by its short name in full, so its CTĐT and KHĐT share one identity", () => {
+    expect(["MMT & TTDL", "MMT&TTDL", "HTTT", "CNTT", "Hệ thống thông tin"].map(fullMajorName)).toEqual([
+      "MẠNG MÁY TÍNH VÀ TRUYỀN THÔNG DỮ LIỆU", "MẠNG MÁY TÍNH VÀ TRUYỀN THÔNG DỮ LIỆU", "HỆ THỐNG THÔNG TIN", "CÔNG NGHỆ THÔNG TIN",
+      "Hệ thống thông tin",
+    ]);
   });
 });
