@@ -128,13 +128,37 @@ Bật khi server có `AI_WORKER_KEY` (như các tính năng AI khác). Việc ch
   - Mỗi môn 30–60 giây, prompt khoảng 6,8K token.
 - Loại việc không đổi nên **không cần khởi động lại worker**.
 
+**Không theo nhãn chuyên ngành, AI tự kiểm tra lại (27/10/2026, `comp-link-v7`, `comp-course-v6`, `comp-check-v1`).** Yêu cầu: AI "không được thiên về cho ngành mới này và phải sử dụng được cho tương lai khi có thêm CTĐT mới". Trong ba đề xuất, người dùng chọn cách 1 và 3; cách 2 (lấy cấu hình môn cùng tên làm mẫu) không được chọn.
+- Chạy thử trước khi sửa: prompt v4, 53 môn riêng của HTTT, MMT&TTDL, không lưu. Kết quả 32 đúng, 13 cần xem, 8 sai một phần.
+  - Phần lớn lỗi do nhãn chuyên ngành của môn: IoT thành lập trình nhúng; An ninh mạng thành tuân thủ ATTT; HTTT Địa lý thành GIS.
+  - Còn lại do hiểu nhầm từ ("tối ưu", "mã hóa") và kỹ năng mềm chung chung.
+- **Cách 1, prompt lượt đề xuất:**
+  - Không gửi chuyên ngành của môn.
+  - Quy tắc 2 thêm: "Không suy ra nội dung học phần từ tên ngành, chuyên ngành hay nhóm tự chọn của chương trình".
+  - Câu giới thiệu nói về các ngành của Khoa, không kể tên ngành nào. Quy tắc 9 nói "học phần chuyên môn của ngành đào tạo". Ví dụ "kế toán" bị bỏ khỏi quy tắc 8.
+- **Cách 3, lượt kiểm tra (`comp-check-v1`, `buildCourseCheckInput` trong `prompt.ts`, `courseCheckInput` và `completeCourseSuggestion` trong `jobs.ts`):**
+  - Khi lượt đề xuất (links hoặc full) có kỹ năng, máy chủ chưa lưu mà xếp lại chính việc đó với prompt kiểm tra.
+  - Prompt kiểm tra gồm khối học phần của lượt đầu (không có chương trình, ngành hay chuyên ngành) và các kỹ năng đã đề xuất. Mỗi kỹ năng kèm khóa của lượt đầu, mô tả, % và lý do.
+  - AI trả `{"links":[{skillKey, keep, percent, reason}]}`. Đây vẫn là dạng `links` nên worker hiện tại chạy được, không cần khởi động lại.
+  - Kỹ năng bị bỏ ra khỏi đề xuất và được ghi ở `result.check.removed` kèm lý do. Ở chế độ links, kỹ năng đã liên kết bị bỏ vẫn giữ với 0%.
+  - Kỹ năng không có trong câu trả lời giữ nguyên %. % được chia lại cho đủ 100. Bỏ hết là một đề xuất rỗng hợp lệ.
+  - Lượt kiểm tra lỗi thì việc thất bại như trước.
+  - `prompt_version` lưu "<lượt đầu>+comp-check-v1"; `metrics` lưu cả `propose` và `check`.
+  - Worker gửi lại câu trả lời của lượt đầu lần nữa thì vẫn nhận ("ok"). Lượt kiểm tra được giao lại với lease mới và hai lần thử mới.
+- **Chạy thử sau khi sửa (cùng 53 môn, không lưu): 42 đúng, 10 cần xem, 1 sai.**
+  - 7/8 môn sai trước đó không còn sai. Riêng "Mã hóa và an toàn dữ liệu" vẫn thêm chuỗi khối 40%.
+  - Lượt kiểm tra bỏ 39 kỹ năng ở 28 môn, phần lớn là kỹ năng mềm chung chung và kỹ năng do nhãn chuyên ngành.
+  - Thêm 15 môn CNTT đã duyệt, chạy như môn mới (ẩn liên kết và dữ liệu Khoa): 12/15 đúng trọng tâm. Không môn nào nhận kỹ năng của HTTT, MMT&TTDL. Khác biệt chủ yếu do CTĐT không có mô tả: Cơ sở lập trình không biết dạy bằng Python.
+  - Trung bình 78 giây mỗi môn (trước khoảng 47 giây).
+  - Bảng từng môn: `output/ai-trial-2026-10-27/`.
+
 Việc v2 gửi `think: true` trong job; worker trước 17/10/2026 luôn gửi `think: false` và báo loại cũ `competency_course_suggestion`, nên server không giao việc v2 cho nó (trang báo "Máy AI đang chạy phiên bản cũ…"). **Phải khởi động lại worker** để dùng các nút AI của mục Năng lực.
 
 | Chế độ | Prompt | AI trả về | Lưu |
 | --- | --- | --- | --- |
-| `links` — Tạo liên kết kỹ năng (AI) | `comp-link-v5` | Tối đa 8 kỹ năng mới theo khóa `S001…` + nhóm `G1…` và mọi kỹ năng đã liên kết (đưa vào danh mục với dấu "đã liên kết", nhắc lại ở mục [6] kèm trọng số hiện tại), tối đa 2 kỹ năng mới theo tên; **mỗi mục có % nguyên**, server chia lại cho tổng đúng 100; kỹ năng đã liên kết mà AI bỏ sót được thêm với 0% | Body `{items:[{skillId\|null, skillName, groupId\|null, percent}], status}`: các kỹ năng giữ lại kèm % thành liên kết và trọng số của học phần, lưu bản nháp hoặc áp dụng. Mọi kỹ năng đã liên kết phải có trong body (thiếu → 409 `links_changed`; đề xuất thiếu kỹ năng đã liên kết hiện "stale"). Đề xuất `comp-link-v3` (trước 20/10/2026) không có % nên bắt đầu từ 0%. |
+| `links` — Tạo liên kết kỹ năng (AI) | `comp-link-v7`, rồi `comp-check-v1` | Tối đa 8 kỹ năng mới theo khóa `S001…` + nhóm `G1…` và mọi kỹ năng đã liên kết (đưa vào danh mục với dấu "đã liên kết", nhắc lại ở mục [6] kèm trọng số hiện tại), tối đa 2 kỹ năng mới theo tên; **mỗi mục có % nguyên**, server chia lại cho tổng đúng 100; kỹ năng đã liên kết mà AI bỏ sót được thêm với 0% | Body `{items:[{skillId\|null, skillName, groupId\|null, percent}], status}`: các kỹ năng giữ lại kèm % thành liên kết và trọng số của học phần, lưu bản nháp hoặc áp dụng. Mọi kỹ năng đã liên kết phải có trong body (thiếu → 409 `links_changed`; đề xuất thiếu kỹ năng đã liên kết hiện "stale"). Đề xuất `comp-link-v3` (trước 20/10/2026) không có % nên bắt đầu từ 0%. |
 | `weights` — Thêm trọng số (AI) cũ | `comp-weight-v2` | % nguyên cho từng kỹ năng đã liên kết | Không còn nút từ 20/10/2026; API giữ lại cho đề xuất cũ. |
-| `full` — nhiều môn | `comp-course-v4` | Tối đa 8 kỹ năng kèm %, không kỹ năng mới; rỗng khi không có kỹ năng phù hợp | "Lưu … đề xuất thành bản nháp" hoặc "Lưu và áp dụng" (cần tick xác nhận); mỗi môn một savepoint, môn có liên kết từ trước bị bỏ qua. |
+| `full` — nhiều môn | `comp-course-v6`, rồi `comp-check-v1` | Tối đa 8 kỹ năng kèm %, không kỹ năng mới; rỗng khi không có kỹ năng phù hợp | "Lưu … đề xuất thành bản nháp" hoặc "Lưu và áp dụng" (cần tick xác nhận); mỗi môn một savepoint, môn có liên kết từ trước bị bỏ qua. |
 
 - **Ứng viên**: cấu hình năng lực đang dùng (theo nhóm rồi tên) và **kỹ năng nghề nghiệp chưa đo** — kỹ năng chung mà nghề còn yêu cầu nhưng chưa có cấu hình năng lực (Docker, Linux…). Khi lưu, kỹ năng nghề chưa đo được tạo cấu hình năng lực trong nhóm AI chọn (quản trị viên đổi được); kỹ năng mới được thêm vào kho kỹ năng chung của Nghề nghiệp rồi tạo cấu hình. Nhờ vậy kỹ năng do AI tạo luôn dùng được cho nghề nghiệp, và kỹ năng nghề chưa đo trở nên đo được.
 - **Kiểm tra phía server** (`competencies/ai/validate.ts`): khóa lạ, lặp hoặc đã liên kết bị bỏ; khóa viết trong câu được thay bằng tên; lý do có link/HTML bị xóa trắng. Phần trăm được kẹp 0–100, làm tròn và chia lại để **tổng đúng 100** (phương pháp phần dư lớn nhất) vì ngữ pháp JSON không ép được tổng; chế độ weights luôn đủ mọi kỹ năng đã liên kết (thiếu thì 0). Không còn mục hợp lệ → `invalid_ai_output`; câu trả lời rỗng là đề xuất rỗng hợp lệ.
@@ -150,6 +174,7 @@ Việc v2 gửi `think: true` trong job; worker trước 17/10/2026 luôn gửi 
 - Migration 041 (23/10/2026): `verify-competency-shared-courses.mjs` chạy thêm 040–041 rồi thêm một cách ghi khác (tên, tín chỉ) của một môn đã cấu hình vào một phiên bản K32 tạm, kèm một đề xuất AI đang chờ. Kiểm tra: không gộp được môn đã cấu hình vào môn kia, không gộp được sang mã khác; gộp xong thì dòng CTĐT về môn đích, đề xuất bị hủy và chuyển sang môn đích, lịch sử ghi `mergedCourse` với khóa K32, số môn giảm 1, và nhập lại cách ghi đó vào một phiên bản khác thì vào thẳng môn đích mà tên môn không đổi.
 - Migration 040 (22/10/2026): `verify-competency-ai.mjs` kiểm tra lưu một kỹ năng với nhiều nhóm qua router thật (bỏ trùng, nhóm đầu tiên, bỏ tích nhóm đầu tiên, không nhóm nào → 400, bộ lọc/chi tiết/số kỹ năng của nhóm, không xóa được nhóm còn là nhóm thứ hai của kỹ năng, xóa cấu hình xóa luôn các nhóm còn lại). `verify-competency-assessment.mjs` kiểm tra bộ đọc dữ liệu trả nhóm còn lại đang sử dụng và kết quả tính kỹ năng vào cả hai nhóm.
 - `verify-competency-assessment.mjs` có thêm trường hợp sinh viên K30 nhận cấu hình K29 của cùng môn; `verify-careers.mjs` chạy thêm 034–038. Script cũ `verify-competencies.mjs` (dựa trên nhập Excel) đã bị xóa.
+- Lượt kiểm tra (27/10/2026): `prompt.test.ts` kiểm tra prompt không còn chuyên ngành và prompt kiểm tra (khóa, dấu "đã liên kết", ngữ pháp). `validate.test.ts` kiểm tra câu trả lời của lượt kiểm tra: bỏ, giữ, thiếu câu trả lời, kỹ năng đã liên kết giữ 0%, bỏ hết, sai dạng. `verify-competency-ai.mjs` đi cả hai lượt qua router thật: đề xuất xếp lại thành kiểm tra trên cùng việc, gửi lại lượt đầu vẫn "ok", lưu đủ `prompt_version` và `metrics`, kỹ năng bị bỏ ra khỏi đề xuất và được ghi lại, câu trả lời rỗng không qua lượt kiểm tra.
 - Từ 27/10/2026 `verify-competency-ai.mjs` chạy thêm migration 047: worker router giao cả việc lộ trình học tập (từ 24/10), thiếu bảng `stu_roadmaps` thì bước nhận việc bị lỗi.
 
 ## Lịch sử
@@ -204,3 +229,4 @@ Việc v2 gửi `think: true` trong job; worker trước 17/10/2026 luôn gửi 
   - Gộp 4 môn cùng mã, cùng số tín chỉ, chỉ khác cách ghi tên: 71ITNW30403, 71NWBC30103, 71ISGR40106, và 71ISDT40503 bản 3 TC.
   - Kết quả trên production: 101 → 116 cấu hình năng lực, 260 → 256 môn học, 53 môn chưa có liên kết.
 - 27/10/2026 (sau): thêm **"ngành áp dụng" của kỹ năng** (e147471, migration 054). Form có ô tích ngành, và AI chỉ nhận kỹ năng của ngành môn học. Prompt cũng ghi ngành của môn và cấu hình của môn cùng tên (`comp-link-v6`, `comp-course-v5`). Tính năng được hoàn tác cùng ngày theo yêu cầu: "đáng lẽ cái này là để AI làm 100% … chứ k có tự sửa như vậy". Việc gán kỹ năng cho môn là để AI làm; bổ sung kỹ năng còn thiếu vào danh mục chỉ là mẹo giúp Gemma, không thêm cấu hình thủ công. Prompt về lại `comp-link-v5` và `comp-course-v4`; bảng `ad_comp_skill_majors` còn trống và không còn được dùng.
+- 27/10/2026 (sau): người dùng hỏi cách để AI "không được thiên về cho ngành mới này và phải sử dụng được cho tương lai khi có thêm CTĐT mới" và chọn cách 1 và 3. Prompt lượt đề xuất không còn chuyên ngành (`comp-link-v7`, `comp-course-v6`); thêm lượt AI tự kiểm tra lại (`comp-check-v1`); mục AI ở trên ghi chi tiết. Chạy thử 53 môn HTTT, MMT&TTDL không lưu: từ 32 đúng, 8 sai lên 42 đúng, 1 sai; 15 môn CNTT chạy như môn mới không nhận kỹ năng của ngành khác.

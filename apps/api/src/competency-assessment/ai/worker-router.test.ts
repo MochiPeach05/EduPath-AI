@@ -7,7 +7,7 @@ import { careerSource, fixtureId } from "../../careers/ai-suggestions/test-fixtu
 import { buildGraduationAdviceInput, GRADUATION_ADVICE_PROMPT_VERSION } from "../../graduation/advice/prompt.js";
 import { syntheticGraduation } from "../../graduation/advice/test-fixture.js";
 import { buildCourseAiInput, COURSE_AI_PROMPT_VERSIONS } from "../../competencies/ai/prompt.js";
-import { courseSource } from "../../competencies/ai/test-fixture.js";
+import { courseSource, SKILL_WEB } from "../../competencies/ai/test-fixture.js";
 import { buildRoadmapInput, ROADMAP_PROMPT_VERSION } from "../../roadmap/prompt.js";
 import { syntheticRoadmapFacts } from "../../roadmap/test-fixture.js";
 import { buildAiInput } from "./prompt.js";
@@ -568,22 +568,63 @@ describe("competency course suggestion jobs", () => {
     expect(order).toEqual(["UPDATE stu_comp_ai_jobs", "UPDATE career_ai_suggestions", "UPDATE stu_grad_advice", "UPDATE ad_comp_ai_suggestions"]);
   });
 
-  it("completes a course job after the other tables miss it and fails an invalid output", async () => {
-    const { app, run, sql } = setup(withCourse(courseRow()));
-    const output = { links: [{ skillKey: "S001", groupKey: "G1", reason: "Học phần xây dựng ứng dụng web." }], newSkills: [] };
-    await request(app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success(output)).expect(200, { ok: true });
-    const update = courseUpdate(run)!;
+  const courseRequeue = (run: ReturnType<typeof setup>["run"]) => run.mock.calls.find(([s]) => s.startsWith("UPDATE ad_comp_ai_suggestions SET status='queued'"));
+  const described: Handler = (s) => (s.includes("COALESCE(NULLIF(cs.scope,''),s.description) AS description")
+    ? { rows: [{ id: SKILL_WEB, description: "Xây dựng giao diện và máy chủ web" }] } : undefined);
+  const both = (...handlers: Handler[]): Handler => (s, p) => handlers.reduce<ReturnType<Handler>>((found, handler) => found ?? handler(s, p), undefined);
+  const answer = { links: [{ skillKey: "S001", groupKey: "G1", percent: 100, reason: "Học phần xây dựng ứng dụng web." }], newSkills: [] };
+
+  it("queues the check of a course answer on the same job, then stores the checked proposal (comp-check-v1, 2026-10-27)", async () => {
+    // First pass: nothing is stored yet; the same row is queued again with the check.
+    const first = setup(both(withCourse(courseRow()), described));
+    await request(first.app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success(answer)).expect(200, { ok: true });
+    expect(courseUpdate(first.run)).toBeUndefined();
+    const [id, checkJson, metricsJson, version] = courseRequeue(first.run)![1] as string[];
+    const check = JSON.parse(checkJson!);
+    expect(id).toBe(JOB);
+    expect(check).toMatchObject({ stage: "check", mode: "links", promptVersion: `${COURSE_AI_PROMPT_VERSIONS.links}+comp-check-v1`, think: true });
+    expect(check.user).toContain("S001 | Lập trình web | Chuyên môn | Xây dựng giao diện và máy chủ web | 100% | Học phần xây dựng ứng dụng web.");
+    expect(JSON.parse(metricsJson!)).toEqual({ propose: { eval_count: 900, total_ms: 120000 } });
+    expect(version).toBe(`${COURSE_AI_PROMPT_VERSIONS.links}+comp-check-v1`);
+    expect(first.sql().at(-1)).toBe("COMMIT");
+
+    // The worker repeats the first completion: still ok, nothing written again.
+    const repeated = setup(withCourse(courseRow({ status: "queued", valid: null, ai_input: check })));
+    await request(repeated.app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success(answer)).expect(200, { ok: true });
+    expect([courseUpdate(repeated.run), courseRequeue(repeated.run)]).toEqual([undefined, undefined]);
+
+    // The check comes back: the checked proposal is stored with both metrics and the two prompt versions.
+    const second = setup(withCourse(courseRow({ ai_input: check, metrics: { propose: { eval_count: 900 } } })));
+    await request(second.app).post(`/w/${JOB}/complete`).set("Authorization", AUTH)
+      .send(success({ links: [{ skillKey: "S001", keep: true, percent: 100, reason: "Đúng nội dung chính." }] })).expect(200, { ok: true });
+    const update = courseUpdate(second.run)!;
+    const params = update[1] as unknown[];
     expect(update[0]).toContain("ai_input=NULL");
-    expect((update[1] as unknown[]).slice(0, 3)).toEqual([JOB, "completed", null]);
-    expect(JSON.parse((update[1] as unknown[])[3] as string)).toMatchObject({ mode: "links", items: [{ skillName: "Lập trình web", hasProfile: true }] });
-    expect(sql().at(-1)).toBe("COMMIT");
+    expect(params.slice(0, 3)).toEqual([JOB, "completed", null]);
+    expect(JSON.parse(params[3] as string)).toMatchObject({ mode: "links", items: [{ skillName: "Lập trình web", hasProfile: true, percent: 100 }], check: { proposed: 1, removed: [] } });
+    expect(JSON.parse(params[4] as string)).toEqual({ propose: { eval_count: 900 }, check: { eval_count: 900, total_ms: 120000 } });
+    expect(params[8]).toBe(`${COURSE_AI_PROMPT_VERSIONS.links}+comp-check-v1`);
+
+    // A malformed check fails the job, like a malformed first pass.
+    const badCheck = setup(withCourse(courseRow({ ai_input: check })));
+    await request(badCheck.app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success({ checks: [] })).expect(200);
+    expect((courseUpdate(badCheck.run)![1] as unknown[]).slice(0, 3)).toEqual([JOB, "failed", "invalid_ai_output"]);
+  });
+
+  it("stores an empty course answer at once, fails an invalid one, and refuses a cancelled job", async () => {
+    const empty = setup(withCourse(courseRow()));
+    await request(empty.app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success({ links: [], newSkills: [] })).expect(200, { ok: true });
+    expect(courseRequeue(empty.run)).toBeUndefined();
+    const stored = courseUpdate(empty.run)![1] as unknown[];
+    expect(stored.slice(0, 3)).toEqual([JOB, "completed", null]);
+    expect(JSON.parse(stored[3] as string)).toMatchObject({ mode: "links", items: [] });
 
     const invalid = setup(withCourse(courseRow()));
     await request(invalid.app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success({ links: "nope" })).expect(200);
     expect((courseUpdate(invalid.run)![1] as unknown[]).slice(0, 3)).toEqual([JOB, "failed", "invalid_ai_output"]);
 
     const cancelled = setup(withCourse(courseRow({ status: "cancelled", lease_token: null })));
-    await request(cancelled.app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success(output)).expect(409, { error: "job_expired" });
+    await request(cancelled.app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success(answer)).expect(409, { error: "job_expired" });
     expect(courseUpdate(cancelled.run)).toBeUndefined();
   });
 });

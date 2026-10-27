@@ -107,6 +107,28 @@ async function worker(path, body) {
 }
 const complete = (job, output) => worker(`/${job.id}/complete`, { leaseToken: job.leaseToken, model: "simulated", digest: "", ollamaVersion: "", metrics: {}, output });
 const claim = async () => (await worker("/claim", { kinds: [KIND] })).body.job;
+/** The proposed skills a check job lists: key, name, first-pass percent, and whether the course has the skill. */
+const checkRows = (user) => [...user.matchAll(/^(S\d{3}) \| ([^|\n]+) \| [^|\n]+ \| [^|\n]* \| (\d+)% \|[^\n]*$/gm)]
+  .map((match) => ({ key: match[1], name: match[2].trim(), percent: Number(match[3]), linked: match[0].endsWith("| đã liên kết") }));
+/**
+ * The second pass (comp-check-v1, 2026-10-27): a links or full answer with skills is queued again as a check of the same
+ * proposal. The simulated check drops the rows `drop` picks and keeps the others at their first-pass percent.
+ */
+async function answerCheck(firstJob, drop = () => false) {
+  const job = await claim();
+  assert(job, "the check is queued after the first pass");
+  assert.equal(job.id, firstJob.id, "the check runs on the same proposal");
+  assert.equal(job.promptVersion, `${firstJob.promptVersion}+comp-check-v1`);
+  assert.equal(job.think, true);
+  assert(job.user.includes("[1. HỌC PHẦN]") && !job.user.includes("CHƯƠNG TRÌNH ĐÀO TẠO"), "the check sees the course, not the programme");
+  const rows = checkRows(job.user);
+  assert(rows.length > 0, "the check lists the proposed skills");
+  const output = { links: rows.map((row) => drop(row)
+    ? { skillKey: row.key, keep: false, percent: 0, reason: `Bỏ ${row.key}: không phải nội dung chính.` }
+    : { skillKey: row.key, keep: true, percent: row.percent, reason: "Giữ." }) };
+  assert.deepEqual((await complete(job, output)).body, { ok: true });
+  return rows;
+}
 
 /** Candidate lines of a claimed job: key, name and group ("kỹ năng nghề, chưa có nhóm" for career skills). */
 function candidates(user) {
@@ -248,6 +270,12 @@ try {
     newSkills: [{ name: "Kỹ năng kiểm chứng tự động bằng giả lập", groupKey: "G1", percent: 10, reason: "Học phần có phần kiểm chứng." }]
   };
   assert.deepEqual((await complete(linksJob, linksOutput)).body, { ok: true });
+  // Since 2026-10-27 (comp-check-v1) the answer is checked before it is stored: the same proposal is queued again.
+  assert.equal((await ai("GET", `/${linksJob.id}`)).body.suggestion.status, "queued", "the first pass waits for its check");
+  assert.deepEqual((await complete(linksJob, linksOutput)).body, { ok: true }, "a repeated first-pass completion stays ok");
+  assert.equal((await answerCheck(linksJob)).length, careerOnly ? 4 : 3, "the check lists the proposal, the repeated key already dropped");
+  const stored = (await pool.query("SELECT prompt_version,metrics ? 'propose' AND metrics ? 'check' AS both,result->'check' AS check FROM ad_comp_ai_suggestions WHERE id=$1", [linksJob.id])).rows[0];
+  assert.deepEqual([stored.prompt_version, stored.both, stored.check], [`${COURSE_AI_PROMPT_VERSIONS.links}+comp-check-v1`, true, { proposed: careerOnly ? 4 : 3, removed: [] }]);
   const proposal = (await ai("GET", `/${linksJob.id}`)).body.suggestion;
   assert.equal(proposal.status, "completed");
   assert.equal(proposal.items.length, careerOnly ? 4 : 3);
@@ -274,7 +302,7 @@ try {
   assert.equal((await ai("POST", `/${linksJob.id}/apply`, { body: { status: "draft", items: [keep(proposal.items[0])] } })).body.error, "suggestion_already_applied");
   assert.equal((await ai("GET", `/latest?courseId=${first.id}&mode=links`)).body.suggestion, null);
   assert.equal(await count("ad_comp_course_configs WHERE course_id=$1 AND revision_id IS NULL", [first.id]), 1, "a new configuration belongs to the course, not to a revision");
-  checks.push(`links: claim without key maps, ${proposal.items.length} proposed skills (repeat dropped, key in prose named), apply saves them with the reviewed weights (100%) as a draft of the shared course, adds the new skill to the shared catalog and creates the missing profiles; a second apply is 409`);
+  checks.push(`links: claim without key maps, the answer is checked on the same proposal (comp-check-v1, a repeated first completion stays ok, both metrics kept), ${proposal.items.length} proposed skills (repeat dropped, key in prose named), apply saves them with the reviewed weights (100%) as a draft of the shared course, adds the new skill to the shared catalog and creates the missing profiles; a second apply is 409`);
 
   // Weights (API only: "Thêm trọng số (AI)" has no button since 2026-10-20): AI percents scaled to 100, applied.
   const weightsQueued = await ai("POST", "", { body: { courseId: first.id, mode: "weights" } });
@@ -303,6 +331,8 @@ try {
   const linkedNames = activated.body.course.links.map((link) => link.skillName);
   const fresh = candidates(moreJob.user).find((entry) => !linkedNames.includes(entry.name));
   await complete(moreJob, { links: [{ skillKey: fresh.key, groupKey: "G1", percent: 100, reason: "Bổ sung." }], newSkills: [] });
+  const moreRows = await answerCheck(moreJob, (row) => row.linked);
+  assert.equal(moreRows.filter((row) => row.linked).length, linkedNow.length, "the check marks the linked skills");
   const moreProposal = (await ai("GET", `/${more.body.suggestion.id}`)).body.suggestion;
   assert.equal(moreProposal.items.length, linkedNow.length + 1);
   assert(moreProposal.items.filter((item) => item.alreadyLinked).every((item) => item.percent === 0), "a linked skill the model left out comes back at 0%");
@@ -313,7 +343,7 @@ try {
   assert.equal(kept.status, 201, JSON.stringify(kept.body));
   assert.equal(kept.body.course.status, "active");
   assert.equal(kept.body.course.links.length, linkedNow.length + 1);
-  checks.push(`links on a linked course: ${linkedNow.length} linked skills offered as "đã liên kết", left out ones come back at 0%, a review without them is 409 links_changed, apply keeps them and activates at 100%`);
+  checks.push(`links on a linked course: ${linkedNow.length} linked skills offered as "đã liên kết", left out (or dropped by the check) ones come back at 0%, a review without them is 409 links_changed, apply keeps them and activates at 100%`);
 
   const ids = courses.map((course) => course.id);
   const linkedInScope = chosen.courses.length - courses.length;
@@ -323,10 +353,19 @@ try {
   const total = batch.body.queued;
   assert.equal(total, courses.length - 1);
   assert.equal((await ai("POST", "/batches", { body: { cohort: scope } })).body.queued, 0, "a second run queues nothing while the first is pending");
-  let done = 0, emptyAnswers = 0;
+  let done = 0, emptyAnswers = 0, checked = 0, droppedByCheck = 0;
   for (;;) {
     const job = await claim();
     if (!job) break;
+    if (job.promptVersion === `${COURSE_AI_PROMPT_VERSIONS.full}+comp-check-v1`) {
+      const rows = checkRows(job.user);
+      const drop = checked % 4 === 0 ? rows[1].key : null;
+      const output = { links: rows.map((row) => ({ skillKey: row.key, keep: row.key !== drop, percent: row.key === drop ? 0 : row.percent, reason: "Kiểm tra." })) };
+      assert.deepEqual((await complete(job, output)).body, { ok: true });
+      checked += 1;
+      if (drop) droppedByCheck += 1;
+      continue;
+    }
     assert.equal(job.promptVersion, COURSE_AI_PROMPT_VERSIONS.full);
     if (done % 3 === 2) emptyAnswers += 1;
     const keys = candidates(job.user);
@@ -338,6 +377,9 @@ try {
     done += 1;
   }
   assert.equal(done, total);
+  assert.equal(checked, total - emptyAnswers, "every answer with skills is checked once, an empty one is not");
+  const oneLeft = await count("ad_comp_ai_suggestions WHERE batch_id IS NOT NULL AND status='completed' AND jsonb_array_length(result->'items')=1 AND jsonb_array_length(result->'check'->'removed')=1");
+  assert.equal(oneLeft, droppedByCheck, "a skill the check drops leaves the proposal and is recorded");
   const progress = (await ai("GET", "/batches/latest")).body.batch;
   assert.deepEqual([progress.total, progress.completed, progress.queued, progress.failed], [total, total, 0, 0]);
   assert(progress.items.every((item) => item.courseId && item.courseName && ids.includes(item.courseId)), "run items carry the shared course and its name");
@@ -357,7 +399,7 @@ try {
     WHERE c.course_id=ANY($1::uuid[]) AND c.status='draft' GROUP BY c.course_id`, [ids])).rows;
   assert(totals.every((row) => Math.abs(row.total - 1) < 1e-9), "every draft adds up to 100%");
   assert.equal((await ai("POST", `/batches/${progress.id}/apply`, { body: { status: "active" } })).body.drafted, 0, "nothing is applied twice");
-  checks.push(`run over ${scope}: ${total} courses queued (${linkedInScope + 1} configured ones skipped, a second run queues nothing), ${drafts.body.drafted} saved as drafts at 100% and ${drafts.body.empty} empty answers counted as "chưa có kỹ năng phù hợp" (never as saved), nothing applied twice`);
+  checks.push(`run over ${scope}: ${total} courses queued, ${checked} answers checked (${droppedByCheck} dropped a skill) (${linkedInScope + 1} configured ones skipped, a second run queues nothing), ${drafts.body.drafted} saved as drafts at 100% and ${drafts.body.empty} empty answers counted as "chưa có kỹ năng phù hợp" (never as saved), nothing applied twice`);
 
   // "Áp dụng bản nháp": the drafts of the cohort's courses become active at once.
   assert.equal((await call("POST", "/courses/activate", { body: { cohort: scope } })).status, 400, "the confirmation is required");

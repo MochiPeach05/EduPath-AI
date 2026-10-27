@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildCourseAiInput, COURSE_AI_PROMPT_VERSIONS, courseTypeLabel } from "./prompt.js";
+import { buildCourseAiInput, buildCourseCheckInput, COURSE_AI_PROMPT_VERSIONS, courseTypeLabel } from "./prompt.js";
 import { courseSource, GROUP_CORE, GROUP_SOFT, SKILL_DB, SKILL_DOCKER, SKILL_TEAM, SKILL_WEB } from "./test-fixture.js";
 
 type Schema = { properties: Record<string, { maxItems?: number; items: { properties: Record<string, { enum?: string[]; type?: string }> } }> };
@@ -66,7 +66,7 @@ describe("course AI prompt", () => {
   });
 
   it("asks for an empty list when no catalog skill is the course's main content (v3, 2026-10-19)", () => {
-    expect(COURSE_AI_PROMPT_VERSIONS).toEqual({ links: "comp-link-v5", weights: "comp-weight-v2", full: "comp-course-v4" });
+    expect(COURSE_AI_PROMPT_VERSIONS).toEqual({ links: "comp-link-v7", weights: "comp-weight-v2", full: "comp-course-v6" });
     for (const mode of ["links", "full"] as const) {
       const input = buildCourseAiInput(courseSource(), mode);
       expect(input.system).toContain('trả về "links": [] (danh sách rỗng)');
@@ -111,6 +111,52 @@ describe("course AI prompt", () => {
     const input = buildCourseAiInput(courseSource({ profiles: [{ id: SKILL_WEB, name: "Phát triển ứng dụng Android", description: scope, groupId: GROUP_CORE }] }), "full");
     expect(scope.length).toBeLessThanOrEqual(120);
     expect(input.user).toContain(`S001 | Phát triển ứng dụng Android | Chuyên môn | ${scope}`);
+  });
+
+  it("leaves the specialty out and never infers content from the programme (v7/v6, 2026-10-27)", () => {
+    for (const mode of ["links", "full"] as const) {
+      const input = buildCourseAiInput(courseSource({ course: { ...courseSource().course, specialty: "An Ninh Mạng" } }), mode);
+      expect(input.user).not.toContain("Chuyên ngành");
+      expect(input.user).not.toContain("An Ninh Mạng");
+      expect(input.user).toContain("Loại: Bắt buộc · Khối kiến thức: Kiến thức chuyên ngành\n");
+      expect(input.system).toContain("Không suy ra nội dung học phần từ tên ngành, chuyên ngành hay nhóm tự chọn của chương trình");
+      expect(input.system).toContain("chương trình đào tạo các ngành thuộc Khoa Công nghệ Thông tin");
+      expect(input.system).toContain("học phần chuyên môn của ngành đào tạo");
+      expect(input.system).not.toContain("lĩnh vực khác như kế toán");
+      // The course block is kept for the second pass, and is the block the model saw.
+      expect(input.course[0]).toBe("Mã: 71ITSE40103");
+      expect(input.user).toContain(input.course.join("\n"));
+    }
+  });
+
+  it("builds the second pass from the proposal: its keys, the linked marker, keep-or-drop answers (comp-check-v1)", () => {
+    const item = (skillId: string | null, skillName: string, percent: number, reason: string, isNewSkill = false) =>
+      ({ skillId, skillName, groupId: GROUP_CORE, hasProfile: !isNewSkill, isNewSkill, percent, reason });
+    const course = buildCourseAiInput(courseSource(), "links").course;
+    const input = buildCourseCheckInput({ mode: "links", promptVersion: COURSE_AI_PROMPT_VERSIONS.links, course,
+      groups: [{ id: GROUP_CORE, name: "Chuyên môn" }],
+      entries: [
+        { key: "S002", item: item(SKILL_DB, "Thiết kế cơ sở dữ liệu", 60, "Thiết kế lược đồ."), description: "Mô hình hóa dữ liệu quan hệ", linked: true },
+        { key: "S901", item: item(null, "Kiểm thử API", 40, "Có phần kiểm thử API.", true), description: "", linked: false }
+      ] });
+    expect(input.stage).toBe("check");
+    expect(input.promptVersion).toBe("comp-link-v7+comp-check-v1");
+    expect(input.think).toBe(true);
+    expect(input.user).toContain("[1. HỌC PHẦN]\nMã: 71ITSE40103");
+    expect(input.user).toContain("S002 | Thiết kế cơ sở dữ liệu | Chuyên môn | Mô hình hóa dữ liệu quan hệ | 60% | Thiết kế lược đồ. | đã liên kết");
+    expect(input.user).toContain("S901 | Kiểm thử API | Chuyên môn | kỹ năng mới, chưa có trong danh mục | 40% | Có phần kiểm thử API.");
+    // No programme in the check: neither major nor specialty can lead it.
+    expect(input.user).not.toContain("CHƯƠNG TRÌNH ĐÀO TẠO");
+    expect(input.system).toContain("kỹ năng đã liên kết bị bỏ vẫn được giữ với 0%");
+    expect(input.system).toContain('"tối ưu" trong một học phần cơ sở dữ liệu là tối ưu truy vấn');
+    const schema = input.schema as { properties: { links: { maxItems: number; items: { properties: Record<string, { enum?: string[]; type?: string }> } } } };
+    expect(schema.properties.links.maxItems).toBe(2);
+    expect(schema.properties.links.items.properties.skillKey!.enum).toEqual(["S002", "S901"]);
+    expect(schema.properties.links.items.properties.keep!.type).toBe("boolean");
+    expect(input.entries.map((entry) => [entry.key, entry.linked])).toEqual([["S002", true], ["S901", false]]);
+    const full = buildCourseCheckInput({ mode: "full", promptVersion: COURSE_AI_PROMPT_VERSIONS.full, course, groups: [], entries: [] });
+    expect(full.promptVersion).toBe("comp-course-v6+comp-check-v1");
+    expect(full.system).not.toContain("đã liên kết");
   });
 
   it("has no new skills in full mode and keeps student data out", () => {

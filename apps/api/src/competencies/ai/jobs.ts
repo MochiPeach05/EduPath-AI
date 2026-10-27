@@ -14,8 +14,8 @@ import {
   type WorkerCompletion
 } from "../../competency-assessment/ai/worker-protocol.js";
 import { CompetencyError } from "../model.js";
-import { buildCourseAiInput, type CourseAiInput, type CourseAiMode, type CourseAiSource } from "./prompt.js";
-import { courseAiContextFromInput, validateCourseAiOutput, type StoredCourseAiResult } from "./validate.js";
+import { buildCourseAiInput, buildCourseCheckInput, type CourseAiInput, type CourseAiMode, type CourseAiSource, type CourseCheckInput } from "./prompt.js";
+import { courseAiContextFromInput, courseCheckContextFromInput, validateCourseAiOutput, validateCourseCheckOutput, type StoredCourseAiResult } from "./validate.js";
 
 /** At most this many queued/processing course proposals system-wide (every shared course fits). */
 const MAX_PENDING_COURSE_SUGGESTIONS = 300;
@@ -261,35 +261,80 @@ export async function extendCourseSuggestion(db: Db, id: string, leaseToken: str
   return result.rows[0]?.leaseUntil ?? null;
 }
 
-type LockedSuggestion = { status: string; lease_token: string | null; valid: boolean | null; ai_input: Record<string, unknown> | null };
+type LockedSuggestion = { status: string; lease_token: string | null; valid: boolean | null; ai_input: Record<string, unknown> | null; metrics: Record<string, unknown> | null };
+
+/**
+ * The second pass of a links or full proposal (comp-check-v1, 2026-10-27): the proposed skills with their
+ * descriptions (profile scope, else the catalog description) and the course block of the first pass. Null
+ * when there is nothing to check (no item, weights mode) or the first input predates the check.
+ */
+export async function courseCheckInput(db: Db, first: Record<string, unknown>, result: StoredCourseAiResult): Promise<CourseCheckInput | null> {
+  if (result.mode === "weights" || !result.items.length || !Array.isArray(first.course) || !Array.isArray(first.skills)
+    || !Array.isArray(first.groups) || typeof first.promptVersion !== "string") return null;
+  const keyOf = new Map((first.skills as { id: string; key: string }[]).map((entry) => [entry.id, entry.key]));
+  const linked = new Set((Array.isArray(first.linked) ? first.linked as { id: string }[] : []).map((entry) => entry.id));
+  const ids = result.items.map((item) => item.skillId).filter((skillId): skillId is string => Boolean(skillId));
+  const described = await db.query<{ id: string; description: string }>(`SELECT s.id,COALESCE(NULLIF(cs.scope,''),s.description) AS description
+    FROM career_skills s LEFT JOIN ad_comp_skills cs ON cs.skill_id=s.id AND cs.deleted_at IS NULL WHERE s.id=ANY($1::uuid[])`, [ids]);
+  const descriptions = new Map(described.rows.map((row) => [row.id, row.description]));
+  // A new skill (links mode) has no key of the first pass; the catalog is capped at 300 keys.
+  let next = 901;
+  const entries = result.items.map((item) => ({
+    key: (item.skillId ? keyOf.get(item.skillId) : undefined) ?? `S${next++}`,
+    item,
+    description: item.skillId ? descriptions.get(item.skillId) ?? "" : "",
+    linked: Boolean(item.skillId && linked.has(item.skillId))
+  }));
+  return buildCourseCheckInput({ mode: result.mode, promptVersion: first.promptVersion, course: first.course as string[],
+    groups: first.groups as { id: string; name: string }[], entries });
+}
 
 /**
  * Stores the worker's result inside the worker router's transaction. Returns 'missing' when no
  * proposal has this id, 'expired' for another or lost lease (a cancelled proposal stays cancelled),
- * and 'ok' when stored or already stored under the same lease.
+ * and 'ok' when stored or already stored under the same lease. A links or full answer with skills is
+ * not stored yet: the same row is queued again with its second pass (comp-check-v1), and the checked
+ * proposal is stored when that one comes back.
  */
 export async function completeCourseSuggestion(client: PoolClient, id: string, input: WorkerCompletion): Promise<"ok" | "expired" | "missing"> {
   const locked = await client.query<LockedSuggestion>(
-    "SELECT status,lease_token,lease_until>now() AS valid,ai_input FROM ad_comp_ai_suggestions WHERE id=$1 FOR UPDATE", [id]);
+    "SELECT status,lease_token,lease_until>now() AS valid,ai_input,metrics FROM ad_comp_ai_suggestions WHERE id=$1 FOR UPDATE", [id]);
   const job = locked.rows[0];
   if (!job) return "missing";
   if ((job.status === "completed" || job.status === "failed") && job.lease_token === input.leaseToken) return "ok";
+  // The first pass of this lease already moved the row on to its check.
+  if (job.status === "queued" && job.lease_token === input.leaseToken && courseCheckContextFromInput(job.ai_input)) return "ok";
   if (job.status !== "processing" || job.lease_token !== input.leaseToken || job.valid !== true) return "expired";
 
   let errorCode: string | null = "error" in input ? input.error : null;
   let result: StoredCourseAiResult | null = null;
-  if (!("error" in input)) {
-    const context = courseAiContextFromInput(job.ai_input);
-    const checked = context ? validateCourseAiOutput(input.output, context) : null;
-    if (checked?.ok) result = checked.result;
-    else errorCode = "invalid_ai_output";
-  }
   const model = "error" in input ? null : input;
+  const check = courseCheckContextFromInput(job.ai_input);
+  if (model && check) {
+    const checked = validateCourseCheckOutput(model.output, check);
+    if (checked.ok) result = checked.result;
+    else errorCode = "invalid_ai_output";
+  } else if (model) {
+    const context = courseAiContextFromInput(job.ai_input);
+    const checked = context ? validateCourseAiOutput(model.output, context) : null;
+    if (checked?.ok) {
+      const next = job.ai_input ? await courseCheckInput(client, job.ai_input, checked.result) : null;
+      if (next) {
+        // Queued again under the same lease token (a repeated completion of this pass stays "ok"); a new claim
+        // gives it a new lease and two fresh attempts. The first pass's metrics are kept for the record.
+        await client.query(`UPDATE ad_comp_ai_suggestions SET status='queued',ai_input=$2::jsonb,lease_until=NULL,attempts=0,metrics=$3::jsonb,
+          prompt_version=$4,updated_at=now() WHERE id=$1`, [id, JSON.stringify(next), JSON.stringify({ propose: model.metrics }), next.promptVersion]);
+        return "ok";
+      }
+      result = checked.result;
+    } else errorCode = "invalid_ai_output";
+  }
+  const metrics = model ? (check ? { ...(job.metrics ?? {}), check: model.metrics } : model.metrics) : null;
   const promptVersion = typeof job.ai_input?.promptVersion === "string" ? job.ai_input.promptVersion : null;
   await client.query(
     `UPDATE ad_comp_ai_suggestions SET status=$2,error_code=$3,result=$4::jsonb,metrics=$5::jsonb,ai_model=$6,ai_model_digest=$7,
       ollama_version=$8,prompt_version=COALESCE($9,prompt_version),ai_input=NULL,lease_until=NULL,completed_at=now(),updated_at=now() WHERE id=$1`,
     [id, errorCode ? "failed" : "completed", errorCode, result ? JSON.stringify(result) : null,
-      model ? JSON.stringify(model.metrics) : null, model?.model ?? null, model?.digest || null, model?.ollamaVersion || null, promptVersion]);
+      metrics ? JSON.stringify(metrics) : null, model?.model ?? null, model?.digest || null, model?.ollamaVersion || null, promptVersion]);
   return "ok";
 }
