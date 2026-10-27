@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { DatabasePool } from "../db/pool.js";
 import { requireAdminAccess } from "../middleware/authorization.js";
 import { CareerError } from "../careers/shared.js";
-import { CompetencyError, cohortFilter, configurationInput, groupInput, skillInput, skillMajorFilter } from "./model.js";
+import { CompetencyError, cohortFilter, configurationInput, groupInput, skillInput } from "./model.js";
 import { CompetencyRepository } from "./repository.js";
 import { createCompetencyAiRouter } from "./ai/router.js";
 
@@ -57,8 +57,7 @@ export function createCompetenciesRouter(pool: DatabasePool | undefined, webOrig
   });
   router.get("/skills", async (req, res) => {
     const query = z.object({ q: z.string().trim().max(300).default(""),
-      groupId: z.union([z.literal(""), uuid]).default(""), active: z.enum(["", "true", "false"]).default(""),
-      major: skillMajorFilter.default("") }).strict().parse(req.query);
+      groupId: z.union([z.literal(""), uuid]).default(""), active: z.enum(["", "true", "false"]).default("") }).strict().parse(req.query);
     res.json({ items: await repository!.skills(query) });
   });
   router.get("/skills/:id", async (req, res) => {

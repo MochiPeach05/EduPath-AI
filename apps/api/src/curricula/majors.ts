@@ -22,9 +22,9 @@ export function fullMajorName(name: string) {
  * user, 2026-10-27: "Điền ngành đúng nè").
  */
 export const MAJORS = [
-  { code: "7480201", name: "CÔNG NGHỆ THÔNG TIN", label: "Công nghệ thông tin", short: "CNTT" },
-  { code: "7480104", name: "HỆ THỐNG THÔNG TIN", label: "Hệ thống thông tin", short: "HTTT" },
-  { code: "7480102", name: "MẠNG MÁY TÍNH VÀ TRUYỀN THÔNG DỮ LIỆU", label: "Mạng máy tính và truyền thông dữ liệu", short: "MMT&TTDL" },
+  { code: "7480201", name: "CÔNG NGHỆ THÔNG TIN", label: "Công nghệ thông tin" },
+  { code: "7480104", name: "HỆ THỐNG THÔNG TIN", label: "Hệ thống thông tin" },
+  { code: "7480102", name: "MẠNG MÁY TÍNH VÀ TRUYỀN THÔNG DỮ LIỆU", label: "Mạng máy tính và truyền thông dữ liệu" },
 ] as const;
 export type MajorCode = (typeof MAJORS)[number]["code"];
 export const CNTT_MAJOR: MajorCode = "7480201";

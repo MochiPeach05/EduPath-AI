@@ -12,12 +12,6 @@ describe("skillInput (2026-10-22: one or more competency groups)", () => {
     expect(skillInput.parse({ ...base, groupIds: [groupB, groupA, groupB] }).groupIds).toEqual([groupB, groupA]);
     expect(skillInput.parse({ ...base, groupId: groupA })).toEqual({ ...base, groupIds: [groupA] });
   });
-  it("keeps the majors sorted without repeats, only the Faculty's; absent stays absent (2026-10-27, migration 054)", () => {
-    expect(skillInput.parse({ ...base, groupIds: [groupA], majorCodes: ["7480104", "7480102", "7480104"] }).majorCodes).toEqual(["7480102", "7480104"]);
-    expect(skillInput.parse({ ...base, groupIds: [groupA], majorCodes: [] }).majorCodes).toEqual([]);
-    expect("majorCodes" in skillInput.parse({ ...base, groupIds: [groupA] })).toBe(false);
-    expect(skillInput.safeParse({ ...base, groupIds: [groupA], majorCodes: ["7340201"] }).success).toBe(false);
-  });
   it("needs at least one group", () => {
     expect(skillInput.safeParse({ ...base, groupIds: [] }).success).toBe(false);
     expect(skillInput.safeParse(base).success).toBe(false);

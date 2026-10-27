@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { useLiveData } from "./use-live-data";
-import { majorShortNames } from "./majors";
 
 export const COMPETENCY_API = "/api/admin/competencies";
 export const WEIGHT_TOLERANCE = 0.000001;
@@ -10,10 +9,8 @@ export type SkillGroup = { id: string; name: string; isActive: boolean };
 /**
  * groupId/groupName/groupActive: the profile's first group. groups: every group of the skill, the first
  * one first (2026-10-22: one or more groups); read it with skillGroups, an older API sends none.
- * majorCodes ("Ngành áp dụng", 2026-10-27): the majors whose courses the AI may give the skill; empty or
- * absent (an older API) = every major.
  */
-export type Skill = CatalogSkill & { scope: string; groupId: string; groupName: string; isActive: boolean; groupActive: boolean; groups?: SkillGroup[]; majorCodes?: string[]; careerCount: number; courseCount: number; legacySkillId: string | null };
+export type Skill = CatalogSkill & { scope: string; groupId: string; groupName: string; isActive: boolean; groupActive: boolean; groups?: SkillGroup[]; careerCount: number; courseCount: number; legacySkillId: string | null };
 export const skillGroups = (skill: Pick<Skill, "groupId" | "groupName" | "groupActive" | "groups">): SkillGroup[] =>
   skill.groups?.length ? skill.groups : [{ id: skill.groupId, name: skill.groupName, isActive: skill.groupActive }];
 export const skillGroupNames = (skill: Pick<Skill, "groupId" | "groupName" | "groupActive" | "groups">) => skillGroups(skill).map((group) => group.name).join(", ");
@@ -29,11 +26,10 @@ export type Cohort = { cohortCode: string; courseCount: number };
 /**
  * A shared course ("môn học", 2026-10-20): one code, name and number of credits, configured once for
  * every cohort. Only the newest CTĐT revision of each curriculum counts: `cohorts` have the course in
- * it, and `majorCodes` (2026-10-27) are the majors of those CTĐT. `mergedFrom` names the cohorts whose own
- * configuration was replaced when the courses were shared.
+ * it. `mergedFrom` names the cohorts whose own configuration was replaced when the courses were shared.
  */
 export type CompetencyCourse = { id: string; code: string; name: string; credits: number; type: string; block: string; specialty: string; cohorts: string[];
-  majorCodes?: string[]; status: CourseStatus; configId: string | null; version: string | null; skillCount: number; totalWeight: number; mergedFrom: string[] };
+  status: CourseStatus; configId: string | null; version: string | null; skillCount: number; totalWeight: number; mergedFrom: string[] };
 /** groupNames: every group of the skill, the first one first (2026-10-22); an older API sends groupName only. */
 export type CourseLink = { skillId: string; skillName: string; groupId: string; groupName: string; groupNames?: string[]; isActive: boolean; weight: number };
 export const linkGroupNames = (link: Pick<CourseLink, "groupName" | "groupNames">) => link.groupNames?.length ? link.groupNames.join(", ") : link.groupName;
@@ -57,8 +53,6 @@ export const ADD_SKILLS_PATH = "/quantri/cau-hinh-nang-luc";
 export const ALL_COURSES_CONFIRMATION = "TẤT CẢ";
 /** "K29, K30": the cohorts whose newest CTĐT revision has the course. */
 export const cohortList = (course: Pick<CompetencyCourse, "cohorts">) => course.cohorts.join(", ");
-/** The majors a skill is kept to, by their short names ("HTTT"); "" for a skill of every major. */
-export const skillMajorNames = (skill: Pick<Skill, "majorCodes">) => majorShortNames(skill.majorCodes);
 
 const failures: Record<string, string> = {
   authentication_required: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",

@@ -28,9 +28,8 @@ function setup(options: { role?: AuthenticatedUser["role"] | null; revokedAtWrit
   let configStatus = "active";
   let savedLinks = configExists ? [{ skillId, skillName: "Lập trình", groupId, groupName: group.name, isActive: true, weight: 1 }] : [];
   // A shared course ("môn học", migration 038) as the course list query returns it.
-  // majors: the folded major names of the CTĐT identities that have it ("cong nghe thong tin:K29"), 2026-10-27.
   const course = () => ({ id: courseId, code: "A101", name: "Lập trình", credits: 3, type: "BB", block: "Chuyên môn", specialty: "", cohorts: ["K29", "K30"],
-    majors: ["mang may tinh va truyen thong du lieu", "cong nghe thong tin", "nganh khac"], configId: configExists ? configId : null, status: configExists ? configStatus : "missing", version: configExists ? configVersion : null,
+    configId: configExists ? configId : null, status: configExists ? configStatus : "missing", version: configExists ? configVersion : null,
     note: "", mergedFrom: [], skillCount: configExists ? savedLinks.length : 0, totalWeight: configExists ? savedLinks.reduce((sum, link) => sum + link.weight, 0) : 0 });
   const rows = (items: Record<string, unknown>[] = []) => ({ rows: items, rowCount: items.length });
   const query = vi.fn(async (sql: string) => {
@@ -155,10 +154,8 @@ describe("competency administration API", () => {
     await request(app).post("/competencies/courses/clear").set("Origin", origin).send({ cohort: "K29", confirm: "K30" }).expect(400, { error: "confirmation_mismatch", details: [] });
     await request(app).post("/competencies/courses/clear").set("Origin", origin).send({ cohort: "", confirm: "K29" }).expect(400, { error: "confirmation_mismatch", details: [] });
     expect(connect).not.toHaveBeenCalled();
-    // The majors as codes in the order of MAJORS (CNTT first); a major the Faculty does not teach is left out.
     await request(app).get("/competencies/courses?cohort=K29").expect(200, { items: [{ id: courseId, code: "A101", name: "Lập trình", credits: 3, type: "BB", block: "Chuyên môn",
-      specialty: "", cohorts: ["K29", "K30"], majorCodes: ["7480201", "7480102"], configId: null, status: "missing", version: null, mergedFrom: [], skillCount: 0, totalWeight: 0 }] });
-    await request(app).get("/competencies/skills?major=7340201").expect(400);
+      specialty: "", cohorts: ["K29", "K30"], configId: null, status: "missing", version: null, mergedFrom: [], skillCount: 0, totalWeight: 0 }] });
   });
 
   it("prevents active allocations from using inactive groups and blocks group deactivation while in use", async () => {

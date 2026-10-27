@@ -30,8 +30,8 @@ const migrations = ["007_student_transcripts.sql", "010_transcript_jobs.sql", "0
   "031_career_ai_suggestions.sql", "032_graduation_ai_advice.sql", "033_competency_cloud_ai.sql", "034_competency_ai_suggestions.sql",
   "035_competency_ai_skills.sql", "036_cancel_competency_ai_skills.sql", "037_competency_field_groups.sql", "038_competency_shared_courses.sql",
   "039_competency_newest_revisions.sql", "040_competency_skill_groups.sql",
-  // The worker router also hands out study roadmaps (047) since 2026-10-24.
-  "047_student_roadmaps.sql", "054_competency_skill_majors.sql"];
+  // The worker router also hands out study roadmaps (047) since 2026-10-24: without the table the claim fails.
+  "047_student_roadmaps.sql"];
 const adminPool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 1 });
 // search_path is the audit schema ONLY, so a missing table can never fall through to public.
 const pool = new pg.Pool({ connectionString: env.DATABASE_URL, max: 8, options: `-c search_path=${schema}` });
@@ -116,7 +116,7 @@ function candidates(user) {
 try {
   const publicBefore = await publicCounts();
   await setupSchema();
-  checks.push(`migrations 007-040, 047 and 054 apply in a throwaway schema; copied ${await count("ad_comp_skills WHERE deleted_at IS NULL")} profiles, ${await count("ad_comp_course_configs")} configurations and ${await count("career_requirements WHERE deleted_at IS NULL")} career links read-only from public`);
+  checks.push(`migrations 007-040 and 047 apply in a throwaway schema; copied ${await count("ad_comp_skills WHERE deleted_at IS NULL")} profiles, ${await count("ad_comp_course_configs")} configurations and ${await count("career_requirements WHERE deleted_at IS NULL")} career links read-only from public`);
 
   const app = express();
   app.use("/api/worker/competency-assessments", createCompetencyWorkerRouter(pool, workerKey));
@@ -314,51 +314,6 @@ try {
   assert.equal(kept.body.course.status, "active");
   assert.equal(kept.body.course.links.length, linkedNow.length + 1);
   checks.push(`links on a linked course: ${linkedNow.length} linked skills offered as "đã liên kết", left out ones come back at 0%, a review without them is 409 links_changed, apply keeps them and activates at 100%`);
-
-  // "Ngành áp dụng" (migration 054, 2026-10-27): a skill kept to another major is never offered to a course; kept to the
-  // course's major it is offered and marked; an older page that sends no majors keeps them. The course list names the majors.
-  {
-    const probe = courses[courses.length - 1];
-    assert.deepEqual(chosen.courses.find((course) => course.id === probe.id).majorCodes, ["7480201"], "the local CTĐT are CNTT");
-    const skill = (await call("GET", "/skills?active=true")).body.items.find((item) => item.groupActive);
-    const patch = async (current, majorCodes) => call("PATCH", `/skills/${current.id}`, { headers: { "x-version": current.version },
-      body: { name: current.name, description: current.description, scope: current.scope, groupIds: current.groups.map((group) => group.id),
-        isActive: current.isActive, ...(majorCodes ? { majorCodes } : {}) } });
-    const offeredTo = async (courseId) => {
-      const queuedProbe = await ai("POST", "", { body: { courseId, mode: "links" } });
-      assert.equal(queuedProbe.status, 201, JSON.stringify(queuedProbe.body));
-      const job = await claim();
-      assert.deepEqual((await complete(job, { links: [], newSkills: [] })).body, { ok: true });
-      return job.user;
-    };
-    const httt = await patch(skill, ["7480104"]);
-    assert.equal(httt.status, 200, JSON.stringify(httt.body));
-    assert.deepEqual(httt.body.majorCodes, ["7480104"]);
-    const listed = async (major) => (await call("GET", `/skills?major=${major}`)).body.items.some((item) => item.id === skill.id);
-    assert.deepEqual([await listed("7480104"), await listed("shared"), await listed("7480201")], [true, false, false], "the major filter");
-    assert.equal((await call("GET", "/skills?major=7340201")).status, 400);
-    let user = await offeredTo(probe.id);
-    assert(!candidates(user).some((entry) => entry.name === skill.name), "a skill kept to HTTT is not offered to a CNTT course");
-    assert(user.includes("Ngành có học phần này trong CTĐT mới nhất: Công nghệ thông tin (CNTT): "), "mục [1] names the major");
-    const kept = await patch(httt.body);
-    assert.deepEqual(kept.body.majorCodes, ["7480104"], "a page that sends no majors keeps them");
-    const cntt = await patch(kept.body, ["7480201"]);
-    user = await offeredTo(probe.id);
-    assert.equal(candidates(user).find((entry) => entry.name === skill.name)?.group.endsWith("· riêng ngành CNTT"), true, "kept to CNTT, it is offered and marked");
-    const shared = await patch(cntt.body, []);
-    assert.deepEqual(shared.body.majorCodes, []);
-    const history = (await call("GET", `/skills/${skill.id}`)).body.history;
-    assert.deepEqual(history.slice(0, 4).map((entry) => entry.snapshot.majorCodes), [[], ["7480201"], ["7480104"], ["7480104"]], "the history keeps the majors");
-    // A configured course of the same name under another code is shown in mục [6] (the probe takes its name for the check).
-    const other = chosen.courses.find((course) => course.status === "active" && course.skillCount > 0);
-    const probeName = (await pool.query("SELECT name FROM ad_comp_courses WHERE id=$1", [probe.id])).rows[0].name;
-    await pool.query("UPDATE ad_comp_courses SET name=$2 WHERE id=$1", [probe.id, other.name]);
-    user = await offeredTo(probe.id);
-    await pool.query("UPDATE ad_comp_courses SET name=$2 WHERE id=$1", [probe.id, probeName]);
-    const sameName = user.slice(user.indexOf("[6. MÔN CÙNG TÊN ĐÃ CẤU HÌNH]"));
-    assert(sameName.includes(`\nMã ${other.code} · CNTT `) && /\n- S\d{3} · .+ \(\d+%\)/.test(sameName), "mục [6] shows the configured course of the same name");
-    checks.push(`"Ngành áp dụng": a skill kept to HTTT is not offered to the CNTT course ${probe.code}, kept to CNTT it is offered as "riêng ngành CNTT"; a page without majors keeps them; the filter, the history and the course list (majorCodes) see them; mục [6] shows ${other.code} for a course of the same name`);
-  }
 
   const ids = courses.map((course) => course.id);
   const linkedInScope = chosen.courses.length - courses.length;
