@@ -20,7 +20,7 @@ describe("course AI prompt", () => {
     // The linked skill is marked, listed again with its weight, and must come back with a percent.
     expect(input.user).toContain("S002 | Thiết kế cơ sở dữ liệu | Chuyên môn | Mô hình hóa dữ liệu quan hệ | đã liên kết");
     expect(input.user).toContain("- S002 · Thiết kế cơ sở dữ liệu (trọng số hiện tại 50%)");
-    expect(input.user.trimEnd().endsWith('Luôn đưa các kỹ năng đã liên kết ở mục [6] vào "links".')).toBe(true);
+    expect(input.user.trimEnd().endsWith('Luôn đưa các kỹ năng đã liên kết ở mục [7] vào "links".')).toBe(true);
     expect(input.system).toContain("tổng percent của mọi mục trong \"links\" và \"newSkills\" bằng đúng 100");
     // The full mode (whole program, courses without links) still leaves linked skills out.
     expect(buildCourseAiInput(courseSource({ links: [{ skillId: SKILL_DB, name: "Thiết kế cơ sở dữ liệu", groupId: GROUP_CORE, description: "", weight: 0.5 }] }), "full").skills
@@ -66,7 +66,7 @@ describe("course AI prompt", () => {
   });
 
   it("asks for an empty list when no catalog skill is the course's main content (v3, 2026-10-19)", () => {
-    expect(COURSE_AI_PROMPT_VERSIONS).toEqual({ links: "comp-link-v5", weights: "comp-weight-v2", full: "comp-course-v4" });
+    expect(COURSE_AI_PROMPT_VERSIONS).toEqual({ links: "comp-link-v6", weights: "comp-weight-v2", full: "comp-course-v5" });
     for (const mode of ["links", "full"] as const) {
       const input = buildCourseAiInput(courseSource(), mode);
       expect(input.system).toContain('trả về "links": [] (danh sách rỗng)');
@@ -97,7 +97,7 @@ describe("course AI prompt", () => {
       expect(input.system).toContain("thường 40–65%");
     }
     const linked = buildCourseAiInput(courseSource({ facultyLinks, links: [{ skillId: SKILL_DB, name: "Thiết kế cơ sở dữ liệu", groupId: GROUP_CORE, description: "", weight: 1 }] }), "links");
-    expect(linked.user.indexOf("[5. KỸ NĂNG KHOA")).toBeLessThan(linked.user.indexOf("[6. KỸ NĂNG ĐÃ LIÊN KẾT"));
+    expect(linked.user.indexOf("[6. MÔN CÙNG TÊN")).toBeLessThan(linked.user.indexOf("[7. KỸ NĂNG ĐÃ LIÊN KẾT"));
     expect(linked.system).toContain("không là biến thể (thêm hay bớt tên công cụ, viết tắt, tiếng Anh hay tiếng Việt)");
     // Trial of 2026-10-22: Gemma kept the AI's Flutter/Kotlin links of a mobile course while the faculty had Android.
     expect(linked.system).toContain("không phải bằng chứng về nội dung học phần");
@@ -111,6 +111,45 @@ describe("course AI prompt", () => {
     const input = buildCourseAiInput(courseSource({ profiles: [{ id: SKILL_WEB, name: "Phát triển ứng dụng Android", description: scope, groupId: GROUP_CORE }] }), "full");
     expect(scope.length).toBeLessThanOrEqual(120);
     expect(input.user).toContain(`S001 | Phát triển ứng dụng Android | Chuyên môn | ${scope}`);
+  });
+
+  it("offers a skill kept to some majors only to their courses and shows the configured course of the same name (v6/v5, 2026-10-27)", () => {
+    const SKILL_GIS = "00000000-0000-4000-8000-000000000021";
+    const profiles = [...courseSource().profiles,
+      { id: SKILL_GIS, name: "Hệ thống thông tin địa lý (GIS)", description: "Bản đồ và phân tích không gian", groupId: GROUP_CORE, majorCodes: ["7480104"] }];
+    // A CNTT course never sees the HTTT skill, in either mode; nor does a course of no known major.
+    for (const mode of ["links", "full"] as const) {
+      const cntt = buildCourseAiInput(courseSource({ profiles, majors: [{ code: "7480201", cohorts: ["K29", "K31"] }] }), mode);
+      expect(cntt.skills.map((entry) => entry.id)).not.toContain(SKILL_GIS);
+      expect(cntt.user).toContain("Ngành có học phần này trong CTĐT mới nhất: Công nghệ thông tin (CNTT): K29, K31");
+      expect(buildCourseAiInput(courseSource({ profiles }), mode).skills.map((entry) => entry.id)).not.toContain(SKILL_GIS);
+    }
+    // An HTTT course gets the HTTT skill, marked, and keeps the skills of every major.
+    const httt = buildCourseAiInput(courseSource({ profiles, majors: [{ code: "7480104", cohorts: ["K29", "K31"] }] }), "full");
+    expect(httt.skills.map((entry) => entry.id)).toEqual(expect.arrayContaining([SKILL_WEB, SKILL_DB, SKILL_TEAM, SKILL_DOCKER, SKILL_GIS]));
+    expect(httt.user).toMatch(/S\d{3} \| Hệ thống thông tin địa lý \(GIS\) \| Chuyên môn · riêng ngành HTTT \| Bản đồ/);
+    expect(httt.user).toContain("Hệ thống thông tin (HTTT): K29, K31");
+    expect(httt.system).toContain("chọn kỹ năng riêng đó");
+    expect(httt.system).toContain("Mạng máy tính và truyền thông dữ liệu");
+    // A course keeps a linked skill of another major in links mode: it has it.
+    const linkedGis = buildCourseAiInput(courseSource({ profiles, majors: [{ code: "7480201", cohorts: ["K31"] }],
+      links: [{ skillId: SKILL_GIS, name: "Hệ thống thông tin địa lý (GIS)", groupId: GROUP_CORE, description: "", weight: 1 }] }), "links");
+    expect(linkedGis.skills.map((entry) => entry.id)).toContain(SKILL_GIS);
+
+    const namesake = { code: "71ITNW41003", where: "CNTT K27, MMT&TTDL K31", links: [
+      { skillId: SKILL_DB, name: "Thiết kế cơ sở dữ liệu", weight: 0.6 }, { skillId: SKILL_WEB, name: "Lập trình web", weight: 0.4 },
+      { skillId: SKILL_GIS, name: "Hệ thống thông tin địa lý (GIS)", weight: 0.2 }] };
+    for (const mode of ["links", "full"] as const) {
+      const input = buildCourseAiInput(courseSource({ profiles, majors: [{ code: "7480201", cohorts: ["K31"] }], namesake }), mode);
+      const section = input.user.slice(input.user.indexOf("[6. MÔN CÙNG TÊN ĐÃ CẤU HÌNH]"));
+      expect(section).toContain("Mã 71ITNW41003 · CNTT K27, MMT&TTDL K31\n- S002 · Thiết kế cơ sở dữ liệu (60%)\n- S001 · Lập trình web (40%)");
+      // A skill that is not a candidate of this course is left out.
+      expect(section).not.toContain("GIS");
+      expect(input.user.indexOf("[5. KỸ NĂNG KHOA")).toBeLessThan(input.user.indexOf("[6. MÔN CÙNG TÊN"));
+      expect(input.system).toContain("Mục [5] đáng tin hơn mục [6]");
+    }
+    expect(buildCourseAiInput(courseSource(), "full").user)
+      .toContain("[6. MÔN CÙNG TÊN ĐÃ CẤU HÌNH] (cùng tên, khác mã, ở ngành hoặc khóa khác; cấu hình đang áp dụng)\nChưa có.");
   });
 
   it("has no new skills in full mode and keeps student data out", () => {

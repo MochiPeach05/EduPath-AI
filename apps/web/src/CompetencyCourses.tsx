@@ -7,6 +7,7 @@ import { assessAllocations, splitEvenly, type AllocationInput } from "./competen
 import { COMPETENCY_API, cohortList, competencyDate, competencyRequest, linkGroupNames, percentage, skillGroupNames, skillGroups, statusLabels, useCompetencyData, type Cohort, type CompetencyCourse, type CompetencySummary, type CourseDetail, type EventEntry, type Group, type Skill } from "./competency-types";
 import CompetencyCourseAi from "./CompetencyCourseAi";
 import { CompetencyBulkAi } from "./CompetencyBulkAi";
+import { majorShortNames } from "./majors";
 
 type Props = { canManage: boolean; revision: number; onSaved: () => void };
 /**
@@ -58,7 +59,7 @@ export function CompetencyCoursesTab({ canManage, revision, onSaved }: Props) {
         return <tr key={course.id}>
           <td className="cm-stt">{(page - 1) * 10 + index + 1}</td>
           <td><strong>{course.code}</strong>{course.name}<small>{course.credits} tín chỉ · {course.type || "Chưa xác định loại"}{course.block ? ` · ${course.block}` : ""}</small></td>
-          <td>{cohortList(course)}</td>
+          <td>{cohortList(course)}{majorShortNames(course.majorCodes) && <small>Ngành {majorShortNames(course.majorCodes)}</small>}</td>
           <td><span className={`comp-state comp-state-${course.status}`}>{statusLabels[course.status]}</span>{course.mergedFrom.length > 0 && <small className="comp-merged">Đã gộp cấu hình khác của {course.mergedFrom.join(", ")}; xem lịch sử.</small>}</td>
           <td>{course.skillCount} kỹ năng<strong>{percentage(course.totalWeight)}</strong>{course.status === "archived" && <small>Trọng số lưu trong lịch sử; không đóng góp.</small>}</td>
           <td><ActionMenu label={`Thao tác với ${course.code} · ${course.name}`} items={[
@@ -89,7 +90,7 @@ function CourseDialog({ course, mode, canManage, close, saved }: { course: Compe
   const step = { detail: remote.data!, canManage, close, saved, busy, setBusy };
   const title = dialogTitles[mode];
   return <Modal title={title ? `${title} · ${course.code}` : `${course.code} · ${course.name}`} onClose={close} busy={busy}>
-    <div className="cm-dialog-body comp-course-dialog"><p className="comp-hint">{course.code} · {course.name} · {course.credits} tín chỉ · Khóa áp dụng: {cohortList(course)}. Cấu hình dùng chung cho mọi khóa có môn này.</p><Status {...remote} />
+    <div className="cm-dialog-body comp-course-dialog"><p className="comp-hint">{course.code} · {course.name} · {course.credits} tín chỉ · Khóa áp dụng: {cohortList(course)}{majorShortNames(course.majorCodes) ? ` (ngành ${majorShortNames(course.majorCodes)})` : ""}. Cấu hình dùng chung cho mọi khóa có môn này.</p><Status {...remote} />
       {remote.data && (mode === "links" ? <ManualLinks key={course.id} {...step} />
           : mode === "removeLinks" ? <RemoveLinks key={course.id} {...step} />
               : <CourseConfiguration key={course.id} initial={remote.data} canManage={canManage} startEditing={mode === "edit"} close={close} saved={saved} busy={busy} setBusy={setBusy} />)}

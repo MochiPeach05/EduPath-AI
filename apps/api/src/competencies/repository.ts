@@ -4,23 +4,36 @@ import type { AuthenticatedUser } from "../auth/types.js";
 import type { DatabasePool } from "../db/pool.js";
 import { access, fold, lockSkillCatalog } from "../careers/shared.js";
 import { refreshCareerSkills } from "../careers/requirements.js";
+import { MAJORS, majorKey } from "../curricula/majors.js";
 import { CompetencyError, validateWeights, WEIGHT_TOLERANCE } from "./model.js";
 
 type Database = DatabasePool | PoolClient;
 type GroupChange = { name: string; description: string; isActive: boolean };
-/** groupIds: one or more competency groups (migration 040); the first is stored as ad_comp_skills.group_id. */
-type SkillChange = { name: string; description: string; scope: string; groupIds: string[]; isActive: boolean };
+/**
+ * groupIds: one or more competency groups (migration 040); the first is stored as ad_comp_skills.group_id.
+ * majorCodes: "Ngành áp dụng" (migration 054), none = every major; absent keeps the stored ones.
+ */
+type SkillChange = { name: string; description: string; scope: string; groupIds: string[]; isActive: boolean; majorCodes?: string[] };
 type SkillGroup = { id: string; name: string; isActive: boolean };
 type ConfigurationChange = { status: "draft" | "active"; links: { skillId: string; weight: number }[]; note?: string };
 type Group = { id: string; name: string; description: string; isActive: boolean; version: string; skillCount: number };
-/** groupId/groupName/groupActive: the first group; groups: every group of the skill, the first one first. */
-type Skill = { id: string; name: string; description: string; scope: string; legacySkillId: string | null; groupId: string; groupName: string; isActive: boolean; groupActive: boolean; groups: SkillGroup[]; version: string; careerCount: number; courseCount: number };
+/**
+ * groupId/groupName/groupActive: the first group; groups: every group of the skill, the first one first.
+ * majorCodes: the majors the skill is kept to, sorted; empty = every major.
+ */
+type Skill = { id: string; name: string; description: string; scope: string; legacySkillId: string | null; groupId: string; groupName: string; isActive: boolean; groupActive: boolean; groups: SkillGroup[]; majorCodes: string[]; version: string; careerCount: number; courseCount: number };
 type CourseLink = { skillId: string; skillName: string; groupId: string; groupName: string; groupNames: string[]; isActive: boolean; weight: number };
 type CourseStatus = "draft" | "active" | "archived" | "missing";
-/** One shared course ("môn học") with its configuration; `cohorts` have it in their newest CTĐT revision. */
+/**
+ * One shared course ("môn học") with its configuration; `cohorts` have it in their newest CTĐT revision, and
+ * `majorCodes` are those CTĐT's majors (2026-10-27), in the order of MAJORS.
+ */
 type CourseRow = { id: string; code: string; name: string; credits: number; type: string; block: string; specialty: string;
-  cohorts: string[]; configId: string | null; status: CourseStatus; version: string | null; note: string;
+  cohorts: string[]; majorCodes: string[]; configId: string | null; status: CourseStatus; version: string | null; note: string;
   mergedFrom: string[]; skillCount: number; totalWeight: number };
+/** The Faculty's majors of CTĐT identities ("he thong thong tin:K31"), in the order of MAJORS; another major is left out. */
+export const majorCodesOf = (identityMajors: readonly string[]) =>
+  MAJORS.filter(major => identityMajors.includes(majorKey(major.name))).map(major => major.code as string);
 type Warning = { code: string; message: string; courseCode?: string };
 
 /** The profile cs belongs to the group: its first group (ad_comp_skills.group_id) or another one (migration 040). */
@@ -30,9 +43,13 @@ const groupsOf = (columns: string) => `(SELECT ${columns} FROM ad_comp_groups x
   WHERE x.id=cs.group_id OR x.id IN (SELECT m.group_id FROM ad_comp_skill_groups m WHERE m.skill_id=cs.skill_id))`;
 const groupColumns = `g.id,g.name,g.description,g.is_active AS "isActive",g.version,
  (SELECT count(*)::int FROM ad_comp_skills cs WHERE ${inGroup("g.id")} AND cs.deleted_at IS NULL) AS "skillCount"`;
+/** The majors the profile cs is kept to ("Ngành áp dụng", migration 054), sorted; empty = every major. */
+export const majorsOf = (alias: string) => `(SELECT COALESCE(array_agg(m.major_code ORDER BY m.major_code),'{}')
+  FROM ad_comp_skill_majors m WHERE m.skill_id=${alias}.skill_id)`;
 const skillColumns = `s.id,s.name,s.description,cs.scope,cs.legacy_skill_id AS "legacySkillId",cs.group_id AS "groupId",g.name AS "groupName",
  cs.is_active AS "isActive",g.is_active AS "groupActive",cs.version,
  ${groupsOf(`jsonb_agg(jsonb_build_object('id',x.id,'name',x.name,'isActive',x.is_active) ORDER BY x.id<>cs.group_id,x.name,x.id)`)} AS groups,
+ ${majorsOf("cs")} AS "majorCodes",
  (SELECT count(DISTINCT r.career_position_id)::int FROM career_requirements r
   JOIN career_positions p ON p.id=r.career_position_id
   WHERE r.skill_id=s.id AND r.deleted_at IS NULL AND p.deleted_at IS NULL) AS "careerCount",
@@ -164,10 +181,14 @@ export class CompetencyRepository {
  WHERE deleted_at IS NULL ORDER BY name,id`)).rows;
   }
 
-  async skills(query: { q: string; groupId: string; active: "" | "true" | "false" }) {
+  /** major: "" every skill, "shared" the skills of every major, a major code the skills kept to that major. */
+  async skills(query: { q: string; groupId: string; active: "" | "true" | "false"; major?: string }) {
     const result = await this.pool.query<Skill>(`SELECT ${skillColumns} ${skillTables}
  WHERE cs.deleted_at IS NULL AND s.deleted_at IS NULL AND ($1='' OR ${inGroup("NULLIF($1,'')::uuid")})
- AND ($2='' OR cs.is_active=($2='true')) ORDER BY s.name,s.id`, [query.groupId, query.active]);
+ AND ($2='' OR cs.is_active=($2='true'))
+ AND ($3='' OR ($3='shared' AND NOT EXISTS(SELECT 1 FROM ad_comp_skill_majors m WHERE m.skill_id=cs.skill_id))
+   OR EXISTS(SELECT 1 FROM ad_comp_skill_majors m WHERE m.skill_id=cs.skill_id AND m.major_code=$3)) ORDER BY s.name,s.id`,
+    [query.groupId, query.active, query.major ?? ""]);
     const term = fold(query.q);
     return result.rows.filter(row => fold(`${row.name} ${row.description} ${row.scope} ${row.groups.map(group => group.name).join(" ")}`).includes(term));
   }
@@ -208,6 +229,13 @@ export class CompetencyRepository {
     await db.query("DELETE FROM ad_comp_skill_groups WHERE skill_id=$1", [skillId]);
     for (const groupId of groupIds.filter(groupId => groupId !== first).sort())
       await db.query("INSERT INTO ad_comp_skill_groups(skill_id,group_id) VALUES($1,$2)", [skillId, groupId]);
+  }
+
+  /** Replaces the majors a profile is kept to (migration 054); none = every major. */
+  private async writeMajors(db: Database, skillId: string, majorCodes: string[]) {
+    await db.query("DELETE FROM ad_comp_skill_majors WHERE skill_id=$1", [skillId]);
+    for (const code of [...new Set(majorCodes)].sort())
+      await db.query("INSERT INTO ad_comp_skill_majors(skill_id,major_code) VALUES($1,$2)", [skillId, code]);
   }
 
   private async activeSkillUsage(db: Database, id: string) {
@@ -253,6 +281,7 @@ export class CompetencyRepository {
           [id, first, data.scope, data.isActive]);
       }
       await this.writeOtherGroups(client, id, first, data.groupIds);
+      await this.writeMajors(client, id, data.majorCodes ?? []);
       const snapshot = await this.skillSnapshot(client, id);
       await this.event(client, "skill", id, actor, snapshot, restored ? "Khôi phục cấu hình năng lực"
         : match ? "Thêm cấu hình năng lực cho kỹ năng có sẵn trong danh mục" : "Thêm cấu hình năng lực");
@@ -288,6 +317,7 @@ export class CompetencyRepository {
       await client.query(`UPDATE ad_comp_skills SET group_id=$2,scope=$3,is_active=$4,version=$5,updated_at=now()
  WHERE skill_id=$1`, [id, first, data.scope, data.isActive, randomUUID()]);
       await this.writeOtherGroups(client, id, first, data.groupIds);
+      if (data.majorCodes) await this.writeMajors(client, id, data.majorCodes);
       const snapshot = await this.skillSnapshot(client, id);
       await this.event(client, "skill", id, actor, snapshot, "Cập nhật cấu hình năng lực");
       return snapshot;
@@ -304,8 +334,9 @@ export class CompetencyRepository {
       const nextVersion = randomUUID();
       const removed = await client.query<{ deletedAt: string }>(`UPDATE ad_comp_skills SET deleted_at=now(),is_active=false,
  version=$2,updated_at=now() WHERE skill_id=$1 RETURNING deleted_at AS "deletedAt"`, [id, nextVersion]);
-      // The history keeps the groups; a restored profile starts from the groups chosen then.
+      // The history keeps the groups and majors; a restored profile starts from the ones chosen then.
       await client.query("DELETE FROM ad_comp_skill_groups WHERE skill_id=$1", [id]);
+      await client.query("DELETE FROM ad_comp_skill_majors WHERE skill_id=$1", [id]);
       await this.event(client, "skill", id, actor,
         { ...previous, isActive: false, version: nextVersion, deletedAt: removed.rows[0]!.deletedAt }, "Xóa cấu hình năng lực");
       return { deleted: true };
@@ -327,20 +358,21 @@ export class CompetencyRepository {
    * come from the filtered cohort, otherwise from the newest cohort that has the course.
    */
   private async courseRows(db: Database, cohort: string, id: string | null = null): Promise<CourseRow[]> {
-    const result = await db.query<CourseRow>(`WITH occ AS (SELECT cc.course_id,cc.position,cc.course_type,cc.block,cc.specialty,
- cu.cohort_code,cu.id AS curriculum_id FROM curriculum_courses cc JOIN curricula cu ON cu.current_revision=cc.revision_id),
+    const result = await db.query<Omit<CourseRow, "majorCodes"> & { majors: string[] }>(`WITH occ AS (SELECT cc.course_id,cc.position,cc.course_type,cc.block,cc.specialty,
+ cu.cohort_code,cu.id AS curriculum_id,split_part(cu.identity_key,':',1) AS major FROM curriculum_courses cc JOIN curricula cu ON cu.current_revision=cc.revision_id),
  shown AS (SELECT DISTINCT ON (course_id) course_id,position,course_type,block,specialty FROM occ
  WHERE ($1='' OR cohort_code=$1) AND ($2::uuid IS NULL OR course_id=$2)
  ORDER BY course_id,${cohortOrder("cohort_code")},curriculum_id)
  SELECT c.id,c.code,c.name,c.credits::float8 AS credits,s.course_type AS type,s.block,s.specialty,
  (SELECT array_agg(DISTINCT o.cohort_code ORDER BY o.cohort_code) FROM occ o WHERE o.course_id=c.id) AS cohorts,
+ (SELECT array_agg(DISTINCT o.major) FROM occ o WHERE o.course_id=c.id) AS majors,
  cfg.id AS "configId",COALESCE(cfg.status,'missing') AS status,cfg.version,COALESCE(cfg.note,'') AS note,
  COALESCE(cfg.merged_from,'{}') AS "mergedFrom",
  (SELECT count(*)::int FROM ad_comp_course_links l WHERE l.config_id=cfg.id) AS "skillCount",
  COALESCE((SELECT sum(l.weight)::float8 FROM ad_comp_course_links l WHERE l.config_id=cfg.id),0) AS "totalWeight"
  FROM ad_comp_courses c JOIN shown s ON s.course_id=c.id LEFT JOIN ad_comp_course_configs cfg ON cfg.course_id=c.id
  ORDER BY ${cohort ? "s.position," : ""}c.code,c.name,c.id`, [cohort, id]);
-    return result.rows;
+    return result.rows.map(({ majors, ...row }) => ({ ...row, majorCodes: majorCodesOf(majors ?? []) }));
   }
 
   /** Ids of the courses of the filter (see courseRows), for the AI run over the filter. */
@@ -369,7 +401,8 @@ export class CompetencyRepository {
  JOIN career_skills s ON s.id=cs.skill_id JOIN ad_comp_groups g ON g.id=cs.group_id
  WHERE l.config_id=$1 ORDER BY g.name,s.name,s.id`, [course.configId])).rows : [];
     return { courseId: course.id, courseCode: course.code, courseName: course.name, credits: course.credits, cohorts: course.cohorts,
-      configId: course.configId, status: course.status, version: course.version, note: course.note, mergedFrom: course.mergedFrom, links };
+      majorCodes: course.majorCodes, configId: course.configId, status: course.status, version: course.version, note: course.note,
+      mergedFrom: course.mergedFrom, links };
   }
 
   /**

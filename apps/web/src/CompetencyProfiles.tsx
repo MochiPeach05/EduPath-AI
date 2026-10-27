@@ -4,11 +4,12 @@ import { Icon, RequiredLabel } from "./admin-account-shared";
 import { searchTerm } from "./student-curriculum-types";
 import { useLiveFilters } from "./use-live-filters";
 import {
-  COMPETENCY_API, competencyDate, competencyRequest, percentage, skillGroups, statusLabels,
+  COMPETENCY_API, competencyDate, competencyRequest, percentage, skillGroups, skillMajorNames, statusLabels,
   useCompetencyData, type CatalogSkill, type EventEntry, type Group, type Skill, type SkillDetail,
 } from "./competency-types";
 import { CheckedForm, DescriptionField } from "./CheckedForm";
 import { DESCRIPTION_MAX_WORDS, LONG_DESCRIPTION_MAX_WORDS } from "./form-checks";
+import { MAJOR_OPTIONS, majorShortNames } from "./majors";
 
 type TabProps = { canManage: boolean; revision: number; onSaved: () => void };
 type EditorProps<T> = { current: T | null; close: () => void; saved: () => void };
@@ -28,6 +29,12 @@ function snapshotGroups(snapshot: Record<string, unknown>): string {
 
 function ProfileState({ active }: { active: boolean }) {
   return <span className={`comp-state${active ? "" : " comp-state-inactive"}`}>{active ? "Đang sử dụng" : "Ngừng sử dụng"}</span>;
+}
+
+/** "Ngành áp dụng" (2026-10-27): the majors whose courses the AI may give the skill, or every major. */
+function majorsText(codes: readonly string[] | undefined) {
+  const labels = MAJOR_OPTIONS.filter(major => codes?.includes(major.code)).map(major => major.label);
+  return labels.length ? `Riêng ngành ${labels.join(", ")}` : "Mọi ngành";
 }
 
 export function CompetencyGroupsTab({ canManage, revision, onSaved }: TabProps) {
@@ -174,7 +181,8 @@ function GroupEditor({ current, close, saved }: EditorProps<Group>) {
 }
 
 export function CompetencySkillsTab({ canManage, revision, onSaved }: TabProps) {
-  const { draft, setDraft, filters, page, setPage, reset } = useLiveFilters({ q: "", groupId: "", active: "" });
+  // major: "" every skill, "shared" the skills of every major, a code the skills kept to that major (2026-10-27).
+  const { draft, setDraft, filters, page, setPage, reset } = useLiveFilters({ q: "", groupId: "", active: "", major: "" });
   const remote = useCompetencyData<{ items: Skill[] }>(`${COMPETENCY_API}/skills?${new URLSearchParams(filters)}`, revision);
   const groups = useCompetencyData<{ items: Group[] }>(`${COMPETENCY_API}/groups`, revision);
   const [selected, setSelected] = useState<Skill | null>(null);
@@ -193,6 +201,10 @@ export function CompetencySkillsTab({ canManage, revision, onSaved }: TabProps) 
         <label>Nhóm năng lực<select value={draft.groupId} disabled={groups.loading} onChange={event => setDraft({ ...draft, groupId: event.target.value })}>
           <option value="">Tất cả nhóm</option>{groups.data?.items.map(group => <option key={group.id} value={group.id}>{group.name}{group.isActive ? "" : " (ngừng sử dụng)"}</option>)}
         </select></label>
+        <label>Ngành<select value={draft.major} onChange={event => setDraft({ ...draft, major: event.target.value })}>
+          <option value="">Tất cả ngành</option><option value="shared">Dùng cho mọi ngành</option>
+          {MAJOR_OPTIONS.map(major => <option key={major.code} value={major.code}>Riêng ngành {major.short}</option>)}
+        </select></label>
         <label>Trạng thái<select value={draft.active} onChange={event => setDraft({ ...draft, active: event.target.value })}><option value="">Tất cả</option><option value="true">Đang sử dụng</option><option value="false">Ngừng sử dụng</option></select></label>
         <button className="am-outline" onClick={reset}><Icon name="refresh" /> Xóa bộ lọc</button>
       </div>
@@ -203,7 +215,7 @@ export function CompetencySkillsTab({ canManage, revision, onSaved }: TabProps) 
           <thead><tr><th className="cm-stt">STT</th><th>Kỹ năng</th><th>Nhóm năng lực</th><th>Phạm vi</th><th>Trạng thái</th><th>Liên kết</th><th>Thao tác</th></tr></thead>
           <tbody>{remote.data.items.slice((page - 1) * 10, page * 10).map((skill, index) => <tr key={skill.id}>
             <td className="cm-stt">{(page - 1) * 10 + index + 1}</td>
-            <td><button className="am-name-link" onClick={() => { setSelected(skill); setMode("detail"); }}>{skill.name}</button></td>
+            <td><button className="am-name-link" onClick={() => { setSelected(skill); setMode("detail"); }}>{skill.name}</button>{skillMajorNames(skill) && <small>Riêng ngành {skillMajorNames(skill)}</small>}</td>
             <td><GroupNames skill={skill} /></td>
             <td className="comp-description">{skill.scope || "Chưa bổ sung"}</td>
             <td><ProfileState active={skill.isActive} /></td>
@@ -238,8 +250,12 @@ export function SkillEditor({ current, revision, groups, close, saved }: EditorP
   // No "Chọn nhóm năng lực" placeholder (user, 2026-10-20): a new profile starts in the first group in use.
   const firstGroup = groups.find(group => group.isActive)?.id ?? groups[0]?.id ?? "";
   // One or more groups (user, 2026-10-22: "Viết tài liệu" is Kỹ năng mềm and also Chuyên môn): the skill score counts in each.
+  // "Ngành áp dụng" (user, 2026-10-27: the AI gives HTTT/MMT courses their skills, CNTT keeps the others): none = every major.
   const [form, setForm] = useState({ name: current?.name ?? "", description: current?.description ?? "", scope: current?.scope ?? "",
-    groupIds: current ? skillGroups(current).map(group => group.id) : firstGroup ? [firstGroup] : [], isActive: current?.isActive ?? true });
+    groupIds: current ? skillGroups(current).map(group => group.id) : firstGroup ? [firstGroup] : [], isActive: current?.isActive ?? true,
+    majorCodes: [...(current?.majorCodes ?? [])] });
+  const toggleMajor = (code: string) => setForm(previous => ({ ...previous,
+    majorCodes: previous.majorCodes.includes(code) ? previous.majorCodes.filter(item => item !== code) : [...previous.majorCodes, code] }));
   // The groups can arrive after the dialog opens: the shown groups and the saved ones stay the same.
   useEffect(() => { if (firstGroup) setForm(previous => previous.groupIds.length ? previous : { ...previous, groupIds: [firstGroup] }); }, [firstGroup]);
   // Groups of the profile that the list no longer has (deleted) stay visible, so the admin can untick them.
@@ -291,6 +307,12 @@ export function SkillEditor({ current, revision, groups, close, saved }: EditorP
           <p className="comp-hint">Chọn một hoặc nhiều nhóm. Điểm kỹ năng được tính vào từng nhóm đã chọn. Mức độ quan trọng của kỹ năng đối với từng nghề được đặt trong phần yêu cầu của nghề (Bắt buộc/Ưu tiên).</p>
         </fieldset>
         {!groups.length && <p className="comp-hint">Chưa tải được nhóm năng lực. Đóng hộp thoại và tải lại danh sách nhóm trước khi lưu.</p>}
+        <fieldset className="comp-group-picks">
+          <legend>Ngành áp dụng</legend>
+          {MAJOR_OPTIONS.map(major => <label key={major.code} className="cm-check"><input type="checkbox"
+            checked={form.majorCodes.includes(major.code)} onChange={() => toggleMajor(major.code)} /> {major.label}</label>)}
+          <p className="comp-hint">Không chọn ngành nào: kỹ năng dùng cho mọi ngành. Chọn ngành: AI chỉ đề xuất kỹ năng này cho môn học của các ngành đã chọn.</p>
+        </fieldset>
         <DescriptionField label="Phạm vi đánh giá" maxWords={LONG_DESCRIPTION_MAX_WORDS} rows={5} maxLength={4000} value={form.scope} placeholder="Nội dung và phạm vi đánh giá kỹ năng…" onChange={event => setForm({ ...form, scope: event.target.value })} />
         <label className="cm-check"><input type="checkbox" checked={form.isActive} onChange={event => setForm({ ...form, isActive: event.target.checked })} /> Đang sử dụng trong đánh giá năng lực</label>
         {current && <p className="comp-hint">Tên và mô tả dùng chung với mục Quản lý nghề nghiệp. Việc chỉnh sửa sẽ cập nhật thông tin liên quan. Để ngừng sử dụng kỹ năng, cần điều chỉnh các cấu hình môn học đang áp dụng kỹ năng này.</p>}
@@ -316,6 +338,7 @@ function SkillDetails({ current, revision, canManage, close, edit }: { current: 
         <dl className="comp-detail-grid">
           <div><dt>Tên kỹ năng</dt><dd>{detail.name}</dd></div>
           <div><dt>Nhóm năng lực</dt><dd><GroupNames skill={detail} /></dd></div>
+          <div><dt>Ngành áp dụng</dt><dd>{majorsText(detail.majorCodes)}</dd></div>
           <div><dt>Mô tả kỹ năng chung</dt><dd className="comp-description">{detail.description || "Chưa bổ sung."}</dd></div>
           <div><dt>Phạm vi đánh giá</dt><dd className="comp-description">{detail.scope || "Chưa bổ sung."}</dd></div>
           <div><dt>Trạng thái sử dụng</dt><dd><ProfileState active={detail.isActive} /></dd></div>
@@ -365,6 +388,7 @@ function ProfileHistory({ entries, entity }: { entries: EventEntry[]; entity: "s
               {typeof snapshot.name === "string" && <div><dt>{entity === "group" ? "Tên nhóm" : "Tên kỹ năng"}</dt><dd>{snapshot.name}</dd></div>}
               {typeof snapshot.description === "string" && <div><dt>Mô tả</dt><dd className="comp-description">{snapshot.description || "Chưa bổ sung."}</dd></div>}
               {typeof snapshot.groupName === "string" && <div><dt>Nhóm năng lực</dt><dd>{snapshotGroups(snapshot)}</dd></div>}
+              {Array.isArray(snapshot.majorCodes) && <div><dt>Ngành áp dụng</dt><dd>{majorShortNames(snapshot.majorCodes.map(String)) ? `Riêng ngành ${majorShortNames(snapshot.majorCodes.map(String))}` : "Mọi ngành"}</dd></div>}
               {typeof snapshot.scope === "string" && <div><dt>Phạm vi</dt><dd className="comp-description">{snapshot.scope || "Chưa bổ sung."}</dd></div>}
               {typeof snapshot.skillCount === "number" && <div><dt>Số kỹ năng</dt><dd>{snapshot.skillCount}</dd></div>}
               {typeof snapshot.isActive === "boolean" && <div><dt>Trạng thái</dt><dd><ProfileState active={snapshot.isActive} /></dd></div>}

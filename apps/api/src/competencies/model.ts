@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { MAJORS, type MajorCode } from "../curricula/majors.js";
 import { DESCRIPTION_MAX_WORDS, LONG_DESCRIPTION_MAX_WORDS, limitedText } from "../word-limits.js";
 
 export class CompetencyError extends Error {
@@ -6,15 +7,23 @@ export class CompetencyError extends Error {
 }
 export const WEIGHT_TOLERANCE = 0.000001;
 export const groupInput = z.object({ name: z.string().trim().min(1).max(160), description: limitedText(2000, DESCRIPTION_MAX_WORDS), isActive: z.boolean() }).strict();
+/** The Faculty's majors a skill can be kept to ("Ngành áp dụng", migration 054). */
+export const MAJOR_CODES = MAJORS.map(major => major.code) as [MajorCode, ...MajorCode[]];
 /**
  * A skill profile. groupIds: its competency groups, one or more (2026-10-22, migration 040), duplicates
- * dropped; a page served before the change still sends a single groupId.
+ * dropped; a page served before the change still sends a single groupId. majorCodes (2026-10-27, migration
+ * 054): the majors whose courses the AI may give the skill, none = every major; absent (a page served before
+ * the change) keeps the stored majors of an edited profile.
  */
 export const skillInput = z.object({
   name: z.string().trim().min(1).max(100), description: limitedText(2000, DESCRIPTION_MAX_WORDS), scope: limitedText(4000, LONG_DESCRIPTION_MAX_WORDS),
   groupIds: z.array(z.uuid()).min(1).max(10).optional(), groupId: z.uuid().optional(), isActive: z.boolean(),
+  majorCodes: z.array(z.enum(MAJOR_CODES)).max(MAJOR_CODES.length).optional(),
 }).strict().refine(value => Boolean(value.groupIds?.length || value.groupId), { path: ["groupIds"] })
-  .transform(({ groupId, groupIds, ...value }) => ({ ...value, groupIds: [...new Set(groupIds ?? [groupId!])] }));
+  .transform(({ groupId, groupIds, majorCodes, ...value }) => ({ ...value, groupIds: [...new Set(groupIds ?? [groupId!])],
+    ...(majorCodes ? { majorCodes: [...new Set(majorCodes)].sort() } : {}) }));
+/** The "Ngành" filter of "Cấu hình năng lực": "" every skill, "shared" the skills of every major, a code the skills kept to it. */
+export const skillMajorFilter = z.union([z.literal(""), z.literal("shared"), z.enum(MAJOR_CODES)]);
 /** The cohort filter of "Cấu hình môn học" ("" = every course). */
 export const cohortFilter = z.string().trim().max(20).regex(/^[0-9A-Za-z]*$/);
 const allocationSchema = z.object({ skillId: z.uuid(), weight: z.number().min(0).max(1) }).strict();
