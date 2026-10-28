@@ -51,6 +51,25 @@ Migration `014_career_positions.sql` tạo danh mục và thêm liên kết từ
   - Kết quả trên production: từ 18 lên 26 nghề, mọi kỹ năng nghề yêu cầu đều có môn dạy.
   - Không thêm lại nghề lập trình trò chơi (kỹ năng Phát triển trò chơi chỉ có 1 môn tự chọn của K26), nghề DevOps và nghề quản trị hệ thống (Linux chỉ có ở CTĐT K26–K28).
 
+- 28/10/2026: **nghề cho ngành HTTT và MMT&TTDL**. Yêu cầu: "thêm nghề nghiệp mới phù hợp với ngành mới và những kĩ năng mình mới thêm nữa đi hạn chế rơi vào kỹ năng mà không môn nào dùng".
+  - Script: `output/career-add-2026-10-28/add-careers.mjs`. Bản chạy thử chỉ đọc, không chèn dòng nào, nên không tốn mã NN. Người dùng đồng ý rồi mới chạy `apply`. Bản sao lưu: `output/supabase-backup-2026-10-28-career-add.json`.
+  - Kết quả trên production: từ 26 lên 33 nghề, mã NN039–NN045. Không sửa nghề nào có sẵn.
+  - Mọi kỹ năng nghề yêu cầu đều có môn dạy. Lần này môn dạy được tính cả bản nháp của Cấu hình môn học, vì 15 kỹ năng mới của hai ngành (thêm ngày 27/10) chỉ có trong 53 bản nháp lưu ngày 28/10. 13 kỹ năng chỉ có môn dạy ở bản nháp. Chúng chỉ được tính vào điểm năng lực sau khi quản trị viên bấm Áp dụng bản nháp.
+  - Mỗi nghề có tối đa 3 kỹ năng bắt buộc (*), vì kỹ năng bắt buộc có ngưỡng 85 với sinh viên.
+
+| Mã | Nghề | Tiếng Anh | Lĩnh vực | Kỹ năng (* bắt buộc) |
+| --- | --- | --- | --- | --- |
+| NN039 | Chuyên viên hệ thống thông tin địa lý (GIS) | GIS Specialist | Dữ liệu & Trí tuệ nhân tạo | Hệ thống thông tin địa lý (GIS)*, Xử lý dữ liệu địa không gian*, Trực quan hóa dữ liệu, Thiết kế cơ sở dữ liệu, Phân tích dữ liệu |
+| NN040 | Chuyên viên tư vấn triển khai ERP | ERP Consultant | Nghiệp vụ & Thiết kế | Hoạch định nguồn lực doanh nghiệp (ERP)*, Quản lý quy trình nghiệp vụ*, Phân tích yêu cầu*, Vận dụng nguyên lý kế toán, SQL, Giao tiếp |
+| NN041 | Chuyên viên chuyển đổi số | Digital Transformation Specialist | Nghiệp vụ & Thiết kế | Hoạch định chuyển đổi số*, Quản lý quy trình nghiệp vụ*, Quản trị dữ liệu và thông tin số, Phân tích yêu cầu, Quản lý dự án phần mềm |
+| NN042 | Quản trị viên hệ thống | System Administrator | Hạ tầng & Điện toán đám mây | Nguyên lý hệ điều hành*, Ảo hóa hệ thống*, Linux*, Mạng máy tính, Network monitoring, Quản lý dịch vụ CNTT |
+| NN043 | Chuyên viên điều tra số và phân tích mã độc | Digital Forensics and Malware Analyst | An ninh mạng | Điều tra số*, Phân tích mã độc*, Ứng phó sự cố*, SIEM, TCP/IP |
+| NN044 | Chuyên viên quản trị và tuân thủ an toàn thông tin | Information Security Governance and Compliance Specialist | An toàn thông tin | Quản trị và tuân thủ an toàn thông tin*, Bảo mật hệ thống thông tin*, IAM, Ứng phó sự cố, Viết tài liệu |
+| NN045 | Lập trình viên ứng dụng mạng | Network Application Developer | Phát triển phần mềm | Lập trình ứng dụng mạng*, TCP/IP*, Mạng máy tính, Lập trình hệ thống nhúng và IoT (ESP32), Lập trình hướng đối tượng |
+
+  - Nghề quản trị hệ thống (NN020) đã bị xóa ngày 23/10 vì khi đó không môn nào dạy kỹ năng của nó. Nay các môn MMT&TTDL dạy Nguyên lý hệ điều hành, Ảo hóa hệ thống và Linux, nên nghề được thêm lại với mã mới NN042.
+  - Không gắn vào nghề nào hai kỹ năng nền tảng mới: Kiến trúc máy tính và hợp ngữ, Kỹ thuật truyền số liệu.
+
 ## Sử dụng
 
 Ba trang **Lĩnh vực**, **Kỹ năng** và **Nghề nghiệp** nằm trong nhóm **Quản lý nghề nghiệp** trên thanh bên, theo thứ tự thiết lập: lĩnh vực để phân nhóm vị trí, kỹ năng là danh mục dùng chung, rồi nghề nghiệp dùng cả hai. Liên kết kỹ năng được quản lý tại **Nghề nghiệp → Thao tác → Tạo liên kết kỹ năng**. Khung gợi ý cũ trên ba trang đã bỏ ngày 17/10/2026. Mọi mục trong menu **Thao tác** ghi động từ + danh từ (17/10/2026).
