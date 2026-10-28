@@ -12,15 +12,15 @@ import StudentProfiles from "./StudentProfiles";
 import CurriculaManagement from "./CurriculaManagement";
 import PlansManagement from "./PlansManagement";
 import CompetencyManagement from "./CompetencyManagement";
-import { adminSidebar, resolveAdminPage, type AdminPage } from "./admin-navigation";
+import { adminGroupOf, adminSidebar, resolveAdminPage, toggleAdminGroup, type AdminPage } from "./admin-navigation";
 import "./admin-workspace.css";
 
 export default function AdminWorkspace({ user, busy, error, onLogout }: { user: AuthenticatedUser; busy: boolean; error: string | null; onLogout: () => void }) {
   const canManage = canAccessAdmin(user.role);
   const [menuOpen, setMenuOpen] = useState(false);
   const [path, setPath] = useState(() => window.location.pathname);
-  /** Groups the admin opened or closed; untouched, a group is open while one of its pages is shown. */
-  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  /** The one open group, or null when the admin closed it (user, 2026-10-28: opening one group closes the other). */
+  const [openGroup, setOpenGroup] = useState(() => adminGroupOf(window.location.pathname));
   const heading = useRef<HTMLHeadingElement>(null);
   const header = useRef<HTMLElement>(null);
   const shell = useRef<HTMLDivElement>(null);
@@ -44,9 +44,8 @@ export default function AdminWorkspace({ user, busy, error, onLogout }: { user: 
     return () => window.removeEventListener("popstate", onPopState);
   }, []);
   useEffect(() => {
-    // Reaching a page of a closed group (guide link, back button) opens that group.
-    const group = adminSidebar.find((entry) => entry.kind === "group" && entry.pages.some((page) => page.path === current.path));
-    if (group?.kind === "group") setOpenGroups((previous) => previous[group.id] === false ? { ...previous, [group.id]: true } : previous);
+    // Showing a page (link, back button) opens its group and closes the other; a page outside the groups closes both.
+    setOpenGroup(adminGroupOf(current.path));
   }, [current]);
   useEffect(() => {
     document.title = `${current.label} · EduPath AI`;
@@ -61,10 +60,10 @@ export default function AdminWorkspace({ user, busy, error, onLogout }: { user: 
       <nav id="admin-navigation" aria-label="Danh mục quản trị">{adminSidebar.map((entry) => {
         if (entry.kind === "page") return pageLink(entry.page);
         const holdsCurrent = entry.pages.some((page) => page.path === current.path);
-        const open = openGroups[entry.id] ?? holdsCurrent;
+        const open = openGroup === entry.id;
         return <div key={entry.id} className="am-nav-group">
           <button type="button" className={`am-nav-group-toggle${holdsCurrent ? " am-nav-group-current" : ""}`} aria-expanded={open} aria-controls={`admin-navigation-${entry.id}`}
-            onClick={() => setOpenGroups((previous) => ({ ...previous, [entry.id]: !open }))}><Icon name={entry.icon} /><span>{entry.label}</span><Icon name="chevronDown" className="am-nav-chevron" /></button>
+            onClick={() => setOpenGroup((previous) => toggleAdminGroup(previous, entry.id))}><Icon name={entry.icon} /><span>{entry.label}</span><Icon name="chevronDown" className="am-nav-chevron" /></button>
           <div id={`admin-navigation-${entry.id}`} className="am-nav-sub" hidden={!open}>{entry.pages.map(pageLink)}</div>
         </div>;
       })}</nav>

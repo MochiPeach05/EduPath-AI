@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import AdminWorkspace from "./AdminWorkspace";
-import { adminNavigation } from "./admin-navigation";
+import { adminGroupOf, adminNavigation, toggleAdminGroup } from "./admin-navigation";
 import type { AuthenticatedUser } from "./types";
 
 const user: AuthenticatedUser = { userId: "u1", identityKey: "k", tenantId: "t", objectId: "o", name: "Quản trị", email: null, username: null, role: "admin", signedInAt: "2026-10-13T00:00:00Z" };
@@ -44,6 +44,32 @@ describe("admin workspace", () => {
       // The "Gợi ý quản lý nghề nghiệp" box was removed at the user's request (2026-10-17).
       expect(open).not.toContain("Gợi ý quản lý nghề nghiệp");
     }
+  });
+
+  it("opens one group at a time: opening one group closes the other (user, 2026-10-28)", () => {
+    // On Kỹ năng, Quản lý nghề nghiệp is open. Opening Quản lý năng lực closes it, and the reverse;
+    // a click on the open group closes it, so both can be closed.
+    let open = adminGroupOf("/quantri/ky-nang");
+    expect(open).toBe("careers");
+    open = toggleAdminGroup(open, "competencies");
+    expect(open).toBe("competencies");
+    open = toggleAdminGroup(open, "careers");
+    expect(open).toBe("careers");
+    open = toggleAdminGroup(open, "careers");
+    expect(open).toBeNull();
+    expect(toggleAdminGroup(open, "competencies")).toBe("competencies");
+  });
+
+  it("opens the group of the page shown and closes the other one (user, 2026-10-28)", () => {
+    const openGroups = (html: string) => [...html.matchAll(/aria-expanded="true" aria-controls="admin-navigation-(\w+)"/g)].map(match => match[1]);
+    const careerPages = ["/quantri/linh-vuc-nghe-nghiep", "/quantri/ky-nang", "/quantri/vi-tri-nghe-nghiep"];
+    const competencyPages = ["/quantri/nhom-nang-luc", "/quantri/cau-hinh-nang-luc", "/quantri/cau-hinh-mon-hoc"];
+    for (const { path } of adminNavigation) {
+      expect(openGroups(render(path))).toEqual(careerPages.includes(path) ? ["careers"] : competencyPages.includes(path) ? ["competencies"] : []);
+    }
+    // An old link or a trailing slash opens the group of the page it shows.
+    expect(openGroups(render("/quantri/danh-gia-nang-luc"))).toEqual(["competencies"]);
+    expect(openGroups(render("/quantri/ky-nang/"))).toEqual(["careers"]);
   });
 
   it.each(adminNavigation.map(item => [item.label, item.path] as const))("uses %s as the page title and the breadcrumb", (label, path) => {

@@ -49,3 +49,18 @@ export function resolveAdminPage(pathname: string) {
   const target = adminPathAliases[path] ?? path;
   return adminNavigation.find((item) => item.path === target) ?? adminNavigation[0];
 }
+
+/** The group holding a page ("careers" or "competencies"), or null for a page outside the groups. */
+export function adminGroupOf(pathname: string) {
+  const { path } = resolveAdminPage(pathname);
+  const group = adminSidebar.find((entry) => entry.kind === "group" && entry.pages.some((page) => page.path === path));
+  return group?.kind === "group" ? group.id : null;
+}
+
+/**
+ * The open group after a click on a group's entry. One group at a time (user, 2026-10-28: "mở tab Quản lý nghề nghiệp
+ * thì đóng tab quản lý năng lực và ngược lại"): a closed group opens and the other closes; the open group closes.
+ */
+export function toggleAdminGroup(openGroup: string | null, clicked: string) {
+  return openGroup === clicked ? null : clicked;
+}
