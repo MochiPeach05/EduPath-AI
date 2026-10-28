@@ -37,6 +37,8 @@ describe("assistant student sources", () => {
     expect(text).toContain("Khóa: K29");
     expect(text).toContain("Kết quả tham khảo:");
     expect(text).not.toMatch(/@|MSSV|Mã sinh viên/);
+    // The S01… keys belong to the roadmap prompt; answers copied them (2026-10-29).
+    expect(text).not.toMatch(/\[S\d+\]/);
   });
 
   it("adds the skill levels, the AI roadmap and the consented survey when the question asks for them", async () => {

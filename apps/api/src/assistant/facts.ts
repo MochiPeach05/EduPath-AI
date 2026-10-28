@@ -137,7 +137,9 @@ export async function studentSources(db: Db, userId: string, question: string, i
     },
     {
       kind: "assessment", title: "Kỹ năng của nghề mục tiêu (kết quả đánh giá năng lực)", link: "#skill-gap",
-      text: clean([...careerLines(assessment.computed), overallLine(assessment.computed), "Kỹ năng nghề cần bổ sung:", ...sections.skills]),
+      // The S01… keys of the roadmap prompt mean nothing to the student: the lines go without them.
+      text: clean([...careerLines(assessment.computed), overallLine(assessment.computed), "Kỹ năng nghề cần bổ sung:",
+        ...sections.skills.map((line) => line.replace(/^- \[S\d+\] /, "- "))]),
     },
     {
       kind: "roadmap", title: "Học phần đang học, cần học và cần cải thiện", link: "#roadmap",

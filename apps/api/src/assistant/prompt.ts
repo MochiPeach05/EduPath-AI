@@ -7,11 +7,13 @@ import { ASSISTANT_PROMPT_VERSION } from "./protocol.js";
 import type { ContextSource } from "./facts.js";
 
 /**
- * Gemma answers without thinking: the data is already chosen and short answers come in about 10–20 s on the Khoa's PC
- * (measured 2026-10-28: about 1 400 prompt tokens/s, 46–79 answer tokens/s). num_predict leaves room for a long list.
+ * Gemma thinks before it answers (user, 2026-10-29: "nên bật thinking không theo tôi là có đó"). Measured on 6 questions of
+ * a synthetic K29 student: median 27 s instead of 11 s, and none of the misreadings of the answers without thinking (met
+ * skills listed as gaps, two terms mixed up, "8/10 môn" read as 8 missing, a skill group read as a level). num_predict
+ * covers the thinking (about 2–3k characters) and the answer; the prompt stays under about 6k tokens of the 16k context.
  */
-export const ASSISTANT_OPTIONS = { num_ctx: 16384, num_predict: 2048, temperature: 0.3, top_p: 0.9, top_k: 64 } as const;
-export const ASSISTANT_THINK = false;
+export const ASSISTANT_OPTIONS = { num_ctx: 16384, num_predict: 8192, temperature: 0.3, top_p: 0.9, top_k: 64 } as const;
+export const ASSISTANT_THINK = true;
 /** Turns of the conversation repeated in the prompt, and the characters kept of each. */
 export const HISTORY_MESSAGES = 6;
 const HISTORY_CHARS = 600;

@@ -29,7 +29,20 @@ Người dùng yêu cầu ngày 28/10/2026: "triển khai giai đoạn 1, 2, 3 l
 ## Mô hình và tốc độ (đo trên máy chạy AI, 28/10/2026)
 - Máy dùng GPU RTX 3050 Laptop 4 GB. Gemma 4 E4B nặng 6,6 GB và được nạp một phần lên GPU (`num_gpu` 38), chiếm khoảng 3,3 GB VRAM.
 - Đọc prompt khoảng 1 400 token/giây (7 254 token mất 5,3 giây). Viết câu trả lời 46–79 token/giây. Nạp mô hình lần đầu mất khoảng 14 giây.
-- Một câu trả lời có ngữ cảnh 6–8 nghìn token mất khoảng 10–20 giây, không bật thinking.
+- **Bật thinking (assistant-v2, 29/10/2026).** Người dùng đề nghị bật, và phép thử 6 câu hỏi trên sinh viên giả K29 xác nhận nên bật:
+
+  | | Thời gian (trung vị) | Lỗi đọc sai dữ liệu |
+  | --- | --- | --- |
+  | Tắt thinking | 11 giây | Có, ở 4/6 câu |
+  | Bật thinking | 27 giây | Không thấy |
+
+  Các lỗi khi tắt thinking:
+  - liệt kê kỹ năng đã đạt là kỹ năng cần bổ sung;
+  - nhầm hai học kỳ;
+  - đọc "8/10 môn" thành còn thiếu 8 môn;
+  - nhầm nhóm năng lực thành mức kỹ năng.
+
+  Trong lúc mô hình suy nghĩ, trang hiện "Trợ lý đang soạn câu trả lời…". Phần suy nghĩ không được lưu.
 - Gemma 4 không có endpoint embedding (Ollama báo "This server does not support embeddings"). Vì vậy dùng **EmbeddingGemma** (`embeddinggemma`, 308M), chạy bằng CPU (`num_gpu` 0) để không tranh VRAM với Gemma:
   - một câu hỏi mất khoảng 50 ms;
   - 32 đoạn văn mất khoảng 1 giây;
@@ -43,7 +56,7 @@ Người dùng yêu cầu ngày 28/10/2026: "triển khai giai đoạn 1, 2, 3 l
    - 6 đoạn tri thức tìm được;
    - tài nguyên tự học của các kỹ năng còn thiếu;
    - lịch sử 6 lượt gần nhất (bỏ số nguồn cũ).
-4. Gemma trả lời bằng văn bản thường. Worker gửi phần chữ đã viết lên `POST /:id/progress` khoảng 0,7 giây một lần; trang web hỏi `GET /messages/:id` mỗi giây nên chữ hiện dần.
+4. Gemma suy nghĩ (thinking) rồi trả lời bằng văn bản thường. Worker gửi phần chữ đã viết lên `POST /:id/progress` khoảng 0,7 giây một lần; trang web hỏi `GET /messages/:id` mỗi giây nên chữ hiện dần.
 5. Worker gọi `/complete { answer }`. API kiểm tra câu trả lời (`validate.ts`):
    - giữ số nguồn hợp lệ;
    - xóa mọi link không có trong danh sách tài nguyên của prompt;

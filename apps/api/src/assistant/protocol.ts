@@ -23,7 +23,8 @@ export const EMBEDDING_DIMENSIONS = 768;
 export const queryEmbeddingText = (query: string) => `task: search result | query: ${query}`;
 export const documentEmbeddingText = (title: string, text: string) => `title: ${title.trim() || "none"} | text: ${text}`;
 
-export const ASSISTANT_PROMPT_VERSION = "assistant-v1";
+/** v2 (2026-10-29): Gemma thinks before it answers (prompt.ts ASSISTANT_THINK); skill keys no longer in the data. */
+export const ASSISTANT_PROMPT_VERSION = "assistant-v2";
 export const KNOWLEDGE_PROMPT_VERSION = "knowledge-v1";
 /** An answer takes well under a minute; a lost worker frees the job after this lease (the worker extends every 3 min). */
 export const ASSISTANT_LEASE_MINUTES = 5;

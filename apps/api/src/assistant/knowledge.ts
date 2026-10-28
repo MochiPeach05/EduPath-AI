@@ -712,6 +712,8 @@ const RESOURCE_WORDS: Record<string, string> = {
   course: "khóa học", documentation: "tài liệu", docs: "tài liệu", tutorial: "hướng dẫn", video: "video", book: "sách", article: "bài viết",
   practice: "bài tập thực hành", exercise: "bài tập thực hành", interactive: "bài tập thực hành", certification: "chứng chỉ", project: "dự án mẫu",
   beginner: "cơ bản", intermediate: "trung cấp", advanced: "nâng cao", all: "mọi trình độ", vi: "tiếng Việt", en: "tiếng Anh",
+  // The level codes of learning-resources.json.
+  "co-ban": "cơ bản", "trung-cap": "trung cấp", "nang-cao": "nâng cao",
 };
 const resourceWord = (value: string | null) => (value ? RESOURCE_WORDS[value.trim().toLowerCase()] ?? clean(value, 60) : "");
 /** The resource key of a skill: its name folded (no accents, lower case), so a lookup by name needs no catalog id. */

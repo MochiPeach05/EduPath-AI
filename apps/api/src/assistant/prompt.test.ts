@@ -14,7 +14,7 @@ describe("assistant prompt", () => {
       question: "Còn môn kia thì sao?",
     });
     expect(prompt.system).toBe(ASSISTANT_SYSTEM_PROMPT);
-    expect(prompt.think).toBe(false);
+    expect(prompt.think).toBe(true);
     expect(prompt.options.num_ctx).toBe(16384);
     expect(prompt.user).toContain("[1] Hồ sơ học tập của bạn\nKhóa: K29\nNghề mục tiêu: Lập trình viên Web");
     expect(prompt.user).toContain("[2] Học phần 71ITSE30103 Lập trình Web");
