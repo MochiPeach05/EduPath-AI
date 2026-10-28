@@ -7,6 +7,7 @@ import { careerFailures, careerRequest, type Career, type CareerRequirement, typ
 import CareerSkillAiSuggestions from "./CareerSkillAiSuggestions";
 import { CheckedForm, DescriptionField } from "./CheckedForm";
 import { LONG_DESCRIPTION_MAX_WORDS } from "./form-checks";
+import { sortRows, useTableSort, type SortRule } from "./table-sort";
 
 const endpoint = "/api/admin/careers/requirements";
 const emptyFilters = { q: "", skillId: "", kind: "", priority: "" };
@@ -14,9 +15,16 @@ export default function CareerRequirementsManagement({ canManage, career, revisi
   canManage: boolean; career: Career; revision: number; saved: () => void;
 }) {
   const { draft, setDraft, filters, page, setPage } = useLiveFilters(emptyFilters);
+  const { sort, sortHeader } = useTableSort(() => setPage(1));
   const remote = useData<{ items: CareerRequirement[] }>(`${endpoint}?${new URLSearchParams({ ...filters, careerPositionId: career.id })}`, revision);
   const skills = useData<{ items: CareerSkill[] }>(`${endpoint}/skills`, revision);
   const courseWeights = useCareerCourseWeights(career.id, revision);
+  // The columns the list sorts by (table-sort.tsx): Trọng số học phần by the number of courses shown, Tính chất Bắt buộc first.
+  const requirementSort: Record<string, SortRule<CareerRequirement>> = {
+    title: { value: item => item.title }, skillName: { value: item => item.skillName },
+    courses: { value: item => item.skillId && courseWeights.data ? courseWeights.data.items.filter(course => course.skillId === item.skillId).length : null, by: "number" },
+    isRequired: { value: item => item.isRequired, order: [true, false] },
+  };
   const [selected, setSelected] = useState<CareerRequirement | null>(null);
   const [mode, setMode] = useState<"detail" | "edit" | "delete" | "ai" | null>(null);
   const [kind, setKind] = useState<"skill" | "other">("other");
@@ -49,9 +57,9 @@ export default function CareerRequirementsManagement({ canManage, career, revisi
       <Status {...remote} /><Status {...skills} />
       {remote.data && <>
         <div className="cm-table-scroll"><table className="cm-table career-requirement-table">
-          <thead><tr><th className="cm-stt">STT</th><th>Yêu cầu</th><th>Kỹ năng</th><th>Trọng số học phần</th><th>Tính chất</th><th>Thao tác</th></tr></thead>
-          <tbody>{remote.data.items.slice((page - 1) * 10, page * 10).map((item, index) => <tr key={item.id}>
-            <td className="cm-stt">{(page - 1) * 10 + index + 1}</td>
+          <thead><tr>{sortHeader("STT", "stt", "cm-stt")}{sortHeader("Yêu cầu", "title")}{sortHeader("Kỹ năng", "skillName")}{sortHeader("Trọng số học phần", "courses")}{sortHeader("Tính chất", "isRequired")}<th>Thao tác</th></tr></thead>
+          <tbody>{sortRows(remote.data.items, requirementSort, sort).slice((page - 1) * 10, page * 10).map(({ row: item, stt }) => <tr key={item.id}>
+            <td className="cm-stt">{stt}</td>
             <td><strong>{item.title}</strong><small className="career-requirement-summary">{item.description || "Chưa bổ sung mô tả"}</small></td>
             <td>{item.skillName || "—"}</td>
             <td><CareerWeightCell key={`${career.id}:${courseWeights.data?.revisionId ?? "loading"}:${item.skillId}`} state={courseWeights} skillId={item.skillId} skillName={item.skillName} /></td>

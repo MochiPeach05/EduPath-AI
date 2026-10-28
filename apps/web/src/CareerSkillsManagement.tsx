@@ -7,12 +7,16 @@ import "./curricula.css";
 import "./careers.css";
 import { CheckedForm, DescriptionField } from "./CheckedForm";
 import { DESCRIPTION_MAX_WORDS } from "./form-checks";
+import { sortRows, useTableSort, type SortRule } from "./table-sort";
 
 const endpoint = "/api/admin/careers/skills";
+// The columns the list sorts by (table-sort.tsx).
+const skillSort: Record<string, SortRule<ManagedCareerSkill>> = { name: { value: skill => skill.name }, description: { value: skill => skill.description } };
 
 export default function CareerSkillsManagement({ canManage }: { canManage: boolean }) {
   const [revision, setRevision] = useState(0);
   const { draft, setDraft, filters, page, setPage } = useLiveFilters({ q: "" });
+  const { sort, sortHeader } = useTableSort(() => setPage(1));
   const remote = useData<{ items: ManagedCareerSkill[] }>(`${endpoint}?${new URLSearchParams(filters)}`, revision);
   const [selected, setSelected] = useState<ManagedCareerSkill | null>(null);
   const [mode, setMode] = useState<"detail" | "edit" | "delete" | null>(null);
@@ -34,9 +38,9 @@ export default function CareerSkillsManagement({ canManage }: { canManage: boole
       <Status {...remote} />
       {remote.data && <>
         <div className="cm-table-scroll"><table className="cm-table career-catalog-table">
-          <thead><tr><th className="cm-stt">STT</th><th>Tên kỹ năng</th><th>Mô tả</th><th>Thao tác</th></tr></thead>
-          <tbody>{remote.data.items.slice((page - 1) * 10, page * 10).map((skill, index) => <tr key={skill.id}>
-            <td className="cm-stt">{(page - 1) * 10 + index + 1}</td>
+          <thead><tr>{sortHeader("STT", "stt", "cm-stt")}{sortHeader("Tên kỹ năng", "name")}{sortHeader("Mô tả", "description")}<th>Thao tác</th></tr></thead>
+          <tbody>{sortRows(remote.data.items, skillSort, sort).slice((page - 1) * 10, page * 10).map(({ row: skill, stt }) => <tr key={skill.id}>
+            <td className="cm-stt">{stt}</td>
             <td><strong>{skill.name}</strong></td>
             <td><div className="career-clip" title={skill.description || undefined}>{skill.description || <span className="career-empty">Chưa bổ sung</span>}</div></td>
             <td><ActionMenu label={`Thao tác với kỹ năng ${skill.name}`} items={[

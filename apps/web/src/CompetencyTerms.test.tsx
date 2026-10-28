@@ -36,7 +36,7 @@ describe("competency terms", () => {
     const skills = renderToStaticMarkup(createElement(CompetencySkillsTab, props));
     expect(groups).toContain("Thêm nhóm năng lực");
     expect(skills).toContain("Thêm cấu hình năng lực");
-    expect(skills).toContain("<th>Nhóm năng lực</th>");
+    expect(skills).toMatch(/<th scope="col"><button type="button" class="ts-sort"[^>]*><span>Nhóm năng lực<\/span>/);
     for (const html of [groups, skills]) expect(html).not.toMatch(/nhóm kỹ năng|hồ sơ|Danh mục kỹ năng/i);
   });
 });

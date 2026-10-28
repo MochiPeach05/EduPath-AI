@@ -5,7 +5,8 @@ import type { DatabasePool } from "../db/pool.js";
 import { requireAdminAccess } from "../middleware/authorization.js";
 import { PlanError, itemSchema } from "./model.js";
 import { parsePlan } from "./parser.js";
-import { PlanRepository } from "./repository.js";
+import { PlanRepository, planSort } from "./repository.js";
+import { sortSchema } from "../admin/table-sort.js";
 
 const fingerprint = (data: unknown) =>
   createHash("sha256").update(JSON.stringify(data)).digest("hex");
@@ -60,10 +61,11 @@ export function createPlansRouter(
           .default(""),
         active: z.enum(["", "true", "false"]).default(""),
         page: z.coerce.number().int().min(1).max(10000).default(1),
+        ...sortSchema(planSort),
       })
       .parse(req.query);
     res.json(
-      await repository!.list(query.q, query.cohort, query.active, query.page),
+      await repository!.list(query.q, query.cohort, query.active, query.page, query.sort, query.dir),
     );
   });
   const upload = raw({

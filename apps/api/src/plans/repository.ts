@@ -4,6 +4,14 @@ import type { DatabasePool } from "../db/pool.js";
 import { adminRoles, type AuthenticatedUser } from "../auth/types.js";
 import { PlanError, reviewPlan, identity, type PlanData } from "./model.js";
 import type { CurriculumData } from "../curricula/model.js";
+import { byOrder, byText, orderBy, type OwnOrder, type SortDirection } from "../admin/table-sort.js";
+// The columns the list sorts by (web PlansManagement.tsx, admin/table-sort.ts): Khóa K9 before K29, Phiên bản by number
+// then the last update, Trạng thái Đang mở first.
+export const planSort = {
+  name: byText("name"), cohortCode: byText('"cohortCode"'), itemCount: ['"itemCount"'],
+  version: ["version", '"updatedAt"'], isActive: byOrder('"isActive"', ["true", "false"]),
+};
+const planOrder: OwnOrder = [['"cohortCode"', "DESC"], ["id", "ASC"]];
 const columns = `c.id,c.is_active AS "isActive",c.lock_version AS token,c.updated_at AS "updatedAt",r.id AS "revisionId",r.version,r.data,r.source_filename AS "sourceFilename"`;
 export class PlanRepository {
   constructor(readonly pool: DatabasePool) { }
@@ -35,7 +43,8 @@ export class PlanRepository {
       : null;
     return reviewPlan(data, row?.data);
   }
-  async list(q: string, cohort: string, active: string, page: number) {
+  async list(q: string, cohort: string, active: string, page: number, sort?: string, dir?: SortDirection) {
+    const order = orderBy(planSort, planOrder, sort, dir);
     const result = await this.pool.query(
       `WITH filtered AS (
       SELECT c.id,c.cohort_code AS "cohortCode",c.is_active AS "isActive",c.updated_at AS "updatedAt",r.version,
@@ -45,8 +54,9 @@ export class PlanRepository {
       WHERE ($1='' OR strpos(lower(concat_ws(' ',r.data->>'name',r.data->>'major',c.cohort_code,
         r.data->'sections')),lower($1))>0)
       AND ($2='' OR c.cohort_code=$2) AND ($3='' OR c.is_active=($3='true'))
-    ), paged AS (SELECT * FROM filtered ORDER BY "cohortCode" DESC,id LIMIT 10 OFFSET $4)
-    SELECT COALESCE((SELECT json_agg(paged) FROM paged),'[]') AS items,(SELECT count(*)::int FROM filtered) AS total`,
+    ), numbered AS (SELECT filtered.*, row_number() OVER (ORDER BY ${orderBy(planSort, planOrder)})::int AS stt FROM filtered),
+    paged AS (SELECT * FROM numbered ORDER BY ${order} LIMIT 10 OFFSET $4)
+    SELECT COALESCE((SELECT json_agg(paged ORDER BY ${order}) FROM paged),'[]') AS items,(SELECT count(*)::int FROM filtered) AS total`,
       [q, cohort, active, (page - 1) * 10],
     );
     const options = await this.pool.query(

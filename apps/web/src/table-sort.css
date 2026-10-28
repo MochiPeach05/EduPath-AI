@@ -1,0 +1,42 @@
+/* Sortable table headers (table-sort.tsx): the header text is the button; two small arrows sit after it. */
+.ts-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: left;
+  text-transform: inherit;
+  cursor: pointer;
+}
+
+.ts-sort:hover,
+.ts-sort-active {
+  color: var(--ep-action, #b51639);
+}
+
+.ts-sort:focus-visible {
+  outline: 2px solid var(--ep-action, #b51639);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.ts-arrows {
+  flex: none;
+  width: 7px;
+  height: 11px;
+}
+
+.ts-arrows path {
+  fill: currentColor;
+  opacity: .3;
+}
+
+.ts-arrows path.ts-on {
+  opacity: 1;
+}

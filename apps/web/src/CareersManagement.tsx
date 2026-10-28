@@ -9,6 +9,7 @@ import "./curricula.css";
 import "./careers.css";
 import { CheckedForm, DescriptionField } from "./CheckedForm";
 import { LONG_DESCRIPTION_MAX_WORDS } from "./form-checks";
+import { sortRows, useTableSort, type SortRule } from "./table-sort";
 const endpoint = "/api/admin/careers";
 export default function CareersManagement({
   canManage,
@@ -31,6 +32,12 @@ export default function CareersManagement({
   );
   const fields = useData<{ items: CareerField[] }>(`${endpoint}/fields`, revision);
   const fieldNames = new Map(fields.data?.items.map(field => [field.code, field.name]));
+  const fieldName = (c: Career) => fieldNames.get(c.category) ?? c.categoryName ?? c.category;
+  // The columns the list sorts by (table-sort.tsx); Kỹ năng liên kết by the number of linked skills.
+  const { sort, sortHeader } = useTableSort(() => setPage(1));
+  const careerSort: Record<string, SortRule<Career>> = {
+    code: { value: c => c.code }, nameVi: { value: c => c.nameVi }, category: { value: fieldName }, skills: { value: c => c.skills.length, by: "number" },
+  };
   useEffect(() => {
     if (fields.data && draft.category && !fields.data.items.some(field => field.code === draft.category)) {
       setDraft({ ...draft, category: "" });
@@ -106,26 +113,26 @@ export default function CareersManagement({
               <table className="cm-table">
                 <thead>
                   <tr>
-                    <th className="cm-stt">STT</th>
-                    <th>Mã vị trí</th>
-                    <th>Vị trí nghề nghiệp</th>
-                    <th>Lĩnh vực</th>
-                    <th>Kỹ năng liên kết</th>
+                    {sortHeader("STT", "stt", "cm-stt")}
+                    {sortHeader("Mã vị trí", "code")}
+                    {sortHeader("Vị trí nghề nghiệp", "nameVi")}
+                    {sortHeader("Lĩnh vực", "category")}
+                    {sortHeader("Kỹ năng liên kết", "skills")}
                     <th>Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {list.data.items
+                  {sortRows(list.data.items, careerSort, sort)
                     .slice((page - 1) * 10, page * 10)
-                    .map((c, index) => (
+                    .map(({ row: c, stt }) => (
                       <tr key={c.id}>
-                        <td className="cm-stt">{(page - 1) * 10 + index + 1}</td>
+                        <td className="cm-stt">{stt}</td>
                         <td className="career-code">{c.code}</td>
                         <td>
                           <strong>{c.nameVi}</strong>
                           <small>{c.nameEn}</small>
                         </td>
-                        <td>{fieldNames.get(c.category) ?? c.categoryName ?? c.category}</td>
+                        <td>{fieldName(c)}</td>
                         <td>
                           {c.skills.slice(0, 3).join(" · ") || "Chưa liên kết"}
                         </td>

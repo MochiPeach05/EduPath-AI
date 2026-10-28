@@ -4,15 +4,31 @@ import { Icon, RequiredLabel } from "./admin-account-shared";
 import { searchTerm } from "./student-curriculum-types";
 import { useLiveFilters } from "./use-live-filters";
 import {
-  COMPETENCY_API, competencyDate, competencyRequest, percentage, skillGroups, statusLabels,
-  useCompetencyData, type CatalogSkill, type EventEntry, type Group, type Skill, type SkillDetail,
+  COMPETENCY_API, competencyDate, competencyRequest, percentage, skillGroupNames, skillGroups, statusLabels,
+  useCompetencyData, type CatalogSkill, type Contribution, type EventEntry, type Group, type Skill, type SkillDetail,
 } from "./competency-types";
 import { CheckedForm, DescriptionField } from "./CheckedForm";
 import { DESCRIPTION_MAX_WORDS, LONG_DESCRIPTION_MAX_WORDS } from "./form-checks";
+import { sortRows, useTableSort, type SortRule } from "./table-sort";
 
 type TabProps = { canManage: boolean; revision: number; onSaved: () => void };
 type EditorProps<T> = { current: T | null; close: () => void; saved: () => void };
 type GroupDetail = Group & { skills?: Skill[]; history?: EventEntry[] };
+// The columns the tables sort by (table-sort.tsx): Trạng thái puts Đang sử dụng first, Liên kết goes by courses, then
+// careers, and a course's Cấu hình môn học follows the order of its states (Chưa cấu hình, Bản nháp, Đang áp dụng, Đã lưu trữ).
+const activeFirst = [true, false];
+const groupSort: Record<string, SortRule<Group>> = {
+  name: { value: group => group.name }, description: { value: group => group.description },
+  skillCount: { value: group => group.skillCount, by: "number" }, isActive: { value: group => group.isActive, order: activeFirst },
+};
+const skillSort: Record<string, SortRule<Skill>> = {
+  name: { value: skill => skill.name }, groups: { value: skillGroupNames }, scope: { value: skill => skill.scope },
+  isActive: { value: skill => skill.isActive, order: activeFirst }, links: { value: skill => skill.courseCount * 10000 + skill.careerCount, by: "number" },
+};
+const contributionSort: Record<string, SortRule<Contribution>> = {
+  course: { value: item => item.courseCode }, cohorts: { value: item => item.cohorts.join(", ") },
+  weight: { value: item => item.weight, by: "number" }, status: { value: item => item.status, order: Object.keys(statusLabels) },
+};
 
 /** A profile's groups (2026-10-22: one or more), naming the ones no longer in use. */
 function GroupNames({ skill }: { skill: Skill }) {
@@ -33,6 +49,7 @@ function ProfileState({ active }: { active: boolean }) {
 export function CompetencyGroupsTab({ canManage, revision, onSaved }: TabProps) {
   const remote = useCompetencyData<{ items: Group[] }>(`${COMPETENCY_API}/groups`, revision);
   const { draft, setDraft, filters, page, setPage, reset } = useLiveFilters({ q: "", active: "" });
+  const { sort, sortHeader } = useTableSort(() => setPage(1));
   const [selected, setSelected] = useState<Group | null>(null);
   const [mode, setMode] = useState<"detail" | "edit" | "delete" | null>(null);
   const close = () => { setSelected(null); setMode(null); };
@@ -55,9 +72,9 @@ export function CompetencyGroupsTab({ canManage, revision, onSaved }: TabProps) 
       <Status {...remote} />
       {remote.data && <>
         <div className="cm-table-scroll" tabIndex={0} role="region" aria-label="Bảng nhóm năng lực"><table className="cm-table comp-group-table">
-          <thead><tr><th className="cm-stt">STT</th><th>Nhóm năng lực</th><th>Mô tả</th><th>Số kỹ năng</th><th>Trạng thái</th><th>Thao tác</th></tr></thead>
-          <tbody>{items.slice((page - 1) * 10, page * 10).map((group, index) => <tr key={group.id}>
-            <td className="cm-stt">{(page - 1) * 10 + index + 1}</td>
+          <thead><tr>{sortHeader("STT", "stt", "cm-stt")}{sortHeader("Nhóm năng lực", "name")}{sortHeader("Mô tả", "description")}{sortHeader("Số kỹ năng", "skillCount")}{sortHeader("Trạng thái", "isActive")}<th>Thao tác</th></tr></thead>
+          <tbody>{sortRows(items, groupSort, sort).slice((page - 1) * 10, page * 10).map(({ row: group, stt }) => <tr key={group.id}>
+            <td className="cm-stt">{stt}</td>
             <td><button className="am-name-link" onClick={() => { setSelected(group); setMode("detail"); }}>{group.name}</button></td>
             <td className="comp-description">{group.description || "Chưa bổ sung"}</td>
             <td>{group.skillCount}</td><td><ProfileState active={group.isActive} /></td>
@@ -109,6 +126,7 @@ function GroupDelete({ current, close, saved }: { current: Group; close: () => v
 function GroupDetails({ current, revision, canManage, close, edit }: { current: Group; revision: number; canManage: boolean; close: () => void; edit: (group: Group) => void }) {
   const remote = useCompetencyData<GroupDetail>(`${COMPETENCY_API}/groups/${current.id}`, revision);
   const [page, setPage] = useState(1);
+  const { sort, sortHeader } = useTableSort(() => setPage(1));
   const detail = remote.data;
   return <Modal title={`Chi tiết nhóm năng lực — ${current.name}`} onClose={close}>
     <div className="cm-dialog-body cm-form">
@@ -124,8 +142,8 @@ function GroupDetails({ current, revision, canManage, close, edit }: { current: 
           <h3>Kỹ năng thuộc nhóm</h3>
           {detail.skills.length ? <>
             <div className="cm-table-scroll" tabIndex={0} role="region" aria-label="Các kỹ năng thuộc nhóm"><table className="cm-table">
-              <thead><tr><th className="cm-stt">STT</th><th>Kỹ năng</th><th>Phạm vi đánh giá</th><th>Trạng thái</th></tr></thead>
-              <tbody>{detail.skills.slice((page - 1) * 10, page * 10).map((skill, index) => <tr key={skill.id}><td className="cm-stt">{(page - 1) * 10 + index + 1}</td><td><strong>{skill.name}</strong></td><td className="comp-description">{skill.scope || "Chưa bổ sung."}</td><td><ProfileState active={skill.isActive} /></td></tr>)}</tbody>
+              <thead><tr>{sortHeader("STT", "stt", "cm-stt")}{sortHeader("Kỹ năng", "name")}{sortHeader("Phạm vi đánh giá", "scope")}{sortHeader("Trạng thái", "isActive")}</tr></thead>
+              <tbody>{sortRows(detail.skills, skillSort, sort).slice((page - 1) * 10, page * 10).map(({ row: skill, stt }) => <tr key={skill.id}><td className="cm-stt">{stt}</td><td><strong>{skill.name}</strong></td><td className="comp-description">{skill.scope || "Chưa bổ sung."}</td><td><ProfileState active={skill.isActive} /></td></tr>)}</tbody>
             </table></div>
             <Pagination total={detail.skills.length} page={page} setPage={setPage} />
           </> : <p className="am-empty">Chưa có kỹ năng thuộc nhóm này.</p>}
@@ -175,6 +193,7 @@ function GroupEditor({ current, close, saved }: EditorProps<Group>) {
 
 export function CompetencySkillsTab({ canManage, revision, onSaved }: TabProps) {
   const { draft, setDraft, filters, page, setPage, reset } = useLiveFilters({ q: "", groupId: "", active: "" });
+  const { sort, sortHeader } = useTableSort(() => setPage(1));
   const remote = useCompetencyData<{ items: Skill[] }>(`${COMPETENCY_API}/skills?${new URLSearchParams(filters)}`, revision);
   const groups = useCompetencyData<{ items: Group[] }>(`${COMPETENCY_API}/groups`, revision);
   const [selected, setSelected] = useState<Skill | null>(null);
@@ -200,9 +219,9 @@ export function CompetencySkillsTab({ canManage, revision, onSaved }: TabProps) 
       <Status {...remote} />
       {remote.data && <>
         <div className="cm-table-scroll" tabIndex={0} role="region" aria-label="Bảng cấu hình năng lực"><table className="cm-table comp-skill-table">
-          <thead><tr><th className="cm-stt">STT</th><th>Kỹ năng</th><th>Nhóm năng lực</th><th>Phạm vi</th><th>Trạng thái</th><th>Liên kết</th><th>Thao tác</th></tr></thead>
-          <tbody>{remote.data.items.slice((page - 1) * 10, page * 10).map((skill, index) => <tr key={skill.id}>
-            <td className="cm-stt">{(page - 1) * 10 + index + 1}</td>
+          <thead><tr>{sortHeader("STT", "stt", "cm-stt")}{sortHeader("Kỹ năng", "name")}{sortHeader("Nhóm năng lực", "groups")}{sortHeader("Phạm vi", "scope")}{sortHeader("Trạng thái", "isActive")}{sortHeader("Liên kết", "links")}<th>Thao tác</th></tr></thead>
+          <tbody>{sortRows(remote.data.items, skillSort, sort).slice((page - 1) * 10, page * 10).map(({ row: skill, stt }) => <tr key={skill.id}>
+            <td className="cm-stt">{stt}</td>
             <td><button className="am-name-link" onClick={() => { setSelected(skill); setMode("detail"); }}>{skill.name}</button></td>
             <td><GroupNames skill={skill} /></td>
             <td className="comp-description">{skill.scope || "Chưa bổ sung"}</td>
@@ -308,6 +327,7 @@ export function SkillEditor({ current, revision, groups, close, saved }: EditorP
 function SkillDetails({ current, revision, canManage, close, edit }: { current: Skill; revision: number; canManage: boolean; close: () => void; edit: (skill: Skill) => void }) {
   const remote = useCompetencyData<SkillDetail>(`${COMPETENCY_API}/skills/${current.id}`, revision);
   const [page, setPage] = useState(1);
+  const { sort, sortHeader } = useTableSort(() => setPage(1));
   const detail = remote.data;
   return <Modal title={`Chi tiết cấu hình năng lực — ${current.name}`} onClose={close}>
     <div className="cm-dialog-body cm-form">
@@ -327,9 +347,9 @@ function SkillDetails({ current, revision, canManage, close, edit }: { current: 
           <p className="comp-hint">Đóng góp được tính từ cấu hình môn học đang áp dụng có trọng số lớn hơn 0. Mỗi môn có một cấu hình dùng chung cho mọi khóa có môn đó.</p>
           {detail.contributions.length ? <>
             <div className="cm-table-scroll" tabIndex={0} role="region" aria-label="Môn học đóng góp vào năng lực"><table className="cm-table">
-              <thead><tr><th className="cm-stt">STT</th><th>Môn học</th><th>Khóa áp dụng</th><th>Trọng số</th><th>Cấu hình môn học</th></tr></thead>
-              <tbody>{detail.contributions.slice((page - 1) * 10, page * 10).map((item, index) => <tr key={item.courseId}>
-                <td className="cm-stt">{(page - 1) * 10 + index + 1}</td>
+              <thead><tr>{sortHeader("STT", "stt", "cm-stt")}{sortHeader("Môn học", "course")}{sortHeader("Khóa áp dụng", "cohorts")}{sortHeader("Trọng số", "weight")}{sortHeader("Cấu hình môn học", "status")}</tr></thead>
+              <tbody>{sortRows(detail.contributions, contributionSort, sort).slice((page - 1) * 10, page * 10).map(({ row: item, stt }) => <tr key={item.courseId}>
+                <td className="cm-stt">{stt}</td>
                 <td><strong>{item.courseCode}</strong><br />{item.courseName}</td>
                 <td>{item.cohorts.join(", ")}</td>
                 <td>{percentage(item.weight)}{item.weight === 0 && <small className="comp-hint">Không đóng góp</small>}</td>

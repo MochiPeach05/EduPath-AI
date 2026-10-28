@@ -7,6 +7,7 @@ import { assessAllocations, splitEvenly, type AllocationInput } from "./competen
 import { COMPETENCY_API, cohortList, competencyDate, competencyRequest, linkGroupNames, percentage, skillGroupNames, skillGroups, statusLabels, useCompetencyData, type Cohort, type CompetencyCourse, type CompetencySummary, type CourseDetail, type EventEntry, type Group, type Skill } from "./competency-types";
 import CompetencyCourseAi from "./CompetencyCourseAi";
 import { CompetencyBulkAi } from "./CompetencyBulkAi";
+import { sortRows, useTableSort, type SortRule } from "./table-sort";
 
 type Props = { canManage: boolean; revision: number; onSaved: () => void };
 /**
@@ -19,9 +20,17 @@ const courseUrl = (id: string) => `${COMPETENCY_API}/courses/${encodeURIComponen
 const putCourse = (detail: CourseDetail, body: { status: "draft" | "active"; links: { skillId: string; weight: number }[]; note: string }) =>
   competencyRequest(courseUrl(detail.courseId), { method: "PUT", headers: { "Content-Type": "application/json", "x-version": detail.version ?? "new" }, body: JSON.stringify(body) });
 
+// The columns the course list sorts by (table-sort.tsx): Môn học by code, Trạng thái in the order of its states,
+// Kỹ năng / tổng trọng số by the number of skills.
+const courseSort: Record<string, SortRule<CompetencyCourse>> = {
+  course: { value: course => course.code }, cohorts: { value: cohortList }, status: { value: course => course.status, order: Object.keys(statusLabels) },
+  skills: { value: course => course.skillCount, by: "number" },
+};
+
 /** "Cấu hình môn học": the shared courses of every CTĐT, filtered by cohort (2026-10-20). */
 export function CompetencyCoursesTab({ canManage, revision, onSaved }: Props) {
   const { draft, setDraft, filters, page, setPage, reset } = useLiveFilters({ q: "", status: "", cohort: "" });
+  const { sort, sortHeader } = useTableSort(() => setPage(1));
   const query = new URLSearchParams(filters);
   const cohorts = useCompetencyData<{ items: Cohort[] }>(`${COMPETENCY_API}/cohorts`, revision);
   const courses = useCompetencyData<{ items: CompetencyCourse[] }>(`${COMPETENCY_API}/courses?${query}`, revision);
@@ -53,10 +62,10 @@ export function CompetencyCoursesTab({ canManage, revision, onSaved }: Props) {
         <button className="am-outline" onClick={reset}><Icon name="refresh" /> Xóa bộ lọc</button>
       </div>
       <Status {...cohorts} /><Status {...courses} />
-      {courses.data && <><div className="cm-table-scroll" tabIndex={0} role="region" aria-label="Bảng cấu hình môn học"><table className="cm-table comp-course-table"><thead><tr><th className="cm-stt">STT</th><th>Môn học</th><th>Khóa áp dụng</th><th>Trạng thái</th><th>Kỹ năng / tổng trọng số</th><th>Thao tác</th></tr></thead><tbody>{courses.data.items.slice((page - 1) * 10, page * 10).map((course, index) => {
+      {courses.data && <><div className="cm-table-scroll" tabIndex={0} role="region" aria-label="Bảng cấu hình môn học"><table className="cm-table comp-course-table"><thead><tr>{sortHeader("STT", "stt", "cm-stt")}{sortHeader("Môn học", "course")}{sortHeader("Khóa áp dụng", "cohorts")}{sortHeader("Trạng thái", "status")}{sortHeader("Kỹ năng / tổng trọng số", "skills")}<th>Thao tác</th></tr></thead><tbody>{sortRows(courses.data.items, courseSort, sort).slice((page - 1) * 10, page * 10).map(({ row: course, stt }) => {
         const linked = course.skillCount > 0;
         return <tr key={course.id}>
-          <td className="cm-stt">{(page - 1) * 10 + index + 1}</td>
+          <td className="cm-stt">{stt}</td>
           <td><strong>{course.code}</strong>{course.name}<small>{course.credits} tín chỉ · {course.type || "Chưa xác định loại"}{course.block ? ` · ${course.block}` : ""}</small></td>
           <td>{cohortList(course)}</td>
           <td><span className={`comp-state comp-state-${course.status}`}>{statusLabels[course.status]}</span>{course.mergedFrom.length > 0 && <small className="comp-merged">Đã gộp cấu hình khác của {course.mergedFrom.join(", ")}; xem lịch sử.</small>}</td>

@@ -4,8 +4,11 @@ import { z } from "zod";
 import type { DatabasePool } from "../db/pool.js";
 import { adminRoles, type AuthenticatedUser, type AppRole } from "../auth/types.js";
 import { requireRole, requireAdminAccess } from "../middleware/authorization.js";
+import { byGivenName, byOrder, orderBy, sortSchema, type OwnOrder, type SortDirection } from "./table-sort.js";
 
 export interface Account {
+  /** The row's number in the list's own order (by name), kept when the list is sorted by a column. */
+  stt?: number;
   id: string;
   name: string;
   email: string | null;
@@ -14,8 +17,10 @@ export interface Account {
   isActive: boolean;
   lastLoginAt: string | null;
 }
-export interface AccountQuery { q: string; page: number; pageSize: number; role?: AppRole | undefined; active?: "true" | "false" | undefined }
-export interface HistoryQuery { q: string; page: number; pageSize: number; userId?: string | undefined; outcome?: "success" | "denied" | undefined; portal?: "admin" | "student" | undefined; from?: string | undefined; to?: string | undefined }
+/** sort: a column of the list (accountSort, historySort) or "stt", the list's own order; table-sort.ts. */
+interface Sorted { sort?: string | undefined; dir?: SortDirection | undefined }
+export interface AccountQuery extends Sorted { q: string; page: number; pageSize: number; role?: AppRole | undefined; active?: "true" | "false" | undefined }
+export interface HistoryQuery extends Sorted { q: string; page: number; pageSize: number; userId?: string | undefined; outcome?: "success" | "denied" | undefined; portal?: "admin" | "student" | undefined; from?: string | undefined; to?: string | undefined }
 export interface AccountChange { role?: AppRole | undefined; isActive?: boolean | undefined }
 export interface LoginEvent { id: string; userId: string; name: string; email: string | null; occurredAt: string; outcome: string; reason: string; portal: string }
 export interface AccountDetail extends Account { createdAt: string; firstLoginAt: string | null; updatedAt: string }
@@ -34,6 +39,19 @@ export interface AdminAccountRepository {
 
 const columns = `id, display_name AS name, email, username,
   COALESCE(role_override, role) AS role, is_active AS "isActive", last_login_at AS "lastLoginAt"`;
+// The columns the lists sort by (web AccountsManagement.tsx). Vai trò goes from Quản trị viên down to Sinh viên, Trạng
+// thái from active to locked; Cổng and Thông tin follow their Vietnamese labels, Kết quả puts Thành công first.
+const accountSort = {
+  name: byGivenName("name"), role: byOrder("role", ["admin", "faculty_board", "department_head", "lecturer", "student"]),
+  isActive: byOrder('"isActive"', ["true", "false"]), lastLoginAt: ['"lastLoginAt"']
+};
+const accountOrder: OwnOrder = [["name", "ASC"], ["id", "ASC"]];
+const historySort = {
+  occurredAt: ['"occurredAt"'], name: byGivenName("name"), portal: byOrder("portal", ["admin", "student"]),
+  outcome: byOrder("outcome", ["success", "denied"]),
+  reason: byOrder("reason", ["admin_required", "signed_in", "staff_portal_only", "callback_failed", "admin_portal_only"])
+};
+const historyOrder: OwnOrder = [['"occurredAt"', "DESC"], ["id", "DESC"]];
 
 export class PostgresAdminAccountRepository implements AdminAccountRepository {
   constructor(private readonly pool: DatabasePool) {}
@@ -48,6 +66,7 @@ export class PostgresAdminAccountRepository implements AdminAccountRepository {
   }
 
   async list(_actor: AuthenticatedUser, query: AccountQuery): Promise<AccountPage> {
+    const order = orderBy(accountSort, accountOrder, query.sort, query.dir);
     const result = await this.pool.query<AccountPage>(
       `WITH filtered AS (
         SELECT id,
@@ -58,10 +77,11 @@ export class PostgresAdminAccountRepository implements AdminAccountRepository {
         WHERE ($1 = '' OR strpos(lower(concat_ws(' ', display_name, email, username)), lower($1)) > 0)
           AND ($4::text IS NULL OR COALESCE(role_override, role) = $4)
           AND ($5::boolean IS NULL OR is_active = $5)
-      ), paged AS (
-        SELECT * FROM filtered ORDER BY name, id LIMIT $2 OFFSET $3
+      ), numbered AS (SELECT filtered.*, row_number() OVER (ORDER BY ${orderBy(accountSort, accountOrder)})::int AS stt FROM filtered),
+      paged AS (
+        SELECT * FROM numbered ORDER BY ${order} LIMIT $2 OFFSET $3
       )
-      SELECT COALESCE((SELECT json_agg(paged ORDER BY name, id) FROM paged), '[]'::json) AS items,
+      SELECT COALESCE((SELECT json_agg(paged ORDER BY ${order}) FROM paged), '[]'::json) AS items,
         (SELECT count(*)::int FROM filtered) AS total`,
       [query.q, query.pageSize, (query.page - 1) * query.pageSize, query.role ?? null, query.active ?? null]
     );
@@ -155,6 +175,7 @@ export class PostgresAdminAccountRepository implements AdminAccountRepository {
 
   async history(actor: AuthenticatedUser, query: HistoryQuery) {
     if (query.userId) await this.detail(actor, query.userId);
+    const order = orderBy(historySort, historyOrder, query.sort, query.dir);
     const result = await this.pool.query<{ items: LoginEvent[]; total: number }>(`WITH filtered AS (
       SELECT e.id, e.user_id AS "userId", u.display_name AS name, u.email,
         e.occurred_at AS "occurredAt", e.outcome, e.reason, e.portal
@@ -163,8 +184,8 @@ export class PostgresAdminAccountRepository implements AdminAccountRepository {
         AND ($2 = '' OR strpos(lower(concat_ws(' ', u.display_name, u.email, u.username, e.reason)), lower($2)) > 0)
         AND ($3::text IS NULL OR e.outcome = $3) AND ($4::text IS NULL OR e.portal = $4)
         AND ($5::timestamptz IS NULL OR e.occurred_at >= $5) AND ($6::timestamptz IS NULL OR e.occurred_at < $6)
-      ), paged AS (SELECT * FROM filtered ORDER BY "occurredAt" DESC, id DESC LIMIT $7 OFFSET $8)
-      SELECT COALESCE((SELECT json_agg(paged ORDER BY "occurredAt" DESC, id DESC) FROM paged), '[]'::json) AS items,
+      ), paged AS (SELECT * FROM filtered ORDER BY ${order} LIMIT $7 OFFSET $8)
+      SELECT COALESCE((SELECT json_agg(paged ORDER BY ${order}) FROM paged), '[]'::json) AS items,
         (SELECT count(*)::int FROM filtered) AS total`,
     [query.userId ?? null, query.q, query.outcome ?? null, query.portal ?? null, query.from ?? null, query.to ?? null, query.pageSize, (query.page - 1) * query.pageSize]);
     return result.rows[0] ?? { items: [], total: 0 };
@@ -186,7 +207,8 @@ export function createAdminAccountsRouter(repository: AdminAccountRepository | u
       q: z.string().trim().max(120).default(""),
       page: z.coerce.number().int().min(1).max(100000).default(1),
       pageSize: z.coerce.number().int().min(1).max(50).default(10),
-      role: z.enum(["admin", "student", "faculty_board", "department_head", "lecturer"]).optional(), active: z.enum(["true", "false"]).optional()
+      role: z.enum(["admin", "student", "faculty_board", "department_head", "lecturer"]).optional(), active: z.enum(["true", "false"]).optional(),
+      ...sortSchema(accountSort)
     }).strict().safeParse(request.query);
     if (!input.success) { response.status(400).json({ error: "invalid_query" }); return; }
     response.json({ ...await repository!.list(request.session.user!, input.data), page: input.data.page, pageSize: input.data.pageSize });
@@ -195,7 +217,7 @@ export function createAdminAccountsRouter(repository: AdminAccountRepository | u
     const input = z.object({ q: z.string().trim().max(120).default(""),
       page: z.coerce.number().int().min(1).max(100000).default(1), pageSize: z.coerce.number().int().min(1).max(50).default(10),
       userId: z.guid().optional(), outcome: z.enum(["success", "denied"]).optional(), portal: z.enum(["admin", "student"]).optional(),
-      from: z.iso.datetime({ offset: true }).optional(), to: z.iso.datetime({ offset: true }).optional()
+      from: z.iso.datetime({ offset: true }).optional(), to: z.iso.datetime({ offset: true }).optional(), ...sortSchema(historySort)
     }).strict().refine((value) => !value.from || !value.to || Date.parse(value.from) < Date.parse(value.to)).safeParse(request.query);
     if (!input.success) { response.status(400).json({ error: "invalid_query" }); return; }
     response.json({ ...await repository!.history(request.session.user!, input.data), page: input.data.page, pageSize: input.data.pageSize });

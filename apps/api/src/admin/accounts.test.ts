@@ -57,6 +57,16 @@ describe("admin accounts API", () => {
     expect(repository.list).toHaveBeenCalledWith(actor, { q: "hoa", page: 2, pageSize: 10 });
     expect(result.body).toEqual({ items: [], total: 0, page: 2, pageSize: 10 });
   });
+  it("sorts accounts and login history by their own columns only", async () => {
+    const { app, repository } = setup();
+    await request(app).get("/accounts?sort=lastLoginAt&dir=desc").expect(200);
+    expect(repository.list).toHaveBeenCalledWith(actor, { q: "", page: 1, pageSize: 10, sort: "lastLoginAt", dir: "desc" });
+    await request(app).get("/accounts/history?sort=reason").expect(200);
+    expect(repository.history).toHaveBeenCalledWith(actor, expect.objectContaining({ sort: "reason" }));
+    for (const query of ["sort=email", "sort=stt%3B", "dir=up", "sort=occurredAt"]) await request(app).get(`/accounts?${query}`).expect(400);
+    await request(app).get("/accounts/history?sort=role").expect(400);
+    expect(repository.list).toHaveBeenCalledTimes(1);
+  });
   it("accepts every deterministic MD5 seed GUID on account detail and routes a seed GUID to history and lock handlers", async () => {
     const { app, repository } = setup();
     for (const seedAccountId of seedAccountIds) await request(app).get(`/accounts/${seedAccountId}`).expect(200);
@@ -194,5 +204,8 @@ describe("Postgres admin account repository", () => {
     await repository.list(actor, { q: "' OR 1=1 --", page: 2, pageSize: 10 });
     expect(query.mock.calls[0]?.[1]).toEqual(["' OR 1=1 --", 10, 10, null, null]);
     expect(query.mock.calls[0]?.[0]).not.toContain("' OR 1=1 --");
+    expect(query.mock.calls[0]?.[0]).toContain("FROM numbered ORDER BY name ASC, id ASC LIMIT $2 OFFSET $3");
+    await repository.history(actor, { q: "", page: 1, pageSize: 10, sort: "stt", dir: "desc" });
+    expect(query.mock.calls[1]?.[0]).toContain('ORDER BY "occurredAt" ASC, id ASC LIMIT $7 OFFSET $8');
   });
 });

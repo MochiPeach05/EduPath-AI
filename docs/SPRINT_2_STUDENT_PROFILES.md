@@ -24,8 +24,8 @@ Sidebar có hai mục: Danh sách tài khoản người dùng và Hồ sơ sinh 
 
 ## Backend
 
-- `GET /api/admin/students`: `q` tối đa 120 ký tự; `page` 1–100000; `pageSize` 1–50; `cohortYear` 2000–2100; `semester` 1–3; `active=true|false`; `profileStatus=missing|incomplete|complete`.
-- Trả `items`, `total`, `cohortYears`, `page`, `pageSize`. Tổng số và trang dữ liệu lấy trong cùng một truy vấn; sắp xếp tên, ID để phân trang ổn định.
+- `GET /api/admin/students`: `q` tối đa 120 ký tự; `page` 1–100000; `pageSize` 1–50; `cohortYear` 2000–2100; `semester` 1–3; `active=true|false`; `profileStatus=missing|incomplete|complete`; `sort=stt|name|studentCode|cohortCode|className|cohortYear|profileStatus|isActive` và `dir=asc|desc` (từ 28/10/2026, xem `docs/admin-table-sort.md`).
+- Trả `items`, `total`, `cohortYears`, `page`, `pageSize`. Tổng số và trang dữ liệu lấy trong cùng một truy vấn; thứ tự mặc định là tên, ID để phân trang ổn định. Mỗi dòng có `stt`, là số thứ tự của dòng theo thứ tự mặc định; số này giữ nguyên khi danh sách được sắp xếp theo cột khác.
 - `GET /api/admin/students/:id`: UUID hợp lệ, trả `student`; người dùng khác tenant, không phải Student hoặc không tồn tại đều trả 404.
 - Cả hai endpoint yêu cầu phiên Admin và kiểm tra lại Admin đang hoạt động trong database; middleware phiên hiện có vẫn kiểm tra phiên bản quyền/trạng thái.
 - SQL có tham số, giới hạn tenant ở cả danh sách, chi tiết và danh sách năm nhập học; không trả token, mật khẩu, Entra object ID hoặc nội dung session. Phản hồi không cache. Preview không có database trả 503.

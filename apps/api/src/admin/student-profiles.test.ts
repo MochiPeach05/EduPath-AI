@@ -52,8 +52,13 @@ describe("student profile read API", () => {
     await request(app).get("/students").query({ q: "  23748  ", page: 2, pageSize: 20, cohortYear: 2023, cohortCode: "K29", active: "false", profileStatus: "incomplete" }).expect(200);
     expect(repository.list).toHaveBeenCalledWith(actor, { q: "23748", page: 2, pageSize: 20, cohortYear: 2023, cohortCode: "K29", active: "false", profileStatus: "incomplete" });
   });
-  it.each(["page=0", "pageSize=51", "page=1&page=2", "cohortYear=1999", "cohortYear=2101", "cohortYear=2023.5", "cohortYear=abc", "cohortCode=29", "cohortCode=bad", "cohortCode=K29&cohortCode=K30", "semester=0", "semester=4", "semester=20", "semester=21", "semester=1.5", "active=yes", "profileStatus=all", "tenantId=other", "role=admin"])("rejects invalid filters %s", async (query) => {
+  it.each(["page=0", "pageSize=51", "page=1&page=2", "cohortYear=1999", "cohortYear=2101", "cohortYear=2023.5", "cohortYear=abc", "cohortCode=29", "cohortCode=bad", "cohortCode=K29&cohortCode=K30", "semester=0", "semester=4", "semester=20", "semester=21", "semester=1.5", "active=yes", "profileStatus=all", "tenantId=other", "role=admin", "sort=email", "sort=name%3B", "sort=name&sort=cohortYear", "dir=down"])("rejects invalid filters %s", async (query) => {
     const { app, repository } = setup(); await request(app).get(`/students?${query}`).expect(400); expect(repository.list).not.toHaveBeenCalled();
+  });
+  it("passes a column sort to the repository", async () => {
+    const { app, repository } = setup();
+    await request(app).get("/students").query({ sort: "name", dir: "desc", page: 2 }).expect(200);
+    expect(repository.list).toHaveBeenCalledWith(actor, { q: "", page: 2, pageSize: 10, sort: "name", dir: "desc" });
   });
   it("rejects oversized keywords and malformed ids", async () => {
     const { app, repository } = setup(); await request(app).get("/students").query({ q: "x".repeat(121) }).expect(400);
@@ -86,6 +91,16 @@ describe("student profile SQL safety", () => {
     expect(sql).toContain("COALESCE(u.role_override, u.role) = 'student'");
     expect(sql).not.toContain("' OR 1=1 --"); expect(sql).not.toContain("SELECT * FROM users");
     expect(values).toEqual(["' OR 1=1 --", 2023, "K29", "false", "incomplete", 10, 10]);
+  });
+  it("numbers the rows in the list's own order and sorts the whole list by a known column before paging", async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [{ items: [], total: 0, cohortYears: [], cohortCodes: [] }] });
+    const repo = new PostgresStudentProfileRepository({ query } as unknown as DatabasePool);
+    await repo.list(actor, { q: "", page: 3, pageSize: 10, sort: "cohortYear", dir: "desc" });
+    const [sql, values] = query.mock.calls[0]!;
+    expect(sql).toContain("row_number() OVER (ORDER BY name ASC, id ASC)::int AS stt FROM filtered");
+    expect(sql).toContain('FROM numbered ORDER BY "cohortYear" DESC NULLS LAST, name ASC, id ASC LIMIT $6 OFFSET $7');
+    expect(sql).toContain('json_agg(paged ORDER BY "cohortYear" DESC NULLS LAST, name ASC, id ASC)');
+    expect(values).toEqual(["", null, null, null, null, 10, 20]);
   });
   it("does not return absent or non-student details", async () => {
     const query = vi.fn().mockResolvedValue({ rows: [] }); const repo = new PostgresStudentProfileRepository({ query } as unknown as DatabasePool);

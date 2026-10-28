@@ -7,11 +7,12 @@ import { specialtyLabel } from "./competency-assessment-types";
 import { majorLabel } from "./majors";
 import TranscriptTables, { transcriptNotes } from "./TranscriptTables";
 import { formatUpdatedAt } from "./student-overview-data";
+import { sortParams, useTableSort } from "./table-sort";
 import type { Transcript } from "./StudentTranscript";
 import "./student-profiles.css";
 
 type ProfileStatus = "missing" | "incomplete" | "complete";
-type Student = { id: string; name: string; email: string | null; isActive: boolean; studentCode: string | null; cohortCode: string | null; className: string | null; cohortYear: number | null; profileStatus: ProfileStatus };
+type Student = { stt?: number; id: string; name: string; email: string | null; isActive: boolean; studentCode: string | null; cohortCode: string | null; className: string | null; cohortYear: number | null; profileStatus: ProfileStatus };
 type StudentDetail = Student & { majorCode?: string | null; specialty?: string | null; surveyUpdatedAt?: string | null; surveyComplete?: boolean; careerPosition?: CareerSelection | null; username: string | null; interests: string | null; careerGoal: string | null; accountCreatedAt: string; firstLoginAt: string; lastLoginAt: string; profileCreatedAt: string | null; profileUpdatedAt: string | null };
 type StudentPage = { items: Student[]; total: number; cohortYears: number[]; cohortCodes: string[] };
 const statusLabels: Record<ProfileStatus, string> = { missing: "Chưa có hồ sơ", incomplete: "Chưa hoàn tất", complete: "Đã hoàn tất" };
@@ -55,10 +56,12 @@ function StudentDetails({ id }: { id: string }) {
 
 export default function StudentProfiles() {
   const { draft, setDraft, filters, page, setPage, flush, reset } = useLiveFilters(emptyFilters);
+  // The server sorts the whole list (admin/student-profiles.ts); STT stays the row's number in the list by name.
+  const { sort, sortHeader } = useTableSort(() => setPage(1));
   const [selected, setSelected] = useState<Student | null>(null);
   const [cohortCodes, setCohortCodes] = useState<string[]>([]);
   const [cohortYears, setCohortYears] = useState<number[]>([]);
-  const params = new URLSearchParams({ page: String(page), pageSize: "10" });
+  const params = sortParams(sort, new URLSearchParams({ page: String(page), pageSize: "10" }));
   for (const [key, value] of Object.entries(filters)) if (value) params.set(key, value);
   const state = useData<StudentPage>(`/api/admin/students?${params}`);
   useEffect(() => { if (state.data) { setCohortYears(state.data.cohortYears); setCohortCodes(state.data.cohortCodes ?? []); } }, [state.data]);
@@ -73,7 +76,7 @@ export default function StudentProfiles() {
       <label htmlFor="student-active">Trạng thái tài khoản<select id="student-active" value={draft.active} onChange={(e) => setDraft({ ...draft, active: e.target.value })}><option value="">Tất cả tài khoản</option><option value="true">Đang hoạt động</option><option value="false">Đã khóa</option></select></label>
       <div className="sp-filter-actions"><button className="am-outline" type="button" onClick={reset}>Xóa bộ lọc</button></div>
     </form>
-    <Status {...state} />{state.data && <><div className="am-table-scroll" tabIndex={0} role="region" aria-label="Bảng hồ sơ sinh viên, cuộn ngang trên màn hình nhỏ"><table className="am-table sp-table"><thead><tr><th scope="col">STT</th><th scope="col">Sinh viên</th><th scope="col">Mã sinh viên</th><th scope="col">Khóa học</th><th scope="col">Lớp học</th><th scope="col">Năm nhập học</th><th scope="col">Hồ sơ</th><th scope="col">Tài khoản</th><th scope="col">Thao tác</th></tr></thead><tbody>{state.data.items.map((student, index) => <tr key={student.id}><td>{(page - 1) * 10 + index + 1}</td><td><div className="am-person"><span className="am-avatar" aria-hidden="true">{student.name.slice(0, 1)}</span><div><button className="am-name-link" onClick={() => setSelected(student)}>{student.name}</button><small>{student.email ?? "Chưa có email"}</small></div></div></td><td>{student.studentCode ?? "Chưa cập nhật"}</td><td>{student.cohortCode ?? "—"}</td><td>{student.className ?? "—"}</td><td>{student.cohortYear ?? "—"}</td><td><ProfileBadge status={student.profileStatus} /></td><td><span className={`am-state ${student.isActive ? "" : "am-state-locked"}`}>{student.isActive ? "Đang hoạt động" : "Đã khóa"}</span></td><td><button className="am-outline" onClick={() => setSelected(student)}><Icon name="eye" />Xem chi tiết</button></td></tr>)}</tbody></table></div>
+    <Status {...state} />{state.data && <><div className="am-table-scroll" tabIndex={0} role="region" aria-label="Bảng hồ sơ sinh viên, cuộn ngang trên màn hình nhỏ"><table className="am-table sp-table"><thead><tr>{sortHeader("STT", "stt")}{sortHeader("Sinh viên", "name")}{sortHeader("Mã sinh viên", "studentCode")}{sortHeader("Khóa học", "cohortCode")}{sortHeader("Lớp học", "className")}{sortHeader("Năm nhập học", "cohortYear")}{sortHeader("Hồ sơ", "profileStatus")}{sortHeader("Tài khoản", "isActive")}<th scope="col">Thao tác</th></tr></thead><tbody>{state.data.items.map((student, index) => <tr key={student.id}><td>{student.stt ?? (page - 1) * 10 + index + 1}</td><td><div className="am-person"><span className="am-avatar" aria-hidden="true">{student.name.slice(0, 1)}</span><div><button className="am-name-link" onClick={() => setSelected(student)}>{student.name}</button><small>{student.email ?? "Chưa có email"}</small></div></div></td><td>{student.studentCode ?? "Chưa cập nhật"}</td><td>{student.cohortCode ?? "—"}</td><td>{student.className ?? "—"}</td><td>{student.cohortYear ?? "—"}</td><td><ProfileBadge status={student.profileStatus} /></td><td><span className={`am-state ${student.isActive ? "" : "am-state-locked"}`}>{student.isActive ? "Đang hoạt động" : "Đã khóa"}</span></td><td><button className="am-outline" onClick={() => setSelected(student)}><Icon name="eye" />Xem chi tiết</button></td></tr>)}</tbody></table></div>
       {!state.data.items.length && <div className="am-empty"><h3>{filtered ? "Không tìm thấy hồ sơ phù hợp" : "Chưa có sinh viên trong danh sách"}</h3><p>{filtered ? "Thử từ khóa khác hoặc xóa bộ lọc." : "Danh sách sẽ hiển thị khi có tài khoản mang vai trò Sinh viên trong hệ thống."}</p></div>}
       <Pagination total={state.data.total} page={page} setPage={setPage} /></>}
     <p className="am-table-note"></p>

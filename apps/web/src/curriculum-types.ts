@@ -73,6 +73,8 @@ export interface CurriculumDetail {
 }
 export interface CurriculumList {
   items: {
+    /** The row's number in the list's own order (newest cohort first), kept when the list is sorted by a column. */
+    stt?: number;
     id: string;
     name: string;
     major: string;

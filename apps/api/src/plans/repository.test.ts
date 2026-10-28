@@ -44,3 +44,17 @@ describe("PlanRepository.link", () => {
     });
   });
 });
+
+describe("PlanRepository.list", () => {
+  it("numbers the rows in the list's own order and sorts the whole list by a known column before paging", async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [] });
+    const repository = new PlanRepository({ query } as unknown as DatabasePool);
+    await repository.list("", "K29", "", 1, "stt", "desc");
+    const [sql, values] = query.mock.calls[0]!;
+    expect(sql).toContain('row_number() OVER (ORDER BY "cohortCode" DESC, id ASC)::int AS stt FROM filtered');
+    expect(sql).toContain('FROM numbered ORDER BY "cohortCode" ASC, id DESC LIMIT 10 OFFSET $4');
+    expect(values).toEqual(["", "K29", "", 0]);
+    await repository.list("", "", "", 1, "isActive", "asc");
+    expect(query.mock.calls[2]![0]).toContain(`ORDER BY CASE "isActive" WHEN 'true' THEN 0 WHEN 'false' THEN 1 END ASC NULLS LAST, "cohortCode" DESC, id ASC LIMIT`);
+  });
+});

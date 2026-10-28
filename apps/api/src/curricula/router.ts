@@ -4,7 +4,8 @@ import type { DatabasePool } from "../db/pool.js";
 import { requireAdminAccess } from "../middleware/authorization.js";
 import { CurriculumError, courseSchema } from "./model.js";
 import { parseCurriculum } from "./parser.js";
-import { CurriculumRepository } from "./repository.js";
+import { CurriculumRepository, curriculumSort } from "./repository.js";
+import { sortSchema } from "../admin/table-sort.js";
 import { courseInput, putCourse, removeCourse } from "./course-mutations.js";
 import { courseCode } from "./course-codes.js";
 
@@ -59,10 +60,11 @@ export function createCurriculaRouter(
           .default(""),
         active: z.enum(["", "true", "false"]).default(""),
         page: z.coerce.number().int().min(1).max(10000).default(1),
+        ...sortSchema(curriculumSort),
       })
       .parse(req.query);
     res.json(
-      await repository!.list(query.q, query.cohort, query.active, query.page),
+      await repository!.list(query.q, query.cohort, query.active, query.page, query.sort, query.dir),
     );
   });
   const upload = raw({

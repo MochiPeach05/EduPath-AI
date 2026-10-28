@@ -20,7 +20,7 @@ const failures: Record<string, string> = {
   invalid_origin: "Yêu cầu không hợp lệ. Vui lòng tải lại trang rồi thử lại.",
   authentication_required: "Phiên đăng nhập đã hết hạn. Vui lòng đăng xuất và đăng nhập lại."
 };
-export type Account = { id: string; name: string; email: string | null; username: string | null; role: AppRole; isActive: boolean; lastLoginAt: string | null };
+export type Account = { stt?: number; id: string; name: string; email: string | null; username: string | null; role: AppRole; isActive: boolean; lastLoginAt: string | null };
 export type AccountPage = { items: Account[]; total: number; page: number; pageSize: number };
 
 /** A field label ending in the red asterisk that marks the field as required.

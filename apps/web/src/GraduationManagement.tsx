@@ -11,6 +11,7 @@ import type {
 import "./curricula.css";
 import "./graduation.css";
 import { CheckedForm } from "./CheckedForm";
+import { sortRows, useTableSort, type SortRule } from "./table-sort";
 const endpoint = "/api/admin/graduation";
 const errors: Record<string, string> = {
   invalid_workbook:
@@ -61,6 +62,21 @@ const thresholdFields = [
   ["freeElectiveCredits", "Tín chỉ tự chọn tự do"],
   ["minimumGpa", "Điểm trung bình tích lũy tối thiểu"],
 ] as const;
+// The columns the list sorts by (table-sort.tsx): Tiêu chuẩn by its name, Đang mở before Đã khóa.
+const standardSort: Record<string, SortRule<GraduationList["items"][number]>> = {
+  name: { value: (item) => item.name },
+  cohort: { value: (item) => item.cohortCode },
+  specialty: { value: (item) => item.specialty },
+  minimumCredits: { value: (item) => item.minimumCredits, by: "number" },
+  active: { value: (item) => item.isActive, order: [true, false] },
+};
+// The columns of a condition group that sort: Mã học phần by its own code, Môn điều kiện "Có" first.
+const conditionSort: Record<string, SortRule<GraduationData["courses"][number]>> = {
+  code: { value: (c) => c.code },
+  name: { value: (c) => c.name },
+  credits: { value: (c) => c.credits, by: "number" },
+  conditionOnly: { value: (c) => c.conditionOnly, order: [true, false] },
+};
 export default function GraduationManagement({
   canManage,
 }: {
@@ -74,6 +90,7 @@ export default function GraduationManagement({
     cohort: "",
     active: "",
   });
+  const { sort, sortHeader } = useTableSort(() => setPage(1));
   const setFilter = (key: keyof typeof draft, value: string) =>
     setDraft({ ...draft, [key]: value });
   const list = useData<GraduationList>(
@@ -158,21 +175,21 @@ export default function GraduationManagement({
               <table className="cm-table">
                 <thead>
                   <tr>
-                    <th className="cm-stt">STT</th>
-                    <th>Tiêu chuẩn</th>
-                    <th>Khóa</th>
-                    <th>Chuyên ngành</th>
-                    <th>TC tối thiểu</th>
-                    <th>Trạng thái</th>
+                    {sortHeader("STT", "stt", "cm-stt")}
+                    {sortHeader("Tiêu chuẩn", "name")}
+                    {sortHeader("Khóa", "cohort")}
+                    {sortHeader("Chuyên ngành", "specialty")}
+                    {sortHeader("TC tối thiểu", "minimumCredits")}
+                    {sortHeader("Trạng thái", "active")}
                     <th>Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {list.data.items
+                  {sortRows(list.data.items, standardSort, sort)
                     .slice((page - 1) * 10, page * 10)
-                    .map((item, index) => (
+                    .map(({ row: item, stt }) => (
                       <tr key={item.id}>
-                        <td className="cm-stt">{(page - 1) * 10 + index + 1}</td>
+                        <td className="cm-stt">{stt}</td>
                         <td>
                           <strong>{item.name}</strong>
                           <small>
@@ -465,6 +482,8 @@ function Conditions({
   editCourse?: (id: string) => void;
 }) {
   const [q, setQ] = useState("");
+  // One sort for every group: each group's rows are sorted inside its own table.
+  const { sort, sortHeader } = useTableSort();
   const fold = (s: string) =>
     s
       .normalize("NFD")
@@ -513,18 +532,18 @@ function Conditions({
               <table className="cm-table">
                 <thead>
                   <tr>
-                    <th className="cm-stt">STT</th>
-                    <th>Mã học phần</th>
-                    <th>Tên học phần</th>
-                    <th>TC</th>
-                    <th>Môn điều kiện (*)</th>
+                    {sortHeader("STT", "stt", "cm-stt")}
+                    {sortHeader("Mã học phần", "code")}
+                    {sortHeader("Tên học phần", "name")}
+                    {sortHeader("TC", "credits")}
+                    {sortHeader("Môn điều kiện (*)", "conditionOnly")}
                     {editCourse && <th>Thao tác</th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((c, index) => (
+                  {sortRows(items, conditionSort, sort).map(({ row: c, stt }) => (
                     <tr key={c.id}>
-                      <td className="cm-stt">{index + 1}</td>
+                      <td className="cm-stt">{stt}</td>
                       <td>{[c.code, ...(c.alternativeCodes ?? [])].join(" / ")}</td>
                       <td>{c.name}</td>
                       <td>{fmt(c.credits)}</td>

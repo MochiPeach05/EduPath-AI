@@ -7,6 +7,7 @@ import { AccountError, type AdminAccountRepository } from "./accounts.js";
 import type { SpecialtyCode } from "../competency-assessment/types.js";
 import { CONSENT_VALID_SINCE } from "../student/consent.js";
 import { withoutSettledReviews, type TranscriptData } from "../student/transcript-parser.js";
+import { byGivenName, byOrder, byText, orderBy, sortSchema, type OwnOrder, type SortDirection } from "./table-sort.js";
 
 export interface StudentProfileQuery {
   q: string; page: number; pageSize: number;
@@ -14,8 +15,12 @@ export interface StudentProfileQuery {
   cohortCode?: string | undefined;
   active?: "true" | "false" | undefined;
   profileStatus?: "missing" | "incomplete" | "complete" | undefined;
+  /** A column of the list (studentSort) or "stt", the list's own order; table-sort.ts. */
+  sort?: string | undefined; dir?: SortDirection | undefined;
 }
 interface StudentProfileSummary {
+  /** The row's number in the list's own order (by name), kept when the list is sorted by a column. */
+  stt?: number;
   id: string; name: string; email: string | null; isActive: boolean;
   studentCode: string | null; cohortYear: number | null;
   cohortCode: string | null; className: string | null;
@@ -71,10 +76,17 @@ const summaryColumns = `u.id, COALESCE(p.full_name, u.display_name) AS name, u.e
   p.student_code AS "studentCode", p.cohort_year AS "cohortYear",
   ${profileStatus} AS "profileStatus"`;
 const studentScope = `(COALESCE(u.role_override, u.role) = 'student' OR u.is_student)`;
+// The columns the list sorts by (web StudentProfiles.tsx); Hồ sơ goes from complete to missing, Tài khoản from active to locked.
+const studentSort = {
+  name: byGivenName("name"), studentCode: byText('"studentCode"'), cohortCode: byText('"cohortCode"'), className: byText('"className"'),
+  cohortYear: ['"cohortYear"'], profileStatus: byOrder('"profileStatus"', ["complete", "incomplete", "missing"]), isActive: byOrder('"isActive"', ["true", "false"])
+};
+const studentOrder: OwnOrder = [["name", "ASC"], ["id", "ASC"]];
 
 export class PostgresStudentProfileRepository implements StudentProfileRepository {
   constructor(private readonly pool: DatabasePool) {}
   async list(_actor: AuthenticatedUser, query: StudentProfileQuery): Promise<StudentProfilePage> {
+    const order = orderBy(studentSort, studentOrder, query.sort, query.dir);
     const result = await this.pool.query<StudentProfilePage>(`WITH students AS (
       SELECT ${summaryColumns}, concat_ws(' ', u.display_name, p.full_name, u.email, u.username, p.student_code, p.cohort_code, p.class_name, p.career_goal) AS search_text
       FROM users u LEFT JOIN student_profiles p ON p.user_id = u.id WHERE ${studentScope}
@@ -85,8 +97,9 @@ export class PostgresStudentProfileRepository implements StudentProfileRepositor
         AND ($3::text IS NULL OR "cohortCode" = $3)
         AND ($4::boolean IS NULL OR "isActive" = $4)
         AND ($5::text IS NULL OR "profileStatus" = $5)
-    ), paged AS (SELECT * FROM filtered ORDER BY name, id LIMIT $6 OFFSET $7)
-    SELECT COALESCE((SELECT json_agg(paged ORDER BY name, id) FROM paged), '[]'::json) AS items,
+    ), numbered AS (SELECT filtered.*, row_number() OVER (ORDER BY ${orderBy(studentSort, studentOrder)})::int AS stt FROM filtered),
+    paged AS (SELECT * FROM numbered ORDER BY ${order} LIMIT $6 OFFSET $7)
+    SELECT COALESCE((SELECT json_agg(paged ORDER BY ${order}) FROM paged), '[]'::json) AS items,
       (SELECT count(*)::int FROM filtered) AS total,
       COALESCE((SELECT json_agg(year ORDER BY year DESC) FROM (SELECT DISTINCT "cohortYear" AS year FROM students WHERE "cohortYear" IS NOT NULL) years), '[]'::json) AS "cohortYears",
       COALESCE((SELECT json_agg(code ORDER BY code DESC) FROM (SELECT DISTINCT "cohortCode" AS code FROM students WHERE "cohortCode" IS NOT NULL) codes), '[]'::json) AS "cohortCodes"`,
@@ -132,7 +145,8 @@ export function createStudentProfilesRouter(repository: StudentProfileRepository
       cohortYear: z.coerce.number().int().min(2000).max(2100).optional(),
       cohortCode: z.string().trim().toUpperCase().regex(/^K[0-9]{2,3}$/).optional(),
       active: z.enum(["true", "false"]).optional(),
-      profileStatus: z.enum(["missing", "incomplete", "complete"]).optional()
+      profileStatus: z.enum(["missing", "incomplete", "complete"]).optional(),
+      ...sortSchema(studentSort)
     }).strict().safeParse(request.query);
     if (!input.success) { response.status(400).json({ error: "invalid_query" }); return; }
     response.json({ ...await repository!.list(request.session.user!, input.data), page: input.data.page, pageSize: input.data.pageSize });

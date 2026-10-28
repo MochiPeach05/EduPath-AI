@@ -7,14 +7,20 @@ import "./curricula.css";
 import "./careers.css";
 import { CheckedForm, DescriptionField } from "./CheckedForm";
 import { DESCRIPTION_MAX_WORDS } from "./form-checks";
+import { sortRows, useTableSort, type SortRule } from "./table-sort";
 
 const endpoint = "/api/admin/careers/fields";
+// The columns the list sorts by (table-sort.tsx); STT shows the field's number.
+const fieldSort: Record<string, SortRule<CareerField>> = {
+  stt: { value: field => field.code }, name: { value: field => field.name }, description: { value: field => field.description },
+};
 
 export default function CareerFieldsManagement({ canManage }: { canManage: boolean }) {
   const [revision, setRevision] = useState(0);
   const remote = useData<{ items: CareerField[] }>(endpoint, revision);
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
+  const { sort, sortHeader } = useTableSort(() => setPage(1));
   const [selected, setSelected] = useState<CareerField | null>(null);
   const [mode, setMode] = useState<"detail" | "edit" | "delete" | null>(null);
   const close = () => { setMode(null); setSelected(null); };
@@ -36,8 +42,8 @@ export default function CareerFieldsManagement({ canManage }: { canManage: boole
       <Status {...remote} />
       {remote.data && <>
         <div className="cm-table-scroll"><table className="cm-table career-catalog-table">
-          <thead><tr><th className="cm-stt">STT</th><th>Tên lĩnh vực</th><th>Mô tả</th><th>Thao tác</th></tr></thead>
-          <tbody>{items.slice((page - 1) * 10, page * 10).map(field => <tr key={field.id}>
+          <thead><tr>{sortHeader("STT", "stt", "cm-stt")}{sortHeader("Tên lĩnh vực", "name")}{sortHeader("Mô tả", "description")}<th>Thao tác</th></tr></thead>
+          <tbody>{sortRows(items, fieldSort, sort).slice((page - 1) * 10, page * 10).map(({ row: field }) => <tr key={field.id}>
             <td className="cm-stt">{field.code}</td><td><strong>{field.name}</strong></td>
             <td><div className="career-clip" title={field.description || undefined}>{field.description || <span className="career-empty">Chưa bổ sung</span>}</div></td>
             <td><ActionMenu label={`Thao tác với lĩnh vực ${field.name}`} items={[

@@ -12,11 +12,28 @@ import type {
 } from "./curriculum-types";
 import "./curricula.css";
 import { CheckedForm } from "./CheckedForm";
+import { sortParams, sortRows, useTableSort, type SortRule } from "./table-sort";
 
 const endpoint = "/api/admin/curricula";
 const mime =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const date = (s: string) => new Date(s).toLocaleString("vi-VN");
+// The columns the course tables sort by (table-sort.tsx): BB / TC as text (BB, BBKTL, TC, TC1, TC2…), Năm · HK as
+// year then term (Năm 2 · HK 1 → 21); a course without a year comes last.
+const courseSort: Record<string, SortRule<CurriculumCourse>> = {
+  code: { value: (c) => c.code },
+  name: { value: (c) => c.name },
+  credits: { value: (c) => c.credits, by: "number" },
+  type: { value: (c) => c.type },
+  term: { value: (c) => c.studyYear === null ? null : c.studyYear * 10 + (c.semester ?? 0), by: "number" },
+};
+// The columns of Điều kiện học phần that sort: Tiên quyết before Học trước, Cần rà soát first.
+const relationSort: Record<string, SortRule<CurriculumData["relations"][number]>> = {
+  course: { value: (r) => r.courseCode },
+  kind: { value: (r) => r.kind, order: ["prerequisite", "prior"] },
+  raw: { value: (r) => r.raw },
+  review: { value: (r) => r.reviewRequired, order: [true, false] },
+};
 const errors: Record<string, string> = {
   invalid_workbook:
     "Không đọc được tệp Excel. Hãy chọn tệp .xlsx theo mẫu khung CTĐT của Khoa.",
@@ -139,8 +156,10 @@ export default function CurriculaManagement({
   const [notice, setNotice] = useState("");
   const { draft, setDraft, filters, page, setPage, reset, flush } =
     useLiveFilters({ q: "", cohort: "", active: "" });
+  // The server sorts the whole list (curricula/repository.ts); STT stays the row's number in its own order.
+  const { sort, sortHeader } = useTableSort(() => setPage(1));
   const remote = useData<CurriculumList>(
-    `${endpoint}?${new URLSearchParams({ ...filters, page: String(page) })}`,
+    `${endpoint}?${sortParams(sort, new URLSearchParams({ ...filters, page: String(page) }))}`,
     revision,
   );
   useEffect(() => {
@@ -238,19 +257,19 @@ export default function CurriculaManagement({
               <table className="cm-table">
                 <thead>
                   <tr>
-                    <th className="cm-stt">STT</th>
-                    <th>Chương trình đào tạo</th>
-                    <th>Khóa</th>
-                    <th>Học phần</th>
-                    <th>Phiên bản</th>
-                    <th>Trạng thái</th>
+                    {sortHeader("STT", "stt", "cm-stt")}
+                    {sortHeader("Chương trình đào tạo", "name")}
+                    {sortHeader("Khóa", "cohortCode")}
+                    {sortHeader("Học phần", "courseCount")}
+                    {sortHeader("Phiên bản", "version")}
+                    {sortHeader("Trạng thái", "isActive")}
                     <th>Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
                   {remote.data.items.map((c, index) => (
                     <tr key={c.id}>
-                      <td className="cm-stt">{index + 1}</td>
+                      <td className="cm-stt">{c.stt ?? (page - 1) * 10 + index + 1}</td>
                       <td>
                         <strong>{c.name}</strong>
                         <small>
@@ -341,6 +360,7 @@ function ImportDialog({
     [confirmed, setConfirmed] = useState(false);
   const generation = useRef(0);
   const errorSummary = useRef<HTMLParagraphElement>(null);
+  const { sort, sortHeader } = useTableSort();
   useEffect(() => {
     if (error) errorSummary.current?.focus();
   }, [error]);
@@ -452,18 +472,18 @@ function ImportDialog({
                 <table className="cm-table">
                   <thead>
                     <tr>
-                      <th className="cm-stt">STT</th>
-                      <th>Mã</th>
-                      <th>Học phần</th>
-                      <th>Tín chỉ</th>
-                      <th>Loại</th>
-                      <th>Năm · HK</th>
+                      {sortHeader("STT", "stt", "cm-stt")}
+                      {sortHeader("Mã", "code")}
+                      {sortHeader("Học phần", "name")}
+                      {sortHeader("Tín chỉ", "credits")}
+                      {sortHeader("Loại", "type")}
+                      {sortHeader("Năm · HK", "term")}
                     </tr>
                   </thead>
                   <tbody>
-                    {preview.courses.map((c, index) => (
+                    {sortRows(preview.courses, courseSort, sort).map(({ row: c, stt }) => (
                       <tr key={`${c.code}-${c.position}-${c.sourceRow}`}>
-                        <td className="cm-stt">{index + 1}</td>
+                        <td className="cm-stt">{stt}</td>
                         <td>{c.code}</td>
                         <td>{c.name}</td>
                         <td>{c.credits}</td>
@@ -556,6 +576,8 @@ function CurriculumView({
   const heading = useRef<HTMLHeadingElement>(null);
   // Only after a load the person waited for; background refreshes must not move focus.
   useEffect(() => { if (!remote.loading) heading.current?.focus(); }, [remote.loading]);
+  // The sort of the Điều kiện học phần table; Cấu trúc học phần keeps its own (Courses).
+  const { sort, sortHeader } = useTableSort();
   const current = remote.data;
   const historical = current && current.revisionId !== current.history[0]?.id;
   const mutable = canManage && !historical;
@@ -761,17 +783,17 @@ function CurriculumView({
                   <table className="cm-table">
                     <thead>
                       <tr>
-                        <th className="cm-stt">STT</th>
-                        <th>Học phần</th>
-                        <th>Loại điều kiện</th>
-                        <th>Nội dung</th>
-                        <th>Đối chiếu</th>
+                        {sortHeader("STT", "stt", "cm-stt")}
+                        {sortHeader("Học phần", "course")}
+                        {sortHeader("Loại điều kiện", "kind")}
+                        {sortHeader("Nội dung", "raw")}
+                        {sortHeader("Đối chiếu", "review")}
                       </tr>
                     </thead>
                     <tbody>
-                      {current.data.relations.map((r, index) => (
+                      {sortRows(current.data.relations, relationSort, sort).map(({ row: r, stt }) => (
                         <tr key={r.courseCode + r.kind}>
-                          <td className="cm-stt">{index + 1}</td>
+                          <td className="cm-stt">{stt}</td>
                           <td>{r.courseCode}</td>
                           <td>
                             {r.kind === "prior" ? "Học trước" : "Tiên quyết"}
@@ -943,6 +965,8 @@ function Courses({
       .flatMap((g) => rows.filter((c) => c.groupId === g.id))
       .map((c, index) => [c, index + 1]),
   );
+  // A sort moves courses only inside their block, so the block rows stay in place; each course keeps its STT.
+  const { sort, sortHeader } = useTableSort();
   return (
     <>
       <div className="cm-filters">
@@ -1008,12 +1032,12 @@ function Courses({
         <table className="cm-table cm-courses">
           <thead>
             <tr>
-              <th className="cm-stt">STT</th>
-              <th>Mã học phần</th>
-              <th>Tên học phần</th>
-              <th>TC</th>
-              <th>BB / TC</th>
-              <th>Năm · HK</th>
+              {sortHeader("STT", "stt", "cm-stt")}
+              {sortHeader("Mã học phần", "code")}
+              {sortHeader("Tên học phần", "name")}
+              {sortHeader("TC", "credits")}
+              {sortHeader("BB / TC", "type")}
+              {sortHeader("Năm · HK", "term")}
               <th>Thao tác</th>
             </tr>
           </thead>
@@ -1064,9 +1088,8 @@ function Courses({
                       </div>
                     </td>
                   </tr>
-                  {rows
-                    .filter((c) => c.groupId === g.id)
-                    .map((c) => (
+                  {sortRows(rows.filter((c) => c.groupId === g.id), courseSort, sort)
+                    .map(({ row: c }) => (
                       <Fragment key={`${c.code}-${c.position}-${c.sourceRow}`}>
                         <tr>
                           <td className="cm-stt">{stt.get(c)}</td>

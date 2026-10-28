@@ -6,6 +6,7 @@ import type { PlanData, PlanDetail, PlanItem, PlanList } from "./plan-types";
 import "./curricula.css";
 import "./plans.css";
 import { CheckedForm } from "./CheckedForm";
+import { sortParams, sortRows, useTableSort, type SortRule } from "./table-sort";
 
 const endpoint = "/api/admin/plans";
 const mime =
@@ -18,6 +19,14 @@ const fold = (s: string) =>
     .toLowerCase()
     .trim();
 const date = (s: string) => new Date(s).toLocaleString("vi-VN");
+// The columns the plan table sorts by (table-sort.tsx); Tiên quyết / Học trước by its two texts in that order.
+const itemSort: Record<string, SortRule<PlanItem>> = {
+  code: { value: (i) => i.code },
+  name: { value: (i) => i.name },
+  credits: { value: (i) => i.credits, by: "number" },
+  type: { value: (i) => i.type },
+  relations: { value: (i) => [i.prerequisite, i.prior].join(" ") },
+};
 const messages: Record<string, string> = {
   invalid_workbook:
     "Không đọc được Excel. Hãy dùng tệp .xlsx theo mẫu kế hoạch của Khoa.",
@@ -130,8 +139,10 @@ export default function PlansManagement({ canManage }: { canManage: boolean }) {
     [notice, setNotice] = useState("");
   const { draft, setDraft, filters, page, setPage, reset, flush } =
     useLiveFilters({ q: "", cohort: "", active: "" });
+  // The server sorts the whole list (plans/repository.ts); STT stays the row's number in its own order.
+  const { sort, sortHeader } = useTableSort(() => setPage(1));
   const remote = useData<PlanList>(
-    `${endpoint}?${new URLSearchParams({ ...filters, page: String(page) })}`,
+    `${endpoint}?${sortParams(sort, new URLSearchParams({ ...filters, page: String(page) }))}`,
     revision,
   );
   useEffect(() => {
@@ -230,19 +241,19 @@ export default function PlansManagement({ canManage }: { canManage: boolean }) {
               <table className="cm-table">
                 <thead>
                   <tr>
-                    <th className="cm-stt">STT</th>
-                    <th>Kế hoạch đào tạo</th>
-                    <th>Khóa</th>
-                    <th>Lượt môn</th>
-                    <th>Phiên bản</th>
-                    <th>Trạng thái</th>
+                    {sortHeader("STT", "stt", "cm-stt")}
+                    {sortHeader("Kế hoạch đào tạo", "name")}
+                    {sortHeader("Khóa", "cohortCode")}
+                    {sortHeader("Lượt môn", "itemCount")}
+                    {sortHeader("Phiên bản", "version")}
+                    {sortHeader("Trạng thái", "isActive")}
                     <th>Thao tác</th>
                   </tr>
                 </thead>
                 <tbody>
                   {remote.data.items.map((p, index) => (
                     <tr key={p.id}>
-                      <td className="cm-stt">{index + 1}</td>
+                      <td className="cm-stt">{p.stt ?? (page - 1) * 10 + index + 1}</td>
                       <td>
                         <strong>{p.name}</strong>
                         <small>
@@ -555,6 +566,19 @@ function PlanStructure({
       .flatMap((t) => items.filter((i) => i.termCode === t.code))
       .map((i, index) => [i.id, index + 1]),
   );
+  // A sort moves rows only inside each run of one section in a term, so the term and section headings stay in
+  // place; each row keeps its STT.
+  const { sort, sortHeader } = useTableSort();
+  const termItems = (code: string) =>
+    items
+      .filter((i) => i.termCode === code)
+      .reduce<PlanItem[][]>((runs, i) => {
+        const run = runs.at(-1);
+        if (run?.[0].sectionId === i.sectionId) run.push(i);
+        else runs.push([i]);
+        return runs;
+      }, [])
+      .flatMap((run) => sortRows(run, itemSort, sort).map(({ row }) => row));
   return (
     <>
       <div className="cm-filters">
@@ -604,12 +628,12 @@ function PlanStructure({
         <table className="cm-table cm-courses">
           <thead>
             <tr>
-              <th className="cm-stt">STT</th>
-              <th>Mã học phần</th>
-              <th>Tên học phần</th>
-              <th>TC</th>
-              <th>Loại môn</th>
-              <th>Tiên quyết / Học trước</th>
+              {sortHeader("STT", "stt", "cm-stt")}
+              {sortHeader("Mã học phần", "code")}
+              {sortHeader("Tên học phần", "name")}
+              {sortHeader("TC", "credits")}
+              {sortHeader("Loại môn", "type")}
+              {sortHeader("Tiên quyết / Học trước", "relations")}
               <th>Thao tác</th>
             </tr>
           </thead>
@@ -625,8 +649,7 @@ function PlanStructure({
                     </span>
                   </th>
                 </tr>
-                {items
-                  .filter((i) => i.termCode === t.code)
+                {termItems(t.code)
                   .map((i, index, all) => (
                     <Fragment key={i.id}>
                       {i.sectionId !== all[index - 1]?.sectionId && (

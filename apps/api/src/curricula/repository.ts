@@ -4,6 +4,15 @@ import type { PoolClient } from "pg";
 import type { DatabasePool } from "../db/pool.js";
 import { adminRoles, type AuthenticatedUser } from "../auth/types.js";
 import { CurriculumError, rebuild, type CurriculumData } from "./model.js";
+import { byOrder, byText, orderBy, type OwnOrder, type SortDirection } from "../admin/table-sort.js";
+
+// The columns the list sorts by (web CurriculaManagement.tsx, admin/table-sort.ts): Khóa K9 before K29, Phiên bản by
+// number then the last update, Trạng thái Đang mở first.
+export const curriculumSort = {
+  name: byText("name"), cohortCode: byText('"cohortCode"'), courseCount: ['"courseCount"'],
+  version: ["version", '"updatedAt"'], isActive: byOrder('"isActive"', ["true", "false"]),
+};
+const curriculumOrder: OwnOrder = [['"cohortCode"', "DESC"], ["id", "ASC"]];
 
 export const identity = (data: CurriculumData) =>
   `${data.major
@@ -28,7 +37,8 @@ export class CurriculumRepository {
     );
     if (!result.rowCount) throw new CurriculumError("insufficient_role", 403);
   }
-  async list(q: string, cohort: string, active: string, page: number) {
+  async list(q: string, cohort: string, active: string, page: number, sort?: string, dir?: SortDirection) {
+    const order = orderBy(curriculumSort, curriculumOrder, sort, dir);
     const result = await this.pool.query(
       `WITH filtered AS (
       SELECT c.id,c.cohort_code AS "cohortCode",c.is_active AS "isActive",c.updated_at AS "updatedAt",r.version,
@@ -38,8 +48,9 @@ export class CurriculumRepository {
       WHERE ($1='' OR strpos(lower(concat_ws(' ',r.data->>'name',r.data->>'major',c.cohort_code,
         (SELECT string_agg(cc.specialty,' ') FROM curriculum_courses cc WHERE cc.revision_id=r.id))),lower($1))>0)
       AND ($2='' OR c.cohort_code=$2) AND ($3='' OR c.is_active=($3='true'))
-    ), paged AS (SELECT * FROM filtered ORDER BY "cohortCode" DESC,id LIMIT 10 OFFSET $4)
-    SELECT COALESCE((SELECT json_agg(paged) FROM paged),'[]') AS items,(SELECT count(*)::int FROM filtered) AS total`,
+    ), numbered AS (SELECT filtered.*, row_number() OVER (ORDER BY ${orderBy(curriculumSort, curriculumOrder)})::int AS stt FROM filtered),
+    paged AS (SELECT * FROM numbered ORDER BY ${order} LIMIT 10 OFFSET $4)
+    SELECT COALESCE((SELECT json_agg(paged ORDER BY ${order}) FROM paged),'[]') AS items,(SELECT count(*)::int FROM filtered) AS total`,
       [q, cohort, active, (page - 1) * 10],
     );
     const options = await this.pool.query(

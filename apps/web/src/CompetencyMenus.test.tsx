@@ -45,7 +45,7 @@ describe("course row menu (2026-10-20)", () => {
 
   it("lists the shared courses with their cohorts and filters by cohort (Cấu hình môn học)", () => {
     const html = render();
-    expect(html).toContain("<th>Môn học</th><th>Khóa áp dụng</th>");
+    expect(html).toMatch(/<span>Môn học<\/span>.*?<\/th><th scope="col"><button[^>]*><span>Khóa áp dụng<\/span>/);
     expect(html).toContain("<td>K29, K30</td>");
     expect(html).toContain('<option value="" selected="">Tất cả khóa</option><option value="K30">K30 · 87 môn</option><option value="K29">K29 · 88 môn</option>');
     expect(html).toContain("Đã gộp cấu hình khác của K29 · phiên bản 1; xem lịch sử.");

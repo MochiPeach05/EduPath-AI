@@ -78,3 +78,17 @@ describe("CurriculumRepository revision persistence", () => {
     expect(client.release).toHaveBeenCalledOnce();
   });
 });
+
+describe("CurriculumRepository.list", () => {
+  it("numbers the rows in the list's own order and sorts the whole list by a known column before paging", async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [] });
+    const repository = new CurriculumRepository({ query } as unknown as DatabasePool);
+    await repository.list("", "", "", 2, "version", "desc");
+    const [sql, values] = query.mock.calls[0]!;
+    expect(sql).toContain('row_number() OVER (ORDER BY "cohortCode" DESC, id ASC)::int AS stt FROM filtered');
+    expect(sql).toContain('FROM numbered ORDER BY version DESC NULLS LAST, "updatedAt" DESC NULLS LAST, "cohortCode" DESC, id ASC LIMIT 10 OFFSET $4');
+    expect(values).toEqual(["", "", "", 10]);
+    await repository.list("", "", "", 1, "name; DROP TABLE curricula", "asc");
+    expect(query.mock.calls[2]![0]).toContain('FROM numbered ORDER BY "cohortCode" DESC, id ASC LIMIT 10 OFFSET $4');
+  });
+});
