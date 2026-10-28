@@ -8,6 +8,7 @@ const AI_WORKER_ENV_KEYS = [
   "OLLAMA_MODEL",
   "OLLAMA_CONTEXT",
   "OLLAMA_NUM_GPU",
+  "OLLAMA_EMBED_NUM_GPU",
   "AI_TIMEOUT_MS"
 ] as const;
 
@@ -28,6 +29,11 @@ interface AiWorkerConfig {
   model: string;
   contextLength: number;
   numGpu?: number;
+  /**
+   * GPU layers of the embedding model of "Trợ lý AI" (its name comes with each job). Default 0: it runs on the CPU
+   * so the 4 GB GPU stays with Gemma.
+   */
+  embedNumGpu: number;
   timeoutMs: number;
 }
 
@@ -107,6 +113,7 @@ export function loadAiWorkerConfig(env: AiWorkerEnv): AiWorkerConfig {
 
   const contextLength = parseInteger("OLLAMA_CONTEXT", env.OLLAMA_CONTEXT, DEFAULT_OLLAMA_CONTEXT, 4096, 131072);
   const timeoutMs = parseInteger("AI_TIMEOUT_MS", env.AI_TIMEOUT_MS, DEFAULT_AI_TIMEOUT_MS, 60_000, 1_800_000);
+  const embedNumGpu = parseInteger("OLLAMA_EMBED_NUM_GPU", env.OLLAMA_EMBED_NUM_GPU, 0, 0, 999);
   const numGpuValue = env.OLLAMA_NUM_GPU?.trim();
   const config: AiWorkerConfig = {
     apiUrl: api.origin,
@@ -114,6 +121,7 @@ export function loadAiWorkerConfig(env: AiWorkerEnv): AiWorkerConfig {
     ollamaUrl: ollama.origin,
     model,
     contextLength,
+    embedNumGpu,
     timeoutMs
   };
   if (numGpuValue) config.numGpu = parseInteger("OLLAMA_NUM_GPU", numGpuValue, 0, 0, 999);

@@ -6,7 +6,9 @@ import {
   buildChatBody,
   getOllamaModelInfo,
   ollamaChat,
+  ollamaEmbed,
   parseAiOutput,
+  parseAssistantOutput,
   parseCareerSuggestionOutput,
   parseCourseSuggestionOutput,
   parseGraduationAdviceOutput,
@@ -97,6 +99,15 @@ describe("buildChatBody", () => {
   it("adds num_gpu when configured and falls back to the configured context", () => {
     const body = buildChatBody({ ...runtime, numGpu: 34 }, { ...job, options: {} });
     expect(body.options).toEqual({ num_ctx: 16384, num_gpu: 34 });
+  });
+
+  it("sends no format at all for a plain-text answer (schema null or undefined)", () => {
+    for (const schema of [null, undefined]) {
+      const body = buildChatBody(runtime, { ...job, schema });
+      expect("format" in body).toBe(false);
+      expect(JSON.stringify(body)).not.toContain("format");
+      expect(body.stream).toBe(true);
+    }
   });
 });
 
@@ -216,6 +227,132 @@ describe("ollamaChat", () => {
     const pending = ollamaChat(runtime, job, { fetch }, controller.signal);
     setTimeout(() => controller.abort(), 10);
     await expect(pending).rejects.toBeInstanceOf(GenerationAbortedError);
+  });
+
+  it("reports the answer so far through onContent whenever it grows, never the thinking", async () => {
+    const seen: string[] = [];
+    const chunks = [
+      line({ message: { role: "assistant", content: "", thinking: "BÍ MẬT SUY NGHĨ" } }),
+      line({ message: { content: "", thinking: " vẫn nghĩ" } }),
+      line({ message: { content: "Bạn " } }) + line({ message: { content: "nên " } }),
+      line({ message: { content: "" } }),
+      line({ message: { content: "học SQL." } }).slice(0, 10),
+      line({ message: { content: "học SQL." } }).slice(10),
+      doneLine()
+    ];
+    const { fetch } = fetchReturning(streamResponse(chunks));
+    const result = await ollamaChat(runtime, { ...job, schema: null, think: true }, { fetch, onContent: (content) => seen.push(content) });
+    expect(result.content).toBe("Bạn nên học SQL.");
+    expect(seen).toEqual(["Bạn nên ", "Bạn nên học SQL."]);
+    expect(seen.join()).not.toContain("BÍ MẬT");
+  });
+
+  it("reports content that arrives in a last line without a newline", async () => {
+    const seen: string[] = [];
+    const { fetch } = fetchReturning(streamResponse([line({ message: { content: "Xin " } }), JSON.stringify({ message: { content: "chào" }, done: true, done_reason: "stop" })]));
+    await ollamaChat(runtime, { ...job, schema: null }, { fetch, onContent: (content) => seen.push(content) });
+    expect(seen).toEqual(["Xin ", "Xin chào"]);
+  });
+});
+
+describe("ollamaEmbed", () => {
+  const embedRuntime = { ollamaUrl: "http://127.0.0.1:11434", timeoutMs: 600_000 };
+  const spec = { model: "embeddinggemma", inputs: ["task: search result | query: SQL", "title: none | text: Cơ sở dữ liệu"] };
+  const fetchJson = (body: unknown, status = 200) => fetchReturning(new Response(JSON.stringify(body), { status }));
+
+  it("posts every input to /api/embed on the CPU and returns one rounded vector per input", async () => {
+    const { fetch, calls } = fetchJson({ model: "embeddinggemma", embeddings: [[0.12345678, -0.5, 1e-9], [0.000_000_6, 0.25, -0.987_654_321]], total_duration: 1 });
+    const vectors = await ollamaEmbed(embedRuntime, spec, { numGpu: 0, fetch });
+    expect(vectors).toEqual([[0.123457, -0.5, 0], [0.000001, 0.25, -0.987654]]);
+    expect(calls[0]?.url).toBe("http://127.0.0.1:11434/api/embed");
+    expect(calls[0]?.init?.method).toBe("POST");
+    expect(calls[0]?.init?.redirect).toBe("error");
+    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({
+      model: "embeddinggemma",
+      input: spec.inputs,
+      truncate: true,
+      keep_alive: "15m",
+      options: { num_gpu: 0 }
+    });
+  });
+
+  it("passes the configured GPU layers", async () => {
+    const { fetch, calls } = fetchJson({ embeddings: [[1], [2]] });
+    await ollamaEmbed(embedRuntime, spec, { numGpu: 12, fetch });
+    expect(JSON.parse(String(calls[0]?.init?.body)).options).toEqual({ num_gpu: 12 });
+  });
+
+  it.each<[string, unknown, string]>([
+    ["fewer vectors than inputs", { embeddings: [[0.1, 0.2]] }, "embedding_count"],
+    ["no embeddings", { model: "embeddinggemma" }, "embedding_count"],
+    ["vectors of different lengths", { embeddings: [[0.1, 0.2], [0.1]] }, "embedding_dimensions"],
+    ["a vector that is not an array", { embeddings: [[0.1, 0.2], "x"] }, "embedding_dimensions"],
+    ["empty vectors", { embeddings: [[], []] }, "embedding_empty"],
+    ["a null value", { embeddings: [[0.1, null], [0.1, 0.2]] }, "embedding_not_finite"],
+    ["a string value", { embeddings: [[0.1, 0.2], [0.1, "0.2"]] }, "embedding_not_finite"]
+  ])("fails with ai_failed on %s", async (_name, body, detail) => {
+    await expect(ollamaEmbed(embedRuntime, spec, { numGpu: 0, ...fetchJson(body) })).rejects.toMatchObject({ code: "ai_failed", detail });
+  });
+
+  it("fails with ai_failed on a body that is not JSON", async () => {
+    await expect(ollamaEmbed(embedRuntime, spec, { numGpu: 0, ...fetchReturning(new Response("<html>")) })).rejects.toMatchObject({
+      code: "ai_failed",
+      detail: "response_not_json"
+    });
+  });
+
+  it("maps a refused connection, a missing model and a model that cannot embed to ollama_unavailable, other HTTP errors to ai_failed", async () => {
+    const refused: FetchLike = async () => {
+      throw new TypeError("fetch failed", { cause: Object.assign(new Error("connect ECONNREFUSED"), { code: "ECONNREFUSED" }) });
+    };
+    await expect(ollamaEmbed(embedRuntime, spec, { numGpu: 0, fetch: refused })).rejects.toMatchObject({ code: "ollama_unavailable", detail: "connection_failed" });
+    const notPulled = { error: "model \"embeddinggemma\" not found, try pulling it first" };
+    await expect(ollamaEmbed(embedRuntime, spec, { numGpu: 0, ...fetchJson(notPulled, 404) })).rejects.toMatchObject({ code: "ollama_unavailable", detail: "ollama_http_404" });
+    await expect(ollamaEmbed(embedRuntime, spec, { numGpu: 0, ...fetchJson(notPulled, 400) })).rejects.toMatchObject({ code: "ollama_unavailable", detail: "ollama_http_400" });
+    await expect(ollamaEmbed(embedRuntime, spec, { numGpu: 0, ...fetchJson({ error: "This server does not support embeddings" }, 501) })).rejects.toMatchObject({
+      code: "ollama_unavailable"
+    });
+    await expect(ollamaEmbed(embedRuntime, spec, { numGpu: 0, ...fetchJson({ error: "out of memory" }, 500) })).rejects.toMatchObject({ code: "ai_failed", detail: "ollama_http_500" });
+    await expect(ollamaEmbed(embedRuntime, spec, { numGpu: 0, ...fetchJson({ error: "bad input" }, 400) })).rejects.toMatchObject({ code: "ai_failed", detail: "ollama_http_400" });
+  });
+
+  /** A fetch that answers only when its signal aborts, like a model that never finishes. */
+  const hangingFetch: FetchLike = (_url, init) =>
+    new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(new DOMException("This operation was aborted", "AbortError")), { once: true });
+    });
+
+  it("aborts with ai_timeout at the deadline", async () => {
+    vi.useFakeTimers();
+    const assertion = expect(ollamaEmbed({ ...embedRuntime, timeoutMs: 60_000 }, spec, { numGpu: 0, fetch: hangingFetch })).rejects.toMatchObject({
+      code: "ai_timeout",
+      detail: "overall_timeout"
+    });
+    await vi.advanceTimersByTimeAsync(61_000);
+    await assertion;
+  });
+
+  it("throws GenerationAbortedError when the caller aborts, also before the call", async () => {
+    const controller = new AbortController();
+    const pending = ollamaEmbed(embedRuntime, spec, { numGpu: 0, fetch: hangingFetch }, controller.signal);
+    setTimeout(() => controller.abort(), 10);
+    await expect(pending).rejects.toBeInstanceOf(GenerationAbortedError);
+    const unused = fetchJson({ embeddings: [[1], [2]] });
+    await expect(ollamaEmbed(embedRuntime, spec, { numGpu: 0, fetch: unused.fetch }, controller.signal)).rejects.toBeInstanceOf(GenerationAbortedError);
+    expect(unused.calls).toHaveLength(0);
+  });
+});
+
+describe("parseAssistantOutput", () => {
+  it("returns the trimmed plain-text answer and is the check of the assistant_chat kind", () => {
+    expect(parseAssistantOutput("\n  Bạn nên học **SQL** trước.  \n")).toEqual({ answer: "Bạn nên học **SQL** trước." });
+    expect(parseJobOutput("assistant_chat", " {\"not\": \"json-checked\"} ")).toEqual({ answer: "{\"not\": \"json-checked\"}" });
+  });
+
+  it("rejects an empty or blank answer as invalid_ai_output", () => {
+    for (const content of ["", "   ", "\n\t "]) {
+      expect(() => parseJobOutput("assistant_chat", content)).toThrowError(expect.objectContaining({ code: "invalid_ai_output", detail: "answer" }));
+    }
   });
 });
 

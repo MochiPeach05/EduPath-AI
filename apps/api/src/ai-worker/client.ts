@@ -1,5 +1,13 @@
 import { z } from "zod";
-import { AI_JOB_KINDS, COMPETENCY_ASSESSMENT_KIND, type AiJobKind } from "../competency-assessment/ai/worker-protocol.js";
+import {
+  assistantClaimSchema,
+  knowledgeClaimSchema,
+  preparedPromptSchema,
+  type PreparedPrompt,
+  type prepareBodySchema,
+  type progressBodySchema
+} from "../assistant/protocol.js";
+import { AI_JOB_KINDS, COMPETENCY_ASSESSMENT_KIND, GENERATION_JOB_KINDS, type AiJobKind } from "../competency-assessment/ai/worker-protocol.js";
 import type { AiErrorCode, FetchLike, OllamaMetrics } from "./ollama.js";
 
 const WORKER_API_PATH = "/api/worker/competency-assessments";
@@ -18,9 +26,10 @@ export class WorkerApiError extends Error {
   }
 }
 
-const claimedJobSchema = z.object({
+/** A job that carries its prompt: one Ollama chat call with system, user, schema and options. */
+const generationJobSchema = z.object({
   /** Servers released before career suggestions send no kind; their jobs are competency assessments. */
-  kind: z.enum(AI_JOB_KINDS).default(COMPETENCY_ASSESSMENT_KIND),
+  kind: z.enum(GENERATION_JOB_KINDS).default(COMPETENCY_ASSESSMENT_KIND),
   id: z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i),
   leaseToken: z.string().min(1).max(200),
   promptVersion: z.string().min(1).max(64),
@@ -31,19 +40,30 @@ const claimedJobSchema = z.object({
   /** Gemma's thinking mode; course proposals and student comments ask for it. Absent means off. */
   think: z.boolean().optional()
 });
+/** Or a "Trợ lý AI" job without a prompt (assistant/protocol.ts): a student's question, or knowledge texts to embed. */
+const claimedJobSchema = z.union([generationJobSchema, assistantClaimSchema, knowledgeClaimSchema]);
 const claimResponseSchema = z.object({ job: claimedJobSchema.nullable() });
 const extendResponseSchema = z.object({ leaseUntil: z.string().min(1) });
 
+export type GenerationJob = z.infer<typeof generationJobSchema>;
 export type ClaimedJob = z.infer<typeof claimedJobSchema>;
 
+/** Ollama's chat metrics, plus the embedding time (embed_ms) and the number of vectors (count) of embedding work. */
+export type JobMetrics = OllamaMetrics & { embed_ms?: number; count?: number };
+
 export type CompleteBody =
-  | { leaseToken: string; model: string; digest: string; ollamaVersion: string; metrics: OllamaMetrics; output: Record<string, unknown> }
+  | { leaseToken: string; model: string; digest: string; ollamaVersion: string; metrics: JobMetrics; output: Record<string, unknown> }
   | { leaseToken: string; error: AiErrorCode };
 
 export interface WorkerClient {
   heartbeat(): Promise<void>;
+  /** The server may hold an empty claim up to CLAIM_WAIT_MS (12 s) for a question to arrive. */
   claim(): Promise<ClaimedJob | null>;
   extend(jobId: string, leaseToken: string): Promise<{ leaseUntil: string }>;
+  /** assistant_chat: the question's vector (null when embedding failed) in, the prompt to run out. */
+  prepare(jobId: string, body: z.infer<typeof prepareBodySchema>): Promise<PreparedPrompt>;
+  /** assistant_chat: the answer so far, shown to the student while Gemma writes. */
+  progress(jobId: string, body: z.infer<typeof progressBodySchema>): Promise<void>;
   complete(jobId: string, body: CompleteBody): Promise<void>;
 }
 
@@ -126,7 +146,7 @@ export function createWorkerClient(options: WorkerClientOptions): WorkerClient {
       await post("/heartbeat", { kinds });
     },
     async claim() {
-      const parsed = claimResponseSchema.safeParse(await post("/claim", { kinds }));
+      const parsed = claimResponseSchema.safeParse(await post("/claim", { kinds, wait: true }));
       if (!parsed.success) throw new WorkerApiError(200, "invalid_claim_response");
       return parsed.data.job;
     },
@@ -134,6 +154,14 @@ export function createWorkerClient(options: WorkerClientOptions): WorkerClient {
       const parsed = extendResponseSchema.safeParse(await post(`/${encodeURIComponent(jobId)}/extend`, { leaseToken }));
       if (!parsed.success) throw new WorkerApiError(200, "invalid_extend_response");
       return parsed.data;
+    },
+    async prepare(jobId, body) {
+      const parsed = preparedPromptSchema.safeParse(await post(`/${encodeURIComponent(jobId)}/prepare`, { leaseToken: body.leaseToken, vector: body.vector }));
+      if (!parsed.success) throw new WorkerApiError(200, "invalid_prepare_response");
+      return parsed.data;
+    },
+    async progress(jobId, body) {
+      await post(`/${encodeURIComponent(jobId)}/progress`, { leaseToken: body.leaseToken, content: body.content });
     },
     async complete(jobId, body) {
       await post(`/${encodeURIComponent(jobId)}/complete`, body);

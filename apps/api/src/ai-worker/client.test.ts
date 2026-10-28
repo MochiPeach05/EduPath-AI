@@ -70,12 +70,18 @@ describe("createWorkerClient", () => {
 });
 
 describe("job kinds", () => {
-  it("advertises every supported kind on heartbeat and claim and reads the job kind", async () => {
+  const allKinds = [
+    "competency_assessment", "career_skill_suggestion", "graduation_advice", "competency_course_suggestion_v2", "study_roadmap",
+    "assistant_chat", "knowledge_embedding"
+  ];
+
+  it("advertises every supported kind on heartbeat and claim, asks the server to wait on claim and reads the job kind", async () => {
     const { calls, fetch } = recorder(() => Response.json({ job: { ...claimed, kind: "career_skill_suggestion" } }));
     const client = createWorkerClient({ apiUrl: "http://localhost:4000", workerKey: key, fetch });
     await client.heartbeat();
     expect((await client.claim())?.kind).toBe("career_skill_suggestion");
-    for (const call of calls) expect(JSON.parse(String(call.init?.body))).toEqual({ kinds: ["competency_assessment", "career_skill_suggestion", "graduation_advice", "competency_course_suggestion_v2", "study_roadmap"] });
+    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ kinds: allKinds });
+    expect(JSON.parse(String(calls[1]?.init?.body))).toEqual({ kinds: allKinds, wait: true });
   });
 
   it("reads a graduation advice job", async () => {
@@ -88,6 +94,72 @@ describe("job kinds", () => {
     const { calls, fetch } = recorder(() => Response.json({ job: { ...claimed, kind: "something_new" } }));
     const client = createWorkerClient({ apiUrl: "http://localhost:4000", workerKey: key, fetch, kinds: ["competency_assessment"] });
     await expect(client.claim()).rejects.toMatchObject({ code: "invalid_claim_response" });
-    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ kinds: ["competency_assessment"] });
+    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ kinds: ["competency_assessment"], wait: true });
+  });
+});
+
+describe("Trợ lý AI jobs", () => {
+  const question = {
+    kind: "assistant_chat",
+    id: "33333333-3333-4333-8333-333333333333",
+    leaseToken: "44444444-4444-4444-8444-444444444444",
+    promptVersion: "assistant-v1",
+    embed: { model: "embeddinggemma", inputs: ["task: search result | query: Học phần nào cần học trước?"] }
+  };
+  const batch = {
+    kind: "knowledge_embedding",
+    id: "55555555-5555-4555-8555-555555555555",
+    leaseToken: "66666666-6666-4666-8666-666666666666",
+    promptVersion: "knowledge-v1",
+    embed: { model: "embeddinggemma", inputs: ["title: A | text: x", "title: B | text: y"] }
+  };
+  const prompt = { system: "s", user: "u", options: { num_ctx: 8192, temperature: 0.3 }, think: false, promptVersion: "assistant-v1" };
+  const claimOf = (job: unknown) => createWorkerClient({ apiUrl: "http://localhost:4000", workerKey: key, fetch: recorder(() => Response.json({ job })).fetch });
+
+  it("reads a claimed question (with or without an embedding to make) and a knowledge batch, which carry no prompt", async () => {
+    expect(await claimOf(question).claim()).toEqual(question);
+    expect(await claimOf({ ...question, embed: null }).claim()).toEqual({ ...question, embed: null });
+    expect(await claimOf(batch).claim()).toEqual(batch);
+  });
+
+  it.each<[string, unknown]>([
+    ["a generation job without its prompt", { ...claimed, kind: "graduation_advice", system: undefined }],
+    ["a question with a cloud embedding model", { ...question, embed: { model: "embeddinggemma-cloud", inputs: ["x"] } }],
+    ["a question without the embed field", { ...question, embed: undefined }],
+    ["a knowledge batch without texts", { ...batch, embed: null }],
+    ["a knowledge batch with an empty text", { ...batch, embed: { model: "embeddinggemma", inputs: [""] } }],
+    ["a question with a bad id", { ...question, id: "../admin" }]
+  ])("rejects %s", async (_name, job) => {
+    await expect(claimOf(job).claim()).rejects.toMatchObject({ status: 200, code: "invalid_claim_response" });
+  });
+
+  it("prepare posts the lease and the vector (or null) and returns the prompt", async () => {
+    const { calls, fetch } = recorder(() => Response.json({ ...prompt, extra: "dropped" }));
+    const client = createWorkerClient({ apiUrl: "http://localhost:4000", workerKey: key, fetch });
+    expect(await client.prepare(question.id, { leaseToken: question.leaseToken, vector: [0.1, -0.2] })).toEqual(prompt);
+    await client.prepare(question.id, { leaseToken: question.leaseToken, vector: null });
+    expect(calls[0]?.url).toBe(`http://localhost:4000/api/worker/competency-assessments/${question.id}/prepare`);
+    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ leaseToken: question.leaseToken, vector: [0.1, -0.2] });
+    expect(JSON.parse(String(calls[1]?.init?.body))).toEqual({ leaseToken: question.leaseToken, vector: null });
+  });
+
+  it("prepare rejects a malformed prompt and surfaces 409 job_expired", async () => {
+    for (const body of [{ ...prompt, system: "" }, { ...prompt, think: "no" }, { job: prompt }]) {
+      const client = createWorkerClient({ apiUrl: "http://localhost:4000", workerKey: key, fetch: recorder(() => Response.json(body)).fetch });
+      const error = await client.prepare(question.id, { leaseToken: question.leaseToken, vector: null }).catch((e: unknown) => e);
+      expect(error).toBeInstanceOf(WorkerApiError);
+      expect(error).toMatchObject({ status: 200, code: "invalid_prepare_response" });
+    }
+    const expired = createWorkerClient({ apiUrl: "http://localhost:4000", workerKey: key, fetch: recorder(() => Response.json({ error: "job_expired" }, { status: 409 })).fetch });
+    await expect(expired.prepare(question.id, { leaseToken: question.leaseToken, vector: null })).rejects.toMatchObject({ status: 409, code: "job_expired" });
+  });
+
+  it("progress posts the lease and the answer so far to the job path", async () => {
+    const { calls, fetch } = recorder(() => Response.json({ ok: true }));
+    const client = createWorkerClient({ apiUrl: "http://localhost:4000", workerKey: key, fetch });
+    await client.progress(question.id, { leaseToken: question.leaseToken, content: "Bạn nên học" });
+    expect(calls[0]?.url).toBe(`http://localhost:4000/api/worker/competency-assessments/${question.id}/progress`);
+    expect(calls[0]?.init?.method).toBe("POST");
+    expect(JSON.parse(String(calls[0]?.init?.body))).toEqual({ leaseToken: question.leaseToken, content: "Bạn nên học" });
   });
 });

@@ -1,0 +1,199 @@
+/* "Trợ lý AI" (StudentAssistant.tsx): the conversations on the left, the chat on the right; below 900px a selector above
+   the chat. The chat fills the window under the page heading and scrolls on its own. The assistant wears the AI blue of
+   Lộ trình AI (student-roadmap.css); the student's questions the portal's soft red. */
+.as-page {
+  --as-ai: #1c4182;
+  --as-ai-soft: #e6eef9;
+  --as-ai-line: #cfdaeb;
+  --as-ai-wash: #f4f7fc;
+  --as-width: 860px;
+  display: grid;
+  grid-template-columns: minmax(220px, 290px) minmax(0, 1fr);
+  grid-template-areas: "threads chat";
+  gap: 20px;
+  min-width: 0;
+  height: clamp(540px, calc(100 * var(--ep-vh) - var(--sw-header-height, 92px) - 184px), 1000px);
+  margin-bottom: 32px;
+}
+
+/* Small buttons of the page (confirmations, Thử lại) next to the portal's 44px ones. */
+.as-page :is(.sw-primary, .sw-outline).as-small {
+  --ep-button-height: 34px;
+  padding: 5px 12px;
+  font-size: 12.5px;
+}
+.as-page .as-small > svg { width: 16px; height: 16px; }
+
+/* ---- Conversations (wide) ---- */
+.as-threads { grid-area: threads; display: flex; flex-direction: column; gap: 12px; min-height: 0; padding: 18px 12px 12px; }
+.as-threads > h2 { padding-inline: 6px; font-size: 15px; }
+.as-new { width: 100%; }
+.as-list-note { margin: 0; padding: 4px 6px; color: var(--sw-muted); font-size: 12.5px; line-height: 1.6; }
+.as-list-problem { display: grid; justify-items: start; gap: 8px; color: #7a2a12; }
+.as-list-problem p { margin: 0; }
+.as-thread-list { display: grid; align-content: start; gap: 2px; flex: 1; min-height: 0; margin: 0; padding: 0; overflow-y: auto; list-style: none; scrollbar-width: thin; }
+.as-thread { display: grid; min-width: 0; border-radius: 8px; transition: background-color 150ms ease; }
+.as-thread-row { display: flex; align-items: center; min-width: 0; }
+.as-thread > .as-confirm { width: auto; margin: 0 6px 8px; }
+.as-thread:hover { background: #f5f6f8; }
+.as-thread.is-current { background: var(--sw-soft); }
+.as-thread-open { display: grid; flex: 1; gap: 1px; min-width: 0; padding: 9px 4px 9px 10px; border-radius: 8px; background: none; color: var(--sw-ink); text-align: left; }
+.as-thread-title { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; font-size: 13px; font-weight: 600; line-height: 1.45; overflow-wrap: anywhere; }
+.as-thread.is-current .as-thread-title { color: #8f1531; }
+.as-thread-time { color: var(--sw-muted); font-size: 11.5px; line-height: 1.5; }
+.as-thread-delete { display: inline-grid; flex: none; place-items: center; width: 32px; height: 32px; margin-right: 4px; border-radius: 6px; background: none; color: #98a1b0; }
+.as-thread-delete:hover { background: #fff; color: var(--sw-red); }
+.as-thread-delete svg { width: 16px; height: 16px; }
+/* The list scrolls, so the focus ring is drawn inside the buttons where it cannot be cut off. */
+.as-thread-list :is(button, a):focus-visible { outline-offset: -3px; }
+
+.as-confirm { display: grid; gap: 8px; width: 100%; padding: 10px; border: 1px solid #f1c4cf; border-radius: 8px; background: #fff7f9; }
+.as-confirm p { margin: 0; color: #6f1029; font-size: 13px; font-weight: 600; }
+.as-confirm-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.as-confirm .as-confirm-error { color: #9b1639; font-weight: 500; }
+
+/* ---- Conversations (narrow): a selector above the chat ---- */
+.as-picker { grid-area: picker; display: none; flex-direction: column; gap: 8px; min-width: 0; }
+.as-picker-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.as-picker-select { flex: 1; min-width: 0; }
+.as-picker select { width: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid #d7dce3; border-radius: 8px; background: #fff; color: var(--sw-ink); font-size: 14px; font-weight: 600; text-overflow: ellipsis; }
+.as-page .as-picker-delete { flex: none; width: 44px; padding: 0; color: var(--sw-red); }
+.as-picker-new { flex: none; }
+
+/* ---- Chat ---- */
+.as-chat { grid-area: chat; display: flex; flex-direction: column; min-height: 0; padding: 0; overflow: hidden; }
+.as-offline { display: flex; align-items: flex-start; gap: 10px; margin: 14px 20px 0; padding: 10px 14px; border: 1px solid var(--as-ai-line); border-radius: 8px; background: var(--as-ai-wash); color: var(--as-ai); font-size: 13px; line-height: 1.6; }
+.as-offline svg { width: 18px; height: 18px; margin-top: 2px; }
+.as-offline p { margin: 0; }
+/* position: the questions' offsetTop is measured from here (StudentAssistant scrolls to the last one). */
+.as-scroll { position: relative; flex: 1; min-height: 0; padding: 24px 28px 20px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+.as-state { display: grid; justify-items: center; gap: 8px; max-width: 420px; margin: 48px auto 0; color: var(--sw-muted); font-size: 13.5px; text-align: center; }
+.as-state strong { color: var(--sw-ink); font-size: 15px; }
+.as-state p { margin: 0; }
+
+/* Empty state: a greeting and one starter question per function. */
+.as-welcome { display: grid; justify-items: center; gap: 10px; max-width: 720px; margin: 0 auto; padding: 20px 0 8px; text-align: center; }
+.as-welcome-icon { display: inline-grid; place-items: center; width: 48px; height: 48px; margin-bottom: 4px; border-radius: 14px; background: var(--as-ai-soft); color: var(--as-ai); }
+.as-welcome-icon svg { width: 24px; height: 24px; }
+.sw-shell .as-welcome h2 { font-size: 22px; letter-spacing: -.4px; line-height: 1.35; }
+.as-welcome > p { max-width: 580px; margin: 0; color: var(--sw-muted); font-size: 13.5px; line-height: 1.65; }
+.as-starters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; width: 100%; margin: 16px 0 0; padding: 0; list-style: none; text-align: left; }
+.as-starters li:last-child:nth-child(odd) { grid-column: 1 / -1; justify-self: center; width: calc(50% - 5px); }
+/* .sw-shell: the portal's button reset (border: 0) would otherwise win. */
+.sw-shell .as-starter { display: flex; align-items: center; gap: 12px; width: 100%; height: 100%; padding: 12px 14px; border: 1px solid var(--sw-border); border-radius: 10px; background: #fff; color: var(--sw-ink); font-size: 13.5px; font-weight: 600; line-height: 1.5; text-align: left; }
+.sw-shell .as-starter:hover:not(:disabled) { border-color: var(--ep-control-border-hover); background: var(--ep-control-soft); }
+.as-starter svg { flex: none; width: 18px; height: 18px; color: var(--sw-red); }
+
+.as-messages { display: grid; gap: 22px; max-width: var(--as-width); margin: 0 auto; padding: 0; list-style: none; }
+.as-question { justify-self: end; max-width: min(80%, 620px); padding: 10px 14px; border-radius: 14px 14px 4px 14px; background: var(--sw-soft); color: var(--sw-ink); font-size: 14px; line-height: 1.6; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.as-answer { display: grid; grid-template-columns: 32px minmax(0, 1fr); align-items: start; gap: 12px; }
+.as-avatar { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 9px; background: var(--as-ai-soft); color: var(--as-ai); }
+.as-avatar svg { width: 17px; height: 17px; }
+.as-answer-body { display: grid; justify-items: start; gap: 12px; min-width: 0; padding-top: 4px; }
+.as-answer-text { display: grid; gap: 10px; width: 100%; color: var(--sw-ink); font-size: 14.5px; line-height: 1.7; overflow-wrap: anywhere; }
+.sw-shell .as-answer-text :is(p, ul, ol) { margin: 0; }
+.as-answer-text :is(ul, ol) { display: grid; gap: 4px; padding-left: 22px; }
+/* The answer sits in the list of messages, where browsers would mark a list as nested (circles). */
+.as-answer-text ul { list-style-type: disc; }
+.as-answer-text ol { list-style-type: decimal; }
+.as-answer-text li::marker { color: #8a93a3; }
+.as-answer-text strong { font-weight: 700; }
+.sw-shell .as-answer-text a { color: var(--sw-red); text-decoration: underline; text-underline-offset: 2px; }
+.sw-shell .as-answer-text .as-answer-heading { font-size: 15px; }
+.as-answer-text > .as-dots { margin-top: -2px; }
+
+/* [n]: a small number above the line, a button when its source is known. */
+.as-cite { font-size: 11px; line-height: 0; }
+.as-cite-button { display: inline-grid; place-items: center; min-width: 18px; height: 18px; margin-left: 1px; padding: 0 4px; border-radius: 9px; background: var(--as-ai-soft); color: var(--as-ai); font-size: 11px; font-weight: 800; line-height: 1; vertical-align: 1px; }
+.as-cite-button:hover { background: var(--as-ai); color: #fff; }
+.sw-shell .as-cite-button:focus-visible { outline-width: 2px; outline-offset: 1px; }
+
+.as-sources { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.as-sources-label { color: var(--sw-muted); font-size: 12px; font-weight: 700; }
+.as-source-list { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.as-source { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; min-height: 30px; padding: 4px 11px 4px 5px; border: 1px solid var(--sw-border); border-radius: 999px; background: #fff; color: #33415c; font-size: 12.5px; font-weight: 600; line-height: 1.35; transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease; }
+a.as-source:hover { border-color: var(--as-ai-line); background: var(--as-ai-wash); color: var(--as-ai); }
+.as-source-n { display: inline-grid; flex: none; place-items: center; min-width: 20px; height: 20px; padding: 0 5px; border-radius: 10px; background: var(--as-ai-soft); color: var(--as-ai); font-size: 11px; font-weight: 800; }
+.as-source-title { overflow-wrap: anywhere; }
+.sw-shell .as-source svg { width: 14px; height: 14px; color: #8a93a3; }
+.as-source.is-highlighted { border-color: var(--as-ai); background: var(--as-ai-wash); box-shadow: 0 0 0 3px rgba(28, 65, 130, .16); }
+span.as-source:focus { outline: none; }
+
+.as-feedback { display: flex; gap: 2px; margin: -6px 0 0 -6px; }
+.as-rate { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: none; color: #8a93a3; }
+.as-rate:hover { background: #f3f4f6; color: var(--sw-ink); }
+.sw-shell .as-rate svg { width: 17px; height: 17px; }
+.as-rate-up[aria-pressed="true"] { background: #eaf5ee; color: var(--sw-green); }
+.as-rate-down[aria-pressed="true"] { background: #fdecef; color: #b42335; }
+.as-action-error { margin: 0; color: #9b1639; font-size: 12.5px; }
+
+.as-typing, .as-waiting { display: inline-flex; align-items: center; gap: 10px; margin: 0; padding: 8px 14px; border-radius: 12px; background: var(--as-ai-wash); color: #3d5a8c; font-size: 13.5px; }
+.as-waiting svg { width: 17px; height: 17px; }
+.as-dots { display: inline-flex; align-items: center; gap: 4px; height: 1em; }
+.as-dots i { width: 6px; height: 6px; border-radius: 50%; background: #7e98c4; animation: as-blink 1.2s ease-in-out infinite both; }
+.as-dots i:nth-child(2) { animation-delay: .16s; }
+.as-dots i:nth-child(3) { animation-delay: .32s; }
+@keyframes as-blink {
+  0%, 80%, 100% { opacity: .25; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-2px); }
+}
+.as-failed { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 10px 12px 10px 14px; border: 1px solid #e9d39b; border-radius: 10px; background: #fffaf0; color: #5c4210; font-size: 13.5px; }
+.as-failed p { margin: 0; font-weight: 600; }
+.as-stopped { margin: 0; color: var(--sw-muted); font-size: 13.5px; font-style: italic; }
+
+/* ---- Question box ---- */
+.as-composer { flex: none; padding: 12px 20px 14px; border-top: 1px solid var(--sw-border); background: #fff; }
+.as-composer-inner { display: grid; gap: 8px; max-width: var(--as-width); margin: 0 auto; }
+.as-send-error { margin: 0; padding: 8px 12px; border-radius: 8px; background: #fff0f3; color: #9b1639; font-size: 13px; }
+.as-input { display: flex; align-items: flex-end; gap: 10px; padding: 6px 6px 6px 14px; border: 1px solid #d3d9e1; border-radius: 12px; background: #fff; transition: border-color 150ms ease, box-shadow 150ms ease; }
+.as-input:focus-within { border-color: var(--ep-control-border-hover); box-shadow: 0 0 0 3px rgba(181, 22, 57, .1); }
+.as-input textarea { flex: 1; min-width: 0; min-height: 40px; max-height: 180px; padding: 8px 0; border: 0; background: transparent; color: var(--sw-ink); font-size: 14px; line-height: 1.6; resize: none; overflow-y: auto; }
+.as-input textarea::placeholder { color: #8a93a3; }
+/* The box around it shows the focus. */
+.sw-shell .as-input textarea:focus-visible { outline: none; }
+.as-page .as-send { --ep-button-height: 40px; flex: none; padding: 8px 14px; }
+.as-composer-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; color: var(--sw-muted); font-size: 12px; }
+.as-composer-meta p { margin: 0; }
+.as-counter { margin-left: auto !important; font-variant-numeric: tabular-nums; }
+.as-counter.is-full { color: #b42318; font-weight: 700; }
+.as-notes { display: grid; gap: 1px; color: var(--sw-muted); font-size: 11.5px; line-height: 1.55; }
+.as-notes p { margin: 0; }
+
+@media (max-width: 899.98px) {
+  .as-page {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: "picker" "chat";
+    gap: 12px;
+    /* The page heading stays above it, so the question box shows in the first screen of a phone. */
+    height: max(460px, calc(100 * var(--ep-vh) - var(--sw-header-height, 92px) - 200px));
+  }
+  .as-threads { display: none; }
+  .as-picker { display: flex; }
+  .as-scroll { padding: 20px 18px 16px; }
+  .as-composer { padding: 10px 14px 12px; }
+  .as-offline { margin: 12px 14px 0; }
+  .as-question { max-width: 88%; }
+}
+
+@media (max-width: 600px) {
+  .as-starters { grid-template-columns: minmax(0, 1fr); }
+  .as-starters li:last-child:nth-child(odd) { width: 100%; }
+  .sw-shell .as-welcome h2 { font-size: 19px; }
+  /* The chat is short on a phone: the starter questions come first. */
+  .as-welcome { padding-top: 4px; }
+  .as-welcome-icon { display: none; }
+  .as-picker-new > span { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+  .as-page .as-picker-new { width: 44px; padding: 0; }
+  /* 16px keeps phones from zooming into the field. */
+  .as-input textarea, .as-picker select { font-size: 16px; }
+}
+
+@media (max-width: 480px) {
+  .as-scroll { padding: 16px 12px 12px; }
+  .as-answer { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .as-avatar { width: 28px; height: 28px; }
+  .as-send-label { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+  .as-page .as-send { width: 40px; padding: 0; }
+}

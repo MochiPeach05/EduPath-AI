@@ -1,0 +1,80 @@
+// The worker protocol of "Trợ lý AI" (STU-CHAT-01..05, 2026-10-28), shared by the API (assistant/*, the worker router)
+// and the local worker (ai-worker/*). Two job kinds go through /api/worker/competency-assessments next to the others:
+//
+// assistant_chat: one answer. The claimed job carries the question to embed (or embed: null). The worker embeds it with
+//   the embedding model (on the CPU, so Gemma keeps the GPU), POSTs /:id/prepare { leaseToken, vector } (vector null when
+//   embedding failed: the server then searches by words only) and receives the prompt { system, user, options, think,
+//   promptVersion }. It streams Gemma's answer (plain text, no JSON schema) and POSTs the text so far to /:id/progress
+//   { leaseToken, content } about once a second, then completes with output { answer }.
+// knowledge_embedding: a batch of texts of the shared knowledge index; the worker completes with output { vectors }, one
+//   vector per input, in order.
+//
+// /claim accepts { kinds, wait: true }: with no job, the server waits up to CLAIM_WAIT_MS for a question to answer.
+import { z } from "zod";
+import { ASSISTANT_CHAT_KIND, KNOWLEDGE_EMBEDDING_KIND } from "../competency-assessment/ai/worker-protocol.js";
+
+/**
+ * Google's EmbeddingGemma (308M, 768 dimensions, multilingual), pulled into the worker's Ollama. Gemma 4 itself has no
+ * embedding endpoint ("This server does not support embeddings"). Chunks embedded by another model are embedded again.
+ */
+export const EMBEDDING_MODEL = "embeddinggemma";
+export const EMBEDDING_DIMENSIONS = 768;
+/** EmbeddingGemma's prompt formats for retrieval: the question and a document of the index. */
+export const queryEmbeddingText = (query: string) => `task: search result | query: ${query}`;
+export const documentEmbeddingText = (title: string, text: string) => `title: ${title.trim() || "none"} | text: ${text}`;
+
+export const ASSISTANT_PROMPT_VERSION = "assistant-v1";
+export const KNOWLEDGE_PROMPT_VERSION = "knowledge-v1";
+/** An answer takes well under a minute; a lost worker frees the job after this lease (the worker extends every 3 min). */
+export const ASSISTANT_LEASE_MINUTES = 5;
+/** Texts per knowledge_embedding job (about 32 × 768 numbers stay under the worker router's 512 kB body limit). */
+export const KNOWLEDGE_BATCH = 32;
+/** How long /claim with wait: true holds an empty claim for a question to arrive. */
+export const CLAIM_WAIT_MS = 12_000;
+/** Longest question (characters); the web page checks the same (ASSISTANT_MAX_QUESTION). */
+export const MAX_QUESTION_CHARS = 1000;
+/** Longest answer the server stores, and the longest text /progress accepts. */
+export const MAX_ANSWER_CHARS = 12_000;
+
+const uuid = z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+/** A local Ollama model name (the worker refuses cloud models). */
+export const localModelName = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/).refine((name) => !/cloud/i.test(name), "cloud_model");
+export const embedSpecSchema = z.object({
+  model: localModelName,
+  inputs: z.array(z.string().min(1).max(8000)).min(1).max(64),
+});
+export type EmbedSpec = z.infer<typeof embedSpecSchema>;
+
+export const assistantClaimSchema = z.object({
+  kind: z.literal(ASSISTANT_CHAT_KIND),
+  id: uuid,
+  leaseToken: z.string().min(1).max(200),
+  promptVersion: z.string().min(1).max(64),
+  embed: embedSpecSchema.nullable(),
+});
+export const knowledgeClaimSchema = z.object({
+  kind: z.literal(KNOWLEDGE_EMBEDDING_KIND),
+  id: uuid,
+  leaseToken: z.string().min(1).max(200),
+  promptVersion: z.string().min(1).max(64),
+  embed: embedSpecSchema,
+});
+export type AssistantClaim = z.infer<typeof assistantClaimSchema>;
+export type KnowledgeClaim = z.infer<typeof knowledgeClaimSchema>;
+
+export const prepareBodySchema = z.object({
+  leaseToken: z.uuid(),
+  vector: z.array(z.number().finite()).min(1).max(4096).nullable(),
+}).strict();
+export const preparedPromptSchema = z.object({
+  system: z.string().min(1),
+  user: z.string().min(1),
+  options: z.record(z.string(), z.unknown()),
+  think: z.boolean(),
+  promptVersion: z.string().min(1).max(64),
+});
+export type PreparedPrompt = z.infer<typeof preparedPromptSchema>;
+export const progressBodySchema = z.object({ leaseToken: z.uuid(), content: z.string().max(MAX_ANSWER_CHARS) }).strict();
+
+export const assistantOutputSchema = z.object({ answer: z.string().trim().min(1).max(MAX_ANSWER_CHARS) });
+export const knowledgeOutputSchema = z.object({ vectors: z.array(z.array(z.number().finite()).min(1).max(4096)).min(1).max(64) });

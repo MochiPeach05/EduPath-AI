@@ -253,7 +253,8 @@ try {
   const timings = {};
   const claimed = [];
   const events = [];
-  const baseClient = createWorkerClient({ apiUrl: baseUrl, workerKey });
+  // The kinds this check runs (the client's default also advertises the Trợ lý AI kinds, whose tables this schema lacks).
+  const baseClient = createWorkerClient({ apiUrl: baseUrl, workerKey, kinds: ["competency_assessment", "career_skill_suggestion"] });
   const client = { ...baseClient, claim: async () => { const job = await baseClient.claim(); if (job) claimed.push(job); return job; } };
   const log = (event, fields = {}) => {
     events.push({ event, at: Date.now(), ...fields });

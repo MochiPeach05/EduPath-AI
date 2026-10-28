@@ -1,9 +1,18 @@
-import { COMPETENCY_ASSESSMENT_KIND, type AiJobKind } from "../competency-assessment/ai/worker-protocol.js";
-import { WorkerApiError, type ClaimedJob, type CompleteBody, type WorkerClient } from "./client.js";
+import {
+  MAX_ANSWER_CHARS,
+  knowledgeOutputSchema,
+  prepareBodySchema,
+  type AssistantClaim,
+  type EmbedSpec,
+  type KnowledgeClaim
+} from "../assistant/protocol.js";
+import { ASSISTANT_CHAT_KIND, COMPETENCY_ASSESSMENT_KIND, KNOWLEDGE_EMBEDDING_KIND } from "../competency-assessment/ai/worker-protocol.js";
+import { WorkerApiError, type ClaimedJob, type CompleteBody, type GenerationJob, type JobMetrics, type WorkerClient } from "./client.js";
 import {
   AiWorkerError,
   GenerationAbortedError,
   parseJobOutput,
+  type ChatJobKind,
   type OllamaChatResult,
   type OllamaJob,
   type OllamaMetrics,
@@ -15,8 +24,13 @@ export type LogFields = Record<string, string | number | boolean | null | undefi
 export type WorkerLogger = (event: string, fields?: LogFields) => void;
 
 export interface OllamaPort {
-  chat(job: OllamaJob, signal: AbortSignal): Promise<OllamaChatResult>;
+  /** One streamed chat call; onContent receives the answer so far whenever it grows (assistant answers). */
+  chat(job: OllamaJob, signal: AbortSignal, onContent?: (content: string) => void): Promise<OllamaChatResult>;
   modelInfo(): Promise<OllamaModelInfo>;
+  /** One vector per input, in order, from the local embedding model the spec names. */
+  embed(spec: EmbedSpec, signal: AbortSignal): Promise<number[][]>;
+  /** Ollama version and digest of a local model by name (the embedding model of a job); rejects a missing or remote one. */
+  embeddingModelInfo(model: string): Promise<OllamaModelInfo>;
 }
 
 export interface WorkerTimings {
@@ -25,14 +39,18 @@ export interface WorkerTimings {
   errorBackoffMs: number;
   extendEveryMs: number;
   completeRetries: number;
+  /** Shortest gap between two /progress posts of an assistant answer. */
+  progressEveryMs: number;
 }
 
 const DEFAULT_TIMINGS: WorkerTimings = {
   heartbeatMs: 20_000,
-  idlePollMs: 5_000,
+  // The server holds an empty claim up to CLAIM_WAIT_MS (12 s), so the worker only pauses briefly between claims.
+  idlePollMs: 1_000,
   errorBackoffMs: 15_000,
   extendEveryMs: 180_000,
-  completeRetries: 3
+  completeRetries: 3,
+  progressEveryMs: 700
 };
 
 export interface WorkerDeps {
@@ -67,6 +85,9 @@ export function errorFields(error: unknown): LogFields {
   return { error: "unknown" };
 }
 
+/** /extend or /prepare answering 409 (lease expired, question cancelled) or 404 (job gone): nothing is left to report. */
+const jobGone = (error: unknown) => error instanceof WorkerApiError && (error.status === 409 || error.status === 404);
+
 interface GenerationResult {
   output: Record<string, unknown>;
   metrics: OllamaMetrics;
@@ -75,7 +96,8 @@ interface GenerationResult {
 
 /**
  * Runs the chat call and the local output check for the job kind. Retries exactly once when the model
- * returned unparseable or mis-shaped JSON; never retries truncation (done_reason "length"), timeouts or other errors.
+ * returned unparseable or mis-shaped JSON (or an empty answer); never retries truncation (done_reason "length"),
+ * timeouts or other errors.
  */
 async function generateWithRetry(
   ollama: OllamaPort,
@@ -83,12 +105,13 @@ async function generateWithRetry(
   signal: AbortSignal,
   log: WorkerLogger,
   jobId: string,
-  kind: AiJobKind = COMPETENCY_ASSESSMENT_KIND
+  kind: ChatJobKind = COMPETENCY_ASSESSMENT_KIND,
+  onContent?: (content: string) => void
 ): Promise<GenerationResult> {
   const maxAttempts = 2;
   for (let attempt = 1; ; attempt++) {
     const started = Date.now();
-    const result = await ollama.chat(job, signal);
+    const result = await ollama.chat(job, signal, onContent);
     log("generation_finished", {
       job: jobId,
       kind,
@@ -107,6 +130,7 @@ async function generateWithRetry(
 }
 
 type JobOutcome = "completed" | "failed" | "abandoned";
+type CompletedBody = Extract<CompleteBody, { output: unknown }>;
 
 async function completeWithRetry(deps: WorkerDeps, timings: WorkerTimings, jobId: string, body: CompleteBody, signal: AbortSignal): Promise<boolean> {
   for (let attempt = 0; ; attempt++) {
@@ -122,7 +146,140 @@ async function completeWithRetry(deps: WorkerDeps, timings: WorkerTimings, jobId
   }
 }
 
-/** Generates the AI output for one claimed job, extending the lease while it runs, then reports the result. */
+/** A generation kind: the prompt came with the claim. */
+async function generate(job: GenerationJob, info: OllamaModelInfo, deps: WorkerDeps, signal: AbortSignal): Promise<CompletedBody> {
+  // A job object without kind (an older server, or a test double) is a competency assessment.
+  const result = await generateWithRetry(deps.ollama, job, signal, deps.log, job.id, job.kind ?? COMPETENCY_ASSESSMENT_KIND);
+  return { leaseToken: job.leaseToken, model: deps.model, digest: info.digest, ollamaVersion: info.version, metrics: result.metrics, output: result.output };
+}
+
+/** knowledge_embedding: one vector per text of the batch, from the embedding model the job names. */
+async function embedKnowledge(job: KnowledgeClaim, deps: WorkerDeps, signal: AbortSignal): Promise<CompletedBody> {
+  // The digest reported with the vectors; a missing or remote model fails here, before any text is sent.
+  const embedInfo = await deps.ollama.embeddingModelInfo(job.embed.model);
+  const started = Date.now();
+  const vectors = await deps.ollama.embed(job.embed, signal);
+  const ms = Date.now() - started;
+  deps.log("embedding_finished", { job: job.id, kind: KNOWLEDGE_EMBEDDING_KIND, ms, count: vectors.length, dimensions: vectors[0]?.length ?? 0 });
+  const output = knowledgeOutputSchema.safeParse({ vectors });
+  if (!output.success || output.data.vectors.length !== job.embed.inputs.length) throw new AiWorkerError("invalid_ai_output", "vectors");
+  return {
+    leaseToken: job.leaseToken,
+    model: job.embed.model,
+    digest: embedInfo.digest,
+    ollamaVersion: embedInfo.version,
+    metrics: { embed_ms: ms, count: vectors.length },
+    output: output.data
+  };
+}
+
+/** The question's vector, as /prepare accepts it. */
+async function embedQuestion(spec: EmbedSpec, deps: WorkerDeps, signal: AbortSignal): Promise<number[]> {
+  // A missing or remote embedding model never receives the student's question.
+  await deps.ollama.embeddingModelInfo(spec.model);
+  const [vector] = await deps.ollama.embed({ model: spec.model, inputs: spec.inputs.slice(0, 1) }, signal);
+  const checked = prepareBodySchema.shape.vector.safeParse(vector);
+  if (!checked.success || !checked.data) throw new AiWorkerError("ai_failed", "embedding_invalid");
+  return checked.data;
+}
+
+interface ProgressReporter {
+  /** The answer so far: posted at once, then at most once per progressEveryMs, always the newest text. */
+  update(content: string): void;
+  /** No post after this; resolves once a post still in flight has settled. */
+  stop(): Promise<void>;
+}
+
+/**
+ * Posts an assistant answer to /progress while Gemma writes it, never two posts at once. A failed post never stops
+ * the job; only the first failure of a job is logged (the others would repeat it every 700 ms).
+ */
+function createProgressReporter(deps: WorkerDeps, job: AssistantClaim, everyMs: number): ProgressReporter {
+  let latest: string | null = null;
+  let lastSentAt = Number.NEGATIVE_INFINITY;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let inFlight: Promise<void> | null = null;
+  let stopped = false;
+  let failureLogged = false;
+
+  const send = () => {
+    timer = undefined;
+    if (stopped || inFlight || latest === null) return;
+    const content = latest;
+    latest = null;
+    lastSentAt = Date.now();
+    inFlight = deps.client
+      .progress(job.id, { leaseToken: job.leaseToken, content })
+      .catch((error: unknown) => {
+        if (!failureLogged) deps.log("progress_failed", { job: job.id, ...errorFields(error) });
+        failureLogged = true;
+      })
+      .finally(() => {
+        inFlight = null;
+        schedule();
+      });
+  };
+  const schedule = () => {
+    if (stopped || inFlight || timer || latest === null) return;
+    const wait = lastSentAt + everyMs - Date.now();
+    if (wait <= 0) send();
+    else timer = setTimeout(send, wait);
+  };
+  return {
+    update(content) {
+      // /progress accepts at most MAX_ANSWER_CHARS.
+      latest = content.length > MAX_ANSWER_CHARS ? content.slice(0, MAX_ANSWER_CHARS) : content;
+      schedule();
+    },
+    stop() {
+      stopped = true;
+      clearTimeout(timer);
+      timer = undefined;
+      return inFlight ?? Promise.resolve();
+    }
+  };
+}
+
+/**
+ * assistant_chat: embeds the question, gets the prompt from /prepare, then streams Gemma's plain-text answer to
+ * /progress. A failed embedding only loses the vector: the server then searches by words only.
+ */
+async function answerQuestion(job: AssistantClaim, info: OllamaModelInfo, deps: WorkerDeps, timings: WorkerTimings, signal: AbortSignal): Promise<CompletedBody> {
+  let vector: number[] | null = null;
+  const embedMetrics: JobMetrics = {};
+  if (job.embed) {
+    const started = Date.now();
+    try {
+      vector = await embedQuestion(job.embed, deps, signal);
+      embedMetrics.embed_ms = Date.now() - started;
+      deps.log("embedding_finished", { job: job.id, kind: ASSISTANT_CHAT_KIND, ms: embedMetrics.embed_ms, dimensions: vector.length });
+    } catch (error) {
+      if (error instanceof GenerationAbortedError || signal.aborted) throw error;
+      deps.log("embedding_failed", { job: job.id, kind: ASSISTANT_CHAT_KIND, ...errorFields(error) });
+    }
+  }
+  const prompt = await deps.client.prepare(job.id, { leaseToken: job.leaseToken, vector });
+  const progress = createProgressReporter(deps, job, timings.progressEveryMs);
+  try {
+    const chatJob: OllamaJob = { system: prompt.system, user: prompt.user, schema: null, options: prompt.options, think: prompt.think };
+    const result = await generateWithRetry(deps.ollama, chatJob, signal, deps.log, job.id, ASSISTANT_CHAT_KIND, progress.update);
+    const metrics: JobMetrics = { ...result.metrics, ...embedMetrics };
+    return { leaseToken: job.leaseToken, model: deps.model, digest: info.digest, ollamaVersion: info.version, metrics, output: result.output };
+  } finally {
+    // The final text goes in /complete, which never runs next to a /progress post (an abandoned job does not wait).
+    const settled = progress.stop();
+    if (!signal.aborted) await settled;
+  }
+}
+
+/** The /complete body of one job, by kind. */
+function runJob(job: ClaimedJob, info: OllamaModelInfo, deps: WorkerDeps, timings: WorkerTimings, signal: AbortSignal): Promise<CompletedBody> {
+  if (job.kind === KNOWLEDGE_EMBEDDING_KIND) return embedKnowledge(job, deps, signal);
+  if (job.kind === ASSISTANT_CHAT_KIND) return answerQuestion(job, info, deps, timings, signal);
+  return generate(job, info, deps, signal);
+}
+
+/** Runs one claimed job, extending the lease while it runs, then reports the result. */
 export async function processJob(job: ClaimedJob, info: OllamaModelInfo, deps: WorkerDeps, signal: AbortSignal): Promise<JobOutcome> {
   const timings = { ...DEFAULT_TIMINGS, ...deps.timings };
   const controller = new AbortController();
@@ -139,7 +296,7 @@ export async function processJob(job: ClaimedJob, info: OllamaModelInfo, deps: W
       .then(() => deps.log("lease_extended", { job: job.id }))
       .catch((error: unknown) => {
         deps.log("lease_extend_failed", { job: job.id, ...errorFields(error) });
-        if (error instanceof WorkerApiError && (error.status === 409 || error.status === 404)) {
+        if (jobGone(error)) {
           leaseLost = true;
           controller.abort();
         }
@@ -154,11 +311,12 @@ export async function processJob(job: ClaimedJob, info: OllamaModelInfo, deps: W
   deps.log("job_claimed", { job: job.id, kind, promptVersion: job.promptVersion });
   let body: CompleteBody;
   try {
-    const result = await generateWithRetry(deps.ollama, job, controller.signal, deps.log, job.id, kind);
-    body = { leaseToken: job.leaseToken, model: deps.model, digest: info.digest, ollamaVersion: info.version, metrics: result.metrics, output: result.output };
+    body = await runJob(job, info, deps, timings, controller.signal);
   } catch (error) {
-    if (error instanceof GenerationAbortedError || controller.signal.aborted) {
-      deps.log("job_abandoned", { job: job.id, leaseLost });
+    // Shutdown, a lost lease, or /prepare answering 409/404 (the question was cancelled or has expired).
+    const gone = jobGone(error);
+    if (error instanceof GenerationAbortedError || controller.signal.aborted || gone) {
+      deps.log("job_abandoned", { job: job.id, leaseLost: leaseLost || gone });
       return "abandoned";
     }
     deps.log("generation_failed", { job: job.id, ...errorFields(error) });
@@ -174,7 +332,10 @@ export async function processJob(job: ClaimedJob, info: OllamaModelInfo, deps: W
   return outcome;
 }
 
-/** Main loop: heartbeat every 20 s while Ollama is reachable, claim, generate, complete; idle poll 5 s, error backoff 15 s. */
+/**
+ * Main loop: heartbeat every 20 s while Ollama is reachable, claim (the server holds an empty claim up to 12 s),
+ * run the job, complete; idle poll 1 s, error backoff 15 s.
+ */
 export async function runWorker(deps: WorkerDeps, signal: AbortSignal): Promise<void> {
   const timings = { ...DEFAULT_TIMINGS, ...deps.timings };
   let ollamaHealthy = false;

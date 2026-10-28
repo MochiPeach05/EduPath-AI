@@ -10,9 +10,9 @@ const base: AiWorkerEnv = { AI_API_URL: "http://localhost:4000", AI_WORKER_KEY: 
 describe("parseAiWorkerEnvFile", () => {
   it("keeps only whitelisted keys, strips quotes and ignores comments", () => {
     const env = parseAiWorkerEnvFile(
-      "﻿# comment\nAI_API_URL=\"http://localhost:4000\"\r\nOCR_WORKER_KEY=secret\nDATABASE_URL=postgres://x\nexport OLLAMA_MODEL='gemma4:e4b'\nOLLAMA_NUM_GPU = 34\n"
+      "﻿# comment\nAI_API_URL=\"http://localhost:4000\"\r\nOCR_WORKER_KEY=secret\nDATABASE_URL=postgres://x\nexport OLLAMA_MODEL='gemma4:e4b'\nOLLAMA_NUM_GPU = 34\nOLLAMA_EMBED_NUM_GPU=0\n"
     );
-    expect(env).toEqual({ AI_API_URL: "http://localhost:4000", OLLAMA_MODEL: "gemma4:e4b", OLLAMA_NUM_GPU: "34" });
+    expect(env).toEqual({ AI_API_URL: "http://localhost:4000", OLLAMA_MODEL: "gemma4:e4b", OLLAMA_NUM_GPU: "34", OLLAMA_EMBED_NUM_GPU: "0" });
   });
 });
 
@@ -24,8 +24,15 @@ describe("loadAiWorkerConfig", () => {
       ollamaUrl: "http://127.0.0.1:11434",
       model: "gemma4:e4b",
       contextLength: 16384,
+      // The embedding model of Trợ lý AI runs on the CPU unless told otherwise.
+      embedNumGpu: 0,
       timeoutMs: 600_000
     });
+  });
+
+  it("reads OLLAMA_EMBED_NUM_GPU apart from OLLAMA_NUM_GPU", () => {
+    expect(loadAiWorkerConfig({ ...base, OLLAMA_EMBED_NUM_GPU: "12" })).toMatchObject({ embedNumGpu: 12 });
+    expect(loadAiWorkerConfig({ ...base, OLLAMA_NUM_GPU: "38", OLLAMA_EMBED_NUM_GPU: " " })).toMatchObject({ numGpu: 38, embedNumGpu: 0 });
   });
 
   it("accepts HTTPS APIs, loopback Ollama variants and OLLAMA_NUM_GPU", () => {
@@ -47,7 +54,9 @@ describe("loadAiWorkerConfig", () => {
     ["model with spaces", { ...base, OLLAMA_MODEL: "gemma 4" }],
     ["context too small", { ...base, OLLAMA_CONTEXT: "2048" }],
     ["timeout not a number", { ...base, AI_TIMEOUT_MS: "10m" }],
-    ["negative GPU layers", { ...base, OLLAMA_NUM_GPU: "-1" }]
+    ["negative GPU layers", { ...base, OLLAMA_NUM_GPU: "-1" }],
+    ["negative embedding GPU layers", { ...base, OLLAMA_EMBED_NUM_GPU: "-1" }],
+    ["embedding GPU layers not a number", { ...base, OLLAMA_EMBED_NUM_GPU: "cpu" }]
   ])("fails closed on %s", (_name, env) => {
     expect(() => loadAiWorkerConfig(env)).toThrowError(AiWorkerConfigError);
   });

@@ -1,0 +1,4075 @@
+{
+  "checkedAt": "2026-10-28",
+  "skills": [
+    {
+      "skill": "Accessibility",
+      "resources": [
+        {
+          "title": "Accessibility",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/Accessibility",
+          "provider": "MDN Web Docs",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Nắm nguyên tắc web dễ tiếp cận: HTML ngữ nghĩa, ARIA, điều khiển bằng bàn phím và hỗ trợ trình đọc màn hình."
+        },
+        {
+          "title": "Learn Accessibility",
+          "url": "https://web.dev/learn/accessibility",
+          "provider": "web.dev (Google)",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Khóa học từng bước về tương phản màu, tiêu điểm bàn phím, nhãn biểu mẫu và cách kiểm tra khả năng tiếp cận."
+        },
+        {
+          "title": "Making your service accessible: an introduction",
+          "url": "https://www.gov.uk/service-manual/helping-people-to-use-your-service/making-your-service-accessible-an-introduction",
+          "provider": "GOV.UK Service Manual",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hiểu vì sao phải thiết kế cho người khuyết tật và cách áp dụng yêu cầu WCAG ngay từ khi thiết kế dịch vụ số."
+        }
+      ]
+    },
+    {
+      "skill": "Ảo hóa hệ thống",
+      "resources": [
+        {
+          "title": "What is virtualization?",
+          "url": "https://www.redhat.com/en/topics/virtualization/what-is-virtualization",
+          "provider": "Red Hat",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hiểu ảo hóa, hypervisor và vai trò của máy ảo trong trung tâm dữ liệu và điện toán đám mây."
+        },
+        {
+          "title": "Hyper-V virtualization in Windows Server and Windows",
+          "url": "https://learn.microsoft.com/en-us/windows-server/virtualization/hyper-v/overview",
+          "provider": "Microsoft Learn",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Tìm hiểu cách Hyper-V tạo và quản lý máy ảo, switch ảo và ổ đĩa ảo trên Windows Server."
+        },
+        {
+          "title": "Oracle VirtualBox User Guide",
+          "url": "https://www.virtualbox.org/manual/",
+          "provider": "Oracle VirtualBox",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Thực hành tạo máy ảo, cấu hình các chế độ mạng ảo (NAT, Bridged, Host-only) và ổ đĩa ảo trên máy cá nhân."
+        }
+      ]
+    },
+    {
+      "skill": "API",
+      "resources": [
+        {
+          "title": "What is an API? A Beginner's Guide to APIs",
+          "url": "https://www.postman.com/what-is-an-api/",
+          "provider": "Postman",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hiểu API là gì, các kiểu API phổ biến và cách client gửi yêu cầu, nhận phản hồi từ dịch vụ."
+        },
+        {
+          "title": "Overview of HTTP",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/Overview",
+          "provider": "MDN Web Docs",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Nắm cấu trúc yêu cầu, phản hồi, header và mã trạng thái HTTP, nền tảng của hầu hết API trên web."
+        },
+        {
+          "title": "Using the Fetch API",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch",
+          "provider": "MDN Web Docs",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Thực hành gọi API bằng fetch, gửi dữ liệu JSON và xử lý lỗi kết nối hoặc phản hồi không thành công."
+        }
+      ]
+    },
+    {
+      "skill": "API testing",
+      "resources": [
+        {
+          "title": "Write scripts to test API response data in Postman",
+          "url": "https://learning.postman.com/docs/tests-and-scripts/write-scripts/test-scripts/",
+          "provider": "Postman Learning Center",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Viết test trong Postman để kiểm tra mã trạng thái, thời gian phản hồi và nội dung JSON trả về của API."
+        },
+        {
+          "title": "HTTP response status codes",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Status",
+          "provider": "MDN Web Docs",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Tra cứu ý nghĩa các nhóm mã trạng thái 2xx, 4xx, 5xx để xác định kết quả mong đợi khi kiểm thử API."
+        },
+        {
+          "title": "API testing",
+          "url": "https://playwright.dev/docs/api-testing",
+          "provider": "Playwright",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Tự động hóa kiểm thử API bằng Playwright: gửi yêu cầu, kiểm tra phản hồi và chuẩn bị dữ liệu kiểm thử."
+        }
+      ]
+    },
+    {
+      "skill": "Báo cáo lỗ hổng",
+      "resources": [
+        {
+          "title": "OWASP Risk Rating Methodology",
+          "url": "https://community.owasp.org/OWASP_Risk_Rating_Methodology",
+          "provider": "OWASP",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Học cách ước lượng khả năng xảy ra và mức tác động để xếp hạng rủi ro của một lỗ hổng trong báo cáo."
+        },
+        {
+          "title": "CVSS v4.0 User Guide",
+          "url": "https://www.first.org/cvss/v4.0/user-guide",
+          "provider": "FIRST",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Hướng dẫn chấm điểm mức nghiêm trọng của lỗ hổng theo chuẩn CVSS v4.0 để trình bày rủi ro thống nhất."
+        },
+        {
+          "title": "Quality Reports",
+          "url": "https://docs.hackerone.com/en/articles/8475116-quality-reports",
+          "provider": "HackerOne",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Cách viết báo cáo lỗ hổng rõ ràng: tiêu đề, các bước tái hiện, bằng chứng, tác động và đề xuất khắc phục."
+        }
+      ]
+    },
+    {
+      "skill": "Bảo mật hệ thống thông tin",
+      "resources": [
+        {
+          "title": "Introduction to Cybersecurity",
+          "url": "https://www.netacad.com/courses/introduction-to-cybersecurity",
+          "provider": "Cisco Networking Academy",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Khóa học miễn phí giới thiệu các mối đe dọa phổ biến và cách bảo vệ thiết bị, dữ liệu, hệ thống."
+        },
+        {
+          "title": "Cybersecurity Framework",
+          "url": "https://www.nist.gov/cyberframework",
+          "provider": "NIST",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Tìm hiểu khung NIST CSF 2.0 với các chức năng Quản trị, Nhận diện, Bảo vệ, Phát hiện, Ứng phó và Phục hồi."
+        },
+        {
+          "title": "Introduction to security, compliance, and identity concepts",
+          "url": "https://learn.microsoft.com/en-us/training/paths/describe-concepts-of-security-compliance-identity/",
+          "provider": "Microsoft Learn",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Lộ trình ngắn về các khái niệm nền: Zero Trust, mã hóa, xác thực, phân quyền và tuân thủ."
+        }
+      ]
+    },
+    {
+      "skill": "Cấu trúc dữ liệu",
+      "resources": [
+        {
+          "title": "VisuAlgo",
+          "url": "https://visualgo.net/en",
+          "provider": "VisuAlgo (NUS)",
+          "type": "practice",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Xem mô phỏng từng bước danh sách liên kết, ngăn xếp, hàng đợi, cây, bảng băm, heap để hiểu cách hoạt động."
+        },
+        {
+          "title": "Algorithms, Part I",
+          "url": "https://www.coursera.org/learn/algorithms-part1",
+          "provider": "Coursera (Princeton University)",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Khóa học miễn phí của Princeton về ngăn xếp, hàng đợi, sắp xếp, cây tìm kiếm, bảng băm kèm bài tập lập trình."
+        },
+        {
+          "title": "Hàng đợi hai đầu (deque) và Bài toán tìm max-min trong đoạn tịnh tiến",
+          "url": "https://wiki.vnoi.info/algo/data-structures/deque-min-max",
+          "provider": "VNOI Wiki",
+          "type": "article",
+          "language": "vi",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Bài tiếng Việt cho thấy chọn đúng cấu trúc dữ liệu (deque) giúp giảm độ phức tạp của lời giải."
+        }
+      ]
+    },
+    {
+      "skill": "Cloud platform",
+      "resources": [
+        {
+          "title": "Introduction to Cloud Infrastructure: Describe Cloud Concepts",
+          "url": "https://learn.microsoft.com/en-us/training/paths/microsoft-azure-fundamentals-describe-cloud-concepts/",
+          "provider": "Microsoft Learn",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Học các mô hình dịch vụ IaaS, PaaS, SaaS, mô hình triển khai đám mây và lợi ích của điện toán đám mây."
+        },
+        {
+          "title": "Điện toán đám mây là gì?",
+          "url": "https://aws.amazon.com/vi/what-is-cloud-computing/",
+          "provider": "Amazon Web Services",
+          "type": "article",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Bài giới thiệu tiếng Việt về điện toán đám mây, các loại dịch vụ và lợi ích khi dùng nền tảng đám mây."
+        },
+        {
+          "title": "Google Cloud overview",
+          "url": "https://docs.cloud.google.com/docs/overview",
+          "provider": "Google Cloud",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Tìm hiểu cách Google Cloud tổ chức dự án, tài nguyên, vùng và các nhóm dịch vụ tính toán, lưu trữ, mạng."
+        }
+      ]
+    },
+    {
+      "skill": "Đánh giá mô hình",
+      "resources": [
+        {
+          "title": "Metrics and scoring: quantifying the quality of predictions",
+          "url": "https://scikit-learn.org/stable/modules/model_evaluation.html",
+          "provider": "scikit-learn",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Tra cứu và áp dụng chỉ số đánh giá cho phân loại, hồi quy như accuracy, precision, recall, F1, ROC AUC, MAE."
+        },
+        {
+          "title": "Cross-validation: evaluating estimator performance",
+          "url": "https://scikit-learn.org/stable/modules/cross_validation.html",
+          "provider": "scikit-learn",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Hiểu cách chia dữ liệu huấn luyện/kiểm tra và dùng cross-validation để đánh giá mô hình khách quan hơn."
+        },
+        {
+          "title": "Phân loại: Độ chính xác, recall, precision và các chỉ số liên quan",
+          "url": "https://developers.google.com/machine-learning/crash-course/classification/accuracy-precision-recall?hl=vi",
+          "provider": "Google for Developers",
+          "type": "course",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Bài học có bản tiếng Việt giải thích accuracy, precision, recall và cách chọn chỉ số phù hợp với bài toán."
+        }
+      ]
+    },
+    {
+      "skill": "Data warehouse",
+      "resources": [
+        {
+          "title": "Dimensional Modeling Techniques",
+          "url": "https://www.kimballgroup.com/data-warehouse-business-intelligence-resources/kimball-techniques/dimensional-modeling-techniques/",
+          "provider": "Kimball Group",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Tham khảo kỹ thuật mô hình hóa chiều: bảng sự kiện, bảng chiều, độ chi tiết và chiều thay đổi chậm (SCD)."
+        },
+        {
+          "title": "Understand star schema and the importance for Power BI",
+          "url": "https://learn.microsoft.com/en-us/power-bi/guidance/star-schema",
+          "provider": "Microsoft Learn",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hiểu lược đồ hình sao và cách thiết kế bảng sự kiện, bảng chiều phục vụ báo cáo phân tích."
+        },
+        {
+          "title": "Building a Kimball dimensional model with dbt",
+          "url": "https://docs.getdbt.com/blog/kimball-dimensional-model",
+          "provider": "dbt Labs",
+          "type": "article",
+          "language": "en",
+          "level": "nang-cao",
+          "free": true,
+          "note": "Hướng dẫn thực hành dựng mô hình chiều Kimball từ dữ liệu nguồn bằng SQL và dbt."
+        }
+      ]
+    },
+    {
+      "skill": "Deep learning",
+      "resources": [
+        {
+          "title": "Dive into Deep Learning",
+          "url": "https://d2l.ai/",
+          "provider": "D2L.ai",
+          "type": "book",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Sách mở có mã chạy được, đi từ mạng nơ-ron cơ bản đến CNN, RNN, Transformer và kỹ thuật huấn luyện."
+        },
+        {
+          "title": "Practical Deep Learning for Coders",
+          "url": "https://course.fast.ai/",
+          "provider": "fast.ai",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Khóa học thực hành: huấn luyện mô hình cho ảnh, văn bản, dữ liệu bảng và đánh giá kết quả."
+        },
+        {
+          "title": "MIT 6.S191: Introduction to Deep Learning",
+          "url": "https://introtodeeplearning.com/",
+          "provider": "MIT",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Bài giảng video và lab nhập môn học sâu của MIT, phù hợp để nắm khái niệm trước khi làm dự án."
+        }
+      ]
+    },
+    {
+      "skill": "Điều tra số",
+      "resources": [
+        {
+          "title": "SP 800-86: Guide to Integrating Forensic Techniques into Incident Response",
+          "url": "https://csrc.nist.gov/pubs/sp/800/86/final",
+          "provider": "NIST",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Hướng dẫn quy trình thu thập, kiểm tra, phân tích và báo cáo chứng cứ số khi ứng phó sự cố."
+        },
+        {
+          "title": "Autopsy User's Guide",
+          "url": "https://sleuthkit.org/autopsy/docs/user-docs/4.23.0/",
+          "provider": "The Sleuth Kit / Autopsy",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Thực hành phân tích ảnh ổ đĩa bằng Autopsy: tạo case, tìm tệp đã xóa, dựng dòng thời gian, tìm từ khóa."
+        },
+        {
+          "title": "Volatility 3 documentation",
+          "url": "https://volatility3.readthedocs.io/en/latest/",
+          "provider": "Volatility Foundation",
+          "type": "docs",
+          "language": "en",
+          "level": "nang-cao",
+          "free": true,
+          "note": "Học phân tích bộ nhớ RAM để tìm tiến trình, kết nối mạng và dấu vết bất thường của sự cố."
+        }
+      ]
+    },
+    {
+      "skill": "ETL/ELT",
+      "resources": [
+        {
+          "title": "Extract, transform, load (ETL)",
+          "url": "https://learn.microsoft.com/en-us/azure/architecture/data-guide/relational-data/etl",
+          "provider": "Microsoft Learn",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Phân biệt ETL và ELT, các bước trích xuất, chuyển đổi, nạp dữ liệu và luồng điều khiển trong pipeline."
+        },
+        {
+          "title": "Data Engineering Zoomcamp",
+          "url": "https://github.com/DataTalksClub/data-engineering-zoomcamp",
+          "provider": "DataTalks.Club",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Khóa học miễn phí xây dựng pipeline dữ liệu thực tế: điều phối luồng, kho dữ liệu, xử lý lô và luồng."
+        },
+        {
+          "title": "Airflow 101: Building Your First Workflow",
+          "url": "https://airflow.apache.org/docs/apache-airflow/stable/tutorial/fundamentals.html",
+          "provider": "Apache Airflow",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Viết DAG đầu tiên để lập lịch, theo dõi và tự động chạy lại các bước xử lý dữ liệu."
+        }
+      ]
+    },
+    {
+      "skill": "Figma",
+      "resources": [
+        {
+          "title": "Figma Design: Get started",
+          "url": "https://help.figma.com/hc/en-us/categories/360002051613-Figma-Design",
+          "provider": "Figma Learn",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Bộ hướng dẫn chính thức để làm quen giao diện Figma, frame, layer và các công cụ thiết kế cơ bản."
+        },
+        {
+          "title": "Guide to components in Figma",
+          "url": "https://help.figma.com/hc/en-us/articles/360038662654-Guide-to-components-in-Figma",
+          "provider": "Figma Learn",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Tạo component, variant và instance để tái sử dụng thành phần giao diện nhất quán trong thiết kế."
+        },
+        {
+          "title": "Guide to prototyping in Figma",
+          "url": "https://help.figma.com/hc/en-us/articles/360040314193-Guide-to-prototyping-in-Figma",
+          "provider": "Figma Learn",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Nối các màn hình, thêm tương tác và hiệu ứng chuyển cảnh để tạo prototype bấm thử được."
+        }
+      ]
+    },
+    {
+      "skill": "Firewall",
+      "resources": [
+        {
+          "title": "What Is a Firewall?",
+          "url": "https://www.cisco.com/site/us/en/learn/topics/security/what-is-a-firewall.html",
+          "provider": "Cisco",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hiểu tường lửa là gì, các loại tường lửa và cách quy tắc cho phép hoặc chặn lưu lượng mạng."
+        },
+        {
+          "title": "SP 800-41 Rev. 1: Guidelines on Firewalls and Firewall Policy",
+          "url": "https://csrc.nist.gov/pubs/sp/800/41/r1/final",
+          "provider": "NIST",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Hướng dẫn xây dựng chính sách tường lửa, chọn kiến trúc triển khai và quản lý quy tắc theo thời gian."
+        },
+        {
+          "title": "Firewall - Ubuntu Server documentation",
+          "url": "https://ubuntu.com/server/docs/how-to/security/firewalls/",
+          "provider": "Ubuntu (Canonical)",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Thực hành cấu hình tường lửa ufw trên Linux: mở cổng, chặn dịch vụ và xem nhật ký."
+        }
+      ]
+    },
+    {
+      "skill": "Giải bài toán tối ưu hóa",
+      "resources": [
+        {
+          "title": "Giới thiệu về OR-Tools",
+          "url": "https://developers.google.com/optimization/introduction?hl=vi",
+          "provider": "Google for Developers",
+          "type": "docs",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Làm quen các dạng bài toán tối ưu và cách dùng OR-Tools giải quy hoạch tuyến tính, tối ưu tổ hợp."
+        },
+        {
+          "title": "Optimization (scipy.optimize)",
+          "url": "https://docs.scipy.org/doc/scipy/tutorial/optimize.html",
+          "provider": "SciPy",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Thực hành tìm cực tiểu hàm, giải bài toán có ràng buộc và kiểm tra nghiệm bằng Python."
+        },
+        {
+          "title": "Optimization Methods in Management Science",
+          "url": "https://ocw.mit.edu/courses/15-053-optimization-methods-in-management-science-spring-2013/",
+          "provider": "MIT OpenCourseWare",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Bài giảng về quy hoạch tuyến tính, quy hoạch nguyên và cách mô hình hóa bài toán tối ưu."
+        }
+      ]
+    },
+    {
+      "skill": "Giao tiếp",
+      "resources": [
+        {
+          "title": "Public Speaking Tips",
+          "url": "https://www.toastmasters.org/resources/public-speaking-tips",
+          "provider": "Toastmasters International",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Mẹo chuẩn bị và trình bày trước người nghe: sắp xếp ý, giọng nói, ngôn ngữ cơ thể và xử lý hồi hộp."
+        },
+        {
+          "title": "Effective Email Communication",
+          "url": "https://writingcenter.unc.edu/tips-and-tools/effective-e-mail-communication/",
+          "provider": "UNC Writing Center",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Cách viết email học tập, công việc ngắn gọn, đúng mục đích và phản hồi lịch sự với giảng viên, đồng nghiệp."
+        },
+        {
+          "title": "Use the CommKit",
+          "url": "https://mitcommlab.mit.edu/eecs/use-the-commkit/",
+          "provider": "MIT EECS Communication Lab",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Bộ hướng dẫn của MIT về trình bày slide, báo cáo và thuyết trình kỹ thuật rõ ràng cho người nghe."
+        }
+      ]
+    },
+    {
+      "skill": "Git",
+      "resources": [
+        {
+          "title": "Pro Git",
+          "url": "https://git-scm.com/book/en/v2",
+          "provider": "git-scm.com",
+          "type": "book",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Sách chính thức miễn phí về Git: commit, nhánh, merge, rebase và làm việc với kho từ xa."
+        },
+        {
+          "title": "Learn Git Branching",
+          "url": "https://learngitbranching.js.org/?locale=vi",
+          "provider": "Learn Git Branching",
+          "type": "practice",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Luyện lệnh Git trực quan bằng tiếng Việt qua các màn chơi về nhánh, merge, rebase và remote."
+        },
+        {
+          "title": "How to Resolve Merge Conflicts in Git",
+          "url": "https://www.atlassian.com/git/tutorials/using-branches/merge-conflicts",
+          "provider": "Atlassian",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hiểu vì sao xảy ra xung đột khi hợp nhất nhánh và các bước xử lý xung đột bằng dòng lệnh."
+        }
+      ]
+    },
+    {
+      "skill": "Hệ thống thông tin địa lý (GIS)",
+      "resources": [
+        {
+          "title": "A Gentle Introduction to GIS",
+          "url": "https://docs.qgis.org/latest/en/docs/gentle_gis_introduction/index.html",
+          "provider": "QGIS",
+          "type": "book",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Nhập môn GIS: dữ liệu vector, raster, hệ tọa độ, bản đồ chuyên đề và phân tích không gian cơ bản."
+        },
+        {
+          "title": "QGIS Training Manual",
+          "url": "https://docs.qgis.org/latest/en/docs/training_manual/index.html",
+          "provider": "QGIS",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Giáo trình thực hành QGIS nguồn mở: tạo và biên tập lớp dữ liệu, phân tích vector/raster, làm bản đồ."
+        },
+        {
+          "title": "Leaflet Quick Start Guide",
+          "url": "https://leafletjs.com/examples/quick-start/",
+          "provider": "Leaflet",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Dựng bản đồ WebGIS tương tác đầu tiên với Leaflet: lớp nền, điểm, đường, vùng và popup."
+        }
+      ]
+    },
+    {
+      "skill": "Hoạch định chuyển đổi số",
+      "resources": [
+        {
+          "title": "Hỏi đáp về chuyển đổi số",
+          "url": "https://dx.gov.vn/hoi-dap.htm",
+          "provider": "Cổng Chuyển đổi số quốc gia",
+          "type": "article",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Giải đáp các khái niệm chuyển đổi số, chính phủ số, kinh tế số và vai trò của cơ quan, doanh nghiệp."
+        },
+        {
+          "title": "What Is Digital Transformation?",
+          "url": "https://www.ibm.com/think/topics/digital-transformation",
+          "provider": "IBM",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hiểu chuyển đổi số là gì, các công nghệ trụ cột và cách xây dựng chiến lược, lộ trình chuyển đổi."
+        },
+        {
+          "title": "OECD Going Digital Toolkit",
+          "url": "https://goingdigital.oecd.org/",
+          "provider": "OECD",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Bộ chỉ số và hướng dẫn chính sách giúp đánh giá mức sẵn sàng số và xây dựng chiến lược chuyển đổi số."
+        }
+      ]
+    },
+    {
+      "skill": "Hoạch định nguồn lực doanh nghiệp (ERP)",
+      "resources": [
+        {
+          "title": "Odoo User Docs",
+          "url": "https://www.odoo.com/documentation/latest/applications.html",
+          "provider": "Odoo",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Tài liệu chính thức của ERP mã nguồn mở Odoo cho các phân hệ bán hàng, mua hàng, kho, kế toán, nhân sự."
+        },
+        {
+          "title": "Odoo eLearning",
+          "url": "https://www.odoo.com/slides",
+          "provider": "Odoo",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Khóa video miễn phí hướng dẫn cấu hình và vận hành từng phân hệ Odoo theo quy trình nghiệp vụ."
+        },
+        {
+          "title": "ERPNext: Introduction",
+          "url": "https://docs.frappe.io/erpnext/introduction",
+          "provider": "Frappe (ERPNext)",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Giới thiệu ERPNext, một ERP mã nguồn mở, và cách ánh xạ quy trình doanh nghiệp vào các phân hệ."
+        }
+      ]
+    },
+    {
+      "skill": "HTML/CSS",
+      "resources": [
+        {
+          "title": "Structuring content with HTML",
+          "url": "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Structuring_content",
+          "provider": "MDN Web Docs",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Học cấu trúc trang bằng HTML ngữ nghĩa: tiêu đề, danh sách, liên kết, hình ảnh, bảng và biểu mẫu."
+        },
+        {
+          "title": "Learn CSS",
+          "url": "https://web.dev/learn/css",
+          "provider": "web.dev (Google)",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Khóa học CSS có hệ thống: box model, selector, flexbox, grid, đơn vị đo và bố cục responsive."
+        },
+        {
+          "title": "HTML CSS từ Zero đến Hero",
+          "url": "https://f8.edu.vn/courses/html-css",
+          "provider": "F8",
+          "type": "course",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Khóa học tiếng Việt miễn phí dựng giao diện web bằng HTML, CSS, responsive và làm dự án thực hành."
+        }
+      ]
+    },
+    {
+      "skill": "IAM",
+      "resources": [
+        {
+          "title": "Describe identity concepts",
+          "url": "https://learn.microsoft.com/en-us/training/modules/describe-identity-principles-concepts/",
+          "provider": "Microsoft Learn",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Phân biệt xác thực và phân quyền, nhà cung cấp danh tính, đăng nhập một lần (SSO) và dịch vụ thư mục."
+        },
+        {
+          "title": "What is IAM?",
+          "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/introduction.html",
+          "provider": "Amazon Web Services",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Hiểu người dùng, nhóm, vai trò và chính sách quyền khi quản lý truy cập trên đám mây AWS."
+        },
+        {
+          "title": "Authorization Cheat Sheet",
+          "url": "https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html",
+          "provider": "OWASP",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Nguyên tắc phân quyền an toàn: quyền tối thiểu, từ chối mặc định và kiểm tra quyền ở mọi yêu cầu."
+        }
+      ]
+    },
+    {
+      "skill": "JavaScript/TypeScript",
+      "resources": [
+        {
+          "title": "JavaScript Guide",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide",
+          "provider": "MDN Web Docs",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hướng dẫn chuẩn về cú pháp, hàm, đối tượng, xử lý sự kiện và lập trình bất đồng bộ trong JavaScript."
+        },
+        {
+          "title": "The Modern JavaScript Tutorial",
+          "url": "https://javascript.info/",
+          "provider": "javascript.info",
+          "type": "book",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Giáo trình JavaScript hiện đại từ cơ bản đến Promise, async/await và thao tác DOM, có bài tập kèm lời giải."
+        },
+        {
+          "title": "Lập Trình JavaScript Cơ Bản",
+          "url": "https://f8.edu.vn/courses/javascript-co-ban",
+          "provider": "F8",
+          "type": "course",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Khóa học tiếng Việt miễn phí về biến, hàm, mảng, đối tượng, DOM và bài tập thực hành JavaScript."
+        },
+        {
+          "title": "The TypeScript Handbook",
+          "url": "https://www.typescriptlang.org/docs/handbook/intro.html",
+          "provider": "TypeScript (Microsoft)",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Học thêm kiểu tĩnh với TypeScript: khai báo kiểu, interface, generic và bắt lỗi khi biên dịch."
+        }
+      ]
+    },
+    {
+      "skill": "Kiểm thử",
+      "resources": [
+        {
+          "title": "The Practical Test Pyramid",
+          "url": "https://martinfowler.com/articles/practical-test-pyramid.html",
+          "provider": "martinfowler.com",
+          "type": "article",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Hiểu các mức kiểm thử đơn vị, tích hợp, giao diện và cách cân đối chúng trong một dự án thật."
+        },
+        {
+          "title": "Software Engineering at Google: Testing Overview",
+          "url": "https://abseil.io/resources/swe-book/html/ch11.html",
+          "provider": "Google (Abseil)",
+          "type": "book",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Chương sách miễn phí về mục đích kiểm thử, quy mô, phạm vi test và cách tổ chức kiểm thử trong nhóm."
+        },
+        {
+          "title": "Certified Tester Foundation Level (CTFL) v4.0",
+          "url": "https://istqb.org/certifications/certified-tester-foundation-level-ctfl-v4-0/",
+          "provider": "ISTQB",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Chuẩn kiến thức kiểm thử nền tảng về quy trình, mức và loại kiểm thử; syllabus tải miễn phí."
+        }
+      ]
+    },
+    {
+      "skill": "Kiểm thử xâm nhập",
+      "resources": [
+        {
+          "title": "Web Security Testing Guide",
+          "url": "https://owasp.org/projects/web-security-testing-guide",
+          "provider": "OWASP",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Bộ hướng dẫn kiểm thử bảo mật ứng dụng web: thu thập thông tin, kiểm thử xác thực, phân quyền, đầu vào."
+        },
+        {
+          "title": "SP 800-115: Technical Guide to Information Security Testing and Assessment",
+          "url": "https://csrc.nist.gov/pubs/sp/800/115/final",
+          "provider": "NIST",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Hướng dẫn lập kế hoạch và thực hiện kiểm thử an ninh: dò quét, khai thác, đánh giá và báo cáo."
+        },
+        {
+          "title": "Nmap Reference Guide",
+          "url": "https://nmap.org/book/man.html",
+          "provider": "Nmap",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Tài liệu chính thức của Nmap về dò tìm máy chủ, quét cổng, nhận diện dịch vụ và hệ điều hành."
+        }
+      ]
+    },
+    {
+      "skill": "Kiến trúc máy tính và hợp ngữ",
+      "resources": [
+        {
+          "title": "Nand2Tetris: From Nand to Tetris",
+          "url": "https://www.nand2tetris.org/",
+          "provider": "Nand2Tetris",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Tự xây máy tính từ cổng logic đến CPU, bộ nhớ, hợp ngữ và trình dịch qua các dự án nhỏ."
+        },
+        {
+          "title": "Computation Structures",
+          "url": "https://ocw.mit.edu/courses/6-004-computation-structures-spring-2017/",
+          "provider": "MIT OpenCourseWare",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Bài giảng về biểu diễn số, mạch số, tập lệnh, pipeline, bộ nhớ đệm và tổ chức bộ xử lý."
+        },
+        {
+          "title": "Guide to x86 Assembly",
+          "url": "https://www.cs.virginia.edu/~evans/cs216/guides/x86.html",
+          "provider": "University of Virginia",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Tóm tắt thanh ghi, lệnh và quy ước gọi hàm x86 để đọc và viết chương trình hợp ngữ đơn giản."
+        }
+      ]
+    },
+    {
+      "skill": "Kỹ thuật truyền số liệu",
+      "resources": [
+        {
+          "title": "Introduction to EECS II: Digital Communication Systems",
+          "url": "https://ocw.mit.edu/courses/6-02-introduction-to-eecs-ii-digital-communication-systems-fall-2012/",
+          "provider": "MIT OpenCourseWare",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Bài giảng về mã hóa, mã sửa lỗi, điều chế, ghép kênh và truyền tín hiệu qua kênh có nhiễu."
+        },
+        {
+          "title": "Computer Networks: A Systems Approach, Chapter 2: Direct Links",
+          "url": "https://book.systemsapproach.org/direct.html",
+          "provider": "Systems Approach (Peterson & Davie)",
+          "type": "book",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Chương sách mở về mã hóa tín hiệu, đóng khung, phát hiện lỗi, truyền tin cậy và chia sẻ đường truyền."
+        },
+        {
+          "title": "Networking tutorial",
+          "url": "https://www.youtube.com/playlist?list=PLowKtXNTBypH19whXTVoG3oKSuOcw_XeW",
+          "provider": "Ben Eater (YouTube)",
+          "type": "video",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Chuỗi video minh họa trực quan cách bit được mã hóa, truyền trên dây và đóng gói thành khung Ethernet."
+        }
+      ]
+    },
+    {
+      "skill": "Làm việc nhóm",
+      "resources": [
+        {
+          "title": "Atlassian Team Playbook",
+          "url": "https://www.atlassian.com/team-playbook",
+          "provider": "Atlassian",
+          "type": "practice",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Bộ hoạt động mẫu giúp nhóm thống nhất mục tiêu, phân vai, họp hiệu quả và tự đánh giá sức khỏe nhóm."
+        },
+        {
+          "title": "Teamwork Skills: Being an Effective Group Member",
+          "url": "https://uwaterloo.ca/centre-for-teaching-excellence/catalogs/tip-sheets/teamwork-skills-being-effective-group-member",
+          "provider": "University of Waterloo",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Gợi ý kỹ năng làm việc nhóm cho sinh viên: lắng nghe, chia sẻ trách nhiệm, góp ý và giải quyết bất đồng."
+        },
+        {
+          "title": "Roles and Responsibilities Play",
+          "url": "https://www.atlassian.com/team-playbook/plays/roles-and-responsibilities",
+          "provider": "Atlassian",
+          "type": "practice",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Buổi làm việc mẫu để cả nhóm làm rõ ai làm gì, tránh trùng lặp và bỏ sót nhiệm vụ."
+        }
+      ]
+    },
+    {
+      "skill": "Lập trình C#",
+      "resources": [
+        {
+          "title": "C# Guide",
+          "url": "https://learn.microsoft.com/en-us/dotnet/csharp/",
+          "provider": "Microsoft Learn",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Tài liệu chính thức về cú pháp, kiểu dữ liệu, xử lý ngoại lệ và cách tổ chức mã C# trên .NET."
+        },
+        {
+          "title": "Write your first code using C# (Get started with C#, Part 1)",
+          "url": "https://learn.microsoft.com/en-us/training/paths/get-started-c-sharp-part-1/",
+          "provider": "Microsoft Learn",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Bài học tương tác ngay trên trình duyệt về biến, kiểu dữ liệu và những câu lệnh C# đầu tiên."
+        },
+        {
+          "title": "Foundational C# with Microsoft",
+          "url": "https://www.freecodecamp.org/learn/foundational-c-sharp-with-microsoft",
+          "provider": "freeCodeCamp",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Chứng chỉ miễn phí hợp tác với Microsoft, ôn luyện C# qua chuỗi bài học và bài kiểm tra cuối khóa."
+        }
+      ]
+    },
+    {
+      "skill": "Lập trình hệ thống nhúng và IoT (ESP32)",
+      "resources": [
+        {
+          "title": "ESP-IDF Programming Guide: Get Started",
+          "url": "https://docs.espressif.com/projects/esp-idf/en/stable/esp32/get-started/index.html",
+          "provider": "Espressif",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Hướng dẫn chính thức cài ESP-IDF, nạp chương trình và chạy ví dụ đầu tiên trên ESP32."
+        },
+        {
+          "title": "Arduino ESP32 Core documentation",
+          "url": "https://docs.espressif.com/projects/arduino-esp32/en/latest/",
+          "provider": "Espressif",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Lập trình ESP32 bằng Arduino: GPIO, ngắt, Wi-Fi, Bluetooth và giao tiếp cảm biến qua I2C, SPI."
+        },
+        {
+          "title": "Getting Started with the ESP32 Development Board",
+          "url": "https://randomnerdtutorials.com/getting-started-with-esp32/",
+          "provider": "Random Nerd Tutorials",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Bài nhập môn ESP32 có sơ đồ chân và dự án mẫu đọc cảm biến, điều khiển thiết bị."
+        }
+      ]
+    },
+    {
+      "skill": "Lập trình hướng đối tượng",
+      "resources": [
+        {
+          "title": "Object Oriented Programming",
+          "url": "https://dev.java/learn/language/oop/",
+          "provider": "Dev.java (Oracle)",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Giải thích lớp, đối tượng, kế thừa, interface và đóng gói qua các ví dụ Java."
+        },
+        {
+          "title": "Object-Oriented Programming (C#)",
+          "url": "https://learn.microsoft.com/en-us/dotnet/csharp/fundamentals/tutorials/oop",
+          "provider": "Microsoft Learn",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Thực hành trừu tượng hóa, đóng gói, kế thừa và đa hình qua ví dụ tài khoản ngân hàng bằng C#."
+        },
+        {
+          "title": "Classes",
+          "url": "https://docs.python.org/3/tutorial/classes.html",
+          "provider": "Python Software Foundation",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Cách định nghĩa lớp, thuộc tính, phương thức và kế thừa trong Python."
+        }
+      ]
+    },
+    {
+      "skill": "Lập trình Java",
+      "resources": [
+        {
+          "title": "Learn Java",
+          "url": "https://dev.java/learn/",
+          "provider": "Dev.java (Oracle)",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hướng dẫn chính thức từ cài JDK, cú pháp, collection đến xử lý ngoại lệ và tổ chức chương trình Java."
+        },
+        {
+          "title": "Java Programming",
+          "url": "https://java-programming.mooc.fi/",
+          "provider": "University of Helsinki (MOOC.fi)",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Khóa học Java miễn phí của Đại học Helsinki với hàng trăm bài tập lập trình được chấm tự động."
+        },
+        {
+          "title": "JUnit User Guide",
+          "url": "https://docs.junit.org/current/user-guide/",
+          "provider": "JUnit",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Viết và chạy kiểm thử đơn vị cho chương trình Java bằng JUnit để kiểm tra mã đúng yêu cầu."
+        }
+      ]
+    },
+    {
+      "skill": "Lập trình tính toán song song",
+      "resources": [
+        {
+          "title": "Introduction to Parallel Computing Tutorial",
+          "url": "https://hpc.llnl.gov/documentation/tutorials/introduction-parallel-computing-tutorial",
+          "provider": "Lawrence Livermore National Laboratory",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Tổng quan mô hình song song, phân rã bài toán, đồng bộ, cân bằng tải và cách đo hiệu suất tăng tốc."
+        },
+        {
+          "title": "OpenMP Tutorial",
+          "url": "https://hpc-tutorials.llnl.gov/openmp/",
+          "provider": "Lawrence Livermore National Laboratory",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Học song song hóa vòng lặp và vùng mã trên CPU nhiều lõi bằng chỉ thị OpenMP trong C/C++."
+        },
+        {
+          "title": "concurrent.futures: Launching parallel tasks",
+          "url": "https://docs.python.org/3/library/concurrent.futures.html",
+          "provider": "Python Software Foundation",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Chạy tác vụ song song bằng ThreadPoolExecutor, ProcessPoolExecutor rồi so sánh thời gian thực thi."
+        }
+      ]
+    },
+    {
+      "skill": "Lập trình ứng dụng mạng",
+      "resources": [
+        {
+          "title": "Beej's Guide to Network Programming",
+          "url": "https://beej.us/guide/bgnet/",
+          "provider": "Beej's Guides",
+          "type": "book",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Sách miễn phí kinh điển về socket TCP/UDP, mô hình client–server và xử lý nhiều kết nối bằng poll/select."
+        },
+        {
+          "title": "Socket Programming HOWTO",
+          "url": "https://docs.python.org/3/howto/sockets.html",
+          "provider": "Python Software Foundation",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hướng dẫn ngắn viết chương trình client–server bằng socket trong Python."
+        },
+        {
+          "title": "All About Sockets",
+          "url": "https://docs.oracle.com/javase/tutorial/networking/sockets/",
+          "provider": "Oracle",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Xây dựng ứng dụng client–server bằng Socket và ServerSocket trong Java, kèm ví dụ máy chủ nhiều luồng."
+        }
+      ]
+    },
+    {
+      "skill": "Lập trình với cơ sở dữ liệu",
+      "resources": [
+        {
+          "title": "JDBC Basics",
+          "url": "https://docs.oracle.com/javase/tutorial/jdbc/basics/index.html",
+          "provider": "Oracle",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Kết nối cơ sở dữ liệu từ Java, thực thi truy vấn, dùng PreparedStatement, giao dịch và gọi stored procedure."
+        },
+        {
+          "title": "Stored Procedures (Database Engine)",
+          "url": "https://learn.microsoft.com/en-us/sql/relational-databases/stored-procedures/stored-procedures-database-engine",
+          "provider": "Microsoft Learn",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Hiểu và viết stored procedure trên SQL Server để xử lý dữ liệu ngay phía cơ sở dữ liệu."
+        },
+        {
+          "title": "PL/pgSQL: SQL Procedural Language",
+          "url": "https://www.postgresql.org/docs/current/plpgsql.html",
+          "provider": "PostgreSQL",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Viết hàm, thủ tục và trigger bằng PL/pgSQL để xử lý nghiệp vụ trong PostgreSQL."
+        }
+      ]
+    },
+    {
+      "skill": "Lập trình với MongoDB",
+      "resources": [
+        {
+          "title": "MongoDB CRUD Operations",
+          "url": "https://www.mongodb.com/docs/manual/crud/",
+          "provider": "MongoDB",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Thao tác thêm, đọc, sửa, xóa tài liệu và truy vấn có điều kiện trong MongoDB."
+        },
+        {
+          "title": "Data Modeling in MongoDB",
+          "url": "https://www.mongodb.com/docs/manual/data-modeling/",
+          "provider": "MongoDB",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Thiết kế lược đồ tài liệu, chọn nhúng hay tham chiếu dữ liệu theo cách ứng dụng truy cập."
+        },
+        {
+          "title": "Mongoose: Getting Started",
+          "url": "https://mongoosejs.com/docs/index.html",
+          "provider": "Mongoose",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Kết nối MongoDB từ Node.js, định nghĩa schema, model và truy vấn dữ liệu bằng Mongoose."
+        }
+      ]
+    },
+    {
+      "skill": "Lập trình với SQLite",
+      "resources": [
+        {
+          "title": "SQL As Understood By SQLite",
+          "url": "https://www.sqlite.org/lang.html",
+          "provider": "SQLite",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Tra cứu cú pháp SQL của SQLite: tạo bảng, chèn dữ liệu, truy vấn, chỉ mục và giao dịch."
+        },
+        {
+          "title": "sqlite3: DB-API 2.0 interface for SQLite databases",
+          "url": "https://docs.python.org/3/library/sqlite3.html",
+          "provider": "Python Software Foundation",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Lưu và truy xuất dữ liệu SQLite trong chương trình Python, dùng tham số truy vấn an toàn."
+        },
+        {
+          "title": "Lưu dữ liệu bằng SQLite",
+          "url": "https://developer.android.com/training/data-storage/sqlite?hl=vi",
+          "provider": "Android Developers",
+          "type": "docs",
+          "language": "vi",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Tạo cơ sở dữ liệu SQLite trong ứng dụng Android với SQLiteOpenHelper và thêm, đọc, sửa, xóa dữ liệu."
+        }
+      ]
+    },
+    {
+      "skill": "Linux",
+      "resources": [
+        {
+          "title": "The Linux command line for beginners",
+          "url": "https://ubuntu.com/tutorials/command-line-for-beginners",
+          "provider": "Ubuntu (Canonical)",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Làm quen dòng lệnh Linux: điều hướng thư mục, thao tác tệp, quyền và chạy lệnh quản trị với sudo."
+        },
+        {
+          "title": "The Linux Command Line",
+          "url": "https://linuxcommand.org/tlcl.php",
+          "provider": "LinuxCommand.org (William Shotts)",
+          "type": "book",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Sách miễn phí về shell, quyền, tiến trình, quản lý gói và viết shell script trên Linux."
+        },
+        {
+          "title": "The Missing Semester of Your CS Education",
+          "url": "https://missing.csail.mit.edu/",
+          "provider": "MIT CSAIL",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Bài giảng MIT về shell, script, công cụ dòng lệnh, SSH và tự động hóa công việc trên Linux."
+        }
+      ]
+    },
+    {
+      "skill": "LLM/NLP",
+      "resources": [
+        {
+          "title": "Hugging Face LLM Course",
+          "url": "https://huggingface.co/learn/llm-course/vi/chapter1/1",
+          "provider": "Hugging Face",
+          "type": "course",
+          "language": "vi",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Khóa học có bản tiếng Việt về Transformer, tokenizer, tinh chỉnh và dùng mô hình ngôn ngữ cho tác vụ văn bản."
+        },
+        {
+          "title": "CS224N: Natural Language Processing with Deep Learning",
+          "url": "https://web.stanford.edu/class/cs224n/",
+          "provider": "Stanford University",
+          "type": "course",
+          "language": "en",
+          "level": "nang-cao",
+          "free": true,
+          "note": "Bài giảng và slide về xử lý ngôn ngữ tự nhiên với học sâu, từ word vector đến mô hình ngôn ngữ lớn."
+        },
+        {
+          "title": "Giới thiệu về các mô hình ngôn ngữ lớn",
+          "url": "https://developers.google.com/machine-learning/crash-course/llm?hl=vi",
+          "provider": "Google for Developers",
+          "type": "course",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Bài học ngắn có tiếng Việt về token, mô hình ngôn ngữ, Transformer và cách LLM tạo văn bản."
+        }
+      ]
+    },
+    {
+      "skill": "Mã hóa và bảo mật dữ liệu",
+      "resources": [
+        {
+          "title": "Practical Cryptography for Developers",
+          "url": "https://cryptobook.nakov.com/",
+          "provider": "Svetlin Nakov",
+          "type": "book",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Sách miễn phí về hàm băm, MAC, mã hóa đối xứng, bất đối xứng và chữ ký số, có ví dụ mã."
+        },
+        {
+          "title": "Cryptographic Storage Cheat Sheet",
+          "url": "https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html",
+          "provider": "OWASP",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Khuyến nghị chọn thuật toán, quản lý khóa và mã hóa dữ liệu lưu trữ đúng cách trong ứng dụng."
+        },
+        {
+          "title": "Crypto 101",
+          "url": "https://www.crypto101.io/",
+          "provider": "Crypto 101 (Laurens Van Houtven)",
+          "type": "book",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Sách mở nhập môn mật mã cho lập trình viên, phân tích các lỗi dùng sai mật mã thường gặp."
+        }
+      ]
+    },
+    {
+      "skill": "Machine learning",
+      "resources": [
+        {
+          "title": "Machine Learning Crash Course",
+          "url": "https://developers.google.com/machine-learning/crash-course?hl=vi",
+          "provider": "Google for Developers",
+          "type": "course",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Khóa học có tiếng Việt về hồi quy, phân loại, chuẩn bị dữ liệu, đánh giá và tránh overfitting."
+        },
+        {
+          "title": "Intro to Machine Learning",
+          "url": "https://www.kaggle.com/learn/intro-to-machine-learning",
+          "provider": "Kaggle",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Thực hành huấn luyện cây quyết định, random forest và kiểm tra mô hình ngay trên notebook trực tuyến."
+        },
+        {
+          "title": "Giới thiệu về Machine Learning",
+          "url": "https://machinelearningcoban.com/2016/12/26/introduce/",
+          "provider": "Machine Learning cơ bản (Vũ Hữu Tiệp)",
+          "type": "article",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Blog tiếng Việt uy tín mở đầu chuỗi bài giải thích thuật toán học máy kèm toán và mã minh họa."
+        }
+      ]
+    },
+    {
+      "skill": "Mạng máy tính",
+      "resources": [
+        {
+          "title": "Networking Basics",
+          "url": "https://www.netacad.com/courses/networking-basics",
+          "provider": "Cisco Networking Academy",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Khóa học miễn phí về mô hình mạng, địa chỉ IP, Ethernet, giao thức, dịch vụ và thực hành Packet Tracer."
+        },
+        {
+          "title": "Computer Networking: a Top Down Approach (online lectures)",
+          "url": "https://gaia.cs.umass.edu/kurose_ross/online_lectures.htm",
+          "provider": "UMass Amherst (Kurose & Ross)",
+          "type": "video",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Bài giảng video theo giáo trình Kurose & Ross, đi qua từng tầng: ứng dụng, giao vận, mạng, liên kết."
+        },
+        {
+          "title": "Packet Traveling",
+          "url": "https://www.practicalnetworking.net/series/packet-traveling/packet-traveling/",
+          "provider": "Practical Networking",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Theo dõi đường đi của gói tin qua switch, router để hiểu ARP, địa chỉ MAC, IP và định tuyến cơ bản."
+        }
+      ]
+    },
+    {
+      "skill": "MLOps",
+      "resources": [
+        {
+          "title": "MLOps: Continuous delivery and automation pipelines in machine learning",
+          "url": "https://docs.cloud.google.com/architecture/mlops-continuous-delivery-and-automation-pipelines-in-machine-learning",
+          "provider": "Google Cloud",
+          "type": "article",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Mô tả các mức trưởng thành MLOps: tự động huấn luyện, triển khai, theo dõi và quản lý phiên bản mô hình."
+        },
+        {
+          "title": "MLOps Zoomcamp",
+          "url": "https://github.com/DataTalksClub/mlops-zoomcamp",
+          "provider": "DataTalks.Club",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Khóa học miễn phí thực hành theo dõi thí nghiệm, đóng gói, triển khai và giám sát mô hình học máy."
+        },
+        {
+          "title": "MLflow Documentation",
+          "url": "https://mlflow.org/docs/latest/",
+          "provider": "MLflow",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Dùng MLflow để ghi lại thí nghiệm, quản lý phiên bản mô hình và đóng gói mô hình khi triển khai."
+        }
+      ]
+    },
+    {
+      "skill": "Mobile UI",
+      "resources": [
+        {
+          "title": "Bố cục trong khung hiển thị",
+          "url": "https://developer.android.com/develop/ui/views/layout/declaring-layout?hl=vi",
+          "provider": "Android Developers",
+          "type": "docs",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Khai báo layout XML, các loại ViewGroup và thuộc tính bố trí thành phần trên màn hình Android."
+        },
+        {
+          "title": "Tổng quan về sự kiện đầu vào",
+          "url": "https://developer.android.com/develop/ui/views/touch-and-input/input-events?hl=vi",
+          "provider": "Android Developers",
+          "type": "docs",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Xử lý sự kiện chạm, nhấn, nhập liệu bằng listener để tạo tương tác cho giao diện Android."
+        },
+        {
+          "title": "Material Design 3",
+          "url": "https://m3.material.io/",
+          "provider": "Google (Material Design)",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Hướng dẫn thiết kế của Google về thành phần, bố cục, màu sắc và điều hướng cho ứng dụng di động."
+        }
+      ]
+    },
+    {
+      "skill": "MySQL",
+      "resources": [
+        {
+          "title": "MySQL 8.4 Reference Manual: Tutorial",
+          "url": "https://dev.mysql.com/doc/refman/8.4/en/tutorial.html",
+          "provider": "MySQL (Oracle)",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hướng dẫn kết nối máy chủ MySQL, tạo cơ sở dữ liệu, bảng và thao tác dữ liệu qua client."
+        },
+        {
+          "title": "MySQL Connector/J Developer Guide",
+          "url": "https://dev.mysql.com/doc/connector-j/en/",
+          "provider": "MySQL (Oracle)",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Kết nối ứng dụng Java với MySQL qua JDBC: cấu hình kết nối, thực thi truy vấn và xử lý lỗi."
+        },
+        {
+          "title": "MySQL Connector/Python Developer Guide",
+          "url": "https://dev.mysql.com/doc/connector-python/en/",
+          "provider": "MySQL (Oracle)",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Kết nối ứng dụng Python với MySQL, thực thi truy vấn có tham số và quản lý giao dịch."
+        }
+      ]
+    },
+    {
+      "skill": "Network monitoring",
+      "resources": [
+        {
+          "title": "Wireshark User's Guide",
+          "url": "https://www.wireshark.org/docs/wsug_html_chunked/",
+          "provider": "Wireshark",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Bắt và lọc gói tin, đọc thống kê lưu lượng để phát hiện bất thường trên mạng."
+        },
+        {
+          "title": "Zabbix Manual",
+          "url": "https://www.zabbix.com/documentation/current/en/manual",
+          "provider": "Zabbix",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Giám sát thiết bị, máy chủ, dịch vụ mạng, thu thập chỉ số và cấu hình cảnh báo với Zabbix."
+        },
+        {
+          "title": "Prometheus Overview",
+          "url": "https://prometheus.io/docs/introduction/overview/",
+          "provider": "Prometheus",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Hiểu kiến trúc thu thập chỉ số theo thời gian, truy vấn và cảnh báo của Prometheus."
+        }
+      ]
+    },
+    {
+      "skill": "Nghiên cứu và thực hiện đề tài CNTT",
+      "resources": [
+        {
+          "title": "Conducting Research",
+          "url": "https://owl.purdue.edu/owl/research_and_citation/conducting_research/index.html",
+          "provider": "Purdue OWL",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hướng dẫn tìm và đánh giá nguồn tài liệu, nghiên cứu sơ cấp và viết tổng quan tài liệu cho đề tài."
+        },
+        {
+          "title": "Elsevier Researcher Academy",
+          "url": "https://researcheracademy.elsevier.com/",
+          "provider": "Elsevier",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Các module e-learning miễn phí về thiết kế nghiên cứu, viết bài báo, đạo đức học thuật và công bố kết quả."
+        },
+        {
+          "title": "IEEE Author Center: Journals",
+          "url": "https://journals.ieeeauthorcenter.ieee.org/",
+          "provider": "IEEE",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Hướng dẫn cấu trúc, cách viết và trình bày bài báo kỹ thuật theo chuẩn IEEE, gồm cả trích dẫn."
+        }
+      ]
+    },
+    {
+      "skill": "Nguyên lý hệ điều hành",
+      "resources": [
+        {
+          "title": "Operating Systems: Three Easy Pieces",
+          "url": "https://pages.cs.wisc.edu/~remzi/OSTEP/",
+          "provider": "University of Wisconsin–Madison",
+          "type": "book",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Sách miễn phí về tiến trình, lập lịch, bộ nhớ ảo, đồng bộ hóa và hệ thống tệp, viết dễ hiểu."
+        },
+        {
+          "title": "6.1810: Operating System Engineering",
+          "url": "https://pdos.csail.mit.edu/6.1810/",
+          "provider": "MIT CSAIL",
+          "type": "course",
+          "language": "en",
+          "level": "nang-cao",
+          "free": true,
+          "note": "Môn hệ điều hành của MIT với lab xv6 để tự cài đặt system call, bộ nhớ ảo và lập lịch."
+        },
+        {
+          "title": "CS 162: Operating Systems and System Programming",
+          "url": "https://cs162.org/",
+          "provider": "UC Berkeley",
+          "type": "course",
+          "language": "en",
+          "level": "nang-cao",
+          "free": true,
+          "note": "Bài giảng của Đại học Berkeley về tiến trình, luồng, đồng bộ, bộ nhớ, vào/ra và hệ thống tệp."
+        }
+      ]
+    },
+    {
+      "skill": "Node.js/Java/.NET",
+      "resources": [
+        {
+          "title": "Introduction to Node.js",
+          "url": "https://nodejs.org/learn/getting-started/introduction-to-nodejs",
+          "provider": "Node.js",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Làm quen Node.js: vòng lặp sự kiện, module, npm và chạy JavaScript phía máy chủ."
+        },
+        {
+          "title": "Express Routing",
+          "url": "https://expressjs.com/en/guide/routing/",
+          "provider": "Express.js",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Định nghĩa route, tham số, middleware và tổ chức xử lý yêu cầu trong ứng dụng Express."
+        },
+        {
+          "title": "Express web framework (Node.js/JavaScript)",
+          "url": "https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Server-side/Express_Nodejs",
+          "provider": "MDN Web Docs",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Chuỗi bài dựng website hoàn chỉnh bằng Express: route, controller, template, cơ sở dữ liệu và triển khai."
+        }
+      ]
+    },
+    {
+      "skill": "Phân tích dữ liệu",
+      "resources": [
+        {
+          "title": "Pandas",
+          "url": "https://www.kaggle.com/learn/pandas",
+          "provider": "Kaggle",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Thực hành đọc, lọc, nhóm, tổng hợp và kết hợp dữ liệu với pandas ngay trên notebook."
+        },
+        {
+          "title": "Data Cleaning",
+          "url": "https://www.kaggle.com/learn/data-cleaning",
+          "provider": "Kaggle",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Xử lý giá trị thiếu, chuẩn hóa thang đo, định dạng ngày tháng và dữ liệu nhập không nhất quán."
+        },
+        {
+          "title": "10 minutes to pandas",
+          "url": "https://pandas.pydata.org/docs/user_guide/10min.html",
+          "provider": "pandas",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Tóm tắt nhanh các thao tác khám phá dữ liệu cơ bản với DataFrame trong pandas."
+        }
+      ]
+    },
+    {
+      "skill": "Phân tích mã độc",
+      "resources": [
+        {
+          "title": "MITRE ATT&CK",
+          "url": "https://attack.mitre.org/",
+          "provider": "MITRE",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Cơ sở tri thức về chiến thuật, kỹ thuật tấn công để gắn hành vi mã độc với dấu hiệu nhận diện."
+        },
+        {
+          "title": "REMnux Documentation",
+          "url": "https://docs.remnux.org/",
+          "provider": "REMnux",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Bộ công cụ Linux chuyên phân tích mã độc, hướng dẫn phân tích tĩnh và động trong môi trường cách ly."
+        },
+        {
+          "title": "Reverse Engineering 101",
+          "url": "https://malwareunicorn.org/workshops/re101.html",
+          "provider": "Malware Unicorn",
+          "type": "course",
+          "language": "en",
+          "level": "nang-cao",
+          "free": true,
+          "note": "Workshop miễn phí dựng phòng lab an toàn và phân tích tĩnh, động một mẫu mã độc trên Windows."
+        }
+      ]
+    },
+    {
+      "skill": "Phân tích vấn đề môi trường",
+      "resources": [
+        {
+          "title": "Climate Change",
+          "url": "https://ourworldindata.org/climate-change",
+          "provider": "Our World in Data",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Dữ liệu và biểu đồ tin cậy về khí thải, biến đổi khí hậu và tác động môi trường để phân tích có căn cứ."
+        },
+        {
+          "title": "The 17 Goals",
+          "url": "https://sdgs.un.org/goals",
+          "provider": "United Nations",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Tìm hiểu các Mục tiêu Phát triển Bền vững về khí hậu, nước, năng lượng, hệ sinh thái và giải pháp."
+        },
+        {
+          "title": "Effects of Climate Change",
+          "url": "https://science.nasa.gov/climate-change/effects/",
+          "provider": "NASA",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Giải thích các tác động của biến đổi khí hậu như nắng nóng, hạn hán, nước biển dâng dựa trên bằng chứng."
+        }
+      ]
+    },
+    {
+      "skill": "Phân tích yêu cầu",
+      "resources": [
+        {
+          "title": "Stakeholder Interviews 101",
+          "url": "https://www.nngroup.com/articles/stakeholder-interviews/",
+          "provider": "Nielsen Norman Group",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Cách chuẩn bị và phỏng vấn các bên liên quan để thu thập, làm rõ mục tiêu và ràng buộc của dự án."
+        },
+        {
+          "title": "What is a Product Requirements Document (PRD)?",
+          "url": "https://www.atlassian.com/agile/product-management/requirements",
+          "provider": "Atlassian",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hướng dẫn đặc tả yêu cầu: mục tiêu, giả định, yêu cầu chức năng, ràng buộc và câu hỏi còn mở."
+        },
+        {
+          "title": "User Stories With Examples and a Template",
+          "url": "https://www.atlassian.com/agile/project-management/user-stories",
+          "provider": "Atlassian",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Viết user story và tiêu chí chấp nhận để mô tả yêu cầu từ góc nhìn người dùng."
+        }
+      ]
+    },
+    {
+      "skill": "Phát triển trò chơi",
+      "resources": [
+        {
+          "title": "CS50's Introduction to 2D Game Development",
+          "url": "https://cs50.harvard.edu/games/",
+          "provider": "Harvard University (CS50)",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Khóa học miễn phí của Harvard dựng lại các trò chơi kinh điển để học vòng lặp game, va chạm, âm thanh."
+        },
+        {
+          "title": "Your first 2D game",
+          "url": "https://docs.godotengine.org/en/stable/getting_started/first_2d_game/index.html",
+          "provider": "Godot Engine",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hướng dẫn từng bước làm một trò chơi 2D hoàn chỉnh với engine mã nguồn mở Godot."
+        },
+        {
+          "title": "Game Loop",
+          "url": "https://gameprogrammingpatterns.com/game-loop.html",
+          "provider": "Game Programming Patterns (Robert Nystrom)",
+          "type": "book",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Giải thích cách thiết kế vòng lặp trò chơi, tách cập nhật logic khỏi vẽ hình và kiểm soát tốc độ khung hình."
+        }
+      ]
+    },
+    {
+      "skill": "Phát triển ứng dụng Android",
+      "resources": [
+        {
+          "title": "Giới thiệu về hoạt động",
+          "url": "https://developer.android.com/guide/components/activities/intro-activities?hl=vi",
+          "provider": "Android Developers",
+          "type": "docs",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hiểu Activity, vòng đời màn hình và cách khai báo Activity trong ứng dụng Android."
+        },
+        {
+          "title": "Ý định và bộ lọc ý định",
+          "url": "https://developer.android.com/guide/components/intents-filters?hl=vi",
+          "provider": "Android Developers",
+          "type": "docs",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Dùng Intent để chuyển màn hình, truyền dữ liệu giữa các Activity và gọi ứng dụng khác."
+        },
+        {
+          "title": "Tổng quan về lưu trữ dữ liệu và tệp",
+          "url": "https://developer.android.com/training/data-storage?hl=vi",
+          "provider": "Android Developers",
+          "type": "docs",
+          "language": "vi",
+          "level": "trung-cap",
+          "free": true,
+          "note": "So sánh các cách lưu dữ liệu trên Android: tệp, SharedPreferences và cơ sở dữ liệu."
+        }
+      ]
+    },
+    {
+      "skill": "Phát triển ứng dụng desktop",
+      "resources": [
+        {
+          "title": "Desktop Guide for WPF and Windows Forms",
+          "url": "https://learn.microsoft.com/en-us/dotnet/desktop/",
+          "provider": "Microsoft Learn",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Tổng quan cách xây dựng ứng dụng desktop trên .NET với Windows Forms hoặc WPF."
+        },
+        {
+          "title": "TkDocs Tutorial",
+          "url": "https://tkdocs.com/tutorial/",
+          "provider": "TkDocs",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Xây dựng giao diện desktop bằng Tkinter (Python): widget, bố cục và xử lý sự kiện."
+        },
+        {
+          "title": "Electron Tutorial: Prerequisites",
+          "url": "https://www.electronjs.org/docs/latest/tutorial/tutorial-prerequisites",
+          "provider": "Electron",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Chuỗi hướng dẫn làm ứng dụng desktop đa nền tảng bằng HTML, CSS, JavaScript với Electron."
+        }
+      ]
+    },
+    {
+      "skill": "Phát triển ứng dụng với Java Swing",
+      "resources": [
+        {
+          "title": "Creating a GUI With Swing",
+          "url": "https://docs.oracle.com/javase/tutorial/uiswing/",
+          "provider": "Oracle",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Giáo trình chính thức về JFrame, các thành phần Swing và cách tổ chức ứng dụng giao diện Java."
+        },
+        {
+          "title": "Writing Event Listeners",
+          "url": "https://docs.oracle.com/javase/tutorial/uiswing/events/index.html",
+          "provider": "Oracle",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Xử lý sự kiện nút bấm, bàn phím, chuột bằng ActionListener và các listener khác trong Swing."
+        },
+        {
+          "title": "Laying Out Components Within a Container",
+          "url": "https://docs.oracle.com/javase/tutorial/uiswing/layout/index.html",
+          "provider": "Oracle",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Dùng BorderLayout, GridLayout, BoxLayout, GridBagLayout để bố trí giao diện Swing."
+        }
+      ]
+    },
+    {
+      "skill": "Phát triển ứng dụng với Spring Boot",
+      "resources": [
+        {
+          "title": "Building an Application with Spring Boot",
+          "url": "https://spring.io/guides/gs/spring-boot/",
+          "provider": "Spring",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Tạo ứng dụng Spring Boot đầu tiên, viết controller, chạy và kiểm thử nhanh."
+        },
+        {
+          "title": "Spring Boot Reference Documentation",
+          "url": "https://docs.spring.io/spring-boot/index.html",
+          "provider": "Spring",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Tài liệu chính thức về cấu hình, starter, auto-configuration và đóng gói ứng dụng Spring Boot."
+        },
+        {
+          "title": "Accessing Data with JPA",
+          "url": "https://spring.io/guides/gs/accessing-data-jpa/",
+          "provider": "Spring",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Lưu và truy vấn dữ liệu với Spring Data JPA thông qua entity và repository."
+        }
+      ]
+    },
+    {
+      "skill": "Phát triển ứng dụng với Windows Forms",
+      "resources": [
+        {
+          "title": "What is Windows Forms",
+          "url": "https://learn.microsoft.com/en-us/dotnet/desktop/winforms/overview/",
+          "provider": "Microsoft Learn",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Tổng quan Windows Forms trên .NET: form, control, sự kiện và cách xây dựng ứng dụng desktop."
+        },
+        {
+          "title": "Create a Windows Forms app tutorial",
+          "url": "https://learn.microsoft.com/en-us/dotnet/desktop/winforms/get-started/create-app-visual-studio",
+          "provider": "Microsoft Learn",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Tạo ứng dụng Windows Forms đầu tiên trong Visual Studio, thêm control và viết mã xử lý."
+        },
+        {
+          "title": "Events Overview (Windows Forms)",
+          "url": "https://learn.microsoft.com/en-us/dotnet/desktop/winforms/forms/events",
+          "provider": "Microsoft Learn",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hiểu cách gắn và xử lý sự kiện của form và control trong Windows Forms."
+        },
+        {
+          "title": "Overview of Data Binding and Windows Forms",
+          "url": "https://learn.microsoft.com/en-us/dotnet/desktop/winforms/data/overview",
+          "provider": "Microsoft Learn",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Liên kết dữ liệu với control như TextBox, DataGridView để hiển thị và cập nhật dữ liệu."
+        }
+      ]
+    },
+    {
+      "skill": "PHP",
+      "resources": [
+        {
+          "title": "PHP: A simple tutorial",
+          "url": "https://www.php.net/manual/en/tutorial.php",
+          "provider": "PHP.net",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hướng dẫn chính thức viết trang PHP đầu tiên, dùng biến, điều kiện và nhúng PHP vào HTML."
+        },
+        {
+          "title": "PHP: Dealing with Forms",
+          "url": "https://www.php.net/manual/en/tutorial.forms.php",
+          "provider": "PHP.net",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Nhận và xử lý dữ liệu biểu mẫu qua $_POST, $_GET, đồng thời lọc dữ liệu đầu vào an toàn."
+        },
+        {
+          "title": "PHP: The Right Way",
+          "url": "https://phptherightway.com/",
+          "provider": "PHP The Right Way",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Tổng hợp thực hành tốt khi viết PHP hiện đại: Composer, PDO, bảo mật và chuẩn mã nguồn."
+        }
+      ]
+    },
+    {
+      "skill": "Playwright/Selenium",
+      "resources": [
+        {
+          "title": "Selenium: Getting started",
+          "url": "https://www.selenium.dev/documentation/webdriver/getting_started/",
+          "provider": "Selenium",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Cài Selenium WebDriver, viết kịch bản đầu tiên để mở trình duyệt, tìm phần tử và kiểm tra kết quả."
+        },
+        {
+          "title": "Page object models",
+          "url": "https://www.selenium.dev/documentation/test_practices/encouraged/page_object_models/",
+          "provider": "Selenium",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Tổ chức kịch bản kiểm thử theo mẫu Page Object Model để dễ bảo trì và tái sử dụng."
+        },
+        {
+          "title": "Playwright: Installation",
+          "url": "https://playwright.dev/docs/intro",
+          "provider": "Playwright",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Bắt đầu kiểm thử tự động giao diện web với Playwright, chạy test và xem báo cáo kết quả."
+        }
+      ]
+    },
+    {
+      "skill": "Power BI/Tableau",
+      "resources": [
+        {
+          "title": "Training for Power BI",
+          "url": "https://learn.microsoft.com/en-us/training/powerplatform/power-bi",
+          "provider": "Microsoft Learn",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Các lộ trình học Power BI miễn phí, từ kết nối dữ liệu, mô hình hóa đến xây dựng báo cáo."
+        },
+        {
+          "title": "Get started with Power BI Desktop",
+          "url": "https://learn.microsoft.com/en-us/power-bi/fundamentals/desktop-getting-started",
+          "provider": "Microsoft Learn",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Nhập dữ liệu, biến đổi bằng Power Query và tạo trực quan hóa đầu tiên trong Power BI Desktop."
+        },
+        {
+          "title": "Tutorial: Create a report from an Excel workbook in Power BI",
+          "url": "https://learn.microsoft.com/en-us/power-bi/create-reports/desktop-excel-stunning-report",
+          "provider": "Microsoft Learn",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Thực hành biến bảng Excel dữ liệu kinh doanh thành báo cáo và dashboard tương tác."
+        }
+      ]
+    },
+    {
+      "skill": "Prototyping",
+      "resources": [
+        {
+          "title": "UX Prototypes: Low Fidelity vs. High Fidelity",
+          "url": "https://www.nngroup.com/articles/ux-prototype-hi-lo-fidelity/",
+          "provider": "Nielsen Norman Group",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Phân biệt prototype độ trung thực thấp và cao, khi nào dùng loại nào để thử nghiệm ý tưởng."
+        },
+        {
+          "title": "Making prototypes",
+          "url": "https://www.gov.uk/service-manual/design/making-prototypes",
+          "provider": "GOV.UK Service Manual",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Cách làm prototype nhanh để kiểm tra luồng sử dụng với người dùng thật trước khi phát triển."
+        },
+        {
+          "title": "Guide to prototyping in Figma",
+          "url": "https://help.figma.com/hc/en-us/articles/360040314193-Guide-to-prototyping-in-Figma",
+          "provider": "Figma Learn",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Nối màn hình, thêm tương tác và chuyển cảnh trong Figma để tạo bản mẫu bấm thử và thu phản hồi."
+        }
+      ]
+    },
+    {
+      "skill": "Python",
+      "resources": [
+        {
+          "title": "The Python Tutorial",
+          "url": "https://docs.python.org/3/tutorial/",
+          "provider": "Python Software Foundation",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Giáo trình chính thức về cú pháp, cấu trúc dữ liệu, hàm, module và xử lý ngoại lệ trong Python."
+        },
+        {
+          "title": "CS50's Introduction to Programming with Python",
+          "url": "https://cs50.harvard.edu/python/",
+          "provider": "Harvard University (CS50)",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Khóa học video miễn phí có bài tập về hàm, vòng lặp, ngoại lệ, thư viện, kiểm thử và xử lý tệp."
+        },
+        {
+          "title": "Python",
+          "url": "https://www.kaggle.com/learn/python",
+          "provider": "Kaggle",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Khóa ngắn ôn nhanh Python cho xử lý dữ liệu, có bài tập chạy trực tiếp trên notebook."
+        }
+      ]
+    },
+    {
+      "skill": "Quản lý dịch vụ CNTT",
+      "resources": [
+        {
+          "title": "ITIL 4: Guiding Principles and Practices",
+          "url": "https://www.atlassian.com/itsm/itil",
+          "provider": "Atlassian",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Tổng quan ITIL 4: chuỗi giá trị dịch vụ, nguyên tắc chỉ dẫn và các thực hành quản lý dịch vụ CNTT."
+        },
+        {
+          "title": "What Is ITSM (IT Service Management)?",
+          "url": "https://www.ibm.com/think/topics/it-service-management",
+          "provider": "IBM",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hiểu các quy trình ITSM như quản lý yêu cầu, sự cố, vấn đề và thay đổi trong vận hành dịch vụ."
+        },
+        {
+          "title": "Service Level Objectives",
+          "url": "https://sre.google/sre-book/service-level-objectives/",
+          "provider": "Google SRE",
+          "type": "book",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Cách định nghĩa SLI, SLO và SLA để đo và cam kết chất lượng dịch vụ CNTT."
+        }
+      ]
+    },
+    {
+      "skill": "Quản lý dự án phần mềm",
+      "resources": [
+        {
+          "title": "What Is Project Management?",
+          "url": "https://www.atlassian.com/work-management/project-management",
+          "provider": "Atlassian",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Tổng quan vòng đời dự án: khởi tạo, lập kế hoạch, thực hiện, theo dõi, kiểm soát và kết thúc."
+        },
+        {
+          "title": "Story points and estimation",
+          "url": "https://www.atlassian.com/agile/project-management/estimation",
+          "provider": "Atlassian",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Cách ước lượng công việc bằng story point và dùng ước lượng để lập kế hoạch sprint."
+        },
+        {
+          "title": "The Scrum Guide",
+          "url": "https://scrumguides.org/scrum-guide.html",
+          "provider": "Scrum Guides (Schwaber & Sutherland)",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Tài liệu gốc về Scrum: vai trò, sự kiện, artifact để lập kế hoạch và kiểm soát tiến độ theo sprint."
+        }
+      ]
+    },
+    {
+      "skill": "Quản lý lỗi",
+      "resources": [
+        {
+          "title": "Bug Writing Guidelines",
+          "url": "https://bugzilla.mozilla.org/page.cgi?id=bug-writing.html",
+          "provider": "Mozilla",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hướng dẫn viết báo cáo lỗi tốt: tóm tắt rõ, các bước tái hiện, kết quả mong đợi và kết quả thực tế."
+        },
+        {
+          "title": "Understanding a Bug",
+          "url": "https://bugzilla.readthedocs.io/en/latest/using/understanding.html",
+          "provider": "Bugzilla",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hiểu các trường của một lỗi như mức nghiêm trọng, độ ưu tiên, trạng thái và vòng đời xử lý lỗi."
+        },
+        {
+          "title": "About issues",
+          "url": "https://docs.github.com/en/issues/tracking-your-work-with-issues/learning-about-issues/about-issues",
+          "provider": "GitHub Docs",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Dùng GitHub Issues để ghi nhận, gắn nhãn, phân công và theo dõi lỗi cùng nhóm phát triển."
+        }
+      ]
+    },
+    {
+      "skill": "Quản lý quy trình nghiệp vụ",
+      "resources": [
+        {
+          "title": "What is Business Process Management?",
+          "url": "https://www.ibm.com/think/topics/business-process-management",
+          "provider": "IBM",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hiểu vòng đời quản lý quy trình nghiệp vụ: thiết kế, mô hình hóa, thực thi, giám sát và tối ưu."
+        },
+        {
+          "title": "BPMN: Business Process Model and Notation",
+          "url": "https://camunda.com/bpmn/",
+          "provider": "Camunda",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hướng dẫn trực quan về ký hiệu BPMN 2.0 để mô hình hóa quy trình nghiệp vụ."
+        },
+        {
+          "title": "Automate a business process using Power Automate",
+          "url": "https://learn.microsoft.com/en-us/training/paths/automate-process-power-automate/",
+          "provider": "Microsoft Learn",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Lộ trình học tự động hóa quy trình nghiệp vụ như phê duyệt, thông báo bằng Power Automate."
+        }
+      ]
+    },
+    {
+      "skill": "Quản lý thời gian và lập kế hoạch cá nhân",
+      "resources": [
+        {
+          "title": "Procrastination",
+          "url": "https://learningcenter.unc.edu/tips-and-tools/how-to-tame-procrastination/",
+          "provider": "UNC Learning Center",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Nhận diện nguyên nhân trì hoãn, chia nhỏ việc và đặt mốc thời gian để bắt đầu, duy trì tiến độ."
+        },
+        {
+          "title": "Calendars and College",
+          "url": "https://learningcenter.unc.edu/tips-and-tools/using-planners/",
+          "provider": "UNC Learning Center",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Cách dùng lịch học kỳ, lịch tuần và danh sách việc để lập kế hoạch học tập cá nhân."
+        },
+        {
+          "title": "The Eisenhower Matrix",
+          "url": "https://www.todoist.com/productivity-methods/eisenhower-matrix",
+          "provider": "Todoist",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Sắp xếp ưu tiên công việc theo mức khẩn cấp và mức quan trọng bằng ma trận Eisenhower."
+        }
+      ]
+    },
+    {
+      "skill": "Quản trị cơ sở dữ liệu SQL Server",
+      "resources": [
+        {
+          "title": "Back up and Restore of SQL Server Databases",
+          "url": "https://learn.microsoft.com/en-us/sql/relational-databases/backup-restore/back-up-and-restore-of-sql-server-databases",
+          "provider": "Microsoft Learn",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Lập chiến lược sao lưu và phục hồi cơ sở dữ liệu SQL Server: full, differential và log backup."
+        },
+        {
+          "title": "Permissions (Database Engine)",
+          "url": "https://learn.microsoft.com/en-us/sql/relational-databases/security/permissions-database-engine",
+          "provider": "Microsoft Learn",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Hiểu hệ thống quyền của SQL Server và cách cấp, thu hồi quyền theo nguyên tắc quyền tối thiểu."
+        },
+        {
+          "title": "Transaction Locking and Row Versioning Guide",
+          "url": "https://learn.microsoft.com/en-us/sql/relational-databases/sql-server-transaction-locking-and-row-versioning-guide",
+          "provider": "Microsoft Learn",
+          "type": "docs",
+          "language": "en",
+          "level": "nang-cao",
+          "free": true,
+          "note": "Tìm hiểu giao dịch, mức cô lập, khóa và row versioning để kiểm soát truy cập đồng thời."
+        },
+        {
+          "title": "Monitor and Tune for Performance",
+          "url": "https://learn.microsoft.com/en-us/sql/relational-databases/performance/monitor-and-tune-for-performance",
+          "provider": "Microsoft Learn",
+          "type": "docs",
+          "language": "en",
+          "level": "nang-cao",
+          "free": true,
+          "note": "Theo dõi hiệu năng SQL Server, xác định truy vấn chậm và điều chỉnh để cải thiện tốc độ."
+        }
+      ]
+    },
+    {
+      "skill": "Quản trị dữ liệu và thông tin số",
+      "resources": [
+        {
+          "title": "What is data governance?",
+          "url": "https://cloud.google.com/learn/what-is-data-governance",
+          "provider": "Google Cloud",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hiểu quản trị dữ liệu: vai trò, chính sách, chất lượng, bảo mật và vòng đời dữ liệu trong tổ chức."
+        },
+        {
+          "title": "What Is Data Management?",
+          "url": "https://www.ibm.com/think/topics/data-management",
+          "provider": "IBM",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Tổng quan cách thu thập, lưu trữ, tích hợp và khai thác dữ liệu phục vụ ra quyết định."
+        },
+        {
+          "title": "Knowledge Management in ITSM",
+          "url": "https://www.atlassian.com/itsm/knowledge-management",
+          "provider": "Atlassian",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Cách tổ chức, chia sẻ và tái sử dụng tri thức, tài liệu nội bộ để mọi người tìm thông tin nhanh hơn."
+        }
+      ]
+    },
+    {
+      "skill": "Quản trị và tuân thủ an toàn thông tin",
+      "resources": [
+        {
+          "title": "Cybersecurity Framework",
+          "url": "https://www.nist.gov/cyberframework",
+          "provider": "NIST",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Khung NIST CSF 2.0, có chức năng Quản trị (Govern) giúp xây dựng chính sách và quản lý rủi ro an toàn thông tin."
+        },
+        {
+          "title": "SP 800-30 Rev. 1: Guide for Conducting Risk Assessments",
+          "url": "https://csrc.nist.gov/pubs/sp/800/30/r1/final",
+          "provider": "NIST",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Quy trình đánh giá rủi ro an toàn thông tin: xác định mối đe dọa, điểm yếu, khả năng xảy ra và tác động."
+        },
+        {
+          "title": "Những nội dung mới trong Luật An ninh mạng số 116/2025/QH15",
+          "url": "https://xaydungchinhsach.chinhphu.vn/nhung-noi-dung-moi-trong-luat-an-ninh-mang-so-116-2025-qh15-119260629145615168.htm",
+          "provider": "Cổng Thông tin điện tử Chính phủ",
+          "type": "article",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Tóm tắt điểm mới của Luật An ninh mạng 2025 (hiệu lực 01/7/2026) để đối chiếu khi xây dựng chính sách."
+        }
+      ]
+    },
+    {
+      "skill": "React",
+      "resources": [
+        {
+          "title": "Quick Start",
+          "url": "https://react.dev/learn",
+          "provider": "React",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Tài liệu chính thức về component, props, state, xử lý sự kiện và hiển thị danh sách trong React."
+        },
+        {
+          "title": "Thinking in React",
+          "url": "https://react.dev/learn/thinking-in-react",
+          "provider": "React",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Quy trình chia giao diện thành component, xác định state tối thiểu và luồng dữ liệu một chiều."
+        },
+        {
+          "title": "Xây Dựng Website với ReactJS",
+          "url": "https://f8.edu.vn/courses/reactjs",
+          "provider": "F8",
+          "type": "course",
+          "language": "vi",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Khóa học tiếng Việt về component, Hooks (useState, useEffect, useContext) và dự án thực hành React."
+        }
+      ]
+    },
+    {
+      "skill": "Rèn luyện thể chất",
+      "resources": [
+        {
+          "title": "Physical activity",
+          "url": "https://www.who.int/news-room/fact-sheets/detail/physical-activity",
+          "provider": "World Health Organization",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Khuyến nghị của WHO về thời lượng, cường độ vận động mỗi tuần và lợi ích sức khỏe của tập luyện."
+        },
+        {
+          "title": "Exercise",
+          "url": "https://www.nhs.uk/live-well/exercise/",
+          "provider": "NHS",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hướng dẫn tập luyện cho người trưởng thành: sức bền, sức mạnh, độ dẻo và cách bắt đầu an toàn."
+        },
+        {
+          "title": "Adult Activity: An Overview",
+          "url": "https://www.cdc.gov/physical-activity-basics/guidelines/adults.html",
+          "provider": "CDC",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Gợi ý lên kế hoạch vận động hằng tuần, kết hợp bài tập tim mạch và bài tập tăng cường cơ bắp."
+        }
+      ]
+    },
+    {
+      "skill": "REST API",
+      "resources": [
+        {
+          "title": "Web API Design Best Practices",
+          "url": "https://learn.microsoft.com/en-us/azure/architecture/best-practices/api-design",
+          "provider": "Microsoft Learn",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Nguyên tắc thiết kế REST API: đặt tên tài nguyên, phương thức HTTP, mã trạng thái, phân trang, phiên bản."
+        },
+        {
+          "title": "HTTP request methods",
+          "url": "https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Methods",
+          "provider": "MDN Web Docs",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Tra cứu ý nghĩa GET, POST, PUT, PATCH, DELETE và tính an toàn, idempotent của từng phương thức."
+        },
+        {
+          "title": "API design guide",
+          "url": "https://docs.cloud.google.com/apis/design",
+          "provider": "Google Cloud",
+          "type": "docs",
+          "language": "en",
+          "level": "nang-cao",
+          "free": true,
+          "note": "Hướng dẫn thiết kế API hướng tài nguyên, quy ước đặt tên và cách trả lỗi mà Google áp dụng."
+        }
+      ]
+    },
+    {
+      "skill": "Routing/Switching",
+      "resources": [
+        {
+          "title": "Networking Devices and Initial Configuration",
+          "url": "https://www.netacad.com/courses/networking-devices-and-initial-configuration",
+          "provider": "Cisco Networking Academy",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Khóa học miễn phí về thiết bị mạng và cấu hình ban đầu cho switch, router, kèm thực hành Packet Tracer."
+        },
+        {
+          "title": "Free CCNA 200-301 Complete Course",
+          "url": "https://www.youtube.com/playlist?list=PLxbwE86jKRgMpuZuLBivzlM8s2Dk5lXBQ",
+          "provider": "Jeremy's IT Lab (YouTube)",
+          "type": "video",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Chuỗi video miễn phí trọn chương trình CCNA, có lab về VLAN, STP, định tuyến tĩnh và OSPF."
+        },
+        {
+          "title": "Virtual Local Area Networks (VLANs)",
+          "url": "https://www.practicalnetworking.net/stand-alone/vlans/",
+          "provider": "Practical Networking",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Giải thích VLAN, trunk và cách switch tách miền quảng bá trong mạng LAN."
+        }
+      ]
+    },
+    {
+      "skill": "SIEM",
+      "resources": [
+        {
+          "title": "Introduction to Microsoft Sentinel",
+          "url": "https://learn.microsoft.com/en-us/training/modules/intro-to-azure-sentinel/",
+          "provider": "Microsoft Learn",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hiểu vai trò của SIEM/SOAR: thu thập log, phát hiện mối đe dọa và điều tra sự cố trên Microsoft Sentinel."
+        },
+        {
+          "title": "Getting started with Wazuh",
+          "url": "https://documentation.wazuh.com/current/getting-started/index.html",
+          "provider": "Wazuh",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Nền tảng SIEM/XDR mã nguồn mở để thực hành thu thập log, tạo luật cảnh báo và giám sát an ninh."
+        },
+        {
+          "title": "What is SIEM?",
+          "url": "https://www.ibm.com/think/topics/siem",
+          "provider": "IBM",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Tổng quan cách SIEM tập hợp nhật ký, liên kết sự kiện và tạo cảnh báo cho đội vận hành an ninh."
+        }
+      ]
+    },
+    {
+      "skill": "SQL",
+      "resources": [
+        {
+          "title": "SQLBolt",
+          "url": "https://sqlbolt.com/",
+          "provider": "SQLBolt",
+          "type": "practice",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Bài học SQL tương tác với bài tập chạy ngay trên trình duyệt về SELECT, JOIN, GROUP BY."
+        },
+        {
+          "title": "The SQL Language",
+          "url": "https://www.postgresql.org/docs/current/tutorial-sql.html",
+          "provider": "PostgreSQL",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hướng dẫn chính thức tạo bảng, chèn dữ liệu, truy vấn, kết hợp bảng và dùng hàm tổng hợp."
+        },
+        {
+          "title": "Intro to SQL",
+          "url": "https://www.kaggle.com/learn/intro-to-sql",
+          "provider": "Kaggle",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Luyện viết truy vấn SQL trên bộ dữ liệu lớn có sẵn: lọc, nhóm, sắp xếp và JOIN."
+        }
+      ]
+    },
+    {
+      "skill": "Sử dụng công nghệ số",
+      "resources": [
+        {
+          "title": "Bình dân học vụ số",
+          "url": "https://www.binhdanhocvuso.gov.vn/",
+          "provider": "Bộ Công an (nền tảng Bình dân học vụ số)",
+          "type": "course",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Nền tảng quốc gia phổ cập kỹ năng số cho người dân, học trực tuyến mọi lúc, mọi nơi."
+        },
+        {
+          "title": "Microsoft Digital Literacy",
+          "url": "https://www.microsoft.com/en-us/digital-literacy",
+          "provider": "Microsoft",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Khóa học nền tảng về dùng máy tính, Internet, an toàn trực tuyến và tạo nội dung số."
+        },
+        {
+          "title": "Mẹo giúp bạn luôn an toàn trên mạng",
+          "url": "https://safety.google/intl/vi_ALL/safety/security-tips/",
+          "provider": "Google Safety Center",
+          "type": "article",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Mẹo bảo vệ tài khoản, nhận diện lừa đảo và chia sẻ thông tin an toàn khi học tập, làm việc trực tuyến."
+        }
+      ]
+    },
+    {
+      "skill": "Sử dụng tiếng Anh",
+      "resources": [
+        {
+          "title": "LearnEnglish",
+          "url": "https://learnenglish.britishcouncil.org/",
+          "provider": "British Council",
+          "type": "practice",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Bài luyện nghe, đọc, viết, ngữ pháp và từ vựng theo trình độ, kèm bài tập tương tác."
+        },
+        {
+          "title": "Activities for Learners",
+          "url": "https://www.cambridgeenglish.org/learning-english/activities-for-learners/",
+          "provider": "Cambridge English",
+          "type": "practice",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hoạt động luyện tiếng Anh miễn phí theo trình độ cho bốn kỹ năng nghe, nói, đọc, viết."
+        },
+        {
+          "title": "Write & Improve",
+          "url": "https://writeandimprove.com/",
+          "provider": "Cambridge English",
+          "type": "practice",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Luyện viết tiếng Anh và nhận nhận xét tự động về lỗi, mức độ bài viết theo khung CEFR."
+        }
+      ]
+    },
+    {
+      "skill": "TCP/IP",
+      "resources": [
+        {
+          "title": "TCP/IP addressing and subnetting",
+          "url": "https://learn.microsoft.com/en-us/troubleshoot/windows-client/networking/tcpip-addressing-and-subnetting",
+          "provider": "Microsoft Learn",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Giải thích địa chỉ IP, subnet mask, lớp mạng, gateway và cách chia mạng con."
+        },
+        {
+          "title": "Subnetting Mastery",
+          "url": "https://www.practicalnetworking.net/stand-alone/subnetting-mastery/",
+          "provider": "Practical Networking",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Chuỗi bài và video giúp chia mạng con nhanh, tính địa chỉ mạng, broadcast và dải host."
+        },
+        {
+          "title": "Subnetting Questions",
+          "url": "https://subnettingpractice.com/",
+          "provider": "subnettingpractice.com",
+          "type": "practice",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Luyện bài tập subnetting ngẫu nhiên có đáp án để thành thạo tính toán địa chỉ IP."
+        }
+      ]
+    },
+    {
+      "skill": "Test design",
+      "resources": [
+        {
+          "title": "Reading 2: Testing",
+          "url": "https://web.mit.edu/6.102/www/sp25/classes/02-testing/",
+          "provider": "MIT 6.102",
+          "type": "article",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Học thiết kế test case bằng phân vùng miền đầu vào, chọn giá trị biên và đo độ bao phủ."
+        },
+        {
+          "title": "Certified Tester Foundation Level (CTFL) v4.0",
+          "url": "https://istqb.org/certifications/certified-tester-foundation-level-ctfl-v4-0/",
+          "provider": "ISTQB",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Syllabus miễn phí trình bày kỹ thuật phân vùng tương đương, giá trị biên và bảng quyết định."
+        }
+      ]
+    },
+    {
+      "skill": "Thiết kế cơ sở dữ liệu",
+      "resources": [
+        {
+          "title": "Database normalization description",
+          "url": "https://learn.microsoft.com/en-us/previous-versions/troubleshoot/microsoft-365/microsoft-365-apps/access/database-normalization-description",
+          "provider": "Microsoft Learn",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Giải thích chuẩn hóa dữ liệu 1NF, 2NF, 3NF và cách loại bỏ dư thừa, phụ thuộc không hợp lệ."
+        },
+        {
+          "title": "Database Design Course",
+          "url": "https://www.youtube.com/watch?v=ztHopE5Wnpc",
+          "provider": "freeCodeCamp.org (YouTube)",
+          "type": "video",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Khóa video về mô hình thực thể – quan hệ, khóa, quan hệ giữa bảng và chuẩn hóa khi thiết kế CSDL."
+        },
+        {
+          "title": "Constraints",
+          "url": "https://www.postgresql.org/docs/current/ddl-constraints.html",
+          "provider": "PostgreSQL",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Cài đặt ràng buộc khóa chính, khóa ngoại, UNIQUE, CHECK để bảo vệ tính toàn vẹn dữ liệu."
+        }
+      ]
+    },
+    {
+      "skill": "Thiết kế hệ hỗ trợ quyết định",
+      "resources": [
+        {
+          "title": "The Analytics Edge",
+          "url": "https://ocw.mit.edu/courses/15-071-the-analytics-edge-spring-2017/",
+          "provider": "MIT OpenCourseWare",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Dùng dữ liệu, mô hình dự báo và tối ưu để hỗ trợ ra quyết định qua các tình huống thực tế."
+        },
+        {
+          "title": "Use parameters to visualize variables (what-if)",
+          "url": "https://learn.microsoft.com/en-us/power-bi/transform-model/desktop-what-if",
+          "provider": "Microsoft Learn",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Tạo tham số what-if trong Power BI để so sánh kịch bản và hỗ trợ lựa chọn phương án."
+        },
+        {
+          "title": "Decision Support Systems Resources",
+          "url": "https://dssresources.com/",
+          "provider": "DSSResources.com (Daniel J. Power)",
+          "type": "article",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Kho bài viết về khái niệm, phân loại và cách xây dựng hệ hỗ trợ quyết định do GS. Daniel Power biên soạn."
+        }
+      ]
+    },
+    {
+      "skill": "Thiết kế phần mềm",
+      "resources": [
+        {
+          "title": "Architectural principles",
+          "url": "https://learn.microsoft.com/en-us/dotnet/architecture/modern-web-apps-azure/architectural-principles",
+          "provider": "Microsoft Learn",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Nguyên tắc tách mối quan tâm, đóng gói, đảo ngược phụ thuộc, trách nhiệm đơn nhất khi thiết kế phần mềm."
+        },
+        {
+          "title": "Design Patterns",
+          "url": "https://refactoring.guru/design-patterns",
+          "provider": "Refactoring.Guru",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Giải thích trực quan các mẫu thiết kế phổ biến kèm sơ đồ UML và ví dụ mã nhiều ngôn ngữ."
+        },
+        {
+          "title": "Software Architecture Guide",
+          "url": "https://martinfowler.com/architecture/",
+          "provider": "martinfowler.com",
+          "type": "article",
+          "language": "en",
+          "level": "nang-cao",
+          "free": true,
+          "note": "Tổng hợp bài viết về kiến trúc phần mềm, các kiểu kiến trúc và cách ra quyết định thiết kế."
+        }
+      ]
+    },
+    {
+      "skill": "Thống kê",
+      "resources": [
+        {
+          "title": "OpenIntro Statistics",
+          "url": "https://www.openintro.org/book/os/",
+          "provider": "OpenIntro",
+          "type": "book",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Giáo trình mở về thống kê mô tả, xác suất, ước lượng, kiểm định giả thuyết và hồi quy."
+        },
+        {
+          "title": "Seeing Theory",
+          "url": "https://seeing-theory.brown.edu/",
+          "provider": "Brown University",
+          "type": "practice",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Minh họa tương tác các khái niệm xác suất, phân phối, ước lượng và suy luận thống kê."
+        },
+        {
+          "title": "Introduction to Probability and Statistics",
+          "url": "https://ocw.mit.edu/courses/18-05-introduction-to-probability-and-statistics-spring-2022/",
+          "provider": "MIT OpenCourseWare",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Môn xác suất thống kê của MIT với ghi chú bài giảng và bài tập về ước lượng, kiểm định."
+        }
+      ]
+    },
+    {
+      "skill": "Thực hiện dự án CNTT",
+      "resources": [
+        {
+          "title": "About Projects",
+          "url": "https://docs.github.com/en/issues/planning-and-tracking-with-projects/learning-about-projects/about-projects",
+          "provider": "GitHub Docs",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Dùng GitHub Projects để chia nhỏ công việc, theo dõi tiến độ và phối hợp nhóm khi làm đồ án."
+        },
+        {
+          "title": "What is Kanban?",
+          "url": "https://www.atlassian.com/agile/kanban",
+          "provider": "Atlassian",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Tổ chức công việc dự án bằng bảng Kanban, giới hạn việc đang làm và theo dõi luồng hoàn thành."
+        },
+        {
+          "title": "What is Agile?",
+          "url": "https://www.atlassian.com/agile",
+          "provider": "Atlassian",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Tổng quan Agile và Scrum: chia sprint, họp định kỳ và bàn giao kết quả theo từng vòng lặp ngắn."
+        }
+      ]
+    },
+    {
+      "skill": "Thực nghiệm",
+      "resources": [
+        {
+          "title": "NIST/SEMATECH e-Handbook: Process Improvement (Design of Experiments)",
+          "url": "https://www.itl.nist.gov/div898/handbook/pri/pri.htm",
+          "provider": "NIST",
+          "type": "book",
+          "language": "en",
+          "level": "nang-cao",
+          "free": true,
+          "note": "Chương về thiết kế thí nghiệm: chọn biến, mức, phương án thí nghiệm và phân tích kết quả."
+        },
+        {
+          "title": "scikit-image Examples",
+          "url": "https://scikit-image.org/docs/stable/auto_examples/index.html",
+          "provider": "scikit-image",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Bộ ví dụ mã để chạy thử và so sánh các phương pháp xử lý ảnh như lọc, phân ngưỡng, phân đoạn."
+        },
+        {
+          "title": "skimage.metrics",
+          "url": "https://scikit-image.org/docs/stable/api/skimage.metrics.html",
+          "provider": "scikit-image",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Tính PSNR, SSIM, MSE để so sánh định lượng kết quả giữa các phương pháp xử lý ảnh."
+        }
+      ]
+    },
+    {
+      "skill": "Toán ứng dụng",
+      "resources": [
+        {
+          "title": "Mathematics for Computer Science",
+          "url": "https://ocw.mit.edu/courses/6-042j-mathematics-for-computer-science-spring-2015/",
+          "provider": "MIT OpenCourseWare",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Toán rời rạc cho CNTT: logic, chứng minh, quy nạp, đồ thị, phép đếm và xác suất."
+        },
+        {
+          "title": "Linear Algebra",
+          "url": "https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/",
+          "provider": "MIT OpenCourseWare",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Bài giảng video của GS. Gilbert Strang về ma trận, hệ phương trình, không gian vector và trị riêng."
+        },
+        {
+          "title": "Essence of linear algebra",
+          "url": "https://www.youtube.com/playlist?list=PLZHQObOWTQDPD3MizzM2xVFitgF8hE_ab",
+          "provider": "3Blue1Brown (YouTube)",
+          "type": "video",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Chuỗi video hoạt hình giúp hiểu trực giác vector, phép biến đổi tuyến tính, định thức và trị riêng."
+        }
+      ]
+    },
+    {
+      "skill": "Tối ưu hiệu năng",
+      "resources": [
+        {
+          "title": "Performance Engineering of Software Systems",
+          "url": "https://ocw.mit.edu/courses/6-172-performance-engineering-of-software-systems-fall-2018/",
+          "provider": "MIT OpenCourseWare",
+          "type": "course",
+          "language": "en",
+          "level": "nang-cao",
+          "free": true,
+          "note": "Môn học về đo đạc, phân tích và tối ưu hiệu năng chương trình, gồm song song hóa đa lõi."
+        },
+        {
+          "title": "The Python Profilers",
+          "url": "https://docs.python.org/3/library/profile.html",
+          "provider": "Python Software Foundation",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Dùng cProfile để đo thời gian chạy từng hàm và tìm điểm nghẽn trước khi tối ưu."
+        },
+        {
+          "title": "Use The Index, Luke",
+          "url": "https://use-the-index-luke.com/",
+          "provider": "Use The Index, Luke (Markus Winand)",
+          "type": "book",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Sách miễn phí về chỉ mục và tối ưu truy vấn SQL cho lập trình viên trên nhiều hệ quản trị CSDL."
+        }
+      ]
+    },
+    {
+      "skill": "Tối ưu hóa công cụ tìm kiếm (SEO)",
+      "resources": [
+        {
+          "title": "Cẩm nang SEO: Kiến thức cơ bản",
+          "url": "https://developers.google.com/search/docs/fundamentals/seo-starter-guide?hl=vi",
+          "provider": "Google Search Central",
+          "type": "docs",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hướng dẫn chính thức bằng tiếng Việt về cách Google thu thập, lập chỉ mục và tối ưu nội dung trang."
+        },
+        {
+          "title": "Beginner's Guide to SEO",
+          "url": "https://moz.com/beginners-guide-to-seo",
+          "provider": "Moz",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Giáo trình SEO nhập môn về nghiên cứu từ khóa, tối ưu on-page, xây dựng liên kết và đo lường."
+        },
+        {
+          "title": "Cách sử dụng Search Console",
+          "url": "https://developers.google.com/search/docs/monitor-debug/search-console-start?hl=vi",
+          "provider": "Google Search Central",
+          "type": "docs",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Dùng Search Console theo dõi lượt hiển thị, từ khóa, lỗi lập chỉ mục để đánh giá hiệu quả SEO."
+        }
+      ]
+    },
+    {
+      "skill": "Triển khai ứng dụng",
+      "resources": [
+        {
+          "title": "Get started",
+          "url": "https://docs.docker.com/get-started/",
+          "provider": "Docker Docs",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Học khái niệm image, container và cách đóng gói, chạy ứng dụng bằng Docker từ đầu."
+        },
+        {
+          "title": "The Twelve-Factor App",
+          "url": "https://12factor.net/vi/",
+          "provider": "12factor.net",
+          "type": "article",
+          "language": "vi",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Mười hai nguyên tắc xây dựng ứng dụng dễ triển khai, như cấu hình qua biến môi trường, tách build và run."
+        },
+        {
+          "title": "Học kiến thức cơ bản về Kubernetes",
+          "url": "https://kubernetes.io/vi/docs/tutorials/kubernetes-basics/",
+          "provider": "Kubernetes",
+          "type": "course",
+          "language": "vi",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Bài hướng dẫn tiếng Việt về triển khai, mở rộng và cập nhật ứng dụng container trên Kubernetes."
+        }
+      ]
+    },
+    {
+      "skill": "Trực quan hóa dữ liệu",
+      "resources": [
+        {
+          "title": "Fundamentals of Data Visualization",
+          "url": "https://clauswilke.com/dataviz/",
+          "provider": "Claus O. Wilke",
+          "type": "book",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Sách mở về chọn biểu đồ, màu sắc và cách trình bày để thể hiện dữ liệu rõ ràng, trung thực."
+        },
+        {
+          "title": "From Data to Viz",
+          "url": "https://www.data-to-viz.com/",
+          "provider": "data-to-viz.com",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Cây quyết định giúp chọn loại biểu đồ theo kiểu dữ liệu, kèm các lỗi trình bày thường gặp cần tránh."
+        },
+        {
+          "title": "Data Visualization",
+          "url": "https://www.kaggle.com/learn/data-visualization",
+          "provider": "Kaggle",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Thực hành vẽ biểu đồ đường, cột, nhiệt, phân tán bằng seaborn để truyền đạt kết quả phân tích."
+        }
+      ]
+    },
+    {
+      "skill": "Tư duy phản biện và giải quyết vấn đề",
+      "resources": [
+        {
+          "title": "Critical thinking web",
+          "url": "https://philosophy.hku.hk/think/",
+          "provider": "The University of Hong Kong",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hơn 100 bài học miễn phí về lập luận, ngụy biện, tư duy phản biện và giải quyết vấn đề."
+        },
+        {
+          "title": "Critical Thinking",
+          "url": "https://plato.stanford.edu/entries/critical-thinking/",
+          "provider": "Stanford Encyclopedia of Philosophy",
+          "type": "article",
+          "language": "en",
+          "level": "nang-cao",
+          "free": true,
+          "note": "Bài tổng quan học thuật về định nghĩa, các kỹ năng và cách rèn luyện tư duy phản biện."
+        },
+        {
+          "title": "Logic in Argumentative Writing",
+          "url": "https://owl.purdue.edu/owl/general_writing/academic_writing/logic_in_argumentative_writing/index.html",
+          "provider": "Purdue OWL",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Cách xây dựng lập luận chặt chẽ, dùng bằng chứng và nhận diện các ngụy biện logic phổ biến."
+        }
+      ]
+    },
+    {
+      "skill": "Tư duy thuật toán",
+      "resources": [
+        {
+          "title": "Introduction to Algorithms",
+          "url": "https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/",
+          "provider": "MIT OpenCourseWare",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Bài giảng về phân tích độ phức tạp, sắp xếp, băm, đồ thị, quy hoạch động kèm bài tập."
+        },
+        {
+          "title": "Độ phức tạp thời gian",
+          "url": "https://wiki.vnoi.info/algo/basic/computational-complexity",
+          "provider": "VNOI Wiki",
+          "type": "article",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Bài tiếng Việt về cách đánh giá độ phức tạp thời gian để so sánh và chọn thuật toán phù hợp."
+        },
+        {
+          "title": "CSES Problem Set",
+          "url": "https://cses.fi/problemset/",
+          "provider": "CSES",
+          "type": "practice",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Hơn 300 bài tập thuật toán có chấm tự động, sắp theo chủ đề từ cơ bản đến nâng cao."
+        }
+      ]
+    },
+    {
+      "skill": "Tự học và học tập suốt đời",
+      "resources": [
+        {
+          "title": "Studying 101: Study Smarter Not Harder",
+          "url": "https://learningcenter.unc.edu/tips-and-tools/studying-101-study-smarter-not-harder/",
+          "provider": "UNC Learning Center",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Chiến lược tự học hiệu quả: đọc chủ động, tự kiểm tra, ôn tập giãn cách và tự đánh giá việc học."
+        },
+        {
+          "title": "Learning how to learn | Barbara Oakley | TEDxOaklandUniversity",
+          "url": "https://www.youtube.com/watch?v=O96fE1E-rf8",
+          "provider": "TEDx Talks (YouTube)",
+          "type": "video",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Bài nói ngắn về cách não học, chế độ tập trung và lan tỏa, giúp tự học hiệu quả hơn."
+        },
+        {
+          "title": "Developer Roadmaps",
+          "url": "https://roadmap.sh/",
+          "provider": "roadmap.sh",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Lộ trình tự học theo từng vai trò CNTT, giúp tự đánh giá kỹ năng đã có và chọn phần cần học tiếp."
+        }
+      ]
+    },
+    {
+      "skill": "UML/BPMN",
+      "resources": [
+        {
+          "title": "What is Unified Modeling Language (UML)?",
+          "url": "https://www.visual-paradigm.com/guide/uml-unified-modeling-language/what-is-uml/",
+          "provider": "Visual Paradigm",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Giới thiệu 14 loại sơ đồ UML, mục đích của từng sơ đồ và ví dụ minh họa."
+        },
+        {
+          "title": "PlantUML",
+          "url": "https://plantuml.com/",
+          "provider": "PlantUML",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Vẽ sơ đồ UML như use case, lớp, tuần tự, hoạt động bằng mô tả văn bản đơn giản."
+        },
+        {
+          "title": "BPMN 2.0 Symbols - A complete guide with examples",
+          "url": "https://camunda.com/bpmn/reference/",
+          "provider": "Camunda",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Tra cứu đầy đủ ký hiệu BPMN 2.0: sự kiện, tác vụ, cổng, luồng và ví dụ mô hình quy trình."
+        }
+      ]
+    },
+    {
+      "skill": "Ứng phó sự cố",
+      "resources": [
+        {
+          "title": "SP 800-61 Rev. 3: Incident Response Recommendations and Considerations",
+          "url": "https://csrc.nist.gov/pubs/sp/800/61/r3/final",
+          "provider": "NIST",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Khuyến nghị mới nhất của NIST về chuẩn bị, phát hiện, ứng phó và phục hồi sự cố, gắn với CSF 2.0."
+        },
+        {
+          "title": "Incident response overview",
+          "url": "https://learn.microsoft.com/en-us/security/operations/incident-response-overview",
+          "provider": "Microsoft Learn",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Các bước ứng phó sự cố, vai trò của đội phản ứng và cách rút kinh nghiệm sau sự cố."
+        },
+        {
+          "title": "CSIRT Services Framework Version 2.1",
+          "url": "https://www.first.org/standards/frameworks/csirts/csirt_services_framework_v2.1",
+          "provider": "FIRST",
+          "type": "docs",
+          "language": "en",
+          "level": "nang-cao",
+          "free": true,
+          "note": "Mô tả dịch vụ của đội ứng cứu sự cố (CSIRT) như xử lý sự cố, phân tích và chia sẻ thông tin."
+        }
+      ]
+    },
+    {
+      "skill": "User research",
+      "resources": [
+        {
+          "title": "When to Use Which User-Experience Research Methods",
+          "url": "https://www.nngroup.com/articles/which-ux-research-methods/",
+          "provider": "Nielsen Norman Group",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "So sánh các phương pháp nghiên cứu người dùng và cách chọn phương pháp phù hợp cho từng giai đoạn."
+        },
+        {
+          "title": "User research",
+          "url": "https://www.gov.uk/service-manual/user-research",
+          "provider": "GOV.UK Service Manual",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Lập kế hoạch nghiên cứu, tuyển người tham gia, phỏng vấn, kiểm thử khả dụng và tổng hợp kết quả."
+        },
+        {
+          "title": "UX Research Cheat Sheet",
+          "url": "https://www.nngroup.com/articles/ux-research-cheat-sheet/",
+          "provider": "Nielsen Norman Group",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Bảng tóm tắt phương pháp nghiên cứu theo từng giai đoạn thiết kế, từ khám phá đến đánh giá."
+        }
+      ]
+    },
+    {
+      "skill": "Vận dụng công nghệ chuỗi khối",
+      "resources": [
+        {
+          "title": "Blockchain and Money",
+          "url": "https://ocw.mit.edu/courses/15-s12-blockchain-and-money-fall-2018/",
+          "provider": "MIT OpenCourseWare",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Bài giảng video của MIT về nguyên lý blockchain, tiền mã hóa và các ứng dụng tiềm năng."
+        },
+        {
+          "title": "Bitcoin and Cryptocurrency Technologies",
+          "url": "https://www.coursera.org/learn/cryptocurrency",
+          "provider": "Coursera (Princeton University)",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Khóa học miễn phí giải thích hàm băm, chữ ký số, cơ chế đồng thuận và bảo mật của blockchain."
+        },
+        {
+          "title": "Giới thiệu kỹ thuật về Ethereum",
+          "url": "https://ethereum.org/vi/developers/docs/intro-to-ethereum/",
+          "provider": "ethereum.org",
+          "type": "docs",
+          "language": "vi",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Giới thiệu tiếng Việt về blockchain, tài khoản, giao dịch và hợp đồng thông minh trên Ethereum."
+        }
+      ]
+    },
+    {
+      "skill": "Vận dụng kiến thức chính trị và xã hội",
+      "resources": [
+        {
+          "title": "Lịch sử Đảng",
+          "url": "https://tulieuvankien.dangcongsan.vn/tu-lieu-van-kien-dang/lich-su-dang",
+          "provider": "Báo điện tử Đảng Cộng sản Việt Nam",
+          "type": "book",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Thư viện sách lịch sử Đảng chính thống, như Lịch sử biên niên Đảng Cộng sản Việt Nam, đọc trực tuyến."
+        },
+        {
+          "title": "Tư tưởng, đạo đức, phong cách Hồ Chí Minh",
+          "url": "https://hochiminh.vn/tu-tuong-dao-duc-ho-chi-minh",
+          "provider": "Báo Nhân Dân (hochiminh.vn)",
+          "type": "article",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Chuyên mục về nguồn gốc, nội dung tư tưởng, đạo đức, phong cách Hồ Chí Minh và các bài nghiên cứu."
+        },
+        {
+          "title": "Karl Marx",
+          "url": "https://plato.stanford.edu/entries/marx/",
+          "provider": "Stanford Encyclopedia of Philosophy",
+          "type": "article",
+          "language": "en",
+          "level": "nang-cao",
+          "free": true,
+          "note": "Bài tổng quan học thuật về triết học, lý luận kinh tế và quan niệm lịch sử của Karl Marx."
+        }
+      ]
+    },
+    {
+      "skill": "Vận dụng kiến thức nền tảng CNTT",
+      "resources": [
+        {
+          "title": "CS50x: Introduction to Computer Science",
+          "url": "https://cs50.harvard.edu/x/",
+          "provider": "Harvard University (CS50)",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Khóa nhập môn khoa học máy tính của Harvard: biểu diễn dữ liệu, thuật toán, bộ nhớ, web và bảo mật."
+        },
+        {
+          "title": "Crash Course Computer Science",
+          "url": "https://www.youtube.com/playlist?list=PL8dPuuaLjXtNlUrzyH5r6jN9ulIgZBpdo",
+          "provider": "CrashCourse (YouTube)",
+          "type": "video",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Chuỗi video ngắn từ cổng logic, CPU, hệ điều hành đến mạng Internet và an toàn thông tin."
+        },
+        {
+          "title": "Computer Science Field Guide",
+          "url": "https://www.csfieldguide.org.nz/en/",
+          "provider": "University of Canterbury",
+          "type": "book",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Sách mở trực quan về biểu diễn dữ liệu, thuật toán, mạng máy tính, mật mã và tương tác người – máy."
+        }
+      ]
+    },
+    {
+      "skill": "Vận dụng kiến thức quốc phòng và an ninh",
+      "resources": [
+        {
+          "title": "Quốc phòng - An ninh",
+          "url": "https://www.qdnd.vn/quoc-phong-an-ninh",
+          "provider": "Báo Quân đội nhân dân",
+          "type": "article",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Chuyên mục tin, bài về quốc phòng, an ninh và xây dựng lực lượng vũ trang để liên hệ nội dung học phần."
+        },
+        {
+          "title": "Xây dựng nền quốc phòng toàn dân vững mạnh, hiện đại",
+          "url": "https://tapchiqptd.vn/vi/xay-dung-nen-quoc-phong-toan-dan-vung-manh-hien-dai-176.html",
+          "provider": "Tạp chí Quốc phòng toàn dân",
+          "type": "article",
+          "language": "vi",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Bài nghiên cứu về đường lối và xây dựng nền quốc phòng toàn dân, giúp hiểu sâu học phần lý luận."
+        }
+      ]
+    },
+    {
+      "skill": "Vận dụng kiến thức vật lý",
+      "resources": [
+        {
+          "title": "University Physics Volume 1",
+          "url": "https://openstax.org/books/university-physics-volume-1/pages/1-introduction",
+          "provider": "OpenStax (Rice University)",
+          "type": "book",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Giáo trình vật lý đại cương mở về cơ học, sóng, nhiệt học, có ví dụ và bài tập kèm lời giải."
+        },
+        {
+          "title": "Classical Mechanics",
+          "url": "https://ocw.mit.edu/courses/8-01sc-classical-mechanics-fall-2016/",
+          "provider": "MIT OpenCourseWare",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Khóa tự học cơ học cổ điển với video bài giảng, ví dụ giải mẫu và bài tập."
+        },
+        {
+          "title": "Tutorials (Online Textbook)",
+          "url": "https://www.physicsclassroom.com/tutorial",
+          "provider": "The Physics Classroom",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Bài giảng trực quan theo chủ đề: chuyển động, lực, năng lượng, điện, sóng để ôn khái niệm vật lý."
+        }
+      ]
+    },
+    {
+      "skill": "Vận dụng luật và chiến thuật cờ vua",
+      "resources": [
+        {
+          "title": "Học cờ vua",
+          "url": "https://lichess.org/learn",
+          "provider": "Lichess",
+          "type": "practice",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Bài học tương tác có tiếng Việt về cách đi quân, chiếu, nhập thành và các nguyên tắc cơ bản."
+        },
+        {
+          "title": "Luyện tập",
+          "url": "https://lichess.org/practice",
+          "provider": "Lichess",
+          "type": "practice",
+          "language": "vi",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Bài luyện tập theo chủ đề về đòn chiến thuật, tàn cuộc và kỹ thuật chiếu hết."
+        },
+        {
+          "title": "FIDE Laws of Chess",
+          "url": "https://handbook.fide.com/chapter/E012023",
+          "provider": "FIDE",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Luật cờ vua chính thức của FIDE về cách đi quân, kết thúc ván và quy định thi đấu."
+        }
+      ]
+    },
+    {
+      "skill": "Vận dụng nguyên lý kế toán",
+      "resources": [
+        {
+          "title": "Principles of Accounting, Volume 1: Financial Accounting",
+          "url": "https://openstax.org/books/principles-financial-accounting/pages/1-why-it-matters",
+          "provider": "OpenStax (Rice University)",
+          "type": "book",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Giáo trình mở về phương trình kế toán, ghi sổ kép, bút toán và lập báo cáo tài chính."
+        },
+        {
+          "title": "Accounting Basics",
+          "url": "https://www.accountingcoach.com/accounting-basics/explanation",
+          "provider": "AccountingCoach",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Giải thích dễ hiểu về tài khoản, ghi Nợ – Có, chứng từ, sổ sách và các báo cáo tài chính cơ bản."
+        },
+        {
+          "title": "Introduction to Financial and Managerial Accounting",
+          "url": "https://ocw.mit.edu/courses/15-501-introduction-to-financial-and-managerial-accounting-spring-2004/",
+          "provider": "MIT OpenCourseWare",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Tài liệu môn kế toán tài chính và kế toán quản trị của MIT Sloan, có bài giảng và bài tập."
+        }
+      ]
+    },
+    {
+      "skill": "Vận dụng pháp luật cơ bản",
+      "resources": [
+        {
+          "title": "Hiến pháp nước Cộng hòa xã hội chủ nghĩa Việt Nam 2013",
+          "url": "https://vi.wikisource.org/wiki/Hi%E1%BA%BFn_ph%C3%A1p_n%C6%B0%E1%BB%9Bc_C%E1%BB%99ng_h%C3%B2a_x%C3%A3_h%E1%BB%99i_ch%E1%BB%A7_ngh%C4%A9a_Vi%E1%BB%87t_Nam_2013",
+          "provider": "Wikisource tiếng Việt",
+          "type": "docs",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Toàn văn Hiến pháp 2013 (bản gốc, một số điều được sửa đổi năm 2025) về bộ máy nhà nước, quyền và nghĩa vụ công dân."
+        },
+        {
+          "title": "CSDL quốc gia về pháp luật",
+          "url": "https://vbpl.vn/",
+          "provider": "Bộ Tư pháp",
+          "type": "docs",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Cơ sở dữ liệu chính thức để tra cứu văn bản pháp luật còn hiệu lực khi phân tích một tình huống."
+        },
+        {
+          "title": "Chính sách mới",
+          "url": "https://xaydungchinhsach.chinhphu.vn/chinh-sach-moi.htm",
+          "provider": "Cổng Thông tin điện tử Chính phủ",
+          "type": "article",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Chuyên mục giải thích các luật, chính sách mới có hiệu lực bằng ngôn ngữ dễ hiểu, kèm ví dụ áp dụng."
+        }
+      ]
+    },
+    {
+      "skill": "Vận dụng quy trình phát triển phần mềm",
+      "resources": [
+        {
+          "title": "What is the Software Development Lifecycle (SDLC)?",
+          "url": "https://www.ibm.com/think/topics/sdlc",
+          "provider": "IBM",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Các giai đoạn vòng đời phát triển phần mềm và so sánh mô hình thác nước, lặp, Agile."
+        },
+        {
+          "title": "What is Agile?",
+          "url": "https://learn.microsoft.com/en-us/devops/plan/what-is-agile",
+          "provider": "Microsoft Learn",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Giới thiệu phát triển Agile, Scrum, Kanban và cách lập kế hoạch theo vòng lặp ngắn."
+        },
+        {
+          "title": "What is DevOps?",
+          "url": "https://learn.microsoft.com/en-us/devops/what-is-devops",
+          "provider": "Microsoft Learn",
+          "type": "article",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Hiểu DevOps gắn phát triển, kiểm thử, triển khai và vận hành để nâng chất lượng và dễ bảo trì."
+        }
+      ]
+    },
+    {
+      "skill": "Vận dụng thương mại điện tử",
+      "resources": [
+        {
+          "title": "What is Ecommerce?",
+          "url": "https://www.ibm.com/think/topics/ecommerce",
+          "provider": "IBM",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Tổng quan các mô hình B2B, B2C, C2C, D2C và hoạt động vận hành của kinh doanh trực tuyến."
+        },
+        {
+          "title": "What Is Ecommerce? Definition, Types & How It Works",
+          "url": "https://www.shopify.com/blog/what-is-ecommerce",
+          "provider": "Shopify",
+          "type": "article",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Giải thích các loại hình thương mại điện tử, kênh bán hàng và cách một cửa hàng trực tuyến vận hành."
+        },
+        {
+          "title": "Báo cáo Chỉ số Thương mại điện tử Việt Nam 2025",
+          "url": "https://vecom.vn/bao-cao-chi-so-thuong-mai-dien-tu-viet-nam-2025",
+          "provider": "Hiệp hội Thương mại điện tử Việt Nam (VECOM)",
+          "type": "article",
+          "language": "vi",
+          "level": "co-ban",
+          "free": true,
+          "note": "Số liệu và nhận định về thị trường thương mại điện tử Việt Nam, hữu ích để phân tích mô hình kinh doanh."
+        }
+      ]
+    },
+    {
+      "skill": "Viết tài liệu",
+      "resources": [
+        {
+          "title": "Technical Writing",
+          "url": "https://developers.google.com/tech-writing",
+          "provider": "Google for Developers",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Khóa học miễn phí của Google về câu ngắn gọn, đoạn rõ ý, danh sách và cách tổ chức tài liệu kỹ thuật."
+        },
+        {
+          "title": "Software documentation guide",
+          "url": "https://www.writethedocs.org/guide/",
+          "provider": "Write the Docs",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Hướng dẫn viết README, tài liệu người dùng, tài liệu API và quy trình bảo trì tài liệu."
+        },
+        {
+          "title": "Diátaxis",
+          "url": "https://diataxis.fr/",
+          "provider": "Diátaxis",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Khung tổ chức tài liệu thành bốn loại: hướng dẫn học, hướng dẫn cách làm, tham chiếu và giải thích."
+        }
+      ]
+    },
+    {
+      "skill": "Web security",
+      "resources": [
+        {
+          "title": "OWASP Top 10",
+          "url": "https://top10.owasp.org/",
+          "provider": "OWASP",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Danh sách 10 rủi ro bảo mật ứng dụng web phổ biến nhất kèm ví dụ và cách phòng tránh."
+        },
+        {
+          "title": "Web Security Academy",
+          "url": "https://portswigger.net/web-security",
+          "provider": "PortSwigger",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Học và thực hành lab miễn phí về SQL injection, XSS, CSRF, lỗi xác thực và phân quyền."
+        },
+        {
+          "title": "OWASP Cheat Sheet Series",
+          "url": "https://cheatsheetseries.owasp.org/",
+          "provider": "OWASP",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Hướng dẫn ngắn để cài đặt đúng xác thực, quản lý phiên, kiểm tra đầu vào và bảo vệ dữ liệu."
+        }
+      ]
+    },
+    {
+      "skill": "Xây dựng giải pháp trí tuệ nhân tạo",
+      "resources": [
+        {
+          "title": "CS50's Introduction to Artificial Intelligence with Python",
+          "url": "https://cs50.harvard.edu/ai/",
+          "provider": "Harvard University (CS50)",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Khóa học về tìm kiếm, suy luận, xác suất, tối ưu, học máy và mạng nơ-ron qua các dự án Python."
+        },
+        {
+          "title": "Elements of AI",
+          "url": "https://www.elementsofai.com/",
+          "provider": "University of Helsinki & MinnaLearn",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Khóa nhập môn AI cho người không chuyên: AI là gì, cách giải quyết vấn đề, học máy và giới hạn của AI."
+        },
+        {
+          "title": "People + AI Guidebook",
+          "url": "https://pair.withgoogle.com/guidebook/",
+          "provider": "Google PAIR",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Hướng dẫn thiết kế giải pháp AI: xác định nhu cầu, dữ liệu, giải thích kết quả và xử lý lỗi của mô hình."
+        }
+      ]
+    },
+    {
+      "skill": "Xử lý ảnh và thị giác máy tính",
+      "resources": [
+        {
+          "title": "CS231n: Deep Learning for Computer Vision",
+          "url": "https://cs231n.github.io/",
+          "provider": "Stanford University",
+          "type": "course",
+          "language": "en",
+          "level": "nang-cao",
+          "free": true,
+          "note": "Ghi chú bài giảng về phân loại ảnh, mạng tích chập và cách huấn luyện mô hình thị giác máy tính."
+        },
+        {
+          "title": "Computer Vision: Algorithms and Applications, 2nd ed.",
+          "url": "https://szeliski.org/Book/",
+          "provider": "Richard Szeliski",
+          "type": "book",
+          "language": "en",
+          "level": "nang-cao",
+          "free": true,
+          "note": "Sách giáo khoa có bản điện tử miễn phí về xử lý ảnh, đặc trưng, phân đoạn, nhận dạng và tái tạo 3D."
+        },
+        {
+          "title": "Computer Vision",
+          "url": "https://www.kaggle.com/learn/computer-vision",
+          "provider": "Kaggle",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Thực hành xây dựng bộ phân loại ảnh với CNN và học chuyển giao trên notebook trực tuyến."
+        }
+      ]
+    },
+    {
+      "skill": "Xử lý dữ liệu địa không gian",
+      "resources": [
+        {
+          "title": "Introduction to PostGIS",
+          "url": "https://postgis.net/workshops/postgis-intro/",
+          "provider": "PostGIS",
+          "type": "course",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Workshop chính thức về lưu trữ, truy vấn dữ liệu không gian, hệ tọa độ, chỉ mục và hàm không gian."
+        },
+        {
+          "title": "Introduction to GeoPandas",
+          "url": "https://geopandas.org/en/stable/getting_started/introduction.html",
+          "provider": "GeoPandas",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Đọc, xử lý, chuyển hệ tọa độ và vẽ bản đồ dữ liệu địa không gian bằng Python."
+        },
+        {
+          "title": "Geospatial Analysis",
+          "url": "https://www.kaggle.com/learn/geospatial-analysis",
+          "provider": "Kaggle",
+          "type": "course",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Thực hành tạo bản đồ tương tác, phân tích khoảng cách và vùng lân cận với dữ liệu thực."
+        }
+      ]
+    },
+    {
+      "skill": "Xử lý dữ liệu lớn và phân tán",
+      "resources": [
+        {
+          "title": "Quick Start",
+          "url": "https://spark.apache.org/docs/latest/quick-start.html",
+          "provider": "Apache Spark",
+          "type": "docs",
+          "language": "en",
+          "level": "co-ban",
+          "free": true,
+          "note": "Làm quen xử lý dữ liệu phân tán với Spark qua shell tương tác và ứng dụng độc lập đầu tiên."
+        },
+        {
+          "title": "MLlib: Main Guide",
+          "url": "https://spark.apache.org/docs/latest/ml-guide.html",
+          "provider": "Apache Spark",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Huấn luyện và đánh giá mô hình học máy trên dữ liệu lớn với thư viện MLlib của Spark."
+        },
+        {
+          "title": "MapReduce Tutorial",
+          "url": "https://hadoop.apache.org/docs/stable/hadoop-mapreduce-client/hadoop-mapreduce-client-core/MapReduceTutorial.html",
+          "provider": "Apache Hadoop",
+          "type": "docs",
+          "language": "en",
+          "level": "trung-cap",
+          "free": true,
+          "note": "Hiểu mô hình MapReduce qua ví dụ WordCount: chia dữ liệu, xử lý song song và gộp kết quả."
+        }
+      ]
+    }
+  ]
+}

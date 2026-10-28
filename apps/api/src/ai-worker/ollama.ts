@@ -1,10 +1,15 @@
+import type { EmbedSpec } from "../assistant/protocol.js";
 import {
+  ASSISTANT_CHAT_KIND,
   CAREER_SKILL_SUGGESTION_KIND,
   COMPETENCY_COURSE_SUGGESTION_KIND,
   GRADUATION_ADVICE_KIND,
   STUDY_ROADMAP_KIND,
-  type AiJobKind
+  type GenerationJobKind
 } from "../competency-assessment/ai/worker-protocol.js";
+
+/** Kinds whose job is one chat call: the generation kinds and the assistant answer. */
+export type ChatJobKind = GenerationJobKind | typeof ASSISTANT_CHAT_KIND;
 
 /** Error codes the worker may report to the API (contract C3). */
 export const AI_ERROR_CODES = ["ai_timeout", "ai_output_truncated", "invalid_ai_output", "ollama_unavailable", "ai_failed"] as const;
@@ -41,6 +46,7 @@ export interface OllamaRuntime {
 export interface OllamaJob {
   system: string;
   user: string;
+  /** JSON schema of the answer (Ollama's format); null or undefined for a plain-text answer (Trợ lý AI). */
   schema: unknown;
   options: Record<string, unknown>;
   /**
@@ -70,6 +76,8 @@ interface OllamaDeps {
   inactivityMs?: number;
   /** Hard cap on accumulated output characters. */
   maxOutputChars?: number;
+  /** Called with the answer so far (message.content, never the thinking) whenever it grows. Must not throw. */
+  onContent?: ((content: string) => void) | undefined;
 }
 
 const OLLAMA_KEEP_ALIVE = "15m";
@@ -92,7 +100,8 @@ export function buildChatBody(runtime: OllamaRuntime, job: OllamaJob): Record<st
       { role: "system", content: job.system },
       { role: "user", content: job.user }
     ],
-    format: job.schema,
+    // No format at all for a plain-text answer.
+    ...(job.schema === null || job.schema === undefined ? {} : { format: job.schema }),
     think: job.think === true,
     stream: true,
     truncate: false,
@@ -226,6 +235,12 @@ export async function ollamaChat(runtime: OllamaRuntime, job: OllamaJob, deps: O
     if (!response.body) throw new AiWorkerError("ai_failed", "empty_body");
 
     const accumulator = new NdjsonAccumulator(deps.maxOutputChars);
+    let reported = 0;
+    const reportContent = () => {
+      if (!deps.onContent || accumulator.content.length <= reported) return;
+      reported = accumulator.content.length;
+      deps.onContent(accumulator.content);
+    };
     const decoder = new TextDecoder();
     reader = response.body.getReader();
     if (reason) await reader.cancel().catch(() => undefined);
@@ -242,6 +257,7 @@ export async function ollamaChat(runtime: OllamaRuntime, job: OllamaJob, deps: O
       if (chunk.done) break;
       resetIdle();
       accumulator.push(decoder.decode(chunk.value, { stream: true }));
+      reportContent();
       if (accumulator.done) {
         await reader.cancel().catch(() => undefined);
         break;
@@ -250,6 +266,7 @@ export async function ollamaChat(runtime: OllamaRuntime, job: OllamaJob, deps: O
     if (reason) throw reasonError(reason);
     accumulator.push(decoder.decode());
     accumulator.end();
+    reportContent();
     const doneLine = accumulator.done as unknown as Record<string, unknown>;
     const doneReason = typeof doneLine.done_reason === "string" ? doneLine.done_reason : undefined;
     if (doneReason === "length") throw new AiWorkerError("ai_output_truncated", "done_reason_length");
@@ -258,6 +275,96 @@ export async function ollamaChat(runtime: OllamaRuntime, job: OllamaJob, deps: O
   } finally {
     clearTimeout(overall);
     if (idle) clearTimeout(idle);
+    signal?.removeEventListener("abort", onExternalAbort);
+  }
+}
+
+export interface EmbedOptions {
+  /** GPU layers of the embedding model; 0 keeps it on the CPU so the GPU stays with Gemma. */
+  numGpu: number;
+  fetch?: FetchLike | undefined;
+}
+
+/** Far above 64 vectors of 4096 numbers; anything bigger is not a real answer. */
+const MAX_EMBED_RESPONSE_CHARS = 32_000_000;
+
+/** 6 decimals keep a 768-number vector near 7 kB in the /complete body; retrieval does not notice the difference. */
+const roundEmbedding = (value: number) => Math.round(value * 1e6) / 1e6;
+
+/**
+ * One /api/embed call for every input of the spec. Resolves with one vector per input, in order, all of the same
+ * length, rounded to 6 decimals; throws an AiWorkerError (ai_timeout, ollama_unavailable, ai_failed) or
+ * GenerationAbortedError like ollamaChat.
+ */
+export async function ollamaEmbed(
+  runtime: Pick<OllamaRuntime, "ollamaUrl" | "timeoutMs">,
+  spec: EmbedSpec,
+  options: EmbedOptions,
+  signal?: AbortSignal
+): Promise<number[][]> {
+  const fetchImpl: FetchLike = options.fetch ?? fetch;
+  const controller = new AbortController();
+  let reason: AbortReason | null = null;
+  const abort = (why: AbortReason) => {
+    if (reason) return;
+    reason = why;
+    controller.abort();
+  };
+  const overall = setTimeout(() => abort("timeout"), runtime.timeoutMs);
+  const onExternalAbort = () => abort("external");
+  signal?.addEventListener("abort", onExternalAbort, { once: true });
+  if (signal?.aborted) abort("external");
+
+  try {
+    if (reason) throw reasonError(reason);
+    let response: Response;
+    try {
+      response = await fetchImpl(`${runtime.ollamaUrl}/api/embed`, {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json" },
+        body: JSON.stringify({ model: spec.model, input: spec.inputs, truncate: true, keep_alive: OLLAMA_KEEP_ALIVE, options: { num_gpu: options.numGpu } }),
+        redirect: "error",
+        signal: controller.signal
+      });
+    } catch (error) {
+      if (reason) throw reasonError(reason);
+      if (isConnectionError(error)) throw new AiWorkerError("ollama_unavailable", "connection_failed");
+      throw new AiWorkerError("ai_failed", "request_failed");
+    }
+    let text: string;
+    try {
+      text = await response.text();
+    } catch (error) {
+      if (reason) throw reasonError(reason);
+      if (isConnectionError(error)) throw new AiWorkerError("ollama_unavailable", "response_interrupted");
+      throw new AiWorkerError("ai_failed", "response_read_failed");
+    }
+    if (!response.ok) {
+      // A model that is not pulled (404, or "model ... not found") or cannot embed (501) is a setup problem of this PC.
+      const unavailable = response.status === 404 || response.status === 501 || /model[\s\S]{0,300}not found/i.test(text.slice(0, 2_000));
+      throw new AiWorkerError(unavailable ? "ollama_unavailable" : "ai_failed", `ollama_http_${response.status}`);
+    }
+    if (text.length > MAX_EMBED_RESPONSE_CHARS) throw new AiWorkerError("ai_failed", "response_too_large");
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      throw new AiWorkerError("ai_failed", "response_not_json");
+    }
+    const embeddings = (parsed as { embeddings?: unknown } | null)?.embeddings;
+    if (!Array.isArray(embeddings) || embeddings.length !== spec.inputs.length) throw new AiWorkerError("ai_failed", "embedding_count");
+    const first: unknown = embeddings[0];
+    const dimensions = Array.isArray(first) ? first.length : 0;
+    if (dimensions === 0) throw new AiWorkerError("ai_failed", "embedding_empty");
+    return embeddings.map((vector: unknown) => {
+      if (!Array.isArray(vector) || vector.length !== dimensions) throw new AiWorkerError("ai_failed", "embedding_dimensions");
+      return vector.map((value: unknown) => {
+        if (typeof value !== "number" || !Number.isFinite(value)) throw new AiWorkerError("ai_failed", "embedding_not_finite");
+        return roundEmbedding(value);
+      });
+    });
+  } finally {
+    clearTimeout(overall);
     signal?.removeEventListener("abort", onExternalAbort);
   }
 }
@@ -361,8 +468,16 @@ export function parseStudyRoadmapOutput(content: string): Record<string, unknown
   return output;
 }
 
+/** A "Trợ lý AI" answer is plain text: the trimmed content, which must not be empty. The API validates the rest. */
+export function parseAssistantOutput(content: string): { answer: string } {
+  const answer = content.trim();
+  if (!answer) throw new AiWorkerError("invalid_ai_output", "answer");
+  return { answer };
+}
+
 /** The local output check for a job kind. */
-export function parseJobOutput(kind: AiJobKind, content: string): Record<string, unknown> {
+export function parseJobOutput(kind: ChatJobKind, content: string): Record<string, unknown> {
+  if (kind === ASSISTANT_CHAT_KIND) return parseAssistantOutput(content);
   if (kind === CAREER_SKILL_SUGGESTION_KIND) return parseCareerSuggestionOutput(content);
   if (kind === GRADUATION_ADVICE_KIND) return parseGraduationAdviceOutput(content);
   if (kind === COMPETENCY_COURSE_SUGGESTION_KIND) return parseCourseSuggestionOutput(content);
@@ -398,7 +513,10 @@ function sameModel(name: unknown, wanted: string): boolean {
   return name === wanted || name === withTag;
 }
 
-/** Reads the Ollama version (/api/version) and the configured model's digest (/api/tags). */
+/**
+ * Reads the Ollama version (/api/version) and the digest of a local model (/api/tags): the configured chat model, or
+ * the embedding model named by a job.
+ */
 export async function getOllamaModelInfo(runtime: Pick<OllamaRuntime, "ollamaUrl" | "model">, deps: Pick<OllamaDeps, "fetch"> = {}): Promise<OllamaModelInfo> {
   const fetchImpl: FetchLike = deps.fetch ?? fetch;
   const versionBody = (await getJson(fetchImpl, `${runtime.ollamaUrl}/api/version`)) as { version?: unknown };

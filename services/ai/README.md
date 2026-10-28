@@ -1,6 +1,6 @@
 # Worker AI (Ollama + Gemma 4 E4B)
 
-Worker này chạy trên máy cá nhân có GPU. Nó lấy job AI từ API EduPath, gọi Ollama ở chính máy này, rồi gửi kết quả về API. Có năm loại job: nhận xét năng lực cho sinh viên (`competency_assessment`, xem `docs/competency-assessment.md`), đề xuất kỹ năng cho vị trí nghề nghiệp ở trang quản trị (`career_skill_suggestion`, xem `docs/career-ai-suggestions.md`), lời khuyên điều kiện xét tốt nghiệp cho sinh viên, tạo tự động khi sinh viên import bảng điểm hoặc mở trang Điều kiện xét tốt nghiệp (`graduation_advice`, xem `docs/graduation-advice.md`), và đề xuất liên kết kỹ năng, trọng số cho học phần ở mục Năng lực của trang quản trị (`competency_course_suggestion_v2`, chạy với chế độ suy luận của Gemma, xem `docs/competency-management.md`; worker lấy loại này sau cùng nên một lần chạy cho cả chương trình không làm sinh viên phải chờ), và lộ trình học tập 3 tháng khi sinh viên bấm "Tạo lộ trình" ở trang Lộ trình học tập (`study_roadmap`, chạy với chế độ suy luận, mỗi lộ trình khoảng 2–4 phút, xem `docs/study-roadmap.md`). Dữ liệu chỉ đi giữa API và máy chạy worker; Ollama chỉ nghe trên `127.0.0.1`.
+Worker này chạy trên máy cá nhân có GPU. Nó lấy job AI từ API EduPath, gọi Ollama ở chính máy này, rồi gửi kết quả về API. Có năm loại job: nhận xét năng lực cho sinh viên (`competency_assessment`, xem `docs/competency-assessment.md`), đề xuất kỹ năng cho vị trí nghề nghiệp ở trang quản trị (`career_skill_suggestion`, xem `docs/career-ai-suggestions.md`), lời khuyên điều kiện xét tốt nghiệp cho sinh viên, tạo tự động khi sinh viên import bảng điểm hoặc mở trang Điều kiện xét tốt nghiệp (`graduation_advice`, xem `docs/graduation-advice.md`), và đề xuất liên kết kỹ năng, trọng số cho học phần ở mục Năng lực của trang quản trị (`competency_course_suggestion_v2`, chạy với chế độ suy luận của Gemma, xem `docs/competency-management.md`; worker lấy loại này sau cùng nên một lần chạy cho cả chương trình không làm sinh viên phải chờ), và lộ trình học tập 3 tháng khi sinh viên bấm "Tạo lộ trình" ở trang Lộ trình học tập (`study_roadmap`, chạy với chế độ suy luận, mỗi lộ trình khoảng 2–4 phút, xem `docs/study-roadmap.md`). Từ 28/10/2026 có thêm hai loại cho Trợ lý AI (`docs/assistant.md`): câu trả lời cho câu hỏi của sinh viên (`assistant_chat`, worker lấy trước mọi loại khác, chữ hiện dần trên trang), và embedding của kho tri thức (`knowledge_embedding`, lấy sau cùng). Hai loại này dùng thêm model embedding EmbeddingGemma, chạy bằng CPU. Dữ liệu chỉ đi giữa API và máy chạy worker; Ollama chỉ nghe trên `127.0.0.1`.
 
 Mã nguồn nằm ở `apps/api/src/ai-worker/`. Cấu hình nằm ở `services/ai/.env` (không commit).
 
@@ -21,6 +21,11 @@ Mã nguồn nằm ở `apps/api/src/ai-worker/`. Cấu hình nằm ở `services
    ollama pull gemma4:e4b
    ```
    Không dùng bản `google/gemma-4-E4B` trên Hugging Face: đó là bản gốc chưa tinh chỉnh hội thoại. Worker cũng từ chối tên model có chữ `cloud`.
+4. Tải model embedding cho Trợ lý AI (khoảng 0,6 GB). Gemma 4 không có endpoint embedding:
+   ```powershell
+   ollama pull embeddinggemma
+   ```
+   Worker chạy model này bằng CPU (`OLLAMA_EMBED_NUM_GPU=0`) để Gemma giữ VRAM. Đo trên RTX 3050 4 GB: mỗi câu hỏi khoảng 50 ms, 32 đoạn văn khoảng 1 giây. Thiếu model thì Trợ lý AI vẫn trả lời, nhưng chỉ tìm dữ liệu chung theo từ khóa.
 
 ## 2. Tạo cấu hình
 
@@ -50,6 +55,7 @@ Nếu script vừa tạo khóa mới, khởi động lại backend để nó đ�
 | `OLLAMA_MODEL` | Tên model | `gemma4:e4b` |
 | `OLLAMA_CONTEXT` | `num_ctx` dùng khi khởi động model | `16384` |
 | `OLLAMA_NUM_GPU` | Số lớp model đặt trên GPU (tùy chọn) | Ollama tự chọn |
+| `OLLAMA_EMBED_NUM_GPU` | Số lớp của model embedding đặt trên GPU | `0` (chạy bằng CPU) |
 | `AI_TIMEOUT_MS` | Thời gian tối đa cho một lần sinh | `600000` (10 phút) |
 
 ## 3. Chạy worker

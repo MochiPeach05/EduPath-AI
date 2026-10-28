@@ -22,6 +22,7 @@ import "./student-layout.css";
 const StudentCompetency = lazy(() => import("./StudentCompetency"));
 const StudentRoadmap = lazy(() => import("./StudentRoadmap"));
 const StudentCareerGuidance = lazy(() => import("./StudentCareerGuidance"));
+const StudentAssistant = lazy(() => import("./StudentAssistant"));
 
 const pages = [
   { id: "overview", label: "Tổng quan", icon: "home" },
@@ -78,10 +79,6 @@ export function nameInitials(name: string): string {
   return (capitalised.length > 0 ? capitalised : words).slice(-2).map(word => word[0]).join("").toLocaleUpperCase("vi");
 }
 
-const featureCopy: Partial<Record<Page, { title: string; text: string; steps: string[] }>> = {
-  assistant: { title: "Một người bạn đồng hành trong học tập", text: "Trợ lý AI sẽ giúp giải thích kết quả đánh giá và lý do đề xuất học phần, đồng thời tư vấn kỹ năng nên tự học.", steps: ["Giải thích kết quả năng lực", "Hỏi đáp về lộ trình", "Gợi ý tài nguyên học tập"] }
-};
-
 // "?" help: one short step per page, in the order a new student needs them.
 const helpSteps: [string, string][] = [
   ["Hồ sơ và bảng điểm", "Import bảng điểm, chọn chuyên ngành và làm Khảo sát định hướng."],
@@ -90,6 +87,7 @@ const helpSteps: [string, string][] = [
   ["Khoảng trống kỹ năng", "xem kỹ năng còn thiếu so với nghề mục tiêu và học phần nên học."],
   ["Lộ trình học tập", "theo dõi tiến độ, nhờ EduPath AI soạn lộ trình cho học kỳ tới và lên kế hoạch các học kỳ."],
   ["Điều kiện xét tốt nghiệp", "tự kiểm tra các điều kiện xét tốt nghiệp và đọc lời khuyên của EduPath AI."],
+  ["Trợ lý AI", "hỏi về kỹ năng còn thiếu, lộ trình học tập, nghề nghiệp và tài liệu tự học."],
   ["Chương trình đào tạo và Kế hoạch đào tạo", "tra cứu học phần và kế hoạch từng học kỳ (trong menu tài khoản)."]
 ];
 
@@ -292,7 +290,6 @@ export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) 
           {panel === "help" ? <>
             <h3 id="student-help-title">Bắt đầu với EduPath AI</h3>
             <ol className="sw-help-steps">{helpSteps.map(([where, what]) => <li key={where}><strong>{where}</strong>: {what}</li>)}</ol>
-            <p><strong>Trợ lý AI</strong> sẽ được bổ sung sau.</p>
           </> : <>
             <h3 id="student-notifications-title">Thông báo</h3>
             <p>Chức năng thông báo học tập đang được phát triển.</p>
@@ -310,17 +307,17 @@ export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) 
               : <button type="button" onClick={error.kind === "logout" ? () => void exit() : () => setReload(n => n + 1)}>Thử lại</button>}
           </div>}
           <div className="sw-page-heading">
-            <div><p className="sw-eyebrow">CỔNG QUẢN LÝ HỌC TẬP</p><h1 ref={headingRef} tabIndex={-1}>{selected.label}</h1><p>{page === "overview" ? `Xin chào, ${name}. Cùng tiếp tục hành trình của bạn nhé.` : page === "profile" ? "Thông tin cá nhân và kết quả học tập của bạn, tại một nơi." : page === "plans" ? "Xem các học phần dự kiến theo năm học và học kỳ." : page === "roadmap" ? "Theo dõi tiến độ theo yêu cầu của chương trình, rồi tự lên kế hoạch các học kỳ tới hoặc để EduPath AI soạn lộ trình cho học kỳ tới." : page === "graduation" ? "Đối chiếu bảng điểm với tiêu chuẩn xét tốt nghiệp của khóa và chuyên ngành của bạn." : page === "curriculum" ? "Tra cứu học phần, tín chỉ và điều kiện học theo chương trình đào tạo." : page === "competency" ? "Điểm theo nhóm năng lực, mức thành thạo từng kỹ năng, tiến độ học tập và xét tốt nghiệp, tính từ bảng điểm của bạn." : page === "skill-gap" ? "So sánh năng lực của bạn với yêu cầu của nghề mục tiêu: kỹ năng còn thiếu, mức thiếu hụt, học phần nên học và kỹ năng cần tự học." : page === "career" ? "Gợi ý nghề phù hợp với năng lực và sở thích của bạn, so sánh các nghề và chọn nghề mục tiêu." : "Khám phá bước tiếp theo trên hành trình học tập của bạn."}</p></div>
+            <div><p className="sw-eyebrow">CỔNG QUẢN LÝ HỌC TẬP</p><h1 ref={headingRef} tabIndex={-1}>{selected.label}</h1><p>{page === "overview" ? `Xin chào, ${name}. Cùng tiếp tục hành trình của bạn nhé.` : page === "profile" ? "Thông tin cá nhân và kết quả học tập của bạn, tại một nơi." : page === "plans" ? "Xem các học phần dự kiến theo năm học và học kỳ." : page === "roadmap" ? "Theo dõi tiến độ theo yêu cầu của chương trình, rồi tự lên kế hoạch các học kỳ tới hoặc để EduPath AI soạn lộ trình cho học kỳ tới." : page === "graduation" ? "Đối chiếu bảng điểm với tiêu chuẩn xét tốt nghiệp của khóa và chuyên ngành của bạn." : page === "curriculum" ? "Tra cứu học phần, tín chỉ và điều kiện học theo chương trình đào tạo." : page === "competency" ? "Điểm theo nhóm năng lực, mức thành thạo từng kỹ năng, tiến độ học tập và xét tốt nghiệp, tính từ bảng điểm của bạn." : page === "skill-gap" ? "So sánh năng lực của bạn với yêu cầu của nghề mục tiêu: kỹ năng còn thiếu, mức thiếu hụt, học phần nên học và kỹ năng cần tự học." : page === "career" ? "Gợi ý nghề phù hợp với năng lực và sở thích của bạn, so sánh các nghề và chọn nghề mục tiêu." : page === "assistant" ? "Hỏi EduPath AI về kỹ năng còn thiếu, lộ trình học tập, nghề nghiệp và tài liệu tự học, dựa trên hồ sơ của bạn." : "Khám phá bước tiếp theo trên hành trình học tập của bạn."}</p></div>
             {page === "overview" && <button className="sw-outline" onClick={() => navigate("profile")}>Xem Hồ sơ và bảng điểm <Icon name="arrow" /></button>}
           </div>
-          {/* Not on the Trợ lý AI placeholder either: nothing there depends on the profile yet. */}
+          {/* Not on Trợ lý AI either: the chat fills the window under the heading. */}
           {!["overview", "profile", "competency", "skill-gap", "roadmap", "assistant"].includes(page) && reminder}
           {page === "overview" ? <StudentOverview profile={profile} loading={loading} navigate={navigate} identity={
             <section className="so-student-strip" aria-label="Thông tin sinh viên">
               <div className="so-student-identity"><span className="sw-avatar sw-avatar-large">{avatar}</span><div><strong>{name}</strong><span>{email ?? "Chưa cập nhật email"}</span></div></div>
               <dl><div><dt>Mã sinh viên</dt><dd>{loading ? "Đang tải…" : profile?.studentCode ?? "Chưa cập nhật"}</dd></div><div><dt>Ngành</dt><dd>{loading ? "Đang tải…" : majorLabel(profile?.majorCode) ?? "Chưa cập nhật"}</dd></div><div><dt>Khóa · Lớp</dt><dd>{loading ? "Đang tải…" : [profile?.cohortCode, profile?.className].filter(Boolean).join(" · ") || "Chưa cập nhật"}</dd></div><div><dt>Năm nhập học</dt><dd>{loading ? "Đang tải…" : profile?.cohortYear ?? "Chưa cập nhật"}</dd></div></dl>
             </section>} />
-          : page === "profile" ? <div className="sr-profile-layout">{profileCard}{profile && <StudentProfileEditor profile={profile} onSaved={() => setReload(n => n + 1)} />}{profile && <StudentProfileSurvey onSaved={() => setReload(n => n + 1)} />}<StudentTranscript /></div> : page === "curriculum" ? <StudentCurriculum /> : page === "plans" ? <StudentPlans /> : page === "graduation" ? <StudentGraduation /> : page === "roadmap" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">Đang tải lộ trình học tập…</p></section>}><StudentRoadmap notice={reminder} /></Suspense> : page === "career" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">Đang tải định hướng nghề nghiệp…</p></section>}><StudentCareerGuidance onProfileChanged={() => setReload(n => n + 1)} /></Suspense> : page === "competency" || page === "skill-gap" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">{page === "skill-gap" ? "Đang tải trang khoảng trống kỹ năng…" : "Đang tải trang đánh giá năng lực…"}</p></section>}><StudentCompetency key={page} profile={profile} view={page === "skill-gap" ? "gap" : "competency"} notice={reminder} /></Suspense> : <section className="sw-panel sw-feature"><span className="sw-card-icon"><Icon name={selected.icon} /></span><span className="sw-tag">Sắp ra mắt</span><h2>{featureCopy[page]?.title}</h2><p>{featureCopy[page]?.text}</p><div className="sw-feature-steps">{featureCopy[page]?.steps.map((step, i) => <div key={step}><span>0{i + 1}</span><h3>{step}</h3></div>)}</div><p className="sw-muted">Chức năng này chưa sẵn sàng sử dụng. Bạn có thể xem thông tin học tập hiện có trong Hồ sơ và bảng điểm.</p><button className="sw-primary" onClick={() => navigate("profile")}>Xem Hồ sơ và bảng điểm <Icon name="arrow" /></button></section>}
+          : page === "profile" ? <div className="sr-profile-layout">{profileCard}{profile && <StudentProfileEditor profile={profile} onSaved={() => setReload(n => n + 1)} />}{profile && <StudentProfileSurvey onSaved={() => setReload(n => n + 1)} />}<StudentTranscript /></div> : page === "curriculum" ? <StudentCurriculum /> : page === "plans" ? <StudentPlans /> : page === "graduation" ? <StudentGraduation /> : page === "roadmap" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">Đang tải lộ trình học tập…</p></section>}><StudentRoadmap notice={reminder} /></Suspense> : page === "career" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">Đang tải định hướng nghề nghiệp…</p></section>}><StudentCareerGuidance onProfileChanged={() => setReload(n => n + 1)} /></Suspense> : page === "competency" || page === "skill-gap" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">{page === "skill-gap" ? "Đang tải trang khoảng trống kỹ năng…" : "Đang tải trang đánh giá năng lực…"}</p></section>}><StudentCompetency key={page} profile={profile} view={page === "skill-gap" ? "gap" : "competency"} notice={reminder} /></Suspense> : page === "assistant" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">Đang tải Trợ lý AI…</p></section>}><StudentAssistant /></Suspense> : null}
           <footer className="sw-footer">
             <nav className="sw-footer-links" aria-label="Liên kết cuối trang">
               {publicInformationLinks.map(link => <a key={link.href} href={link.href} target="_blank" rel="noreferrer">{link.label}<span className="sr-only"> (mở trong tab mới)</span></a>)}

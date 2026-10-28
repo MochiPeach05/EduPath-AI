@@ -6,7 +6,9 @@
 // (graduation/advice/jobs.ts) to workers that advertise "graduation_advice", and AI proposals for
 // the courses of a CTĐT (competencies/ai/jobs.ts) to workers that advertise
 // "competency_course_suggestion_v2", and study roadmaps (roadmap/jobs.ts) to workers that advertise
-// "study_roadmap"; extend/complete find the id in any of the job tables.
+// "study_roadmap"; extend/complete find the id in any of the job tables. Since 2026-10-28 they also serve the answers of
+// Trợ lý AI ("assistant_chat", assistant/chat.ts, with /:id/prepare and /:id/progress) and the embeddings of its
+// knowledge index ("knowledge_embedding", assistant/knowledge-jobs.ts); see assistant/protocol.ts.
 import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
 import express, { Router, type ErrorRequestHandler, type RequestHandler } from "express";
 import { z } from "zod";
@@ -30,6 +32,26 @@ import {
   extendCourseSuggestion
 } from "../../competencies/ai/jobs.js";
 import { claimRoadmap, completeRoadmap, createRoadmapExpiry, extendRoadmap } from "../../roadmap/jobs.js";
+import {
+  assistantWorkerJob,
+  claimAssistantAnswer,
+  completeAssistantAnswer,
+  createAssistantExpiry,
+  extendAssistantAnswer,
+  prepareAssistantAnswer,
+  progressAssistantAnswer
+} from "../../assistant/chat.js";
+import {
+  claimKnowledgeEmbedding,
+  completeKnowledgeEmbedding,
+  createKnowledgeExpiry,
+  enqueueKnowledgeEmbeddings,
+  extendKnowledgeEmbedding,
+  knowledgeWorkerJob
+} from "../../assistant/knowledge-jobs.js";
+import { createKnowledgeRefresh } from "../../assistant/knowledge.js";
+import { CLAIM_WAIT_MS, EMBEDDING_DIMENSIONS, prepareBodySchema, progressBodySchema } from "../../assistant/protocol.js";
+import { waitForAssistantWork } from "../../assistant/wakeup.js";
 import { cleanAiOutputKeys, keyNamesFrom } from "./key-cleanup.js";
 import { validateAiOutput, validationContextFromAiInput } from "./validate.js";
 import {
@@ -37,10 +59,12 @@ import {
   AI_JOB_LEASE_MINUTES,
   AI_JOB_MAX_ATTEMPTS,
   AI_WORKER_ERROR_CODES,
+  ASSISTANT_CHAT_KIND,
   CAREER_SKILL_SUGGESTION_KIND,
   COMPETENCY_ASSESSMENT_KIND,
   COMPETENCY_COURSE_SUGGESTION_KIND,
   GRADUATION_ADVICE_KIND,
+  KNOWLEDGE_EMBEDDING_KIND,
   STUDY_ROADMAP_KIND,
   normalizeJobKinds,
   type AiJobKind
@@ -51,8 +75,11 @@ class WorkerError extends Error {
 }
 
 const leaseBody = z.object({ leaseToken: z.uuid() }).strict();
-/** Optional on /heartbeat and /claim; workers released before career suggestions send {}. */
-const kindsBody = z.object({ kinds: z.array(z.string().max(64)).max(16).optional() });
+/**
+ * Optional on /heartbeat and /claim; workers released before career suggestions send {}. wait (2026-10-28): with no job,
+ * hold the claim up to CLAIM_WAIT_MS for a question to answer.
+ */
+const kindsBody = z.object({ kinds: z.array(z.string().max(64)).max(16).optional(), wait: z.boolean().optional() });
 const metricsSchema = z.record(z.string().max(64), z.union([z.number(), z.string().max(200), z.boolean(), z.null()]))
   .refine((value) => Object.keys(value).length <= 32, "too_many_metrics");
 const completeBody = z.union([
@@ -118,6 +145,14 @@ export function createCompetencyWorkerRouter(pool: DatabasePool | undefined, aiW
   const graduationHousekeeping = createGraduationAdviceExpiry();
   const courseHousekeeping = createCourseSuggestionExpiry();
   const roadmapHousekeeping = createRoadmapExpiry();
+  const assistantHousekeeping = createAssistantExpiry();
+  const knowledgeHousekeeping = createKnowledgeExpiry();
+  // The knowledge index is rebuilt from the catalogs at most every 10 minutes, in the background of a claim (it reads
+  // every catalog), then its changed chunks are queued for embedding. Neither ever fails a claim.
+  const refreshKnowledge = createKnowledgeRefresh();
+  const refreshInBackground = () => {
+    void refreshKnowledge(db).then((ran) => (ran ? enqueueKnowledgeEmbeddings(db) : 0)).catch(() => undefined);
+  };
 
   const authenticate: RequestHandler = (req, res, next) => {
     res.setHeader("Cache-Control", "no-store");
@@ -167,12 +202,24 @@ export function createCompetencyWorkerRouter(pool: DatabasePool | undefined, aiW
 
   router.post("/claim", async (req, res) => {
     const kinds = jobKinds(req.body);
+    const wait = (req.body as { wait?: unknown } | undefined)?.wait === true;
     await heartbeat(kinds);
     await housekeeping(db);
     await careerHousekeeping(db);
     await graduationHousekeeping(db);
     await courseHousekeeping(db);
     await roadmapHousekeeping(db);
+    // The Trợ lý AI tables are touched only by workers that run its kinds (the student API expires answers too).
+    if (kinds.includes(ASSISTANT_CHAT_KIND)) await assistantHousekeeping(db);
+    if (kinds.includes(KNOWLEDGE_EMBEDDING_KIND)) {
+      await knowledgeHousekeeping(db);
+      refreshInBackground();
+    }
+    // Answers of Trợ lý AI first: a student waits on the chat, and an answer takes seconds.
+    if (kinds.includes(ASSISTANT_CHAT_KIND)) {
+      const answer = await claimAssistantAnswer(db, randomUUID());
+      if (answer) { res.json({ job: assistantWorkerJob(answer) }); return; }
+    }
     // Career suggestions first: an admin is waiting on the page and these jobs are rare.
     if (kinds.includes(CAREER_SKILL_SUGGESTION_KIND)) {
       const career = await claimCareerSuggestion(db, randomUUID());
@@ -211,7 +258,43 @@ export function createCompetencyWorkerRouter(pool: DatabasePool | undefined, aiW
       const course = await claimCourseSuggestion(db, randomUUID());
       if (course) { res.json({ job: workerJob(COMPETENCY_COURSE_SUGGESTION_KIND, course) }); return; }
     }
+    // Embeddings of the knowledge index last: background work no one waits for.
+    if (kinds.includes(KNOWLEDGE_EMBEDDING_KIND)) {
+      const batch = await claimKnowledgeEmbedding(db, randomUUID());
+      if (batch) { res.json({ job: knowledgeWorkerJob(batch) }); return; }
+    }
+    // Nothing to do: a worker that asks to wait is held until a question is queued in this process (or CLAIM_WAIT_MS).
+    if (wait && kinds.includes(ASSISTANT_CHAT_KIND)) {
+      const gone = new AbortController();
+      res.on("close", () => gone.abort());
+      if (await waitForAssistantWork(CLAIM_WAIT_MS, gone.signal)) {
+        const answer = await claimAssistantAnswer(db, randomUUID());
+        if (answer) { res.json({ job: assistantWorkerJob(answer) }); return; }
+      }
+    }
     res.json({ job: null });
+  });
+
+  // Trợ lý AI: the prompt of a claimed answer, built from the student's data and the knowledge search (the worker sends
+  // the question's vector, or null when embedding failed).
+  router.post("/:id/prepare", async (req, res) => {
+    const id = jobId(req.params.id);
+    const body = prepareBodySchema.safeParse(req.body);
+    if (!body.success) throw new WorkerError("invalid_input", 400);
+    const vector = body.data.vector?.length === EMBEDDING_DIMENSIONS ? body.data.vector : null;
+    const prompt = await prepareAssistantAnswer(db, id, body.data.leaseToken, vector);
+    if (prompt === "missing" || prompt === "expired") throw new WorkerError("job_expired", 409);
+    res.json(prompt);
+  });
+
+  // Trợ lý AI: the answer so far, about once a second while Gemma writes.
+  router.post("/:id/progress", async (req, res) => {
+    const id = jobId(req.params.id);
+    const body = progressBodySchema.safeParse(req.body);
+    if (!body.success) throw new WorkerError("invalid_input", 400);
+    const outcome = await progressAssistantAnswer(db, id, body.data.leaseToken, body.data.content);
+    if (outcome !== "ok") throw new WorkerError("job_expired", 409);
+    res.json({ ok: true });
   });
 
   router.post("/:id/extend", async (req, res) => {
@@ -224,7 +307,8 @@ export function createCompetencyWorkerRouter(pool: DatabasePool | undefined, aiW
       [id, body.data.leaseToken, AI_JOB_LEASE_MINUTES]);
     const leaseUntil = result.rows[0]?.leaseUntil ?? await extendCareerSuggestion(db, id, body.data.leaseToken)
       ?? await extendGraduationAdvice(db, id, body.data.leaseToken) ?? await extendCourseSuggestion(db, id, body.data.leaseToken)
-      ?? await extendRoadmap(db, id, body.data.leaseToken);
+      ?? await extendRoadmap(db, id, body.data.leaseToken) ?? await extendAssistantAnswer(db, id, body.data.leaseToken)
+      ?? await extendKnowledgeEmbedding(db, id, body.data.leaseToken);
     if (!leaseUntil) throw new WorkerError("job_expired", 409);
     res.json({ leaseUntil: new Date(leaseUntil).toISOString() });
   });
@@ -246,11 +330,14 @@ export function createCompetencyWorkerRouter(pool: DatabasePool | undefined, aiW
         return;
       }
       if (!job) {
-        // Not a competency job: the id may be a career skill suggestion, a graduation advice, a course proposal or a roadmap.
+        // Not a competency job: the id may be a career skill suggestion, a graduation advice, a course proposal, a roadmap,
+        // an answer of Trợ lý AI or a batch of knowledge embeddings.
         const career = await completeCareerSuggestion(client, id, input);
         const graduation = career === "missing" ? await completeGraduationAdvice(client, id, input) : career;
         const course = graduation === "missing" ? await completeCourseSuggestion(client, id, input) : graduation;
-        const outcome = course === "missing" ? await completeRoadmap(client, id, input) : course;
+        const roadmap = course === "missing" ? await completeRoadmap(client, id, input) : course;
+        const answer = roadmap === "missing" ? await completeAssistantAnswer(client, id, input) : roadmap;
+        const outcome = answer === "missing" ? await completeKnowledgeEmbedding(client, id, input) : answer;
         if (outcome !== "ok") throw new WorkerError("job_expired", 409);
         await client.query("COMMIT");
         res.json({ ok: true });

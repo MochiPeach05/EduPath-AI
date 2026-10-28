@@ -7,12 +7,13 @@ import type { DatabasePool } from "../db/pool.js";
 // the AI roadmap that reads them. 2026-10-25 (written on 24/10, the date had to change): the technologies and free-time
 // interests moved into the survey and the AI roadmap reads them too. 2026-10-26 (approved by the user on 25/10, amended
 // on 26/10): the Khoa's admins see the scores of every stored transcript (not the PDF), those imported earlier included,
-// and the AI roadmap covers the next term instead of 3 months.
+// and the AI roadmap covers the next term instead of 3 months. 2026-10-28 (approved by the user): Trợ lý AI answers from
+// these results and the survey (under its consent) and keeps the conversations until deleted or 90 days without a message.
 // Must equal `policyVersion` in apps/web/src/public-information.ts (checked by consent.test.ts).
-export const TRANSCRIPT_POLICY_VERSION = "2026-10-26";
+export const TRANSCRIPT_POLICY_VERSION = "2026-10-28";
 /**
- * The oldest policy version whose consents still count, so 2026-10-26 asks no one again (user, 2026-10-26: "không để lại
- * ghi chú gì hết"); new consents are recorded under TRANSCRIPT_POLICY_VERSION. Must equal `consentValidSince` in
+ * The oldest policy version whose consents still count, so 2026-10-26 and 2026-10-28 ask no one again (user, 2026-10-26:
+ * "không để lại ghi chú gì hết"); new consents are recorded under TRANSCRIPT_POLICY_VERSION. Must equal `consentValidSince` in
  * apps/web/src/public-information.ts (checked by consent.test.ts).
  */
 export const CONSENT_VALID_SINCE = "2026-10-25";

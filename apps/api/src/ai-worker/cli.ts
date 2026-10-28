@@ -1,7 +1,7 @@
 import { fileURLToPath } from "node:url";
 import { AiWorkerConfigError, loadAiWorkerConfig, readAiWorkerEnv } from "./config.js";
 import { createWorkerClient } from "./client.js";
-import { getOllamaModelInfo, ollamaChat, warmUpOllama, type OllamaRuntime } from "./ollama.js";
+import { getOllamaModelInfo, ollamaChat, ollamaEmbed, warmUpOllama, type OllamaRuntime } from "./ollama.js";
 import { errorFields, runWorker, type LogFields } from "./worker.js";
 
 /** services/ai/.env relative to apps/api/src/ai-worker/cli.ts */
@@ -46,6 +46,7 @@ async function main(): Promise<void> {
     model: config.model,
     contextLength: config.contextLength,
     numGpu: config.numGpu ?? null,
+    embedNumGpu: config.embedNumGpu,
     timeoutMs: config.timeoutMs
   });
 
@@ -61,8 +62,11 @@ async function main(): Promise<void> {
     {
       client: createWorkerClient({ apiUrl: config.apiUrl, workerKey: config.workerKey }),
       ollama: {
-        chat: (job, signal) => ollamaChat(runtime, job, {}, signal),
-        modelInfo: () => getOllamaModelInfo(runtime)
+        chat: (job, signal, onContent) => ollamaChat(runtime, job, { onContent }, signal),
+        modelInfo: () => getOllamaModelInfo(runtime),
+        // "Trợ lý AI": the embedding model named by each job, on the CPU unless OLLAMA_EMBED_NUM_GPU says otherwise.
+        embed: (spec, signal) => ollamaEmbed(runtime, spec, { numGpu: config.embedNumGpu }, signal),
+        embeddingModelInfo: (model) => getOllamaModelInfo({ ollamaUrl: runtime.ollamaUrl, model })
       },
       log,
       model: config.model

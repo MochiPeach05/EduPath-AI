@@ -112,10 +112,13 @@ describe("student shell", () => {
     expect(html).toContain('<a href="mailto:hotrosinhvien@vlu.edu.vn">Hỗ trợ: hotrosinhvien@vlu.edu.vn</a>');
   });
 
-  it("sends the Trợ lý AI placeholder to Hồ sơ và bảng điểm by its name", () => {
+  it("opens the Trợ lý AI chat instead of the old placeholder", () => {
     const html = render("#assistant");
     expect(html).toContain('<h1 tabindex="-1">Trợ lý AI</h1>');
-    expect(html).toContain("Xem Hồ sơ và bảng điểm");
-    expect(html).not.toContain("Xem hồ sơ học tập");
+    expect(html).toContain("Hỏi EduPath AI về kỹ năng còn thiếu, lộ trình học tập, nghề nghiệp và tài liệu tự học, dựa trên hồ sơ của bạn.");
+    // The chat loads on demand, like the other large pages.
+    expect(html).toContain("Đang tải Trợ lý AI…");
+    expect(html).not.toContain("Sắp ra mắt");
+    expect(html).not.toContain("Chức năng này chưa sẵn sàng sử dụng");
   });
 });

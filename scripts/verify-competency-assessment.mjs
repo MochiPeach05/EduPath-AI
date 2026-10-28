@@ -389,7 +389,8 @@ async function runOllamaCheck(skills) {
 
   const runtime = { ollamaUrl: "http://127.0.0.1:11434", model: process.env.OLLAMA_MODEL || "gemma4:e4b", contextLength: 16384,
     timeoutMs: 600000, numGpu: Number(process.env.OLLAMA_NUM_GPU || 38) };
-  const client = createWorkerClient({ apiUrl: aiBase, workerKey: aiKey });
+  // Competency assessments only (the client's default also advertises the Trợ lý AI kinds, whose tables this schema lacks).
+  const client = createWorkerClient({ apiUrl: aiBase, workerKey: aiKey, kinds: ["competency_assessment"] });
   const events = [];
   const deps = { client, model: runtime.model, log: (event, fields = {}) => events.push({ event, ...fields }),
     ollama: { chat: (job, signal) => ollamaChat(runtime, job, {}, signal), modelInfo: () => getOllamaModelInfo(runtime) } };

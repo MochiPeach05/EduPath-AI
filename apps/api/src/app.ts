@@ -17,6 +17,7 @@ import helmet from "helmet";
 import type { DatabasePool } from "./db/pool.js";
 import { createStudentDataRouter } from "./student/router.js";
 import { createRoadmapRouter } from "./roadmap/router.js";
+import { createAssistantRouter } from "./assistant/router.js";
 import { createCareerGuidanceRouter } from "./career-guidance/router.js";
 import { createStudyPlanRouter } from "./study-plan/router.js";
 import { createCompetencyAssessmentRouter } from "./competency-assessment/router.js";
@@ -198,6 +199,8 @@ export function createApp({
   app.use("/api/student/study-plan", createStudyPlanRouter(databasePool, config.webOrigin));
   // The 3-month study roadmap is AI work too: it is created only when AI_WORKER_KEY is configured.
   app.use("/api/student/roadmap", createRoadmapRouter(databasePool, config.webOrigin, { enabled: Boolean(config.aiWorkerKey) }));
+  // "Trợ lý AI" (STU-CHAT-01..05): answers come from the local AI worker too, so questions are queued only with AI_WORKER_KEY.
+  app.use("/api/student/assistant", createAssistantRouter(databasePool, config.webOrigin, { enabled: Boolean(config.aiWorkerKey) }));
   // "Định hướng nghề nghiệp": every catalog career against the student's competencies and survey (read only, no AI).
   app.use("/api/student/career-guidance", createCareerGuidanceRouter(databasePool));
   // AI comments are queued only when AI_WORKER_KEY is configured; otherwise ai_status is 'disabled'.

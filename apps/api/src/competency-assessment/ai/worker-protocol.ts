@@ -27,9 +27,18 @@ export const GRADUATION_ADVICE_KIND = "graduation_advice";
 export const COMPETENCY_COURSE_SUGGESTION_KIND = "competency_course_suggestion_v2";
 /** The 3-month study roadmap of a student ("Lộ trình học tập", 2026-10-24), written with thinking. */
 export const STUDY_ROADMAP_KIND = "study_roadmap";
-export const AI_JOB_KINDS = [
+/**
+ * "Trợ lý AI" (2026-10-28, assistant/protocol.ts): one answer to a student's question, embedded, prepared by the server
+ * and streamed back; and the embeddings of the shared knowledge index. Their claimed jobs carry no system/user prompt.
+ */
+export const ASSISTANT_CHAT_KIND = "assistant_chat";
+export const KNOWLEDGE_EMBEDDING_KIND = "knowledge_embedding";
+/** Kinds whose claimed job is one Ollama chat call with system, user, schema and options. */
+export const GENERATION_JOB_KINDS = [
   COMPETENCY_ASSESSMENT_KIND, CAREER_SKILL_SUGGESTION_KIND, GRADUATION_ADVICE_KIND, COMPETENCY_COURSE_SUGGESTION_KIND, STUDY_ROADMAP_KIND
 ] as const;
+export type GenerationJobKind = (typeof GENERATION_JOB_KINDS)[number];
+export const AI_JOB_KINDS = [...GENERATION_JOB_KINDS, ASSISTANT_CHAT_KIND, KNOWLEDGE_EMBEDDING_KIND] as const;
 export type AiJobKind = (typeof AI_JOB_KINDS)[number];
 
 /** Known kinds only, without repeats; missing or empty means competency assessments only. */
