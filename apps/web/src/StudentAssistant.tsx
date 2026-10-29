@@ -10,7 +10,8 @@ import "./student-assistant.css";
 // "Trợ lý AI" (STU-CHAT-01..05, 2026-10-28): a chat with EduPath AI about the student's skill gaps, roadmap, recommended
 // courses, careers and self-study resources. The conversations are listed on the left (a selector above the chat below
 // 900px). A question is queued for the local Gemma worker; while its answer waits or is written the page reads it about
-// once a second and shows the text as it grows. A finished answer cites its sources ([n]) and can be rated.
+// once a second and shows the text as it grows. A finished answer cites its sources ([n]) and can be rated. Above the
+// question box the server's suggested next questions (2026-10-29) send in one click.
 
 /** How often an answer that waits or is being written is read again. */
 export const ANSWER_POLL_MS = 1000;
@@ -31,6 +32,19 @@ export const STARTER_QUESTIONS = [
   { icon: "help", text: "Vì sao lộ trình đề xuất các môn này cho mình?" },
   { icon: "book", text: "Mình nên tự học kỹ năng còn thiếu ở đâu?" },
 ] as const;
+
+/**
+ * The next questions offered above the question box when the server sends none (an older server): getting started first,
+ * then the student's own results (2026-10-29, user: "ở trên khung đoạn nhập đoạn chat nên có các câu hỏi đề xuất").
+ */
+export const FALLBACK_SUGGESTIONS = [
+  "Làm sao để import bảng điểm PDF?",
+  "Làm sao để chạy Đánh giá năng lực?",
+  "Điểm trung bình tích lũy của mình là bao nhiêu?",
+  "Điều kiện xét tốt nghiệp của khóa mình là gì?",
+] as const;
+/** The most suggestions the server sends (assistant-types.ts). */
+const MAX_SUGGESTIONS = 6;
 
 export const OFFLINE_NOTICE = "Trợ lý AI đang tạm ngưng. Câu hỏi vẫn được lưu và sẽ được trả lời khi hệ thống AI hoạt động trở lại.";
 
@@ -157,6 +171,41 @@ export function threadTimeLabel(iso: string, now: Date = new Date()): string {
   return year === today.slice(0, 4) ? `${dayOfMonth}/${month}` : `${dayOfMonth}/${month}/${year}`;
 }
 
+/** Two questions are the same whatever their spacing, case or Unicode form (Vietnamese keyboards type either form). */
+const questionKey = (text: string) => text.normalize("NFC").replace(/\s+/g, " ").trim().toLocaleLowerCase("vi");
+
+/** The server's suggestions as the page offers them: text only, each once, short enough to send, at most six. */
+export function readSuggestions(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const questions: string[] = [];
+  for (const item of value) {
+    if (typeof item !== "string") continue;
+    const text = item.replace(/\s+/g, " ").trim();
+    const key = questionKey(text);
+    if (!text || text.length > ASSISTANT_MAX_QUESTION || seen.has(key)) continue;
+    seen.add(key);
+    questions.push(text);
+    if (questions.length === MAX_SUGGESTIONS) break;
+  }
+  return questions;
+}
+
+/**
+ * The questions offered above the box: the server's suggestions (FALLBACK_SUGGESTIONS when it sends none) without those
+ * in `skip`, the last question of the open conversation or the starter questions a new conversation already shows.
+ */
+export function offeredQuestions(suggestions: readonly string[], skip: readonly string[]): string[] {
+  const skipped = new Set(skip.map(questionKey));
+  return (suggestions.length ? suggestions : FALLBACK_SUGGESTIONS).filter((text) => !skipped.has(questionKey(text)));
+}
+
+/** The student's last question in a conversation (oldest first), or null. */
+function lastQuestion(messages: readonly AssistantMessage[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) if (messages[i].role === "user") return messages[i].content;
+  return null;
+}
+
 /** A page of the portal ("#skill-gap"), opened in place like the nav; anything else is not a portal link. */
 const portalLink = (link: string | null) => (link && /^#[a-z][a-z-]*$/.test(link) ? link : null);
 
@@ -172,13 +221,16 @@ function storeThread(id: string | null) {
 
 /* ---------------------------------------------------------------------- data */
 
+/** GET /threads as the page keeps it: the suggestions read (readSuggestions), [] when the server sends none. */
+type ThreadsState = Required<AssistantThreadsResponse>;
 type Conversation = { threadId: string; messages: AssistantMessage[] };
 type ActionError = { messageId: string; text: string };
 export type Announcement = { text: string; n: number };
 
 function useAssistant() {
-  // The list is read again every 30 s and when the student comes back to the tab, for workerOnline and other tabs' changes.
-  const [list, setList] = useState<AssistantThreadsResponse | null>(null);
+  // The list is read again every 30 s, when the student comes back to the tab and when an answer is finished, for
+  // workerOnline, the suggested questions and other tabs' changes.
+  const [list, setList] = useState<ThreadsState | null>(null);
   const [listError, setListError] = useState("");
   const [listRevision, setListRevision] = useState(0);
   // Local changes since a list request started: its answer would undo them, so it is read again instead.
@@ -195,7 +247,7 @@ function useAssistant() {
       assistantApi.threads(request.signal).then((data) => {
         if (request.signal.aborted) return;
         if (seen !== changes.current) { load(); return; }
-        const next = { threads: newestFirst(data.threads), workerOnline: data.workerOnline === true };
+        const next: ThreadsState = { threads: newestFirst(data.threads), workerOnline: data.workerOnline === true, suggestions: readSuggestions(data.suggestions) };
         setList((current) => (current && json(current) === json(next) ? current : next));
         setListError("");
       }, (error: unknown) => { if (!request.signal.aborted) setListError(errorText(error)); });
@@ -286,19 +338,23 @@ function useAssistant() {
     return () => controller.abort();
   }, [pendingId, replaceMessage, reloadConversation]);
 
-  // Screen readers hear when an answer they waited for is finished, not every piece of it.
+  // Screen readers hear when an answer they waited for is finished, not every piece of it; the list (with the suggested
+  // questions, which follow what the student has asked) is read again then.
   const [announcement, setAnnouncement] = useState<Announcement>({ text: "", n: 0 });
   const statuses = useRef<{ threadId: string | null; byId: Map<string, AssistantMessageStatus> }>({ threadId: null, byId: new Map() });
   useEffect(() => {
     const before = statuses.current;
     if (shown && before.threadId === shown.threadId) {
+      let finished = false;
       for (const message of shown.messages) {
         const was = before.byId.get(message.id);
         if (message.role !== "assistant" || !was || !isAnswerPending(was) || isAnswerPending(message.status)) continue;
         const text = message.status === "completed" ? "Trợ lý đã trả lời xong câu hỏi của bạn."
           : message.status === "failed" ? "Chưa trả lời được câu hỏi này." : "Câu trả lời đã dừng.";
         setAnnouncement((current) => ({ text, n: current.n + 1 }));
+        finished = true;
       }
+      if (finished) setListRevision((n) => n + 1);
     }
     statuses.current = { threadId: shown?.threadId ?? null, byId: new Map(shown?.messages.map((message) => [message.id, message.status] as const)) };
   }, [shown]);
@@ -313,8 +369,10 @@ function useAssistant() {
     const threadId = selectedId;
     changes.current += 1;
     try {
+      let messages: AssistantMessage[];
       if (!threadId) {
         const data = await assistantApi.start(content);
+        messages = data.messages;
         setList((current) => current && { ...current, threads: withThread(current.threads, data.thread) });
         // The new conversation opens, unless the student has meanwhile opened another one.
         if (selected.current === null) {
@@ -325,10 +383,13 @@ function useAssistant() {
         }
       } else {
         const data = await assistantApi.ask(threadId, content);
+        messages = data.messages;
         setConversation((current) => (current?.threadId === threadId ? { ...current, messages: [...current.messages, ...data.messages] } : current));
         const at = data.messages[0]?.createdAt ?? new Date().toISOString();
         setList((current) => current && { ...current, threads: newestFirst(current.threads.map((thread) => (thread.id === threadId ? { ...thread, updatedAt: at } : thread))) });
       }
+      // An answer the server gave at once (e.g. what to set up first) is finished already: the suggestions follow it.
+      if (messages.some((message) => message.role === "assistant" && !isAnswerPending(message.status))) setListRevision((n) => n + 1);
       return true;
     } catch (error) {
       const code = codeOf(error);
@@ -381,6 +442,8 @@ function useAssistant() {
 
   return {
     threads: list?.threads ?? null, listError: list ? "" : listError, onReloadList: () => setListRevision((n) => n + 1), workerOnline,
+    // A list that cannot be read offers the fallback questions; one still loading offers none yet.
+    suggestions: list ? list.suggestions : listError ? [] : null,
     selectedId, messages: shown?.messages ?? null, loadError, onReloadConversation: reloadConversation, onSelect: select,
     onSend: send, sending, sendError, onDelete: remove, onRetry: retry, retrying, onRate: rate, actionError, announcement,
   };
@@ -597,9 +660,53 @@ export function AnswerItem({ message, workerOnline, retrying, error, onRetry, on
   </li>;
 }
 
-/** waiting: the open conversation still loads, so whether it waits for an answer is not known yet. */
-function Composer({ input, pending, waiting, sending, error, onSend }: {
+/**
+ * The suggested next questions above the box; one click asks one. Wide screens keep them to two lines (the server lists
+ * the most useful first, so the last ones that do not fit are left out); below 900px they scroll sideways in one line.
+ */
+function Suggestions({ questions, disabled, onAsk }: { questions: readonly string[]; disabled: boolean; onAsk: (question: string) => void }) {
+  const list = useRef<HTMLUListElement>(null);
+  const key = questions.join("\n");
+  useLayoutEffect(() => {
+    const element = list.current;
+    if (!element) return;
+    const fit = () => {
+      const items = [...element.children] as HTMLElement[];
+      for (const item of items) item.hidden = false;
+      // In one line every chip has the same top, and all of them stay.
+      const lines = [...new Set(items.map((item) => item.offsetTop))].sort((a, b) => a - b);
+      for (const item of items) item.hidden = lines.length > 2 && item.offsetTop > lines[1];
+    };
+    fit();
+    // Hiding chips changes only the height, so only a new width (or the web font arriving) fits them again.
+    let width = element.clientWidth;
+    const observer = typeof ResizeObserver === "function" ? new ResizeObserver(() => {
+      if (element.clientWidth === width) return;
+      width = element.clientWidth;
+      fit();
+    }) : null;
+    observer?.observe(element);
+    let active = true;
+    void document.fonts?.ready.then(() => { if (active) fit(); });
+    return () => { active = false; observer?.disconnect(); };
+  }, [key]);
+  return <div className="as-suggestions" role="group" aria-labelledby="as-suggestions-label">
+    <span id="as-suggestions-label" className="as-suggestions-label">Gợi ý</span>
+    <ul ref={list} className="as-suggestion-list">
+      {questions.map((question) => <li key={question}>
+        <button type="button" className="as-suggestion" disabled={disabled} onClick={() => onAsk(question)}>{question}</button>
+      </li>)}
+    </ul>
+  </div>;
+}
+
+/**
+ * waiting: the open conversation still loads, so whether it waits for an answer is not known yet. The suggested questions
+ * step aside while a question is sent or answered, and wait (disabled) while the conversation loads.
+ */
+function Composer({ input, pending, waiting, sending, error, onSend, suggestions, onAsk }: {
   input: RefObject<HTMLTextAreaElement | null>; pending: boolean; waiting: boolean; sending: boolean; error: string; onSend: (text: string) => Promise<boolean>;
+  suggestions: readonly string[]; onAsk: (question: string) => void;
 }) {
   const [draft, setDraft] = useState("");
   // The box grows with the question (up to its max-height, then it scrolls).
@@ -621,6 +728,7 @@ function Composer({ input, pending, waiting, sending, error, onSend }: {
   const hint = pending ? "Bạn có thể gửi câu hỏi tiếp theo khi trợ lý trả lời xong." : "";
   return <form className="as-composer" onSubmit={(event) => { event.preventDefault(); void submit(); }}>
     <div className="as-composer-inner">
+      {suggestions.length > 0 && !pending && !sending && <Suggestions questions={suggestions} disabled={waiting} onAsk={onAsk} />}
       {error && <p className="as-send-error" role="alert">{error}</p>}
       <div className="as-input">
         <label htmlFor="as-question" className="sr-only">Câu hỏi của bạn</label>
@@ -655,6 +763,8 @@ export type AssistantViewProps = {
   listError: string;
   onReloadList: () => void;
   workerOnline: boolean;
+  /** The suggested next questions of GET /threads ([]: none sent, FALLBACK_SUGGESTIONS are offered); null while the list loads. */
+  suggestions: readonly string[] | null;
   selectedId: string | null;
   /** The open conversation, oldest first; null while it loads. */
   messages: AssistantMessage[] | null;
@@ -722,8 +832,13 @@ export function AssistantView(props: AssistantViewProps) {
   };
   const retry = (id: string) => { void props.onRetry(id).then((queued) => { if (queued) input.current?.focus(); }); };
 
-  // The starters are disabled while a question is sent, which drops their focus: the question box takes it.
+  // The starters are disabled while a question is sent (the suggested questions step aside), which drops their focus: the
+  // question box takes it.
   const ask = (question: string) => { void props.onSend(question).then(() => input.current?.focus()); };
+  // Not the question just asked, nor on a new conversation the starter questions it already shows.
+  const asked = messages ? lastQuestion(messages) : null;
+  const suggestions = props.suggestions === null ? []
+    : offeredQuestions(props.suggestions, selectedId === null ? STARTER_QUESTIONS.map((starter) => starter.text) : asked ? [asked] : []);
 
   let chat: ReactNode;
   if (selectedId === null) chat = <Welcome busy={sending} onAsk={ask} />;
@@ -749,7 +864,8 @@ export function AssistantView(props: AssistantViewProps) {
         const area = event.currentTarget;
         atEnd.current = area.scrollHeight - area.scrollTop - area.clientHeight < 48;
       }}>{chat}</div>
-      <Composer input={input} pending={pending} waiting={selectedId !== null && !messages} sending={sending} error={props.sendError} onSend={props.onSend} />
+      <Composer input={input} pending={pending} waiting={selectedId !== null && !messages} sending={sending} error={props.sendError} onSend={props.onSend}
+        suggestions={suggestions} onAsk={ask} />
     </section>
   </div>;
 }

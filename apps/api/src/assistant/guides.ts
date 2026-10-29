@@ -172,10 +172,10 @@ export function portalGuides(): PortalGuide[] {
     ]],
     ["tro-ly-ai", "Trợ lý AI", "#assistant", [
       "Trợ lý AI trả lời câu hỏi về việc học của chính bạn: điểm trong bảng điểm (điểm từng môn, điểm trung bình tích lũy, tín chỉ tích lũy, môn chưa đạt), kết quả năng lực và khoảng trống kỹ năng, học phần nên học và lý do, lộ trình, tiến độ, điều kiện tốt nghiệp, nghề nghiệp và tài liệu tự học.",
-      "- Dữ liệu để trả lời: bảng điểm bạn đã tải lên (điểm và các dòng tổng kết chép đúng như in, không tính lại), các kết quả hệ thống đã tính cho bạn (lần Đánh giá năng lực mới nhất, Lộ trình AI mới nhất, tiến độ so với kế hoạch; câu trả lời Khảo sát định hướng khi bạn đã đồng ý) và danh mục chung của Khoa (học phần, kỹ năng, nghề nghiệp, chương trình và kế hoạch đào tạo, tiêu chuẩn xét tốt nghiệp, hướng dẫn sử dụng và tài liệu tự học do EduPath AI tuyển chọn).",
+      "- Dữ liệu để trả lời: bảng điểm bạn đã tải lên (chép đúng như in, không tính lại), kết quả hệ thống đã tính cho bạn (Đánh giá năng lực và Lộ trình AI mới nhất, tiến độ so với kế hoạch; Khảo sát định hướng khi bạn đã đồng ý) và danh mục chung của Khoa (học phần, kỹ năng, nghề nghiệp, chương trình và kế hoạch đào tạo, tiêu chuẩn xét tốt nghiệp, hướng dẫn sử dụng, tài liệu tự học do EduPath AI tuyển chọn).",
       "- Mỗi ý trong câu trả lời ghi số nguồn như [1], [2]; bấm nguồn để mở trang liên quan. Đường link chỉ dẫn tới tài liệu tự học có trong danh sách.",
-      "- Mọi con số do hệ thống tính, trợ lý không tự tính điểm. Câu trả lời do mô hình AI chạy cục bộ viết nên có thể chưa chính xác; hãy đối chiếu với số liệu trên trang và hỏi cố vấn học tập trước khi đăng ký học phần.",
-      `- Muốn câu trả lời sát với bạn, hãy hoàn thành hồ sơ và Đánh giá năng lực trước. Mỗi câu hỏi tối đa ${formatNumber(MAX_QUESTION_CHARS)} ký tự; trong một cuộc trò chuyện, trợ lý trả lời lần lượt từng câu.`,
+      "- Mọi con số do hệ thống tính, trợ lý không tự tính điểm. Câu trả lời do AI chạy cục bộ viết nên có thể chưa chính xác; hãy đối chiếu với số liệu trên trang và hỏi cố vấn học tập trước khi đăng ký học phần.",
+      `- Câu hỏi cần kết quả bạn chưa có (bảng điểm, Đánh giá năng lực, Lộ trình AI) được trả lời ngay là chưa có cơ sở để tư vấn, kèm các bước cần làm. Câu hỏi gợi ý phía trên ô nhập theo những gì bạn đã làm; bấm để gửi. Mỗi câu hỏi tối đa ${formatNumber(MAX_QUESTION_CHARS)} ký tự; trong một cuộc trò chuyện, trợ lý trả lời lần lượt từng câu.`,
       `- Cuộc trò chuyện được lưu cùng tài khoản của bạn; bạn có thể xóa, và cuộc trò chuyện không có tin nhắn mới trong ${CONVERSATION_RETENTION_DAYS} ngày sẽ tự bị xóa.`,
     ]],
     ["ai-va-du-lieu", "EduPath AI dùng AI vào việc gì", "#assistant", [

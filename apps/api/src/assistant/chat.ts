@@ -18,6 +18,7 @@ import {
   type EmbedSpec, type RewriteSpec,
 } from "./protocol.js";
 import { resourceKey } from "./knowledge.js";
+import { READINESS_ANSWER_VERSION, readinessAnswer, readReadiness } from "./readiness.js";
 import { loadKnowledgeIndex } from "./search.js";
 import { addressesIn, checkAnswer, codesIn, type AnswerContext } from "./validate.js";
 
@@ -148,7 +149,8 @@ function answerInput(questionId: string, question: string, history: readonly His
  * A question (POST /threads, POST /threads/:id/messages), inside the caller's transaction: the student's row first
  * (FOR KEY SHARE), then a per-student lock. Refused: an empty or long question (400), a thread of someone else (404), an
  * answer still pending for the student (409 answer_pending), questions too close or too many (429 too_frequent), a full
- * queue (429 queue_full). The caller wakes the worker after COMMIT (notifyAssistantWork).
+ * queue (429 queue_full). The caller wakes the worker after COMMIT (notifyAssistantWork). A question about the student's
+ * own results that their data cannot answer yet (readiness.ts) gets its answer at once, "completed", without a job.
  */
 export async function askQuestion(client: PoolClient, userId: string, input: { threadId: string | null; content: string }):
   Promise<{ thread: ThreadRow; messages: MessageRow[] }> {
@@ -188,6 +190,15 @@ export async function askQuestion(client: PoolClient, userId: string, input: { t
   const asked = (await client.query<MessageRow>(
     `INSERT INTO stu_chat_messages(id,thread_id,user_id,role,content,status,created_at) VALUES($1,$2,$3,'user',$4,'completed',clock_timestamp())
       RETURNING ${messageColumns}`, [questionId, thread.id, userId, question])).rows[0]!;
+  const intents = detectIntents(question);
+  const fixed = readinessAnswer(await readReadiness(client, userId), intents, question);
+  if (fixed) {
+    const answer = (await client.query<MessageRow>(
+      `INSERT INTO stu_chat_messages(id,thread_id,user_id,role,content,status,intents,sources,prompt_version,created_at,completed_at)
+        VALUES($1,$2,$3,'assistant',$4,'completed',$5::text[],$6::jsonb,$7,clock_timestamp(),clock_timestamp()) RETURNING ${messageColumns}`,
+      [randomUUID(), thread.id, userId, fixed.content, intents, JSON.stringify(fixed.sources), READINESS_ANSWER_VERSION])).rows[0]!;
+    return { thread, messages: [asked, answer] };
+  }
   const aiInput = answerInput(questionId, question, history);
   const answer = (await client.query<MessageRow>(
     `INSERT INTO stu_chat_messages(id,thread_id,user_id,role,status,ai_input,prompt_version,created_at)

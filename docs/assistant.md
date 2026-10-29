@@ -118,6 +118,37 @@ Một sinh viên hỏi "Điểm tổng của tôi hiện tại là bao nhiêu". 
 - Không có link bịa hay mã học phần lạ.
 - Gemma viết "2,85" cho giá trị "2.85" in trên bảng điểm: cùng con số, chỉ đổi dấu thập phân theo cách viết tiếng Việt.
 
+## Khi chưa có kết quả, và câu hỏi gợi ý (assistant-v5, 29/10/2026)
+Người dùng (29/10) gửi ảnh: sinh viên chưa import bảng điểm, chưa đánh giá năng lực, hỏi "Vì sao lộ trình đề xuất các môn này cho mình?" và nhận câu trả lời chung chung. Yêu cầu: nói rõ "bạn chưa thực hiện đánh giá năng lực nên chúng tôi chưa có cơ sở để tư vấn", mời hoàn thành đủ các bước, và đặt câu hỏi đề xuất phía trên ô nhập.
+- **Trả lời ngay, không qua AI** (`readiness.ts`). Khi nhận câu hỏi, API đọc 6 mục:
+  - bảng điểm, chuyên ngành, nghề mục tiêu;
+  - Khảo sát định hướng (đã trả lời và đồng ý, như khối đỏ ở Tổng quan);
+  - kết quả Đánh giá năng lực, Lộ trình AI.
+- **Câu hỏi nào được trả lời ngay.** Đó là câu hỏi về chính sinh viên ("mình", "tôi", "em", "tớ", "tui", hoặc "còn thiếu") mà dữ liệu chưa trả lời được. Câu trả lời cố định có trạng thái completed ngay trong phản hồi POST, `prompt_version` assistant-readiness-v1, và nguồn là các trang cần mở. Có ba trường hợp:
+  - Hỏi điểm (ý định transcript), hoặc hỏi mình đủ điều kiện tốt nghiệp chưa, khi chưa có bảng điểm: "Bạn chưa import bảng điểm nên…".
+  - Hỏi kỹ năng còn thiếu, lộ trình, nên học gì, vì sao đề xuất (gaps, roadmap, course_reason) khi chưa có Đánh giá năng lực: "Bạn chưa thực hiện Đánh giá năng lực nên mình chưa có cơ sở để tư vấn cho câu hỏi này…". Theo sau là các bước còn thiếu theo thứ tự: import bảng điểm, chọn chuyên ngành và nghề, Khảo sát định hướng, Đánh giá năng lực, và Tạo lộ trình nếu câu hỏi nói về Lộ trình AI.
+  - Hỏi vì sao lộ trình đề xuất khi đã đánh giá nhưng chưa tạo Lộ trình AI: "Bạn chưa tạo Lộ trình AI…".
+- **Không chặn nhầm.**
+  - Câu hỏi cách làm ("làm sao để…", "hướng dẫn…"), câu hỏi về danh mục (kế hoạch đào tạo, chương trình đào tạo, môn tiên quyết) và câu hỏi chung không xưng hô vẫn do AI trả lời.
+  - Khi đã có bảng điểm, câu hỏi về điểm, nợ môn, học lại do AI trả lời từ bảng điểm, kể cả khi chưa đánh giá năng lực.
+  - Đại từ được dò trên chữ có dấu, nên "tới", "tối ưu", "thông minh" không bị hiểu là "tôi", "mình". Câu gõ không dấu có danh sách từ ghép để loại trừ.
+- **Các câu còn lại do AI trả lời.** Nguồn hồ sơ nói rõ "chưa có cơ sở để tư vấn" và các bước cần làm. Prompt assistant-v5 thêm một cách trả lời: câu hỏi cần kết quả riêng mà dữ liệu ghi là chưa có thì câu đầu nói rõ điều đó và các bước, không thay bằng lời khuyên chung. Câu hỏi về thông tin chung vẫn trả lời bình thường.
+- **Câu hỏi gợi ý** (`GET /threads` trả thêm `suggestions`, tối đa 6):
+  - Đầu tiên là việc còn phải làm: import bảng điểm, chọn chuyên ngành và nghề, Khảo sát định hướng, chạy Đánh giá năng lực hoặc tạo Lộ trình AI.
+  - Sau đó là câu hỏi về kết quả của chính sinh viên: GPA, nợ môn, kỹ năng còn thiếu, học kỳ tới, vì sao lộ trình đề xuất, điều kiện tốt nghiệp, tài liệu tự học, cách EduPath AI dùng dữ liệu.
+  - Một phép thử chạy cả 64 tổ hợp 6 mục và bảo đảm không câu gợi ý nào dẫn tới câu trả lời "chưa có cơ sở".
+- Prompt do API dựng nên không cần khởi động lại worker.
+
+**Kiểm tra (29/10/2026).** Dùng sinh viên giả lập K29 chưa có bảng điểm, chuyên ngành, nghề và đánh giá, kèm kho tri thức local; Gemma 4 E4B có thinking:
+
+| Câu hỏi | Đường đi | Câu trả lời |
+| --- | --- | --- |
+| Vì sao lộ trình đề xuất các môn này cho mình? | Trả lời ngay | "Bạn chưa import bảng điểm và chưa thực hiện Đánh giá năng lực nên mình chưa có cơ sở để tư vấn…", 5 bước, nguồn 4 trang |
+| Học kỳ tới nên học môn gì? | AI, 17 giây | Câu đầu "Mình chưa có cơ sở để tư vấn riêng cho bạn về học phần nên học…", rồi 3 bước |
+| Điểm mạnh nhất hiện tại là gì? | AI, 12 giây | "Mình chưa có cơ sở để tư vấn về điểm mạnh hiện tại của bạn vì bạn chưa import bảng điểm và chưa thực hiện Đánh giá năng lực", rồi các bước |
+| Môn Cấu trúc dữ liệu và giải thuật học những gì? | AI, 16 giây | Trả lời bình thường từ học phần và kỹ năng |
+| Kế hoạch đào tạo K29 học kỳ 3 có những môn nào? | AI, 35 giây | Trả lời bình thường: ba học kỳ 3 của KHĐT K29 kèm học phần |
+
 
 ## Kết quả kiểm tra (29/10/2026)
 Bộ đánh giá tự động `apps/api/eval/assistant/run.ts` ghi kết quả vào `docs/assistant-evaluation.md`. Bộ này gồm 48 câu hỏi trên sinh viên giả lập K29 và danh mục của CSDL local, và đã chạy trên assistant-v2.
@@ -181,7 +212,8 @@ Bảng `ai_knowledge_chunks` (migration 055) chỉ chứa dữ liệu danh mục
 
 ## Mã nguồn
 - **API** (`apps/api/src/assistant/`):
-  - `protocol.ts` (giao thức worker), `intent.ts`, `facts.ts`, `transcript.ts` (nguồn Bảng điểm), `prompt.ts` (assistant-v4), `validate.ts`;
+  - `protocol.ts` (giao thức worker), `intent.ts`, `facts.ts`, `transcript.ts` (nguồn Bảng điểm), `prompt.ts` (assistant-v5), `validate.ts`;
+  - `readiness.ts` (trả lời ngay khi chưa có kết quả, câu hỏi gợi ý);
   - `chat.ts` (hội thoại và job), `router.ts` (API cho sinh viên), `wakeup.ts`;
   - `knowledge.ts`, `knowledge-jobs.ts`, `guides.ts`, `search.ts`, `learning-resources.json`.
 - **Worker:** `apps/api/src/ai-worker/`.

@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import StudentAssistant, {
-  ANSWER_POLL_MS, AssistantView, DeleteConfirm, OFFLINE_NOTICE, STARTER_QUESTIONS, assistantApi, assistantErrorMessage, newestFirst, threadTimeLabel, watchAnswer,
+  ANSWER_POLL_MS, AssistantView, DeleteConfirm, FALLBACK_SUGGESTIONS, OFFLINE_NOTICE, STARTER_QUESTIONS, assistantApi, assistantErrorMessage, newestFirst,
+  offeredQuestions, readSuggestions, threadTimeLabel, watchAnswer,
   type AssistantViewProps,
 } from "./StudentAssistant";
 import type { AssistantMessage, AssistantThread } from "./assistant-types";
@@ -29,11 +30,13 @@ const answer = message("a1", "assistant", "So với nghề mục tiêu, bạn c�
 });
 
 const view = (props: Partial<AssistantViewProps> = {}) => renderToStaticMarkup(<AssistantView
-  threads={threads} listError="" onReloadList={() => undefined} workerOnline selectedId={null} messages={null} loadError=""
+  threads={threads} listError="" onReloadList={() => undefined} workerOnline suggestions={null} selectedId={null} messages={null} loadError=""
   onReloadConversation={() => undefined} onSelect={() => undefined} onSend={async () => true} sending={false} sendError=""
   onDelete={async () => null} onRetry={async () => true} retrying={null} onRate={() => undefined} actionError={null}
   announcement={{ text: "", n: 0 }} now={now} {...props} />);
 const conversation = (messages: AssistantMessage[], props: Partial<AssistantViewProps> = {}) => view({ selectedId: "t1", messages, ...props });
+/** The suggested questions above the box, in order. */
+const chipsOf = (html: string) => [...html.matchAll(/<button type="button" class="as-suggestion"(?: disabled="")?>([^<]*)<\/button>/g)].map((match) => match[1]);
 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
 
@@ -126,6 +129,40 @@ describe("Trợ lý AI page", () => {
       + '<div class="as-confirm-actions"><button type="button" class="sw-primary as-small">Xóa</button><button type="button" class="sw-outline as-small">Hủy</button></div></div>');
   });
 
+  it("offers the server's suggested questions above the box, without the question just asked", () => {
+    const suggestions = ["Điểm trung bình tích lũy của mình là bao nhiêu?", "Mình còn nợ môn nào không?", question.content, "Học kỳ tới mình nên học những môn nào?"];
+    const html = conversation([question, answer], { suggestions });
+    expect(html).toContain('<div class="as-suggestions" role="group" aria-labelledby="as-suggestions-label"><span id="as-suggestions-label" class="as-suggestions-label">Gợi ý</span>');
+    expect(chipsOf(html)).toEqual([suggestions[0], suggestions[1], suggestions[3]]);
+    // In the question form, above the box.
+    expect(html.indexOf('<form class="as-composer"')).toBeLessThan(html.indexOf('class="as-suggestions"'));
+    expect(html.indexOf('class="as-suggestions"')).toBeLessThan(html.indexOf('<textarea id="as-question"'));
+  });
+
+  it("falls back to a few questions when the server sends none, without repeating a new conversation's starters", () => {
+    expect(chipsOf(conversation([question, answer], { suggestions: [] }))).toEqual([...FALLBACK_SUGGESTIONS]);
+    // The starters already ask about the graduation conditions.
+    const fresh = view({ suggestions: [] });
+    expect(chipsOf(fresh)).toEqual(["Làm sao để import bảng điểm PDF?", "Làm sao để chạy Đánh giá năng lực?", "Điểm trung bình tích lũy của mình là bao nhiêu?"]);
+    expect(fresh.match(/class="as-starter"/g)).toHaveLength(5);
+    // None while the list loads.
+    expect(view()).not.toContain("as-suggestion");
+  });
+
+  it("puts the suggestions aside while a question is sent or answered, and holds them while a conversation loads", () => {
+    const suggestions = ["Mình còn nợ môn nào không?"];
+    const chip = 'class="as-suggestion">Mình còn nợ môn nào không?</button>';
+    expect(conversation([question, message("a1", "assistant", "", { status: "queued", completedAt: null })], { suggestions })).not.toContain("as-suggestion");
+    expect(conversation([question, message("a1", "assistant", "Bạn còn", { status: "processing", completedAt: null })], { suggestions })).not.toContain("as-suggestion");
+    expect(view({ suggestions, sending: true })).not.toContain("as-suggestion");
+    expect(conversation([question, answer], { suggestions, sending: true })).not.toContain("as-suggestion");
+    // Back once the answer is finished, failed or stopped.
+    expect(conversation([question, answer], { suggestions })).toContain(chip);
+    expect(conversation([question, message("a1", "assistant", "", { status: "failed" })], { suggestions })).toContain(chip);
+    // Whether a conversation that still loads waits for an answer is not known yet.
+    expect(view({ suggestions, selectedId: "t1", messages: null })).toContain('class="as-suggestion" disabled="">Mình còn nợ môn nào không?</button>');
+  });
+
   it("announces a finished answer once, not every piece of it", () => {
     expect(view()).toContain('<p class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>');
     expect(view({ announcement: { text: "Trợ lý đã trả lời xong câu hỏi của bạn.", n: 1 } }))
@@ -142,6 +179,20 @@ describe("words", () => {
     }
     expect(assistantErrorMessage("message_too_long")).toBe("Câu hỏi dài hơn 1.000 ký tự. Bạn hãy rút gọn rồi gửi lại.");
     expect(assistantErrorMessage("something_new")).toBe("Chưa xử lý được yêu cầu. Vui lòng thử lại.");
+  });
+
+  it("reads the server's suggestions as text, each once, short enough to send, at most six", () => {
+    expect(readSuggestions(undefined)).toEqual([]);
+    expect(readSuggestions("Mình còn nợ môn nào không?")).toEqual([]);
+    expect(readSuggestions([" Mình còn nợ môn nào không? ", 42, null, "", "   ", "mình còn  nợ môn nào không?", "Vì sao ".repeat(200),
+      "Câu 1?", "Câu 2?", "Câu 3?", "Câu 4?", "Câu 5?", "Câu 6?"])).toEqual(["Mình còn nợ môn nào không?", "Câu 1?", "Câu 2?", "Câu 3?", "Câu 4?", "Câu 5?"]);
+  });
+
+  it("offers the fallback when the server sends none and skips a question however it is typed", () => {
+    expect(offeredQuestions([], [])).toEqual([...FALLBACK_SUGGESTIONS]);
+    // Spacing, case and the decomposed form some Vietnamese keyboards type.
+    expect(offeredQuestions(["Mình còn nợ môn nào không?", "Học kỳ tới mình nên học những môn nào?"], [" mình còn nợ  môn nào KHÔNG? ".normalize("NFD")]))
+      .toEqual(["Học kỳ tới mình nên học những môn nào?"]);
   });
 
   it("dates a conversation by the day in Vietnam", () => {

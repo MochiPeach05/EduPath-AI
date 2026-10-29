@@ -145,6 +145,15 @@ span.as-source:focus { outline: none; }
 /* ---- Question box ---- */
 .as-composer { flex: none; padding: 12px 20px 14px; border-top: 1px solid var(--sw-border); background: #fff; }
 .as-composer-inner { display: grid; gap: 8px; max-width: var(--as-width); margin: 0 auto; }
+/* Suggested next questions: small chips like the sources, in the starters' red when pointed at. Up to two lines here
+   (StudentAssistant leaves out the ones that do not fit), one line that scrolls sideways below 900px. */
+.as-suggestions { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.as-suggestions-label { flex: none; padding-top: 6px; color: var(--sw-muted); font-size: 12px; font-weight: 700; line-height: 1.5; }
+.as-suggestion-list { display: flex; flex: 1; flex-wrap: wrap; align-items: flex-start; gap: 6px; min-width: 0; margin: 0; padding: 0; list-style: none; }
+.as-suggestion-list > li { max-width: 100%; }
+.as-suggestion-list > li[hidden] { display: none; }
+.sw-shell .as-suggestion { max-width: 100%; min-height: 30px; padding: 4px 12px; border: 1px solid var(--sw-border); border-radius: 999px; background: #fff; color: #33415c; font-size: 12.5px; font-weight: 600; line-height: 1.4; text-align: left; overflow-wrap: anywhere; }
+.sw-shell .as-suggestion:hover:not(:disabled) { border-color: var(--ep-control-border-hover); background: var(--ep-control-soft); color: var(--ep-action-hover); }
 .as-send-error { margin: 0; padding: 8px 12px; border-radius: 8px; background: #fff0f3; color: #9b1639; font-size: 13px; }
 .as-input { display: flex; align-items: flex-end; gap: 10px; padding: 6px 6px 6px 14px; border: 1px solid #d3d9e1; border-radius: 12px; background: #fff; transition: border-color 150ms ease, box-shadow 150ms ease; }
 .as-input:focus-within { border-color: var(--ep-control-border-hover); box-shadow: 0 0 0 3px rgba(181, 22, 57, .1); }
@@ -175,6 +184,13 @@ span.as-source:focus { outline: none; }
   .as-composer { padding: 10px 14px 12px; }
   .as-offline { margin: 12px 14px 0; }
   .as-question { max-width: 88%; }
+  /* The suggestions keep to one line that scrolls sideways out to the edges of the chat, so the question box keeps its
+     place; the padding leaves room for the focus ring. */
+  .as-suggestions-label { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; }
+  .as-suggestion-list { flex-wrap: nowrap; margin: -6px -14px; padding: 6px 14px; overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; }
+  .as-suggestion-list::-webkit-scrollbar { display: none; }
+  .as-suggestion-list > li { flex: none; max-width: none; }
+  .sw-shell .as-suggestion { min-height: 34px; white-space: nowrap; }
 }
 
 @media (max-width: 600px) {

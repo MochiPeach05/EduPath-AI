@@ -131,11 +131,11 @@ describe("assistant student sources", () => {
     expect(none.gapSkills).toEqual([]);
     expect(none.sources).toHaveLength(1);
     expect(none.sources[0]?.text).toContain("Nghề mục tiêu: Lập trình viên Web");
-    expect(none.sources[0]?.text).toContain("cần tải bảng điểm lên rồi chạy Đánh giá năng lực");
+    expect(none.sources[0]?.text).toContain("Bạn chưa import bảng điểm và chưa thực hiện Đánh giá năng lực nên EduPath AI chưa có cơ sở để tư vấn");
 
     const uploaded = await studentSources(db({ assessment: false }), userId, "Điểm tổng của mình là bao nhiêu?", ["transcript"], ROADMAP_NOW);
     expect(uploaded.sources.map((source) => source.kind)).toEqual(["profile", "transcript"]);
-    expect(uploaded.sources[0]?.text).toContain("Bạn đã tải bảng điểm lên nhưng chưa có kết quả đánh giá năng lực");
+    expect(uploaded.sources[0]?.text).toContain("Bạn đã import bảng điểm nhưng chưa thực hiện Đánh giá năng lực nên EduPath AI chưa có cơ sở để tư vấn");
     expect(uploaded.sources[1]?.text).toContain("Điểm TB tích lũy (Hệ 4): 3.10");
   });
 });

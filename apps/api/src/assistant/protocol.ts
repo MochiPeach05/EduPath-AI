@@ -35,8 +35,11 @@ export const documentEmbeddingText = (title: string, text: string) => `title: ${
  * và lấy thêm thông tin từ nó nữa để sinh viên có thể tra cứu"): the stored transcript is a source, "Bảng điểm của bạn"
  * (transcript.ts): always the printed cumulative GPA and credits and the courses not passed, the rows of the courses and
  * terms a question names, every row for a grade question (intent "transcript"); grades are quoted, never recomputed.
+ * v5 (2026-10-29, user: "nên trả lời một cách rõ ràng hơn bạn chưa thực hiện đánh giá năng lực nên chúng tôi chưa có cơ sở
+ * để tư vấn"): a question needing results the student does not have yet is answered by saying so first, with the steps;
+ * the clear cases never reach the AI (readiness.ts answers them at once, prompt_version assistant-readiness-v1).
  */
-export const ASSISTANT_PROMPT_VERSION = "assistant-v4";
+export const ASSISTANT_PROMPT_VERSION = "assistant-v5";
 export const KNOWLEDGE_PROMPT_VERSION = "knowledge-v1";
 /** An answer takes well under a minute; a lost worker frees the job after this lease (the worker extends every 3 min). */
 export const ASSISTANT_LEASE_MINUTES = 5;

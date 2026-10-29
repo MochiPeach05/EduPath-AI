@@ -136,9 +136,11 @@ async function profileOnly(db: Db, userId: string, hasTranscript: boolean): Prom
       `Khóa: ${row?.cohortCode ?? "chưa cập nhật"}`,
       `Chuyên ngành: ${specialtyLabel(row?.specialty ?? null) ?? "Chưa xác định"}`,
       `Nghề mục tiêu: ${row?.career ?? "Chưa chọn"}`,
+      // assistant-v5 (2026-10-29, user: "nên trả lời một cách rõ ràng hơn bạn chưa thực hiện đánh giá năng lực nên chúng tôi
+      // chưa có cơ sở để tư vấn"): the missing results and the steps, for the answer to say first.
       hasTranscript
-        ? "Bạn đã tải bảng điểm lên nhưng chưa có kết quả đánh giá năng lực trên EduPath AI: hãy chạy Đánh giá năng lực (cần đủ bảng điểm, chuyên ngành và nghề mục tiêu) thì mới biết điểm các kỹ năng, học phần còn thiếu và tiến độ tốt nghiệp của bạn."
-        : "Bạn chưa có kết quả đánh giá năng lực trên EduPath AI: cần tải bảng điểm lên rồi chạy Đánh giá năng lực thì mới biết điểm các kỹ năng, học phần còn thiếu và tiến độ tốt nghiệp của bạn.",
+        ? "Bạn đã import bảng điểm nhưng chưa thực hiện Đánh giá năng lực nên EduPath AI chưa có cơ sở để tư vấn về kỹ năng, học phần nên học, lộ trình và tiến độ tốt nghiệp của bạn. Cần làm: bấm Đánh giá năng lực ở trang Đánh giá năng lực (cần đủ bảng điểm, chuyên ngành và nghề mục tiêu)."
+        : "Bạn chưa import bảng điểm và chưa thực hiện Đánh giá năng lực nên EduPath AI chưa có cơ sở để tư vấn về điểm, kỹ năng, học phần nên học, lộ trình và tiến độ tốt nghiệp của bạn. Cần làm: import bảng điểm PDF ở Hồ sơ và bảng điểm, chọn chuyên ngành và nghề mục tiêu, rồi bấm Đánh giá năng lực ở trang Đánh giá năng lực.",
     ]),
   };
 }

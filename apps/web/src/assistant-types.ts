@@ -3,7 +3,7 @@
  * answers through the local Gemma worker: an answer is queued, then streamed into the message (content grows while
  * status is "processing"), so the page polls GET /messages/:id until the status is final.
  *
- * GET    /threads                    → { threads: AssistantThread[]; workerOnline: boolean }
+ * GET    /threads                    → { threads: AssistantThread[]; workerOnline: boolean; suggestions: string[] }
  * POST   /threads        { content } → { thread: AssistantThread; messages: AssistantMessage[] }  (the question + the answer being written)
  * GET    /threads/:id                → { thread: AssistantThread; messages: AssistantMessage[] }  (oldest first)
  * POST   /threads/:id/messages { content } → { thread: AssistantThread; messages: AssistantMessage[] } (the question + the answer)
@@ -15,6 +15,10 @@
  * Errors: { error } with 400 empty_message | message_too_long, 404 thread_not_found | message_not_found,
  * 409 answer_pending (the thread still waits for an answer) | not_failed (retry), 429 too_frequent | queue_full,
  * 503 database_required.
+ *
+ * A question about the student's own results that the student's data cannot answer yet (no transcript, no competency
+ * assessment, no AI roadmap; 2026-10-29, user: "nên trả lời một cách rõ ràng hơn") is answered at once by the server: the
+ * answer comes back "completed" in the POST response, saying what is missing and the steps, with the pages as sources.
  */
 export const ASSISTANT_API = "/api/student/assistant";
 /** Longest question, in characters (the server checks the same). */
@@ -59,5 +63,10 @@ export type AssistantMessage = {
   completedAt: string | null;
 };
 
-export type AssistantThreadsResponse = { threads: AssistantThread[]; workerOnline: boolean };
+/**
+ * suggestions (2026-10-29, user: "ở trên khung đoạn nhập đoạn chat nên có các câu hỏi đề xuất để sinh viên chọn tiếp"):
+ * up to 6 questions the student can send next, chosen by the server from what the student has done (setup questions
+ * such as importing the transcript first, then questions about their own results); [] or absent from an older server.
+ */
+export type AssistantThreadsResponse = { threads: AssistantThread[]; workerOnline: boolean; suggestions?: string[] };
 export type AssistantThreadResponse = { thread: AssistantThread; messages: AssistantMessage[] };

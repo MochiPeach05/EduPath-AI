@@ -13,6 +13,7 @@ import {
   retryAnswer, setFeedback,
 } from "./chat.js";
 import { MAX_QUESTION_CHARS } from "./protocol.js";
+import { readReadiness, suggestedQuestions } from "./readiness.js";
 import { notifyAssistantWork } from "./wakeup.js";
 
 type AssistantRouterOptions = {
@@ -68,15 +69,21 @@ export function createAssistantRouter(pool: DatabasePool | undefined, webOrigin:
   router.get("/threads", async (req, res) => {
     emptyObject.parse(req.query);
     await expireQuietly();
-    const threads = await listThreads(pool!, req.session.user!.userId);
-    res.json({ threads: threads.map(presentThread), workerOnline: await workerOnline() });
+    const userId = req.session.user!.userId;
+    const threads = await listThreads(pool!, userId);
+    // The questions shown above the input: setting up first (import the transcript…), then the student's own results.
+    const suggestions = suggestedQuestions(await readReadiness(pool!, userId));
+    res.json({ threads: threads.map(presentThread), workerOnline: await workerOnline(), suggestions });
   });
+
+  /** A question answered at once (readiness.ts) leaves nothing for the worker. */
+  const wakeWorker = (messages: { status: string }[]) => { if (messages.some((message) => message.status === "queued")) notifyAssistantWork(); };
 
   router.post("/threads", async (req, res) => {
     const body = questionBody.parse(req.body ?? {});
     if (!enabled) { res.status(409).json({ error: "ai_disabled" }); return; }
     const asked = await inTransaction(pool!, (client) => askQuestion(client, req.session.user!.userId, { threadId: null, content: body.content }));
-    notifyAssistantWork();
+    wakeWorker(asked.messages);
     res.status(201).json({ thread: presentThread(asked.thread), messages: asked.messages.map(presentMessage) });
   });
 
@@ -90,7 +97,7 @@ export function createAssistantRouter(pool: DatabasePool | undefined, webOrigin:
     const body = questionBody.parse(req.body ?? {});
     if (!enabled) { res.status(409).json({ error: "ai_disabled" }); return; }
     const asked = await inTransaction(pool!, (client) => askQuestion(client, req.session.user!.userId, { threadId, content: body.content }));
-    notifyAssistantWork();
+    wakeWorker(asked.messages);
     res.status(201).json({ thread: presentThread(asked.thread), messages: asked.messages.map(presentMessage) });
   });
 

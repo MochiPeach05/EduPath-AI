@@ -55,10 +55,17 @@ describe("assistant student API", () => {
     await request(setup().app).post("/assistant/threads").send({ content: "Xin chào" }).expect(403);
   });
 
-  it("lists conversations with the worker state of the assistant kind", async () => {
+  it("lists conversations with the worker state of the assistant kind and the suggested questions", async () => {
     vi.mocked(chat.listThreads).mockResolvedValue([thread]);
     const online = await request(setup().app).get("/assistant/threads").expect(200);
-    expect(online.body).toEqual({ threads: [{ id: threadId, title: thread.title, createdAt: "2026-10-28T01:00:00.000Z", updatedAt: "2026-10-28T01:00:00.000Z" }], workerOnline: true });
+    // A student with nothing done yet is offered the setup questions first.
+    expect(online.body).toEqual({
+      threads: [{ id: threadId, title: thread.title, createdAt: "2026-10-28T01:00:00.000Z", updatedAt: "2026-10-28T01:00:00.000Z" }], workerOnline: true,
+      suggestions: [
+        "Làm sao để import bảng điểm PDF?", "Làm sao để chọn chuyên ngành và nghề mục tiêu?", "Khảo sát định hướng dùng để làm gì?",
+        "Làm sao để chạy Đánh giá năng lực?", "Điều kiện xét tốt nghiệp của khóa mình là gì?", "EduPath AI dùng dữ liệu của mình như thế nào?",
+      ],
+    });
     const old = await request(setup({ worker: { online: true, kinds: ["study_roadmap"] } }).app).get("/assistant/threads").expect(200);
     expect(old.body.workerOnline).toBe(false);
   });
@@ -71,6 +78,17 @@ describe("assistant student API", () => {
     expect(vi.mocked(chat.askQuestion).mock.calls[0]?.[2]).toEqual({ threadId: null, content: "Hỏi" });
     expect(client.query).toHaveBeenCalledWith("COMMIT");
     expect(notifyAssistantWork).toHaveBeenCalledOnce();
+  });
+
+  it("returns an answer given at once without waking the worker", async () => {
+    const sources = [{ n: 1, kind: "guide" as const, title: "Hồ sơ và bảng điểm", link: "#profile" }];
+    vi.mocked(chat.askQuestion).mockResolvedValue({ thread, messages: [
+      message({ id: "77777777-7777-4777-8777-777777777777", role: "user", content: "Điểm GPA của mình?", status: "completed" }),
+      message({ status: "completed", content: "Bạn chưa import bảng điểm [1]", sources, completedAt: new Date("2026-10-28T01:00:00Z") }),
+    ] });
+    const response = await request(setup().app).post(`/assistant/threads/${threadId}/messages`).set("origin", origin).send({ content: "Điểm GPA của mình?" }).expect(201);
+    expect(response.body.messages[1]).toMatchObject({ status: "completed", sources });
+    expect(notifyAssistantWork).not.toHaveBeenCalled();
   });
 
   it("maps refusals to their status codes and never queues without the AI worker key", async () => {
