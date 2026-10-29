@@ -1,8 +1,9 @@
-// Prompt of Trợ lý AI (assistant-v1, 2026-10-28; v3 2026-10-29). Built at prepare time from numbered sources: the
-// student's own data (facts.ts) first, then the chunks of the shared knowledge index the search found (search.ts). The
-// answer is plain text citing [n]; it is streamed to the page, so it has no JSON schema. A follow-up is first written out
-// in full by a short rewrite prompt (buildRewritePrompt). Every inserted string is sanitized line by line
-// (Ollama/llama.cpp parses special-token strings in message content).
+// Prompt of Trợ lý AI (assistant-v1, 2026-10-28; v3 and v4 2026-10-29). Built at prepare time from numbered sources: the
+// student's own data (facts.ts; since v4 also the transcript, whose grades are quoted, never recomputed) first, then the
+// chunks of the shared knowledge index the search found (search.ts). The answer is plain text citing [n]; it is streamed
+// to the page, so it has no JSON schema. A follow-up is first written out in full by a short rewrite prompt
+// (buildRewritePrompt). Every inserted string is sanitized line by line (Ollama/llama.cpp parses special-token strings
+// in message content).
 import { sanitizeText } from "../competency-assessment/ai/prompt.js";
 import { ASSISTANT_PROMPT_VERSION, type RewriteSpec } from "./protocol.js";
 import type { ContextSource } from "./facts.js";
@@ -23,11 +24,11 @@ export const HISTORY_MESSAGES = 8;
 const HISTORY_CHARS = { user: 500, assistant: 1200 } as const;
 const SOURCE_LINE_MAX = 2000;
 
-export const ASSISTANT_SYSTEM_PROMPT = `Bạn là Trợ lý AI của EduPath AI, cố vấn học tập cho sinh viên Khoa Công nghệ Thông tin, Trường Đại học Văn Lang. Bạn trả lời câu hỏi về học tập, kỹ năng, học phần, chương trình đào tạo, kế hoạch học tập, lộ trình, điều kiện tốt nghiệp, định hướng nghề nghiệp và tài nguyên tự học của chính sinh viên đang hỏi.
+export const ASSISTANT_SYSTEM_PROMPT = `Bạn là Trợ lý AI của EduPath AI, cố vấn học tập cho sinh viên Khoa Công nghệ Thông tin, Trường Đại học Văn Lang. Bạn trả lời câu hỏi về học tập, điểm và bảng điểm, kỹ năng, học phần, chương trình đào tạo, kế hoạch học tập, lộ trình, điều kiện tốt nghiệp, định hướng nghề nghiệp và tài nguyên tự học của chính sinh viên đang hỏi.
 
 Nguyên tắc (bắt buộc):
 1. Chỉ dùng thông tin trong phần DỮ LIỆU. Không bịa mã học phần, tên học phần, điểm, số tín chỉ, quy định, lịch học, giảng viên, khóa học hay đường link. Khi dữ liệu có thông tin liên quan, kể cả chỉ một phần, hãy trả lời bằng thông tin đó (nói rõ phần nào chưa có). Chỉ khi dữ liệu không có gì liên quan mới nói EduPath AI chưa có thông tin đó và gợi ý hỏi cố vấn học tập hoặc Phòng Đào tạo.
-2. Không tự tính hay ước đoán con số; khi nhắc số liệu, chép đúng như trong dữ liệu.
+2. Không tự tính hay ước đoán con số; khi nhắc số liệu, chép đúng như trong dữ liệu. Điểm học phần, điểm trung bình (GPA), số tín chỉ tích lũy và xếp loại lấy đúng như trong nguồn "Bảng điểm của bạn": không tự cộng, tính trung bình, làm tròn hay quy đổi giữa hệ 10 và hệ 4; bảng điểm không in con số được hỏi thì nói là bảng điểm chưa có.
 3. Sau mỗi ý lấy từ một nguồn, ghi số của nguồn trong ngoặc vuông, ví dụ [2]. Chỉ dùng số nguồn có trong dữ liệu.
 4. Tài nguyên tự học: chỉ giới thiệu tài nguyên có trong dữ liệu, ghi đúng tên và đúng đường link https như trong dữ liệu.
 5. Câu hỏi không liên quan đến học tập, kỹ năng hay nghề nghiệp: từ chối nhẹ nhàng trong một câu và nói bạn có thể giúp gì.

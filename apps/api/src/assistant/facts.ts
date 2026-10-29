@@ -3,6 +3,8 @@
 // target career, graduation pace: the same lines the AI roadmap reads, roadmap/prompt.ts roadmapDataSections), the newest
 // AI roadmap and, under a valid consent, the profile survey. Each part is one numbered source of the prompt. Never a
 // name, student code, email or class (the rule of the roadmap prompt); numbers come from the engine, the AI only explains.
+// Since assistant-v4 (2026-10-29) the stored transcript is a source too (transcript.ts): its scores and printed
+// summaries are copied as printed, so a student can look up a grade, the GPA or the credits in the chat.
 import { levelOf } from "../competency-assessment/calculate.js";
 import { formatNumber, sanitizeText, termText } from "../competency-assessment/ai/prompt.js";
 import { fold, specialtyLabel } from "../competency-assessment/specialty.js";
@@ -14,11 +16,14 @@ import { roadmapDataSections } from "../roadmap/prompt.js";
 import { roadmapWindow } from "../roadmap/window.js";
 import { activeConsentVersion, isValidConsent } from "../student/consent.js";
 import { readSurvey, surveyFacts } from "../student/survey.js";
+import { withoutSettledReviews, type TranscriptData } from "../student/transcript-parser.js";
 import type { AssistantIntent } from "./intent.js";
+import { transcriptLines } from "./transcript.js";
 
 type Db = Pick<DatabasePool, "query">;
 export type AssistantSourceKind =
-  | "profile" | "assessment" | "roadmap" | "graduation" | "course" | "skill" | "career" | "curriculum" | "plan" | "resource" | "guide";
+  | "profile" | "assessment" | "roadmap" | "graduation" | "course" | "skill" | "career" | "curriculum" | "plan" | "resource" | "guide"
+  | "transcript";
 /**
  * One source of the prompt: what the answer may cite as [n], with the page the student can open. ref: the knowledge chunk
  * it came from (source_kind, source_key), so a later question of the conversation can bring it back (assistant-v3).
@@ -34,10 +39,29 @@ const LEVELS: Record<LevelCode, string> = {
 /** Skills listed in "Mức các kỹ năng của bạn": the ones the question names first, then the career's, then the extremes. */
 const MAX_SKILL_LINES = 16;
 const LINE_MAX = 400;
+/** A transcript line holds a course with its attempts, or up to 6 printed summaries. */
+const TRANSCRIPT_LINE_MAX = 600;
 
 const dateText = (value: Date | string) =>
   new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(value));
-const clean = (lines: readonly string[]) => lines.map((line) => sanitizeText(line, LINE_MAX)).filter(Boolean).join("\n");
+const clean = (lines: readonly string[], max = LINE_MAX) => lines.map((line) => sanitizeText(line, max)).filter(Boolean).join("\n");
+
+type StoredTranscript = { data: TranscriptData; updatedAt: Date | string };
+
+/** The stored transcript as the student pages show it (withoutSettledReviews): parsed_data and its date, never the PDF. */
+async function readTranscript(db: Db, userId: string): Promise<StoredTranscript | null> {
+  const row = (await db.query<{ data: TranscriptData | null; updatedAt: Date | string }>(
+    `SELECT parsed_data AS data,updated_at AS "updatedAt" FROM student_transcripts WHERE user_id=$1`, [userId])).rows[0];
+  return row?.data?.sections ? { data: withoutSettledReviews(row.data), updatedAt: row.updatedAt } : null;
+}
+
+/** "Bảng điểm của bạn" (transcript.ts): the summary, plus the rows the question names or, for a grade question, every row. */
+function transcriptSource(transcript: StoredTranscript, question: string, intents: readonly AssistantIntent[]): ContextSource {
+  return {
+    kind: "transcript", title: "Bảng điểm của bạn", link: "#profile",
+    text: clean(transcriptLines(transcript.data, { question, intents, updated: dateText(transcript.updatedAt) }), TRANSCRIPT_LINE_MAX),
+  };
+}
 
 function skillLevel(skill: Pick<SkillResult, "score" | "status" | "upcoming" | "upcomingTerm">): string {
   if (skill.score === null) {
@@ -100,8 +124,8 @@ export function aiRoadmapLines(row: RoadmapRow, newestAssessmentId: string): str
   return lines;
 }
 
-/** Without an assessment only the profile is known; the answer should say how to get the rest. */
-async function profileOnly(db: Db, userId: string): Promise<ContextSource> {
+/** Without an assessment only the profile (and the transcript, if any) is known; the answer should say how to get the rest. */
+async function profileOnly(db: Db, userId: string, hasTranscript: boolean): Promise<ContextSource> {
   const result = await db.query<{ cohortCode: string | null; specialty: SpecialtyCode | null; career: string | null }>(
     `SELECT p.cohort_code AS "cohortCode",p.specialty,c.name_vi AS career FROM student_profiles p
       LEFT JOIN career_positions c ON c.id=p.career_position_id AND c.deleted_at IS NULL WHERE p.user_id=$1`, [userId]);
@@ -112,19 +136,24 @@ async function profileOnly(db: Db, userId: string): Promise<ContextSource> {
       `Khóa: ${row?.cohortCode ?? "chưa cập nhật"}`,
       `Chuyên ngành: ${specialtyLabel(row?.specialty ?? null) ?? "Chưa xác định"}`,
       `Nghề mục tiêu: ${row?.career ?? "Chưa chọn"}`,
-      "Bạn chưa có kết quả đánh giá năng lực trên EduPath AI: cần tải bảng điểm lên rồi chạy Đánh giá năng lực thì mới biết điểm các kỹ năng, học phần còn thiếu và tiến độ tốt nghiệp của bạn.",
+      hasTranscript
+        ? "Bạn đã tải bảng điểm lên nhưng chưa có kết quả đánh giá năng lực trên EduPath AI: hãy chạy Đánh giá năng lực (cần đủ bảng điểm, chuyên ngành và nghề mục tiêu) thì mới biết điểm các kỹ năng, học phần còn thiếu và tiến độ tốt nghiệp của bạn."
+        : "Bạn chưa có kết quả đánh giá năng lực trên EduPath AI: cần tải bảng điểm lên rồi chạy Đánh giá năng lực thì mới biết điểm các kỹ năng, học phần còn thiếu và tiến độ tốt nghiệp của bạn.",
     ]),
   };
 }
 
 /**
- * The student's sources for one question. Always: profile, the target career's skills, the courses to take or improve,
- * the graduation pace. By intent: the skill levels (gaps, or a skill named in the question), the newest AI roadmap
- * (roadmap, course_reason) and the profile survey (roadmap, resources; only under a valid profile_survey consent).
+ * The student's sources for one question. Always: profile, the transcript (if any), the target career's skills, the
+ * courses to take or improve, the graduation pace. By intent: the skill levels (gaps, or a skill named in the question),
+ * the newest AI roadmap (roadmap, course_reason) and the profile survey (roadmap, resources; only under a valid
+ * profile_survey consent). The transcript gives the rows the question names, or every row for a grade question.
  */
 export async function studentSources(db: Db, userId: string, question: string, intents: readonly AssistantIntent[], now: Date = new Date()): Promise<StudentContext> {
   const assessment = await newestAssessment(db, userId);
-  if (!assessment) return { sources: [await profileOnly(db, userId)], gapSkills: [] };
+  const transcript = await readTranscript(db, userId);
+  const transcriptPart = transcript ? [transcriptSource(transcript, question, intents)] : [];
+  if (!assessment) return { sources: [await profileOnly(db, userId, transcript !== null), ...transcriptPart], gapSkills: [] };
   const wants = (...names: AssistantIntent[]) => names.some((name) => intents.includes(name));
   const facts = buildRoadmapFacts(assessment.id, assessment.computed, roadmapWindow(now));
   let survey = null;
@@ -138,6 +167,7 @@ export async function studentSources(db: Db, userId: string, question: string, i
       kind: "profile", title: "Hồ sơ học tập của bạn", link: "#profile",
       text: clean([...sections.profile, sections.window.at(-1) ?? "", `Kết quả đánh giá năng lực mới nhất: ngày ${dateText(assessment.createdAt)}.`]),
     },
+    ...transcriptPart,
     {
       kind: "assessment", title: "Kỹ năng của nghề mục tiêu (kết quả đánh giá năng lực)", link: "#skill-gap",
       // The S01… keys of the roadmap prompt mean nothing to the student: the lines go without them.

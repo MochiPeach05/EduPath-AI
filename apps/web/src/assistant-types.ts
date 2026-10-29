@@ -31,10 +31,12 @@ export type AssistantThread = {
 /**
  * Where an answer took a fact from, numbered as the answer cites it ([1], [2]…). `link` is a page of the student
  * portal ("#skill-gap", "#roadmap", "#competency", "#career", "#graduation", "#curriculum", "#plans", "#profile") or an
- * https:// address of a self-study resource; null when there is nothing to open.
+ * https:// address of a self-study resource; null when there is nothing to open. "transcript" (2026-10-29): the
+ * student's own transcript ("Bảng điểm của bạn"), opened at Hồ sơ và bảng điểm ("#profile").
  */
 export type AssistantSourceKind =
-  | "profile" | "assessment" | "roadmap" | "graduation" | "course" | "skill" | "career" | "curriculum" | "plan" | "resource" | "guide";
+  | "profile" | "assessment" | "roadmap" | "graduation" | "course" | "skill" | "career" | "curriculum" | "plan" | "resource" | "guide"
+  | "transcript";
 export type AssistantSource = { n: number; kind: AssistantSourceKind; title: string; link: string | null };
 
 export type AssistantMessageStatus = "queued" | "processing" | "completed" | "failed" | "cancelled";

@@ -45,7 +45,7 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
       "EduPath AI dùng mô hình ngôn ngữ Gemma 4 E4B ở bốn trang. Trong Đánh giá năng lực, mô hình viết nhận xét học tập giúp bạn hiểu kết quả của mình: điểm mạnh nằm ở đâu, kỹ năng nào còn thiếu so với nghề mục tiêu, nên ưu tiên học phần nào trong danh sách hệ thống gợi ý và nên tự học thêm những gì.",
       "Mô hình cũng soạn Lộ trình AI (lộ trình cho học kỳ tới) trong trang Lộ trình học tập: học phần nên học, học phần cần cải thiện, kỹ năng nên tự học và lời khuyên theo mục tiêu của bạn, dựa trên kết quả đánh giá năng lực và Khảo sát định hướng trong hồ sơ. Các học phần được đề xuất được thêm vào Kế hoạch học kỳ để bạn điều chỉnh.",
       "Trong Điều kiện xét tốt nghiệp, mục Lời khuyên từ EduPath AI gợi ý cách hoàn thành những điều kiện còn thiếu, dựa trên kết quả đối chiếu bảng điểm của bạn với tiêu chuẩn xét tốt nghiệp của khóa và chuyên ngành.",
-      "Trang Trợ lý AI trả lời câu hỏi của bạn về kỹ năng còn thiếu, lộ trình, lý do học phần được đề xuất, chương trình đào tạo, điều kiện tốt nghiệp và tài nguyên tự học. Trợ lý tìm thông tin liên quan trong kết quả của bạn và trong dữ liệu chung của Khoa (bằng mô hình EmbeddingGemma, cũng chạy cục bộ), rồi Gemma 4 E4B trả lời kèm số nguồn như [1], [2]; tài nguyên tự học chỉ lấy từ danh sách đã được kiểm tra.",
+      "Trang Trợ lý AI trả lời câu hỏi của bạn về điểm trong bảng điểm, kỹ năng còn thiếu, lộ trình, lý do học phần được đề xuất, chương trình đào tạo, điều kiện tốt nghiệp và tài nguyên tự học. Trợ lý tìm thông tin liên quan trong bảng điểm, kết quả của bạn và trong dữ liệu chung của Khoa (bằng mô hình EmbeddingGemma, cũng chạy cục bộ), rồi Gemma 4 E4B trả lời kèm số nguồn như [1], [2]; điểm được chép đúng như in trên bảng điểm, tài nguyên tự học chỉ lấy từ danh sách đã được kiểm tra.",
       "Mọi con số như điểm kỹ năng, mức năng lực, khoảng trống kỹ năng, mức phù hợp nghề và kết quả đối chiếu xét tốt nghiệp đều do hệ thống tính (điểm kỹ năng theo trọng số học phần mà Khoa cấu hình), không do AI đưa ra. Mô hình chạy cục bộ trên một máy tính do nhóm phát triển EduPath AI quản lý, nên dữ liệu của bạn không được gửi tới dịch vụ AI đám mây nào."
     ],
     note: "Nhận xét, lộ trình và lời khuyên do AI viết chỉ để tham khảo và có thể chưa chính xác. Hãy đối chiếu với số liệu trên trang và trao đổi với giảng viên hoặc cố vấn học tập trước khi quyết định."
@@ -130,7 +130,7 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
       "Để viết nhận xét, mô hình chỉ nhận mã và tên học phần theo chương trình đào tạo, điểm của bạn ở các học phần đó, khóa, chuyên ngành, nghề mục tiêu và các kết quả hệ thống đã tính như điểm kỹ năng, khoảng trống và học phần gợi ý.",
       "Mô hình không nhận họ tên, mã số sinh viên, email, lớp hay tệp PDF bảng điểm của bạn. Mô hình chạy cục bộ trên máy tính do nhóm phát triển EduPath AI quản lý, nhận yêu cầu qua một kênh có xác thực, và dữ liệu không được gửi tới dịch vụ AI đám mây nào."
     ],
-    note: "Khi soạn Lộ trình AI, mô hình nhận thêm câu trả lời Khảo sát định hướng (kể cả thế mạnh, phần mô tả công nghệ bạn thành thạo và sở trường) và danh sách thành tích bạn liệt kê. Khi trả lời trong Trợ lý AI, mô hình nhận câu hỏi, vài lượt trò chuyện gần nhất và những phần kết quả liên quan đến câu hỏi. Dữ liệu gửi cho mô hình được xóa sau khi xử lý xong; chỉ nhận xét, lộ trình và cuộc trò chuyện được lưu lại. Chi tiết xem mục Đánh giá năng lực và AI, mục Khảo sát và lộ trình AI, mục Trợ lý AI trong Chính sách bảo mật."
+    note: "Khi soạn Lộ trình AI, mô hình nhận thêm câu trả lời Khảo sát định hướng (kể cả thế mạnh, phần mô tả công nghệ bạn thành thạo và sở trường) và danh sách thành tích bạn liệt kê. Khi trả lời trong Trợ lý AI, mô hình nhận câu hỏi, vài lượt trò chuyện gần nhất, những phần kết quả liên quan đến câu hỏi và điểm trong bảng điểm của bạn (điểm trung bình và tín chỉ tích lũy, học phần chưa đạt; điểm từng học phần khi bạn hỏi về điểm). Dữ liệu gửi cho mô hình được xóa sau khi xử lý xong; chỉ nhận xét, lộ trình và cuộc trò chuyện được lưu lại. Chi tiết xem mục Đánh giá năng lực và AI, mục Khảo sát và lộ trình AI, mục Trợ lý AI trong Chính sách bảo mật."
   },
   {
     question: "Vì sao tôi phải làm Khảo sát định hướng?",
@@ -185,7 +185,7 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
     answer: [
       "Sau khi bạn tải lên, EduPath AI tự động đọc tệp PDF để lấy danh sách môn học, tín chỉ, điểm và kết quả theo từng học kỳ. Tệp chỉ dùng để tạo bảng điểm trong tài khoản của bạn và không được gửi cho dịch vụ AI hay đơn vị nào bên ngoài.",
       "Mỗi tài khoản lưu một bảng điểm. Bảng điểm được giữ đến khi bạn thay bằng bản mới, bấm Xóa bảng điểm hoặc khi tài khoản được xóa.",
-      "Nếu bạn dùng Đánh giá năng lực, phần dữ liệu từ bảng điểm gửi cho mô hình AI viết nhận xét chỉ gồm mã học phần, tên học phần theo chương trình đào tạo và điểm, không gồm tệp PDF."
+      "Nếu bạn dùng Đánh giá năng lực, phần dữ liệu từ bảng điểm gửi cho mô hình AI viết nhận xét chỉ gồm mã học phần, tên học phần theo chương trình đào tạo và điểm, không gồm tệp PDF. Khi bạn hỏi Trợ lý AI, mô hình nhận điểm trung bình và số tín chỉ tích lũy, các học phần chưa đạt và, khi câu hỏi nói về điểm, điểm của các học phần liên quan hoặc cả bảng điểm, cũng không gồm tệp PDF."
     ],
     note: "Việc đọc tự động có thể nhầm, nhất là với ảnh chụp hoặc bản scan. Hãy đối chiếu kết quả với bảng điểm gốc và luôn tự giữ bản PDF của mình."
   },
@@ -217,10 +217,11 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
 // Students consent to this policy version when importing a transcript, requesting a competency
 // assessment or saving the profile survey; the API rejects any other version. Must equal
 // TRANSCRIPT_POLICY_VERSION in apps/api/src/student/consent.ts. 2026-10-28: Trợ lý AI (no one is asked again).
-export const policyVersion = "2026-10-28";
+// 2026-10-29: Trợ lý AI reads the transcript's scores so a student can look up grades in the chat (no one is asked again).
+export const policyVersion = "2026-10-29";
 export const policyUpdatedAt = policyVersion.split("-").reverse().join("/");
-// Consents given under this version or later still count, so policies 2026-10-26 and 2026-10-28 ask no one again (user,
-// 2026-10-26).
+// Consents given under this version or later still count, so policies 2026-10-26, 2026-10-28 and 2026-10-29 ask no one
+// again (user, 2026-10-26).
 // Must equal CONSENT_VALID_SINCE in apps/api/src/student/consent.ts.
 export const consentValidSince = "2026-10-25";
 export const isValidConsent = (version: string | null | undefined) => typeof version === "string" && version >= consentValidSince;
@@ -261,7 +262,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
               "Chuyên ngành, mục tiêu nghề nghiệp, khảo sát định hướng (gồm thế mạnh, mô tả công nghệ bạn thành thạo và sở trường), thành tích và bảng điểm do bạn tự cung cấp, và bạn có thể sửa hoặc xóa bất cứ lúc nào.",
               "Đánh giá năng lực chỉ chạy khi bạn yêu cầu và đồng ý. Điểm và mức năng lực do hệ thống tính; AI chỉ viết nhận xét để bạn tham khảo.",
               "Lộ trình học tập cho học kỳ tới do AI soạn dùng kết quả đánh giá năng lực, câu trả lời khảo sát định hướng (kể cả thế mạnh, phần mô tả công nghệ bạn thành thạo và sở trường) và thành tích bạn liệt kê, khi bạn yêu cầu và đã đồng ý.",
-              "Trợ lý AI chỉ xử lý dữ liệu của bạn khi bạn gửi câu hỏi: trợ lý dùng kết quả đánh giá năng lực, lộ trình, khảo sát định hướng (khi bạn đã đồng ý cho khảo sát) và dữ liệu chung của Khoa để trả lời. Câu hỏi và câu trả lời được lưu trong tài khoản của bạn; bạn xóa được bất cứ lúc nào.",
+              "Trợ lý AI chỉ xử lý dữ liệu của bạn khi bạn gửi câu hỏi: trợ lý dùng điểm trong bảng điểm (điểm từng học phần khi bạn hỏi về điểm), kết quả đánh giá năng lực, lộ trình, khảo sát định hướng (khi bạn đã đồng ý cho khảo sát) và dữ liệu chung của Khoa để trả lời. Câu hỏi và câu trả lời được lưu trong tài khoản của bạn; bạn xóa được bất cứ lúc nào.",
               "Mô hình AI chạy cục bộ, không nhận họ tên, mã số sinh viên, email, lớp hay tệp PDF bảng điểm của bạn, và dữ liệu không được gửi tới dịch vụ AI đám mây.",
               "EduPath AI không bán dữ liệu, không hiển thị quảng cáo và không theo dõi bạn trên các trang web khác.",
               "Dữ liệu được lưu trên dịch vụ lưu trữ đám mây, máy chủ có thể đặt ngoài Việt Nam."
@@ -344,6 +345,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
               "Đánh giá năng lực và phân tích khoảng trống kỹ năng so với nghề mục tiêu, khi bạn yêu cầu.",
               "Tạo nhận xét học tập bằng AI cho kết quả đánh giá năng lực của bạn.",
               "Soạn lộ trình học tập cho học kỳ tới bằng AI và đề xuất học phần cho Kế hoạch học kỳ, dựa trên kết quả đánh giá năng lực, khảo sát định hướng và thành tích của bạn, khi bạn yêu cầu.",
+              "Trả lời câu hỏi của bạn trong Trợ lý AI, kể cả tra cứu điểm trong bảng điểm, khi bạn gửi câu hỏi.",
               "Giúp Khoa hỗ trợ, tư vấn học tập và quản lý đào tạo.",
               "Bảo vệ tài khoản và xử lý khi có sự cố."
             ]]
@@ -512,6 +514,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
               [
                 "Câu hỏi của bạn và vài lượt trò chuyện gần nhất trong cùng cuộc trò chuyện.",
                 "Kết quả đánh giá năng lực mới nhất của bạn: khóa, chuyên ngành, nghề mục tiêu, mức các kỹ năng, kỹ năng nghề còn thiếu, học phần đang học, cần học, cần cải thiện, tiến độ học tập và xét tốt nghiệp.",
+                "Bảng điểm bạn đã tải lên: điểm trung bình và số tín chỉ tích lũy, học phần đang học và học phần chưa đạt; khi câu hỏi nói về điểm, bảng điểm, một học phần hay một học kỳ, thêm điểm của các học phần liên quan (hoặc cả bảng điểm) và các dòng tổng kết in trên bảng điểm.",
                 "Lộ trình AI mới nhất của bạn, khi câu hỏi nói về lộ trình hoặc lý do học phần được đề xuất.",
                 "Câu trả lời khảo sát định hướng, chỉ khi bạn đã đồng ý cho việc dùng khảo sát và câu hỏi nói về lộ trình hoặc tự học.",
                 "Dữ liệu chung của Khoa: chương trình đào tạo, kế hoạch đào tạo, danh mục kỹ năng và nghề nghiệp, tiêu chuẩn xét tốt nghiệp, hướng dẫn sử dụng EduPath AI và danh sách tài nguyên tự học đã được kiểm tra."
@@ -676,7 +679,8 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
               "Bản cập nhật ngày 24/10/2026 bổ sung trang Lộ trình học tập (kế hoạch học kỳ và lộ trình 3 tháng do AI soạn), khảo sát định hướng và thành tích trong hồ sơ, và việc mô hình AI dùng các câu trả lời này để tư vấn lộ trình.",
               "Bản cập nhật ngày 25/10/2026 đưa Thế mạnh của bạn (công nghệ bạn thành thạo, kèm phần tự mô tả) và Sở trường vào Khảo sát định hướng (thay mục Sở thích trong Thông tin cá nhân) và cho Lộ trình AI dùng các phần này; bạn được đề nghị đồng ý lại khi lưu khảo sát.",
               "Bản cập nhật ngày 26/10/2026 cho phép quản trị viên của Khoa Công nghệ Thông tin xem điểm và kết quả từng môn trong bảng điểm (không gồm tệp PDF) của sinh viên, kể cả bảng điểm đã tải lên trước ngày này, để hỗ trợ học tập và tư vấn, và ghi Lộ trình AI theo học kỳ tới của lịch trường thay cho 3 tháng. Sự đồng ý bạn đã đưa ra theo bản ngày 25/10/2026 vẫn còn hiệu lực.",
-              "Bản cập nhật ngày 28/10/2026 bổ sung Trợ lý AI: trợ lý trả lời câu hỏi của bạn từ kết quả đánh giá năng lực, lộ trình, khảo sát định hướng (khi bạn đã đồng ý cho khảo sát) và dữ liệu chung của Khoa, và EduPath AI lưu cuộc trò chuyện cho đến khi bạn xóa hoặc 90 ngày sau tin nhắn cuối cùng. Trợ lý chỉ xử lý dữ liệu của bạn khi bạn gửi câu hỏi; sự đồng ý bạn đã đưa ra theo bản ngày 25/10/2026 vẫn còn hiệu lực."
+              "Bản cập nhật ngày 28/10/2026 bổ sung Trợ lý AI: trợ lý trả lời câu hỏi của bạn từ kết quả đánh giá năng lực, lộ trình, khảo sát định hướng (khi bạn đã đồng ý cho khảo sát) và dữ liệu chung của Khoa, và EduPath AI lưu cuộc trò chuyện cho đến khi bạn xóa hoặc 90 ngày sau tin nhắn cuối cùng. Trợ lý chỉ xử lý dữ liệu của bạn khi bạn gửi câu hỏi; sự đồng ý bạn đã đưa ra theo bản ngày 25/10/2026 vẫn còn hiệu lực.",
+              "Bản cập nhật ngày 29/10/2026 cho Trợ lý AI dùng điểm trong bảng điểm bạn đã tải lên (không gồm tệp PDF), để bạn tra cứu điểm ngay trong cuộc trò chuyện: với mọi câu hỏi, trợ lý dùng điểm trung bình và số tín chỉ tích lũy, học phần đang học và học phần chưa đạt; khi câu hỏi nói về điểm, trợ lý dùng thêm điểm của các học phần liên quan hoặc cả bảng điểm. Điểm được chép đúng như in trên bảng điểm, không tính lại. Sự đồng ý bạn đã đưa ra theo bản ngày 25/10/2026 vẫn còn hiệu lực."
             ]
           }
         ]

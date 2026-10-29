@@ -251,6 +251,8 @@ function syntheticStudentDb(): Db {
     if (sql.includes("FROM stu_profile_surveys")) return rows([syntheticSurveyRow()]);
     if (sql.includes("FROM data_consents")) return rows([{ policy_version: TRANSCRIPT_POLICY_VERSION }]);
     if (sql.includes("FROM stu_roadmaps")) return rows([syntheticRoadmap()]);
+    // No transcript (assistant-v4 reads it): the 48 questions keep the data they were written for.
+    if (sql.includes("FROM student_transcripts")) return rows([]);
     throw new Error(`unexpected query of the synthetic student: ${sql.replace(/\s+/g, " ").slice(0, 80)}`);
   };
   return { query } as unknown as Db;

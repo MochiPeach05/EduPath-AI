@@ -31,8 +31,12 @@ export const documentEmbeddingText = (title: string, text: string) => `title: ${
  * v3 (2026-10-29, user: the assistant forgot the conversation after 2–3 vague questions): a follow-up is rewritten into a
  * standalone question before retrieval, the sources the previous answers cited and the topics of the last turns carry
  * over, and the history is longer with its lines kept.
+ * v4 (2026-10-29, user: the assistant answered "Mình không có thông tin về điểm tổng (GPA)"; "giữ nguyên json bảng điểm luôn
+ * và lấy thêm thông tin từ nó nữa để sinh viên có thể tra cứu"): the stored transcript is a source, "Bảng điểm của bạn"
+ * (transcript.ts): always the printed cumulative GPA and credits and the courses not passed, the rows of the courses and
+ * terms a question names, every row for a grade question (intent "transcript"); grades are quoted, never recomputed.
  */
-export const ASSISTANT_PROMPT_VERSION = "assistant-v3";
+export const ASSISTANT_PROMPT_VERSION = "assistant-v4";
 export const KNOWLEDGE_PROMPT_VERSION = "knowledge-v1";
 /** An answer takes well under a minute; a lost worker frees the job after this lease (the worker extends every 3 min). */
 export const ASSISTANT_LEASE_MINUTES = 5;

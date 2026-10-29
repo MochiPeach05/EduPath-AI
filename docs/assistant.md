@@ -8,7 +8,7 @@ Người dùng yêu cầu ngày 28/10/2026: "triển khai giai đoạn 1, 2, 3 l
 | --- | --- | --- |
 | STU-CHAT-01 | Giải thích khoảng trống kỹ năng | Kết quả đánh giá năng lực mới nhất: kỹ năng của nghề mục tiêu, mức các kỹ năng |
 | STU-CHAT-02 | Tư vấn lộ trình học tập | Học phần đang học, cần học, cần cải thiện; tiến độ tốt nghiệp; Lộ trình AI mới nhất |
-| STU-CHAT-03 | Hỏi đáp với trợ lý AI | Kho tri thức chung: CTĐT, KHĐT, kỹ năng, nghề, tiêu chuẩn tốt nghiệp, hướng dẫn |
+| STU-CHAT-03 | Hỏi đáp với trợ lý AI | Bảng điểm của sinh viên (tra cứu điểm, GPA, tín chỉ tích lũy; từ assistant-v4). Kho tri thức chung: CTĐT, KHĐT, kỹ năng, nghề, tiêu chuẩn tốt nghiệp, hướng dẫn |
 | STU-CHAT-04 | Giải thích lý do đề xuất môn học | Lộ trình AI (lời khuyên từng học phần), liên kết môn–kỹ năng và trọng số, môn tiên quyết |
 | STU-CHAT-05 | Gợi ý tài nguyên tự học | Danh sách tài nguyên đã kiểm tra link (`apps/api/src/assistant/learning-resources.json`) |
 
@@ -19,7 +19,7 @@ Người dùng yêu cầu ngày 28/10/2026: "triển khai giai đoạn 1, 2, 3 l
   - GPU 4 GB không đủ để huấn luyện.
   - Mô hình đã fine-tune không ghi được nguồn.
 - **Hai tầng truy xuất:**
-  - **Dữ liệu cá nhân dùng SQL**, chính xác hoàn toàn (`facts.ts`). Tầng này lấy kết quả mà engine đã tính, dùng chung các dòng với prompt của Lộ trình AI (`roadmapDataSections`). Nguyên tắc giữ như cũ: engine tính, AI chỉ giải thích.
+  - **Dữ liệu cá nhân dùng SQL**, chính xác hoàn toàn (`facts.ts`). Tầng này lấy kết quả mà engine đã tính, dùng chung các dòng với prompt của Lộ trình AI (`roadmapDataSections`), và từ assistant-v4 cả bảng điểm đã lưu (mục Bảng điểm). Nguyên tắc giữ như cũ: engine tính, AI chỉ giải thích; điểm trong bảng điểm được chép nguyên.
   - **Kho tri thức chung dùng tìm kiếm kết hợp** (`search.ts`):
     - BM25 theo từ (bỏ dấu, có cặp từ liền nhau như "co so du lieu");
     - vector EmbeddingGemma (768 chiều, cosine);
@@ -86,6 +86,38 @@ Bản v3 sửa bằng ba kỹ thuật chuẩn của RAG có hội thoại:
 2. **Giữ nguồn và chủ đề.** Mỗi nguồn được dẫn lưu kèm khóa của đoạn tri thức (`ref`, chỉ ở server). Câu hỏi sau đưa lại tối đa 3 đoạn mà 2 câu trả lời trước đã dẫn. Ý định của 2 câu trả lời trước cũng được cộng vào ý định của câu mới.
 3. **Lịch sử dài hơn.** Prompt giữ 8 tin nhắn: mỗi câu hỏi tối đa 500 ký tự, mỗi câu trả lời tối đa 1.200 ký tự, giữ nguyên dòng nên danh sách vẫn là danh sách.
 
+## Bảng điểm (assistant-v4, 29/10/2026)
+Một sinh viên hỏi "Điểm tổng của tôi hiện tại là bao nhiêu". Bản v3 trả lời "Mình không có thông tin về điểm tổng (GPA)" rồi nói sang điểm năng lực, vì trợ lý không đọc bảng điểm. Người dùng yêu cầu: "giữ nguyên json bảng điểm luôn và lấy thêm thông tin từ nó nữa để sinh viên có thể tra cứu".
+
+- **Dữ liệu có cấu trúc, không dùng embedding.** Bảng điểm của một sinh viên chỉ khoảng 40–70 dòng và mỗi con số phải đúng tuyệt đối, nên nó thuộc tầng SQL: `student_transcripts.parsed_data` (không bao giờ đọc cột PDF), đọc qua `withoutSettledReviews` như trang sinh viên và trang quản trị.
+- **Nguồn "Bảng điểm của bạn"** (`transcript.ts`; kind `transcript`, link `#profile`) đứng ngay sau hồ sơ:
+  - luôn có: các dòng tích lũy in ở cuối học kỳ gần nhất có điểm (Tổng số tín chỉ tích lũy, Điểm TB tích lũy hệ 4 và hệ 10, Xếp loại học tập tích lũy) kèm ghi chú đó là GPA hay "điểm tổng", học phần đang học, số học phần, học phần chưa đạt, đang học lại và đã học lại rồi đạt;
+  - câu hỏi nêu học phần (mã, hoặc tên đầy đủ; tên dài nhất thắng, nên "Hệ quản trị cơ sở dữ liệu" không kéo theo "Cơ sở dữ liệu") hay học kỳ ("học kỳ 1 năm 2024-2025", "HK241", "học kỳ vừa rồi", "học kỳ này", "năm hai"): thêm các dòng đó cùng tổng kết của học kỳ; mã không có trong bảng điểm thì nói rõ;
+  - câu hỏi về điểm không nêu học phần hay học kỳ: cả bảng điểm, mỗi dòng một học phần ("mã tên (TC): điểm hệ 10, hệ 4, điểm chữ, kết quả"), theo học kỳ, kèm mọi dòng tổng kết in trên bảng điểm. Tối đa 80 dòng; dài hơn thì bỏ các học kỳ cũ nhất và ghi rõ.
+- **Cùng quy tắc với trang sinh viên:**
+  - ô Kết quả in trên bảng điểm quyết định Đạt/Không đạt; ô trống thì theo điểm chữ;
+  - MT là đạt; VT (vắng thi) và CT (cấm thi) là không đạt, không có điểm; F in "Đạt" (khóa trước đạt từ 4,0) là đạt;
+  - một học phần đạt khi có một lần đạt, kể cả lần học lại dưới mã khác cùng tên (học trả nợ với khóa sau, như comp-calc-v17).
+- **Số liệu chép nguyên.** Điểm và các dòng tổng kết giữ đúng như in; hệ thống không tính lại GPA. Prompt assistant-v4 thêm vào nguyên tắc 2: điểm, GPA, tín chỉ tích lũy và xếp loại lấy đúng như nguồn Bảng điểm, không cộng, tính trung bình, làm tròn hay quy đổi hệ 10 – hệ 4.
+- **Ý định "transcript"** (`intent.ts`): bảng điểm, GPA, điểm tổng / trung bình / tích lũy / môn / học kỳ / chữ / hệ 4, tín chỉ tích lũy, rớt / nợ / qua môn, vắng thi, cấm thi; "mấy điểm", "điểm cao nhất", "điểm của…", "xếp loại" khi câu hỏi không nói về kỹ năng, năng lực hay mức phù hợp. "Điểm mạnh", "điểm yếu", "điểm phù hợp", "điểm năng lực", "điểm kỹ năng" không phải câu hỏi về điểm học phần.
+- Đã có bảng điểm nhưng chưa có kết quả đánh giá năng lực: trợ lý vẫn có nguồn Bảng điểm, và hồ sơ nói rõ phần còn thiếu là Đánh giá năng lực.
+- Prompt do API dựng nên không cần khởi động lại worker. Hướng dẫn "Trợ lý AI" trong kho tri thức nay nói trợ lý đọc bảng điểm; kho được embed lại ở lần làm mới tiếp theo.
+
+**Kiểm tra (29/10/2026).** Sinh viên giả lập K29 có bảng điểm 40 dòng trong 10 học kỳ: F rồi học lại đạt, VT đang học lại, CT chưa học lại, MT ở điểm bảo lưu, môn điều kiện. Kết quả đánh giá được tính từ chính bảng điểm đó, kèm kho tri thức local. Gemma 4 E4B có thinking, `num_gpu` 38:
+
+| Câu hỏi | Câu trả lời | Đúng? |
+| --- | --- | --- |
+| Điểm tổng của tôi hiện tại là bao nhiêu? | GPA cuối học kỳ 3 năm học 2025–2026: 2,85 (hệ 4), 7,28 (hệ 10) | Đúng |
+| Môn Cơ sở dữ liệu mình được mấy điểm? | Học hai lần: F 3,5 (học kỳ 3 năm học 2023–2024, Không đạt), rồi B 7,5 (học kỳ 1 năm học 2024–2025, Đạt) | Đúng |
+| Học kỳ 1 năm 2024-2025 mình học những môn nào? | Đủ 6 học phần với điểm và kết quả, kể cả môn CT | Đúng |
+| Mình còn nợ môn nào không? | Phát triển ứng dụng di động (CT) cần học lại; Kỹ thuật lập trình (VT) đang học lại; thêm một môn điểm D, ghi đúng là học cải thiện | Đúng |
+| Môn nào mình điểm cao nhất? | Nhập môn Công nghệ phần mềm, 9,5 | Đúng |
+| Mình tích lũy được bao nhiêu tín chỉ rồi? | 79 tín chỉ, còn thiếu 47 TC | Đúng (câu đầu xưng nhầm "Mình đã tích lũy") |
+
+- Mỗi câu mất 16–27 giây. Prompt từ 3,4 nghìn token (hỏi một học phần) đến 9,1 nghìn token (cả bảng điểm cùng các đoạn CTĐT), trong ngữ cảnh 16 nghìn token.
+- Không có link bịa hay mã học phần lạ.
+- Gemma viết "2,85" cho giá trị "2.85" in trên bảng điểm: cùng con số, chỉ đổi dấu thập phân theo cách viết tiếng Việt.
+
 
 ## Kết quả kiểm tra (29/10/2026)
 Bộ đánh giá tự động `apps/api/eval/assistant/run.ts` ghi kết quả vào `docs/assistant-evaluation.md`. Bộ này gồm 48 câu hỏi trên sinh viên giả lập K29 và danh mục của CSDL local, và đã chạy trên assistant-v2.
@@ -134,10 +166,12 @@ Bảng `ai_knowledge_chunks` (migration 055) chỉ chứa dữ liệu danh mục
   - Cuộc trò chuyện không có tin nhắn mới trong 90 ngày tự xóa.
   - `ai_input` (dữ liệu gửi cho mô hình) bị xóa khi job kết thúc.
 - **Chính sách bảo mật ngày 28/10/2026** (người dùng đồng ý ngày 28/10) thêm mục Trợ lý AI và thời gian lưu. `CONSENT_VALID_SINCE` giữ nguyên 2026-10-25, nên không ai bị hỏi lại.
+- **Chính sách bảo mật ngày 29/10/2026** (theo yêu cầu bảng điểm của người dùng) thêm việc trợ lý dùng điểm trong bảng điểm: mục Trợ lý AI, các câu hỏi thường gặp về dữ liệu AI và bảng điểm, mục đích sử dụng và dòng "Bản cập nhật ngày 29/10/2026". `TRANSCRIPT_POLICY_VERSION` và `policyVersion` là 2026-10-29; `CONSENT_VALID_SINCE` vẫn 2026-10-25, nên không ai bị hỏi lại.
 - **Dữ liệu trợ lý được dùng:**
+  - bảng điểm đã lưu (`parsed_data`, không bao giờ đọc PDF), vốn chỉ tồn tại khi sinh viên đã đồng ý lúc tải lên;
   - khảo sát định hướng, chỉ khi sự đồng ý `profile_survey` còn hiệu lực;
   - kết quả đánh giá và lộ trình, vốn chỉ tồn tại khi sinh viên đã đồng ý.
-- **Mô hình không nhận** họ tên, MSSV, email, lớp hay PDF.
+- **Mô hình không nhận** họ tên, MSSV, email, lớp hay PDF. Dòng tổng kết của bảng điểm chỉ được đưa vào khi nhãn là điểm, tín chỉ, xếp loại hay rèn luyện.
 
 ## Vận hành
 - Trên máy chạy AI: tải model embedding bằng `ollama pull embeddinggemma`, rồi khởi động lại worker (`npm run ai-worker -w @edupath/api`). Worker cũ không quảng bá hai loại job mới nên không nhận chúng.
@@ -147,7 +181,7 @@ Bảng `ai_knowledge_chunks` (migration 055) chỉ chứa dữ liệu danh mục
 
 ## Mã nguồn
 - **API** (`apps/api/src/assistant/`):
-  - `protocol.ts` (giao thức worker), `intent.ts`, `facts.ts`, `prompt.ts` (assistant-v1), `validate.ts`;
+  - `protocol.ts` (giao thức worker), `intent.ts`, `facts.ts`, `transcript.ts` (nguồn Bảng điểm), `prompt.ts` (assistant-v4), `validate.ts`;
   - `chat.ts` (hội thoại và job), `router.ts` (API cho sinh viên), `wakeup.ts`;
   - `knowledge.ts`, `knowledge-jobs.ts`, `guides.ts`, `search.ts`, `learning-resources.json`.
 - **Worker:** `apps/api/src/ai-worker/`.
