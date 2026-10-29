@@ -9,6 +9,8 @@ describe("assistant intents", () => {
     ["Điều kiện xét tốt nghiệp của khóa mình là gì?", ["graduation"]],
     ["Mình nên tự học Docker ở đâu, có tài liệu nào không?", ["resources"]],
     ["Chào bạn", []],
+    // "danh sách" is a list, not a book (the evaluation of 2026-10-29).
+    ["Danh sách học phần của nhóm TC309 gồm những môn nào?", []],
   ])("reads %s", (question, intents) => {
     expect(detectIntents(question)).toEqual(intents);
   });

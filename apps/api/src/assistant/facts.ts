@@ -19,8 +19,11 @@ import type { AssistantIntent } from "./intent.js";
 type Db = Pick<DatabasePool, "query">;
 export type AssistantSourceKind =
   | "profile" | "assessment" | "roadmap" | "graduation" | "course" | "skill" | "career" | "curriculum" | "plan" | "resource" | "guide";
-/** One source of the prompt: what the answer may cite as [n], with the page the student can open. */
-export type ContextSource = { kind: AssistantSourceKind; title: string; link: string | null; text: string };
+/**
+ * One source of the prompt: what the answer may cite as [n], with the page the student can open. ref: the knowledge chunk
+ * it came from (source_kind, source_key), so a later question of the conversation can bring it back (assistant-v3).
+ */
+export type ContextSource = { kind: AssistantSourceKind; title: string; link: string | null; text: string; ref?: { kind: string; key: string } };
 /** The student's sources and the target career's skills still to build (for the self-study resources). */
 export type StudentContext = { sources: ContextSource[]; gapSkills: string[] };
 

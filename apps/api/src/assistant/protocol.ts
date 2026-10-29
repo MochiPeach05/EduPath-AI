@@ -5,7 +5,10 @@
 //   the embedding model (on the CPU, so Gemma keeps the GPU), POSTs /:id/prepare { leaseToken, vector } (vector null when
 //   embedding failed: the server then searches by words only) and receives the prompt { system, user, options, think,
 //   promptVersion }. It streams Gemma's answer (plain text, no JSON schema) and POSTs the text so far to /:id/progress
-//   { leaseToken, content } about once a second, then completes with output { answer }.
+//   { leaseToken, content } about once a second, then completes with output { answer }. Since assistant-v3 a question
+//   asked after others also carries rewrite: a short prompt Gemma answers first (no thinking) with the question written
+//   out in full ("Còn môn đó thì sao?" → the course it means); the worker embeds that standalone question instead and
+//   sends it as /prepare's standalone, which the server then searches with.
 // knowledge_embedding: a batch of texts of the shared knowledge index; the worker completes with output { vectors }, one
 //   vector per input, in order.
 //
@@ -23,8 +26,13 @@ export const EMBEDDING_DIMENSIONS = 768;
 export const queryEmbeddingText = (query: string) => `task: search result | query: ${query}`;
 export const documentEmbeddingText = (title: string, text: string) => `title: ${title.trim() || "none"} | text: ${text}`;
 
-/** v2 (2026-10-29): Gemma thinks before it answers (prompt.ts ASSISTANT_THINK); skill keys no longer in the data. */
-export const ASSISTANT_PROMPT_VERSION = "assistant-v2";
+/**
+ * v2 (2026-10-29): Gemma thinks before it answers (prompt.ts ASSISTANT_THINK); skill keys no longer in the data.
+ * v3 (2026-10-29, user: the assistant forgot the conversation after 2–3 vague questions): a follow-up is rewritten into a
+ * standalone question before retrieval, the sources the previous answers cited and the topics of the last turns carry
+ * over, and the history is longer with its lines kept.
+ */
+export const ASSISTANT_PROMPT_VERSION = "assistant-v3";
 export const KNOWLEDGE_PROMPT_VERSION = "knowledge-v1";
 /** An answer takes well under a minute; a lost worker frees the job after this lease (the worker extends every 3 min). */
 export const ASSISTANT_LEASE_MINUTES = 5;
@@ -46,12 +54,20 @@ export const embedSpecSchema = z.object({
 });
 export type EmbedSpec = z.infer<typeof embedSpecSchema>;
 
+/** The prompt that writes a follow-up out in full (prompt.ts buildRewritePrompt); null for the first question. */
+export const rewriteSpecSchema = z.object({
+  system: z.string().min(1),
+  user: z.string().min(1),
+  options: z.record(z.string(), z.unknown()),
+});
+export type RewriteSpec = z.infer<typeof rewriteSpecSchema>;
 export const assistantClaimSchema = z.object({
   kind: z.literal(ASSISTANT_CHAT_KIND),
   id: uuid,
   leaseToken: z.string().min(1).max(200),
   promptVersion: z.string().min(1).max(64),
   embed: embedSpecSchema.nullable(),
+  rewrite: rewriteSpecSchema.nullable().optional(),
 });
 export const knowledgeClaimSchema = z.object({
   kind: z.literal(KNOWLEDGE_EMBEDDING_KIND),
@@ -66,7 +82,19 @@ export type KnowledgeClaim = z.infer<typeof knowledgeClaimSchema>;
 export const prepareBodySchema = z.object({
   leaseToken: z.uuid(),
   vector: z.array(z.number().finite()).min(1).max(4096).nullable(),
+  /** The follow-up written out in full by Gemma (rewrite); absent or null: search with the question itself. */
+  standalone: z.string().max(2000).nullable().optional(),
 }).strict();
+
+/**
+ * The standalone question in Gemma's rewrite: its first line without a label or quotes, 3–500 characters, or null (the
+ * server then searches with its own text). Used by the worker and checked again by the server.
+ */
+export function standaloneQuestion(text: string | null | undefined): string | null {
+  const line = (text ?? "").split(/\r?\n/).map((item) => item.trim()).find(Boolean) ?? "";
+  const question = line.replace(/^(?:câu hỏi(?: độc lập| viết lại)?|standalone(?: question)?)\s*:\s*/i, "").replace(/^["'“”«»]+|["'“”«»]+$/g, "").trim();
+  return question.length >= 3 && question.length <= 500 && !question.includes("===") ? question : null;
+}
 export const preparedPromptSchema = z.object({
   system: z.string().min(1),
   user: z.string().min(1),

@@ -2,6 +2,8 @@ import {
   MAX_ANSWER_CHARS,
   knowledgeOutputSchema,
   prepareBodySchema,
+  queryEmbeddingText,
+  standaloneQuestion,
   type AssistantClaim,
   type EmbedSpec,
   type KnowledgeClaim
@@ -241,16 +243,39 @@ function createProgressReporter(deps: WorkerDeps, job: AssistantClaim, everyMs: 
 }
 
 /**
- * assistant_chat: embeds the question, gets the prompt from /prepare, then streams Gemma's plain-text answer to
- * /progress. A failed embedding only loses the vector: the server then searches by words only.
+ * A follow-up written out in full (assistant-v3): Gemma answers the job's rewrite prompt first, without thinking, and the
+ * first line of its answer is the standalone question. Any failure only means null: the server searches with its own text.
+ */
+async function rewriteQuestion(job: AssistantClaim, deps: WorkerDeps, signal: AbortSignal, metrics: JobMetrics): Promise<string | null> {
+  if (!job.rewrite) return null;
+  const started = Date.now();
+  try {
+    const result = await deps.ollama.chat({ system: job.rewrite.system, user: job.rewrite.user, schema: null, options: job.rewrite.options, think: false }, signal);
+    const standalone = standaloneQuestion(result.content);
+    metrics.rewrite_ms = Date.now() - started;
+    deps.log("rewrite_finished", { job: job.id, kind: ASSISTANT_CHAT_KIND, ms: metrics.rewrite_ms, rewritten: standalone !== null });
+    return standalone;
+  } catch (error) {
+    if (error instanceof GenerationAbortedError || signal.aborted) throw error;
+    deps.log("rewrite_failed", { job: job.id, kind: ASSISTANT_CHAT_KIND, ...errorFields(error) });
+    return null;
+  }
+}
+
+/**
+ * assistant_chat: writes a follow-up out in full (rewrite), embeds the question, gets the prompt from /prepare, then streams
+ * Gemma's plain-text answer to /progress. A failed embedding only loses the vector: the server then searches by words only.
  */
 async function answerQuestion(job: AssistantClaim, info: OllamaModelInfo, deps: WorkerDeps, timings: WorkerTimings, signal: AbortSignal): Promise<CompletedBody> {
   let vector: number[] | null = null;
   const embedMetrics: JobMetrics = {};
-  if (job.embed) {
+  const standalone = await rewriteQuestion(job, deps, signal, embedMetrics);
+  // The standalone question is what the search should find; the server's own text stays the fallback.
+  const embed = job.embed && standalone ? { model: job.embed.model, inputs: [queryEmbeddingText(standalone)] } : job.embed;
+  if (embed) {
     const started = Date.now();
     try {
-      vector = await embedQuestion(job.embed, deps, signal);
+      vector = await embedQuestion(embed, deps, signal);
       embedMetrics.embed_ms = Date.now() - started;
       deps.log("embedding_finished", { job: job.id, kind: ASSISTANT_CHAT_KIND, ms: embedMetrics.embed_ms, dimensions: vector.length });
     } catch (error) {
@@ -258,7 +283,7 @@ async function answerQuestion(job: AssistantClaim, info: OllamaModelInfo, deps: 
       deps.log("embedding_failed", { job: job.id, kind: ASSISTANT_CHAT_KIND, ...errorFields(error) });
     }
   }
-  const prompt = await deps.client.prepare(job.id, { leaseToken: job.leaseToken, vector });
+  const prompt = await deps.client.prepare(job.id, { leaseToken: job.leaseToken, vector, standalone });
   const progress = createProgressReporter(deps, job, timings.progressEveryMs);
   try {
     const chatJob: OllamaJob = { system: prompt.system, user: prompt.user, schema: null, options: prompt.options, think: prompt.think };

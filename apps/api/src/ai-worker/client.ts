@@ -49,7 +49,8 @@ export type GenerationJob = z.infer<typeof generationJobSchema>;
 export type ClaimedJob = z.infer<typeof claimedJobSchema>;
 
 /** Ollama's chat metrics, plus the embedding time (embed_ms) and the number of vectors (count) of embedding work. */
-export type JobMetrics = OllamaMetrics & { embed_ms?: number; count?: number };
+/** rewrite_ms: the rewrite of a follow-up into a standalone question (assistant-v3). */
+export type JobMetrics = OllamaMetrics & { embed_ms?: number; count?: number; rewrite_ms?: number };
 
 export type CompleteBody =
   | { leaseToken: string; model: string; digest: string; ollamaVersion: string; metrics: JobMetrics; output: Record<string, unknown> }

@@ -11,7 +11,7 @@ const PATTERNS: readonly (readonly [AssistantIntent, RegExp])[] = [
   ["roadmap", /\b(lo trinh|hoc ky (toi|sau|tiep|nay)|ky (toi|sau|nay)|nam (toi|sau)|nen hoc|hoc (gi|mon gi|mon nao|nhung mon)|dang ky|ke hoach|tien do|hoc lai|hoc cai thien|cai thien|tre han|no mon|rot mon)\b/],
   ["course_reason", /\b(tai sao|vi sao|ly do|de xuat|goi y mon|sao lai|co can (hoc|thiet))\b/],
   ["graduation", /\b(tot nghiep|ra truong|khoa luan|do an tot nghiep|chuyen de tot nghiep|tin chi|diem trung binh|gpa|chuan dau ra)\b/],
-  ["resources", /\b(tai lieu|tu hoc|khoa hoc (online|truc tuyen|mien phi|tren mang)|nguon hoc|hoc o dau|link|youtube|sach|website|trang web|tai nguyen|chung chi|bai tap|luyen tap|hoc them)\b/],
+  ["resources", /\b(tai lieu|tu hoc|khoa hoc (online|truc tuyen|mien phi|tren mang)|nguon hoc|hoc o dau|link|youtube|(?<!danh )sach|website|trang web|tai nguyen|chung chi|bai tap|luyen tap|hoc them)\b/],
 ];
 
 export function detectIntents(question: string): AssistantIntent[] {

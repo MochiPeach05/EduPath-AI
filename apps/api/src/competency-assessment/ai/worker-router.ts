@@ -282,7 +282,7 @@ export function createCompetencyWorkerRouter(pool: DatabasePool | undefined, aiW
     const body = prepareBodySchema.safeParse(req.body);
     if (!body.success) throw new WorkerError("invalid_input", 400);
     const vector = body.data.vector?.length === EMBEDDING_DIMENSIONS ? body.data.vector : null;
-    const prompt = await prepareAssistantAnswer(db, id, body.data.leaseToken, vector);
+    const prompt = await prepareAssistantAnswer(db, id, body.data.leaseToken, vector, body.data.standalone ?? null);
     if (prompt === "missing" || prompt === "expired") throw new WorkerError("job_expired", 409);
     res.json(prompt);
   });

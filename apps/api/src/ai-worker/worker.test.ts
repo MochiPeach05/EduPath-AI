@@ -321,7 +321,7 @@ describe("processJob assistant_chat", () => {
 
     expect(d.ollama.embeddingModelInfo).toHaveBeenCalledWith("embeddinggemma");
     expect(d.ollama.embed).toHaveBeenCalledWith({ model: "embeddinggemma", inputs: ["task: search result | query: BÍ MẬT CÂU HỎI"] }, expect.any(AbortSignal));
-    expect(client.prepare).toHaveBeenCalledWith(question.id, { leaseToken: "lease-2", vector: [0.1, -0.2, 0.3] });
+    expect(client.prepare).toHaveBeenCalledWith(question.id, { leaseToken: "lease-2", vector: [0.1, -0.2, 0.3], standalone: null });
     // Plain text: no schema, the prompt's own options and thinking flag.
     expect(chat).toHaveBeenCalledWith(
       { system: prompt.system, user: prompt.user, schema: null, options: prompt.options, think: false },
@@ -396,7 +396,7 @@ describe("processJob assistant_chat", () => {
       expect(await processJob(question, info, d, new AbortController().signal)).toBe("completed");
       // A missing model never receives the question.
       if (ollama.embeddingModelInfo) expect(d.ollama.embed).not.toHaveBeenCalled();
-      expect(client.prepare).toHaveBeenCalledWith(question.id, { leaseToken: "lease-2", vector: null });
+      expect(client.prepare).toHaveBeenCalledWith(question.id, { leaseToken: "lease-2", vector: null, standalone: null });
       expect(completions).toEqual([{ id: question.id, body: completed({ prompt_eval_count: 10, eval_count: 20 }) }]);
       expect(events(logs).filter((event) => event.event === "embedding_failed")).toEqual([expect.objectContaining({ job: question.id, kind: "assistant_chat" })]);
       expect(logs.join("\n")).not.toMatch(/BÍ MẬT|Bạn nên/);
@@ -409,7 +409,37 @@ describe("processJob assistant_chat", () => {
     expect(await processJob({ ...question, embed: null }, info, d, new AbortController().signal)).toBe("completed");
     expect(d.ollama.embed).not.toHaveBeenCalled();
     expect(d.ollama.embeddingModelInfo).not.toHaveBeenCalled();
-    expect(client.prepare).toHaveBeenCalledWith(question.id, { leaseToken: "lease-2", vector: null });
+    expect(client.prepare).toHaveBeenCalledWith(question.id, { leaseToken: "lease-2", vector: null, standalone: null });
+  });
+
+  it("writes a follow-up out in full first, embeds that and sends it as standalone (assistant-v3)", async () => {
+    const logs: string[] = [];
+    const { client, completions } = fakeClient();
+    const rewrite = { system: "VIẾT LẠI", user: "HỘI THOẠI BÍ MẬT", options: { num_ctx: 16384, num_predict: 160, temperature: 0 } };
+    const chat = vi.fn<OllamaPort["chat"]>()
+      .mockResolvedValueOnce(ok("Câu hỏi viết lại: Mình nên học Cơ sở dữ liệu hay Kiểm thử trước?\nGiải thích thừa"))
+      .mockResolvedValueOnce(ok(answer));
+    const d = deps(client, chat, logs);
+    expect(await processJob({ ...question, rewrite }, info, d, new AbortController().signal)).toBe("completed");
+    expect(chat.mock.calls[0]?.[0]).toEqual({ system: "VIẾT LẠI", user: "HỘI THOẠI BÍ MẬT", schema: null, options: rewrite.options, think: false });
+    expect(d.ollama.embed).toHaveBeenCalledWith(
+      { model: "embeddinggemma", inputs: ["task: search result | query: Mình nên học Cơ sở dữ liệu hay Kiểm thử trước?"] }, expect.any(AbortSignal));
+    expect(client.prepare).toHaveBeenCalledWith(question.id,
+      { leaseToken: "lease-2", vector: [0.1, -0.2, 0.3], standalone: "Mình nên học Cơ sở dữ liệu hay Kiểm thử trước?" });
+    expect(completions[0]?.body).toMatchObject({ metrics: { rewrite_ms: expect.any(Number) } });
+    expect(logs.join("\n")).not.toMatch(/BÍ MẬT|Cơ sở dữ liệu/);
+  });
+
+  it("keeps the server's own text when the rewrite fails or says nothing usable", async () => {
+    const outcomes = [() => Promise.reject(new AiWorkerError("ai_timeout", "overall_timeout")), () => Promise.resolve(ok("  \n"))];
+    for (const outcome of outcomes) {
+      const { client } = fakeClient();
+      const chat = vi.fn<OllamaPort["chat"]>().mockImplementationOnce(outcome).mockResolvedValueOnce(ok(answer));
+      const d = deps(client, chat);
+      expect(await processJob({ ...question, rewrite: { system: "s", user: "u", options: {} } }, info, d, new AbortController().signal)).toBe("completed");
+      expect(d.ollama.embed).toHaveBeenCalledWith(question.embed, expect.any(AbortSignal));
+      expect(client.prepare).toHaveBeenCalledWith(question.id, { leaseToken: "lease-2", vector: [0.1, -0.2, 0.3], standalone: null });
+    }
   });
 
   it.each([409, 404])("abandons the question without answering when /prepare answers %i", async (status) => {

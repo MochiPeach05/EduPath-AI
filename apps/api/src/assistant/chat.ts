@@ -10,12 +10,14 @@ import type { DatabasePool } from "../db/pool.js";
 import type { SpecialtyCode } from "../competency-assessment/types.js";
 import { resolveStudentStandard } from "../graduation/resolve.js";
 import { studentSources, type AssistantSourceKind, type ContextSource } from "./facts.js";
-import { detectIntents, isFollowUp } from "./intent.js";
-import { buildAssistantPrompt, HISTORY_MESSAGES, numberSources, type AssistantPrompt, type HistoryMessage } from "./prompt.js";
+import { detectIntents, isFollowUp, type AssistantIntent } from "./intent.js";
+import { buildAssistantPrompt, buildRewritePrompt, HISTORY_MESSAGES, numberSources, type AssistantPrompt, type HistoryMessage } from "./prompt.js";
 import { z } from "zod";
 import {
-  ASSISTANT_LEASE_MINUTES, ASSISTANT_PROMPT_VERSION, EMBEDDING_MODEL, MAX_QUESTION_CHARS, queryEmbeddingText, type EmbedSpec,
+  ASSISTANT_LEASE_MINUTES, ASSISTANT_PROMPT_VERSION, EMBEDDING_MODEL, MAX_QUESTION_CHARS, queryEmbeddingText, standaloneQuestion,
+  type EmbedSpec, type RewriteSpec,
 } from "./protocol.js";
+import { resourceKey } from "./knowledge.js";
 import { loadKnowledgeIndex } from "./search.js";
 import { addressesIn, checkAnswer, codesIn, type AnswerContext } from "./validate.js";
 
@@ -32,7 +34,15 @@ const MAX_THREADS_LISTED = 50;
 /** Knowledge chunks per answer, and self-study resource chunks added for the skills still to build. */
 const KNOWLEDGE_RESULTS = 6;
 const RESOURCE_RESULTS = 2;
+/** Self-study resource lists the general search may bring: they share their common words ("tài liệu", "tự học"). */
+const GENERAL_RESOURCE_RESULTS = 2;
 const OWN_STANDARD_RESULTS = 2;
+/**
+ * The conversation carries over (assistant-v3): the intents of the answers of the last CARRIED_TURNS questions join the
+ * new ones, and up to CARRIED_SOURCES knowledge chunks those answers cited come back, so a vague follow-up keeps its data.
+ */
+const CARRIED_TURNS = 2;
+const CARRIED_SOURCES = 3;
 
 export class AssistantError extends Error {
   constructor(readonly code: string, readonly status: number) {
@@ -41,7 +51,8 @@ export class AssistantError extends Error {
   }
 }
 
-export type AssistantSource = { n: number; kind: AssistantSourceKind; title: string; link: string | null };
+/** ref (server only): the knowledge chunk of a cited source, brought back by the next questions of the conversation. */
+export type AssistantSource = { n: number; kind: AssistantSourceKind; title: string; link: string | null; ref?: { kind: string; key: string } };
 export type ThreadRow = { id: string; title: string; createdAt: Date | string; updatedAt: Date | string };
 export type MessageRow = {
   id: string; threadId: string; role: "user" | "assistant"; content: string;
@@ -54,6 +65,8 @@ type AnswerInput = {
   questionId: string;
   retrievalText: string;
   embed: EmbedSpec | null;
+  /** The prompt that writes a follow-up out in full (assistant-v3); null for the first question of a conversation. */
+  rewrite?: RewriteSpec | null;
   prepared?: { sources: AssistantSource[]; allowedUrls: string[]; knownCodes: string[] };
 };
 
@@ -61,7 +74,8 @@ const iso = (value: Date | string | null) => (value === null ? null : new Date(v
 export const presentThread = (row: ThreadRow) => ({ id: row.id, title: row.title, createdAt: iso(row.createdAt)!, updatedAt: iso(row.updatedAt)! });
 export const presentMessage = (row: MessageRow) => ({
   id: row.id, threadId: row.threadId, role: row.role, content: row.content, status: row.status, errorCode: row.errorCode,
-  sources: row.status === "completed" ? row.sources ?? [] : [], feedback: row.feedback ?? null,
+  sources: row.status === "completed" ? (row.sources ?? []).map(({ n, kind, title, link }) => ({ n, kind, title, link })) : [],
+  feedback: row.feedback ?? null,
   createdAt: iso(row.createdAt)!, completedAt: iso(row.completedAt),
 });
 
@@ -111,11 +125,22 @@ function retrievalText(question: string, previousQuestion: string | null): strin
   return previousQuestion && isFollowUp(question) ? `${previousQuestion}\n${question}` : question;
 }
 
-function answerInput(questionId: string, question: string, previousQuestion: string | null): AnswerInput {
+/** The messages of a conversation a prompt repeats: questions, and answers that were written (oldest first). */
+async function conversation(db: Pick<PoolClient, "query">, threadId: string): Promise<(HistoryMessage & { id: string })[]> {
+  const rows = (await db.query<{ id: string; role: "user" | "assistant"; content: string; status: string }>(
+    `SELECT id,role,content,status FROM stu_chat_messages WHERE thread_id=$1 ORDER BY ${messageOrder}`, [threadId])).rows;
+  return rows.filter((message) => message.content.trim() && (message.role === "user" || message.status === "completed"))
+    .map((message) => ({ id: message.id, role: message.role, content: message.content }));
+}
+
+/** history: the conversation before the question; a question after others is written out in full first (rewrite). */
+function answerInput(questionId: string, question: string, history: readonly HistoryMessage[]): AnswerInput {
+  const previousQuestion = [...history].reverse().find((message) => message.role === "user")?.content ?? null;
   const text = retrievalText(question, previousQuestion);
   return {
     promptVersion: ASSISTANT_PROMPT_VERSION, questionId, retrievalText: text,
     embed: { model: EMBEDDING_MODEL, inputs: [queryEmbeddingText(text.slice(0, 2000))] },
+    rewrite: history.length ? buildRewritePrompt(history, question) : null,
   };
 }
 
@@ -158,14 +183,12 @@ export async function askQuestion(client: PoolClient, userId: string, input: { t
   } else {
     thread = (await client.query<ThreadRow>(`UPDATE stu_chat_threads SET updated_at=now() WHERE id=$1 RETURNING ${threadColumns}`, [thread.id])).rows[0]!;
   }
-  const previous = (await client.query<{ content: string }>(
-    "SELECT content FROM stu_chat_messages WHERE thread_id=$1 AND role='user' ORDER BY created_at DESC,id DESC LIMIT 1",
-    [thread.id])).rows[0]?.content ?? null;
+  const history = await conversation(client, thread.id);
   const questionId = randomUUID();
   const asked = (await client.query<MessageRow>(
     `INSERT INTO stu_chat_messages(id,thread_id,user_id,role,content,status,created_at) VALUES($1,$2,$3,'user',$4,'completed',clock_timestamp())
       RETURNING ${messageColumns}`, [questionId, thread.id, userId, question])).rows[0]!;
-  const aiInput = answerInput(questionId, question, previous);
+  const aiInput = answerInput(questionId, question, history);
   const answer = (await client.query<MessageRow>(
     `INSERT INTO stu_chat_messages(id,thread_id,user_id,role,status,ai_input,prompt_version,created_at)
       VALUES($1,$2,$3,'assistant','queued',$4::jsonb,$5,clock_timestamp()) RETURNING ${messageColumns}`,
@@ -183,11 +206,11 @@ export async function retryAnswer(client: PoolClient, userId: string, messageId:
   if (!["failed", "cancelled"].includes(row.status) || !row.last) throw new AssistantError("not_failed", 409);
   const pending = await client.query("SELECT 1 FROM stu_chat_messages WHERE user_id=$1 AND status IN ('queued','processing') LIMIT 1", [userId]);
   if (pending.rowCount) throw new AssistantError("answer_pending", 409);
-  const questions = (await client.query<{ id: string; content: string }>(
-    `SELECT id,content FROM stu_chat_messages WHERE thread_id=$1 AND role='user' ORDER BY created_at DESC,id DESC LIMIT 2`, [row.threadId])).rows;
-  const question = questions[0];
+  const messages = await conversation(client, row.threadId);
+  const at = messages.map((message) => message.role).lastIndexOf("user");
+  const question = messages[at];
   if (!question) throw new AssistantError("not_failed", 409);
-  const aiInput = answerInput(question.id, question.content, questions[1]?.content ?? null);
+  const aiInput = answerInput(question.id, question.content, messages.slice(0, at));
   const updated = (await client.query<MessageRow>(
     `UPDATE stu_chat_messages SET status='queued',content='',error_code=NULL,sources='[]'::jsonb,warnings=NULL,feedback=NULL,attempts=0,
       lease_token=NULL,lease_until=NULL,ai_input=$2::jsonb,prompt_version=$3,completed_at=NULL,updated_at=now() WHERE id=$1 RETURNING ${messageColumns}`,
@@ -243,7 +266,7 @@ export async function claimAssistantAnswer(db: Db, leaseToken: string): Promise<
 /** The claimed job as the worker reads it (assistantClaimSchema). */
 export const assistantWorkerJob = (claimed: Claimed) => ({
   kind: ASSISTANT_CHAT_KIND, id: claimed.id, leaseToken: claimed.leaseToken,
-  promptVersion: claimed.aiInput.promptVersion, embed: claimed.aiInput.embed ?? null,
+  promptVersion: claimed.aiInput.promptVersion, embed: claimed.aiInput.embed ?? null, rewrite: claimed.aiInput.rewrite ?? null,
 });
 
 export async function extendAssistantAnswer(db: Db, id: string, leaseToken: string): Promise<Date | null> {
@@ -280,42 +303,61 @@ const knowledgeKind = (kind: string): AssistantSourceKind =>
  * (facts.ts) and the knowledge chunks the search finds with the worker's vector (null: by words only), numbers the
  * sources, keeps what the check needs in ai_input and returns the prompt. 'expired' for another or lost lease.
  */
-export async function prepareAssistantAnswer(db: Db, id: string, leaseToken: string, vector: number[] | null, now: Date = new Date()):
-  Promise<AssistantPrompt | "expired" | "missing"> {
+export async function prepareAssistantAnswer(db: Db, id: string, leaseToken: string, vector: number[] | null, standaloneText: string | null = null,
+  now: Date = new Date()): Promise<AssistantPrompt | "expired" | "missing"> {
   const answer = await liveAnswer(db, id);
   if (!answer) return "missing";
   if (answer.status !== "processing" || answer.leaseToken !== leaseToken || !answer.valid || !answer.aiInput) return "expired";
   const input = answer.aiInput;
-  const thread = await db.query<{ id: string; role: "user" | "assistant"; content: string; status: string }>(
-    `SELECT id,role,content,status FROM stu_chat_messages WHERE thread_id=$1 ORDER BY ${messageOrder}`, [answer.threadId]);
+  const thread = await db.query<{ id: string; role: "user" | "assistant"; content: string; status: string; intents: string[] | null; sources: AssistantSource[] | null }>(
+    `SELECT id,role,content,status,intents,sources FROM stu_chat_messages WHERE thread_id=$1 ORDER BY ${messageOrder}`, [answer.threadId]);
   const at = thread.rows.findIndex((message) => message.id === input.questionId);
   const question = at >= 0 ? thread.rows[at]!.content : input.retrievalText;
-  const history: HistoryMessage[] = thread.rows.slice(0, Math.max(0, at))
+  const before = thread.rows.slice(0, Math.max(0, at));
+  const history: HistoryMessage[] = before
     .filter((message) => message.content.trim() && (message.role === "user" || message.status === "completed"))
     .slice(-HISTORY_MESSAGES).map((message) => ({ role: message.role, content: message.content }));
+  // v3: the follow-up written out in full by the worker's rewrite searches instead of the question itself.
+  const standalone = standaloneQuestion(standaloneText);
+  const searched = standalone ?? input.retrievalText;
+  const earlier = before.filter((message) => message.role === "assistant" && message.status === "completed").slice(-CARRIED_TURNS);
 
-  const intents = detectIntents(input.retrievalText);
-  const student = await studentSources(db, answer.userId, question, intents, now);
+  const intents = [...new Set([...detectIntents(searched), ...earlier.flatMap((message) => message.intents ?? [])])] as AssistantIntent[];
+  const student = await studentSources(db, answer.userId, standalone ? `${question}\n${standalone}` : question, intents, now);
   const index = await loadKnowledgeIndex(db, EMBEDDING_MODEL);
   // Graduation standards: only the student's own, as on the Điều kiện xét tốt nghiệp page (the index holds every one),
   // searched apart so other cohorts' standards never crowd out the rest; its parts come first for a graduation question.
   const ownStandard = await studentStandardId(db, answer.userId);
-  const own = ownStandard === null ? [] : index.search({ text: input.retrievalText, vector, k: 60, kinds: ["graduation"] })
+  const own = ownStandard === null ? [] : index.search({ text: searched, vector, k: 60, kinds: ["graduation"] })
     .filter((chunk) => chunk.sourceKey === ownStandard || chunk.sourceKey.startsWith(`${ownStandard}#`)).slice(0, OWN_STANDARD_RESULTS);
-  const general = index.search({ text: input.retrievalText, vector, k: KNOWLEDGE_RESULTS, excludeKinds: ["graduation"] });
+  let generalResources = 0;
+  const general = index.search({ text: searched, vector, k: KNOWLEDGE_RESULTS, excludeKinds: ["graduation"] })
+    .filter((chunk) => chunk.sourceKind !== "resource" || generalResources++ < GENERAL_RESOURCE_RESULTS);
   const found = intents.includes("graduation") ? [...own, ...general] : [...general, ...own];
-  if ((intents.includes("resources") || intents.includes("gaps")) && student.gapSkills.length) {
-    for (const chunk of index.search({ text: `${student.gapSkills.join(", ")} ${question}`, vector: null, k: RESOURCE_RESULTS, kinds: ["resource"] })) {
-      if (!found.some((item) => item.id === chunk.id)) found.push(chunk);
+  // The self-study resources of the skills still to build, looked up by the skill's own name and listed first (the
+  // evaluation of 2026-10-29: a search mixing the question's common words brought other skills' lists).
+  if (intents.includes("resources") || intents.includes("gaps")) {
+    for (const skill of [...student.gapSkills.slice(0, RESOURCE_RESULTS)].reverse()) {
+      const chunk = index.byKey("resource", resourceKey(skill));
+      if (chunk && !found.some((item) => item.id === chunk.id)) found.unshift({ ...chunk, score: 0, via: [] });
     }
   }
-  const knowledge: ContextSource[] = found.map((chunk) => ({ kind: knowledgeKind(chunk.sourceKind), title: chunk.title, link: chunk.link, text: chunk.content }));
+  // The chunks the last answers cited come back (still in the index), after the new results.
+  let carried = 0;
+  for (const source of earlier.flatMap((message) => message.sources ?? []).reverse()) {
+    if (carried >= CARRIED_SOURCES || !source.ref) continue;
+    const chunk = index.byKey(source.ref.kind, source.ref.key);
+    if (chunk && !found.some((item) => item.id === chunk.id)) { found.push({ ...chunk, score: 0, via: [] }); carried += 1; }
+  }
+  const knowledge: ContextSource[] = found.map((chunk) => ({
+    kind: knowledgeKind(chunk.sourceKind), title: chunk.title, link: chunk.link, text: chunk.content, ref: { kind: chunk.sourceKind, key: chunk.sourceKey },
+  }));
   const sources = numberSources([...student.sources, ...knowledge]);
-  const prompt = buildAssistantPrompt({ sources, history, question });
+  const prompt = buildAssistantPrompt({ sources, history, question, standalone });
 
   const texts = sources.map((source) => source.text).join("\n");
   const prepared = {
-    sources: sources.map(({ n, kind, title, link }) => ({ n, kind, title, link })),
+    sources: sources.map(({ n, kind, title, link, ref }) => ({ n, kind, title, link, ...(ref ? { ref } : {}) })),
     allowedUrls: addressesIn(texts),
     knownCodes: codesIn([texts, question, ...history.map((message) => message.content)].join("\n")),
   };

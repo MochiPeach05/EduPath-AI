@@ -50,12 +50,13 @@ Người dùng yêu cầu ngày 28/10/2026: "triển khai giai đoạn 1, 2, 3 l
 
 ## Luồng một câu hỏi
 1. Sinh viên gửi câu hỏi (`POST /api/student/assistant/threads` hoặc `/threads/:id/messages`). API lưu câu hỏi và một tin nhắn trả lời ở trạng thái `queued`; tin nhắn này cũng chính là job của worker, loại `assistant_chat`. API đánh thức worker đang chờ.
-2. Worker claim job và nhận văn bản cần embed, có tiền tố của EmbeddingGemma `task: search result | query: …`. Câu hỏi nối tiếp ngắn được tìm kèm câu hỏi trước đó.
-3. Worker gọi `POST /:id/prepare { leaseToken, vector }`. API dựng prompt:
-   - dữ liệu cá nhân, chọn theo ý định;
-   - 6 đoạn tri thức tìm được;
+2. Worker claim job và nhận văn bản cần embed, có tiền tố của EmbeddingGemma `task: search result | query: …`. Với câu hỏi không phải câu đầu của cuộc trò chuyện, job mang thêm một prompt **viết lại câu hỏi** (xem mục Trí nhớ hội thoại): Gemma viết lại trước, không bật thinking, và worker embed câu đã viết lại.
+3. Worker gọi `POST /:id/prepare { leaseToken, vector, standalone }`. API dựng prompt:
+   - dữ liệu cá nhân, chọn theo ý định của câu này và của 2 câu trả lời trước;
+   - 6 đoạn tri thức tìm được bằng câu đã viết lại;
+   - tối đa 3 đoạn mà 2 câu trả lời trước đã dẫn;
    - tài nguyên tự học của các kỹ năng còn thiếu;
-   - lịch sử 6 lượt gần nhất (bỏ số nguồn cũ).
+   - 8 tin nhắn gần nhất, giữ nguyên dòng (bỏ số nguồn cũ).
 4. Gemma suy nghĩ (thinking) rồi trả lời bằng văn bản thường. Worker gửi phần chữ đã viết lên `POST /:id/progress` khoảng 0,7 giây một lần; trang web hỏi `GET /messages/:id` mỗi giây nên chữ hiện dần.
 5. Worker gọi `/complete { answer }`. API kiểm tra câu trả lời (`validate.ts`):
    - giữ số nguồn hợp lệ;
@@ -70,6 +71,49 @@ Thứ tự claim:
 1. câu trả lời của Trợ lý AI;
 2. các loại cũ;
 3. embedding của kho tri thức (sau cùng).
+
+## Trí nhớ hội thoại (assistant-v3, 29/10/2026)
+Người dùng thấy trợ lý "quên" cuộc trò chuyện sau 2–3 câu hỏi mơ hồ. Bản v2 có ba nguyên nhân:
+- Lịch sử chỉ gồm 6 tin nhắn, mỗi tin bị dồn thành một dòng 600 ký tự, nên danh sách trong câu trả lời trước bị cắt mất.
+- Tìm kiếm chỉ ghép câu hỏi với đúng một câu hỏi liền trước, mà câu đó thường cũng mơ hồ. Cách nhận ra câu hỏi nối tiếp chỉ là luật đơn giản (`isFollowUp`).
+- Ý định được xác định lại cho từng câu, nên dữ liệu Lộ trình hay Kỹ năng rơi khỏi prompt dù cả cuộc trò chuyện đang nói về nó.
+
+Bản v3 sửa bằng ba kỹ thuật chuẩn của RAG có hội thoại:
+1. **Viết lại câu hỏi (query rewriting).** Câu hỏi không phải câu đầu được Gemma viết lại thành câu độc lập trước khi tìm kiếm, ví dụ "Còn môn thứ hai thì sao?" thành câu nêu đúng tên học phần (`buildRewritePrompt`).
+   - Lần gọi này không bật thinking, viết tối đa 160 token và dùng cùng `num_ctx` với câu trả lời, nên Ollama không phải nạp lại mô hình.
+   - Câu đã viết lại được dùng để tìm kiếm, để nhận ý định, và được đưa vào prompt ("Ý đầy đủ của câu hỏi theo hội thoại").
+   - Nếu viết lại lỗi hoặc không dùng được (`standaloneQuestion`), API tìm bằng văn bản cũ.
+2. **Giữ nguồn và chủ đề.** Mỗi nguồn được dẫn lưu kèm khóa của đoạn tri thức (`ref`, chỉ ở server). Câu hỏi sau đưa lại tối đa 3 đoạn mà 2 câu trả lời trước đã dẫn. Ý định của 2 câu trả lời trước cũng được cộng vào ý định của câu mới.
+3. **Lịch sử dài hơn.** Prompt giữ 8 tin nhắn: mỗi câu hỏi tối đa 500 ký tự, mỗi câu trả lời tối đa 1.200 ký tự, giữ nguyên dòng nên danh sách vẫn là danh sách.
+
+
+## Kết quả kiểm tra (29/10/2026)
+Bộ đánh giá tự động `apps/api/eval/assistant/run.ts` ghi kết quả vào `docs/assistant-evaluation.md`. Bộ này gồm 48 câu hỏi trên sinh viên giả lập K29 và danh mục của CSDL local, và đã chạy trên assistant-v2.
+
+| Đo | Kết quả |
+| --- | --- |
+| Tìm đúng dữ liệu, recall@6 | Từ khóa 94%, vector 85%, **kết hợp 98%** (với câu không dấu: vector 55%, kết hợp 100%) |
+| Trả lời đúng (44 câu trong phạm vi) | A, Gemma không có RAG: **0/44**; B, RAG không thinking: 44/44; C, RAG có thinking (bản chạy thật): **44/44** |
+| Link bịa / mã học phần lạ | 0 ở cả ba cấu hình |
+| Dẫn nguồn [n] | B và C: 44/44 |
+| Câu ngoài phạm vi | Từ chối đúng 4/4 ở cả ba cấu hình, kể cả câu đòi chép lại hướng dẫn hệ thống |
+| Thời gian (trung vị) | A 1,6 giây; B 5,8 giây; C 18 giây |
+
+- **Bộ đánh giá chấm theo từ khóa**, nên không thấy lỗi đọc sai dữ liệu khi câu trả lời vẫn chứa đúng con số. Vì vậy thinking được chọn theo phép thử đọc tay 6 câu (mục Mô hình và tốc độ): tắt thinking thì 4/6 câu đọc sai, bật thinking thì không thấy câu nào.
+- **Hội thoại nhiều lượt (assistant-v3).** Phép thử là một cuộc trò chuyện 5 lượt, trong đó lượt 2–5 là câu hỏi mơ hồ, chạy theo cách cũ và cách mới, có thinking:
+
+  | Lượt | v2 (cũ) | v3 (mới) |
+  | --- | --- | --- |
+  | "Môn đầu tiên trong đó học về gì?" | Hỏi lại sinh viên; tìm nhầm tài liệu GIS, IoT | Viết lại thành "Học phần 71ITIS30203 Hệ quản trị cơ sở dữ liệu học về cái gì?"; trả lời đúng các kỹ năng và môn học trước |
+  | "Còn môn thứ hai thì sao?" | Đoán từ hồ sơ; dữ liệu tìm được không liên quan | Viết lại đúng tên học phần; trả lời đúng kỹ năng, nhóm tự chọn và môn học trước |
+  | "Vậy mình nên ưu tiên cái nào trước?" | Lan man sang các môn học lại khác | So đúng hai môn đang bàn và giải thích vì sao ưu tiên Hệ quản trị CSDL |
+  | "Có tài liệu nào để mình tự học trước cho nó không?" | Tài liệu kế toán, deep learning… | Tài liệu SQL Server của Microsoft Learn |
+
+  Bước viết lại mất khoảng 1,3 giây khi GPU rảnh. Lúc đo song song với bộ đánh giá, nó mất 10–21 giây vì phải chờ GPU.
+- **Đề xuất của báo cáo đánh giá đã áp dụng ở v3:**
+  - tài nguyên của kỹ năng còn thiếu được tra theo đúng tên kỹ năng và đặt lên đầu;
+  - tìm kiếm chung chỉ giữ tối đa 2 danh sách tài nguyên;
+  - "danh sách" không còn bị hiểu là hỏi về sách.
 
 ## Kho tri thức chung
 Bảng `ai_knowledge_chunks` (migration 055) chỉ chứa dữ liệu danh mục, không có dữ liệu sinh viên. Mỗi dòng là một đoạn văn tiếng Việt: học phần, kỹ năng, nghề, lĩnh vực, CTĐT, KHĐT theo học kỳ, tiêu chuẩn tốt nghiệp, hướng dẫn dùng cổng, hoặc tài nguyên tự học của một kỹ năng.
@@ -98,6 +142,7 @@ Bảng `ai_knowledge_chunks` (migration 055) chỉ chứa dữ liệu danh mục
 ## Vận hành
 - Trên máy chạy AI: tải model embedding bằng `ollama pull embeddinggemma`, rồi khởi động lại worker (`npm run ai-worker -w @edupath/api`). Worker cũ không quảng bá hai loại job mới nên không nhận chúng.
 - Biến môi trường mới của worker là `OLLAMA_EMBED_NUM_GPU`, mặc định 0 (chạy embedding bằng CPU).
+- Bước viết lại câu hỏi (v3) chạy trên worker, nên cần khởi động lại worker sau bản v3. Worker cũ bỏ qua prompt viết lại, và API vẫn tìm bằng văn bản của nó.
 - API chỉ nhận câu hỏi khi có `AI_WORKER_KEY`. Trang báo "Trợ lý AI đang tạm ngưng" khi worker không quảng bá `assistant_chat`.
 
 ## Mã nguồn
