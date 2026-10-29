@@ -149,6 +149,52 @@ Người dùng (29/10) gửi ảnh: sinh viên chưa import bảng điểm, chư
 | Môn Cấu trúc dữ liệu và giải thuật học những gì? | AI, 16 giây | Trả lời bình thường từ học phần và kỹ năng |
 | Kế hoạch đào tạo K29 học kỳ 3 có những môn nào? | AI, 35 giây | Trả lời bình thường: ba học kỳ 3 của KHĐT K29 kèm học phần |
 
+## Giọng trả lời tự nhiên (assistant-v6, 29/10/2026)
+Người dùng (29/10): "Tôi thấy hiện tại nó trả lời không có human lắm". Bản đề xuất được duyệt ("Làm theo đề xuất của bạn đi"). Các dấu hiệu "máy" tìm thấy trên câu trả lời v5:
+- số nguồn sau gần như mọi câu, có khi chồng ba số "[7], [5], [12]";
+- gạch đầu dòng và in đậm cho cả 1–2 ý;
+- câu khuôn mẫu như "Bạn vui lòng…", "Lưu ý: …", "Cụ thể,";
+- tự gọi mình là "EduPath AI";
+- mã học phần trên từng dòng;
+- lời chào và lời từ chối kể ra cả danh sách chủ đề.
+
+Thay đổi:
+- **Prompt assistant-v6** (`prompt.ts`), mục "Giọng văn và cách trình bày":
+  - giọng anh/chị khóa trên tư vấn cho đàn em, xưng "mình – bạn", không tự gọi là "EduPath AI";
+  - câu đầu trả lời thẳng, không nhắc lại câu hỏi;
+  - viết câu văn liền mạch; danh sách chỉ khi có từ 3 mục;
+  - danh sách cụm từ khuôn mẫu bị cấm;
+  - mã học phần chỉ khi cần để đăng ký;
+  - động viên khi kết quả chưa tốt;
+  - có thể kết thúc bằng một câu hỏi gợi mở;
+  - lời chào hay cảm ơn chỉ đáp một câu.
+- **Ví dụ trong prompt:** 3 cặp ví dụ "Không nên / Nên" với tên giả (môn X, môn Z), không có mã hay con số thật để tránh bị chép vào câu trả lời.
+- **Số nguồn:**
+  - Nguyên tắc 3 đổi thành: mỗi nguồn ghi một lần trong một đoạn, ở cuối câu hoặc cuối đoạn.
+  - `validate.ts` (`compactCitations`) tự làm việc này cả khi Gemma vẫn ghi nhiều: bỏ "[]", gộp các số đứng liền nhau thành một nhóm đã sắp xếp, và trong mỗi đoạn chỉ giữ lần ghi cuối của mỗi nguồn. Danh sách nguồn ở ô Nguồn không đổi.
+- **Câu trả lời cố định** (`readiness.ts`, assistant-readiness-v2):
+  - cùng giọng, vẫn giữ ý "chưa có cơ sở để tư vấn";
+  - không còn số [n] trong từng bước; các trang cần mở là nguồn, theo thứ tự các bước.
+- `temperature` giữ 0.3 và thinking vẫn bật. Prompt do API dựng nên không cần khởi động lại worker.
+
+**Kiểm tra (29/10/2026).** Cùng 11 câu hỏi, cùng dữ liệu và kho tri thức, chỉ khác prompt. Sinh viên là sinh viên giả lập K29 (có bảng điểm, kết quả đánh giá, khảo sát) và một sinh viên chưa có gì; Gemma 4 E4B có thinking.
+
+| Chỉ số (trung bình 11 câu) | assistant-v5 | assistant-v6 |
+| --- | --- | --- |
+| Độ dài | 587 ký tự | 424 ký tự |
+| Số nguồn [n] mỗi câu trả lời | 3,7 | 1,7 |
+| Câu trả lời có gạch đầu dòng | 8/11 | 2/11 |
+| Cụm từ khuôn mẫu | 5 | 2 |
+| Kết thúc bằng câu hỏi gợi mở | 3/11 | 6/11 |
+| Thời gian | 20 giây | 18 giây |
+
+- **Hai vòng sửa sau lần chạy đầu:**
+  - Gemma vẫn mở đầu bằng "Mình thấy bạn đang muốn…": prompt có thêm cặp ví dụ về câu mở đầu.
+  - Khi viết thành đoạn văn, Gemma bỏ link tài liệu tự học: nguyên tắc 4 buộc mỗi tài nguyên một dòng kèm link.
+- Bản v5 trả lời câu "Học kỳ tới mình nên học những môn nào?" bằng "Mình chưa có cơ sở để tư vấn…" dù sinh viên đã có kết quả. Bản v6 trả lời đúng bằng các môn cần học lại và cải thiện.
+- **Độ đúng:** 17 câu của bộ đánh giá, điều kiện C (`--conditions=C`, lựa chọn mới của `eval/assistant/run.ts`) phủ mọi loại câu hỏi. Kết quả 15/15 câu trong phạm vi đúng, 2/2 câu ngoài phạm vi từ chối đúng.
+- **Còn lại:** đôi khi vẫn có "Cụ thể,", và danh sách hai mục.
+
 
 ## Kết quả kiểm tra (29/10/2026)
 Bộ đánh giá tự động `apps/api/eval/assistant/run.ts` ghi kết quả vào `docs/assistant-evaluation.md`. Bộ này gồm 48 câu hỏi trên sinh viên giả lập K29 và danh mục của CSDL local, và đã chạy trên assistant-v2.
@@ -212,7 +258,7 @@ Bảng `ai_knowledge_chunks` (migration 055) chỉ chứa dữ liệu danh mục
 
 ## Mã nguồn
 - **API** (`apps/api/src/assistant/`):
-  - `protocol.ts` (giao thức worker), `intent.ts`, `facts.ts`, `transcript.ts` (nguồn Bảng điểm), `prompt.ts` (assistant-v5), `validate.ts`;
+  - `protocol.ts` (giao thức worker), `intent.ts`, `facts.ts`, `transcript.ts` (nguồn Bảng điểm), `prompt.ts` (assistant-v6), `validate.ts` (kiểm tra câu trả lời, gộp số nguồn);
   - `readiness.ts` (trả lời ngay khi chưa có kết quả, câu hỏi gợi ý);
   - `chat.ts` (hội thoại và job), `router.ts` (API cho sinh viên), `wakeup.ts`;
   - `knowledge.ts`, `knowledge-jobs.ts`, `guides.ts`, `search.ts`, `learning-resources.json`.

@@ -2,7 +2,8 @@
 //   npx tsx eval/assistant/run.ts --out=<directory for the raw JSON>
 // Options: --skip-generation (index, questions and retrieval only), --ids=a,b (only these questions), --limit=N (the first
 // N questions), --fresh (answer again what an earlier run of the same prompt already answered), --raw (add A0, the bare
-// question), --no-report.
+// question), --conditions=C,B (answer only these conditions; A0 still needs --raw; a partial run goes with --no-report),
+// --no-report.
 //
 // 1. Reads DATABASE_URL of apps/api/.env and refuses any host but this machine (the URL is never printed).
 // 2. Rebuilds the knowledge index (refreshKnowledge) and embeds the chunks without a vector directly with Ollama
@@ -75,11 +76,19 @@ const ASSEMBLY_LINES = [
   "index.search({ text: `${student.gapSkills.join(\", \")} ${question}`, vector: null, k: RESOURCE_RESULTS, kinds: [\"resource\"] })",
 ];
 
-type Args = { out: string; skipGeneration: boolean; ids: Set<string> | null; limit: number | null; fresh: boolean; report: boolean; raw: boolean };
+type Args = {
+  out: string; skipGeneration: boolean; ids: Set<string> | null; limit: number | null; fresh: boolean; report: boolean; raw: boolean;
+  /** --conditions: only these conditions are answered; null: all. */
+  conditions: Set<Condition> | null;
+};
+const CONDITIONS: readonly Condition[] = ["A", "B", "C", "A0"];
 function parseArgs(argv: readonly string[]): Args {
   const value = (name: string) => argv.find((arg) => arg.startsWith(`--${name}=`))?.slice(name.length + 3) ?? null;
   const ids = value("ids");
   const limit = value("limit");
+  const conditions = value("conditions")?.split(",").map((item) => item.trim().toUpperCase()).filter(Boolean) ?? null;
+  const unknown = conditions?.filter((item) => !CONDITIONS.includes(item as Condition)) ?? [];
+  if (unknown.length) throw new Error(`--conditions: unknown ${unknown.join(", ")} (use ${CONDITIONS.join(", ")})`);
   return {
     out: value("out") ?? DEFAULT_OUT,
     skipGeneration: argv.includes("--skip-generation"),
@@ -88,6 +97,7 @@ function parseArgs(argv: readonly string[]): Args {
     fresh: argv.includes("--fresh"),
     report: !argv.includes("--no-report"),
     raw: argv.includes("--raw"),
+    conditions: conditions?.length ? new Set(conditions as Condition[]) : null,
   };
 }
 
@@ -489,7 +499,7 @@ async function main(): Promise<void> {
         ...answered.flatMap((item) => (["C", "B"] as const).map((condition) => ({ item, condition }))),
         ...answered.map((item) => ({ item, condition: "A" as const })),
         ...(args.raw ? answered.map((item) => ({ item, condition: "A0" as const })) : []),
-      ];
+      ].filter(({ condition }) => !args.conditions || args.conditions.has(condition));
       for (const { item, condition } of jobs) {
         const prepared = condition === "A0" ? null : prompts[item.id]![condition === "A" ? "A" : "B"];
         const messages = prepared ? promptMessages(prepared.prompt) : rawMessages(item);

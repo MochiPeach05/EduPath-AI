@@ -38,8 +38,11 @@ export const documentEmbeddingText = (title: string, text: string) => `title: ${
  * v5 (2026-10-29, user: "nên trả lời một cách rõ ràng hơn bạn chưa thực hiện đánh giá năng lực nên chúng tôi chưa có cơ sở
  * để tư vấn"): a question needing results the student does not have yet is answered by saying so first, with the steps;
  * the clear cases never reach the AI (readiness.ts answers them at once, prompt_version assistant-readiness-v1).
+ * v6 (2026-10-29, user: "Tôi thấy hiện tại nó trả lời không có human lắm"): the voice of an anh/chị khóa trên (prompt.ts):
+ * the answer first, prose rather than lists, no stock phrases, each source cited once per paragraph (validate.ts compacts
+ * repeated and stacked citations), a follow-up question only when useful, contrast examples with invented names.
  */
-export const ASSISTANT_PROMPT_VERSION = "assistant-v5";
+export const ASSISTANT_PROMPT_VERSION = "assistant-v6";
 export const KNOWLEDGE_PROMPT_VERSION = "knowledge-v1";
 /** An answer takes well under a minute; a lost worker frees the job after this lease (the worker extends every 3 min). */
 export const ASSISTANT_LEASE_MINUTES = 5;

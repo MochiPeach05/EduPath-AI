@@ -16,6 +16,31 @@ const CODE_PATTERN = /\b(?:\d{2}[A-Z]{2,8}\d{3,6}|[A-Z]{2,5}\d{3,6})\b/g;
 /** An address without the punctuation that ends its sentence, and without a trailing slash, for comparison. */
 export const normalizeUrl = (url: string) => url.replace(/[.,;:!?]+$/, "").replace(/\/+$/, "");
 
+/** One or more citations side by side ("[2][5]"), with the spaces before them. */
+const CITATION_GROUP = /([ \t]*)((?:\[\d+\])+)/g;
+const numbersOf = (group: string) => (group.match(/\d+/g) ?? []).map(Number);
+
+/**
+ * Fewer markers in the text (assistant-v6, user 2026-10-29: "Tôi thấy hiện tại nó trả lời không có human lắm"): an empty
+ * "[]" goes, stacked citations ("[7], [5], [12]", "[7] [5]") become one sorted group ("[5][7][12]"), and within a block
+ * (text between blank lines) a source keeps only its last citation. The sources cited stay the same.
+ */
+export function compactCitations(text: string): string {
+  const grouped = text.replace(/[ \t]*\[[ \t]*\]/g, "")
+    .replace(/\[\d+\](?:[ \t]*[,;]?[ \t]*\[\d+\])+/g, (group) => [...new Set(numbersOf(group))].sort((a, b) => a - b).map((n) => `[${n}]`).join(""));
+  return grouped.split(/(\n[ \t]*\n)/).map((block, index) => {
+    if (index % 2) return block;
+    const last = new Map<number, number>();
+    [...block.matchAll(CITATION_GROUP)].forEach((match, at) => { for (const n of numbersOf(match[2]!)) last.set(n, at); });
+    let at = -1;
+    return block.replace(CITATION_GROUP, (_match, space: string, group: string) => {
+      at += 1;
+      const kept = numbersOf(group).filter((n) => last.get(n) === at);
+      return kept.length ? `${space}${kept.map((n) => `[${n}]`).join("")}` : "";
+    });
+  }).join("");
+}
+
 export function checkAnswer(raw: string, context: AnswerContext): CheckedAnswer {
   const warnings = new Set<string>();
   let text = raw.replace(/\r\n?/g, "\n").replace(/^#{1,6}\s+/gm, "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
@@ -38,6 +63,7 @@ export function checkAnswer(raw: string, context: AnswerContext): CheckedAnswer 
     for (const n of numbers) cited.add(n);
     return [...new Set(numbers)].map((n) => `[${n}]`).join("");
   });
+  text = compactCitations(text);
 
   const known = new Set(context.knownCodes.map((code) => code.toUpperCase()));
   for (const code of text.match(CODE_PATTERN) ?? []) if (!known.has(code.toUpperCase())) warnings.add(`unknown_code:${code}`);

@@ -3,7 +3,9 @@
 // lực nên chúng tôi chưa có cơ sở để tư vấn"): the four items of the Tổng quan gate (transcript, specialty, target career,
 // profile survey) plus a competency assessment and an AI roadmap. A question about the student's own results that these
 // cannot answer gets a fixed answer at once, without an AI job; the chat also suggests the next questions from them
-// ("ở trên khung đoạn nhập đoạn chat nên có các câu hỏi đề xuất để sinh viên chọn tiếp").
+// ("ở trên khung đoạn nhập đoạn chat nên có các câu hỏi đề xuất để sinh viên chọn tiếp"). v2 (2026-10-29, user: "Tôi thấy
+// hiện tại nó trả lời không có human lắm"): the same answers in the warm voice of assistant-v6, short, without [n] in the
+// text; the pages they point to are the sources, numbered in the order the steps mention them.
 import type { PoolClient } from "pg";
 import { fold } from "../competency-assessment/specialty.js";
 import type { DatabasePool } from "../db/pool.js";
@@ -18,7 +20,7 @@ type PageSource = { n: number; kind: AssistantSourceKind; title: string; link: s
 export type ReadinessAnswer = { content: string; sources: PageSource[] };
 
 /** prompt_version of the answers written here instead of by the AI. */
-export const READINESS_ANSWER_VERSION = "assistant-readiness-v1";
+export const READINESS_ANSWER_VERSION = "assistant-readiness-v2";
 const MAX_SUGGESTIONS = 6;
 
 export async function readReadiness(db: Db, userId: string): Promise<Readiness> {
@@ -66,34 +68,29 @@ const PAGES = {
   roadmap: { kind: "guide", title: "Lộ trình học tập", link: "#roadmap" },
   graduation: { kind: "guide", title: "Điều kiện xét tốt nghiệp", link: "#graduation" },
 } as const;
+type Page = keyof typeof PAGES;
 
-/** Numbers the pages in the order the text first cites them ({profile} → [1]…). */
-function cite(lines: readonly string[]): ReadinessAnswer {
-  const sources: PageSource[] = [];
-  const content = lines.join("\n").replace(/\{(profile|career|competency|roadmap|graduation)\}/g, (_match, page: keyof typeof PAGES) => {
-    let source = sources.find((item) => item.link === PAGES[page].link);
-    if (!source) { source = { n: sources.length + 1, ...PAGES[page] }; sources.push(source); }
-    return `[${source.n}]`;
-  });
-  return { content, sources };
+/** A fixed answer: its lines, and the pages it points to as sources, numbered in the order given (each page once). */
+function answer(lines: readonly string[], pages: readonly Page[]): ReadinessAnswer {
+  return { content: lines.join("\n"), sources: [...new Set(pages)].map((page, index) => ({ n: index + 1, ...PAGES[page] })) };
 }
 
-const AFTER = "Sau khi có kết quả, bạn hỏi lại mình câu này nhé. Trong lúc chờ, mình vẫn trả lời được các câu hỏi chung về chương trình đào tạo, điều kiện tốt nghiệp hay cách dùng EduPath AI.";
-
-const CREATE_ROADMAP = "Bấm Tạo lộ trình ở tab Lộ trình AI đề xuất, trang Lộ trình học tập {roadmap}.";
+type Step = { text: string; pages: Page[] };
 
 /** The steps still to do before a competency assessment, the assessment last (then the AI roadmap, when asked about). */
-function assessmentSteps(readiness: Readiness, roadmap: boolean): string[] {
-  const steps: string[] = [];
-  if (!readiness.transcript) steps.push("Import bảng điểm PDF ở trang Hồ sơ và bảng điểm {profile}, phần Bảng điểm của tôi.");
-  if (!readiness.specialty && !readiness.career) steps.push("Chọn chuyên ngành (Hồ sơ và bảng điểm {profile}, mục Mục tiêu học tập) và nghề mục tiêu (trang Định hướng nghề nghiệp {career}).");
-  else if (!readiness.specialty) steps.push("Chọn chuyên ngành ở Hồ sơ và bảng điểm {profile}, mục Mục tiêu học tập.");
-  else if (!readiness.career) steps.push("Chọn nghề mục tiêu ở trang Định hướng nghề nghiệp {career}.");
-  if (!readiness.survey) steps.push("Hoàn thành Khảo sát định hướng ở trang Hồ sơ và bảng điểm {profile}.");
-  steps.push("Bấm Đánh giá năng lực ở trang Đánh giá năng lực {competency}.");
-  if (roadmap && !readiness.roadmap) steps.push(CREATE_ROADMAP);
+function assessmentSteps(readiness: Readiness, roadmap: boolean): Step[] {
+  const steps: Step[] = [];
+  if (!readiness.transcript) steps.push({ text: "Import bảng điểm PDF ở trang Hồ sơ và bảng điểm.", pages: ["profile"] });
+  if (!readiness.specialty && !readiness.career) steps.push({ text: "Chọn chuyên ngành và nghề mục tiêu.", pages: ["profile", "career"] });
+  else if (!readiness.specialty) steps.push({ text: "Chọn chuyên ngành ở trang Hồ sơ và bảng điểm.", pages: ["profile"] });
+  else if (!readiness.career) steps.push({ text: "Chọn nghề mục tiêu ở trang Định hướng nghề nghiệp.", pages: ["career"] });
+  if (!readiness.survey) steps.push({ text: "Làm Khảo sát định hướng ở trang Hồ sơ và bảng điểm.", pages: ["profile"] });
+  steps.push({ text: "Bấm Đánh giá năng lực ở trang Đánh giá năng lực.", pages: ["competency"] });
+  if (roadmap && !readiness.roadmap) steps.push({ text: "Bấm Tạo lộ trình ở trang Lộ trình học tập.", pages: ["roadmap"] });
   return steps;
 }
+
+const MEANWHILE = "Trong lúc chờ, bạn vẫn có thể hỏi mình về chương trình đào tạo, điều kiện tốt nghiệp hay cách dùng EduPath AI.";
 
 /**
  * The fixed answer for a question about the student's own results that their data cannot answer yet, or null (the AI
@@ -107,33 +104,45 @@ export function readinessAnswer(readiness: Readiness, intents: readonly Assistan
   if (!personal(question, text) || HOW_TO.test(text)) return null;
   const aboutRoadmap = intents.includes("course_reason") && /\blo trinh\b/.test(text);
   if (intents.includes("transcript") || (RETAKE.test(text) && readiness.transcript)) {
-    return readiness.transcript ? null : cite([
-      "Bạn chưa import bảng điểm nên mình chưa có điểm của bạn để tra cứu.",
-      "Bạn vui lòng import bảng điểm PDF ở trang Hồ sơ và bảng điểm {profile}, phần Bảng điểm của tôi. Sau khi bảng điểm được lưu, bạn có thể hỏi mình điểm trung bình tích lũy, điểm từng môn, các môn còn nợ hay số tín chỉ đã tích lũy.",
-    ]);
+    return readiness.transcript ? null : answer([
+      "Bạn chưa import bảng điểm nên mình chưa xem được điểm của bạn. Bạn import bảng điểm PDF ở trang Hồ sơ và bảng điểm (phần Bảng điểm của tôi) nhé. "
+        + "Có bảng điểm rồi, bạn hỏi mình điểm trung bình tích lũy, điểm từng môn, môn còn nợ hay số tín chỉ đã tích lũy đều được.",
+    ], ["profile"]);
   }
   if (intents.includes("graduation") && GRADUATION_STANDING.test(text)) {
-    return readiness.transcript ? null : cite([
-      "Bạn chưa import bảng điểm nên mình chưa có cơ sở để đối chiếu kết quả học tập của bạn với tiêu chuẩn xét tốt nghiệp.",
-      "Bạn vui lòng import bảng điểm PDF ở trang Hồ sơ và bảng điểm {profile}, rồi xem trang Điều kiện xét tốt nghiệp {graduation} hoặc hỏi lại mình nhé.",
-    ]);
+    return readiness.transcript ? null : answer([
+      "Bạn chưa import bảng điểm nên mình chưa có cơ sở để đối chiếu kết quả học tập của bạn với tiêu chuẩn xét tốt nghiệp. "
+        + "Bạn import bảng điểm PDF ở trang Hồ sơ và bảng điểm trước nhé, sau đó xem trang Điều kiện xét tốt nghiệp hoặc hỏi lại mình.",
+    ], ["profile", "graduation"]);
   }
   if (CATALOG.test(text)) return null;
   if (intents.some((intent) => intent === "gaps" || intent === "roadmap" || intent === "course_reason") && !readiness.assessment) {
     const steps = assessmentSteps(readiness, aboutRoadmap);
-    const missing = readiness.transcript ? "Bạn chưa thực hiện Đánh giá năng lực" : "Bạn chưa import bảng điểm và chưa thực hiện Đánh giá năng lực";
-    return cite(steps.length === 1
-      ? [`${missing} nên mình chưa có cơ sở để tư vấn cho câu hỏi này. Bạn vui lòng bấm Đánh giá năng lực ở trang Đánh giá năng lực {competency} để mình đưa ra lời khuyên phù hợp và hữu ích hơn.`, AFTER]
-      : [`${missing} nên mình chưa có cơ sở để tư vấn cho câu hỏi này. Bạn vui lòng hoàn thành đầy đủ các bước dưới đây để mình đưa ra lời khuyên phù hợp và hữu ích hơn:`,
-        ...steps.map((step, index) => `${index + 1}. ${step}`), AFTER]);
+    const pages = steps.flatMap((step) => step.pages);
+    // Only the assessment is left: one sentence is enough.
+    if (steps.length === 1) {
+      return answer([
+        "Bạn chỉ còn thiếu bước Đánh giá năng lực nên mình chưa có cơ sở để tư vấn câu này. Bạn bấm Đánh giá năng lực ở trang Đánh giá năng lực nhé, xong rồi hỏi lại mình.",
+      ], pages);
+    }
+    const missing = readiness.transcript ? "Hiện bạn chưa làm Đánh giá năng lực" : "Hiện bạn chưa import bảng điểm và chưa làm Đánh giá năng lực";
+    const after = aboutRoadmap ? "Xong rồi bạn hỏi lại, mình sẽ giải thích vì sao từng môn được đề xuất." : "Xong rồi bạn hỏi lại câu này, mình sẽ trả lời sát với bạn hơn.";
+    return answer([
+      `${missing}, nên mình chưa có cơ sở để tư vấn câu này. Bạn hoàn thành giúp mình mấy bước sau nhé:`,
+      ...steps.map((step, index) => `${index + 1}. ${step.text}`),
+      `${after} ${MEANWHILE}`,
+    ], pages);
   }
   if (aboutRoadmap && !readiness.roadmap) {
-    return cite([
-      "Bạn chưa tạo Lộ trình AI nên chưa có học phần nào được đề xuất để mình giải thích.",
-      readiness.survey
-        ? "Bạn vui lòng bấm Tạo lộ trình ở tab Lộ trình AI đề xuất, trang Lộ trình học tập {roadmap}. Sau khi có lộ trình, bạn hỏi lại mình lý do của từng đề xuất nhé."
-        : "Bạn vui lòng hoàn thành Khảo sát định hướng ở trang Hồ sơ và bảng điểm {profile} (Lộ trình AI cần khảo sát này), rồi bấm Tạo lộ trình ở tab Lộ trình AI đề xuất, trang Lộ trình học tập {roadmap}. Sau khi có lộ trình, bạn hỏi lại mình lý do của từng đề xuất nhé.",
-    ]);
+    return readiness.survey
+      ? answer([
+        "Bạn chưa tạo Lộ trình AI nên chưa có môn nào được đề xuất để mình giải thích. Bạn bấm Tạo lộ trình ở tab Lộ trình AI đề xuất (trang Lộ trình học tập) nhé, "
+          + "có lộ trình rồi mình sẽ giải thích lý do của từng môn.",
+      ], ["roadmap"])
+      : answer([
+        "Bạn chưa tạo Lộ trình AI nên chưa có môn nào được đề xuất để mình giải thích. Lộ trình AI cần Khảo sát định hướng, nên bạn làm khảo sát ở trang Hồ sơ và bảng điểm "
+          + "trước, rồi bấm Tạo lộ trình ở trang Lộ trình học tập nhé. Có lộ trình rồi mình sẽ giải thích lý do của từng môn.",
+      ], ["profile", "roadmap"]);
   }
   return null;
 }

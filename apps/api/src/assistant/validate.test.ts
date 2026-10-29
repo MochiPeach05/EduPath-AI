@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addressesIn, checkAnswer, codesIn } from "./validate.js";
+import { addressesIn, checkAnswer, codesIn, compactCitations } from "./validate.js";
 
 const context = { sourceCount: 3, allowedUrls: ["https://developer.mozilla.org/vi/docs/Learn"], knownCodes: ["71ITSE30103"] };
 
@@ -21,6 +21,21 @@ describe("assistant answer check", () => {
     const checked = checkAnswer("## Gợi ý\nHọc 71ITSE30103 rồi 71ITAI99999.", context);
     expect(checked.content).toBe("Gợi ý\nHọc 71ITSE30103 rồi 71ITAI99999.");
     expect(checked.warnings).toEqual(["unknown_code:71ITAI99999"]);
+  });
+
+  it("drops empty citations and merges stacked ones into one sorted group (assistant-v6)", () => {
+    const checked = checkAnswer("Môn này có 4 tín chỉ [7], [5], [12]. Chưa rõ []. Xem [2] [1].", { ...context, sourceCount: 12 });
+    expect(checked.content).toBe("Môn này có 4 tín chỉ [5][7][12]. Chưa rõ. Xem [1][2].");
+    expect(checked.cited).toEqual([1, 2, 5, 7, 12]);
+  });
+
+  it("keeps a source's last citation in each block, the others go with their space (assistant-v6)", () => {
+    const checked = checkAnswer("Bạn cần học lại môn X [3].\n- Môn Y [3]\n- Môn Z [2][3]\n\nĐoạn sau [3].", context);
+    expect(checked.content).toBe("Bạn cần học lại môn X.\n- Môn Y\n- Môn Z [2][3]\n\nĐoạn sau [3].");
+    expect(checked.cited).toEqual([2, 3]);
+    // A group keeps the numbers cited for the last time there.
+    expect(compactCitations("A [1][2]. B [2].")).toBe("A [1]. B [2].");
+    expect(compactCitations("Không có số nguồn.")).toBe("Không có số nguồn.");
   });
 
   it("finds the addresses and codes of a prompt block", () => {

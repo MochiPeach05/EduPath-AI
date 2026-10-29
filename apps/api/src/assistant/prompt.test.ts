@@ -45,6 +45,20 @@ describe("assistant prompt", () => {
     expect(buildAssistantPrompt({ sources, history: [], question: "Xin chào", standalone: "xin chào" }).user).not.toContain("Ý đầy đủ");
   });
 
+  it("asks for the voice of an older student and one citation per paragraph (assistant-v6)", () => {
+    expect(ASSISTANT_SYSTEM_PROMPT).toContain("Giọng văn và cách trình bày");
+    expect(ASSISTANT_SYSTEM_PROMPT).toContain("mới nói mình chưa có thông tin đó");
+    expect(ASSISTANT_SYSTEM_PROMPT).not.toContain("EduPath AI chưa có thông tin");
+    expect(ASSISTANT_SYSTEM_PROMPT.length).toBeLessThanOrEqual(5000);
+    // The examples use invented names: no course code and no number but a citation that could leak into an answer.
+    const examples = ASSISTANT_SYSTEM_PROMPT.slice(ASSISTANT_SYSTEM_PROMPT.indexOf("Ví dụ về giọng văn"));
+    expect(examples).not.toMatch(/\d{2}[A-Z]{2,8}\d{3,6}/);
+    expect(examples.replace(/\[\d\]/g, "")).not.toMatch(/\d/);
+    const prompt = buildAssistantPrompt({ sources, history: [], question: "Chào bạn" });
+    expect(prompt.user.split("\n").at(-1)).toBe("Hãy trả lời câu hỏi trên theo đúng nguyên tắc và giọng văn ở trên; ghi số nguồn [n] ở cuối câu hoặc đoạn có thông tin lấy từ dữ liệu.");
+    expect(prompt.promptVersion).toBe("assistant-v6");
+  });
+
   it("asks Gemma to write a follow-up out in full from the conversation, with the answer's num_ctx", () => {
     const rewrite = buildRewritePrompt([
       { role: "user", content: "Học kỳ tới mình học gì?" },

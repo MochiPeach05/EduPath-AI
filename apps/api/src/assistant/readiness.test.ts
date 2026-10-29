@@ -1,14 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DatabasePool } from "../db/pool.js";
 import { detectIntents } from "./intent.js";
-import { readinessAnswer, readReadiness, suggestedQuestions, type Readiness } from "./readiness.js";
+import { READINESS_ANSWER_VERSION, readinessAnswer, readReadiness, suggestedQuestions, type Readiness } from "./readiness.js";
 
 // What Trợ lý AI answers at once when the student's results are missing, and the questions it suggests. Synthetic data only.
 const userId = "11111111-1111-4111-8111-111111111111";
 const none: Readiness = { transcript: false, specialty: false, career: false, survey: false, assessment: false, roadmap: false };
 const all: Readiness = { transcript: true, specialty: true, career: true, survey: true, assessment: true, roadmap: true };
 const ask = (readiness: Readiness, question: string) => readinessAnswer(readiness, detectIntents(question), question);
+const links = (answer: { sources: { link: string }[] } | null) => answer?.sources.map((source) => source.link);
 const ROADMAP_QUESTION = "Vì sao lộ trình đề xuất các môn này cho mình?";
+const MEANWHILE = "Trong lúc chờ, bạn vẫn có thể hỏi mình về chương trình đào tạo, điều kiện tốt nghiệp hay cách dùng EduPath AI.";
+const KEYS = Object.keys(none) as (keyof Readiness)[];
+/** Every combination of the six items. */
+const everyReadiness = () => Array.from({ length: 2 ** KEYS.length }, (_, mask) =>
+  Object.fromEntries(KEYS.map((key, bit) => [key, (mask & (1 << bit)) !== 0])) as Readiness);
 
 describe("readReadiness", () => {
   it("reads the profile items, the assessment and the roadmap; the survey only under a consent that still counts", async () => {
@@ -30,16 +36,18 @@ describe("readReadiness", () => {
 
 describe("readinessAnswer", () => {
   it("says the assessment is missing and lists every step left for the question of the screenshot", () => {
+    expect(READINESS_ANSWER_VERSION).toBe("assistant-readiness-v2");
     const answer = ask(none, ROADMAP_QUESTION)!;
     expect(answer.content.split("\n")).toEqual([
-      "Bạn chưa import bảng điểm và chưa thực hiện Đánh giá năng lực nên mình chưa có cơ sở để tư vấn cho câu hỏi này. Bạn vui lòng hoàn thành đầy đủ các bước dưới đây để mình đưa ra lời khuyên phù hợp và hữu ích hơn:",
-      "1. Import bảng điểm PDF ở trang Hồ sơ và bảng điểm [1], phần Bảng điểm của tôi.",
-      "2. Chọn chuyên ngành (Hồ sơ và bảng điểm [1], mục Mục tiêu học tập) và nghề mục tiêu (trang Định hướng nghề nghiệp [2]).",
-      "3. Hoàn thành Khảo sát định hướng ở trang Hồ sơ và bảng điểm [1].",
-      "4. Bấm Đánh giá năng lực ở trang Đánh giá năng lực [3].",
-      "5. Bấm Tạo lộ trình ở tab Lộ trình AI đề xuất, trang Lộ trình học tập [4].",
-      "Sau khi có kết quả, bạn hỏi lại mình câu này nhé. Trong lúc chờ, mình vẫn trả lời được các câu hỏi chung về chương trình đào tạo, điều kiện tốt nghiệp hay cách dùng EduPath AI.",
+      "Hiện bạn chưa import bảng điểm và chưa làm Đánh giá năng lực, nên mình chưa có cơ sở để tư vấn câu này. Bạn hoàn thành giúp mình mấy bước sau nhé:",
+      "1. Import bảng điểm PDF ở trang Hồ sơ và bảng điểm.",
+      "2. Chọn chuyên ngành và nghề mục tiêu.",
+      "3. Làm Khảo sát định hướng ở trang Hồ sơ và bảng điểm.",
+      "4. Bấm Đánh giá năng lực ở trang Đánh giá năng lực.",
+      "5. Bấm Tạo lộ trình ở trang Lộ trình học tập.",
+      `Xong rồi bạn hỏi lại, mình sẽ giải thích vì sao từng môn được đề xuất. ${MEANWHILE}`,
     ]);
+    // The pages the steps mention, in their order; the page shows them under the answer.
     expect(answer.sources).toEqual([
       { n: 1, kind: "guide", title: "Hồ sơ và bảng điểm", link: "#profile" },
       { n: 2, kind: "guide", title: "Định hướng nghề nghiệp", link: "#career" },
@@ -50,18 +58,30 @@ describe("readinessAnswer", () => {
 
   it("names only the steps still to do", () => {
     const onlyAssessment = ask({ ...all, assessment: false, roadmap: false }, "Mình còn thiếu kỹ năng nào cho nghề mục tiêu?")!;
-    expect(onlyAssessment.content).toBe("Bạn chưa thực hiện Đánh giá năng lực nên mình chưa có cơ sở để tư vấn cho câu hỏi này. Bạn vui lòng bấm Đánh giá năng lực ở trang Đánh giá năng lực [1] để mình đưa ra lời khuyên phù hợp và hữu ích hơn.\n"
-      + "Sau khi có kết quả, bạn hỏi lại mình câu này nhé. Trong lúc chờ, mình vẫn trả lời được các câu hỏi chung về chương trình đào tạo, điều kiện tốt nghiệp hay cách dùng EduPath AI.");
-    expect(onlyAssessment.sources.map((source) => source.link)).toEqual(["#competency"]);
+    expect(onlyAssessment.content).toBe("Bạn chỉ còn thiếu bước Đánh giá năng lực nên mình chưa có cơ sở để tư vấn câu này. Bạn bấm Đánh giá năng lực ở trang Đánh giá năng lực nhé, xong rồi hỏi lại mình.");
+    expect(links(onlyAssessment)).toEqual(["#competency"]);
     const noCareer = ask({ ...all, career: false, assessment: false, roadmap: false }, "Học kỳ tới em nên học những môn nào?")!;
-    expect(noCareer.content).toContain("1. Chọn nghề mục tiêu ở trang Định hướng nghề nghiệp [1].\n2. Bấm Đánh giá năng lực ở trang Đánh giá năng lực [2].");
+    expect(noCareer.content).toBe("Hiện bạn chưa làm Đánh giá năng lực, nên mình chưa có cơ sở để tư vấn câu này. Bạn hoàn thành giúp mình mấy bước sau nhé:\n"
+      + "1. Chọn nghề mục tiêu ở trang Định hướng nghề nghiệp.\n2. Bấm Đánh giá năng lực ở trang Đánh giá năng lực.\n"
+      + `Xong rồi bạn hỏi lại câu này, mình sẽ trả lời sát với bạn hơn. ${MEANWHILE}`);
+    expect(links(noCareer)).toEqual(["#career", "#competency"]);
+    const noSpecialty = ask({ ...all, specialty: false, survey: false, assessment: false, roadmap: false }, "Mình còn thiếu kỹ năng nào?")!;
+    expect(noSpecialty.content).toContain("1. Chọn chuyên ngành ở trang Hồ sơ và bảng điểm.\n2. Làm Khảo sát định hướng ở trang Hồ sơ và bảng điểm.\n3. Bấm Đánh giá năng lực");
+    expect(links(noSpecialty)).toEqual(["#profile", "#competency"]);
+    // With the assessment done but the roadmap asked about, its step follows.
+    expect(ask({ ...all, assessment: false, roadmap: false }, ROADMAP_QUESTION)!.content)
+      .toContain("1. Bấm Đánh giá năng lực ở trang Đánh giá năng lực.\n2. Bấm Tạo lộ trình ở trang Lộ trình học tập.\nXong rồi bạn hỏi lại, mình sẽ giải thích vì sao từng môn được đề xuất.");
   });
 
   it("asks for the AI roadmap when only that is missing, and lets the AI answer once it exists", () => {
     const answer = ask({ ...all, roadmap: false }, ROADMAP_QUESTION)!;
-    expect(answer.content).toBe("Bạn chưa tạo Lộ trình AI nên chưa có học phần nào được đề xuất để mình giải thích.\n"
-      + "Bạn vui lòng bấm Tạo lộ trình ở tab Lộ trình AI đề xuất, trang Lộ trình học tập [1]. Sau khi có lộ trình, bạn hỏi lại mình lý do của từng đề xuất nhé.");
-    expect(ask({ ...all, roadmap: false, survey: false }, ROADMAP_QUESTION)!.content).toContain("Bạn vui lòng hoàn thành Khảo sát định hướng ở trang Hồ sơ và bảng điểm [1] (Lộ trình AI cần khảo sát này), rồi bấm Tạo lộ trình");
+    expect(answer.content).toBe("Bạn chưa tạo Lộ trình AI nên chưa có môn nào được đề xuất để mình giải thích. Bạn bấm Tạo lộ trình ở tab Lộ trình AI đề xuất (trang Lộ trình học tập) nhé, "
+      + "có lộ trình rồi mình sẽ giải thích lý do của từng môn.");
+    expect(links(answer)).toEqual(["#roadmap"]);
+    const noSurvey = ask({ ...all, roadmap: false, survey: false }, ROADMAP_QUESTION)!;
+    expect(noSurvey.content).toBe("Bạn chưa tạo Lộ trình AI nên chưa có môn nào được đề xuất để mình giải thích. Lộ trình AI cần Khảo sát định hướng, nên bạn làm khảo sát ở trang Hồ sơ và bảng điểm "
+      + "trước, rồi bấm Tạo lộ trình ở trang Lộ trình học tập nhé. Có lộ trình rồi mình sẽ giải thích lý do của từng môn.");
+    expect(links(noSurvey)).toEqual(["#profile", "#roadmap"]);
     expect(ask(all, ROADMAP_QUESTION)).toBeNull();
     // Another "vì sao" with an assessment is the AI's (the courses of Khoảng trống kỹ năng need no roadmap).
     expect(ask({ ...all, roadmap: false }, "Vì sao mình nên học môn Kiểm thử phần mềm?")).toBeNull();
@@ -69,20 +89,21 @@ describe("readinessAnswer", () => {
 
   it("answers grade questions from the transcript once there, with or without an assessment", () => {
     const answer = ask(none, "Điểm trung bình tích lũy của mình là bao nhiêu?")!;
-    expect(answer.content).toBe("Bạn chưa import bảng điểm nên mình chưa có điểm của bạn để tra cứu.\n"
-      + "Bạn vui lòng import bảng điểm PDF ở trang Hồ sơ và bảng điểm [1], phần Bảng điểm của tôi. Sau khi bảng điểm được lưu, bạn có thể hỏi mình điểm trung bình tích lũy, điểm từng môn, các môn còn nợ hay số tín chỉ đã tích lũy.");
+    expect(answer.content).toBe("Bạn chưa import bảng điểm nên mình chưa xem được điểm của bạn. Bạn import bảng điểm PDF ở trang Hồ sơ và bảng điểm (phần Bảng điểm của tôi) nhé. "
+      + "Có bảng điểm rồi, bạn hỏi mình điểm trung bình tích lũy, điểm từng môn, môn còn nợ hay số tín chỉ đã tích lũy đều được.");
+    expect(links(answer)).toEqual(["#profile"]);
     const transcriptOnly = { ...none, transcript: true };
     expect(ask(transcriptOnly, "Điểm trung bình tích lũy của mình là bao nhiêu?")).toBeNull();
     expect(ask(transcriptOnly, "Mình còn nợ môn nào không?")).toBeNull();
     expect(ask(transcriptOnly, "Mình cần học lại môn nào?")).toBeNull();
-    expect(ask(none, "Mình cần học lại môn nào?")!.content).toMatch(/^Bạn chưa import bảng điểm và chưa thực hiện Đánh giá năng lực/);
+    expect(ask(none, "Mình cần học lại môn nào?")!.content).toMatch(/^Hiện bạn chưa import bảng điểm và chưa làm Đánh giá năng lực, nên mình chưa có cơ sở để tư vấn/);
   });
 
   it("checks the student's own graduation standing against the transcript only", () => {
     const answer = ask(none, "Mình đủ điều kiện tốt nghiệp chưa?")!;
-    expect(answer.content).toBe("Bạn chưa import bảng điểm nên mình chưa có cơ sở để đối chiếu kết quả học tập của bạn với tiêu chuẩn xét tốt nghiệp.\n"
-      + "Bạn vui lòng import bảng điểm PDF ở trang Hồ sơ và bảng điểm [1], rồi xem trang Điều kiện xét tốt nghiệp [2] hoặc hỏi lại mình nhé.");
-    expect(answer.sources.map((source) => source.link)).toEqual(["#profile", "#graduation"]);
+    expect(answer.content).toBe("Bạn chưa import bảng điểm nên mình chưa có cơ sở để đối chiếu kết quả học tập của bạn với tiêu chuẩn xét tốt nghiệp. "
+      + "Bạn import bảng điểm PDF ở trang Hồ sơ và bảng điểm trước nhé, sau đó xem trang Điều kiện xét tốt nghiệp hoặc hỏi lại mình.");
+    expect(links(answer)).toEqual(["#profile", "#graduation"]);
     expect(ask({ ...none, transcript: true }, "Mình đủ điều kiện tốt nghiệp chưa?")).toBeNull();
     // The standard itself needs no result of the student's.
     expect(ask(none, "Điều kiện xét tốt nghiệp của khóa mình là gì?")).toBeNull();
@@ -98,10 +119,31 @@ describe("readinessAnswer", () => {
   });
 
   it("reads the asker in questions typed without diacritics or without a pronoun", () => {
-    expect(ask(none, "vi sao lo trinh de xuat mon nay cho minh")?.content).toMatch(/^Bạn chưa import bảng điểm và chưa thực hiện Đánh giá năng lực/);
+    expect(ask(none, "vi sao lo trinh de xuat mon nay cho minh")?.content).toMatch(/^Hiện bạn chưa import bảng điểm và chưa làm Đánh giá năng lực/);
     expect(ask(none, "toi con thieu ky nang gi")).not.toBeNull();
     expect(ask(none, "Kỹ năng nào còn thiếu cho nghề mục tiêu?")).not.toBeNull();
     expect(ask(none, "Tôi phù hợp với nghề nào?")).not.toBeNull();
+  });
+
+  it("writes every fixed answer in the warm voice: no [n] in the text, the pages numbered from 1", () => {
+    const questions = [
+      ROADMAP_QUESTION, "Mình còn thiếu kỹ năng nào cho nghề mục tiêu?", "Học kỳ tới em nên học những môn nào?", "Điểm trung bình tích lũy của mình là bao nhiêu?",
+      "Mình đủ điều kiện tốt nghiệp chưa?", "Mình cần học lại môn nào?", "Tôi phù hợp với nghề nào?",
+    ];
+    let answered = 0;
+    for (const readiness of everyReadiness()) {
+      for (const question of questions) {
+        const answer = ask(readiness, question);
+        if (!answer) continue;
+        answered += 1;
+        const label = `${question} ${JSON.stringify(readiness)}`;
+        expect(answer.content, label).not.toMatch(/\[\d+\]|\{[a-z]+\}|vui lòng|EduPath AI chưa|thực hiện Đánh giá/i);
+        expect(answer.sources.map((source) => source.n), label).toEqual(answer.sources.map((_, index) => index + 1));
+        expect(new Set(links(answer)).size, label).toBe(answer.sources.length);
+        expect(answer.sources.length, label).toBeGreaterThan(0);
+      }
+    }
+    expect(answered).toBeGreaterThan(100);
   });
 });
 
@@ -122,9 +164,7 @@ describe("suggestedQuestions", () => {
   });
 
   it("never suggests a question the student would get the missing-results answer for", () => {
-    const keys = Object.keys(none) as (keyof Readiness)[];
-    for (let mask = 0; mask < 2 ** keys.length; mask += 1) {
-      const readiness = Object.fromEntries(keys.map((key, bit) => [key, (mask & (1 << bit)) !== 0])) as Readiness;
+    for (const readiness of everyReadiness()) {
       const suggestions = suggestedQuestions(readiness);
       expect(suggestions.length).toBeGreaterThanOrEqual(4);
       expect(suggestions.length).toBeLessThanOrEqual(6);
