@@ -134,7 +134,7 @@ export function portalGuides(): PortalGuide[] {
       "- Xem chi tiết: mô tả nghề, từng yêu cầu kỹ năng (Bắt buộc hoặc Ưu tiên) và mức hiện tại của bạn ở từng yêu cầu.",
       "- So sánh: đánh dấu So sánh ở 2 đến 3 nghề để xem bảng so sánh từng kỹ năng.",
       "- Chọn nghề mục tiêu: mục tiêu được lưu ngay; sau đó bấm Đánh giá lại ở trang Đánh giá năng lực để Khoảng trống kỹ năng và Lộ trình học tập theo nghề mới.",
-      "Khi chưa tính được mức phù hợp (chưa có bảng điểm, chưa chọn chuyên ngành…), bạn vẫn xem được danh mục nghề và yêu cầu của từng nghề.",
+      "Khi chưa tính được mức phù hợp (chưa có bảng điểm, chưa chọn chuyên ngành…), bạn vẫn xem được danh mục nghề và yêu cầu của từng nghề. Sau khi bạn bấm Xóa kết quả đánh giá ở trang Đánh giá năng lực (rút lại sự đồng ý), trang này thôi tính mức phù hợp cho đến khi bạn đánh giá lại.",
     ]],
     ["khao-sat-dinh-huong", "Khảo sát định hướng", "#profile", [
       "Khảo sát định hướng nằm trong Hồ sơ và bảng điểm và là một trong 4 mục hồ sơ bắt buộc. Bảng điểm cho biết bạn đã học gì; khảo sát cho EduPath AI biết bạn muốn đi đâu, để Lộ trình AI đưa ra lời khuyên sát với bạn.",

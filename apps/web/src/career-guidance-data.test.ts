@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  bestFits, bestFitsHeading, blockedText, compareRows, filterCareers, fitRuleText, fitScoreText, fitSummary, gapNote, interestPicks, missingSkills,
+  bestFits, bestFitsHeading, blockedAction, blockedText, compareRows, filterCareers, fitRuleText, fitScoreText, fitSummary, gapNote, interestPicks, missingSkills,
   orderedRequirements, requirementState, toggleCompare, FIT_RULE_TEXT, type GuidanceCareer, type GuidanceRequirement,
 } from "./career-guidance-data";
 
@@ -100,5 +100,12 @@ describe("career guidance", () => {
     expect(toggleCompare(["a", "b", "c"], "d")).toEqual(["a", "b", "c"]);
     expect(toggleCompare(["a", "b"], "a")).toEqual(["b"]);
     expect(blockedText("transcript_required")).toContain("tải bảng điểm");
+  });
+
+  it("says why no fit is computed after the assessment results were deleted, and where to assess again", () => {
+    expect(blockedText("assessment_withdrawn")).toBe("Bạn đã xóa kết quả đánh giá năng lực và rút lại sự đồng ý, nên EduPath AI không tính mức phù hợp của bạn với từng nghề. Muốn xem lại, hãy bấm Đánh giá năng lực ở trang Đánh giá năng lực.");
+    expect(blockedAction("assessment_withdrawn")).toEqual({ href: "#competency", label: "Mở Đánh giá năng lực" });
+    expect(blockedAction("specialty_required")).toEqual({ href: "#profile", label: "Mở Hồ sơ và bảng điểm" });
+    expect(blockedAction("cohort_unknown")).toBeNull();
   });
 });

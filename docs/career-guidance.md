@@ -31,6 +31,10 @@ Thẻ "Định hướng của bạn" ở Tổng quan nay dẫn tới trang này.
 
 - **Mức phù hợp**: `readAssessmentInputs(…, { careerOptional: true })` đọc bảng điểm, CTĐT, trọng số, tiêu chuẩn và kế hoạch như khi đánh giá năng lực (không cần đã chọn nghề), rồi `careerFitsFor(inputs, catalog)` (`competency-assessment/calculate.ts`) chạy phần nghề nghiệp của phép đánh giá (§7.5, §7.6) cho từng nghề, không tính lịch sử. Tính từ bảng điểm hiện tại, nên có thể khác kết quả đánh giá đã lưu nếu bảng điểm hay cấu hình đổi sau lần đánh giá. Khoảng 35 ms cho 30 nghề với sinh viên giả lập; khoảng 0,2–0,4 giây một lần gọi trên máy thử.
 - `blocked`: mã lỗi của `readAssessmentInputs` (`transcript_required`, `specialty_required`, `cohort_unknown`, `curriculum_unavailable`, `curriculum_ambiguous`, `competency_weights_unavailable`); khi đó `fit` = null, yêu cầu không có trạng thái.
+- `blocked` = `assessment_withdrawn` (29/10/2026): sinh viên đã bấm **Xóa kết quả đánh giá** ở trang Đánh giá năng lực, tức là rút lại sự đồng ý `competency_assessment`, và chưa đồng ý lại.
+  - API không đọc bảng điểm và không tính mức phù hợp nào. Trang báo lý do và có nút **Mở Đánh giá năng lực**; ghi chú dưới nghề mục tiêu được ẩn.
+  - Người dùng nêu (29/10): "Khi người dùng đã xóa kết quả năng lực cũ thì nó nên ghi rõ đây là kết quả cũ hoặc là xóa luôn chứ". Trước bản sửa, trang vẫn tính lại từ bảng điểm nên trông như kết quả cũ chưa bị xóa.
+  - Sinh viên chưa từng đánh giá vẫn thấy mức phù hợp, để chọn nghề mục tiêu trước lần đánh giá đầu tiên.
 - **Khớp khảo sát** (`interests.ts`): tên nghề (Việt + Anh) và tên lĩnh vực đọc không dấu, so với quy tắc của từng câu trả lời Lĩnh vực quan tâm nhất (Web, Di động, AI và dữ liệu, An ninh mạng, Cloud/DevOps, Game, Nhúng/IoT) và từng công nghệ bạn thích. Danh mục do Khoa quản lý nên khớp theo tên; nghề không quy tắc nào nhận ra thì không có dòng khớp. Chỉ hiện cho chính sinh viên, không gửi cho AI. Chính sách bảo mật (mục "Thông tin của bạn được dùng để làm gì?": giúp bạn tìm hiểu các vị trí nghề nghiệp và lưu mục tiêu) bao gồm việc này.
 - Thứ tự: mức phù hợp giảm dần (nghề "Chưa đủ dữ liệu" hay chưa tính xếp cuối), rồi tên.
 

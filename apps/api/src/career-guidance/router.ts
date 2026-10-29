@@ -12,7 +12,7 @@ import { AssessmentError, readAssessmentInputs } from "../competency-assessment/
 import type { AssessmentInputs, CareerInput, CareerRequirementResult, CareerResult, FitCode, GapStatus } from "../competency-assessment/types.js";
 import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
-import { activeConsentVersion, isValidConsent } from "../student/consent.js";
+import { activeConsentVersion, consentWithdrawn, isValidConsent } from "../student/consent.js";
 import { readSurvey, type StudentSurvey } from "../student/survey.js";
 import { interestMatch, type InterestMatch } from "./interests.js";
 
@@ -131,11 +131,17 @@ export function createCareerGuidanceRouter(pool: DatabasePool | undefined) {
       await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
       let inputs: AssessmentInputs | null = null;
       let blocked: string | null = null;
-      try {
-        inputs = await readAssessmentInputs(client, userId, { careerOptional: true });
-      } catch (error) {
-        if (!(error instanceof AssessmentError)) throw error;
-        blocked = error.code;
+      // "Xóa kết quả đánh giá" withdrew the consent to assess the competencies: no fit is computed from the transcript until
+      // the student assesses again and agrees again (user 2026-10-29: "Khi người dùng đã xóa kết quả năng lực cũ thì nó nên
+      // ghi rõ đây là kết quả cũ hoặc là xóa luôn chứ"). A student who never assessed still sees the fits to choose a career.
+      if (await consentWithdrawn(client, userId, "competency_assessment")) blocked = "assessment_withdrawn";
+      else {
+        try {
+          inputs = await readAssessmentInputs(client, userId, { careerOptional: true });
+        } catch (error) {
+          if (!(error instanceof AssessmentError)) throw error;
+          blocked = error.code;
+        }
       }
       const catalog = await readCareerCatalog(client);
       const fields = await client.query<{ code: string; name: string }>(

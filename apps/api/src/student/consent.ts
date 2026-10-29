@@ -42,6 +42,14 @@ export async function withdrawConsent(client: PoolClient, userId: string, purpos
 export const recordTranscriptConsent = (client: PoolClient, userId: string) => recordConsent(client, userId, "transcript_processing");
 export const withdrawTranscriptConsent = (client: PoolClient, userId: string) => withdrawConsent(client, userId, "transcript_processing");
 
+/** Whether the student withdrew the consent for a purpose and has not given it again (e.g. "Xóa kết quả đánh giá"). */
+export async function consentWithdrawn(db: Pick<DatabasePool, "query"> | PoolClient, userId: string, purpose: ConsentPurpose): Promise<boolean> {
+  const result = await db.query<{ withdrawn: boolean }>(
+    `SELECT NOT EXISTS (SELECT 1 FROM data_consents WHERE user_id=$1 AND purpose=$2 AND ended_at IS NULL)
+       AND EXISTS (SELECT 1 FROM data_consents WHERE user_id=$1 AND purpose=$2 AND end_reason='withdrawn') AS withdrawn`, [userId, purpose]);
+  return result.rows[0]?.withdrawn === true;
+}
+
 /** Policy version of the student's active consent for a purpose, or null when none is active. */
 export async function activeConsentVersion(db: Pick<DatabasePool, "query"> | PoolClient, userId: string, purpose: ConsentPurpose): Promise<string | null> {
   const result = await db.query<{ policy_version: string }>(

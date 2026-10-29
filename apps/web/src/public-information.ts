@@ -150,7 +150,7 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
   {
     question: "Làm thế nào để xóa kết quả đánh giá năng lực?",
     answer: [
-      "Trên trang Đánh giá năng lực, bạn có thể bấm Xóa kết quả đánh giá để rút lại sự đồng ý cho việc đánh giá năng lực. Khi đó, toàn bộ kết quả đánh giá và nhận xét AI của bạn bị xóa; hồ sơ và bảng điểm vẫn được giữ. Nếu muốn đánh giá lại sau này, bạn cần đồng ý lại.",
+      "Trên trang Đánh giá năng lực, bạn có thể bấm Xóa kết quả đánh giá để rút lại sự đồng ý cho việc đánh giá năng lực. Khi đó, toàn bộ kết quả đánh giá và nhận xét AI của bạn bị xóa; hồ sơ và bảng điểm vẫn được giữ. Trang Định hướng nghề nghiệp cũng thôi tính mức phù hợp của bạn với từng nghề cho đến khi bạn đánh giá lại. Nếu muốn đánh giá lại sau này, bạn cần đồng ý lại.",
       "Kết quả đánh giá cũng bị xóa khi bạn xóa bảng điểm hoặc khi bảng điểm mới thay thế bản cũ, vì kết quả được tính từ bảng điểm đó. Ngoài ra, EduPath AI chỉ giữ tối đa 20 lần đánh giá gần nhất của bạn."
     ],
     note: "Kết quả đánh giá đã xóa không khôi phục được."

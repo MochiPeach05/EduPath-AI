@@ -58,12 +58,14 @@ describe("careers against the competencies", () => {
 
 describe("GET /api/student/career-guidance", () => {
   /** survey: a complete Khảo sát định hướng (survey-v3), an older partial one (survey-v2: the field only) or none; consent: its policy version. */
-  type Setup = { transcript?: boolean; survey?: "complete" | "partial" | null; consent?: string | null; stored?: { career: unknown; created_at: Date } | null };
+  /** withdrawn: the competency assessment consent was withdrawn ("Xóa kết quả đánh giá") and not given again. */
+  type Setup = { transcript?: boolean; survey?: "complete" | "partial" | null; consent?: string | null; stored?: { career: unknown; created_at: Date } | null; withdrawn?: boolean };
   function setup(rows: Setup = {}) {
     const survey = rows.survey === undefined ? "complete" : rows.survey;
     const consent = rows.consent === undefined ? TRANSCRIPT_POLICY_VERSION : rows.consent;
     const query = vi.fn(async (sql: string) => {
       const result = (list: unknown[]) => ({ rowCount: list.length, rows: list });
+      if (sql.includes("end_reason='withdrawn'")) return result([{ withdrawn: rows.withdrawn === true }]);
       if (sql.startsWith("SELECT id FROM users")) return result([{ id: "student-id" }]);
       if (/^(BEGIN|COMMIT|ROLLBACK)/.test(sql)) return result([]);
       if (sql.startsWith("SELECT cohort_code,specialty,career_position_id")) return result([{ cohort_code: "K30", specialty: "CNPM", career_position_id: "c1" }]);
@@ -89,8 +91,17 @@ describe("GET /api/student/career-guidance", () => {
     const app = express();
     app.use((req, _res, next) => { Object.assign(req, { session: { user: { userId: "student-id", tenantId: "tenant-id", role: "student" } } }); next(); });
     app.use("/guidance", createCareerGuidanceRouter(pool));
-    return app;
+    return Object.assign(app, { query });
   }
+
+  it("computes no fit after the student deleted the assessment results and withdrew the consent", async () => {
+    const app = setup({ transcript: true, withdrawn: true });
+    const response = await request(app).get("/guidance").expect(200);
+    expect(response.body).toMatchObject({ blocked: "assessment_withdrawn", targetCareerId: "c1", gapAssessedAt: null });
+    expect(response.body.careers).toEqual([expect.objectContaining({ id: "c1", fit: null, requirements: [expect.objectContaining({ title: "SQL", status: null })] })]);
+    // The transcript is not even read.
+    expect(app.query.mock.calls.some(([sql]) => String(sql).includes("FROM student_transcripts"))).toBe(false);
+  });
 
   it("lists the careers with what blocks the fit, the target career and the survey matches", async () => {
     const response = await request(setup()).get("/guidance").expect(200);

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./student-icons";
 import {
-  CAREER_GUIDANCE_API, COMPARE_MAX, FIT_STEP, bestFits, bestFitsHeading, blockedInProfile, blockedText, compareRows, filterCareers, fitRuleText, fitScoreText,
+  CAREER_GUIDANCE_API, COMPARE_MAX, FIT_STEP, bestFits, bestFitsHeading, blockedAction, blockedText, compareRows, filterCareers, fitRuleText, fitScoreText,
   fitSummary, gapNote, hasFit, interestPicks, matchesInterests, missingSkills, orderedRequirements, requirementName, requirementScoreText, requirementState,
   toggleCompare, type CareerFilters, type GuidanceCareer, type GuidanceResponse, type GuidanceRequirement,
 } from "./career-guidance-data";
@@ -234,7 +234,9 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
   const best = bestFits(careers);
   const bestHeading = bestFitsHeading(best);
   const liked = interestPicks(careers);
-  const targetNote = target ? gapNote(data, target) : null;
+  // After "Xóa kết quả đánh giá" the note of the page says it all.
+  const targetNote = target && data.blocked !== "assessment_withdrawn" ? gapNote(data, target) : null;
+  const unblock = data.blocked ? blockedAction(data.blocked) : null;
 
   return <div className="cg-page">
     <section className="sw-panel cg-header" aria-labelledby="cg-title">
@@ -253,7 +255,7 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
           : <p className="cg-current-empty">Bạn chưa chọn nghề mục tiêu. Hãy xem các gợi ý bên dưới rồi bấm Chọn nghề mục tiêu.</p>}
       </div>
       {data.blocked && <div className="cg-note cg-note-warn" role="note"><p>{blockedText(data.blocked)} Bạn vẫn xem được danh mục nghề và yêu cầu của từng nghề.</p>
-        {blockedInProfile(data.blocked) && <a className="sw-outline" href="#profile">Mở Hồ sơ và bảng điểm</a>}</div>}
+        {unblock && <a className="sw-outline" href={unblock.href}>{unblock.label}</a>}</div>}
     </section>
 
     {!data.blocked && <div className="cg-suggest">

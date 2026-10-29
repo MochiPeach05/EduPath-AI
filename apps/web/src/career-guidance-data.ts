@@ -21,7 +21,10 @@ export type GuidanceCareer = {
   fit: GuidanceFit | null; requirements: GuidanceRequirement[]; interests: { field: string | null; tech: string[] };
 };
 export type GuidanceResponse = {
-  /** Why the fit could not be computed (transcript_required, specialty_required…), or null. */
+  /**
+   * Why the fit could not be computed (transcript_required, specialty_required…; assessment_withdrawn: the student deleted
+   * the assessment results and withdrew the consent), or null.
+   */
   blocked: string | null; targetCareerId: string | null; fields: { code: string; name: string }[]; careers: GuidanceCareer[];
   /** Khảo sát định hướng is complete and agreed to under the current policy (as the AI roadmap requires); otherwise no survey match is used. */
   surveyDone: boolean;
@@ -152,10 +155,16 @@ const BLOCKED: Record<string, string> = {
   curriculum_unavailable: "Khoa chưa có chương trình đào tạo cho khóa của bạn nên chưa tính được mức phù hợp.",
   curriculum_ambiguous: "Khóa của bạn đang có nhiều chương trình đào tạo nên chưa tính được mức phù hợp. Hãy liên hệ Khoa.",
   competency_weights_unavailable: "Khoa chưa gắn kỹ năng cho các học phần nên chưa tính được mức phù hợp.",
+  // 2026-10-29, user: "Khi người dùng đã xóa kết quả năng lực cũ thì nó nên ghi rõ đây là kết quả cũ hoặc là xóa luôn chứ".
+  assessment_withdrawn: "Bạn đã xóa kết quả đánh giá năng lực và rút lại sự đồng ý, nên EduPath AI không tính mức phù hợp của bạn với từng nghề. Muốn xem lại, hãy bấm Đánh giá năng lực ở trang Đánh giá năng lực.",
 };
 export const blockedText = (code: string) => BLOCKED[code] ?? "Chưa tính được mức phù hợp với từng nghề. Vui lòng thử lại sau.";
-/** Whether the student can fix the block in the profile. */
-export const blockedInProfile = (code: string) => code === "transcript_required" || code === "specialty_required";
+/** Where the student can lift the block: the profile (transcript, specialty) or Đánh giá năng lực (consent withdrawn); null otherwise. */
+export function blockedAction(code: string): { href: string; label: string } | null {
+  if (code === "transcript_required" || code === "specialty_required") return { href: "#profile", label: "Mở Hồ sơ và bảng điểm" };
+  if (code === "assessment_withdrawn") return { href: "#competency", label: "Mở Đánh giá năng lực" };
+  return null;
+}
 
 /** The điểm phù hợp as Khoảng trống kỹ năng prints it (formatScore: whole points rounded down, 62,5–63 with one decimal). */
 export const fitScoreText = (score: number) => formatScore(score);
