@@ -7,7 +7,8 @@
  * https://claude.ai/code/artifact/e8499fd2-b393-45c5-a261-1fead4e09652
  *
  * Student, /api/student/notifications:
- * GET    /?filter=all|unread|ai|warn|khoa|sys&limit=50 → { items: StudentNotification[]; unread: number }  (newest first)
+ * GET    /?filter=all|unread|ai|warn|khoa|sys&limit=50&order=newest|unread → { items: StudentNotification[]; unread: number }
+ *        (newest first; order=unread puts the unread ones first, for the popover)
  * GET    /unread-count                                → { unread: number }                                 (the bell polls it)
  * POST   /:id/read   {}                               → { notification: StudentNotification }
  * POST   /:id/unread {}                               → { notification: StudentNotification }
@@ -24,7 +25,11 @@
  *
  * Errors: { error } with 400 invalid_input | title_required | body_required | no_recipients, 401 authentication_required,
  * 403 insufficient_role | invalid_origin | account_unavailable, 404 not_found, 409 already_withdrawn, 503 database_required.
- * Lists return the newest `limit` (50 by default); there is no paging past it.
+ * Lists return the newest `limit` (50 by default); there is no paging past it. The bell shows one notification per topic, the
+ * newest (user review 2026-10-30: "có 2 cặp trùng nhau"): a new run of an AI job replaces the notification of the run
+ * before, a catalog update the one before about the same catalog; warnings and announcements collapse only when their title
+ * and body are the same. `unread` counts the same notifications, so the badge always equals the unread ones listed;
+ * deleting one also deletes the older ones of its topic.
  */
 export const NOTIFICATIONS_API = "/api/student/notifications";
 export const ANNOUNCEMENTS_API = "/api/admin/announcements";

@@ -39,8 +39,8 @@ describe("student notifications API", () => {
 
   it("lists the student's notifications newest first with the unread count, filtered by type or unread", async () => {
     const { app, sql } = setup({
-      rows: (text) => (text.includes("FROM stu_notifications WHERE user_id=$1 AND deleted_at IS NULL") && text.includes("ORDER BY")
-        ? { rowCount: 1, rows: [row()] } : text.includes("count(*)::int AS unread") ? { rowCount: 1, rows: [{ unread: 3 }] } : undefined),
+      rows: (text) => (text.includes("count(*)::int AS unread") ? { rowCount: 1, rows: [{ unread: 3 }] }
+        : text.includes("FROM stu_notifications WHERE user_id=$1 AND deleted_at IS NULL") ? { rowCount: 1, rows: [row()] } : undefined),
     });
     const response = await request(app).get("/n?filter=warn&limit=20").expect(200);
     expect(response.headers["cache-control"]).toBe("no-store");
@@ -50,11 +50,25 @@ describe("student notifications API", () => {
       unread: 3,
     });
     const list = sql().find(([text]) => text.includes("ORDER BY created_at DESC"))!;
-    expect(list[0]).toContain("AND type=$3");
+    expect(list[0]).toContain("WHERE type=$3");
     expect(list[1]).toEqual([USER, 20, "warn"]);
     await request(app).get("/n?filter=unread").expect(200);
-    expect(sql().filter(([text]) => text.includes("ORDER BY created_at DESC")).at(-1)![0]).toContain("AND read_at IS NULL");
+    expect(sql().filter(([text]) => text.includes("ORDER BY created_at DESC")).at(-1)![0]).toContain("WHERE read_at IS NULL");
     await request(app).get("/n?filter=bogus").expect(400, { error: "invalid_input" });
+    await request(app).get("/n?order=bogus").expect(400, { error: "invalid_input" });
+  });
+
+  it("shows and counts only the newest notification of each topic, the unread first for the popover", async () => {
+    const { app, sql } = setup({ rows: (text) => (text.includes("count(*)::int AS unread") ? { rowCount: 1, rows: [{ unread: 1 }] } : undefined) });
+    await request(app).get("/n?limit=5&order=unread").expect(200, { items: [], unread: 1 });
+    const [list, count] = [sql().find(([text]) => text.includes("LIMIT $2"))!, sql().find(([text]) => text.includes("count(*)::int AS unread"))!];
+    // The list and the badge read the same rows: one per topic (a new AI run replaces the one before).
+    for (const [text] of [list, count]) {
+      expect(text).toContain("SELECT DISTINCT ON (CASE WHEN kind IN ('transcript_ready','transcript_failed') THEN 'transcript'");
+      expect(text).toContain("WHERE user_id=$1 AND deleted_at IS NULL");
+    }
+    expect(list[0]).toContain("ORDER BY (read_at IS NULL) DESC,created_at DESC,id DESC LIMIT $2");
+    expect(list[1]).toEqual([USER, 5]);
   });
 
   it("answers the bell's poll and runs the housekeeping at most once an hour", async () => {
@@ -77,6 +91,10 @@ describe("student notifications API", () => {
     await request(app).post(`/n/${ID}/unread`).set("Origin", origin).send({}).expect(404, { error: "not_found" });
     await request(app).post("/n/read-all").set("Origin", origin).send({}).expect(200, { unread: 0 });
     await request(app).delete(`/n/${ID}`).set("Origin", origin).expect(204);
+    // The older notifications of the same topic go with it, so none comes back into the bell.
+    const removal = sql().find(([text]) => text.startsWith("UPDATE stu_notifications SET deleted_at=now()"))!;
+    expect(removal[0]).toContain("=(SELECT (CASE WHEN kind IN");
+    expect(removal[1]).toEqual([ID, USER]);
     expect((await request(app).post(`/n/${ID}/restore`).set("Origin", origin).send({}).expect(200)).body.notification.id).toBe(ID);
     const restore = sql().find(([text]) => text.startsWith("UPDATE stu_notifications SET deleted_at=NULL"))!;
     expect(restore[1]).toEqual([ID, USER, 10]);

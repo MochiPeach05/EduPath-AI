@@ -4,7 +4,7 @@ import { Router, type ErrorRequestHandler } from "express";
 import { z } from "zod";
 import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
-import { LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX, presentNotification } from "./model.js";
+import { LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX, NOTIFICATION_ORDERS, presentNotification } from "./model.js";
 import {
   createNotificationHousekeeping, deleteNotification, listNotifications, readAll, restoreNotification, setRead, unreadCount,
 } from "./repository.js";
@@ -14,6 +14,7 @@ const emptyBody = z.object({}).strict();
 const listQuery = z.object({
   filter: z.enum(["all", "unread", "ai", "warn", "khoa", "sys"]).default("all"),
   limit: z.coerce.number().int().min(1).max(LIST_LIMIT_MAX).default(LIST_LIMIT_DEFAULT),
+  order: z.enum(NOTIFICATION_ORDERS).default("newest"),
 }).strict();
 
 class NotificationError extends Error {
@@ -39,7 +40,7 @@ export function createStudentNotificationsRouter(pool: DatabasePool | undefined,
   router.get("/", async (req, res) => {
     const query = listQuery.parse(req.query);
     const userId = req.session.user!.userId;
-    const items = await listNotifications(pool!, userId, query.filter, query.limit);
+    const items = await listNotifications(pool!, userId, query.filter, query.limit, query.order);
     res.json({ items: items.map(presentNotification), unread: await unreadCount(pool!, userId) });
   });
 

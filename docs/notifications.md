@@ -23,6 +23,8 @@ Thông báo được ghi trong cùng giao dịch với công việc khi có th�
 ## API sinh viên `/api/student/notifications`
 Hợp đồng: `apps/web/src/notification-types.ts`. Danh sách (lọc: tất cả, chưa đọc, Kết quả AI, Cảnh báo, Từ Khoa, Hệ thống), số chưa đọc (chuông đọc lại mỗi 60 giây và khi quay lại tab), đánh dấu đã đọc, chưa đọc, tất cả đã đọc, xóa (xóa mềm) và hoàn tác trong 10 phút.
 
+Mỗi chủ đề chỉ hiện một thông báo, bản mới nhất (`NOTIFICATION_TOPIC` trong `model.ts`, sửa 30/10 sau khi người dùng thấy chuông báo 5 chưa đọc mà danh sách có 2 cặp trùng): mỗi lần đọc bảng điểm, nhận xét năng lực, Lộ trình AI hay tư vấn tốt nghiệp mới thay bản trước; cập nhật danh mục thay bản trước của cùng danh mục và khóa; cảnh báo và thông báo của Khoa chỉ gộp khi trùng cả tiêu đề lẫn nội dung. Số chưa đọc đếm đúng các dòng đó, và khung chuông đưa thông báo chưa đọc lên đầu (`order=unread`), nên số trên chuông luôn bằng số mục chưa đọc. Cảnh báo mới mang tên môn hoặc nhóm trong tiêu đề ("Môn bắt buộc chưa đạt: …").
+
 ## Lưu trữ
 - Thông báo tự xóa sau 90 ngày; thông báo đã xóa bị xóa hẳn sau 1 ngày, riêng cảnh báo đã xóa được giữ ẩn tới hết 90 ngày để không báo lại.
 - Dọn dẹp chạy tối đa mỗi giờ một lần, khi chuông đọc số chưa đọc.

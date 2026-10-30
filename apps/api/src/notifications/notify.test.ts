@@ -73,6 +73,22 @@ describe("notifyWarnings", () => {
     expect(db.params(1).slice(6, 9)).toEqual([null, null, "warning:late_course:71ITIS30303"]);
   });
 
+  it("names what each warning is about in its title, so two of one kind never look alike", async () => {
+    const db = fakeDb();
+    await notifyWarnings(db, USER, [
+      { kind: "failed_course", key: "failed:A1", level: "risk", text: "Môn bắt buộc chưa đạt: Lập trình Web (F, HK1 2025–2026).", strong: ["Lập trình Web"] },
+      { kind: "late_course", key: "late:B1", level: "warn", text: "Cơ sở dữ liệu trễ so với kế hoạch (dự kiến HK2 2025–2026).", strong: ["Cơ sở dữ liệu"] },
+      { kind: "late_course", key: "late:others", level: "warn", text: "Còn 4 môn khác trễ so với kế hoạch: A, B, C.", strong: ["4 môn khác"] },
+      { kind: "elective_short", key: "elective:TC1:HK251", level: "warn", text: "Nhóm tự chọn TC1 còn thiếu 3 TC (dự kiến HK1 2025–2026).", strong: ["Nhóm tự chọn TC1"] },
+      { kind: "elective_short", key: "elective:Tự do:HK252", level: "warn", text: "Tự do (HK2 2025–2026): còn thiếu 2 môn.", strong: ["Tự do"] },
+      { kind: "pace", key: "pace", level: "risk", text: "Còn 40 tín chỉ…", strong: ["40 tín chỉ"] },
+    ]);
+    expect(db.query.mock.calls.map((_, index) => db.params(index)[4])).toEqual([
+      "Môn bắt buộc chưa đạt: Lập trình Web", "Môn trễ so với kế hoạch: Cơ sở dữ liệu", "Còn 4 môn khác trễ so với kế hoạch",
+      "Nhóm tự chọn TC1 còn thiếu 3 TC", "Tự do còn thiếu 2 môn", "Nguy cơ chậm tiến độ tốt nghiệp",
+    ]);
+  });
+
   it("counts only the rows actually written", async () => {
     const db = fakeDb(0);
     expect(await notifyWarnings(db, USER, [{ kind: "pace", key: "HK262", level: "risk", text: "Cần 19 TC mỗi kỳ." }])).toBe(0);

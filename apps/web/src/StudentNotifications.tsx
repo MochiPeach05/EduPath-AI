@@ -25,6 +25,8 @@ export const POPOVER_LIMIT = 5;
 export const LIST_LIMIT = 50;
 /** How long "Hoàn tác" is offered after a delete. */
 export const UNDO_MS = 10_000;
+/** After the student opens a page, the bell counts again this much later (the page may have written notifications). */
+export const NOTIFICATION_RECOUNT_MS = 4_000;
 
 /* ------------------------------------------------------------------ requests */
 
@@ -57,8 +59,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
 const one = (id: string) => `/${encodeURIComponent(id)}`;
 export const notificationsApi = {
-  list: (filter: NotificationFilter, limit: number, signal?: AbortSignal) =>
-    request<{ items: StudentNotification[]; unread: number }>(`?filter=${filter}&limit=${limit}`, { signal }),
+  /** order "unread" lists the unread ones first (the popover), else newest first. */
+  list: (filter: NotificationFilter, limit: number, signal?: AbortSignal, order: "newest" | "unread" = "newest") =>
+    request<{ items: StudentNotification[]; unread: number }>(`?filter=${filter}&limit=${limit}${order === "unread" ? "&order=unread" : ""}`, { signal }),
   unreadCount: (signal?: AbortSignal) => request<{ unread: number }>("/unread-count", { signal }),
   read: (id: string) => request<{ notification: StudentNotification }>(`${one(id)}/read`, { method: "POST", body: "{}" }),
   unread: (id: string) => request<{ notification: StudentNotification }>(`${one(id)}/unread`, { method: "POST", body: "{}" }),
@@ -73,6 +76,13 @@ export const notificationsApi = {
 export const bellLabel = (unread: number) => (unread > 0 ? `Thông báo, ${unread} chưa đọc` : "Thông báo");
 /** The badge on the bell: the count, "99+" past 99. */
 export const badgeText = (unread: number) => (unread > 99 ? "99+" : String(unread));
+/** The first line of a notification's text, shown under its title so two notifications of one kind never look alike. */
+export const notificationExcerpt = (body: string) => body.split("\n").map((line) => line.trim()).find(Boolean) ?? "";
+/** Under the popover's list when it cannot show every unread notification: "Còn 2 thông báo chưa đọc khác". */
+export function moreUnreadText(unread: number, items: readonly StudentNotification[]): string | null {
+  const more = unread - items.filter((item) => !item.read).length;
+  return more > 0 ? `Còn ${more} thông báo chưa đọc khác` : null;
+}
 /** A page of the portal ("#roadmap") a notification may open; anything else is not followed. */
 export const portalLink = (link: string | null) => (link && /^#[a-z][a-z-]*$/.test(link) ? link : null);
 
@@ -126,15 +136,17 @@ export function useUnreadNotifications() {
 
 /* ------------------------------------------------------------------ views */
 
-/** One notification in a list: its type icon, title, type and time, and a dot while unread. */
+/** One notification in a list: its type icon, title, the first line of its text, type and time, and a dot while unread. */
 export function NotificationItem({ notification, now, current = false, onSelect }: {
   notification: StudentNotification; now: Date; current?: boolean; onSelect: () => void;
 }) {
   const type = NOTIFICATION_TYPES[notification.type];
+  const excerpt = notificationExcerpt(notification.body);
   return <button type="button" className={`nt-item nt-${notification.type}${notification.read ? "" : " nt-unread"}`} aria-current={current ? "true" : undefined} onClick={onSelect}>
     <span className="nt-icon" aria-hidden="true">{type.glyph}</span>
     <span className="nt-text">
       <strong>{notification.title}</strong>
+      {excerpt && <span className="nt-excerpt">{excerpt}</span>}
       <small>{type.label} · {notificationTime(notification.createdAt, now)}{notification.read ? "" : " · chưa đọc"}</small>
     </span>
     <span className="nt-dot" aria-hidden="true" />
@@ -164,11 +176,13 @@ export function NotificationDetail({ notification, now, busy, error, onBack, onO
 }
 
 /**
- * The bell's popover: the latest notifications, "Xem tất cả thông báo" and "Đánh dấu tất cả đã đọc". Its heading keeps the
- * id the header's popover is labelled by. onUnread receives every unread count it learns.
+ * The bell's popover: the latest notifications, the unread ones first so it shows what the badge counts (user review
+ * 2026-10-30: "huy hiệu báo 5 chưa đọc … chỉ 1 mục được đánh dấu chưa đọc"); when more are unread than it can show, a
+ * link opens the drawer on "Chưa đọc". Then "Xem tất cả thông báo" and "Đánh dấu tất cả đã đọc". Its heading keeps the id
+ * the header's popover is labelled by. onUnread receives every unread count it learns.
  */
 export function NotificationsPanel({ onOpen, onOpenAll, onUnread }: {
-  onOpen: (notification: StudentNotification) => void; onOpenAll: () => void; onUnread: (count: number) => void;
+  onOpen: (notification: StudentNotification) => void; onOpenAll: (filter?: NotificationFilter) => void; onUnread: (count: number) => void;
 }) {
   const [items, setItems] = useState<StudentNotification[] | null>(null);
   const [unread, setUnread] = useState(0);
@@ -180,7 +194,7 @@ export function NotificationsPanel({ onOpen, onOpenAll, onUnread }: {
   useEffect(() => {
     const controller = new AbortController();
     setError("");
-    notificationsApi.list("all", POPOVER_LIMIT, controller.signal).then((data) => {
+    notificationsApi.list("all", POPOVER_LIMIT, controller.signal, "unread").then((data) => {
       if (controller.signal.aborted) return;
       setItems(data.items); setUnread(data.unread); report.current(data.unread);
     }, (failure: unknown) => { if (!controller.signal.aborted) setError(notificationErrorText(failure)); });
@@ -196,14 +210,16 @@ export function NotificationsPanel({ onOpen, onOpenAll, onUnread }: {
     finally { setBusy(false); }
   };
   const now = new Date();
+  const more = items ? moreUnreadText(unread, items) : null;
   return <div className="nt-panel">
     <h3 id="student-notifications-title">Thông báo{unread > 0 && <span className="nt-count">{unread} chưa đọc</span>}</h3>
     {error ? <div className="nt-state" role="alert"><p>{error}</p><button type="button" className="sw-outline" onClick={() => setRevision((n) => n + 1)}><Icon name="refresh" />Thử lại</button></div>
       : items === null ? <p className="nt-state" role="status">Đang tải thông báo…</p>
         : items.length === 0 ? <p className="nt-state">Chưa có thông báo nào. Khi AI làm xong một việc cho bạn hoặc Khoa gửi thông báo, bạn sẽ thấy ở đây.</p>
           : <ul className="nt-list">{items.map((item) => <li key={item.id}><NotificationItem notification={item} now={now} onSelect={() => onOpen(item)} /></li>)}</ul>}
+    {more && <button type="button" className="sw-text-link nt-more" onClick={() => onOpenAll("unread")}>{more} <Icon name="arrow" /></button>}
     <div className="nt-panel-actions">
-      <button type="button" className="sw-text-link" onClick={onOpenAll}>Xem tất cả thông báo <Icon name="arrow" /></button>
+      <button type="button" className="sw-text-link" onClick={() => onOpenAll()}>Xem tất cả thông báo <Icon name="arrow" /></button>
       {unread > 0 && <button type="button" className="sw-text-link nt-quiet" disabled={busy} onClick={() => void readAll()}>Đánh dấu tất cả đã đọc</button>}
     </div>
   </div>;
@@ -211,11 +227,11 @@ export function NotificationsPanel({ onOpen, onOpenAll, onUnread }: {
 
 /**
  * Every notification (a modal dialog: focus stays inside, Escape closes): filters, the list, and the detail of the one
- * opened (initial: the one picked in the popover). Opening a notification marks it read. Phones show the list, then the
- * detail with "‹ Quay lại danh sách".
+ * opened (initial: the one picked in the popover; initialFilter: "unread" from the popover's "Còn … chưa đọc khác"). Opening
+ * a notification marks it read. Phones show the list, then the detail with "‹ Quay lại danh sách".
  */
-export function NotificationsDrawer({ initial, onClose, onNavigate, onUnread }: {
-  initial: StudentNotification | null; onClose: () => void; onNavigate: (link: string) => void; onUnread: (count: number) => void;
+export function NotificationsDrawer({ initial, initialFilter = "all", onClose, onNavigate, onUnread }: {
+  initial: StudentNotification | null; initialFilter?: NotificationFilter; onClose: () => void; onNavigate: (link: string) => void; onUnread: (count: number) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   useLayoutEffect(() => {
@@ -223,7 +239,7 @@ export function NotificationsDrawer({ initial, onClose, onNavigate, onUnread }: 
     if (element && !element.open && typeof element.showModal === "function") element.showModal();
     return () => { if (element?.open) element.close(); };
   }, []);
-  const [filter, setFilter] = useState<NotificationFilter>("all");
+  const [filter, setFilter] = useState<NotificationFilter>(initialFilter);
   const [items, setItems] = useState<StudentNotification[] | null>(null);
   const [unread, setUnread] = useState<number | null>(null);
   const [error, setError] = useState("");

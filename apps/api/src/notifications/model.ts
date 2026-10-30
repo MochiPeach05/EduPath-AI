@@ -36,6 +36,23 @@ export const RETENTION_DAYS = 90;
 export const RESTORE_MINUTES = 10;
 export const LIST_LIMIT_DEFAULT = 50;
 export const LIST_LIMIT_MAX = 100;
+/** newest: newest first; unread: the unread ones first, each part newest first (the bell's popover). */
+export const NOTIFICATION_ORDERS = ["newest", "unread"] as const;
+export type NotificationOrder = (typeof NOTIFICATION_ORDERS)[number];
+
+/**
+ * What a notification is about, as SQL over a stu_notifications row. The bell shows only the newest notification of each
+ * topic and counts only those (user review 2026-10-30: "huy hiệu báo 5 chưa đọc, nhưng có 2 cặp trùng nhau"):
+ * - a new run of an AI job replaces the notification of the run before: the transcript read (ready or failed), the
+ *   competency comment, the AI roadmap (ready or failed), the graduation advice;
+ * - a catalog update replaces the one before about the same catalog of the same cohort (its title);
+ * - warnings and announcements are one topic only when their title and body are the same.
+ */
+export const NOTIFICATION_TOPIC = `(CASE WHEN kind IN ('transcript_ready','transcript_failed') THEN 'transcript'
+  WHEN kind IN ('roadmap_ready','roadmap_failed') THEN 'roadmap'
+  WHEN kind IN ('assessment_comment','graduation_advice') THEN kind
+  WHEN kind='catalog_updated' THEN 'catalog:'||title
+  ELSE kind||':'||title||':'||body END)`;
 
 export type NotificationRow = {
   id: string; type: NotificationType; kind: NotificationKind; title: string; body: string; link: string | null; linkLabel: string | null;

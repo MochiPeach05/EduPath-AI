@@ -5,18 +5,20 @@
 
 .sw-shell .sw-tools .sw-bell { position: relative; }
 .sw-bell-badge {
-  position: absolute; top: 5px; right: 4px; min-width: 18px; height: 18px; padding: 0 5px;
-  display: grid; place-items: center; border: 2px solid #fff; border-radius: 9px;
-  background: var(--sw-red); color: #fff; font-size: 10.5px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums;
+  position: absolute; top: 5px; right: 4px; min-width: 20px; height: 20px; padding: 0 5px;
+  display: grid; place-items: center; border: 2px solid #fff; border-radius: 10px;
+  background: var(--sw-red); color: #fff; font-size: 12px; font-weight: 800; line-height: 1; font-variant-numeric: tabular-nums;
   pointer-events: none;
 }
 
 /* Popover */
 .nt-panel { display: grid; gap: 10px; }
 .sw-popover .nt-panel h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; }
-.nt-count { padding: 2px 8px; border-radius: 999px; background: var(--sw-soft); color: var(--sw-red); font-size: 11.5px; font-weight: 800; }
+.nt-count { padding: 2px 8px; border-radius: 999px; background: var(--sw-soft); color: var(--sw-red); font-size: 12px; font-weight: 800; }
 .nt-panel-actions { display: flex; flex-wrap: wrap; justify-content: space-between; column-gap: 12px; border-top: 1px solid var(--sw-border); padding-top: 4px; }
 .sw-popover .nt-panel-actions .nt-quiet { color: var(--sw-muted); font-weight: 600; }
+/* "Còn 2 thông báo chưa đọc khác": the unread ones the popover has no room for. */
+.sw-popover .nt-panel .nt-more { justify-self: start; color: var(--sw-red); font-size: 13px; font-weight: 700; }
 .nt-state { margin: 0; padding: 14px 6px; color: var(--sw-muted); font-size: 13px; text-align: center; }
 .nt-state[role="alert"] { display: grid; gap: 8px; justify-items: center; }
 .nt-state[role="alert"] p { margin: 0; color: #9f1d36; }
@@ -38,6 +40,8 @@
 .nt-text { display: grid; gap: 1px; min-width: 0; }
 .nt-text strong { font-size: 13.5px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
 .nt-unread .nt-text strong { font-weight: 800; }
+/* The first line of the text, one line only, so two notifications of one kind never look alike. */
+.nt-excerpt { overflow: hidden; color: #3f4654; font-size: 12.5px; line-height: 1.4; white-space: nowrap; text-overflow: ellipsis; }
 .nt-text small { color: var(--sw-muted); font-size: 12px; }
 .nt-dot { width: 9px; height: 9px; margin-top: 6px; border-radius: 50%; background: var(--sw-red); visibility: hidden; }
 .nt-unread .nt-dot { visibility: visible; }

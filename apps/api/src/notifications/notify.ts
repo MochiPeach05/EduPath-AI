@@ -158,6 +158,8 @@ export type WarningItem = {
   key: string;
   level: "risk" | "warn" | "ok";
   text: string;
+  /** The words the overview bolds; the first names what the warning is about (a course, "3 môn khác", a group). */
+  strong?: readonly string[];
   action?: { label: string; link: string } | null;
 };
 
@@ -170,6 +172,25 @@ const WARNING_TITLES: Record<string, string> = {
 };
 
 /**
+ * The title of a warning's notification names what it is about, so two warnings of one kind never look alike in the bell
+ * (user review 2026-10-30: "có 2 cặp trùng nhau" — two failed courses were both "Có môn bắt buộc chưa đạt"). null for a
+ * kind that is not notified.
+ */
+export function warningTitle(item: Pick<WarningItem, "kind" | "key" | "text" | "strong">): string | null {
+  const generic = WARNING_TITLES[item.kind];
+  if (!generic) return null;
+  const subject = item.strong?.[0]?.trim();
+  if (!subject) return generic;
+  if (item.kind === "failed_course") return `Môn bắt buộc chưa đạt: ${subject}`;
+  if (item.kind === "late_course") return item.key === "late:others" ? `Còn ${subject} trễ so với kế hoạch` : `Môn trễ so với kế hoạch: ${subject}`;
+  if (item.kind === "elective_short") {
+    const missing = /còn thiếu (\d+(?:,\d+)? (?:TC|môn))/.exec(item.text)?.[1];
+    return missing ? `${subject} còn thiếu ${missing}` : `${subject} còn thiếu tín chỉ`;
+  }
+  return generic;
+}
+
+/**
  * One notification per new warning (risk or warn) of the overview, keyed `warning:<kind>:<key>`: a warning already
  * notified is never sent again while its row exists (a deleted one stays hidden until the 90-day purge). Returns how many
  * were written.
@@ -177,7 +198,7 @@ const WARNING_TITLES: Record<string, string> = {
 export async function notifyWarnings(db: Db, userId: string, items: readonly WarningItem[]): Promise<number> {
   let written = 0;
   for (const item of items) {
-    const title = WARNING_TITLES[item.kind];
+    const title = warningTitle(item);
     if (!title || item.level === "ok" || !item.key.trim() || !item.text.trim()) continue;
     const link = item.action && isPortalPage(item.action.link) ? item.action.link : null;
     if (await notify(db, userId, {

@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   NotificationDetail, NotificationItem, NotificationsDrawer, NotificationsPanel, NOTIFICATION_FILTERS, badgeText, bellLabel, drawerSummary,
-  notificationErrorText, notificationTime, notificationsApi, portalLink,
+  moreUnreadText, notificationErrorText, notificationExcerpt, notificationTime, notificationsApi, portalLink,
 } from "./StudentNotifications";
 import type { StudentNotification } from "./notification-types";
 
@@ -45,6 +45,16 @@ describe("bell texts", () => {
     expect(drawerSummary(Array.from({ length: 50 }, (_, index) => notification({ id: `n${index}`, read: index > 0 })))).toBe("50 thông báo mới nhất · 1 chưa đọc");
     expect(NOTIFICATION_FILTERS.map((item) => item.label)).toEqual(["Tất cả", "Chưa đọc", "Cảnh báo", "Kết quả AI", "Từ Khoa", "Hệ thống"]);
   });
+
+  it("shows the first line of the text and says when the popover has no room for every unread one", () => {
+    expect(notificationExcerpt("\n  Môn bắt buộc chưa đạt: Môn A (F).  \nDòng hai")).toBe("Môn bắt buộc chưa đạt: Môn A (F).");
+    expect(notificationExcerpt("")).toBe("");
+    // The badge says 5: the popover shows 3 of them, so it says the other 2 are a click away.
+    const shown = [notification(), notification({ id: "n2" }), notification({ id: "n3" }), notification({ id: "n4", read: true }), notification({ id: "n5", read: true })];
+    expect(moreUnreadText(5, shown)).toBe("Còn 2 thông báo chưa đọc khác");
+    expect(moreUnreadText(3, shown)).toBeNull();
+    expect(moreUnreadText(0, [])).toBeNull();
+  });
 });
 
 /** A fetch that answers with JSON bodies (a plain object stands in for Response). */
@@ -63,6 +73,9 @@ describe("requests", () => {
     await notificationsApi.list("warn", 50);
     expect(fetchMock.mock.calls[0][0]).toBe("/api/student/notifications?filter=warn&limit=50");
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ credentials: "include", cache: "no-store" });
+    // The popover asks for the unread ones first.
+    await notificationsApi.list("all", 5, undefined, "unread");
+    expect(fetchMock.mock.calls.pop()![0]).toBe("/api/student/notifications?filter=all&limit=5&order=unread");
     await expect(notificationsApi.unreadCount()).resolves.toEqual({ unread: 2 });
     await notificationsApi.read("n1");
     expect(fetchMock.mock.calls[2]).toEqual(["/api/student/notifications/n1/read", expect.objectContaining({ method: "POST", body: "{}", headers: { "Content-Type": "application/json" } })]);
@@ -99,6 +112,7 @@ describe("views", () => {
     expect(html).toContain('class="nt-item nt-ai nt-unread"');
     expect(html).toContain(">AI<");
     expect(html).toContain("Kết quả AI · 10 phút trước · chưa đọc");
+    expect(html).toContain('<span class="nt-excerpt">EduPath AI đã viết xong nhận xét cho lần Đánh giá năng lực lúc 09:12 hôm nay.</span>');
     const read = renderToStaticMarkup(<NotificationItem notification={notification({ type: "warn", read: true })} now={now} current onSelect={() => undefined} />);
     expect(read).toContain('class="nt-item nt-warn"');
     expect(read).toContain('aria-current="true"');
@@ -138,5 +152,9 @@ describe("views", () => {
     expect(html).toContain("Nhận xét năng lực đã sẵn sàng");
     const empty = renderToStaticMarkup(<NotificationsDrawer initial={null} onClose={() => undefined} onNavigate={() => undefined} onUnread={() => undefined} />);
     expect(empty).toContain("Chọn một thông báo để xem chi tiết.");
+    // From the popover's "Còn … chưa đọc khác": the drawer opens on "Chưa đọc".
+    const unread = renderToStaticMarkup(<NotificationsDrawer initial={null} initialFilter="unread" onClose={() => undefined} onNavigate={() => undefined} onUnread={() => undefined} />);
+    expect(unread).toContain('aria-pressed="true">Chưa đọc</button>');
+    expect(unread).toContain('aria-pressed="false">Tất cả</button>');
   });
 });

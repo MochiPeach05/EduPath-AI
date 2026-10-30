@@ -5,7 +5,8 @@ import { orderBy, byText, type SortDirection } from "../admin/table-sort.js";
 import { MAJORS } from "../curricula/majors.js";
 import type { DatabasePool } from "../db/pool.js";
 import {
-  notificationColumns, RESTORE_MINUTES, RETENTION_DAYS, type AnnouncementRow, type AnnouncementTarget, type NotificationRow, type NotificationType,
+  notificationColumns, NOTIFICATION_TOPIC, RESTORE_MINUTES, RETENTION_DAYS, type AnnouncementRow, type AnnouncementTarget, type NotificationOrder,
+  type NotificationRow, type NotificationType,
 } from "./model.js";
 import { notifyMany } from "./notify.js";
 
@@ -16,19 +17,25 @@ type Db = Pick<DatabasePool, "query"> | Pick<PoolClient, "query">;
 
 export type NotificationFilter = "all" | "unread" | NotificationType;
 
-export async function listNotifications(db: Db, userId: string, filter: NotificationFilter, limit: number): Promise<NotificationRow[]> {
-  const condition = filter === "all" ? "" : filter === "unread" ? "AND read_at IS NULL" : "AND type=$3";
+/**
+ * The notifications a student sees ($1): not deleted, and only the newest of each topic (model.ts NOTIFICATION_TOPIC). The
+ * list and the badge's count read the same rows, so the badge always equals the unread notifications listed.
+ */
+const VISIBLE = `SELECT DISTINCT ON ${NOTIFICATION_TOPIC} * FROM stu_notifications WHERE user_id=$1 AND deleted_at IS NULL
+  ORDER BY ${NOTIFICATION_TOPIC},created_at DESC,id DESC`;
+
+export async function listNotifications(db: Db, userId: string, filter: NotificationFilter, limit: number, order: NotificationOrder = "newest"): Promise<NotificationRow[]> {
+  const condition = filter === "all" ? "" : filter === "unread" ? "WHERE read_at IS NULL" : "WHERE type=$3";
   const params: unknown[] = [userId, limit];
   if (filter !== "all" && filter !== "unread") params.push(filter);
+  const sort = order === "unread" ? "(read_at IS NULL) DESC,created_at DESC,id DESC" : "created_at DESC,id DESC";
   const result = await db.query<NotificationRow>(
-    `SELECT ${notificationColumns} FROM stu_notifications WHERE user_id=$1 AND deleted_at IS NULL ${condition}
-      ORDER BY created_at DESC,id DESC LIMIT $2`, params);
+    `SELECT ${notificationColumns} FROM (${VISIBLE}) n ${condition} ORDER BY ${sort} LIMIT $2`, params);
   return result.rows;
 }
 
 export async function unreadCount(db: Db, userId: string): Promise<number> {
-  const result = await db.query<{ unread: number }>(
-    "SELECT count(*)::int AS unread FROM stu_notifications WHERE user_id=$1 AND deleted_at IS NULL AND read_at IS NULL", [userId]);
+  const result = await db.query<{ unread: number }>(`SELECT count(*)::int AS unread FROM (${VISIBLE}) n WHERE read_at IS NULL`, [userId]);
   return result.rows[0]?.unread ?? 0;
 }
 
@@ -44,9 +51,14 @@ export async function readAll(db: Db, userId: string): Promise<void> {
   await db.query("UPDATE stu_notifications SET read_at=now() WHERE user_id=$1 AND deleted_at IS NULL AND read_at IS NULL", [userId]);
 }
 
-/** Soft delete, so "Hoàn tác" can bring it back for a moment; false when there is nothing to delete. */
+/**
+ * Soft delete, so "Hoàn tác" can bring it back for a moment; false when there is nothing to delete. The older notifications
+ * of the same topic go with it, so deleting one never brings an older one about the same thing back into the bell.
+ */
 export async function deleteNotification(db: Db, userId: string, id: string): Promise<boolean> {
-  const result = await db.query("UPDATE stu_notifications SET deleted_at=now() WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL", [id, userId]);
+  const result = await db.query(
+    `UPDATE stu_notifications SET deleted_at=now() WHERE user_id=$2 AND deleted_at IS NULL
+      AND ${NOTIFICATION_TOPIC}=(SELECT ${NOTIFICATION_TOPIC} FROM stu_notifications WHERE id=$1 AND user_id=$2 AND deleted_at IS NULL)`, [id, userId]);
   return Boolean(result.rowCount);
 }
 
