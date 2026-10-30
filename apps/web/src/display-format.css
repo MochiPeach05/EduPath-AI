@@ -1,0 +1,18 @@
+/* Status colours shared by every student page (display-format.ts Meaning). Pages keep their own chip shapes. */
+:root {
+  --meaning-good: #27765b;
+  --meaning-good-soft: #e6f2ec;
+  --meaning-fine: #2456a6;
+  --meaning-fine-soft: #e8effa;
+  --meaning-warn: #8f5a00;
+  --meaning-warn-soft: #fff3d9;
+  --meaning-bad: #b42318;
+  --meaning-bad-soft: #fdecea;
+  --meaning-none: #4b5563;
+  --meaning-none-soft: #eef0f4;
+}
+.meaning-good { color: var(--meaning-good) !important; background: var(--meaning-good-soft) !important; }
+.meaning-fine { color: var(--meaning-fine) !important; background: var(--meaning-fine-soft) !important; }
+.meaning-warn { color: var(--meaning-warn) !important; background: var(--meaning-warn-soft) !important; }
+.meaning-bad { color: var(--meaning-bad) !important; background: var(--meaning-bad-soft) !important; }
+.meaning-none { color: var(--meaning-none) !important; background: var(--meaning-none-soft) !important; }
