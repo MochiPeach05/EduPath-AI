@@ -6,10 +6,10 @@
 import { Router, type ErrorRequestHandler } from "express";
 import type { PoolClient } from "pg";
 import { z } from "zod";
-import { careerFitsFor } from "../competency-assessment/calculate.js";
+import { assessWithoutHistory, careerFitsFor } from "../competency-assessment/calculate.js";
 import { courseKey, uniqueCurriculumCourses } from "../competency-assessment/course-state.js";
 import { AssessmentError, readAssessmentInputs } from "../competency-assessment/inputs.js";
-import type { AssessmentInputs, CareerInput, CareerRequirementResult, CareerResult, FitCode, GapStatus } from "../competency-assessment/types.js";
+import type { AssessmentInputs, AssessmentResult, CareerInput, CareerRequirementResult, CareerResult, FitCode, GapStatus } from "../competency-assessment/types.js";
 import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
 import { activeConsentVersion, consentWithdrawn, isValidConsent } from "../student/consent.js";
@@ -27,7 +27,13 @@ export type GuidanceRequirement = {
   noDataReason: NoDataReason | null; exemptOnly: boolean; coefficient: number;
   /** Courses of another specialty that measure the skill, "Name (CODE)" as the note of Khoảng trống kỹ năng. */
   otherSpecialtyCourses: string[];
+  /**
+   * The courses the score comes from, largest share first, with the grade printed on the transcript (user 2026-10-30: "Nên
+   * ghi môn làm minh chứng cạnh từng điểm"); empty without a score.
+   */
+  sources: GuidanceSource[];
 };
+export type GuidanceSource = { name: string; score10: number | null; letter: string | null };
 export type GuidanceCareer = {
   id: string; code: string; nameVi: string; nameEn: string; category: string; categoryName: string; description: string; isTarget: boolean;
   fit: {
@@ -58,16 +64,29 @@ export async function readCareerCatalog(db: Pick<PoolClient, "query">): Promise<
   }));
 }
 
-const requirementsOf = (career: CatalogRow, fit: CareerResult | null, courseNames: ReadonlyMap<string, string>): GuidanceRequirement[] => fit
+/** Per skill key, the courses its score comes from (evidence rows with role "score"), largest share first. */
+export function scoreSourcesBySkill(result: Pick<AssessmentResult, "skills" | "courses">): Map<string, GuidanceSource[]> {
+  const courses = new Map(result.courses.map((course) => [course.code, course]));
+  return new Map(result.skills.map((skill) => [skill.key, skill.evidenceCourses.filter((row) => row.role === "score")
+    .sort((a, b) => (b.share ?? 0) - (a.share ?? 0) || b.contribution - a.contribution || a.code.localeCompare(b.code))
+    .map((row) => {
+      const course = courses.get(row.code);
+      return { name: course?.name ?? row.code, score10: course?.score10 ?? null, letter: course?.letter ?? null };
+    })]));
+}
+
+const requirementsOf = (career: CatalogRow, fit: CareerResult | null, courseNames: ReadonlyMap<string, string>,
+  sources: ReadonlyMap<string, GuidanceSource[]>): GuidanceRequirement[] => fit
   ? fit.requirements.map((row) => ({
     title: row.title, skillName: row.skillName, isRequired: row.isRequired, status: row.status, statusLabel: row.statusLabel,
     score: row.score, threshold: row.threshold, deficit: row.deficit, upcomingTerm: row.upcomingTerm,
     noDataReason: row.noDataReason, exemptOnly: row.exemptOnly, coefficient: row.coefficient,
     otherSpecialtyCourses: (row.otherSpecialtyCourses ?? []).map((code) => (courseNames.has(code) ? `${courseNames.get(code)} (${code})` : code)),
+    sources: row.score !== null && row.skillKey ? sources.get(row.skillKey) ?? [] : [],
   }))
   : career.requirements.map((row) => ({
     title: row.title, skillName: row.skillName, isRequired: row.isRequired, status: null, statusLabel: null, score: null, threshold: null, deficit: null, upcomingTerm: null,
-    noDataReason: null, exemptOnly: false, coefficient: row.isRequired ? 2 : 1, otherSpecialtyCourses: [],
+    noDataReason: null, exemptOnly: false, coefficient: row.isRequired ? 2 : 1, otherSpecialtyCourses: [], sources: [],
   }));
 
 /** The careers, best fit first (no fit last, then by name), each with its fit, requirements and survey matches. */
@@ -75,6 +94,8 @@ export function guidanceCareers(catalog: CatalogRow[], inputs: AssessmentInputs 
   survey: { field: string | null; tech: readonly string[] }): GuidanceCareer[] {
   const fits = inputs ? careerFitsFor(inputs, catalog) : [];
   const courseNames = new Map(uniqueCurriculumCourses(inputs?.curriculum.courses ?? []).map((course) => [courseKey(course.code), course.name]));
+  // The skills' evidence does not depend on the career: one run gives every requirement its courses.
+  const sources = inputs ? scoreSourcesBySkill(assessWithoutHistory(inputs)) : new Map<string, GuidanceSource[]>();
   const careers = catalog.map((career, index): GuidanceCareer => {
     const fit = fits[index] ?? null;
     return {
@@ -86,7 +107,7 @@ export function guidanceCareers(catalog: CatalogRow[], inputs: AssessmentInputs 
         selfStudy: fit.requirements.filter((row) => row.status === "no_data" && (row.noDataReason === "other_specialty" || row.noDataReason === "elective_not_chosen")).length,
         summaryText: fit.summaryText, dataText: fit.dataText,
       },
-      requirements: requirementsOf(career, fit, courseNames),
+      requirements: requirementsOf(career, fit, courseNames, sources),
       interests: interestMatch(career, survey),
     };
   });

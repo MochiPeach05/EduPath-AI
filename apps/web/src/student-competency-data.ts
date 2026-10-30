@@ -4,6 +4,7 @@ import type {
   AiOutput, AiPriority, AiStatus, AssessmentResult, CareerRequirementResult, CareerResult, Confidence,
   CourseState, Eligibility, HistoryPoint, LevelCode, PlanProgressResult, SelfStudyItem, SkillPlan, SkillResult, StoredAssessment, SupportCourse,
 } from "./competency-assessment-types";
+import { meaningOf, scoreText, termName, type Meaning } from "./display-format";
 
 export const COMPETENCY_API = "/api/student/competency-assessments";
 
@@ -87,12 +88,11 @@ const integer = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 0 });
 const decimal = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 2 });
 const oneDecimal = new Intl.NumberFormat("vi-VN", { maximumFractionDigits: 1 });
 /**
- * Scores are classified unrounded by the engine and shown as whole numbers rounded DOWN,
- * so a shown score never crosses a level or threshold it has not reached (84,6 shows 84, not 85).
- * Khá starts at 62,5 (comp-calc-v10): from there to 63 one decimal is kept (62,7), so a Khá score
- * never reads 62 and the bound itself reads 62,5.
+ * Scores are classified unrounded by the engine and shown with scoreText (display-format.ts): one decimal at most, rounded
+ * DOWN to the tenth, so a shown score never crosses a level or threshold it has not reached (89,96 shows 89,9) and every page
+ * prints the same number (user 2026-10-30: Năng lực chung read 59,8 on Tổng quan and 59 here).
  */
-export const formatScore = (value: number | null | undefined) => (value === null || value === undefined ? "—" : oneDecimal.format(shownScore(value)));
+export const formatScore = (value: number | null | undefined) => (value === null || value === undefined ? "—" : scoreText(value));
 export const formatNumber = (value: number | null | undefined) => value === null || value === undefined ? "—" : decimal.format(value);
 export const formatPercent = (share: number | null | undefined) => share === null || share === undefined ? "—" : `${integer.format(share * 100)}%`;
 export function formatDateTime(iso: string | null | undefined): string {
@@ -100,15 +100,9 @@ export function formatDateTime(iso: string | null | undefined): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" });
 }
-/** "HK253" → "HK3 · 2025–2026". Unknown shapes are shown as they are. */
-export function termLabel(term: string | null | undefined): string {
-  if (!term) return "Chưa xếp lịch";
-  const match = /^HK(\d{2})(\d)$/.exec(term);
-  if (!match) return term;
-  const start = 2000 + Number(match[1]);
-  return `HK${match[2]} · ${start}–${start + 1}`;
-}
-/** "Sắp học · HK3 · 2026–2027": a skill or course still to come, its term written like termLabel (2026-10-25 audit, "Sắp học · HK263" before). */
+/** "HK253" → "HK3 2025–2026" (termName, the one way terms are written); no term is "Chưa xếp lịch". */
+export const termLabel = (term: string | null | undefined): string => (term ? termName(term) : "Chưa xếp lịch");
+/** "Sắp học · HK3 2026–2027": a skill or course still to come, its term written like termLabel (2026-10-25 audit, "Sắp học · HK263" before). */
 export const upcomingText = (term: string | null | undefined) => (term ? `Sắp học · ${termLabel(term)}` : "Sắp học");
 
 /* ------------------------------------------------------------ terms ahead */
@@ -134,16 +128,16 @@ export function isOverdue(course: { term: string | null; state: CourseState; ove
   if (course.overdue !== undefined) return course.overdue;
   return course.term !== null && studyTerm !== null && course.state !== "in_progress" && course.term <= studyTerm;
 }
-/** "Đã qua học kỳ dự kiến HK233 — đăng ký ở HK262" (or "ở học kỳ tới" when the next term is not known). */
-export const overdueText = (term: string, nextTerm: string | null) => `Đã qua học kỳ dự kiến ${term} — đăng ký ở ${nextTerm ?? "học kỳ tới"}`;
-/** The "Học kỳ" of a suggested course: "HK261 theo KHĐT", "Chưa xếp lịch", or the overdue wording when its term has passed. */
+/** "Đã qua học kỳ dự kiến HK3 2023–2024 — đăng ký ở HK2 2026–2027" (or "ở học kỳ tới" when the next term is not known). */
+export const overdueText = (term: string, nextTerm: string | null) => `Đã qua học kỳ dự kiến ${termName(term)} — đăng ký ở ${nextTerm ? termName(nextTerm) : "học kỳ tới"}`;
+/** The "Học kỳ" of a suggested course: "HK1 2026–2027 theo KHĐT", "Chưa xếp lịch", or the overdue wording when its term has passed. */
 export function courseTermText(course: Pick<SupportCourse, "term" | "termSource" | "state" | "overdue">, studyTerm: string | null, nextTerm: string | null): string {
   if (!course.term) return "Chưa xếp lịch";
   if (isOverdue(course, studyTerm)) return overdueText(course.term, nextTerm);
-  return `${course.term} theo ${course.termSource === "plan" ? "KHĐT" : "CTĐT"}`;
+  return `${termName(course.term)} theo ${course.termSource === "plan" ? "KHĐT" : "CTĐT"}`;
 }
 /**
- * What an evidence course not taken yet says (2026-10-25 audit): "Sắp học · HK2 · 2026–2027" when it is planned after the
+ * What an evidence course not taken yet says (2026-10-25 audit): "Sắp học · HK2 2026–2027" when it is planned after the
  * term being studied (the engine's rule for SkillResult.upcoming), else "Chưa học" (its term has passed or it has none).
  */
 export function plannedCourseNote(plannedTerm: string | null, studyTerm: string | null): string {
@@ -286,22 +280,17 @@ export const CONFIDENCE_LABELS: Record<Confidence, string> = { low: "Độ tin c
 /* --------------------------------------------------------- career and gaps */
 
 export type StatusTone = "pass" | "fail" | "unknown" | "neutral";
-/** The value formatScore prints, as a number: 84,6 → 84; 62,77 → 62,7 (from a bound that is not whole, 62,5, to 63 one decimal is kept). */
-export function shownScore(value: number): number {
-  const whole = Math.floor(value + 1e-9);
-  const reached = Object.values(LEVEL_THRESHOLDS).some((bound) => whole < bound && value + 1e-9 >= bound);
-  return reached ? Math.floor(value * 10 + 1e-9) / 10 : whole;
-}
+/** The value formatScore prints, as a number: rounded down to the tenth (84,66 → 84,6; 62,49 → 62,4), like scoreText. */
+export const shownScore = (value: number): number => Math.floor(value * 10 + 1e-9) / 10;
 const tenths = (value: number) => Math.round(value * 10) / 10;
 /**
  * The shortfall as the page shows it (2026-10-25 audit): the threshold minus the score as shown, so the two add up — 43 is
- * "thiếu 19,5" against 62,5 (it read "thiếu 19": 43 + 19 = 62), 75 "thiếu 5" against 80. One decimal only when the threshold
- * or the shown score has one. Without the score and threshold (an older caller) the deficit rounded up to a whole point.
- * Never 0: a score below the threshold always lacks something.
+ * "thiếu 19,5" against 62,5, 74,6 "thiếu 5,4" against 80. Without the score and threshold (an older caller) the deficit
+ * rounded up to the tenth. Never 0: a score below the threshold always lacks something.
  */
 function shortfall(deficit: number, shown?: { score?: number | null; threshold?: number | null }): number {
   if (typeof shown?.score === "number" && typeof shown.threshold === "number") return Math.max(0.1, tenths(shown.threshold - shownScore(shown.score)));
-  return Math.max(1, Math.ceil(deficit - 1e-9));
+  return Math.max(0.1, Math.ceil(deficit * 10 - 1e-9) / 10);
 }
 /** A number of points with at most one decimal ("19,5", "6"). */
 const formatPoints = (value: number) => oneDecimal.format(tenths(value));
@@ -383,6 +372,25 @@ export function sortRequirements<T extends Pick<CareerRequirementResult, "isRequ
  */
 export const isGap = (req: Pick<CareerRequirementResult, "status">) => req.status === "below" || req.status === "not_studied" || req.status === "no_data";
 
+/** "a", "a, b và c", or the first three and "và n kỹ năng khác". */
+const nameList = (names: readonly string[]) => names.length > 3 ? `${names.slice(0, 3).join(", ")} và ${names.length - 3} kỹ năng khác` : joinWords(names);
+/**
+ * What "Kỹ năng còn thiếu" says when no skill is missing (isGap). It never says every skill is reached while skills without a
+ * score count 0 in the fit (user 2026-10-30: "✓ Bạn đã đạt mọi kỹ năng" beside "51/100 · Ít phù hợp"): the "Sắp học" skills,
+ * the only ones isGap leaves out, are named with what they do to the score. `zero` is null when every skill is reached.
+ */
+export function noGapText(career: Pick<CareerResult, "requirements">): { met: string; zero: string | null } {
+  const ahead = sortRequirements(career.requirements).filter((req) => req.status === "upcoming").map((req) => req.skillName ?? req.title);
+  if (!ahead.length) return { met: "Bạn đã đạt mọi kỹ năng của nghề này.", zero: null };
+  const level = fitLevelOf(career);
+  const effect = level === "insufficient_data" ? "nên chưa đủ dữ liệu để xếp mức phù hợp"
+    : `kéo điểm phù hợp xuống ${formatScore(fitScoreOf(career.requirements))}/100`;
+  return {
+    met: "Các kỹ năng đã có điểm đều đạt ngưỡng.",
+    zero: `${nameList(ahead)} chưa có điểm (sắp học) nên đang tính 0, ${effect}; điểm sẽ tăng khi bạn học các học phần đó.`,
+  };
+}
+
 /**
  * "Điểm phù hợp" 0–100 (comp-calc-v11, user 2026-10-22: "Sao lại 100% tròn nhỉ tại vì nó chỉ chấm 92
  * điểm và sửa lại thành đơn vị điểm"): the career's skills averaged like a score, Bắt buộc counted
@@ -449,6 +457,16 @@ export function fitStep(level: FitLevel): 0 | 1 | 2 | 3 | 4 | 5 {
   return level === "insufficient_data" ? 0 : (5 - FIT_SCALE.findIndex((item) => item.code === level)) as 1 | 2 | 3 | 4 | 5;
 }
 
+/**
+ * The colour of a level or fit badge (user 2026-10-30: "Ít phù hợp" was green, "Trung bình" green on one page and blue on
+ * another): one colour per word everywhere (display-format meaningOf), so Trung bình is amber as a level and as a fit. A badge
+ * without a score (Sắp học, Chưa học, Chưa có điểm, miễn/công nhận, Chưa đủ dữ liệu) has none.
+ */
+export function levelMeaning(level: LevelCode | DisplayLevel | null | undefined): Meaning {
+  return level && level in LEVEL_LABELS ? meaningOf(LEVEL_LABELS[level as ScoredLevel]) : "none";
+}
+export const fitMeaning = (level: FitLevel): Meaning => (level === "insufficient_data" ? "none" : meaningOf(FIT_LABELS[level]));
+
 export function eligibilityDisplay(eligibility: Eligibility, missing: { code: string; name: string | null }[]): { tone: StatusTone; glyph: string; text: string } {
   if (eligibility === "eligible") return { tone: "pass", glyph: "✓", text: "Đủ điều kiện đăng ký" };
   if (eligibility === "not_eligible") return { tone: "unknown", glyph: "⚠", text: missing.length ? `Cần học trước ${missing.map((m) => m.name ? `${m.name} (${m.code})` : m.code).join(", ")}` : "Chưa đủ điều kiện" };
@@ -477,6 +495,26 @@ export function courseStanding(course: Pick<SupportCourse, "state" | "score10" |
 }
 
 /**
+ * The courses a skill's score comes from (user 2026-10-30: "Nhiều kỹ năng cùng đúng 68 điểm … Nên ghi môn làm minh chứng cạnh
+ * từng điểm"): the scored evidence courses, largest share first, each as "Name (6,8 · C+)" with the grade printed on the
+ * transcript; at most `max`, and how many more there are.
+ */
+export function scoreSources(skill: Pick<SkillResult, "evidenceCourses">, courses: ReadonlyMap<string, Pick<AssessmentResult["courses"][number], "name" | "score10" | "letter">>, max = 2): { names: string[]; more: number } {
+  const rows = skill.evidenceCourses.filter((row) => row.role === "score")
+    .sort((a, b) => (b.share ?? 0) - (a.share ?? 0) || b.contribution - a.contribution || a.code.localeCompare(b.code));
+  const names = rows.slice(0, max).map((row) => gradedCourseText(courses.get(row.code) ?? { name: row.code, score10: null, letter: null }));
+  return { names, more: Math.max(0, rows.length - max) };
+}
+/** "Lập trình web (6,8 · C+)": a course with the grade printed on the transcript (hệ 10, then the letter). */
+export function gradedCourseText(course: { name: string; score10: number | null; letter: string | null }): string {
+  const grade = course.score10 !== null ? `${formatNumber(course.score10)}${course.letter ? ` · ${course.letter}` : ""}` : course.letter;
+  return `${course.name}${grade ? ` (${grade})` : ""}`;
+}
+/** "Từ Lập trình web (6,8 · C+), Cơ sở dữ liệu (7,5 · B) và 1 học phần khác"; "" without a scored course. */
+export const scoreSourcesText = (sources: { names: string[]; more: number }) =>
+  !sources.names.length ? "" : `Từ ${sources.more ? `${sources.names.join(", ")} và ${sources.more} học phần khác` : joinWords(sources.names)}`;
+
+/**
  * The course plans that fit the result: with a target career, only its met skills below Giỏi (Thành thạo before comp-calc-v10)
  * ("deepen", comp-calc-v7); without one, the skills below Khá ("strengthen"; v6 plans have no purpose
  * and are of that kind). Weak skills outside the chosen career are never advised on.
@@ -493,14 +531,14 @@ export const careerSkillKeys = (result: Pick<AssessmentResult, "career">): Set<s
 /* ------------------------------------------------- history (STU-COMP-07) */
 
 type HistoryRow = HistoryPoint & {
-  /** Whole-point change of the overall score from the previous term with a score, as the page shows the scores (rounded down). */
+  /** Change of the overall score from the previous term with a score, as the page shows the scores (tenths, rounded down). */
   change: number | null;
   /** The newest term: the result shown everywhere else on the page. */
   latest: boolean;
 };
 type HistoryYear = { schoolYear: string; rows: HistoryRow[]; end: HistoryRow };
 
-const shown = (score: number | null) => score === null ? null : Math.floor(score + 1e-9);
+const shown = (score: number | null) => score === null ? null : shownScore(score);
 
 /** The history grouped by school year, oldest first, each term with its change from the term before. */
 export function historyYears(history: readonly HistoryPoint[]): HistoryYear[] {
@@ -508,7 +546,7 @@ export function historyYears(history: readonly HistoryPoint[]): HistoryYear[] {
   let previous: number | null = null;
   history.forEach((point, index) => {
     const score = shown(point.overall.score);
-    const row: HistoryRow = { ...point, change: score !== null && previous !== null ? score - previous : null, latest: index === history.length - 1 };
+    const row: HistoryRow = { ...point, change: score !== null && previous !== null ? tenths(score - previous) : null, latest: index === history.length - 1 };
     if (score !== null) previous = score;
     const year = years.at(-1);
     if (year && year.schoolYear === point.schoolYear) { year.rows.push(row); year.end = row; }
@@ -517,8 +555,10 @@ export function historyYears(history: readonly HistoryPoint[]): HistoryYear[] {
   return years;
 }
 
-/** "học kỳ 1 năm học 2023–2024". */
-const termInWords = (point: Pick<HistoryPoint, "semester" | "schoolYear">) => `học kỳ ${point.semester} năm học ${point.schoolYear}`;
+/** "HK1 2023–2024", like every other term on the page (termName). */
+export const historyTermName = (point: Pick<HistoryPoint, "term" | "semester" | "schoolYear">) =>
+  /^HK\d{3}$/.test(point.term) ? termName(point.term) : `HK${point.semester} ${point.schoolYear}`;
+const termInWords = historyTermName;
 
 /** One sentence on the overall trend from the first term with a score to the newest one; null with fewer than two. */
 export function historySentence(history: readonly HistoryPoint[]): string | null {
@@ -527,10 +567,10 @@ export function historySentence(history: readonly HistoryPoint[]): string | null
   const first = scored[0]!, last = scored.at(-1)!;
   const from = shown(first.overall.score)!, to = shown(last.overall.score)!;
   const best = scored.reduce((top, point) => shown(point.overall.score)! > shown(top.overall.score)! ? point : top, first);
-  const trend = to > from ? `tăng từ ${from} (${termInWords(first)}) lên ${to} (${termInWords(last)})`
-    : to < from ? `giảm từ ${from} (${termInWords(first)}) xuống ${to} (${termInWords(last)})`
-      : `giữ ở mức ${to} từ ${termInWords(first)} đến ${termInWords(last)}`;
-  const peak = best !== first && best !== last && shown(best.overall.score)! > Math.max(from, to) ? ` Cao nhất là ${shown(best.overall.score)} vào ${termInWords(best)}.` : "";
+  const trend = to > from ? `tăng từ ${scoreText(from)} (${termInWords(first)}) lên ${scoreText(to)} (${termInWords(last)})`
+    : to < from ? `giảm từ ${scoreText(from)} (${termInWords(first)}) xuống ${scoreText(to)} (${termInWords(last)})`
+      : `giữ ở mức ${scoreText(to)} từ ${termInWords(first)} đến ${termInWords(last)}`;
+  const peak = best !== first && best !== last && shown(best.overall.score)! > Math.max(from, to) ? ` Cao nhất là ${scoreText(shown(best.overall.score)!)} vào ${termInWords(best)}.` : "";
   return `Điểm năng lực tổng ${trend}.${peak}`;
 }
 
@@ -538,7 +578,7 @@ export function historySentence(history: readonly HistoryPoint[]): string | null
 
 type GapHistoryRow = {
   requirementId: string; name: string; priorityLabel: string; isRequired: boolean; threshold: number;
-  /** One cell per point: the score as the page shows it (rounded down) and the status of that term. */
+  /** One cell per point: the score as the page shows it (tenths, rounded down) and the status of that term. */
   cells: { term: string; score: number | null; status: CareerRequirementResult["status"] | null }[];
   /** Latest scored cell − first scored cell; null with fewer than two scored cells. */
   change: number | null;
@@ -566,7 +606,7 @@ export function gapHistory(result: Pick<AssessmentResult, "career" | "history">)
     const scored = cells.filter((cell) => cell.score !== null);
     return {
       requirementId: req.requirementId, name: req.skillName ?? req.title, priorityLabel: req.priorityLabel, isRequired: req.isRequired, threshold: req.threshold,
-      cells, change: scored.length >= 2 ? scored.at(-1)!.score! - scored[0]!.score! : null,
+      cells, change: scored.length >= 2 ? tenths(scored.at(-1)!.score! - scored[0]!.score!) : null,
     };
   });
   const first = points[0]!, last = points.at(-1)!;
@@ -575,7 +615,7 @@ export function gapHistory(result: Pick<AssessmentResult, "career" | "history">)
   const sentence = points.length < 2
     ? `Mới có ${termInWords(last)} có điểm nên chưa so sánh được; ${to}/${total} kỹ năng nghề đạt ngưỡng.`
     : `Từ ${termInWords(first)} đến ${termInWords(last)}, số kỹ năng nghề đạt ngưỡng ${to > from ? `tăng từ ${from} lên ${to}` : to < from ? `giảm từ ${from} xuống ${to}` : `giữ ở ${to}`}/${total}.`
-      + (best ? ` Tăng nhiều nhất: ${best.name} (+${best.change} điểm).` : "");
+      + (best ? ` Tăng nhiều nhất: ${best.name} (${formatDifference(best.change!)} điểm).` : "");
   return { state: "ready", points, rows, sentence };
 }
 
@@ -918,7 +958,7 @@ export function dataUsedLine(assessment: Pick<StoredAssessment, "createdAt" | "r
   const parts = [
     `Cập nhật lúc ${formatDateTime(assessment.createdAt)}`,
     `khóa ${meta.cohortCode}`,
-    `bảng điểm ${transcript.courseCount.toLocaleString("vi-VN")} học phần${transcript.latestTerm ? ` đến ${transcript.latestTerm}` : ""}`,
+    `bảng điểm ${transcript.courseCount.toLocaleString("vi-VN")} học phần${transcript.latestTerm ? ` đến ${termName(transcript.latestTerm)}` : ""}`,
   ];
   return parts.join(" · ");
 }

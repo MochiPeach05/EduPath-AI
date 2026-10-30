@@ -2,9 +2,11 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Icon } from "./student-icons";
 import {
   CAREER_GUIDANCE_API, COMPARE_MAX, FIT_STEP, bestFits, bestFitsHeading, blockedAction, blockedText, compareRows, filterCareers, fitRuleText, fitScoreText,
-  fitSummary, gapNote, hasFit, interestPicks, matchesInterests, missingSkills, orderedRequirements, requirementName, requirementScoreText, requirementState,
+  fitSummary, gapNote, hasFit, interestPicks, matchesInterests, missingSkills, orderedRequirements, requirementName, requirementScoreText, requirementSourcesText, requirementState,
   toggleCompare, type CareerFilters, type GuidanceCareer, type GuidanceResponse, type GuidanceRequirement,
 } from "./career-guidance-data";
+import { meaningClass } from "./display-format";
+import { fitMeaning } from "./student-competency-data";
 import "./career-guidance.css";
 
 // "Định hướng nghề nghiệp" (#career, user 2026-10-24: "làm theo ý bạn muốn nhưng vẫn phải phù hợp với đề tài"): the
@@ -33,10 +35,12 @@ async function saveTarget(careerId: string): Promise<void> {
   throw new Error(body.error === "career_unavailable" ? "Nghề này vừa bị xóa khỏi danh mục. Hãy chọn nghề khác." : "Chưa lưu được nghề mục tiêu. Vui lòng thử lại.");
 }
 
+/** The fit in the colour of its word, as on Khoảng trống kỹ năng (fitMeaning: Ít phù hợp amber, never green). */
 function FitBadge({ career }: { career: GuidanceCareer }) {
   if (!career.fit) return <span className="cg-fit cg-fit-0">Chưa tính</span>;
   const step = FIT_STEP[career.fit.code];
-  return <span className={`cg-fit cg-fit-${step}`}>
+  const meaning = fitMeaning(career.fit.code);
+  return <span className={`cg-fit cg-fit-${step}${meaning !== "none" ? ` ${meaningClass(meaning)}` : ""}`}>
     <span className="cg-pips" aria-hidden="true">{[1, 2, 3, 4, 5].map((pip) => <i key={pip} className={pip <= step ? "is-on" : undefined} />)}</span>
     {career.fit.label}
   </span>;
@@ -113,10 +117,11 @@ function DetailDialog({ career, saving, onChoose, onClose }: { career: GuidanceC
       <h3>Yêu cầu kỹ năng và mức hiện tại của bạn</h3>
       {career.requirements.length ? <div className="cg-table-scroll" tabIndex={0} role="region" aria-label={`Yêu cầu của ${career.nameVi}`}>
         <table className="cg-table">
-          <thead><tr><th scope="col">Kỹ năng</th><th scope="col">Tính chất</th><th scope="col" className="cg-num">Điểm</th><th scope="col">Mức hiện tại của bạn</th></tr></thead>
+          <thead><tr><th scope="col">Kỹ năng</th><th scope="col" className="cg-nowrap">Tính chất</th><th scope="col" className="cg-num">Điểm</th><th scope="col">Mức hiện tại của bạn</th></tr></thead>
           <tbody>{orderedRequirements(career).map((row, index) => <tr key={`${row.title}-${index}`}>
-            <td><strong>{requirementName(row)}</strong>{row.skillName && row.title !== row.skillName && <small>{row.title}</small>}</td>
-            <td>{row.isRequired ? "Bắt buộc" : "Ưu tiên"}</td>
+            <td><strong>{requirementName(row)}</strong>{row.skillName && row.title !== row.skillName && <small>{row.title}</small>}
+              {requirementSourcesText(row) && <small>{requirementSourcesText(row)}</small>}</td>
+            <td className="cg-nowrap">{row.isRequired ? "Bắt buộc" : "Ưu tiên"}</td>
             <td className="cg-num">{requirementScoreText(row)}</td>
             <td><StateChip requirement={row} />{row.status === "no_data" && <small>{row.noDataReason === "other_specialty"
               ? `Chỉ có trong học phần của chuyên ngành khác${row.otherSpecialtyCourses.length ? `: ${row.otherSpecialtyCourses.join(", ")}` : ""}.`

@@ -1,7 +1,7 @@
 // "Định hướng nghề nghiệp" (#career): every career of the catalog against the student's competencies (the same fit as
 // Khoảng trống kỹ năng shows for the target career) and against Khảo sát định hướng. Computed by the API
 // (apps/api/src/career-guidance), shown here; no AI.
-import { careerDataText, careerSummaryText, formatDateTime, formatScore, gapStatusDisplay, sortRequirements, type StatusTone } from "./student-competency-data";
+import { careerDataText, careerSummaryText, formatDateTime, formatScore, gapStatusDisplay, gradedCourseText, scoreSourcesText, sortRequirements, type StatusTone } from "./student-competency-data";
 
 export const CAREER_GUIDANCE_API = "/api/student/career-guidance";
 /** At most this many careers side by side. */
@@ -13,6 +13,8 @@ export type GuidanceRequirement = {
   title: string; skillName: string | null; isRequired: boolean;
   status: GapStatus | null; statusLabel: string | null; score: number | null; threshold: number | null; deficit: number | null; upcomingTerm: string | null;
   exemptOnly: boolean; noDataReason: "no_skill" | "not_measured" | "other_specialty" | "elective_not_chosen" | null; otherSpecialtyCourses: string[];
+  /** The courses the score comes from, largest share first (absent from an older API). */
+  sources?: { name: string; score10: number | null; letter: string | null }[];
 };
 export type GuidanceFit = { score: number | null; code: FitCode; label: string; dataShare: number; met: number; below: number; notStudied: number; upcoming: number; noData: number; total: number;
   summaryText: string; dataText: string };
@@ -128,6 +130,14 @@ export function gapNote(data: Pick<GuidanceResponse, "gapCurrent" | "gapAssessed
 }
 /** A requirement's score as Khoảng trống kỹ năng prints it ("—" without one). */
 export const requirementScoreText = (requirement: Pick<GuidanceRequirement, "score">) => (requirement.score === null ? "—" : formatScore(requirement.score));
+/**
+ * The courses a requirement's score comes from, as Khoảng trống kỹ năng says them ("Từ Lập trình web (6,8 · C+) và 1 học phần
+ * khác"; user 2026-10-30: "Nên ghi môn làm minh chứng cạnh từng điểm"); "" without a score.
+ */
+export function requirementSourcesText(requirement: Pick<GuidanceRequirement, "score" | "sources">, max = 2): string {
+  const sources = requirement.score === null ? [] : requirement.sources ?? [];
+  return scoreSourcesText({ names: sources.slice(0, max).map(gradedCourseText), more: Math.max(0, sources.length - max) });
+}
 /** The count lines of Khoảng trống kỹ năng, rebuilt from the requirements like that page: "Đạt x/y kỹ năng · … · u/y kỹ năng có điểm". */
 export const fitSummary = (career: GuidanceCareer) =>
   (career.fit ? `${careerSummaryText({ summaryText: career.fit.summaryText, requirements: computed(career) })} · ${careerDataText({ requirements: computed(career) })}` : "");
@@ -166,5 +176,5 @@ export function blockedAction(code: string): { href: string; label: string } | n
   return null;
 }
 
-/** The điểm phù hợp as Khoảng trống kỹ năng prints it (formatScore: whole points rounded down, 62,5–63 with one decimal). */
+/** The điểm phù hợp as Khoảng trống kỹ năng prints it (formatScore: rounded down to the tenth, 50,66 → 50,6). */
 export const fitScoreText = (score: number) => formatScore(score);

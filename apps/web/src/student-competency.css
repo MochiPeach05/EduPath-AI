@@ -72,6 +72,11 @@
 .scomp-page .scomp-level-3 .scomp-pips i.is-on { background: var(--scomp-l3); }
 .scomp-page .scomp-level-4 .scomp-pips i.is-on { background: var(--scomp-l4); }
 .scomp-page .scomp-level-5 .scomp-pips i.is-on { background: var(--scomp-l5); }
+/* A badge with a score wears the colour of its word (display-format.css meaning-*, user 2026-10-30: one colour per word);
+   its pips take that colour too, so the step count stays and no second hue sits inside the chip. */
+.scomp-page .scomp-level[class*="meaning-"] { border-color: transparent; }
+.scomp-page .scomp-level[class*="meaning-"] .scomp-pips i { background: color-mix(in srgb, currentColor 22%, transparent); }
+.scomp-page .scomp-level[class*="meaning-"] .scomp-pips i.is-on { background: currentColor; }
 .scomp-page .scomp-confidence { color: var(--sw-muted); font-size: 12px; }
 
 /* Bars on the shared 0–100 scale */
@@ -103,7 +108,7 @@
 .scomp-page .scomp-group-label span { color: var(--sw-muted); font-size: 12px; }
 .scomp-page .scomp-group-value { display: grid; text-align: right; font-size: 12px; color: var(--sw-muted); }
 .scomp-page .scomp-group-value strong { color: var(--sw-ink); font-size: 16px; }
-.scomp-page .scomp-axis { position: relative; height: 16px; color: var(--sw-muted); font-size: 11px; }
+.scomp-page .scomp-axis { position: relative; height: 16px; color: var(--sw-muted); font-size: 12px; }
 .scomp-page .scomp-axis span { position: absolute; top: 0; transform: translateX(-50%); white-space: nowrap; }
 .scomp-page .scomp-fit-label { font-size: 20px; line-height: 1.3; }
 .scomp-page .scomp-fit-label small { display: inline; margin-left: 2px; font-size: 13px; }
@@ -130,7 +135,7 @@
 .scomp-page .scomp-ai-heading { display: flex; align-items: center; gap: 10px; }
 .scomp-page .scomp-ai-icon { display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: #eef3fb; color: var(--scomp-l4); }
 .scomp-page .scomp-ai-icon svg { width: 18px; height: 18px; }
-.scomp-page .scomp-ai-tag { flex: none; white-space: nowrap; display: inline-block; padding: 1px 7px; border: 1px solid #b7c7e3; border-radius: 4px; color: var(--scomp-l4); font-size: 11px; font-weight: 800; letter-spacing: .06em; line-height: 1.6; }
+.scomp-page .scomp-ai-tag { flex: none; white-space: nowrap; display: inline-block; padding: 1px 7px; border: 1px solid #b7c7e3; border-radius: 4px; color: var(--scomp-l4); font-size: 12px; font-weight: 800; letter-spacing: .06em; line-height: 1.6; }
 .scomp-page .scomp-ai-state { position: relative; display: grid; align-content: start; gap: 8px; min-height: 148px; padding: 20px 56px 20px 20px; border: 1px solid #d6dde7; border-radius: 10px; background: #f8fafc; font-size: 14px; line-height: 1.7; }
 .scomp-page .scomp-ai-state .sr-job-spinner { top: 20px; right: 20px; }
 .scomp-page .scomp-ai-state .sr-job-steps { margin: 4px 0 0; }
@@ -142,9 +147,9 @@
 .scomp-page .scomp-ai-block ol { display: grid; gap: 6px; margin: 0; padding-left: 20px; }
 .scomp-page .scomp-ai-sub { margin-top: 4px !important; font-size: 13px; color: #3d4757; }
 .scomp-page .scomp-ai-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px 24px; align-items: start; }
-.scomp-page .scomp-priority { padding: 0 6px; border: 1px solid var(--sw-border); border-radius: 4px; color: var(--sw-muted); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.scomp-page .scomp-priority { padding: 0 6px; border: 1px solid var(--sw-border); border-radius: 4px; color: var(--sw-muted); font-size: 12px; font-weight: 600; white-space: nowrap; }
 .scomp-page .scomp-ai-footer { padding-top: 12px; border-top: 1px solid var(--sw-border); color: var(--sw-muted); font-size: 12px; line-height: 1.6; }
-.scomp-page .scomp-ai-tip { display: flex; align-items: flex-start; gap: 8px; margin-top: 6px; padding: 8px 10px; border-radius: 6px; background: #f2f6fc; font-size: 13px; line-height: 1.6; }
+.scomp-page .scomp-ai-tip { display: flex; align-items: flex-start; gap: 8px; margin-top: 6px; padding: 8px 10px; border-radius: 6px; background: #f2f6fc; font-size: 14px; line-height: 1.6; }
 .scomp-page .scomp-ai-tip ul { margin: 0; padding-left: 16px; }
 
 /* Career fit and gap table */
@@ -182,7 +187,7 @@
 .scomp-page .scomp-course-facts dd { margin: 0; }
 .scomp-page .scomp-course-facts .scomp-course-wide { grid-column: 1 / -1; }
 .scomp-page .scomp-course-facts .scomp-status { white-space: normal; }
-.scomp-page .scomp-course-reason { font-size: 13px; line-height: 1.6; }
+.scomp-page .scomp-course-reason { font-size: 14px; line-height: 1.6; }
 
 /* Skill details */
 .scomp-page .scomp-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; }
@@ -226,7 +231,9 @@
 .scomp-page .scomp-bucket[open] > summary::before { transform: rotate(45deg); }
 .scomp-page .scomp-bucket > summary::before { align-self: center; margin-right: 4px; }
 .scomp-page .scomp-skill-name { font-weight: 600; }
-.scomp-page .scomp-career-tag { display: inline-block; margin-left: 8px; padding: 0 6px; border: 1px solid #c9d6ea; border-radius: 4px; color: var(--scomp-l4); font-size: 11px; font-weight: 700; vertical-align: 1px; white-space: nowrap; }
+/* The courses a score comes from, under the skill's name (scoreSources). */
+.scomp-page .scomp-skill-from { margin-top: 1px; overflow: hidden; color: var(--sw-muted); font-size: 12px; font-weight: 400; text-overflow: ellipsis; white-space: nowrap; }
+.scomp-page .scomp-career-tag { display: inline-block; margin-left: 8px; padding: 0 6px; border: 1px solid #c9d6ea; border-radius: 4px; color: var(--scomp-l4); font-size: 12px; font-weight: 700; vertical-align: 1px; white-space: nowrap; }
 .scomp-page .scomp-skill-score { position: absolute; top: 50%; transform: translateY(-50%); color: var(--sw-ink, #1d2433); font-size: 13px; font-weight: 700; white-space: nowrap; }
 .scomp-page .scomp-skill-body { display: grid; gap: 10px; padding: 4px 14px 14px 30px; }
 .scomp-page .scomp-evidence { min-width: 820px; }
@@ -242,11 +249,11 @@
 .scomp-page .sg-status-pass { color: #16804a; }
 .scomp-page .sg-status-fail { color: #c62828; }
 .scomp-page .sg-status-unknown { color: #805900; }
-.scomp-page .scomp-count { display: inline-block; margin-left: 8px; padding: 0 8px; border-radius: 999px; background: #fdf2f2; color: #c62828; font-size: 12px; font-weight: 700; vertical-align: 2px; }
+.scomp-page .scomp-count { display: inline-block; margin-left: 8px; padding: 0 8px; border-radius: 999px; background: var(--meaning-warn-soft, #fff3d9); color: var(--meaning-warn, #8f5a00); font-size: 12px; font-weight: 700; vertical-align: 2px; }
 
 /* Proficiency table: what the result means, then skills per level and group */
 .scomp-page .scomp-value { display: grid; gap: 6px; padding: 14px 16px; border: 1px solid #cfdaeb; border-radius: 8px; background: #f7f9fd; }
-.scomp-page .scomp-value ul { display: grid; gap: 4px; margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.6; }
+.scomp-page .scomp-value ul { display: grid; gap: 4px; margin: 0; padding-left: 18px; font-size: 14px; line-height: 1.6; }
 .scomp-page .scomp-value .sw-text-link { display: inline; min-height: 0; padding: 0; font-size: inherit; }
 /* Level chart: one stacked bar per group on a shared count axis. Colours are the level ramp of the badges
    (validated as an ordinal ramp), a neutral for "Sắp học" (hatched for "Chưa có điểm") and a light neutral for exempt; 2px surface gaps,
@@ -313,11 +320,11 @@
 .scomp-page .scomp-count-button:focus-visible { outline: 3px solid var(--ep-control-focus, #3f6cb4); outline-offset: 2px; }
 .scomp-page .scomp-zero { color: #a3acb8; }
 
-/* Progress: red when late, green when on plan */
+/* Progress: amber when late (red is kept for a course not passed, user 2026-10-30), green when on plan */
 .scomp-page .scomp-plan-status { display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px; border: 1px solid; border-radius: 8px; font-size: 15px; font-weight: 650; line-height: 1.6; }
-.scomp-page .scomp-plan-late { color: #c62828; background: #fdf2f2; border-color: #f0c5c5; }
+.scomp-page .scomp-plan-late { color: #805900; background: #fff8e8; border-color: #e9d39b; }
 .scomp-page .scomp-plan-ok { color: #16804a; background: #eef8f2; border-color: #b9dcc7; }
-.scomp-page .scomp-plan-list-late li { border-color: #f0c5c5; background: #fffafa; }
+.scomp-page .scomp-plan-list-late li { border-color: #ecdcb0; background: #fffdf6; }
 
 /* Graduation check (the graduation page's evaluation) */
 .scomp-page .scomp-grad-verdict { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; padding: 14px 16px; border: 1px solid; border-radius: 8px; }
@@ -332,11 +339,11 @@
 /* Competency per term (STU-COMP-07). The term column keeps its width and "Mới nhất" stays whole at 500px ("Hi / ện / tại"
    broke there: the section's overflow-wrap lets any word break). */
 .scomp-page .scomp-history-table { min-width: 860px; }
-.scomp-page .scomp-history-table tbody th[scope="row"] { min-width: 140px; white-space: nowrap; }
+.scomp-page .scomp-history-table tbody th[scope="row"] { min-width: 140px; white-space: nowrap; vertical-align: middle; }
 /* STU-GAP-07: career skills by term */
 .scomp-page .scomp-gap-history { min-width: 640px; }
 .scomp-page .scomp-gap-history .scomp-gap-year { text-align: center; }
-.scomp-page .scomp-gap-history thead small { display: block; color: var(--scomp-neutral); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.scomp-page .scomp-gap-history thead small { display: block; color: var(--scomp-neutral); font-size: 12px; font-weight: 600; white-space: nowrap; }
 .scomp-page .scomp-gap-history tfoot th, .scomp-page .scomp-gap-history tfoot td { background: #f8f9fb; font-weight: 700; }
 .scomp-page .scomp-gap-history td span { white-space: nowrap; }
 .scomp-page .scomp-gap-change { font-weight: 700; }
@@ -354,7 +361,7 @@
 .scomp-page .scomp-plan-courses { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .scomp-page .scomp-plan-courses > li { display: grid; gap: 4px; padding: 8px 10px; border-radius: 6px; background: #f8fafc; font-size: 13px; }
 .scomp-page .scomp-plan-course-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; }
-.scomp-page .scomp-plan-action { padding: 0 6px; border: 1px solid #c9d6ea; border-radius: 4px; color: var(--scomp-l4); font-size: 11px; font-weight: 700; white-space: nowrap; }
+.scomp-page .scomp-plan-action { padding: 0 6px; border: 1px solid #c9d6ea; border-radius: 4px; color: var(--scomp-l4); font-size: 12px; font-weight: 700; white-space: nowrap; }
 .scomp-page .scomp-plan-course-facts { display: flex; flex-wrap: wrap; gap: 4px 14px; color: var(--sw-muted); font-size: 12px; }
 .scomp-page .scomp-plan-course-facts .scomp-status { white-space: normal; }
 
@@ -393,7 +400,7 @@
   .scomp-page .scomp-gap-table tbody th,
   .scomp-page .scomp-gap-table td[data-label="Hiện tại"],
   .scomp-page .scomp-gap-table td[data-label="Trạng thái"] { grid-column: 1 / -1; }
-  .scomp-page .scomp-gap-table td[data-label]::before { content: attr(data-label); display: block; color: var(--sw-muted); font-size: 11px; font-weight: 600; }
+  .scomp-page .scomp-gap-table td[data-label]::before { content: attr(data-label); display: block; color: var(--sw-muted); font-size: 12px; font-weight: 600; }
   .scomp-page .scomp-gap-table td[colspan] { grid-column: 1 / -1; }
   .scomp-page .scomp-gap-table .scomp-status { white-space: normal; }
   .scomp-page .scomp-gap-table .scomp-num { text-align: left; }

@@ -54,6 +54,26 @@ describe("careers against the competencies", () => {
     // Without the competencies (no transcript, …) the careers are listed without a fit.
     expect(guidanceCareers(catalog, null, null, survey(null)).map((item) => [item.fit, item.requirements[0]!.status])).toEqual([[null, null], [null, null]]);
   });
+
+  it("names the courses each score comes from, largest share first, and none without a score (user 2026-10-30)", () => {
+    const inputs = syntheticInputs();
+    const target = syntheticCareer();
+    const catalog = [{ ...target, category: "7", categoryName: "Phát triển phần mềm", description: "" }];
+    const [career] = guidanceCareers(catalog, inputs, target.id, survey(null));
+    const result = calculateAssessment(inputs);
+    const courses = new Map(result.courses.map((course) => [course.code, course]));
+    const scored = career!.requirements.filter((row) => row.score !== null);
+    expect(scored.length).toBeGreaterThan(0);
+    for (const [index, row] of career!.requirements.entries()) {
+      const skill = result.skills.find((item) => item.key === result.career!.requirements[index]!.skillKey);
+      const expected = row.score === null || !skill ? [] : skill.evidenceCourses.filter((evidence) => evidence.role === "score")
+        .sort((a, b) => (b.share ?? 0) - (a.share ?? 0) || b.contribution - a.contribution || a.code.localeCompare(b.code))
+        .map((evidence) => ({ name: courses.get(evidence.code)?.name ?? evidence.code, score10: courses.get(evidence.code)?.score10 ?? null, letter: courses.get(evidence.code)?.letter ?? null }));
+      expect(row.sources).toEqual(expected);
+    }
+    expect(scored.every((row) => row.sources.length > 0)).toBe(true);
+    expect(career!.requirements.filter((row) => row.score === null).every((row) => row.sources.length === 0)).toBe(true);
+  });
 });
 
 describe("GET /api/student/career-guidance", () => {

@@ -16,18 +16,18 @@
 .cg-page h3 { font-size: 17px; line-height: 1.35; }
 .cg-page h4 { font-size: 15px; line-height: 1.35; }
 .cg-en { margin: 2px 0 0; color: var(--sw-muted); font-size: 12px; }
-.cg-kicker { color: var(--sw-red); font-size: 11px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.cg-kicker { color: var(--sw-red); font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 
 .cg-header { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: 18px 28px; align-items: start; }
 .cg-header > .cg-note { grid-column: 1 / -1; margin: 0 !important; }
-.cg-lead { margin: 8px 0 0; color: #4a5465; font-size: 13px; line-height: 1.7; max-width: 760px; }
+.cg-lead { margin: 8px 0 0; color: #4a5465; font-size: 14px; line-height: 1.7; max-width: 760px; }
 .cg-current { display: grid; gap: 8px; padding: 14px 16px; border: 1px solid var(--sw-border); border-radius: var(--sw-radius); background: #fafbfc; }
 .cg-current-body { display: grid; gap: 4px; }
 .cg-current-body strong { font-size: 15px; color: var(--sw-ink); }
-.cg-current-empty { margin: 0; color: #4a5465; font-size: 13px; line-height: 1.6; }
+.cg-current-empty { margin: 0; color: #4a5465; font-size: 14px; line-height: 1.6; }
 
 .cg-note { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin: 0; padding: 12px 14px; border-radius: 8px;
-  background: #f4f7fb; color: #33415c; font-size: 13px; line-height: 1.6; }
+  background: #f4f7fb; color: #33415c; font-size: 14px; line-height: 1.6; }
 .cg-note p { margin: 0; flex: 1 1 320px; }
 .cg-note-warn { border: 1px solid #f1c4cf; border-left: 4px solid var(--sw-red); background: #fff5f7; color: #6f1029; }
 
@@ -40,7 +40,7 @@
 .cg-card { display: grid; gap: 10px; padding: 14px 16px; border: 1px solid var(--sw-border); border-radius: var(--sw-radius); background: #fff; }
 .cg-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
 .cg-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; color: #4a5465; font-size: 12px; }
-.cg-empty { margin: 0; padding: 14px; border: 1px dashed #d7dce3; border-radius: 8px; color: var(--sw-muted); font-size: 13px; line-height: 1.6; display: grid; gap: 10px; justify-items: start; }
+.cg-empty { margin: 0; padding: 14px; border: 1px dashed #d7dce3; border-radius: 8px; color: var(--sw-muted); font-size: 14px; line-height: 1.6; display: grid; gap: 10px; justify-items: start; }
 .cg-empty p { margin: 0; }
 
 .cg-score { display: inline-flex; align-items: baseline; gap: 2px; color: var(--sw-ink); font-size: 24px; font-weight: 800; line-height: 1; white-space: nowrap; }
@@ -57,6 +57,9 @@
 .cg-fit-4 .cg-pips i.is-on { background: var(--cg-l4); }
 .cg-fit-5 .cg-pips i.is-on { background: var(--cg-l5); }
 .cg-fit-0 { background: #f1f3f6; color: var(--sw-muted); }
+/* A fit wears the colour of its word (display-format.css meaning-*, as on Khoảng trống kỹ năng); its pips take that colour. */
+.cg-fit[class*="meaning-"] .cg-pips i { background: color-mix(in srgb, currentColor 22%, transparent); }
+.cg-fit[class*="meaning-"] .cg-pips i.is-on { background: currentColor; }
 
 .cg-interest { display: flex; align-items: flex-start; gap: 6px; margin: 0; color: #8a5a00; font-size: 12px; line-height: 1.5; }
 .cg-interest svg { flex: none; width: 14px; height: 14px; margin-top: 2px; }
@@ -91,7 +94,7 @@
 .cg-table th, .cg-table td { padding: 10px 12px; border-bottom: 1px solid var(--sw-border); text-align: left; vertical-align: top; }
 .cg-table thead th { background: #f6f8fb; color: #4a5465; font-size: 12px; font-weight: 700; }
 .cg-table tbody tr:last-child th, .cg-table tbody tr:last-child td { border-bottom: 0; }
-.cg-table td small, .cg-table th small { display: block; margin-top: 2px; color: var(--sw-muted); font-size: 11px; font-weight: 500; }
+.cg-table td small, .cg-table th small { display: block; margin-top: 2px; color: var(--sw-muted); font-size: 12px; font-weight: 500; }
 .cg-compare-table { min-width: 640px; }
 .cg-compare-table thead th { position: relative; min-width: 180px; padding-right: 34px; }
 .cg-compare-table thead th:first-child { min-width: 150px; padding-right: 12px; }
@@ -121,7 +124,7 @@
 .cg-dialog-body h3 { margin: 6px 0 0; font-size: 15px; }
 .cg-dialog footer { margin: 0 !important; padding: 14px 20px; border-top: 1px solid var(--sw-border); }
 .cg-detail-fit { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; color: #4a5465; font-size: 13px; }
-.cg-description { margin: 0; color: #3b4456; font-size: 13px; line-height: 1.7; white-space: pre-line; }
+.cg-description { margin: 0; color: #3b4456; font-size: 14px; line-height: 1.7; white-space: pre-line; }
 
 /* The bottom of the screen: the notice of "Chọn nghề mục tiêu", then the comparison tray. */
 .cg-dock { position: sticky; bottom: 12px; z-index: 5; display: grid; gap: 8px; }
@@ -166,3 +169,4 @@
 /* How the điểm phù hợp is counted (comp-calc-v14) and each skill's score in the detail table. */
 .cg-fit-rule { margin: 6px 0 0; color: #5f6b7a; font-size: 13px; }
 .cg-table .cg-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.cg-table .cg-nowrap { white-space: nowrap; }

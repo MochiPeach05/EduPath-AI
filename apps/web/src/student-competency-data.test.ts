@@ -16,8 +16,8 @@ describe("levels named like the transcript's classification (comp-calc-v10, user
     expect(LEVEL_SCALE.map((item) => `${item.label} ${item.range}`)).toEqual([
       "Xuất sắc từ 90", "Giỏi 80 đến dưới 90", "Khá 62,5 đến dưới 80", "Trung bình 50 đến dưới 62,5", "Yếu dưới 50",
     ]);
-    // Shown whole and rounded down, except from 62,5 to 63: one decimal, so a Khá score never reads 62.
-    expect([82.4, 62.97, 62.5, 62.49, 63].map(formatScore)).toEqual(["82", "62,9", "62,5", "62", "63"]);
+    // Rounded down to the tenth (scoreText, user 2026-10-30), so a shown score never reaches a bound before the score does.
+    expect([82.4, 62.97, 62.5, 62.49, 63].map(formatScore)).toEqual(["82,4", "62,9", "62,5", "62,4", "63"]);
     // Sắp học, Chưa có điểm and Miễn/công nhận are not levels: they stay named in the chart, not in the scale.
     expect(["upcoming", "no_score", "exempt"].map((code) => chartLevelLabel(code as "upcoming"))).toEqual(["Sắp học", "Chưa có điểm", "Miễn/công nhận"]);
     expect(levelStep("excellent")).toBe(5);
@@ -175,11 +175,11 @@ describe("career skills by term (STU-GAP-07)", () => {
     expect(history.rows.map((row) => [row.name, row.cells.map((cell) => cell.score), row.change])).toEqual([
       ["Thiết kế cơ sở dữ liệu", [null, 66, 70, 74, 75], 9],
       ["Lập trình web", [72, 80, 86, 89, 91], 19],
-      ["Giải thuật", [null, null, 58, 62, 64], 6],
+      ["Giải thuật", [null, null, 58, 62, 64.4], 6.4],
       ["Kiểm thử tự động", [null, null, null, null, null], null],
       ["Docker", [null, null, null, null, null], null],
     ]);
-    expect(history.sentence).toBe("Từ học kỳ 1 năm học 2023–2024 đến học kỳ 2 năm học 2025–2026, số kỹ năng nghề đạt ngưỡng tăng từ 0 lên 1/5. Tăng nhiều nhất: Lập trình web (+19 điểm).");
+    expect(history.sentence).toBe("Từ HK1 2023–2024 đến HK2 2025–2026, số kỹ năng nghề đạt ngưỡng tăng từ 0 lên 1/5. Tăng nhiều nhất: Lập trình web (+19 điểm).");
   });
   it("asks for a new assessment when the history predates it, and is absent without a career", () => {
     const old = { ...fixtureResult, history: fixtureResult.history!.map(({ career: _career, ...point }) => point) };
@@ -265,22 +265,25 @@ describe("errors", () => {
 });
 
 describe("formatting", () => {
-  it("shows whole scores rounded down so a shown score never crosses a threshold", () => {
-    expect(formatScore(86.6)).toBe("86");
-    expect(formatScore(84.6)).toBe("84");
-    expect(formatScore(69.5)).toBe("69");
+  it("shows scores rounded down to the tenth so a shown score never crosses a threshold", () => {
+    // Tổng quan prints the same number (user 2026-10-30: 59,8 there, 59 here).
+    expect(formatScore(59.86)).toBe("59,8");
+    expect(formatScore(86.6)).toBe("86,6");
+    expect(formatScore(89.96)).toBe("89,9");
+    expect(formatScore(69.5)).toBe("69,5");
     expect(formatScore(85)).toBe("85");
     expect(formatScore(84.99999999999)).toBe("85");
     expect(formatScore(null)).toBe("—");
-    expect(termLabel("HK253")).toBe("HK3 · 2025–2026");
+    // One way to write a term on every page (termName).
+    expect(termLabel("HK253")).toBe("HK3 2025–2026");
     expect(termLabel(null)).toBe("Chưa xếp lịch");
   });
   it("maps levels to the four ramp steps", () => {
     expect([levelStep("proficient"), levelStep("good"), levelStep("basic"), levelStep("needs_work"), levelStep("no_evidence"), levelStep("exempt")]).toEqual([4, 3, 2, 1, 0, 0]);
   });
   it("never says 'thiếu 0 điểm'", () => {
-    expect(deficitText(0.3)).toBe("Dưới ngưỡng · thiếu 1 điểm");
-    expect(deficitText(5.6)).toBe("Dưới ngưỡng · thiếu 6 điểm");
+    expect(deficitText(0.3)).toBe("Dưới ngưỡng · thiếu 0,3 điểm");
+    expect(deficitText(5.6)).toBe("Dưới ngưỡng · thiếu 5,6 điểm");
     expect(deficitText(5)).toBe("Dưới ngưỡng · thiếu 5 điểm");
     expect(deficitText(null)).toBe("Dưới ngưỡng");
   });
@@ -288,7 +291,7 @@ describe("formatting", () => {
     const line = dataUsedLine(fixtureAssessment());
     expect(line).not.toContain("phiên bản");
     expect(line).toContain("khóa K29");
-    expect(line).toContain("bảng điểm 8 học phần đến HK252");
+    expect(line).toContain("bảng điểm 8 học phần đến HK2 2025–2026");
   });
 });
 
@@ -299,7 +302,7 @@ describe("career gaps", () => {
     expect(byStatus("met")).toEqual({ tone: "pass", glyph: "✓", text: "Đạt ngưỡng" });
     expect(byStatus("below").tone).toBe("fail");
     // The term reads like termLabel (2026-10-25 audit: "Sắp học · HK261" before).
-    expect(byStatus("upcoming")).toEqual({ tone: "neutral", glyph: "○", text: "Sắp học · HK1 · 2026–2027" });
+    expect(byStatus("upcoming")).toEqual({ tone: "neutral", glyph: "○", text: "Sắp học · HK1 2026–2027" });
     expect(byStatus("no_data")).toEqual({ tone: "neutral", glyph: "?", text: "Chưa đủ dữ liệu" });
     expect(gapStatusDisplay({ status: "not_studied", deficit: null, upcomingTerm: null, exemptOnly: false }).tone).toBe("unknown");
   });
@@ -392,22 +395,22 @@ describe("history (STU-COMP-07)", () => {
     term, schoolYear, semester, gradedCourses: semester * 3,
     overall: { score, level: "good" as const, levelLabel: "Khá", skillsWithEvidence: 1, applicableSkills: 2 }, groups: [],
   });
-  it("groups the terms by school year with whole-point changes and the newest term marked", () => {
+  it("groups the terms by school year with changes between the shown scores and the newest term marked", () => {
     const years = historyYears([point("HK231", "2023–2024", 1, 70.9), point("HK232", "2023–2024", 2, null), point("HK233", "2023–2024", 3, 72.2), point("HK241", "2024–2025", 1, 71.99)]);
     expect(years.map((year) => [year.schoolYear, year.rows.map((row) => row.change), year.end.term])).toEqual([
-      // 70,9 → shown 70; a term without a score breaks nothing; 72,2 → 72: +2; 71,99 → 71: −1.
-      ["2023–2024", [null, null, 2], "HK233"], ["2024–2025", [-1], "HK241"],
+      // A term without a score breaks nothing; 70,9 → 72,2: +1,3; 71,99 shows 71,9: −0,3.
+      ["2023–2024", [null, null, 1.3], "HK233"], ["2024–2025", [-0.3], "HK241"],
     ]);
     expect(years.flatMap((year) => year.rows).filter((row) => row.latest).map((row) => row.term)).toEqual(["HK241"]);
     expect(historyYears([])).toEqual([]);
   });
   it("says the trend in one sentence, with the peak only when it stands out", () => {
     expect(historySentence([point("HK231", "2023–2024", 1, 68.5), point("HK242", "2024–2025", 2, 81), point("HK252", "2025–2026", 2, 79.4)]))
-      .toBe("Điểm năng lực tổng tăng từ 68 (học kỳ 1 năm học 2023–2024) lên 79 (học kỳ 2 năm học 2025–2026). Cao nhất là 81 vào học kỳ 2 năm học 2024–2025.");
+      .toBe("Điểm năng lực tổng tăng từ 68,5 (HK1 2023–2024) lên 79,4 (HK2 2025–2026). Cao nhất là 81 vào HK2 2024–2025.");
     expect(historySentence([point("HK231", "2023–2024", 1, 80), point("HK232", "2023–2024", 2, 76.5)]))
-      .toBe("Điểm năng lực tổng giảm từ 80 (học kỳ 1 năm học 2023–2024) xuống 76 (học kỳ 2 năm học 2023–2024).");
-    expect(historySentence([point("HK231", "2023–2024", 1, 75.2), point("HK232", "2023–2024", 2, 75.9)]))
-      .toBe("Điểm năng lực tổng giữ ở mức 75 từ học kỳ 1 năm học 2023–2024 đến học kỳ 2 năm học 2023–2024.");
+      .toBe("Điểm năng lực tổng giảm từ 80 (HK1 2023–2024) xuống 76,5 (HK2 2023–2024).");
+    expect(historySentence([point("HK231", "2023–2024", 1, 75.21), point("HK232", "2023–2024", 2, 75.29)]))
+      .toBe("Điểm năng lực tổng giữ ở mức 75,2 từ HK1 2023–2024 đến HK2 2023–2024.");
     expect(historySentence([point("HK231", "2023–2024", 1, 75)])).toBeNull();
   });
 });
@@ -425,29 +428,30 @@ describe("course plans", () => {
 
 describe("scoreDifference", () => {
   it("agrees with the shown score and the deficit", () => {
-    // 84,6 shows as 84 against 85: the difference is -1 and the status says 'thiếu 1 điểm'.
-    expect(scoreDifference({ score: 84.6, status: "below", deficit: 0.4, threshold: 85 })).toBe(-1);
-    expect(scoreDifference({ score: 64.4, status: "below", deficit: 5.6, threshold: 70 })).toBe(-6);
-    expect(scoreDifference({ score: 91.7, status: "met", deficit: null, threshold: 85 })).toBe(6);
+    // 84,6 against 85: the difference is −0,4 and the status says 'thiếu 0,4 điểm'.
+    expect(scoreDifference({ score: 84.6, status: "below", deficit: 0.4, threshold: 85 })).toBe(-0.4);
+    expect(scoreDifference({ score: 64.4, status: "below", deficit: 5.6, threshold: 70 })).toBe(-5.6);
+    expect(scoreDifference({ score: 91.7, status: "met", deficit: null, threshold: 85 })).toBe(6.7);
     expect(scoreDifference({ score: 85, status: "met", deficit: null, threshold: 85 })).toBe(0);
     expect(scoreDifference({ score: null, status: "not_studied", deficit: null, threshold: 85 })).toBeNull();
     expect(scoreDifference({ score: 50, status: "upcoming", deficit: null, threshold: 70 })).toBeNull();
   });
   it("adds up with the shown score at the 62,5 threshold, with a real minus sign (2026-10-25 audit)", () => {
-    // 43,6 shows as 43: 43 + 19,5 = 62,5 (it read "thiếu 19", 43 + 19 = 62); 73,6 shows as 73: +10,5, not +11.
+    // 43,6 + 18,9 = 62,5 (it read "thiếu 19", 43 + 19 = 62); 43,06 shows as 43: 43 + 19,5; 73,6: +11,1.
     const below = { score: 43.6, status: "below" as const, deficit: 18.9, threshold: 62.5 };
-    expect(scoreDifference(below)).toBe(-19.5);
-    expect(formatDifference(scoreDifference(below)!)).toBe("−19,5");
-    expect(deficitText(below.deficit, below)).toBe("Dưới ngưỡng · thiếu 19,5 điểm");
-    expect(gapStatusDisplay({ ...below, upcomingTerm: null, exemptOnly: false }).text).toBe("Dưới ngưỡng · thiếu 19,5 điểm");
-    expect(scoreDifference({ score: 73.6, status: "met", deficit: null, threshold: 62.5 })).toBe(10.5);
+    expect(scoreDifference(below)).toBe(-18.9);
+    expect(formatDifference(scoreDifference(below)!)).toBe("−18,9");
+    expect(deficitText(below.deficit, below)).toBe("Dưới ngưỡng · thiếu 18,9 điểm");
+    expect(gapStatusDisplay({ ...below, upcomingTerm: null, exemptOnly: false }).text).toBe("Dưới ngưỡng · thiếu 18,9 điểm");
+    expect(scoreDifference({ ...below, score: 43.06, deficit: 19.44 })).toBe(-19.5);
+    expect(scoreDifference({ score: 73.6, status: "met", deficit: null, threshold: 62.5 })).toBe(11.1);
     expect(formatDifference(10.5)).toBe("+10,5");
-    // A Khá score shown with one decimal (62,7) against 80 lacks 17,3; whole numbers stay whole.
+    // 62,77 shows as 62,7 against 80 and lacks 17,3; whole numbers stay whole.
     expect(scoreDifference({ score: 62.77, status: "below", deficit: 17.23, threshold: 80 })).toBe(-17.3);
     expect([formatDifference(-6), formatDifference(0), formatDifference(6)]).toEqual(["−6", "0", "+6"]);
     expect(shownScore(62.77)).toBe(62.7);
-    // Without the score (an older caller): the deficit rounded up to a whole point, never 0.
-    expect(deficitText(0.04)).toBe("Dưới ngưỡng · thiếu 1 điểm");
+    // Without the score (an older caller): the deficit rounded up to the tenth, never 0.
+    expect(deficitText(0.04)).toBe("Dưới ngưỡng · thiếu 0,1 điểm");
   });
 });
 
@@ -463,18 +467,18 @@ describe("terms ahead and past (2026-10-25 audit)", () => {
   });
   it("says a planned term that has passed and when to register, never 'HK233 theo KHĐT'", () => {
     const course = { term: "HK233", termSource: "plan" as const, state: "not_taken" as const };
-    expect(courseTermText(course, "HK251", "HK252")).toBe("Đã qua học kỳ dự kiến HK233 — đăng ký ở HK252");
-    expect(courseTermText(course, "HK251", null)).toBe("Đã qua học kỳ dự kiến HK233 — đăng ký ở học kỳ tới");
+    expect(courseTermText(course, "HK251", "HK252")).toBe("Đã qua học kỳ dự kiến HK3 2023–2024 — đăng ký ở HK2 2025–2026");
+    expect(courseTermText(course, "HK251", null)).toBe("Đã qua học kỳ dự kiến HK3 2023–2024 — đăng ký ở học kỳ tới");
     // The term being studied has passed for registration too; in progress is where it should be.
-    expect(courseTermText({ ...course, term: "HK251" }, "HK251", "HK252")).toBe("Đã qua học kỳ dự kiến HK251 — đăng ký ở HK252");
-    expect(courseTermText({ ...course, term: "HK251", state: "in_progress" }, "HK251", "HK252")).toBe("HK251 theo KHĐT");
-    expect(courseTermText({ ...course, term: "HK261", termSource: "curriculum" }, "HK251", "HK252")).toBe("HK261 theo CTĐT");
+    expect(courseTermText({ ...course, term: "HK251" }, "HK251", "HK252")).toBe("Đã qua học kỳ dự kiến HK1 2025–2026 — đăng ký ở HK2 2025–2026");
+    expect(courseTermText({ ...course, term: "HK251", state: "in_progress" }, "HK251", "HK252")).toBe("HK1 2025–2026 theo KHĐT");
+    expect(courseTermText({ ...course, term: "HK261", termSource: "curriculum" }, "HK251", "HK252")).toBe("HK1 2026–2027 theo CTĐT");
     // The engine's flag wins (comp-calc-v17).
     expect(isOverdue({ ...course, overdue: false }, "HK251")).toBe(false);
     expect(courseTermText({ ...course, term: null }, "HK251", "HK252")).toBe("Chưa xếp lịch");
   });
   it("calls a planned course Sắp học only after the term being studied", () => {
-    expect(plannedCourseNote("HK262", "HK261")).toBe("Sắp học · HK2 · 2026–2027");
+    expect(plannedCourseNote("HK262", "HK261")).toBe("Sắp học · HK2 2026–2027");
     expect(plannedCourseNote("HK253", "HK261")).toBe("Chưa học");
     expect(plannedCourseNote(null, "HK261")).toBe("Chưa học");
     expect(upcomingText(null)).toBe("Sắp học");

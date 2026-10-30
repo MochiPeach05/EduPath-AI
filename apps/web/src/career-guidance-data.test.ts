@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   bestFits, bestFitsHeading, blockedAction, blockedText, compareRows, filterCareers, fitRuleText, fitScoreText, fitSummary, gapNote, interestPicks, missingSkills,
-  orderedRequirements, requirementState, toggleCompare, FIT_RULE_TEXT, type GuidanceCareer, type GuidanceRequirement,
+  orderedRequirements, requirementSourcesText, requirementState, toggleCompare, FIT_RULE_TEXT, type GuidanceCareer, type GuidanceRequirement,
 } from "./career-guidance-data";
 
 // Synthetic careers only.
@@ -40,14 +40,22 @@ describe("career guidance", () => {
   it("says how the student stands on each requirement and what is still missing", () => {
     expect(requirementState(req("SQL", "met"))).toEqual({ tone: "pass", glyph: "✓", text: "Đạt ngưỡng" });
     expect(requirementState(req("SQL", "met", { exemptOnly: true }))).toEqual({ tone: "pass", glyph: "✓", text: "Đạt ngưỡng · miễn/công nhận" });
-    expect(requirementState(req("SQL", "below", { deficit: 8.25 }))).toEqual({ tone: "fail", glyph: "✗", text: "Dưới ngưỡng · thiếu 9 điểm" });
-    expect(requirementState(req("SQL", "below", { deficit: 0.04 }))).toEqual({ tone: "fail", glyph: "✗", text: "Dưới ngưỡng · thiếu 1 điểm" });
-    expect(requirementState(req("Git", "upcoming", { upcomingTerm: "HK262" }))).toEqual({ tone: "neutral", glyph: "○", text: "Sắp học · HK2 · 2026–2027" });
+    expect(requirementState(req("SQL", "below", { deficit: 8.25 }))).toEqual({ tone: "fail", glyph: "✗", text: "Dưới ngưỡng · thiếu 8,3 điểm" });
+    expect(requirementState(req("SQL", "below", { deficit: 0.04 }))).toEqual({ tone: "fail", glyph: "✗", text: "Dưới ngưỡng · thiếu 0,1 điểm" });
+    expect(requirementState(req("SQL", "below", { score: 58.46, deficit: 4.04 }))).toEqual({ tone: "fail", glyph: "✗", text: "Dưới ngưỡng · thiếu 4,1 điểm" });
+    expect(requirementState(req("Git", "upcoming", { upcomingTerm: "HK262" }))).toEqual({ tone: "neutral", glyph: "○", text: "Sắp học · HK2 2026–2027" });
     expect(requirementState(req("AWS", "no_data", { noDataReason: "other_specialty" }))).toEqual({ tone: "unknown", glyph: "!", text: "Cần tự học" });
     expect(requirementState(req("AWS", "no_data", { noDataReason: "not_measured" }))).toEqual({ tone: "neutral", glyph: "?", text: "Chưa đủ dữ liệu" });
     expect(requirementState(req("Docker", null))).toEqual({ tone: "neutral", glyph: "?", text: "Chưa tính" });
-    expect(fitScoreText(50.66)).toBe("50");
+    // Rounded down to the tenth like every score of the app (user 2026-10-30).
+    expect(fitScoreText(50.66)).toBe("50,6");
     expect(fitScoreText(62.73)).toBe("62,7");
+    // The courses a score comes from, beside it (user 2026-10-30: "Nên ghi môn làm minh chứng cạnh từng điểm").
+    const sources = [{ name: "Thiết kế giao diện", score10: 6.8, letter: "C+" }, { name: "Lập trình web", score10: 6.8, letter: null }, { name: "Đồ án", score10: null, letter: "B" }];
+    expect(requirementSourcesText(req("Figma", "met", { score: 68, sources }))).toBe("Từ Thiết kế giao diện (6,8 · C+), Lập trình web (6,8) và 1 học phần khác");
+    expect(requirementSourcesText(req("Figma", "met", { score: 68, sources: sources.slice(0, 2) }))).toBe("Từ Thiết kế giao diện (6,8 · C+) và Lập trình web (6,8)");
+    expect(requirementSourcesText(req("Figma", "upcoming", { sources }))).toBe("");
+    expect(requirementSourcesText(req("Figma", "met", { score: 68 }))).toBe("");
     const mixed = career("y", "Y", 50, { requirements: [req("IAM", "not_studied"), req("Chuỗi khối", "no_data", { noDataReason: "other_specialty" }), req("Bảo mật", "below", { score: 58.5, deficit: 4, isRequired: true })] });
     expect(missingSkills(mixed)).toEqual(["Bảo mật", "IAM", "Chuỗi khối"]);
     expect(orderedRequirements(mixed).map((row) => row.title)).toEqual(["Bảo mật", "IAM", "Chuỗi khối"]);
