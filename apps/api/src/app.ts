@@ -19,6 +19,9 @@ import { createStudentDataRouter } from "./student/router.js";
 import { createRoadmapRouter } from "./roadmap/router.js";
 import { createAssistantRouter } from "./assistant/router.js";
 import { createCareerGuidanceRouter } from "./career-guidance/router.js";
+import { createOverviewRouter, refreshWarningNotifications } from "./overview/router.js";
+import { createStudentNotificationsRouter } from "./notifications/student-router.js";
+import { createAnnouncementsRouter } from "./notifications/admin-router.js";
 import { createStudyPlanRouter } from "./study-plan/router.js";
 import { createCompetencyAssessmentRouter } from "./competency-assessment/router.js";
 import { createCompetencyAiQueue } from "./competency-assessment/ai/queue.js";
@@ -78,8 +81,12 @@ export function createApp({
   // Graduation advice is AI work: queued only when AI_WORKER_KEY is configured. A committed
   // transcript import (native upload or OCR) queues it best-effort for the new transcript.
   const graduationAdviceEnabled = Boolean(config.aiWorkerKey);
-  const afterTranscriptImport = databasePool && graduationAdviceEnabled
-    ? (userId: string) => ensureGraduationAdviceAfterImport(databasePool, userId)
+  // The new transcript's "Cần chú ý" warnings also reach the bell at once (each one once, 2026-10-30).
+  const afterTranscriptImport = databasePool
+    ? async (userId: string) => {
+      await refreshWarningNotifications(databasePool, userId);
+      if (graduationAdviceEnabled) await ensureGraduationAdviceAfterImport(databasePool, userId);
+    }
     : undefined;
   app.use("/api/worker/transcripts", createTranscriptWorkerRouter(databasePool,config.ocrWorkerKey, { afterTranscriptImport }));
   // The AI worker router authenticates before parsing its own body, so it must come before express.json.
@@ -203,6 +210,11 @@ export function createApp({
   app.use("/api/student/assistant", createAssistantRouter(databasePool, config.webOrigin, { enabled: Boolean(config.aiWorkerKey) }));
   // "Định hướng nghề nghiệp": every catalog career against the student's competencies and survey (read only, no AI).
   app.use("/api/student/career-guidance", createCareerGuidanceRouter(databasePool));
+  // Tổng quan (STU-PROG-01…03): the student dashboard in one read-only snapshot, warnings included.
+  app.use("/api/student/overview", createOverviewRouter(databasePool));
+  // The bell of the student portal (STU-PROG-04…09) and the faculty's announcements to it (AD-NOTI-01/02).
+  app.use("/api/student/notifications", createStudentNotificationsRouter(databasePool, config.webOrigin));
+  app.use("/api/admin/announcements", createAnnouncementsRouter(databasePool, config.webOrigin, { staffEmailDomains: config.staffEmailDomains }));
   // AI comments are queued only when AI_WORKER_KEY is configured; otherwise ai_status is 'disabled'.
   app.use("/api/student/competency-assessments", createCompetencyAssessmentRouter(databasePool, config.webOrigin,
     createCompetencyAiQueue({ enabled: Boolean(config.aiWorkerKey) }), { promptVersion: PROMPT_VERSION }));

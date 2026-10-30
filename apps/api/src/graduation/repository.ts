@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import type { DatabasePool } from "../db/pool.js";
 import { adminRoles, type AuthenticatedUser } from "../auth/types.js";
+import { notifyCatalogUpdate } from "../notifications/catalog.js";
 import {
   GraduationError,
   identity,
@@ -88,6 +89,8 @@ export class GraduationRepository {
       "INSERT INTO graduation_events(standard_id,actor_id,action) VALUES($1,$2,$3)",
       [id, actor.userId, note],
     );
+    // The change reaches the bell of the students whose standard it is: "Khoa cập nhật …, bấm Đánh giá lại" (2026-10-30).
+    await notifyCatalogUpdate(client, { kind: "graduation", id, revisionId: rid });
   }
   async createBatch(
     data: GraduationData[],

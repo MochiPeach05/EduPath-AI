@@ -7,6 +7,7 @@ import { TranscriptError } from "./transcript-parser.js";
 import { mapOcrTranscript } from "./ocr-adapter.js";
 import { deleteCompetencyData } from "../competency-assessment/repository.js";
 import { adviceErrorCode, deleteGraduationAdvice } from "../graduation/advice/jobs.js";
+import { notifyInTransaction, notifySafely, transcriptFailed, transcriptReady } from "../notifications/notify.js";
 
 /** Runs once a transcript import or replacement has COMMITTED (graduation advice, design §5.7). */
 export type TranscriptImportHook = (userId: string) => Promise<unknown>;
@@ -24,8 +25,11 @@ export function runAfterTranscriptImport(hook: TranscriptImportHook | undefined,
 
 export const jobColumns = `id,filename,status,error_code AS "errorCode",created_at AS "createdAt",updated_at AS "updatedAt"`;
 export async function expireJobs(pool: Pick<DatabasePool, "query">) {
-  await pool.query(`UPDATE transcript_jobs SET status='failed',error_code='worker_timeout',pdf_data=NULL,lease_token=NULL,updated_at=now()
-    WHERE (status='processing' AND lease_until<now() AND attempts>=2) OR (status IN ('queued','processing') AND created_at<now()-interval '24 hours')`);
+  const expired = await pool.query<{ id: string; user_id: string }>(`UPDATE transcript_jobs SET status='failed',error_code='worker_timeout',pdf_data=NULL,lease_token=NULL,updated_at=now()
+    WHERE (status='processing' AND lease_until<now() AND attempts>=2) OR (status IN ('queued','processing') AND created_at<now()-interval '24 hours')
+    RETURNING id,user_id`);
+  // The bell tells the student the import stopped (2026-10-30, STU-PROG-04).
+  for (const job of expired?.rows ?? []) await notifySafely(pool, job.user_id, { ...transcriptFailed("worker_timeout"), sourceKey: `transcript:${job.id}` });
   await pool.query(`DELETE FROM transcript_jobs WHERE status NOT IN ('queued','processing') AND updated_at<now()-interval '7 days'`);
 }
 // Caller holds the user's row lock and checks the current transcript version.
@@ -95,6 +99,13 @@ export function createTranscriptWorkerRouter(pool: DatabasePool | undefined, key
         await deleteGraduationAdvice(client, uid);
       }
       await client.query("UPDATE transcript_jobs SET status=$2,error_code=$3,pdf_data=NULL,updated_at=now() WHERE id=$1", [req.params.id, errorCode ? "failed" : "completed", errorCode ?? null]);
+      // The PDF is read in the background, so the bell tells the student how it ended (2026-10-30, STU-PROG-04).
+      if (errorCode !== "insufficient_role") {
+        const terms = parsed?.sections.filter((section) => section.academicYear).length ?? null;
+        await notifyInTransaction(client, uid, {
+          ...(errorCode ? transcriptFailed(errorCode) : transcriptReady(parsed?.courseCount ?? null, terms)), sourceKey: `transcript:${req.params.id}`,
+        });
+      }
       await client.query("COMMIT"); res.json({ ok: true });
       if (!errorCode && parsed) imported = uid;
     } catch (e) { await client.query("ROLLBACK"); throw e; } finally { client.release(); }

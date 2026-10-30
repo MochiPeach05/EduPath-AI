@@ -78,6 +78,12 @@ export function portalGuides(): PortalGuide[] {
       "- Chương trình đào tạo và Kế hoạch đào tạo (trong menu tài khoản): tra cứu học phần và kế hoạch từng học kỳ.",
       `Họ tên, mã sinh viên, khóa và lớp được lấy từ tài khoản Microsoft của trường và chỉ để xem; nếu sai hoặc trống, hãy gửi email đến ${SUPPORT_EMAIL}.`,
     ]],
+    ["tong-quan", "Trang Tổng quan và thông báo", "#overview", [
+      "Trang Tổng quan gom kết quả của bạn ở một nơi: GPA tích lũy, tín chỉ đã đạt, năng lực chung, mức phù hợp nghề mục tiêu, tình trạng xét tốt nghiệp và Lộ trình AI; tiến độ theo từng học kỳ của kế hoạch đào tạo (bấm một học kỳ để xem môn); điều kiện xét tốt nghiệp; kỹ năng mạnh nhất và còn thiếu; biểu đồ điểm trung bình theo học kỳ; các môn đang học và môn Lộ trình AI đề xuất cho học kỳ tới; ô hỏi nhanh Trợ lý AI.",
+      "- Cần chú ý (cuối trang): hệ thống tự phát hiện môn bắt buộc chưa đạt mà chưa học lại, môn trễ so với kế hoạch đào tạo, nhóm tự chọn còn thiếu tín chỉ, số tín chỉ mỗi học kỳ còn lại quá nhiều để kịp tốt nghiệp và điểm trung bình dưới ngưỡng xét tốt nghiệp. Đây là kết quả tham khảo, không thay cảnh báo học vụ của trường.",
+      "- Thông báo nằm ở chuông trên thanh đầu trang; số trên chuông là thông báo chưa đọc. Bạn nhận thông báo khi bảng điểm đọc xong, khi có nhận xét năng lực, Lộ trình AI hay lời khuyên xét tốt nghiệp, khi có mục Cần chú ý mới, khi Khoa cập nhật chương trình, kế hoạch đào tạo hay tiêu chuẩn xét tốt nghiệp và khi Khoa gửi thông báo.",
+      "- Trong danh sách thông báo, bạn lọc theo Chưa đọc, Cảnh báo, Kết quả AI, Từ Khoa hoặc Hệ thống, đánh dấu đã đọc, xóa (có Hoàn tác) và bấm nút để mở trang liên quan. Thông báo tự xóa sau 90 ngày.",
+    ]],
     ["import-bang-diem", "Import bảng điểm PDF", "#profile", [
       "Bảng điểm là dữ liệu gốc của mọi kết quả trên EduPath AI. Cách import:",
       "- Tải bảng điểm dạng PDF từ cổng đào tạo của trường: tối đa 5 MB, không quá 20 trang, không khóa bằng mật khẩu; bản PDF xuất trực tiếp dễ đọc hơn ảnh chụp hoặc bản scan.",

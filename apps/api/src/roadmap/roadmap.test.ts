@@ -104,6 +104,17 @@ describe("buildRoadmapFacts", () => {
     expect(skills.every((skill) => skill.kind === "deepen" && skill.statusLabel === "Đã đạt mức Giỏi: nâng lên mức Xuất sắc")).toBe(true);
   });
 
+  it("takes the term being studied from the transcript, not from the failed attempt of a course being retaken", () => {
+    // Stress test 2026-10-30: a retake keeps the term of its failed attempt (here HK232) in result.courses.
+    const result = syntheticRoadmapResult();
+    result.courses.push({ ...result.courses[0]!, code: "71ITSE30103", name: "Kỹ thuật lập trình", state: "in_progress", term: "HK232", applicable: true, conditionOnly: false });
+    result.transcript = { ...result.transcript!, studyTerm: "HK251" };
+    expect(buildRoadmapFacts(ROADMAP_ASSESSMENT, result, roadmapWindow(ROADMAP_NOW)).runningTerm).toBe("HK251");
+    // A result stored before comp-calc-v13 has no studyTerm: the latest term of the courses being studied.
+    result.transcript = { ...result.transcript!, studyTerm: undefined };
+    expect(buildRoadmapFacts(ROADMAP_ASSESSMENT, result, roadmapWindow(ROADMAP_NOW)).runningTerm).toBe("HK251");
+  });
+
   it("reads an assessment before comp-calc-v13, whose next term was the term being studied", () => {
     const result = syntheticRoadmapResult();
     result.progress = { ...result.progress!, currentTerm: "HK243", nextTerm: "HK251", next: [

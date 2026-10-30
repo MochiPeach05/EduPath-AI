@@ -236,6 +236,9 @@ export function calculateAssessment(inputs: AssessmentInputs): AssessmentResult 
   return { ...result, history: competencyHistory(inputs, result) };
 }
 
+/** The assessment without its term-by-term history: Tổng quan reads only the course states, the plan progress and graduation. */
+export const assessWithoutHistory = (inputs: AssessmentInputs): Omit<AssessmentResult, "history"> => assess(inputs);
+
 /**
  * The career part of the assessment (§7.5, §7.6) for each given career, the same inputs otherwise, without the history
  * ("Định hướng nghề nghiệp" compares every career of the catalog the way Khoảng trống kỹ năng shows the target one).

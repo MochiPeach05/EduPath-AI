@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { formatAnswer, safeHttpsUrl } from "./assistant-format";
+import { takeQueuedQuestion } from "./assistant-handoff";
 import {
   ASSISTANT_API, ASSISTANT_MAX_QUESTION,
   type AssistantMessage, type AssistantMessageStatus, type AssistantSource, type AssistantThread, type AssistantThreadResponse, type AssistantThreadsResponse,
@@ -870,6 +871,28 @@ export function AssistantView(props: AssistantViewProps) {
   </div>;
 }
 
+/**
+ * A question left by "Hỏi nhanh Trợ lý AI" on Tổng quan (assistant-handoff.ts): taken once on mount, then sent in a new
+ * conversation as soon as the conversation list has answered (or failed), so the new thread joins the list.
+ */
+function useQueuedQuestion({ threads, listError, selectedId, onSelect, onSend }: ReturnType<typeof useAssistant>) {
+  const queued = useRef<string | null>(null);
+  useEffect(() => {
+    const question = takeQueuedQuestion();
+    if (!question) return;
+    queued.current = question;
+    onSelect(null);
+  }, [onSelect]);
+  useEffect(() => {
+    const question = queued.current;
+    if (!question || selectedId !== null || (threads === null && !listError)) return;
+    queued.current = null;
+    void onSend(question);
+  }, [threads, listError, selectedId, onSend]);
+}
+
 export default function StudentAssistant() {
-  return <AssistantView {...useAssistant()} />;
+  const assistant = useAssistant();
+  useQueuedQuestion(assistant);
+  return <AssistantView {...assistant} />;
 }

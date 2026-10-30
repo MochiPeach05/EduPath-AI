@@ -19,6 +19,7 @@ import { readSurvey, surveyFacts } from "../student/survey.js";
 import { buildRoadmapFacts, type RoadmapFacts } from "./facts.js";
 import { buildRoadmapInput } from "./prompt.js";
 import { roadmapContextFromAiInput, validateRoadmapOutput, type RoadmapOutput } from "./validate.js";
+import { notifyInTransaction, roadmapFailed, roadmapReady } from "../notifications/notify.js";
 import { roadmapWindow } from "./window.js";
 
 /** Serializes the pending checks, the queue-size check and the inserts of concurrent requests. */
@@ -227,10 +228,14 @@ export async function completeRoadmap(client: PoolClient, id: string, input: Wor
   }
   const model = "error" in input ? null : input;
   const promptVersion = typeof job.ai_input?.promptVersion === "string" ? job.ai_input.promptVersion : null;
-  await client.query(
+  const updated = await client.query<{ user_id: string }>(
     `UPDATE stu_roadmaps SET status=$2,error_code=$3,ai_output=$4::jsonb,metrics=$5::jsonb,ai_model=$6,ai_model_digest=$7,
-      ollama_version=$8,prompt_version=COALESCE($9,prompt_version),ai_input=NULL,lease_until=NULL,completed_at=now(),updated_at=now() WHERE id=$1`,
+      ollama_version=$8,prompt_version=COALESCE($9,prompt_version),ai_input=NULL,lease_until=NULL,completed_at=now(),updated_at=now() WHERE id=$1
+      RETURNING user_id`,
     [id, errorCode ? "failed" : "completed", errorCode, output ? JSON.stringify(output) : null,
       model ? JSON.stringify(model.metrics) : null, model?.model ?? null, model?.digest || null, model?.ollamaVersion || null, promptVersion]);
+  // The roadmap takes minutes to write: the bell tells the student how it ended (2026-10-30, STU-PROG-04).
+  const userId = updated?.rows[0]?.user_id;
+  if (userId) await notifyInTransaction(client, userId, { ...(errorCode ? roadmapFailed() : roadmapReady()), sourceKey: `roadmap:${id}` });
   return "ok";
 }

@@ -32,6 +32,7 @@ import {
   extendCourseSuggestion
 } from "../../competencies/ai/jobs.js";
 import { claimRoadmap, completeRoadmap, createRoadmapExpiry, extendRoadmap } from "../../roadmap/jobs.js";
+import { assessmentComment, notifyInTransaction } from "../../notifications/notify.js";
 import {
   assistantWorkerJob,
   claimAssistantAnswer,
@@ -367,6 +368,8 @@ export function createCompetencyWorkerRouter(pool: DatabasePool | undefined, aiW
           `UPDATE stu_comp_assessments SET ai_status='completed',ai_output=$3::jsonb,ai_model=$4,ai_model_digest=$5,ollama_version=$6,
             prompt_version=$7,ai_error_code=NULL,ai_completed_at=now() WHERE id=$1 AND user_id=$2`,
           [job.assessment_id, job.user_id, JSON.stringify(output), input.model, input.digest || null, input.ollamaVersion || null, promptVersion]);
+        // The comment comes minutes after the assessment: the bell tells the student (2026-10-30, STU-PROG-04).
+        await notifyInTransaction(client, job.user_id, { ...assessmentComment(), sourceKey: `assessment:${job.assessment_id}` });
       } else {
         await client.query(
           `UPDATE stu_comp_assessments SET ai_status='failed',ai_error_code=$3,ai_output=NULL WHERE id=$1 AND user_id=$2`,

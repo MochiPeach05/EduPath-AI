@@ -5,6 +5,7 @@ import type { DatabasePool } from "../db/pool.js";
 import { adminRoles, type AuthenticatedUser } from "../auth/types.js";
 import { CurriculumError, rebuild, type CurriculumData } from "./model.js";
 import { byOrder, byText, orderBy, type OwnOrder, type SortDirection } from "../admin/table-sort.js";
+import { notifyCatalogUpdate } from "../notifications/catalog.js";
 
 // The columns the list sorts by (web CurriculaManagement.tsx, admin/table-sort.ts): Khóa K9 before K29, Phiên bản by
 // number then the last update, Trạng thái Đang mở first.
@@ -150,6 +151,8 @@ export class CurriculumRepository {
       "UPDATE curricula SET current_revision=$2,lock_version=$3,updated_at=now() WHERE id=$1",
       [id, revisionId, randomUUID()],
     );
+    // An admin's change reaches the bell of the cohort's students: "Khoa cập nhật …, bấm Đánh giá lại" (2026-10-30).
+    if (actorId) await notifyCatalogUpdate(client, { kind: "curriculum", id, revisionId });
   }
   async create(
     data: CurriculumData,

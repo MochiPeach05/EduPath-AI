@@ -25,8 +25,13 @@ const num = (value: unknown) => value === null || value === undefined ? null : N
  * deterministic order. The caller runs it inside a REPEATABLE READ READ ONLY transaction
  * (see loadAssessmentInputs); no row locks are taken (they fail with SQLSTATE 25006 there).
  */
-/** careerOptional: no target career needed ("Định hướng nghề nghiệp" sets each catalog career itself); career is null then. */
-export async function readAssessmentInputs(db: Db, userId: string, options: { promptVersion?: string; careerOptional?: boolean } = {}): Promise<AssessmentInputs> {
+/**
+ * careerOptional: no target career needed ("Định hướng nghề nghiệp" sets each catalog career itself); career is null then.
+ * weightsOptional: no course–skill weights needed (Tổng quan reads only the course states and the plan progress); the
+ * weights are then empty when the faculty has applied none.
+ */
+export async function readAssessmentInputs(db: Db, userId: string,
+  options: { promptVersion?: string; careerOptional?: boolean; weightsOptional?: boolean } = {}): Promise<AssessmentInputs> {
   const student = await db.query<{ cohort_code: string | null; specialty: string | null; career_position_id: string | null; major_code: string | null }>(
     "SELECT cohort_code,specialty,career_position_id,major_code FROM student_profiles WHERE user_id=$1", [userId]);
   const transcript = await db.query<{ version: string; data: TranscriptData }>(
@@ -74,7 +79,7 @@ export async function readAssessmentInputs(db: Db, userId: string, options: { pr
      FROM curriculum_courses cc JOIN ad_comp_course_configs cfg ON cfg.course_id=cc.course_id AND cfg.status='active'
      WHERE cc.revision_id=$1`, [curriculumRow.revision_id]);
   const weightRow = weightState.rows[0];
-  if (!weightRow?.active_count) throw new AssessmentError("competency_weights_unavailable", 409);
+  if (!weightRow?.active_count && !options.weightsOptional) throw new AssessmentError("competency_weights_unavailable", 409);
   const links = await db.query<{ course_code: string; skill_id: string; weight: string | number }>(
     `SELECT cc.code AS course_code,l.skill_id,l.weight FROM curriculum_courses cc
      JOIN ad_comp_course_configs cfg ON cfg.course_id=cc.course_id AND cfg.status='active'
@@ -89,8 +94,8 @@ export async function readAssessmentInputs(db: Db, userId: string, options: { pr
      WHERE s.is_active AND s.deleted_at IS NULL AND k.deleted_at IS NULL AND g.is_active ORDER BY k.name,s.skill_id`, [SCOPE_MAX_LENGTH]);
   const groups = await db.query<{ id: string; name: string }>("SELECT id,name FROM ad_comp_groups WHERE is_active ORDER BY name,id");
   const weights: WeightsInput = {
-    revisionId: curriculumRow.revision_id, version: curriculumRow.version, activeCount: weightRow.active_count,
-    maxConfigUpdatedAt: weightRow.max_updated === null ? null : new Date(weightRow.max_updated).toISOString(),
+    revisionId: curriculumRow.revision_id, version: curriculumRow.version, activeCount: weightRow?.active_count ?? 0,
+    maxConfigUpdatedAt: weightRow?.max_updated ? new Date(weightRow.max_updated).toISOString() : null,
     links: links.rows.map((row) => ({ courseCode: row.course_code, skillId: row.skill_id, weight: Number(row.weight) })),
     skills: skills.rows.map((row) => ({ skillId: row.skill_id, name: row.name, description: row.description, scope: row.scope, groupId: row.group_id,
       otherGroupIds: row.other_group_ids ?? [] })),

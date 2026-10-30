@@ -9,7 +9,10 @@ export const adminNavigation = [
   { path: "/quantri/vi-tri-nghe-nghiep", label: "Nghề nghiệp", eyebrow: "QUẢN LÝ NGHỀ NGHIỆP", icon: "users" },
   { path: "/quantri/nhom-nang-luc", label: "Nhóm năng lực", eyebrow: "QUẢN LÝ NĂNG LỰC", icon: "book" },
   { path: "/quantri/cau-hinh-nang-luc", label: "Cấu hình năng lực", eyebrow: "QUẢN LÝ NĂNG LỰC", icon: "profile" },
-  { path: "/quantri/cau-hinh-mon-hoc", label: "Cấu hình môn học", eyebrow: "QUẢN LÝ NĂNG LỰC", icon: "chart" }
+  { path: "/quantri/cau-hinh-mon-hoc", label: "Cấu hình môn học", eyebrow: "QUẢN LÝ NĂNG LỰC", icon: "chart" },
+  // AD-NOTI-01/02 (2026-10-30): the faculty's announcements to the students' bell; email comes later.
+  { path: "/quantri/gui-thong-bao", label: "Gửi thông báo", eyebrow: "QUẢN LÝ THÔNG BÁO", icon: "bell" },
+  { path: "/quantri/thong-bao-da-gui", label: "Đã gửi", eyebrow: "QUẢN LÝ THÔNG BÁO", icon: "clock" }
 ] as const;
 export type AdminPage = (typeof adminNavigation)[number];
 
@@ -20,7 +23,8 @@ export type AdminPage = (typeof adminNavigation)[number];
 const adminNavigationGroups = [
   // In the order they are set up: fields, then the shared skills, then the careers that use both.
   { id: "careers", label: "Quản lý nghề nghiệp", icon: "briefcase", paths: ["/quantri/linh-vuc-nghe-nghiep", "/quantri/ky-nang", "/quantri/vi-tri-nghe-nghiep"] },
-  { id: "competencies", label: "Quản lý năng lực", icon: "target", paths: ["/quantri/nhom-nang-luc", "/quantri/cau-hinh-nang-luc", "/quantri/cau-hinh-mon-hoc"] }
+  { id: "competencies", label: "Quản lý năng lực", icon: "target", paths: ["/quantri/nhom-nang-luc", "/quantri/cau-hinh-nang-luc", "/quantri/cau-hinh-mon-hoc"] },
+  { id: "announcements", label: "Quản lý thông báo", icon: "bell", paths: ["/quantri/gui-thong-bao", "/quantri/thong-bao-da-gui"] }
 ] as const;
 
 /** Pages that moved: an old link opens the page that replaced it. */
@@ -50,7 +54,7 @@ export function resolveAdminPage(pathname: string) {
   return adminNavigation.find((item) => item.path === target) ?? adminNavigation[0];
 }
 
-/** The group holding a page ("careers" or "competencies"), or null for a page outside the groups. */
+/** The group holding a page ("careers", "competencies" or "announcements"), or null for a page outside the groups. */
 export function adminGroupOf(pathname: string) {
   const { path } = resolveAdminPage(pathname);
   const group = adminSidebar.find((entry) => entry.kind === "group" && entry.pages.some((page) => page.path === path));

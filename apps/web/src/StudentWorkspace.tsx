@@ -13,6 +13,8 @@ import { majorLabel } from "./majors";
 import { logout } from "./auth-api";
 import { publicInformationLinks, supportEmail } from "./public-information";
 import { Icon } from "./student-icons";
+import { NotificationsDrawer, NotificationsPanel, badgeText, bellLabel, useUnreadNotifications } from "./StudentNotifications";
+import type { StudentNotification } from "./notification-types";
 import type { AuthenticatedUser } from "./types";
 import "./student-workspace.css";
 import "./student-header.css";
@@ -119,6 +121,12 @@ export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) 
   const headingRef = useRef<HTMLHeadingElement>(null);
   const openPanel = (next: Panel, opener: HTMLElement | null) => { panelOpener.current = opener; setPanel(next); };
   const closePanel = (restoreFocus: boolean) => { setPanel(null); if (restoreFocus) panelOpener.current?.focus(); };
+  // Thông báo (2026-10-30): the bell's unread count, and the drawer of every notification (opened from the popover).
+  const notifications = useUnreadNotifications();
+  const bellRef = useRef<HTMLButtonElement>(null);
+  const [notificationDrawer, setNotificationDrawer] = useState<{ initial: StudentNotification | null } | null>(null);
+  const openNotifications = (initial: StudentNotification | null) => { setPanel(null); setNotificationDrawer({ initial }); };
+  const closeNotifications = () => { setNotificationDrawer(null); bellRef.current?.focus(); };
   useEffect(() => {
     if (!panel && !menu) return;
     // A click outside closes the open panel; a click on its own trigger is left to the trigger, which toggles it.
@@ -272,7 +280,7 @@ export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) 
         <nav id="student-navigation" className="sw-header-nav" aria-label="Điều hướng sinh viên">{navPages.map(p => <a key={p.id} href={`#${p.id}`} aria-current={page === p.id ? "page" : undefined} onClick={followLink(p.id)}><span>{p.label}</span></a>)}</nav>
         <div className="sw-tools">
           <button type="button" className="sw-icon-button" aria-label="Hướng dẫn" aria-haspopup="dialog" aria-expanded={panel === "help"} aria-controls={panel === "help" ? "student-help-panel" : undefined} onClick={event => panel === "help" ? closePanel(true) : openPanel("help", event.currentTarget)}><Icon name="help" /></button>
-          <button type="button" className="sw-icon-button" aria-label="Thông báo" aria-haspopup="dialog" aria-expanded={panel === "notifications"} aria-controls={panel === "notifications" ? "student-notifications-panel" : undefined} onClick={event => panel === "notifications" ? closePanel(true) : openPanel("notifications", event.currentTarget)}><Icon name="bell" /></button>
+          <button ref={bellRef} type="button" className="sw-icon-button sw-bell" aria-label={bellLabel(notifications.unread)} aria-haspopup="dialog" aria-expanded={panel === "notifications"} aria-controls={panel === "notifications" ? "student-notifications-panel" : undefined} onClick={event => panel === "notifications" ? closePanel(true) : openPanel("notifications", event.currentTarget)}><Icon name="bell" />{notifications.unread > 0 && <span className="sw-bell-badge" aria-hidden="true">{badgeText(notifications.unread)}</span>}</button>
           <div className="sw-account" ref={accountRef} onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setPanel(p => p === "account" ? null : p); }}>
             {/* The ring marks the avatar while the page on screen is one of its menu items. */}
             <button ref={accountButton} type="button" className={`sw-avatar${accountPages.some(p => p.id === page) ? " sw-avatar-here" : ""}`} aria-label={`Tài khoản ${name}`} aria-expanded={panel === "account"} aria-controls={panel === "account" ? "student-account-menu" : undefined} onClick={event => panel === "account" ? setPanel(null) : openPanel("account", event.currentTarget)}>{avatar}</button>
@@ -290,10 +298,7 @@ export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) 
           {panel === "help" ? <>
             <h3 id="student-help-title">Bắt đầu với EduPath AI</h3>
             <ol className="sw-help-steps">{helpSteps.map(([where, what]) => <li key={where}><strong>{where}</strong>: {what}</li>)}</ol>
-          </> : <>
-            <h3 id="student-notifications-title">Thông báo</h3>
-            <p>Chức năng thông báo học tập đang được phát triển.</p>
-          </>}
+          </> : <NotificationsPanel onOpen={openNotifications} onOpenAll={() => openNotifications(null)} onUnread={notifications.setUnread} />}
         </section>}
       </header>
       <div className={`sw-body ${menu ? "sw-body-menu-open" : ""}`}>
@@ -328,5 +333,7 @@ export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) 
         </main></div>
       </div>
     </div>
+    {notificationDrawer && <NotificationsDrawer initial={notificationDrawer.initial} onClose={closeNotifications} onUnread={notifications.setUnread}
+      onNavigate={link => { setNotificationDrawer(null); const target = pageFromHash(link); if (target) navigate(target); }} />}
   </div>;
 }

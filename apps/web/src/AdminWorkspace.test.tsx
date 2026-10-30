@@ -14,11 +14,11 @@ function render(pathname: string) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("admin workspace", () => {
-  it("shows the short names in the sidebar, in order, with the two groups and their pages", () => {
+  it("shows the short names in the sidebar, in order, with the three groups and their pages", () => {
     const nav = render("/quantri/tai-khoan").match(/<nav id="admin-navigation".*?<\/nav>/s)?.[0] ?? "";
     expect([...nav.matchAll(/<span>([^<]*)<\/span>/g)].map(match => match[1])).toEqual(
       ["Tài khoản", "Sinh viên", "Chương trình", "Tốt nghiệp", "Kế hoạch", "Quản lý nghề nghiệp", "Lĩnh vực", "Kỹ năng", "Nghề nghiệp",
-        "Quản lý năng lực", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học"]);
+        "Quản lý năng lực", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học", "Quản lý thông báo", "Gửi thông báo", "Đã gửi"]);
   });
 
   it("keeps Quản lý năng lực closed elsewhere and open on its pages", () => {
@@ -64,8 +64,10 @@ describe("admin workspace", () => {
     const openGroups = (html: string) => [...html.matchAll(/aria-expanded="true" aria-controls="admin-navigation-(\w+)"/g)].map(match => match[1]);
     const careerPages = ["/quantri/linh-vuc-nghe-nghiep", "/quantri/ky-nang", "/quantri/vi-tri-nghe-nghiep"];
     const competencyPages = ["/quantri/nhom-nang-luc", "/quantri/cau-hinh-nang-luc", "/quantri/cau-hinh-mon-hoc"];
+    const announcementPages = ["/quantri/gui-thong-bao", "/quantri/thong-bao-da-gui"];
     for (const { path } of adminNavigation) {
-      expect(openGroups(render(path))).toEqual(careerPages.includes(path) ? ["careers"] : competencyPages.includes(path) ? ["competencies"] : []);
+      expect(openGroups(render(path))).toEqual(careerPages.includes(path) ? ["careers"] : competencyPages.includes(path) ? ["competencies"]
+        : announcementPages.includes(path) ? ["announcements"] : []);
     }
     // An old link or a trailing slash opens the group of the page it shows.
     expect(openGroups(render("/quantri/danh-gia-nang-luc"))).toEqual(["competencies"]);

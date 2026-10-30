@@ -103,8 +103,12 @@ export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult
     if (improving.has(fact.code) || study.some((item) => item.code === fact.code)) return;
     study.push({ code: fact.code, name: fact.name, credits: fact.credits, source, termCode, careerSkills: skillsOf(fact.code) });
   };
-  // The term being studied: the first term of the courses registered without grades.
-  const runningTerm = (result.courses ?? []).filter((item) => item.state === "in_progress" && item.term).map((item) => item.term!).sort()[0] ?? null;
+  // The term being studied, when courses are registered without grades: the transcript's own (studyTermCode, stored since
+  // comp-calc-v13), else the latest term of those courses. A retake keeps the term of its failed attempt in result.courses,
+  // so the earliest of those terms read an old term as the running one (stress test 2026-10-30: "học kỳ đang học: học kỳ 2
+  // năm học 2023–2024" for a student in học kỳ 1 năm học 2026–2027, and a pace over terms already past).
+  const inProgressTerms = (result.courses ?? []).filter((item) => item.state === "in_progress" && item.term).map((item) => item.term!);
+  const runningTerm = inProgressTerms.length ? result.transcript?.studyTerm ?? [...inProgressTerms].sort().at(-1) ?? null : null;
   for (const item of result.courses ?? []) if (item.state === "in_progress" && item.applicable) add(item, "running", item.term);
   const choices: RoadmapChoice[] = [];
   const progress = result.progress;

@@ -1,0 +1,72 @@
+/* Quản lý thông báo (AnnouncementsManagement.tsx, 2026-10-30): compose form beside the student's view, and the sent list.
+   Built on the admin catalog styles (curricula.css, careers.css); only what those lack is here. */
+
+.an-workspace { gap: 20px; }
+.an-compose { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(280px, 1fr); gap: 20px; align-items: start; }
+.an-form-panel { padding: 24px; }
+.an-panel-head h2 { margin: 0 0 4px; font-size: 20px; }
+.an-panel-head p { margin: 0 0 18px; color: var(--cm-muted); font-size: 13.5px; }
+.an-readonly { margin: 0 0 16px; padding: 10px 12px; border-radius: 8px; background: var(--cm-warn-bg); color: var(--cm-warn); font-size: 13px; }
+
+/* Gửi đến */
+.an-targets, .an-channels { display: grid; gap: 10px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.an-targets legend, .an-channels legend { margin-bottom: 8px; padding: 0; color: var(--cm-muted); font-size: 13px; }
+.an-chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
+/* .an-targets: admin-workspace.css (loaded later) resets every .am-shell button font. */
+.an-targets .an-chip-row button {
+  min-height: 34px; padding: 5px 12px; border: 1px solid #bfc6d2; border-radius: 999px; background: #fff; color: var(--cm-ink);
+  font: inherit; font-size: 13px; font-weight: 650; cursor: pointer;
+}
+.an-targets .an-chip-row button:hover:not(:disabled) { border-color: #9aa3b2; }
+.an-targets .an-chip-row button[aria-pressed="true"] { border-color: #e8b4c1; background: #fbf0f3; color: var(--cm-accent); }
+.an-targets .an-chip-row button:disabled { cursor: not-allowed; opacity: .6; }
+.an-hint { margin: 0; color: var(--cm-muted); font-size: 12.5px; }
+.an-reach { margin: 0; padding: 8px 12px; border-radius: 8px; background: var(--cm-soft); font-size: 13px; }
+.an-reach-ok { color: var(--cm-ink); }
+.an-reach-warn { background: var(--cm-warn-bg); color: var(--cm-warn); font-weight: 600; }
+.an-reach-muted { color: var(--cm-muted); }
+.an-counter { justify-self: end; color: var(--cm-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.an-form textarea { min-height: 140px; }
+.an-channels label.cm-check.an-off { color: var(--cm-muted); }
+.an-soon { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: var(--cm-warn-bg); color: var(--cm-warn); font-size: 11.5px; font-weight: 800; }
+
+/* The student's view */
+.an-preview { display: grid; gap: 12px; padding: 20px 22px; position: sticky; top: calc(var(--am-header-height, 80px) + 16px); }
+.an-preview h2 { margin: 0; font-size: 16px; }
+.an-note-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) 10px; gap: 10px; align-items: start; padding: 10px; border: 1px solid var(--cm-line); border-radius: 10px; }
+.an-note-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: #fbf0f3; color: var(--cm-accent); font-size: 13px; font-weight: 800; }
+.an-note-text { display: grid; gap: 1px; min-width: 0; }
+.an-note-text strong { font-size: 13.5px; line-height: 1.35; overflow-wrap: anywhere; }
+.an-note-text small { color: var(--cm-muted); font-size: 12px; }
+.an-note-dot { width: 9px; height: 9px; margin-top: 6px; border-radius: 50%; background: var(--cm-accent); }
+.an-preview-body { margin: 0; color: var(--cm-ink); font-size: 13.5px; white-space: pre-line; overflow-wrap: anywhere; }
+.an-preview-button { justify-self: start; padding: 6px 12px; border-radius: 8px; background: var(--cm-accent); color: #fff; font-size: 13px; font-weight: 700; }
+.an-preview-note { margin: 0; color: var(--cm-muted); font-size: 12.5px; }
+
+.an-success { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 16px; border: 1px solid #b8dccb; border-radius: 12px; background: #e6f2ec; color: #1f5f49; }
+.an-success p { flex: 1; margin: 0; min-width: 220px; }
+.an-success > svg { width: 20px; height: 20px; flex: none; }
+
+/* Sent list: phones scroll the table sideways (.cm-table-scroll) instead of squeezing the columns. */
+.an-table { min-width: 760px; }
+.an-table td { vertical-align: top; }
+.an-num { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.an-read { display: inline-grid; gap: 4px; min-width: 76px; }
+.an-meter { display: block; height: 5px; border-radius: 3px; background: #eceff3; overflow: hidden; }
+.an-meter i { display: block; height: 100%; border-radius: 3px; background: #27765b; }
+.an-tag { display: inline-block; margin-left: 8px; padding: 1px 8px; border-radius: 999px; background: #eef0f4; color: var(--cm-muted); font-size: 11.5px; font-weight: 700; vertical-align: 1px; }
+.an-withdrawn td { color: var(--cm-muted); }
+.an-detail dl { display: grid; gap: 12px; margin: 0; }
+.an-detail dl div { display: grid; gap: 2px; }
+.an-detail dt { color: var(--cm-muted); font-size: 12.5px; }
+.an-detail dd { margin: 0; overflow-wrap: anywhere; }
+.an-detail-body { white-space: pre-line; }
+
+@media (max-width: 980px) {
+  .an-compose { grid-template-columns: minmax(0, 1fr); }
+  .an-preview { position: static; }
+}
+@media (max-width: 560px) {
+  .an-form-panel { padding: 18px 16px; }
+  .an-preview { padding: 18px 16px; }
+}

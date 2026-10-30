@@ -5,6 +5,7 @@ import { adminRoles, type AuthenticatedUser } from "../auth/types.js";
 import { PlanError, reviewPlan, identity, type PlanData } from "./model.js";
 import type { CurriculumData } from "../curricula/model.js";
 import { byOrder, byText, orderBy, type OwnOrder, type SortDirection } from "../admin/table-sort.js";
+import { notifyCatalogUpdate } from "../notifications/catalog.js";
 // The columns the list sorts by (web PlansManagement.tsx, admin/table-sort.ts): Khóa K9 before K29, Phiên bản by number
 // then the last update, Trạng thái Đang mở first.
 export const planSort = {
@@ -132,6 +133,8 @@ export class PlanRepository {
       "UPDATE training_plans SET current_revision=$2,lock_version=$3,updated_at=now() WHERE id=$1",
       [id, revisionId, randomUUID()],
     );
+    // An admin's change reaches the bell of the cohort's students: "Khoa cập nhật …, bấm Đánh giá lại" (2026-10-30).
+    if (actorId) await notifyCatalogUpdate(client, { kind: "plan", id, revisionId });
   }
   async create(
     data: PlanData,
