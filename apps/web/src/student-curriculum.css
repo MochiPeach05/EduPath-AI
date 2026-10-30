@@ -13,14 +13,14 @@
   margin: 6px 0 8px;
 }
 .sc-eyebrow {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
   color: var(--sw-red);
   text-transform: uppercase;
 }
 .sc-muted {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--sw-muted);
   line-height: 1.7;
 }
@@ -55,7 +55,7 @@
 }
 .sc-selection-note {
   grid-column: 1/-1;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--sw-muted);
   border-top: 1px solid var(--sw-border);
   padding-top: 16px;
@@ -137,10 +137,11 @@
 }
 .sc-electives article p {
   margin: 8px 0;
-  font-size: 13px;
+  font-size: 14px;
 }
 .sc-electives small {
   color: var(--sw-muted);
+  font-size: 12px;
 }
 .sc-catalog.sw-panel {
   padding: 0;

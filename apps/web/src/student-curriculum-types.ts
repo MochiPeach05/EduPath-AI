@@ -1,3 +1,5 @@
+import { planTermCode, programName, termName } from "./display-format";
+
 export interface StudentCourse {
   code: string;
   name: string;
@@ -104,7 +106,7 @@ export const courseRowKey = (course: Pick<StudentCourse, "groupId" | "code">, in
 export const uniqueCourseCount = (courses: readonly Pick<StudentCourse, "code">[]) =>
   new Set(courses.map((course) => course.code.trim().toUpperCase())).size;
 /** "Năm 1 · HK 2" for a course's planned year and semester, leaving out
-    whichever part the curriculum does not give. */
+    whichever part the curriculum does not give (admin pages; students read plannedTermText). */
 export const termLabel = (studyYear: number | null, semester: number | null) =>
   [
     studyYear === null ? "" : `Năm ${studyYear}`,
@@ -112,6 +114,34 @@ export const termLabel = (studyYear: number | null, semester: number | null) =>
   ]
     .filter(Boolean)
     .join(" · ") || "—";
+const knownAdmission = (year: number | null | undefined): year is number => typeof year === "number" && Number.isInteger(year) && year >= 2000 && year < 2100;
+/** The school year of a cohort's study year N: year 1 of a cohort admitted in 2023 is "2023–2024"; "Năm N" without the admission year. */
+export const studyYearText = (studyYear: number, admissionYear: number | null | undefined) =>
+  knownAdmission(admissionYear) ? `${admissionYear + studyYear - 1}–${admissionYear + studyYear}` : `Năm ${studyYear}`;
+/**
+ * A course's planned year and semester as the cohort's calendar term, the one way students read a term (user review
+ * 2026-10-30: "Học kỳ đang được gọi theo 4 kiểu"): year 1, semester 1 of a cohort admitted in 2023 is "HK1 2023–2024".
+ * Without the year it is "HK1", without the semester the school year; without a usable admission year "HK1, năm thứ 1".
+ */
+export function plannedTermText(studyYear: number | null, semester: number | null, admissionYear: number | null | undefined): string {
+  const year = studyYear !== null && studyYear >= 1 ? studyYear : null;
+  const term = semester !== null && semester >= 1 && semester <= 3 ? semester : null;
+  if (year !== null && term !== null) return knownAdmission(admissionYear) ? termName(planTermCode(year, term, admissionYear)) : `HK${term}, năm thứ ${year}`;
+  if (term !== null) return `HK${term}`;
+  return year !== null ? studyYearText(year, admissionYear) : "—";
+}
+/**
+ * A CTĐT/KHĐT title stored in capitals as a heading (user review 2026-10-30: "Tên chương trình viết HOA toàn bộ"):
+ * "KẾ HOẠCH ĐÀO TẠO NGÀNH CÔNG NGHỆ THÔNG TIN - KHÓA 29" → "Kế hoạch đào tạo ngành Công nghệ thông tin – khóa 29".
+ * Sentence case by programName; the major keeps its capital where the title names it; a spaced hyphen reads as a dash.
+ */
+export function programTitle(name: string, major = ""): string {
+  const title = programName(name.normalize("NFC")).replace(/\s+-\s+/g, " – ");
+  const majorName = programName(major.normalize("NFC"));
+  if (!majorName) return title;
+  const at = title.toLocaleLowerCase("vi-VN").indexOf(majorName.toLocaleLowerCase("vi-VN"));
+  return at > 0 ? title.slice(0, at) + majorName + title.slice(at + majorName.length) : title;
+}
 export const searchableCourse = (course: StudentCourse) =>
   `${course.code} ${course.name} ${course.englishName}`
     .normalize("NFD")

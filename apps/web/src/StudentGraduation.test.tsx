@@ -204,7 +204,7 @@ describe("StudentGraduation result", () => {
   it("names every failing part with its shortfall and lists what to do", () => {
     const html = render(ready(graduation()));
     expect(html).toContain("Kết quả xét tốt nghiệp tính đến thời điểm hiện tại");
-    expect(html).toContain("Bảng điểm cập nhật ngày 01/10/2026 · học kỳ có kết quả gần nhất: học kỳ 3 năm học 2025–2026");
+    expect(html).toContain("Bảng điểm cập nhật ngày 01/10/2026 · học kỳ có kết quả gần nhất: HK3 2025–2026");
     expect(html).toMatch(/class="sg-banner sg-banner-fail" role="status"><span class="sg-glyph" aria-hidden="true">✗<\/span>/);
     // The same sentence as the competency page; the failing groups already cover the 12 missing credits.
     expect(html).toContain("Hiện tại bạn chưa đủ điều kiện xét tốt nghiệp vì còn thiếu 2 môn thuộc nhóm bắt buộc, 3 tín chỉ thuộc nhóm tự chọn TC306 và 0,13 điểm trung bình tích lũy. Tổng số tín chỉ tích lũy (126/138) cũng sẽ đủ khi bạn hoàn thành các nhóm trên.");

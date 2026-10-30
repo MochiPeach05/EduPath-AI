@@ -6,15 +6,18 @@ import {
   courseTypeLabel,
   electiveGroupName,
   isSpecialtyName,
+  plannedTermText,
   prerequisiteText,
+  programTitle,
   searchableCourse,
   searchTerm,
-  termLabel,
+  studyYearText,
   uniqueCourseCount,
   type StudentCourse,
   type StudentCurriculumData,
   type StudentCurriculumList,
 } from "./student-curriculum-types";
+import { decimalText, programName } from "./display-format";
 import { readGraduation } from "./student-graduation-api";
 import { GRADUATION_API, standardElectiveQuotas, type StandardElectiveQuota } from "./student-graduation-data";
 import { Icon } from "./student-icons";
@@ -83,7 +86,7 @@ export default function StudentCurriculum() {
               <option value="">Chọn chương trình đào tạo</option>
               {list.data?.items.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.cohortCode} · {item.major}
+                  {item.cohortCode} · {programName(item.major)}
                 </option>
               ))}
             </select>
@@ -214,14 +217,14 @@ function CurriculumContent({
             <p className="sc-eyebrow">
               {data.cohortCode} · Nhập học {data.admissionYear}
             </p>
-            <h2>{data.name}</h2>
+            <h2>{programTitle(data.name, data.major)}</h2>
           </div>
         </div>
         <dl className="sc-stats">
           <div>
             <dt>Tín chỉ chương trình</dt>
             <dd>
-              {data.totalCredits ?? "Chưa xác định"}
+              {data.totalCredits === null ? "Chưa xác định" : decimalText(data.totalCredits)}
               <small>Theo quy định của khung</small>
             </dd>
           </div>
@@ -255,10 +258,10 @@ function CurriculumContent({
                     <strong>{electiveGroupName(group.code)}</strong>
                     <p>
                       {quota
-                        ? `Chọn ${quota.credits} tín chỉ (theo tiêu chuẩn xét tốt nghiệp${quota.groupCode ? `, nhóm ${quota.groupCode}` : ""})`
+                        ? `Chọn ${decimalText(quota.credits)} tín chỉ (theo tiêu chuẩn xét tốt nghiệp${quota.groupCode ? `, nhóm ${quota.groupCode}` : ""})`
                         : group.requiredCredits === null
                           ? "Xem quy định tín chỉ trong khung hoặc liên hệ cố vấn học tập."
-                          : `Chọn ${group.requiredCredits} tín chỉ`}
+                          : `Chọn ${decimalText(group.requiredCredits)} tín chỉ`}
                     </p>
                     <small>{new Set(group.courseCodes).size} học phần trong nhóm</small>
                   </article>
@@ -352,7 +355,7 @@ function CurriculumContent({
                 .sort((a, b) => a - b)
                 .map((n) => (
                   <option key={n} value={n}>
-                    Năm {n}
+                    {studyYearText(n, data.admissionYear)}
                   </option>
                 ))}
             </select>
@@ -366,7 +369,7 @@ function CurriculumContent({
               <option value="">Tất cả học kỳ</option>
               {[1, 2, 3].map((n) => (
                 <option key={n} value={n}>
-                  Học kỳ {n}
+                  HK{n}
                 </option>
               ))}
             </select>
@@ -396,7 +399,7 @@ function CurriculumContent({
                 <th>Học phần</th>
                 <th>Tín chỉ</th>
                 <th>Loại môn</th>
-                <th>Năm · Học kỳ</th>
+                <th>Học kỳ dự kiến</th>
                 <th>Tiên quyết</th>
                 <th className="sc-result-cell">Kết quả</th>
               </tr>
@@ -422,7 +425,7 @@ function CurriculumContent({
                       </button>
                       <small>{c.englishName}</small>
                     </th>
-                    <td>{c.credits}</td>
+                    <td>{decimalText(c.credits)}</td>
                     <td>
                       <span
                         className={`sc-badge ${courseKind(c.type) === "elective" ? "sc-elective" : ""}`}
@@ -431,7 +434,7 @@ function CurriculumContent({
                       </span>
                     </td>
                     <td className="sc-term">
-                      {termLabel(c.studyYear, c.semester)}
+                      {plannedTermText(c.studyYear, c.semester, data.admissionYear)}
                     </td>
                     <td>
                       <span className="sc-condition-text">
@@ -548,10 +551,10 @@ export function CourseDetail({
       </header>
       <div className="sc-dialog-content">
         <div className="sc-course-meta">
-          <span className="sc-badge">{course.credits} tín chỉ</span>
+          <span className="sc-badge">{decimalText(course.credits)} tín chỉ</span>
           <span className="sc-badge">{courseTypeLabel(course.type, course.code)}</span>
           <span className="sc-badge">
-            Năm {course.studyYear ?? "—"} · Học kỳ {course.semester ?? "—"}
+            Học kỳ dự kiến: {plannedTermText(course.studyYear, course.semester, data.admissionYear)}
           </span>
         </div>
         <section>
@@ -624,7 +627,7 @@ export function CourseDetail({
                 course.hours.project,
                 course.hours.internship,
               ]
-                .map((n) => n ?? "—")
+                .map((n) => (n === null ? "—" : decimalText(n)))
                 .join(" / ")}
             </dd>
           </div>

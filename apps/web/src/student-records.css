@@ -81,7 +81,7 @@
     padding: 13px 16px !important;
     border-radius: 6px;
     line-height: 1.7;
-    font-size: 12px;
+    font-size: 14px;
     margin-bottom: 18px !important
 }
 
@@ -109,13 +109,13 @@
 }
 
 .sr-personal dt {
-    font-size: 11px;
+    font-size: 12px;
     color: #7b8190;
     margin-bottom: 8px
 }
 
 .sr-personal dd {
-    font-size: 13px;
+    font-size: 14px;
     line-height: 1.8;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
@@ -134,12 +134,12 @@
 }
 
 .sr-upload strong {
-    font-size: 13px
+    font-size: 14px
 }
 
 .sr-upload p,
 .sr-pending p {
-    font-size: 12px;
+    font-size: 13px;
     color: #7a7180;
     line-height: 1.8;
     margin-top: 6px !important
@@ -148,6 +148,11 @@
 /* "Chọn tệp PDF" of "Cập nhật bảng điểm mới": a button for the hidden file input, like the drop zone's. */
 .sr-upload .sr-upload-button {
     flex-shrink: 0
+}
+
+/* What replacing the transcript deletes is running text (user review 2026-10-30: 14px). */
+.sr-pending p + p {
+    font-size: 14px
 }
 
 .sr-pending {
@@ -162,8 +167,8 @@
     display: flex;
     align-items: flex-start;
     gap: 9px;
-    font-size: 12px;
-    line-height: 1.8;
+    font-size: 14px;
+    line-height: 1.7;
     margin-top: 14px
 }
 
@@ -188,12 +193,12 @@
 }
 
 .sr-file-info strong {
-    font-size: 13px;
+    font-size: 14px;
     overflow-wrap: anywhere
 }
 
 .sr-file-info p {
-    font-size: 11px;
+    font-size: 12px;
     color: #818592;
     margin-top: 7px !important
 }
@@ -206,7 +211,7 @@
 
 .sr-file-actions button,
 .sr-file-actions a {
-    font-size: 11px;
+    font-size: 13px;
     color: #a3153a;
     background: none;
     padding: 5px 0;
@@ -229,7 +234,7 @@
 }
 
 .sr-table-filters>span {
-    font-size: 11px;
+    font-size: 12px;
     color: #858b98;
     white-space: nowrap;
     padding-bottom: 12px
@@ -261,7 +266,7 @@
     table-layout: fixed;
     width: 100%;
     min-width: 860px;
-    font-size: 12px
+    font-size: 13px
 }
 
 .sr-term th:nth-child(1) {
@@ -290,7 +295,7 @@
     background: #fafbfc;
     color: #6d7382;
     text-align: left;
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 700;
     padding: 12px
 }
@@ -305,7 +310,7 @@
 
 .sr-term td:nth-child(2) {
     white-space: nowrap;
-    font-size: 11px;
+    font-size: 12px;
     color: #747b8a
 }
 
@@ -331,7 +336,7 @@
 .sr-result-note {
     display: block;
     margin-top: 2px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 400;
     line-height: 1.4;
     color: #647081
@@ -346,7 +351,7 @@
     background: #fafbfc;
     border: 1px solid #e6e7ed;
     border-top: 0;
-    font-size: 11px
+    font-size: 13px
 }
 
 .sr-summaries>div {
@@ -372,6 +377,11 @@
 
 .sr-transcript {
     min-width: 0
+}
+
+/* The heading's "PDF · tối đa 5 MB" tag: captions are at least 12px (user review 2026-10-30). */
+.sr-transcript .sw-section-heading .sw-tag {
+    font-size: 12px
 }
 
 /* Shown on phones only (below): the term tables are wider than the screen. */
@@ -500,7 +510,7 @@
 .sr-dropzone p {
     max-width: 420px;
     margin: 0;
-    font-size: 13px;
+    font-size: 14px;
     line-height: 1.7;
     color: #647081;
 }
@@ -572,7 +582,7 @@
 .sr-import-progress p {
     margin: 0;
     color: #526174;
-    font-size: 13px;
+    font-size: 14px;
 }
 .sr-progress-heading {
     display: flex;
@@ -633,7 +643,7 @@
 .sr-review-reasons {
     display: block;
     margin-top: 2px;
-    font-size: 11px;
+    font-size: 12px;
     line-height: 1.4;
     color: #704900;
 }

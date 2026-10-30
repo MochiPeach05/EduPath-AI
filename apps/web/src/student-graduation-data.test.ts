@@ -110,7 +110,7 @@ describe("formatting", () => {
   it("formats dates, terms, elapsed time, model names and lists", () => {
     expect(formatDate("2026-10-01T08:00:00Z")).toBe("01/10/2026");
     expect(formatDate("not a date")).toBe("—");
-    expect(termText("HK253")).toBe("học kỳ 3 năm học 2025–2026");
+    expect(termText("HK253")).toBe("HK3 2025–2026");
     expect(termText("Điểm bảo lưu")).toBe("Điểm bảo lưu");
     expect(termText(null)).toBeNull();
     const now = Date.parse("2026-10-13T10:01:15Z");
@@ -125,7 +125,7 @@ describe("formatting", () => {
     expect(joinVi(["A", "B", "C"])).toBe("A, B và C");
   });
   it("says how fresh the data is", () => {
-    expect(asOfLine(evaluation())).toBe("Bảng điểm cập nhật ngày 01/10/2026 · học kỳ có kết quả gần nhất: học kỳ 3 năm học 2025–2026");
+    expect(asOfLine(evaluation())).toBe("Bảng điểm cập nhật ngày 01/10/2026 · học kỳ có kết quả gần nhất: HK3 2025–2026");
     expect(asOfLine(evaluation({ asOf: { transcriptVersion: "v", transcriptUpdatedAt: "2026-10-01T08:00:00Z", latestTerm: null } })))
       .toBe("Bảng điểm cập nhật ngày 01/10/2026 · chưa có học kỳ nào có kết quả");
   });

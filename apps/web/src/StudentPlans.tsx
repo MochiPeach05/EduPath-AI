@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { PlanData, PlanItem } from "./plan-types";
-import { courseTypeLabel, prerequisiteText, searchTerm } from "./student-curriculum-types";
+import { decimalText, programName, termName } from "./display-format";
+import { courseTypeLabel, plannedTermText, prerequisiteText, programTitle, searchTerm } from "./student-curriculum-types";
 import { CourseResultMark } from "./StudentCurriculum";
 import { readGraduation } from "./student-graduation-api";
 import { GRADUATION_API } from "./student-graduation-data";
@@ -20,7 +21,7 @@ type List = {
 };
 type Detail = Pick<
   PlanData,
-  "name" | "major" | "cohortCode" | "totalCredits" | "terms" | "sections"
+  "name" | "major" | "cohortCode" | "admissionYear" | "totalCredits" | "terms" | "sections"
 > & {
   physicalEducationGroups?: Record<string, string[]>;
   items: Omit<
@@ -78,7 +79,7 @@ export default function StudentPlans() {
               <option value="">Chọn kế hoạch đào tạo</option>
               {list.data?.items.map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.cohortCode} · {item.name}
+                  {item.cohortCode} · {programTitle(item.name, item.major)}
                 </option>
               ))}
             </select>
@@ -109,14 +110,21 @@ export default function StudentPlans() {
   );
 }
 
+/**
+ * A plan term the one way students read a term (user review 2026-10-30): its calendar code "HK231" → "HK1 2023–2024";
+ * a term without such a code by its year and semester in the cohort.
+ */
+export const planTermName = (term: Pick<Detail["terms"][number], "code" | "studyYear" | "semester">, admissionYear?: number | null) =>
+  /^HK\d{2}[1-3]$/.test(term.code) ? termName(term.code) : plannedTermText(term.studyYear, term.semester, admissionYear);
+
 /** "Tín chỉ học kỳ theo kế hoạch": the plan's own figure, else what the term's rows add up to (K26 prints none). */
 function termCreditsText(term: Detail["terms"][number], items: Detail["items"], sectionIds: ReadonlySet<string>): string {
-  if (term.sourceCredits !== null) return String(term.sourceCredits);
+  if (term.sourceCredits !== null) return decimalText(term.sourceCredits);
   const sum = planTermCredits(items.filter((item) => item.termCode === term.code), sectionIds);
   if (!sum) return "Chưa xác định";
   return sum.partial
-    ? `${sum.credits} tín chỉ chung, chưa tính các học phần tự chọn hoặc theo chuyên ngành bên dưới`
-    : `${sum.credits} (cộng từ các học phần trong kỳ, không tính môn điều kiện (*))`;
+    ? `${decimalText(sum.credits)} tín chỉ chung, chưa tính các học phần tự chọn hoặc theo chuyên ngành bên dưới`
+    : `${decimalText(sum.credits)} (cộng từ các học phần trong kỳ, không tính môn điều kiện (*))`;
 }
 
 function PlanContents({ id }: { id: string }) {
@@ -158,10 +166,10 @@ function PlanContents({ id }: { id: string }) {
   const showsInferred = rows.some((item) => outcome(item)?.inferred);
   return (
     <section className="sw-panel sp-content">
-      <h2>{data.name}</h2>
+      <h2>{programTitle(data.name, data.major)}</h2>
       <p>
-        {data.major} · {data.cohortCode} · Tổng tín chỉ quy định:{" "}
-        {data.totalCredits ?? "Chưa xác định"}
+        {programName(data.major)} · {data.cohortCode} · Tổng tín chỉ quy định:{" "}
+        {data.totalCredits === null ? "Chưa xác định" : decimalText(data.totalCredits)}
       </p>
       <div className="sc-filters">
         <label className="sc-search">
@@ -173,12 +181,12 @@ function PlanContents({ id }: { id: string }) {
           />
         </label>
         <label>
-          Năm học · Học kỳ
+          Học kỳ
           <select value={term} onChange={(e) => setTerm(e.target.value)}>
             <option value="">Tất cả học kỳ</option>
             {data.terms.map((t) => (
               <option key={t.code} value={t.code}>
-                Năm {t.studyYear} · Học kỳ {t.semester}
+                {planTermName(t, data.admissionYear)}
               </option>
             ))}
           </select>
@@ -211,9 +219,7 @@ function PlanContents({ id }: { id: string }) {
           if (!items.length) return null;
           return (
             <div key={t.code}>
-              <h3>
-                Năm {t.studyYear} · Học kỳ {t.semester}
-              </h3>
+              <h3>{planTermName(t, data.admissionYear)}</h3>
               <p className="sc-muted">
                 Tín chỉ học kỳ theo kế hoạch:{" "}
                 {termCreditsText(t, data.items, sectionIds)}
@@ -244,7 +250,7 @@ function PlanContents({ id }: { id: string }) {
                           </small>
                           {item.notes && <small>{item.notes}</small>}
                         </td>
-                        <td>{item.credits ?? "—"}</td>
+                        <td>{item.credits === null ? "—" : decimalText(item.credits)}</td>
                         <td>{courseTypeLabel(item.type, item.code) || "—"}</td>
                         <td>
                           {item.prerequisite && (

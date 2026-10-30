@@ -139,6 +139,16 @@ describe("StudentCurriculum (audit 2026-10-25)", () => {
     expect(html).not.toContain("<option>Học phần thay thế Đồ án tốt nghiệp</option>");
     expect(html).toContain('<span class="sc-condition-text">71ENG010012 · Anh văn dự bị (AV0)</span>');
   });
+
+  it("writes each planned term as the cohort's calendar term and the capital name in sentence case (user review 2026-10-30)", () => {
+    const html = render();
+    expect(html).toContain("<h2>Khung chương trình đào tạo khóa 27</h2>");
+    expect(html).toContain("<th>Học kỳ dự kiến</th>");
+    expect(html).toContain('<td class="sc-term">HK1 2021–2022</td>');
+    expect(html).toContain('<option value="1">2021–2022</option>');
+    expect(html).toContain('<option value="1">HK1</option>');
+    expect(html).not.toMatch(/Năm 1|Năm · Học kỳ|Học kỳ 1</);
+  });
 });
 
 describe("CourseDetail", () => {
@@ -148,5 +158,6 @@ describe("CourseDetail", () => {
     expect(html).toContain('<span class="sc-badge">Bắt buộc</span>');
     expect(html).not.toContain("TC203");
     expect(html).toContain("<dd>An ninh Mạng và IoT</dd>");
+    expect(html).toContain('<span class="sc-badge">Học kỳ dự kiến: HK1 2021–2022</span>');
   });
 });

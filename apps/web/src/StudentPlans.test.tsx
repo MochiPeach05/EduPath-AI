@@ -79,4 +79,22 @@ describe("StudentPlans (audit 2026-10-25)", () => {
     expect(visible).not.toContain("Đây là kế hoạch giảng dạy");
     expect(html).not.toContain("sp-content");
   });
+
+  it("writes each term the one way and a capital name in sentence case (user review 2026-10-30)", () => {
+    const capital = { ...k26, name: "KẾ HOẠCH ĐÀO TẠO NGÀNH CÔNG NGHỆ THÔNG TIN - KHÓA 26", major: "CÔNG NGHỆ THÔNG TIN" };
+    liveData.mockImplementation((url: string) => {
+      if (url === "/api/student/plans") return ready({ items: [capital], suggestedId: planId, profileCohort: "K26" });
+      if (url === `/api/student/plans/${planId}`) return ready({ ...plan, name: capital.name, major: capital.major, admissionYear: 2020 });
+      if (url === "/api/student/transcript") return ready(transcript);
+      if (url === "/api/student/graduation") return ready(graduation);
+      throw new Error(`Unexpected URL ${url}`);
+    });
+    const html = renderToStaticMarkup(createElement(StudentPlans));
+    expect(html).toContain("<h2>Kế hoạch đào tạo ngành Công nghệ thông tin – khóa 26</h2>");
+    expect(html).toContain("K26 · Kế hoạch đào tạo ngành Công nghệ thông tin – khóa 26</option>");
+    expect(text(html)).toContain("Công nghệ thông tin · K26 · Tổng tín chỉ quy định: 130");
+    expect(html).toContain("<h3>HK1 2020–2021</h3>");
+    expect(html).toContain('<option value="HK202">HK2 2020–2021</option>');
+    expect(html).not.toMatch(/Năm 1 · Học kỳ|Năm học · Học kỳ/);
+  });
 });

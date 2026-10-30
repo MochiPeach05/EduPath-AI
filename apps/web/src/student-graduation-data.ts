@@ -3,6 +3,7 @@
 // advice state. The verdict itself comes from the server (GET /api/student/graduation); nothing
 // here recomputes it. No fetch, no DOM — everything here is unit tested.
 import { specialtyLabel } from "./competency-assessment-types";
+import { termName } from "./display-format";
 import { searchTerm } from "./student-curriculum-types";
 import type {
   AdviceOutput, AdviceStatus, GradCourseState, GradStatus, GraduationAdviceResponse, GraduationAdviceStatusResponse,
@@ -64,13 +65,9 @@ export function formatElapsed(since: string | null | undefined, now: number): st
   const seconds = start === undefined ? 0 : Math.max(0, Math.floor((now - start) / 1000));
   return `${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
-/** "HK253" → "học kỳ 3 năm học 2025–2026"; other shapes are shown as they are. */
+/** "HK253" → "HK3 2025–2026", the one way students read a term (user review 2026-10-30); other shapes are shown as they are. */
 export function termText(term: string | null | undefined): string | null {
-  if (!term) return null;
-  const match = /^HK(\d{2})([1-3])$/.exec(term.trim());
-  if (!match) return term;
-  const start = 2000 + Number(match[1]);
-  return `học kỳ ${match[2]} năm học ${start}–${start + 1}`;
+  return term ? termName(term.trim()) : null;
 }
 /** "gemma4:e4b" → "Gemma 4 E4B". */
 export function modelLabel(model: string | null | undefined): string {
@@ -306,7 +303,7 @@ export function unresolvedCopy(data: Pick<StudentGraduationResponse, "profile" |
 
 /* --------------------------------------------------------- result section */
 
-/** "Bảng điểm cập nhật ngày 01/10/2026 · học kỳ có kết quả gần nhất: học kỳ 3 năm học 2025–2026". */
+/** "Bảng điểm cập nhật ngày 01/10/2026 · học kỳ có kết quả gần nhất: HK3 2025–2026". */
 export function asOfLine(evaluation: Pick<GraduationEvaluation, "asOf">): string {
   const term = termText(evaluation.asOf.latestTerm);
   return `Bảng điểm cập nhật ngày ${formatDate(evaluation.asOf.transcriptUpdatedAt)} · ${term ? `học kỳ có kết quả gần nhất: ${term}` : "chưa có học kỳ nào có kết quả"}`;
