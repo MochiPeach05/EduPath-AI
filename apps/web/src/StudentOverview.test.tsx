@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import StudentOverview, {
-  OverviewDashboard, defaultTermCode, emphasize, formatDecimal, formatScore, gpaChangeText, gpaScale, pageOfLink, reasonTone, relativeDay,
+  OverviewDashboard, defaultTermCode, emphasize, formatDecimal, formatScore, gpaChangeText, gpaScale, pageOfLink, reasonTone,
   termChip, termGroups, type StudentProfile,
 } from "./StudentOverview";
 import type { OverviewResponse } from "./overview-types";
@@ -34,7 +34,7 @@ const full: OverviewResponse = {
     blocked: null, totalCredits: 126, passedCredits: 79, runningCredits: 9, lateCredits: 6, remainingCredits: 38, termsLeft: 2, creditsPerTerm: 19, planMaxPerTerm: 16,
     terms: [
       { term: term("HK231"), state: "done", passedCredits: 15, plannedCredits: 15, courses: [course("71ITBS10103", "Nhập môn Công nghệ thông tin", "passed", "A")] },
-      { term: term("HK241"), state: "late", passedCredits: 12, plannedCredits: 15, courses: [course("71ITSE30603", "Phát triển ứng dụng di động", "failed", "CT (cấm thi), cần học lại"), course("71ITSE30503", "Lập trình ứng dụng Web", "passed", "B+")] },
+      { term: term("HK241"), state: "late", passedCredits: 12, plannedCredits: 15, courses: [course("71ITSE30603", "Phát triển ứng dụng di động", "failed", "cần học lại"), course("71ITSE30503", "Lập trình ứng dụng Web", "passed", "B+")] },
       { term: term("HK261"), state: "running", passedCredits: 0, plannedCredits: 9, courses: [course("71ITSE41203", "Kiểm thử phần mềm", "running", "đang học")] },
       { term: term("HK262"), state: "planned", passedCredits: 0, plannedCredits: 20, courses: [course("71ITGR40303", "Chuyên đề Tốt nghiệp 2", "planned", "dự kiến")] },
     ],
@@ -92,16 +92,6 @@ describe("Tổng quan helpers", () => {
     expect(gpaChangeText(null)).toBeNull();
   });
 
-  it("say when something happened in Vietnam time", () => {
-    const now = new Date("2026-10-30T03:00:00Z");
-    expect(relativeDay("2026-10-30T01:00:00Z", now)).toBe("hôm nay");
-    expect(relativeDay("2026-10-29T03:00:00Z", now)).toBe("hôm qua");
-    expect(relativeDay("2026-10-27T03:00:00Z", now)).toBe("3 ngày trước");
-    expect(relativeDay("2026-10-10T03:00:00Z", now)).toBe("10/10/2026");
-    // 23:30 on 29/10 in Vietnam is still "hôm qua" at 10:00 on 30/10.
-    expect(relativeDay("2026-10-29T16:30:00Z", now)).toBe("hôm qua");
-  });
-
   it("group the plan's terms by school year and open the first late one", () => {
     const terms = full.progress!.terms;
     expect(termGroups(terms).map((group) => [group.year, group.terms.map((item) => item.term.code)])).toEqual([
@@ -135,12 +125,19 @@ describe("Tổng quan helpers", () => {
 });
 
 describe("Tổng quan dashboard", () => {
+  it("leaves out the countdown, the dates and the ✗ marks the user dropped, and boxes the suggested questions (2026-10-30)", () => {
+    const html = dashboard(full);
+    expect(text(html)).not.toMatch(/bắt đầu sau|soạn (hôm|\d)|đánh giá \d|✗/);
+    expect(html).toContain('class="ov-columns"');
+    expect(html).toMatch(/class="ov-sugs"[^>]*><button type="button">/);
+  });
+
   it("shows the six key figures, the cards in the approved order and Cần chú ý last, without a notifications block", () => {
     const html = dashboard(full);
     const plain = text(html);
-    for (const figure of ["GPA tích lũy 2,85 / 4 Khá +0,03 so với học kỳ trước", "Tín chỉ đã đạt 79 / 126 63% chương trình · 9 TC đang học", "Năng lực chung 68,4 / 100 Khá đánh giá 28/10/2026",
+    for (const figure of ["GPA tích lũy 2,85 / 4 Khá +0,03 so với học kỳ trước", "Tín chỉ đã đạt 79 / 126 63% chương trình · 9 TC đang học", "Năng lực chung 68,4 / 100 Khá",
       "Mức phù hợp nghề 74,6 / 100 Phù hợp 4/6 kỹ năng đạt ngưỡng", "Xét tốt nghiệp Chưa đủ Còn 4 điều kiện", "Lộ trình AI Đã có"]) expect(plain).toContain(figure);
-    const order = ["Tiến độ học tập", "Xét tốt nghiệp", "Năng lực và nghề mục tiêu", "Điểm trung bình theo học kỳ", "Học kỳ này", "Học kỳ tới", "Hỏi nhanh Trợ lý AI", "Cần chú ý"]
+    const order = ["Tiến độ học tập", "Học kỳ này", "Học kỳ tới", "Xét tốt nghiệp", "Năng lực và nghề mục tiêu", "Điểm trung bình theo học kỳ", "Hỏi nhanh Trợ lý AI", "Cần chú ý"]
       .map((title) => html.indexOf(`>${title}</h2>`));
     expect(order.every((at) => at >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
@@ -151,7 +148,7 @@ describe("Tổng quan dashboard", () => {
   it("opens the first late term with its courses and marks each term chip", () => {
     const html = dashboard(full);
     expect(html).toContain('class="ov-term ov-term-late" aria-pressed="true"');
-    expect(text(html)).toContain("Phát triển ứng dụng di động · 3 TC ✗ CT (cấm thi), cần học lại");
+    expect(text(html)).toContain("Phát triển ứng dụng di động · 3 TC cần học lại");
     expect(html).toContain("ov-term ov-term-running");
     expect(text(html)).toContain("Còn lại 32 TC");
   });
@@ -159,7 +156,7 @@ describe("Tổng quan dashboard", () => {
   it("draws the GPA chart with a legend, end labels, the 2,00 threshold and a data table", () => {
     const html = dashboard(full);
     const plain = text(html);
-    expect(plain).toContain("GPA tích lũy GPA học kỳ Ngưỡng tốt nghiệp 2,00");
+    expect(plain).toContain("GPA tích lũy (chỉ tính môn đã đạt) GPA học kỳ (tính cả môn chưa đạt) Ngưỡng tốt nghiệp 2,00");
     expect(plain).toContain("2,85 tích lũy");
     expect(plain).toContain("2,50 học kỳ");
     expect(html.match(/<circle /g)?.length).toBe(8);

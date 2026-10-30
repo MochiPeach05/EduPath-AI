@@ -100,14 +100,6 @@ export const shortDate = (iso: string) => {
   const [year, month, day] = vietnamDay(new Date(iso)).split("-");
   return `${day}/${month}/${year}`;
 };
-/** "hôm nay", "hôm qua", "3 ngày trước", else the date (Vietnam time). */
-export function relativeDay(iso: string, now = new Date()): string {
-  const days = Math.round((Date.parse(vietnamDay(now)) - Date.parse(vietnamDay(new Date(iso)))) / 86_400_000);
-  if (days <= 0) return "hôm nay";
-  if (days === 1) return "hôm qua";
-  if (days < 7) return `${days} ngày trước`;
-  return shortDate(iso);
-}
 
 type ProgressTerm = NonNullable<OverviewResponse["progress"]>["terms"][number];
 /** "HK261" → school year "2026–2027", term 1. */
@@ -194,18 +186,6 @@ const Empty = ({ text, action, onAction }: { text: string; action?: string; onAc
 const Head = ({ id, title, sub, children }: { id: string; title: string; sub?: ReactNode; children?: ReactNode }) =>
   <div className="ov-head"><div><h2 id={id}>{title}</h2>{sub && <p className="ov-sub">{sub}</p>}</div>{children}</div>;
 
-function Facts({ data }: { data: OverviewResponse }) {
-  const { profile, terms } = data;
-  const next = terms.next;
-  return <div className="ov-facts">
-    <span className="ov-fact">Chuyên ngành: <b>{profile.specialtyName ?? "chưa chọn"}</b></span>
-    <span className="ov-fact">{terms.studying ? <>Đang học: <b>{terms.studying.label}</b></> : <>Học kỳ đang học: <b>chưa xác định</b></>}</span>
-    {next && <span className="ov-fact ov-fact-soon"><Icon name="clock" />{next.daysUntil > 0
-      ? <>{next.label} bắt đầu sau <b>{next.daysUntil} ngày</b> ({shortDate(next.start)})</>
-      : <>{next.label} bắt đầu <b>hôm nay</b></>}</span>}
-  </div>;
-}
-
 function Kpis({ data, navigate, openTranscript }: { data: OverviewResponse; navigate: Navigate; openTranscript: () => void }) {
   const { transcript, progress, competency, graduation, roadmap } = data;
   const tile = (key: string, label: string, value: ReactNode, foot: ReactNode, onClick: () => void) =>
@@ -221,7 +201,7 @@ function Kpis({ data, navigate, openTranscript }: { data: OverviewResponse; navi
       passed !== null ? <>{total ? `${Math.round((passed / total) * 100)}% chương trình` : "Chưa rõ tổng tín chỉ"}{progress && !progress.blocked && progress.runningCredits > 0 ? ` · ${progress.runningCredits} TC đang học` : ""}</> : "Cần bảng điểm",
       () => navigate("roadmap"))}
     {tile("competency", "Năng lực chung", competency?.overallScore != null ? <>{formatScore(competency.overallScore)}<small>/ 100</small></> : "—",
-      competency ? <>{competency.overallLevel && <Chip tone="ai">{competency.overallLevel}</Chip>}đánh giá {shortDate(competency.assessedAt)}</> : "Chưa đánh giá năng lực",
+      competency ? <>{competency.overallLevel && <Chip tone="ai">{competency.overallLevel}</Chip>}</> : "Chưa đánh giá năng lực",
       () => navigate("competency"))}
     {tile("fit", "Mức phù hợp nghề", competency?.career?.fitScore != null ? <>{formatScore(competency.career.fitScore)}<small>/ 100</small></> : "—",
       competency?.career ? <><Chip tone="ok">{competency.career.fitLabel}</Chip>{competency.career.met}/{competency.career.total} kỹ năng đạt ngưỡng</>
@@ -231,7 +211,7 @@ function Kpis({ data, navigate, openTranscript }: { data: OverviewResponse; navi
       graduation ? graduation.eligible ? <Chip tone="ok">Đạt mọi điều kiện</Chip> : <Chip tone={graduation.missing > 2 ? "risk" : "warn"}>Còn {graduation.missing} điều kiện</Chip> : "Chưa đối chiếu được",
       () => navigate("graduation"))}
     {tile("roadmap", "Lộ trình AI", roadmapValue,
-      roadmap ? <>{roadmap.term && <Chip tone="ai">{roadmap.term.label.replace(", năm học", " ·")}</Chip>}{roadmap.status === "completed" ? `soạn ${relativeDay(roadmap.createdAt)}` : ""}</> : "Tạo ở Lộ trình học tập",
+      roadmap ? <>{roadmap.term && <Chip tone="ai">{roadmap.term.label.replace(", năm học", " ·")}</Chip>}</> : "Tạo ở Lộ trình học tập",
       () => navigate("roadmap"))}
   </div>;
 }
@@ -242,14 +222,14 @@ function ProgressCard({ data, navigate, openTranscript }: { data: OverviewRespon
   const head = <Head id="ov-progress-title" title="Tiến độ học tập" sub={data.profile.cohortCode && data.profile.specialtyName
     ? `So với kế hoạch đào tạo ${data.profile.cohortCode} ${data.profile.specialtyName}${progress?.totalCredits ? ` (${progress.totalCredits} tín chỉ)` : ""}`
     : "So với kế hoạch đào tạo của khóa bạn"}><button type="button" className="sw-text-link" onClick={() => navigate("roadmap")}>Xem chi tiết tiến độ <Icon name="arrow" /></button></Head>;
-  if (!progress) return <section className="sw-panel ov-card ov-w8" aria-labelledby="ov-progress-title">{head}<Empty text="Chưa có bảng điểm nên chưa tính được tiến độ." action="Import bảng điểm" onAction={openTranscript} /></section>;
-  if (progress.blocked) return <section className="sw-panel ov-card ov-w8" aria-labelledby="ov-progress-title">{head}<Empty text={blockedText(progress.blocked)} action={progress.blocked === "specialty_required" ? "Chọn chuyên ngành" : undefined} onAction={() => navigate("profile")} /></section>;
+  if (!progress) return <section className="sw-panel ov-card" aria-labelledby="ov-progress-title">{head}<Empty text="Chưa có bảng điểm nên chưa tính được tiến độ." action="Import bảng điểm" onAction={openTranscript} /></section>;
+  if (progress.blocked) return <section className="sw-panel ov-card" aria-labelledby="ov-progress-title">{head}<Empty text={blockedText(progress.blocked)} action={progress.blocked === "specialty_required" ? "Chọn chuyên ngành" : undefined} onAction={() => navigate("profile")} /></section>;
   const total = progress.totalCredits;
   const scale = Math.max(total ?? 0, progress.passedCredits + progress.runningCredits + progress.lateCredits, 1);
   const remaining = progress.remainingCredits;
   const rest = remaining === null ? null : Math.max(0, remaining - progress.lateCredits);
   const opened = progress.terms.find((term) => term.term.code === open) ?? null;
-  return <section className="sw-panel ov-card ov-w8" aria-labelledby="ov-progress-title">
+  return <section className="sw-panel ov-card" aria-labelledby="ov-progress-title">
     {head}
     <dl className="ov-metrics">
       <div><dt>Đã đạt</dt><dd>{progress.passedCredits}<small>TC</small></dd><span>{total ? `${Math.round((progress.passedCredits / total) * 100)}% chương trình` : "—"}</span></div>
@@ -284,7 +264,7 @@ function ProgressCard({ data, navigate, openTranscript }: { data: OverviewRespon
       {opened && <div className="ov-term-detail" aria-live="polite"><b>{opened.term.label}</b>
         {opened.courses.length ? <ul className="ov-rows">{opened.courses.map((course) => <li key={course.code}>
           <span>{course.name} · {course.credits} TC</span>
-          <span className={`ov-state ov-state-${course.state}`}>{course.state === "passed" ? "✓ " : course.state === "failed" || course.state === "late" ? "✗ " : ""}{course.detail}</span>
+          <span className={`ov-state ov-state-${course.state}`}>{course.state === "passed" ? "✓ " : ""}{course.detail}</span>
         </li>)}</ul> : <p className="ov-sub">Học kỳ này không có môn nào của chuyên ngành bạn.</p>}
       </div>}
     </div>}
@@ -293,11 +273,11 @@ function ProgressCard({ data, navigate, openTranscript }: { data: OverviewRespon
 
 function GraduationCard({ data, navigate }: { data: OverviewResponse; navigate: Navigate }) {
   const graduation = data.graduation;
-  return <section className="sw-panel ov-card ov-w4" aria-labelledby="ov-grad-title">
+  return <section className="sw-panel ov-card" aria-labelledby="ov-grad-title">
     <Head id="ov-grad-title" title="Xét tốt nghiệp" sub={graduation?.standardName ?? "Tiêu chuẩn của khóa và chuyên ngành"}>
       {graduation && (graduation.eligible ? <Chip tone="ok">Đủ điều kiện</Chip> : <Chip tone={graduation.missing > 2 ? "risk" : "warn"}>Còn {graduation.missing} điều kiện</Chip>)}
     </Head>
-    {!graduation ? <Empty text={data.readiness.transcript ? "Chưa đối chiếu được với tiêu chuẩn xét tốt nghiệp: hãy kiểm tra chuyên ngành trong hồ sơ." : "Cần bảng điểm và chuyên ngành để đối chiếu với tiêu chuẩn xét tốt nghiệp."} />
+    {!graduation ? <Empty text={data.readiness.transcript ? "Chưa đối chiếu được với tiêu chuẩn xét tốt nghiệp của khóa và chuyên ngành bạn. Lý do có ở trang Điều kiện xét tốt nghiệp." : "Cần bảng điểm và chuyên ngành để đối chiếu với tiêu chuẩn xét tốt nghiệp."} />
       : <ul className="ov-conds">{graduation.conditions.map((condition) => <li key={condition.label} className="ov-cond">
         <div className="ov-cond-top"><span>{condition.label}</span>{condition.need === null
           ? <span className={`ov-state ${condition.met ? "ov-state-passed" : "ov-state-failed"}`}>{condition.met ? "✓ " : "✗ "}{condition.done}</span>
@@ -313,8 +293,8 @@ function GraduationCard({ data, navigate }: { data: OverviewResponse; navigate: 
 
 function SkillsCard({ data, navigate }: { data: OverviewResponse; navigate: Navigate }) {
   const competency = data.competency;
-  return <section className="sw-panel ov-card ov-w6" aria-labelledby="ov-skill-title">
-    <Head id="ov-skill-title" title="Năng lực và nghề mục tiêu" sub={competency ? `Lần đánh giá ${shortDate(competency.assessedAt)}${data.profile.careerName ? ` · nghề mục tiêu: ${data.profile.careerName}` : ""}` : "Từ lần Đánh giá năng lực mới nhất"}>
+  return <section className="sw-panel ov-card" aria-labelledby="ov-skill-title">
+    <Head id="ov-skill-title" title="Năng lực và nghề mục tiêu" sub={competency && data.profile.careerName ? `Nghề mục tiêu: ${data.profile.careerName}` : "Từ lần Đánh giá năng lực mới nhất"}>
       <button type="button" className="sw-text-link" onClick={() => navigate("skill-gap")}>Khoảng trống kỹ năng <Icon name="arrow" /></button>
     </Head>
     {!competency ? <Empty text="Bạn chưa có kết quả Đánh giá năng lực." action="Đánh giá năng lực" onAction={() => navigate("competency")} /> : <>
@@ -344,9 +324,11 @@ const CHART = { width: 560, height: 230, left: 36, right: 78, top: 14, bottom: 4
 function GpaChart({ data, openTranscript }: { data: OverviewResponse; openTranscript: () => void }) {
   const [hover, setHover] = useState<number | null>(null);
   const series = data.transcript?.series ?? [];
-  const head = <Head id="ov-gpa-title" title="Điểm trung bình theo học kỳ" sub="Hệ 4, chép từ bảng điểm bạn đã import" />;
+  // The two printed averages differ on purpose (user 2026-10-30: "mấy môn rớt nó không tính vào GPA tích lũy"): the term
+  // average counts every graded course of the term, the cumulative one only the courses passed.
+  const head = <Head id="ov-gpa-title" title="Điểm trung bình theo học kỳ" sub="Hệ 4, chép đúng các dòng tổng kết in trên bảng điểm" />;
   if (series.length < 2) {
-    return <section className="sw-panel ov-card ov-w6" aria-labelledby="ov-gpa-title">{head}
+    return <section className="sw-panel ov-card" aria-labelledby="ov-gpa-title">{head}
       <Empty text={data.transcript ? "Cần ít nhất 2 học kỳ có điểm để vẽ biểu đồ." : "Chưa có bảng điểm nên chưa vẽ được điểm theo học kỳ."} action={data.transcript ? undefined : "Import bảng điểm"} onAction={openTranscript} />
     </section>;
   }
@@ -381,11 +363,11 @@ function GpaChart({ data, openTranscript }: { data: OverviewResponse; openTransc
     return { year: group.year, x: L + (middle * (W - L - R)) / Math.max(last, 1) };
   });
   const point = hover === null ? null : series[hover] ?? null;
-  return <section className="sw-panel ov-card ov-w6" aria-labelledby="ov-gpa-title">
+  return <section className="sw-panel ov-card" aria-labelledby="ov-gpa-title">
     {head}
     <ul className="ov-chart-legend">
-      <li><svg width="22" height="10" aria-hidden="true"><line x1="0" y1="5" x2="22" y2="5" className="ov-line-cum" /></svg>GPA tích lũy</li>
-      <li><svg width="22" height="10" aria-hidden="true"><line x1="0" y1="5" x2="22" y2="5" className="ov-line-term" /></svg>GPA học kỳ</li>
+      <li><svg width="22" height="10" aria-hidden="true"><line x1="0" y1="5" x2="22" y2="5" className="ov-line-cum" /></svg>GPA tích lũy (chỉ tính môn đã đạt)</li>
+      <li><svg width="22" height="10" aria-hidden="true"><line x1="0" y1="5" x2="22" y2="5" className="ov-line-term" /></svg>GPA học kỳ (tính cả môn chưa đạt)</li>
       {lo <= 2 && <li><svg width="22" height="10" aria-hidden="true"><line x1="0" y1="5" x2="22" y2="5" className="ov-line-limit" /></svg>Ngưỡng tốt nghiệp 2,00</li>}
     </ul>
     <div className="ov-chart" onMouseLeave={() => setHover(null)}>
@@ -409,7 +391,8 @@ function GpaChart({ data, openTranscript }: { data: OverviewResponse; openTransc
       </div>}
     </div>
     <details className="ov-data"><summary>Xem bảng số liệu</summary>
-      <div className="ov-table-wrap"><table><thead><tr><th scope="col">Học kỳ</th><th scope="col">GPA học kỳ</th><th scope="col">GPA tích lũy</th></tr></thead>
+      <p className="ov-note">Chép từ "Điểm TB học kỳ (Hệ 4)" và "Điểm TB tích lũy (Hệ 4)" in trên bảng điểm. Điểm học kỳ tính mọi môn có điểm trong kỳ, kể cả môn chưa đạt; điểm tích lũy chỉ tính các môn đã đạt, nên thường cao hơn khi có môn rớt.</p>
+      <div className="ov-table-wrap"><table><thead><tr><th scope="col">Học kỳ</th><th scope="col">Điểm TB học kỳ</th><th scope="col">Điểm TB tích lũy</th></tr></thead>
         <tbody>{series.map((item) => <tr key={item.term.code}><td>{item.term.label}</td><td className="ov-num">{item.termGpa4 !== null ? formatDecimal(item.termGpa4) : "—"}</td><td className="ov-num">{item.cumulativeGpa4 !== null ? formatDecimal(item.cumulativeGpa4) : "—"}</td></tr>)}</tbody>
       </table></div>
     </details>
@@ -419,7 +402,7 @@ function GpaChart({ data, openTranscript }: { data: OverviewResponse; openTransc
 function NowCard({ data, openTranscript }: { data: OverviewResponse; openTranscript: () => void }) {
   const running = data.running;
   const credits = running.reduce((sum, course) => sum + course.credits, 0);
-  return <section className="sw-panel ov-card ov-w6" aria-labelledby="ov-now-title">
+  return <div className="ov-half" role="group" aria-labelledby="ov-now-title">
     <Head id="ov-now-title" title="Học kỳ này" sub={data.terms.studying?.label ?? "Theo bảng điểm bạn đã import"}>{running.length > 0 && <Chip tone="ai">{running.length} môn · {credits} TC</Chip>}</Head>
     {!data.readiness.transcript ? <Empty text="Import bảng điểm để xem các môn bạn đang học." action="Import bảng điểm" onAction={openTranscript} />
       : !running.length ? <Empty text="Bảng điểm của bạn chưa có môn nào đang học." />
@@ -427,7 +410,7 @@ function NowCard({ data, openTranscript }: { data: OverviewResponse; openTranscr
           <div className="ov-course-top"><span>{course.name}</span><span className="ov-state ov-state-running">{course.retake ? "đang học lại" : "đang học"} · {course.credits} TC</span></div>
           {course.skills.length > 0 && <small>Rèn luyện: {course.skills.join(", ")}</small>}
         </div>)}<p className="ov-note">Học xong các môn này, kỹ năng "Sắp học" sẽ có điểm ở lần Đánh giá lại.</p></>}
-  </section>;
+  </div>;
 }
 
 function NextCard({ data, navigate }: { data: OverviewResponse; navigate: Navigate }) {
@@ -435,7 +418,7 @@ function NextCard({ data, navigate }: { data: OverviewResponse; navigate: Naviga
   const next = data.terms.next;
   const sub = roadmap?.term?.label ?? (next ? `${next.label} · ${shortDate(next.start)} – ${shortDate(next.end)}` : "Học kỳ tới");
   const credits = roadmap?.courses.reduce((sum, course) => sum + course.credits, 0) ?? 0;
-  const chip = !roadmap ? null : roadmap.status === "completed" ? <Chip tone="ai">Lộ trình AI · soạn {relativeDay(roadmap.createdAt)}</Chip>
+  const chip = !roadmap ? null : roadmap.status === "completed" ? <Chip tone="ai">Lộ trình AI</Chip>
     : roadmap.status === "pending" ? <Chip tone="ai">Lộ trình AI đang soạn</Chip> : <Chip tone="warn">Chưa soạn được</Chip>;
   let body: ReactNode;
   if (!roadmap || roadmap.status !== "completed") {
@@ -459,9 +442,16 @@ function NextCard({ data, navigate }: { data: OverviewResponse; navigate: Naviga
       <button type="button" className="sw-text-link ov-foot-link" onClick={() => navigate("roadmap")}>Mở Lộ trình AI đề xuất <Icon name="arrow" /></button>
     </>;
   }
-  return <section className="sw-panel ov-card ov-w6" aria-labelledby="ov-next-title">
+  return <div className="ov-half" role="group" aria-labelledby="ov-next-title">
     <Head id="ov-next-title" title="Học kỳ tới" sub={sub}>{chip}</Head>
     {body}
+  </div>;
+}
+
+/** "Học kỳ này" beside "Học kỳ tới" in one card, so the two never leave a gap beside each other. */
+function TermsCard({ data, navigate, openTranscript }: { data: OverviewResponse; navigate: Navigate; openTranscript: () => void }) {
+  return <section className="sw-panel ov-card" aria-label="Học kỳ này và học kỳ tới">
+    <div className="ov-halves"><NowCard data={data} openTranscript={openTranscript} /><NextCard data={data} navigate={navigate} /></div>
   </section>;
 }
 
@@ -472,7 +462,7 @@ function AskCard({ suggestions, navigate }: { suggestions: readonly string[]; na
     queueAssistantQuestion(text);
     navigate("assistant");
   };
-  return <section className="sw-panel ov-card ov-w12" aria-labelledby="ov-ask-title">
+  return <section className="sw-panel ov-card" aria-labelledby="ov-ask-title">
     <Head id="ov-ask-title" title="Hỏi nhanh Trợ lý AI" sub="Trợ lý trả lời từ bảng điểm, kết quả đánh giá và lộ trình của bạn." />
     <form className="ov-ask" onSubmit={(event) => { event.preventDefault(); ask(question); }}>
       <label htmlFor="ov-ask-input" className="sr-only">Câu hỏi cho Trợ lý AI</label>
@@ -486,7 +476,7 @@ function AskCard({ suggestions, navigate }: { suggestions: readonly string[]; na
 function WarningsCard({ warnings, navigate }: { warnings: OverviewResponse["warnings"]; navigate: Navigate }) {
   const [tone, label] = LEVEL[warnings.level];
   const icon = (item: OverviewWarning) => (item.level === "ok" ? "✓" : item.level === "risk" ? "!" : "i");
-  return <section className="sw-panel ov-card ov-w12" aria-labelledby="ov-warn-title">
+  return <section className="sw-panel ov-card" aria-labelledby="ov-warn-title">
     <Head id="ov-warn-title" title="Cần chú ý"><span className={`ov-level ov-level-${tone}`}>{label}</span></Head>
     {warnings.items.length ? <ul className="ov-warnings">{warnings.items.map((item) => {
       const page = pageOfLink(item.action?.link);
@@ -504,16 +494,21 @@ function WarningsCard({ warnings, navigate }: { warnings: OverviewResponse["warn
 export function OverviewDashboard({ data, navigate, openTranscript }: { data: OverviewResponse; navigate: Navigate; openTranscript: () => void }) {
   return <>
     <Kpis data={data} navigate={navigate} openTranscript={openTranscript} />
-    <div className="ov-grid">
-      <ProgressCard data={data} navigate={navigate} openTranscript={openTranscript} />
-      <GraduationCard data={data} navigate={navigate} />
-      <SkillsCard data={data} navigate={navigate} />
-      <GpaChart data={data} openTranscript={openTranscript} />
-      <NowCard data={data} openTranscript={openTranscript} />
-      <NextCard data={data} navigate={navigate} />
-      <AskCard suggestions={data.suggestions} navigate={navigate} />
-      <WarningsCard warnings={data.warnings} navigate={navigate} />
+    {/* Two columns that stack on their own (user 2026-10-30: "cách bố cục cứ xấu xấu"): cards of one row no longer leave
+        a gap beside a shorter neighbour. Full-width sections end the page, "Cần chú ý" last. */}
+    <div className="ov-columns">
+      <div className="ov-col">
+        <ProgressCard data={data} navigate={navigate} openTranscript={openTranscript} />
+        <TermsCard data={data} navigate={navigate} openTranscript={openTranscript} />
+      </div>
+      <div className="ov-col">
+        <GraduationCard data={data} navigate={navigate} />
+        <SkillsCard data={data} navigate={navigate} />
+        <GpaChart data={data} openTranscript={openTranscript} />
+      </div>
     </div>
+    <AskCard suggestions={data.suggestions} navigate={navigate} />
+    <WarningsCard warnings={data.warnings} navigate={navigate} />
   </>;
 }
 
@@ -574,7 +569,6 @@ export default function StudentOverview({ profile, loading: profileLoading, navi
   const openTranscript = () => openProfile(PROFILE_SECTIONS.transcript);
   return <div className="so-overview ov-page">
     {identity}
-    {data && <Facts data={data} />}
     {readyKnown && missing > 0 && <section className="so-gate" aria-labelledby="so-gate-title">
       <span className="so-gate-icon" aria-hidden="true"><Icon name="shield" /></span>
       <div className="so-gate-body">

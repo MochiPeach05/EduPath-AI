@@ -64,7 +64,7 @@ describe("progressOverview", () => {
       ["HK231", "done", 6, 6, ["71ITBS10103|passed|A", "71ITBS10203|passed|C+"]],
       ["HK232", "late", 0, 3, ["71ITSE30103|late|chưa học, trễ so với kế hoạch"]],
       ["HK233", "done", 3, 3, ["71ITIS30103|passed|MT (miễn)"]],
-      ["HK241", "late", 3, 6, ["71ITSE30503|failed|CT (cấm thi), cần học lại", "71ITSE30603|passed|C"]],
+      ["HK241", "late", 3, 6, ["71ITSE30503|failed|cần học lại", "71ITSE30603|passed|C"]],
       ["HK242", "done", 0, 0, []],
       ["HK243", "done", 9, 9, ["71ITSE41003|passed|A", "71ITAI40103|passed|D+", "71ITIS30303|passed|B"]],
       ["HK251", "running", 0, 3, ["71ITSE41203|running|đang học"]],
@@ -102,11 +102,11 @@ describe("progressOverview", () => {
     const rows = (x2: CourseFact["state"]) => planTermsView(plan, [fact("X1", "failed"), fact("X2", x2), fact("X3", "not_taken")], "HK251").terms
       .map((term) => [term.term.code, term.courses.map((course) => `${course.code}|${course.state}|${course.detail}`)]);
     expect(rows("not_taken")).toEqual([
-      ["HK241", ["X1|failed|F, học lại hoặc chọn môn khác", "|late|chưa chọn, trễ so với kế hoạch"]],
+      ["HK241", ["X1|failed|học lại hoặc chọn môn khác", "|late|chưa chọn, trễ so với kế hoạch"]],
       ["HK243", ["|late|chưa chọn, trễ so với kế hoạch"]],
     ]);
     expect(rows("passed")).toEqual([
-      ["HK241", ["X2|passed|Đạt", "X1|failed|F, đã chọn môn khác"]],
+      ["HK241", ["X2|passed|Đạt", "X1|failed|đã chọn môn khác"]],
       ["HK243", ["|late|chưa chọn, trễ so với kế hoạch"]],
     ]);
   });

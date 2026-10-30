@@ -123,10 +123,13 @@ export function transcriptRunning(data: TranscriptData, studyTerm: string | null
 /* ------------------------------------------------------------------------ */
 /* Progress against the training plan */
 
-const FAILED_MARK: Record<string, string> = { CT: "CT (cấm thi)", VT: "VT (vắng thi)" };
 const scoreText = (value: number) => value.toFixed(1).replace(".", ",");
 
-/** One course of a plan term as the page prints it; a failed option of a choice says what is left instead of "cần học lại". */
+/**
+ * One course of a plan term as the page prints it; a failed option of a choice says what is left instead of "cần học lại".
+ * A failed course says only what to do (user 2026-10-30: "Không cần ghi rõ ✗ VT (vắng thi), cần học lại ghi cần học lại
+ * được rồi"); its grade stays on the transcript page.
+ */
 export function courseRow(course: CourseFact, term: string, studyTerm: string | null, failedNote = "cần học lại"): OverviewTermCourse {
   const base = { code: course.code, name: course.name, credits: course.credits };
   const due = studyTerm !== null && term <= studyTerm;
@@ -136,7 +139,7 @@ export function courseRow(course: CourseFact, term: string, studyTerm: string | 
     case "exempt": return { ...base, state: "passed", detail: "MT (miễn)" };
     case "graded_unknown": return { ...base, state: "passed", detail: "chưa rõ kết quả, đối chiếu bảng điểm" };
     case "in_progress": return { ...base, state: "running", detail: course.attempts > 1 ? "đang học lại" : "đang học" };
-    case "failed": return { ...base, state: "failed", detail: `${letter ? FAILED_MARK[letter] ?? letter : "chưa đạt"}, ${failedNote}` };
+    case "failed": return { ...base, state: "failed", detail: failedNote };
     default: return due ? { ...base, state: "late", detail: "chưa học, trễ so với kế hoạch" } : { ...base, state: "planned", detail: "dự kiến" };
   }
 }

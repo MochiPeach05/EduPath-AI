@@ -1,5 +1,6 @@
-/* Tổng quan (2026-10-30, the approved preview): key figures, then pairs of cards from progress down to the warnings. Light
-   portal surfaces; status colours only with a label; the GPA chart's two series are a validated pair (CVD ΔE 9.5). */
+/* Tổng quan (2026-10-30, the approved preview): key figures, then two columns that stack on their own (progress and the
+   terms; graduation, skills and the GPA chart), then the quick question and the warnings across the page. Light portal
+   surfaces; status colours only with a label; the GPA chart's two series are a validated pair (CVD ΔE 9.5). */
 .ov-page {
   --ov-ai: #1c4182;
   --ov-ai-soft: #e6eef9;
@@ -24,13 +25,6 @@
 .ov-sub { margin: 2px 0 0; color: var(--sw-muted); font-size: 13px; }
 .ov-note { margin: 0; color: var(--sw-muted); font-size: 12.5px; }
 
-/* Facts under the identity strip */
-.ov-facts { display: flex; flex-wrap: wrap; gap: 8px; }
-.ov-fact { display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border: 1px solid var(--sw-border); border-radius: 999px; background: #fff; font-size: 13px; }
-.ov-fact b { font-weight: 800; }
-.ov-fact-soon { background: var(--ov-ai-soft); border-color: #c9d7f0; color: var(--ov-ai); }
-.ov-page .ov-fact svg { width: 15px; height: 15px; }
-
 /* Chips */
 .ov-chip { display: inline-flex; align-items: center; white-space: nowrap; padding: 2px 9px; border-radius: 999px; background: #eef0f4; color: var(--sw-muted); font-size: 11.5px; font-weight: 700; line-height: 1.6; }
 .ov-chip-ok { background: var(--ov-ok-soft); color: var(--ov-ok); }
@@ -50,14 +44,27 @@
 .ov-kpi-value small { margin-left: 3px; color: var(--sw-muted); font-size: 12.5px; font-weight: 700; }
 .ov-kpi-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; color: var(--sw-muted); font-size: 12px; line-height: 1.45; }
 
-/* Card grid */
-.ov-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 20px; align-items: start; }
+/* Columns: each stacks its own cards, so a short card never leaves a gap beside a tall one */
+.ov-columns { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 20px; align-items: start; }
+.ov-col { display: grid; gap: 20px; align-content: start; min-width: 0; }
+@container ov (max-width: 900px) { .ov-columns { grid-template-columns: minmax(0, 1fr); } }
 .ov-page .ov-card { display: grid; gap: 14px; align-content: start; min-width: 0; padding: 20px 22px; }
-.ov-w12 { grid-column: span 12; }
-.ov-w8 { grid-column: span 8; }
-.ov-w6 { grid-column: span 6; }
-.ov-w4 { grid-column: span 4; }
-@container ov (max-width: 900px) { .ov-w8, .ov-w6, .ov-w4 { grid-column: span 12; } }
+/* Học kỳ này | Học kỳ tới in one card */
+.ov-halves { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.ov-half { display: grid; gap: 12px; align-content: start; min-width: 0; padding-right: 18px; }
+.ov-half + .ov-half { padding: 0 0 0 18px; border-left: 1px solid var(--sw-border); }
+@container ov (max-width: 1100px) and (min-width: 901px) {
+  .ov-halves { grid-template-columns: minmax(0, 1fr); }
+  .ov-half { padding: 0; }
+  .ov-half + .ov-half { margin-top: 16px; padding: 16px 0 0; border-left: 0; border-top: 1px solid var(--sw-border); }
+}
+@container ov (max-width: 640px) {
+  .ov-halves { grid-template-columns: minmax(0, 1fr); }
+  .ov-half { padding: 0; }
+  .ov-half + .ov-half { margin-top: 16px; padding: 16px 0 0; border-left: 0; border-top: 1px solid var(--sw-border); }
+}
+/* The skills' two lists stack while the right column is narrow */
+@container ov (max-width: 1100px) { .ov-col .ov-skill-cols { grid-template-columns: minmax(0, 1fr); } }
 .ov-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 8px 12px; }
 .ov-head > div { min-width: 0; }
 .ov-page .ov-card .sw-text-link { min-height: 0; padding: 0; font-size: 13px; }
@@ -177,10 +184,11 @@
 .ov-ask { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }
 .ov-ask input { width: 100%; min-width: 0; padding: 10px 13px; border: 1px solid #d5dae2; border-radius: 12px; background: #fff; color: var(--sw-ink); }
 .ov-ask input:focus-visible { outline: 2px solid var(--sw-red); outline-offset: 1px; }
-.ov-sugs { display: flex; flex-wrap: wrap; gap: 6px; }
-.ov-sugs button { padding: 4px 11px; border: 1px solid var(--sw-border); border-radius: 999px; background: #fff; color: var(--sw-ink); font-size: 12.5px; font-weight: 600; cursor: pointer; }
-.ov-sugs button:hover { border-color: #c9ced8; }
-.ov-sugs button:focus-visible { outline: 2px solid var(--sw-red); outline-offset: 2px; }
+/* Each suggestion in its own box (user 2026-10-30: "bó khung các câu hỏi lại"); .ov-page outranks the shell's button reset. */
+.ov-sugs { display: flex; flex-wrap: wrap; gap: 8px; }
+.ov-page .ov-sugs button { padding: 7px 13px; border: 1px solid #d5dae2; border-radius: 10px; background: #f8f9fb; color: var(--sw-ink); font-size: 13px; font-weight: 600; line-height: 1.4; text-align: left; cursor: pointer; }
+.ov-page .ov-sugs button:hover { border-color: #b9c0cc; background: #fff; }
+.ov-page .ov-sugs button:focus-visible { outline: 2px solid var(--sw-red); outline-offset: 2px; }
 
 /* Warnings */
 .ov-level { display: inline-flex; align-items: center; gap: 6px; padding: 4px 11px; border-radius: 999px; font-size: 12.5px; font-weight: 800; }
