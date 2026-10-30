@@ -12,7 +12,7 @@
  */
 export const OVERVIEW_API = "/api/student/overview";
 
-/** A term: code "HK261" and label "Học kỳ 1, năm học 2026–2027". */
+/** A term: code "HK261" and label "HK1 2026–2027", the one way student pages write a term (display-format.ts termName). */
 export type OverviewTerm = { code: string; label: string };
 
 export type OverviewResponse = {
@@ -78,7 +78,7 @@ export type OverviewResponse = {
       courses: {
         code: string; name: string; credits: number;
         state: "passed" | "failed" | "running" | "late" | "planned";
-        /** What the page prints after the course: "B+", "CT (cấm thi), cần học lại", "đang học lại", "dự kiến". */
+        /** What the page prints after the course: "B+", "cần học lại", "đang học lại", "dự kiến". */
         detail: string;
       }[];
     }[];
@@ -108,11 +108,15 @@ export type OverviewResponse = {
     assessedAt: string;
     overallScore: number | null;
     overallLevel: string | null;
-    /** The 3 best scored skills (condition-only groups excluded). */
-    strengths: { name: string; score: number }[];
+    /**
+     * The 3 best scored skills (condition-only groups excluded), each with the courses its score comes from (largest share
+     * first, the CTĐT name and the letter that counts), shown beside the score.
+     */
+    strengths: { name: string; score: number; courses: { name: string; letter: string | null }[] }[];
     career: null | {
       name: string;
       fitScore: number | null;
+      /** "Rất phù hợp", "Phù hợp", "Trung bình", "Ít phù hợp", "Không phù hợp" or "Chưa đủ dữ liệu". */
       fitLabel: string;
       met: number;
       total: number;
@@ -130,12 +134,18 @@ export type OverviewResponse = {
     term: OverviewTerm | null;
     /** The courses it recommends, with the reason as a short label ("Học lại", "Trễ kế hoạch", "Theo kế hoạch", "Tự chọn TC309"). */
     courses: { code: string; name: string; credits: number; reason: string }[];
-    /** Skills to learn on one's own. */
+    /** Skills the roadmap suggests practising (its picks), not the program's "Kỹ năng cần tự học" of Khoảng trống kỹ năng. */
     skills: string[];
     /** The first month of its monthly plan: "Tháng 12/2026" and its text. */
     firstMonth: { label: string; text: string } | null;
-    /** Credits the student's saved Kế hoạch học kỳ holds for that term, null without a saved plan. */
-    plannedCredits: number | null;
+    /**
+     * The student's saved Kế hoạch học kỳ for that term, checked exactly as the planner checks it (credits of its courses
+     * and of the courses being studied that term, against the limits): over / under the limits, ok, or empty. null when
+     * the saved plan has no such term.
+     */
+    plan: { credits: number; status: "over" | "under" | "ok" | "empty" } | null;
+    /** The planner's credits per term (min, max), null when the CTĐT is unknown. */
+    limits: { min: number; max: number } | null;
   };
   /** Courses being studied in the studying term, with the skills they train (the faculty's course–skill links). */
   running: { code: string; name: string; credits: number; retake: boolean; skills: string[] }[];

@@ -1,6 +1,7 @@
 import type { CareerSelection } from "./career-types";
 import { useEffect, useState, type ReactNode } from "react";
 import { queueAssistantQuestion } from "./assistant-handoff";
+import { decimalText, meaningClass, meaningOf, scoreText, type Meaning } from "./display-format";
 import { OVERVIEW_API, type OverviewResponse, type OverviewWarning } from "./overview-types";
 import { PROFILE_SECTIONS, profileSectionOf, type ProfileSection } from "./student-overview-data";
 import { SURVEY_API, gapSentence, surveyGaps, type SurveyResponse } from "./profile-survey";
@@ -82,10 +83,8 @@ export const pageOfLink = (link: string | null | undefined): OverviewPage | null
   return (PAGES as readonly string[]).includes(id) ? (id as OverviewPage) : null;
 };
 
-/** 2.85 → "2,85" (digits after the comma fixed). */
-export const formatDecimal = (value: number, digits = 2) => value.toLocaleString("vi-VN", { minimumFractionDigits: digits, maximumFractionDigits: digits });
-/** A 0–100 score as the competency pages print it: 74.6 → "74,6", 85 → "85". */
-export const formatScore = (value: number) => value.toLocaleString("vi-VN", { minimumFractionDigits: 0, maximumFractionDigits: 1 });
+/** 2.85 → "2,85" (digits after the comma fixed). 0–100 scores use scoreText, as on the competency pages (59,86 → "59,8"). */
+export const formatDecimal = (value: number, digits = 2) => decimalText(value, digits);
 
 /** The cumulative GPA against the term before: "+0,03 so với học kỳ trước"; null without both values. */
 export function gpaChangeText(change: number | null): string | null {
@@ -169,10 +168,28 @@ const BLOCKED: Record<string, string> = {
 export const blockedText = (code: string) => BLOCKED[code] ?? "Chưa so được tiến độ với kế hoạch đào tạo. Vui lòng thử lại sau.";
 
 type Tone = "" | "ok" | "warn" | "risk" | "ai";
-const GAP_TONE: Record<string, Tone> = { below: "warn", upcoming: "ai", self_study: "", not_studied: "", no_data: "" };
+/** A missing career skill: amber below the threshold; grey while it has no score yet (Sắp học, Chưa học, Cần tự học…). */
+const gapMeaning = (status: string): Meaning => (status === "below" ? "warn" : "none");
 /** The tone of a roadmap course's reason label. */
 export const reasonTone = (reason: string): Tone =>
   /học lại/i.test(reason) ? "risk" : /trễ/i.test(reason) ? "warn" : /tự chọn/i.test(reason) ? "ai" : "";
+
+type RoadmapInfo = NonNullable<OverviewResponse["roadmap"]>;
+/**
+ * The saved Kế hoạch học kỳ of the roadmap's term in the planner's words (study-plan-data.ts termLoadText): "20 TC · vượt
+ * mức tối đa 18 TC" in amber, "6 TC · dưới mức tối thiểu 9 TC", else just the credits.
+ */
+export function planLoadText(plan: NonNullable<RoadmapInfo["plan"]>, limits: RoadmapInfo["limits"]): { text: string; meaning: Meaning } {
+  const credits = `${plan.credits} TC`;
+  if (plan.status === "over" && limits) return { text: `${credits} · vượt mức tối đa ${limits.max} TC`, meaning: "warn" };
+  if (plan.status === "under" && limits) return { text: `${credits} · dưới mức tối thiểu ${limits.min} TC`, meaning: "warn" };
+  return { text: credits, meaning: "none" };
+}
+/** "Lập trình ứng dụng Web (B), Thiết kế giao diện (B+) và 1 môn khác": the courses a score comes from. */
+export function evidenceText(courses: readonly { name: string; letter: string | null }[], shown = 2): string {
+  const named = courses.slice(0, shown).map((course) => (course.letter ? `${course.name} (${course.letter})` : course.name)).join(", ");
+  return courses.length > shown ? `${named} và ${courses.length - shown} môn khác` : named;
+}
 const LEVEL: Record<OverviewResponse["warnings"]["level"], [string, string]> = {
   risk: ["risk", "▲ Nguy cơ chậm tiến độ"], warn: ["warn", "● Cần chú ý"], ok: ["ok", "✓ Đúng tiến độ"], none: ["none", "Chưa đủ dữ liệu"],
 };
@@ -180,11 +197,16 @@ const LEVEL: Record<OverviewResponse["warnings"]["level"], [string, string]> = {
 /* ------------------------------------------------------------------ view */
 
 type Navigate = (page: OverviewPage) => void;
-const Chip = ({ tone = "", children }: { tone?: Tone; children: ReactNode }) => <span className={`ov-chip${tone ? ` ov-chip-${tone}` : ""}`}>{children}</span>;
+/** A chip in a tone of this page, or in the colour of a meaning shared by every student page (one colour per word). */
+const Chip = ({ tone = "", meaning, children }: { tone?: Tone; meaning?: Meaning; children: ReactNode }) =>
+  <span className={`ov-chip${meaning ? ` ${meaningClass(meaning)}` : tone ? ` ov-chip-${tone}` : ""}`}>{children}</span>;
 const Empty = ({ text, action, onAction }: { text: string; action?: string; onAction?: () => void }) =>
   <div className="ov-empty"><p>{text}</p>{action && onAction && <button type="button" className="sw-text-link" onClick={onAction}>{action} <Icon name="arrow" /></button>}</div>;
 const Head = ({ id, title, sub, children }: { id: string; title: string; sub?: ReactNode; children?: ReactNode }) =>
   <div className="ov-head"><div><h2 id={id}>{title}</h2>{sub && <p className="ov-sub">{sub}</p>}</div>{children}</div>;
+/** Conditions not met yet are amber, never red: red is only for something not passed (user 2026-10-30). */
+const GraduationChip = ({ graduation }: { graduation: NonNullable<OverviewResponse["graduation"]> }) =>
+  graduation.eligible ? <Chip meaning="good">Đạt mọi điều kiện</Chip> : <Chip meaning="warn">Còn {graduation.missing} điều kiện</Chip>;
 
 function Kpis({ data, navigate, openTranscript }: { data: OverviewResponse; navigate: Navigate; openTranscript: () => void }) {
   const { transcript, progress, competency, graduation, roadmap } = data;
@@ -196,22 +218,22 @@ function Kpis({ data, navigate, openTranscript }: { data: OverviewResponse; navi
   const roadmapValue = !roadmap ? "Chưa có" : roadmap.status === "completed" ? "Đã có" : roadmap.status === "pending" ? "Đang soạn" : "Chưa soạn được";
   return <div className="ov-kpis">
     {tile("gpa", "GPA tích lũy", transcript?.gpa4 != null ? <>{formatDecimal(transcript.gpa4)}<small>/ 4</small></> : "—",
-      transcript?.gpa4 != null ? <>{transcript.rank && <Chip tone="ok">{transcript.rank}</Chip>}{change}</> : "Cần bảng điểm", openTranscript)}
+      transcript?.gpa4 != null ? <>{transcript.rank && <Chip meaning={meaningOf(transcript.rank)}>{transcript.rank}</Chip>}{change}</> : "Cần bảng điểm", openTranscript)}
     {tile("credits", "Tín chỉ đã đạt", passed !== null ? <>{passed}{total !== null && <small>/ {total}</small>}</> : "—",
       passed !== null ? <>{total ? `${Math.round((passed / total) * 100)}% chương trình` : "Chưa rõ tổng tín chỉ"}{progress && !progress.blocked && progress.runningCredits > 0 ? ` · ${progress.runningCredits} TC đang học` : ""}</> : "Cần bảng điểm",
       () => navigate("roadmap"))}
-    {tile("competency", "Năng lực chung", competency?.overallScore != null ? <>{formatScore(competency.overallScore)}<small>/ 100</small></> : "—",
-      competency ? <>{competency.overallLevel && <Chip tone="ai">{competency.overallLevel}</Chip>}</> : "Chưa đánh giá năng lực",
+    {tile("competency", "Năng lực chung", competency?.overallScore != null ? <>{scoreText(competency.overallScore)}<small>/ 100</small></> : "—",
+      competency ? <>{competency.overallLevel && <Chip meaning={meaningOf(competency.overallLevel)}>{competency.overallLevel}</Chip>}</> : "Chưa đánh giá năng lực",
       () => navigate("competency"))}
-    {tile("fit", "Mức phù hợp nghề", competency?.career?.fitScore != null ? <>{formatScore(competency.career.fitScore)}<small>/ 100</small></> : "—",
-      competency?.career ? <><Chip tone="ok">{competency.career.fitLabel}</Chip>{competency.career.met}/{competency.career.total} kỹ năng đạt ngưỡng</>
+    {tile("fit", "Mức phù hợp nghề", competency?.career?.fitScore != null ? <>{scoreText(competency.career.fitScore)}<small>/ 100</small></> : "—",
+      competency?.career ? <><Chip meaning={meaningOf(competency.career.fitLabel)}>{competency.career.fitLabel}</Chip>{competency.career.met}/{competency.career.total} kỹ năng đạt ngưỡng</>
         : data.readiness.career ? "Chưa đánh giá năng lực" : "Chưa chọn nghề mục tiêu",
       () => navigate(competency?.career ? "skill-gap" : "career"))}
     {tile("graduation", "Xét tốt nghiệp", graduation ? graduation.eligible ? "Đủ điều kiện" : "Chưa đủ" : "—",
-      graduation ? graduation.eligible ? <Chip tone="ok">Đạt mọi điều kiện</Chip> : <Chip tone={graduation.missing > 2 ? "risk" : "warn"}>Còn {graduation.missing} điều kiện</Chip> : "Chưa đối chiếu được",
+      graduation ? <GraduationChip graduation={graduation} /> : "Chưa đối chiếu được",
       () => navigate("graduation"))}
     {tile("roadmap", "Lộ trình AI", roadmapValue,
-      roadmap ? <>{roadmap.term && <Chip tone="ai">{roadmap.term.label.replace(", năm học", " ·")}</Chip>}</> : "Tạo ở Lộ trình học tập",
+      roadmap ? <>{roadmap.term && <Chip tone="ai">{roadmap.term.label}</Chip>}</> : "Tạo ở Lộ trình học tập",
       () => navigate("roadmap"))}
   </div>;
 }
@@ -275,7 +297,7 @@ function GraduationCard({ data, navigate }: { data: OverviewResponse; navigate: 
   const graduation = data.graduation;
   return <section className="sw-panel ov-card" aria-labelledby="ov-grad-title">
     <Head id="ov-grad-title" title="Xét tốt nghiệp" sub={graduation?.standardName ?? "Tiêu chuẩn của khóa và chuyên ngành"}>
-      {graduation && (graduation.eligible ? <Chip tone="ok">Đủ điều kiện</Chip> : <Chip tone={graduation.missing > 2 ? "risk" : "warn"}>Còn {graduation.missing} điều kiện</Chip>)}
+      {graduation && <GraduationChip graduation={graduation} />}
     </Head>
     {!graduation ? <Empty text={data.readiness.transcript ? "Chưa đối chiếu được với tiêu chuẩn xét tốt nghiệp của khóa và chuyên ngành bạn. Lý do có ở trang Điều kiện xét tốt nghiệp." : "Cần bảng điểm và chuyên ngành để đối chiếu với tiêu chuẩn xét tốt nghiệp."} />
       : <ul className="ov-conds">{graduation.conditions.map((condition) => <li key={condition.label} className="ov-cond">
@@ -302,27 +324,49 @@ function SkillsCard({ data, navigate }: { data: OverviewResponse; navigate: Navi
       <div className="ov-skill-cols">
         <div className="ov-meters"><b>Kỹ năng mạnh nhất</b>
           {competency.strengths.length ? competency.strengths.map((skill) => <div key={skill.name} className="ov-meter">
-            <div className="ov-meter-top"><span>{skill.name}</span><b>{formatScore(skill.score)}</b></div>
-            <div className="ov-track" role="img" aria-label={`${skill.name}: ${formatScore(skill.score)} điểm, ngưỡng Khá 62,5`}><i style={{ width: `${Math.min(100, skill.score)}%` }} /><u style={{ left: "62.5%" }} /></div>
+            <div className="ov-meter-top"><span>{skill.name}</span><b>{scoreText(skill.score)}</b></div>
+            <div className="ov-track" role="img" aria-label={`${skill.name}: ${scoreText(skill.score)} điểm, ngưỡng Khá 62,5`}><i style={{ width: `${Math.min(100, skill.score)}%` }} /><u style={{ left: "62.5%" }} /></div>
+            {skill.courses?.length > 0 && <small className="ov-evidence">Minh chứng: {evidenceText(skill.courses)}</small>}
           </div>) : <p className="ov-sub">Chưa có kỹ năng nào có điểm.</p>}
           {competency.strengths.length > 0 && <small className="ov-sub">Vạch đen: ngưỡng Khá (62,5)</small>}
         </div>
         <div className="ov-gaps"><b>Còn thiếu cho nghề mục tiêu</b>
           {!competency.career ? <p className="ov-sub">Bạn chưa chọn nghề mục tiêu.</p>
-            : competency.career.gaps.length ? <ul className="ov-rows">{competency.career.gaps.map((gap) => <li key={gap.name}><span>{gap.name}</span><Chip tone={GAP_TONE[gap.status] ?? ""}>{gap.label}</Chip></li>)}</ul>
+            : competency.career.gaps.length ? <ul className="ov-rows">{competency.career.gaps.map((gap) => <li key={gap.name}><span>{gap.name}</span><Chip meaning={gapMeaning(gap.status)}>{gap.label}</Chip></li>)}</ul>
               : <p className="ov-sub">Bạn đã đạt mọi kỹ năng của nghề này.</p>}
         </div>
       </div>
       {competency.career && <div className="ov-fit"><span>Mức phù hợp với <b>{competency.career.name}</b>:</span>
-        <span className="ov-fit-score">{competency.career.fitScore !== null ? formatScore(competency.career.fitScore) : "—"}</span><Chip tone="ok">{competency.career.fitLabel}</Chip>
+        <span className="ov-fit-score">{competency.career.fitScore !== null ? scoreText(competency.career.fitScore) : "—"}</span><Chip meaning={meaningOf(competency.career.fitLabel)}>{competency.career.fitLabel}</Chip>
         <span className="ov-sub">{competency.career.met}/{competency.career.total} kỹ năng đạt ngưỡng</span></div>}
     </>}
   </section>;
 }
 
-const CHART = { width: 560, height: 230, left: 36, right: 78, top: 14, bottom: 44 };
+const CHART = { width: 560, height: 230, left: 36, right: 82, top: 14, bottom: 44 };
+/**
+ * The width a chart frame has on screen (ResizeObserver), so the SVG is drawn at that width and its text keeps the
+ * page's sizes: scaled from a fixed 560-wide drawing, the axis read about 7 px in a narrow column (user 2026-10-30:
+ * "chú thích tối thiểu 12px"). null before the first measure and where nothing can measure (server rendering, tests).
+ */
+function useFrameWidth(): [(element: HTMLDivElement | null) => void, number | null] {
+  const [frame, setFrame] = useState<HTMLDivElement | null>(null);
+  const [width, setWidth] = useState<number | null>(null);
+  useEffect(() => {
+    if (!frame || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      const next = Math.round(entries[0]?.contentRect.width ?? 0);
+      if (next > 0) setWidth(next);
+    });
+    observer.observe(frame);
+    return () => observer.disconnect();
+  }, [frame]);
+  return [setFrame, width];
+}
+
 function GpaChart({ data, openTranscript }: { data: OverviewResponse; openTranscript: () => void }) {
   const [hover, setHover] = useState<number | null>(null);
+  const [frameRef, frameWidth] = useFrameWidth();
   const series = data.transcript?.series ?? [];
   // The two printed averages differ on purpose (user 2026-10-30: "mấy môn rớt nó không tính vào GPA tích lũy"): the term
   // average counts every graded course of the term, the cumulative one only the courses passed.
@@ -332,7 +376,8 @@ function GpaChart({ data, openTranscript }: { data: OverviewResponse; openTransc
       <Empty text={data.transcript ? "Cần ít nhất 2 học kỳ có điểm để vẽ biểu đồ." : "Chưa có bảng điểm nên chưa vẽ được điểm theo học kỳ."} action={data.transcript ? undefined : "Import bảng điểm"} onAction={openTranscript} />
     </section>;
   }
-  const { width: W, height: H, left: L, right: R, top: T, bottom: B } = CHART;
+  const { height: H, left: L, right: R, top: T, bottom: B } = CHART;
+  const W = frameWidth ?? CHART.width;
   const { lo, hi, ticks } = gpaScale(series.flatMap((point) => [point.termGpa4, point.cumulativeGpa4]));
   const last = series.length - 1;
   const x = (i: number) => L + (i * (W - L - R)) / Math.max(last, 1);
@@ -370,8 +415,8 @@ function GpaChart({ data, openTranscript }: { data: OverviewResponse; openTransc
       <li><svg width="22" height="10" aria-hidden="true"><line x1="0" y1="5" x2="22" y2="5" className="ov-line-term" /></svg>GPA học kỳ (tính cả môn chưa đạt)</li>
       {lo <= 2 && <li><svg width="22" height="10" aria-hidden="true"><line x1="0" y1="5" x2="22" y2="5" className="ov-line-limit" /></svg>Ngưỡng tốt nghiệp 2,00</li>}
     </ul>
-    <div className="ov-chart" onMouseLeave={() => setHover(null)}>
-      <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`GPA hệ 4 qua ${series.length} học kỳ có điểm.${lastCum !== null ? ` GPA tích lũy hiện tại ${formatDecimal(lastCum)}.` : ""}${lastTerm !== null ? ` Học kỳ gần nhất ${formatDecimal(lastTerm)}.` : ""}`}>
+    <div className="ov-chart" ref={frameRef} onMouseLeave={() => setHover(null)}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ aspectRatio: `${W} / ${H}` }} role="img" aria-label={`GPA hệ 4 qua ${series.length} học kỳ có điểm.${lastCum !== null ? ` GPA tích lũy hiện tại ${formatDecimal(lastCum)}.` : ""}${lastTerm !== null ? ` Học kỳ gần nhất ${formatDecimal(lastTerm)}.` : ""}`}>
         {ticks.map((tick) => <g key={tick}><line x1={L} x2={W - R} y1={y(tick)} y2={y(tick)} className="ov-gridline" />
           <text x={L - 8} y={y(tick) + 4} textAnchor="end" className="ov-axis">{formatDecimal(tick, 1)}</text></g>)}
         {lo <= 2 && <line x1={L} x2={W - R} y1={y(2)} y2={y(2)} className="ov-line-limit" />}
@@ -413,13 +458,23 @@ function NowCard({ data, openTranscript }: { data: OverviewResponse; openTranscr
   </div>;
 }
 
+/**
+ * "Học kỳ tới · theo Lộ trình AI": the AI roadmap's courses for the next term, named by their source because Đánh giá
+ * năng lực lists the next term of the training plan (user 2026-10-30: "Nên đặt tên phân biệt hai cái"). The saved Kế
+ * hoạch học kỳ of that term is checked against the planner's limits in the planner's words; the green "20/16 TC" bar is
+ * gone ("Tổng quan ghi 20/16 TC … planner báo vượt tối đa 18 TC").
+ */
 function NextCard({ data, navigate }: { data: OverviewResponse; navigate: Navigate }) {
   const roadmap = data.roadmap;
   const next = data.terms.next;
   const sub = roadmap?.term?.label ?? (next ? `${next.label} · ${shortDate(next.start)} – ${shortDate(next.end)}` : "Học kỳ tới");
   const credits = roadmap?.courses.reduce((sum, course) => sum + course.credits, 0) ?? 0;
-  const chip = !roadmap ? null : roadmap.status === "completed" ? <Chip tone="ai">Lộ trình AI</Chip>
-    : roadmap.status === "pending" ? <Chip tone="ai">Lộ trình AI đang soạn</Chip> : <Chip tone="warn">Chưa soạn được</Chip>;
+  const limits = roadmap?.limits ?? null;
+  const aiOver = limits !== null && credits > limits.max;
+  const chip = !roadmap ? null : roadmap.status === "completed" ? (roadmap.courses.length ? <Chip tone="ai">{roadmap.courses.length} môn · {credits} TC</Chip> : null)
+    : roadmap.status === "pending" ? <Chip tone="ai">Đang soạn</Chip> : <Chip meaning="warn">Chưa soạn được</Chip>;
+  const plan = roadmap?.plan && roadmap.plan.status !== "empty" ? roadmap.plan : null;
+  const load = plan ? planLoadText(plan, limits) : null;
   let body: ReactNode;
   if (!roadmap || roadmap.status !== "completed") {
     const text = roadmap?.status === "pending" ? "EduPath AI đang soạn lộ trình cho học kỳ tới, bạn quay lại sau ít phút nhé."
@@ -433,17 +488,22 @@ function NextCard({ data, navigate }: { data: OverviewResponse; navigate: Naviga
     body = <>
       {roadmap.courses.length ? <ul className="ov-rows ov-next-courses">{roadmap.courses.map((course) => <li key={course.code}><span>{course.name} · {course.credits} TC</span><Chip tone={reasonTone(course.reason)}>{course.reason}</Chip></li>)}</ul>
         : <p className="ov-sub">Lộ trình không đề xuất thêm môn nào.</p>}
-      {roadmap.skills.length > 0 && <div className="ov-tags"><span className="ov-sub">Kỹ năng nên tự học:</span>{roadmap.skills.map((skill) => <Chip key={skill}>{skill}</Chip>)}</div>}
+      {/* The roadmap's own picks to practise; "Kỹ năng cần tự học" of Khoảng trống kỹ năng are the skills the program
+          does not teach, so the two never read as a contradiction (user 2026-10-30). */}
+      {roadmap.skills.length > 0 && <div className="ov-tags"><span className="ov-sub">Lộ trình AI gợi ý luyện thêm:</span>{roadmap.skills.map((skill) => <Chip key={skill}>{skill}</Chip>)}</div>}
       {roadmap.firstMonth && <div className="ov-month"><b>{roadmap.firstMonth.label}:</b> {roadmap.firstMonth.text}</div>}
-      {roadmap.plannedCredits !== null && credits > 0 && <div className="ov-cond ov-planned">
-        <div className="ov-cond-top"><span>Đã xếp vào Kế hoạch học kỳ</span><b>{roadmap.plannedCredits}/{credits} TC</b></div>
-        <div className="ov-mini" role="img" aria-label={`${roadmap.plannedCredits} trên ${credits} tín chỉ`}><i style={{ width: `${Math.min(100, (roadmap.plannedCredits / credits) * 100)}%` }} /></div>
-      </div>}
+      {plan && load ? <div className="ov-load">
+        <div className="ov-load-top"><span>Kế hoạch học kỳ của bạn</span><Chip meaning={load.meaning}>{load.text}</Chip></div>
+        {limits && <small>Mức cho phép: {limits.min}–{limits.max} TC mỗi học kỳ, như trong Kế hoạch học kỳ.</small>}
+      </div>
+        : credits > 0 && <p className={`ov-note${aiOver ? " ov-note-warn" : ""}`}>{aiOver
+          ? `Lộ trình đề xuất ${credits} TC, vượt mức tối đa ${limits!.max} TC mỗi học kỳ. Khi xếp vào Kế hoạch học kỳ, bạn giữ lại các môn cần nhất.`
+          : "Bạn chưa xếp các môn này vào Kế hoạch học kỳ."}</p>}
       <button type="button" className="sw-text-link ov-foot-link" onClick={() => navigate("roadmap")}>Mở Lộ trình AI đề xuất <Icon name="arrow" /></button>
     </>;
   }
   return <div className="ov-half" role="group" aria-labelledby="ov-next-title">
-    <Head id="ov-next-title" title="Học kỳ tới" sub={sub}>{chip}</Head>
+    <Head id="ov-next-title" title="Học kỳ tới · theo Lộ trình AI" sub={sub}>{chip}</Head>
     {body}
   </div>;
 }

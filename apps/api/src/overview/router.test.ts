@@ -35,7 +35,7 @@ describe("GET /api/student/overview", () => {
       generatedAt: NOW.toISOString(),
       profile: { cohortCode: null, majorName: null, specialtyName: null, careerName: null },
       readiness: { transcript: false, specialty: false, career: false, survey: false, assessment: false, roadmap: false },
-      terms: { studying: null, next: { code: "HK262", label: "Học kỳ 2, năm học 2026–2027", start: "2026-12-21", end: "2027-04-04", daysUntil: 52 } },
+      terms: { studying: null, next: { code: "HK262", label: "HK2 2026–2027", start: "2026-12-21", end: "2027-04-04", daysUntil: 52 } },
       transcript: null, progress: null, graduation: null, competency: null, roadmap: null, running: [],
       warnings: { level: "none", items: [expect.objectContaining({ kind: "missing_data", key: "missing:transcript" })] },
       suggestions: [

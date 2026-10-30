@@ -11,6 +11,7 @@
 import type { PoolClient } from "pg";
 import { readReadiness, suggestedQuestions } from "../assistant/readiness.js";
 import { assessWithoutHistory } from "../competency-assessment/calculate.js";
+import { FIT_LABELS } from "../competency-assessment/constants.js";
 import {
   academicSections, courseKey, hasScore, latestResultSection, printedCumulativeCredits, printedSummaryNumber, studyTermCode, termCode,
 } from "../competency-assessment/course-state.js";
@@ -27,10 +28,12 @@ import { presentRoadmap } from "../roadmap/present.js";
 import { nextCalendarTerm, vietnamToday } from "../roadmap/window.js";
 import { consentWithdrawn } from "../student/consent.js";
 import { withoutSettledReviews, type TranscriptData, type TranscriptSection } from "../student/transcript-parser.js";
+import { readStudyPlanFacts, type StudyPlanContext } from "../study-plan/context.js";
 import type { StudyPlanData } from "../study-plan/model.js";
+import { termName } from "../term-name.js";
 import type {
   OverviewCompetency, OverviewGapStatus, OverviewGraduation, OverviewProgress, OverviewProgressTerm, OverviewResponse, OverviewRoadmap,
-  OverviewRunningCourse, OverviewTerm, OverviewTermCourse, OverviewTranscript,
+  OverviewRunningCourse, OverviewTerm, OverviewTermCourse, OverviewTermLoad, OverviewTranscript,
 } from "./types.js";
 import { gpaText, overviewWarnings, type WarningInput } from "./warnings.js";
 
@@ -46,21 +49,8 @@ const MAX_NAMED_COURSES = 3;
 /* ------------------------------------------------------------------------ */
 /* Terms */
 
-/** "HK261" → "Học kỳ 1, năm học 2026–2027". */
-export function termLabel(code: string): string {
-  const match = /^HK(\d{2})([123])$/.exec(code);
-  if (!match) return code;
-  const year = 2000 + Number(match[1]);
-  return `Học kỳ ${match[2]}, năm học ${year}–${year + 1}`;
-}
-export const termRef = (code: string): OverviewTerm => ({ code, label: termLabel(code) });
-/** "HK261" → "HK1 2026–2027" (a short tag). */
-function termShort(code: string): string {
-  const match = /^HK(\d{2})([123])$/.exec(code);
-  if (!match) return code;
-  const year = 2000 + Number(match[1]);
-  return `HK${match[2]} ${year}–${year + 1}`;
-}
+/** "HK261" with its label "HK1 2026–2027", written the one way of every student page (user 2026-10-30: "Học kỳ đang được gọi theo 4 kiểu"). */
+export const termRef = (code: string): OverviewTerm => ({ code, label: termName(code) });
 
 /** The next term of the calendar (roadmap/window.ts) and how many days until it starts, in Vietnam time. */
 export function nextTermOverview(now: Date): OverviewResponse["terms"]["next"] {
@@ -312,13 +302,24 @@ export function graduationOverview({ standard, evaluation }: Pick<StudentGraduat
 
 const STATUS_ORDER: Record<CareerRequirementResult["status"], number> = { below: 0, not_studied: 1, upcoming: 2, no_data: 3, met: 4 };
 const pointsText = (value: number) => (Math.round(value * 10) / 10).toLocaleString("vi-VN", { maximumFractionDigits: 1 });
+/** A 0–100 score as every page shows it (apps/web/src/display-format.ts scoreText): rounded down to the tenth. */
+const shownScore = (value: number) => Math.floor(value * 10 + 1e-9) / 10;
+
+/** The shortfall as the pages show it: the threshold minus the score as shown, so the two add up (62,5 − 59,8 = 2,7). */
+function shortfall(requirement: CareerRequirementResult): number | null {
+  if (requirement.score === null || !Number.isFinite(requirement.threshold)) return requirement.deficit;
+  return Math.round((requirement.threshold - shownScore(requirement.score)) * 10) / 10;
+}
 
 function gapOf(requirement: CareerRequirementResult): { name: string; status: OverviewGapStatus; label: string } {
   const name = requirement.skillName ?? requirement.title;
   switch (requirement.status) {
-    case "below": return { name, status: "below", label: requirement.deficit === null ? "Dưới ngưỡng" : `Dưới ngưỡng · thiếu ${pointsText(requirement.deficit)} điểm` };
+    case "below": {
+      const deficit = shortfall(requirement);
+      return { name, status: "below", label: deficit === null || deficit <= 0 ? "Dưới ngưỡng" : `Dưới ngưỡng · thiếu ${pointsText(deficit)} điểm` };
+    }
     case "not_studied": return { name, status: "not_studied", label: "Chưa học" };
-    case "upcoming": return { name, status: "upcoming", label: requirement.upcomingTerm ? `Sắp học · ${termShort(requirement.upcomingTerm)}` : "Sắp học" };
+    case "upcoming": return { name, status: "upcoming", label: requirement.upcomingTerm ? `Sắp học · ${termName(requirement.upcomingTerm)}` : "Sắp học" };
     default:
       return requirement.noDataReason === "other_specialty" || requirement.noDataReason === "elective_not_chosen"
         ? { name, status: "self_study", label: "Cần tự học" }
@@ -327,9 +328,25 @@ function gapOf(requirement: CareerRequirementResult): { name: string; status: Ov
 }
 
 /**
- * The latest stored assessment: overall level, the best scored skills (GDTC/GDQP left out) and the target career's fit
- * with its missing skills in the order of Khoảng trống kỹ năng (Bắt buộc first, then the status, then the shortfall).
- * stale: the assessment was made from another transcript, specialty or target career.
+ * The courses a skill's score comes from (evidence rows counted in the score, largest contribution first), named as the
+ * CTĐT names them with the letter of the attempt that counts. Shown beside each score (user 2026-10-30: "Nhiều kỹ năng
+ * cùng đúng 68 điểm … trông như số giả. Nên ghi môn làm minh chứng cạnh từng điểm").
+ */
+function scoreCourses(skill: AssessmentResult["skills"][number], courses: ReadonlyMap<string, CourseFact>): { name: string; letter: string | null }[] {
+  const named = new Set<string>();
+  return [...(skill.evidenceCourses ?? [])].filter((row) => row.role === "score").sort((a, b) => b.contribution - a.contribution).flatMap((row) => {
+    const course = courses.get(row.code);
+    if (!course || named.has(course.name)) return [];
+    named.add(course.name);
+    return [{ name: course.name, letter: course.letter?.trim() || null }];
+  });
+}
+
+/**
+ * The latest stored assessment: overall level, the best scored skills (GDTC/GDQP left out) with the courses their scores
+ * come from, and the target career's fit with its missing skills in the order of Khoảng trống kỹ năng (Bắt buộc first,
+ * then the status, then the shortfall). The fit label is read from the fit code when the result has one, so an older
+ * result reads the current scale. stale: the assessment was made from another transcript, specialty or target career.
  */
 export function competencyOverview(
   row: { createdAt: Date | string; computed: AssessmentResult } | null,
@@ -343,14 +360,16 @@ export function competencyOverview(
       || (b.deficit ?? 0) - (a.deficit ?? 0) || a.title.localeCompare(b.title, "vi"))
     .slice(0, MAX_GAPS).map(gapOf) : [];
   const meta = computed.meta;
+  const courses = new Map((computed.courses ?? []).map((course) => [course.code, course]));
   return {
     assessedAt: new Date(row.createdAt).toISOString(),
     overallScore: computed.overall?.score ?? null,
     overallLevel: computed.overall?.score === null || computed.overall?.score === undefined ? null : computed.overall.levelLabel,
     strengths: computed.skills.filter((skill) => skill.score !== null && !skill.conditionOnly).slice(0, MAX_STRENGTHS)
-      .map((skill) => ({ name: skill.name, score: skill.score! })),
+      .map((skill) => ({ name: skill.name, score: skill.score!, courses: scoreCourses(skill, courses) })),
     career: career && {
-      name: career.nameVi, fitScore: career.fitScore ?? null, fitLabel: career.fitLabel, met: career.counts.met, total: career.counts.total, gaps,
+      name: career.nameVi, fitScore: career.fitScore ?? null, fitLabel: (career.fitCode && FIT_LABELS[career.fitCode]) || career.fitLabel,
+      met: career.counts.met, total: career.counts.total, gaps,
     },
     stale: (current.transcriptVersion !== null && meta.transcriptVersion !== current.transcriptVersion)
       || (meta.specialty ?? null) !== (current.specialty ?? null) || (meta.career?.id ?? null) !== (current.careerId ?? null),
@@ -365,12 +384,37 @@ const ROADMAP_STATUS: Record<RoadmapRow["status"], OverviewRoadmap["status"]> = 
 };
 const tcCode = (label: string | null) => /\bTC\d{3}\b/.exec(label ?? "")?.[0] ?? null;
 
+/** What the planner knows of the student's courses and credit limits (study-plan/context.ts). */
+export type PlannerFacts = Pick<StudyPlanContext, "courses" | "limits">;
+
+/**
+ * A term of the saved Kế hoạch học kỳ checked exactly as the planner checks it (apps/web/src/study-plan-data.ts
+ * termLoad): its planned courses plus the courses being studied that term and planned nowhere, GDTC/GDQP included,
+ * against the limits per term; below the minimum only in HK1/HK2 and not in the last term with courses. Tổng quan said
+ * "20/16 TC" in green while the planner said "vượt mức tối đa 18 TC" (user 2026-10-30).
+ */
+export function plannedTermLoad(planner: PlannerFacts, plan: StudyPlanData, term: string): OverviewTermLoad {
+  const byCode = new Map(planner.courses.map((course) => [courseKey(course.code), course]));
+  const placed = new Set(plan.terms.flatMap((entry) => entry.courses.map((course) => courseKey(course.code))));
+  const courses = [
+    ...(plan.terms.find((entry) => entry.code === term)?.courses ?? []).flatMap((course) => byCode.get(courseKey(course.code)) ?? []),
+    ...planner.courses.filter((course) => course.state === "in_progress" && course.inProgressTerm === term && !placed.has(courseKey(course.code))),
+  ];
+  const credits = courses.reduce((sum, course) => sum + course.credits, 0);
+  if (!courses.length) return { credits, status: "empty" };
+  const limits = planner.limits;
+  const lastWithCourses = [...plan.terms].sort((a, b) => a.code.localeCompare(b.code)).reverse().find((entry) => entry.courses.length)?.code === term;
+  const status = limits && credits > limits.max ? "over" : limits && credits < limits.min && !term.endsWith("3") && !lastWithCourses ? "under" : "ok";
+  return { credits, status };
+}
+
 /**
  * The newest AI roadmap: the courses it recommends (retakes and the AI's picks first, as Lộ trình AI đề xuất lists them;
- * none while it is being written), the skills it picked, the first month of its plan that has a text, and the credits the
- * saved Kế hoạch học kỳ holds for its term.
+ * none while it is being written), the skills it picked, the first month of its plan that has a text, the saved Kế hoạch
+ * học kỳ of its term checked as the planner checks it, and the planner's credit limits per term. Without the planner's
+ * facts the saved term's credits are counted from the curriculum and not checked.
  */
-export function roadmapOverview(row: RoadmapRow | null, saved: StudyPlanData | null, credits: ReadonlyMap<string, number>, now: Date): OverviewRoadmap | null {
+export function roadmapOverview(row: RoadmapRow | null, saved: StudyPlanData | null, credits: ReadonlyMap<string, number>, now: Date, planner: PlannerFacts | null = null): OverviewRoadmap | null {
   if (!row) return null;
   const status = ROADMAP_STATUS[row.status];
   const term = row.facts.window.term ?? null;
@@ -394,6 +438,14 @@ export function roadmapOverview(row: RoadmapRow | null, saved: StudyPlanData | n
   const month = status === "completed" ? view.months.find((entry) => entry.focus || entry.tasks.length) : undefined;
   const monthText = month ? (month.focus ?? month.tasks.join("; ")) : null;
   const termCourses = term ? saved?.terms.find((entry) => entry.code === term)?.courses ?? null : null;
+  let plan: OverviewTermLoad | null = null;
+  if (term && saved && termCourses) {
+    if (planner) plan = plannedTermLoad(planner, saved, term);
+    else {
+      const total = termCourses.reduce((sum, course) => sum + (credits.get(courseKey(course.code)) ?? 0), 0);
+      plan = { credits: total, status: termCourses.length ? "ok" : "empty" };
+    }
+  }
   return {
     status,
     createdAt: new Date(row.createdAt).toISOString(),
@@ -401,8 +453,26 @@ export function roadmapOverview(row: RoadmapRow | null, saved: StudyPlanData | n
     courses,
     skills: status === "completed" ? (picked.length ? picked : view.skills.filter((skill) => skill.kind !== "deepen").slice(0, MAX_STRENGTHS)).map((skill) => skill.name) : [],
     firstMonth: month && monthText ? { label: `Tháng ${Number(month.start.slice(5, 7))}/${month.start.slice(0, 4)}`, text: monthText } : null,
-    plannedCredits: termCourses ? termCourses.reduce((sum, course) => sum + (credits.get(courseKey(course.code)) ?? 0), 0) : null,
+    plan,
+    limits: planner?.limits ? { min: planner.limits.min, max: planner.limits.max } : null,
   };
+}
+
+/**
+ * The planner's facts for the roadmap block, in a savepoint of the caller's read-only transaction: a failure leaves the
+ * block unchecked instead of failing Tổng quan.
+ */
+async function readPlannerFacts(db: PoolClient, userId: string, now: Date): Promise<PlannerFacts | null> {
+  await db.query("SAVEPOINT overview_planner");
+  try {
+    const { context } = await readStudyPlanFacts(db, userId, now);
+    await db.query("RELEASE SAVEPOINT overview_planner");
+    return { courses: context.courses, limits: context.limits };
+  } catch (error) {
+    await db.query("ROLLBACK TO SAVEPOINT overview_planner");
+    console.error(`[overview] planner facts not read (${error instanceof Error ? error.name : "error"})`);
+    return null;
+  }
 }
 
 /* ------------------------------------------------------------------------ */
@@ -487,7 +557,8 @@ export async function readOverview(db: PoolClient, userId: string, now: Date = n
   });
 
   const credits = new Map<string, number>((inputs?.curriculum.courses ?? []).map((course) => [courseKey(course.code), course.credits]));
-  const roadmap = roadmapOverview(await readNewestRoadmap(db, userId), saved, credits, now);
+  const roadmapRow = await readNewestRoadmap(db, userId);
+  const roadmap = roadmapOverview(roadmapRow, saved, credits, now, roadmapRow ? await readPlannerFacts(db, userId, now) : null);
   const running = engine && inputs ? runningOverview(engine, inputs) : transcript ? transcriptRunning(transcript, studyTerm) : [];
 
   // "Cần chú ý"

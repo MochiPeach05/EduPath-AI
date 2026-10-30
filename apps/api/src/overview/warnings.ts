@@ -1,6 +1,8 @@
 // "Cần chú ý" of Tổng quan (STU-PROG-03, 2026-10-30): warnings the system computes, no AI, from the progress against the
 // training plan, the transcript and the graduation check. Pure, so the faculty's report of students at risk (AD-REPORT-04)
-// and the notifications can reuse the same rules. The texts are the portal's neutral voice, as the approved preview reads.
+// and the notifications can reuse the same rules. The texts are the portal's neutral voice, as the approved preview reads;
+// terms are written "HK2 2024–2025" as on every student page (term-name.ts).
+import { termName } from "../term-name.js";
 import type { OverviewWarning, OverviewWarnings } from "./types.js";
 
 /** Late courses listed one by one; the others are grouped in one item. */
@@ -28,14 +30,6 @@ export type WarningInput = {
 };
 
 const RANK: Record<OverviewWarning["level"], number> = { risk: 2, warn: 1, ok: 0 };
-
-/** "HK242" → "học kỳ 2 năm học 2024–2025" (inside a sentence). */
-export function termPhrase(code: string): string {
-  const match = /^HK(\d{2})([123])$/.exec(code);
-  if (!match) return code;
-  const year = 2000 + Number(match[1]);
-  return `học kỳ ${match[2]} năm học ${year}–${year + 1}`;
-}
 
 /** 2.85 → "2,85" (two decimals, Vietnamese comma). */
 export const gpaText = (value: number) => value.toFixed(2).replace(".", ",");
@@ -85,11 +79,11 @@ export function overviewWarnings(input: WarningInput): OverviewWarnings {
   const items: OverviewWarning[] = [];
 
   for (const course of input.failed) {
-    const when = course.term ? `, ${termPhrase(course.term)}` : "";
+    const when = course.term ? `, ${termName(course.term)}` : "";
     items.push(course.plannedIn
       ? {
         level: "warn", kind: "failed_course", key: `failed:${course.code}`,
-        text: `Môn bắt buộc chưa đạt: ${course.name} (${letterText(course.letter)}${when}), đã xếp học lại ở ${termPhrase(course.plannedIn)} trong Kế hoạch học kỳ.`,
+        text: `Môn bắt buộc chưa đạt: ${course.name} (${letterText(course.letter)}${when}), đã xếp học lại ở ${termName(course.plannedIn)} trong Kế hoạch học kỳ.`,
         strong: [course.name], action: { label: "Xem Kế hoạch học kỳ", link: "#roadmap" },
       }
       : {
@@ -129,7 +123,7 @@ export function overviewWarnings(input: WarningInput): OverviewWarnings {
   for (const course of input.late.slice(0, MAX_LATE_ITEMS)) {
     items.push({
       level: "warn", kind: "late_course", key: `late:${course.code}`,
-      text: `${course.name} trễ so với kế hoạch (dự kiến ${termPhrase(course.term)}).`,
+      text: `${course.name} trễ so với kế hoạch (dự kiến ${termName(course.term)}).`,
       strong: [course.name], action: { label: "Thêm vào Kế hoạch học kỳ", link: "#roadmap" },
     });
   }
@@ -151,8 +145,8 @@ export function overviewWarnings(input: WarningInput): OverviewWarnings {
     items.push({
       level: "warn", kind: "elective_short", key: `elective:${group.code ?? group.label}:${group.term}`,
       text: group.code
-        ? `${name} còn thiếu ${missing} (dự kiến ${termPhrase(group.term)}).`
-        : `${name} (${termPhrase(group.term)}): còn thiếu ${missing}.`,
+        ? `${name} còn thiếu ${missing} (dự kiến ${termName(group.term)}).`
+        : `${name} (${termName(group.term)}): còn thiếu ${missing}.`,
       strong: [name], action: { label: "Xem các môn trong nhóm", link: "#roadmap" },
     });
   }

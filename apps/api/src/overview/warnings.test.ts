@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { overviewWarnings, termPhrase, type WarningInput } from "./warnings.js";
+import { overviewWarnings, type WarningInput } from "./warnings.js";
 
 // "Cần chú ý" of Tổng quan: every kind, from synthetic inputs only.
 const base: WarningInput = { hasTranscript: true, blocked: null, failed: [], late: [], electives: [], pace: null, gpa: null };
@@ -22,12 +22,12 @@ describe("overviewWarnings", () => {
     const failed = overviewWarnings({ ...base, failed: [{ code: "71ITSE30603", name: "Phát triển ứng dụng di động", letter: "CT", term: "HK241", plannedIn: null }] });
     expect(failed).toEqual({ level: "risk", items: [{
       level: "risk", kind: "failed_course", key: "failed:71ITSE30603",
-      text: "Môn bắt buộc chưa đạt: Phát triển ứng dụng di động (cấm thi, học kỳ 1 năm học 2024–2025) và chưa có trong Kế hoạch học kỳ.",
+      text: "Môn bắt buộc chưa đạt: Phát triển ứng dụng di động (cấm thi, HK1 2024–2025) và chưa có trong Kế hoạch học kỳ.",
       strong: ["Phát triển ứng dụng di động"], action: { label: "Thêm vào Kế hoạch học kỳ", link: "#roadmap" },
     }] });
     const planned = overviewWarnings({ ...base, failed: [{ code: "71ITBS10203", name: "Cơ sở lập trình", letter: "F", term: "HK231", plannedIn: "HK262" }] });
     expect(planned.level).toBe("warn");
-    expect(planned.items[0]).toMatchObject({ level: "warn", text: "Môn bắt buộc chưa đạt: Cơ sở lập trình (điểm F, học kỳ 1 năm học 2023–2024), đã xếp học lại ở học kỳ 2 năm học 2026–2027 trong Kế hoạch học kỳ.",
+    expect(planned.items[0]).toMatchObject({ level: "warn", text: "Môn bắt buộc chưa đạt: Cơ sở lập trình (điểm F, HK1 2023–2024), đã xếp học lại ở HK2 2026–2027 trong Kế hoạch học kỳ.",
       action: { label: "Xem Kế hoạch học kỳ", link: "#roadmap" } });
     expect(overviewWarnings({ ...base, failed: [{ code: "X", name: "Môn X", letter: "VT", term: null, plannedIn: null }] }).items[0]!.text)
       .toBe("Môn bắt buộc chưa đạt: Môn X (vắng thi) và chưa có trong Kế hoạch học kỳ.");
@@ -59,7 +59,7 @@ describe("overviewWarnings", () => {
     const result = overviewWarnings({ ...base, late });
     expect(result.level).toBe("warn");
     expect(result.items.map((item) => item.key)).toEqual(["late:C0", "late:C1", "late:C2", "late:others"]);
-    expect(result.items[0]!.text).toBe("Môn A trễ so với kế hoạch (dự kiến học kỳ 3 năm học 2024–2025).");
+    expect(result.items[0]!.text).toBe("Môn A trễ so với kế hoạch (dự kiến HK3 2024–2025).");
     expect(result.items[3]).toMatchObject({ text: "Còn 2 môn khác trễ so với kế hoạch: Môn D, Môn E.", strong: ["2 môn khác"] });
   });
 
@@ -69,8 +69,8 @@ describe("overviewWarnings", () => {
       { label: "Chọn 1 trong 3 môn sau", code: null, term: "HK242", unit: "course", missing: 1, missingCredits: 3 },
     ] });
     expect(result.items.map((item) => item.text)).toEqual([
-      "Nhóm tự chọn TC309 còn thiếu 3 TC (dự kiến học kỳ 3 năm học 2024–2025).",
-      "Chọn 1 trong 3 môn sau (học kỳ 2 năm học 2024–2025): còn thiếu 1 môn.",
+      "Nhóm tự chọn TC309 còn thiếu 3 TC (dự kiến HK3 2024–2025).",
+      "Chọn 1 trong 3 môn sau (HK2 2024–2025): còn thiếu 1 môn.",
     ]);
     expect(result.items[0]).toMatchObject({ kind: "elective_short", key: "elective:TC309:HK243", strong: ["Nhóm tự chọn TC309"] });
   });
@@ -86,10 +86,5 @@ describe("overviewWarnings", () => {
     const mixed = overviewWarnings({ ...base, late: [{ code: "L", name: "Môn L", term: "HK243" }], gpa: { actual: 1.5, required: 2 } });
     expect(mixed.level).toBe("risk");
     expect(mixed.items.map((item) => item.kind)).toEqual(["gpa_below", "late_course"]);
-  });
-
-  it("writes a term inside a sentence", () => {
-    expect(termPhrase("HK262")).toBe("học kỳ 2 năm học 2026–2027");
-    expect(termPhrase("x")).toBe("x");
   });
 });

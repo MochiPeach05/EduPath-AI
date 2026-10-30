@@ -4,14 +4,15 @@ Người dùng (30/10/2026) xem bản xem trước, góp ý "hơi ít thông tin
 
 ## Trang (`apps/web/src/StudentOverview.tsx`)
 Thứ tự từ việc cần làm ngay tới chi tiết:
-1. Lời chào, chuyên ngành, học kỳ đang học, đếm ngược tới học kỳ sau (lịch `roadmap/window.ts` TERM_CALENDAR).
+1. Lời chào, chuyên ngành, học kỳ đang học (không còn đếm ngược, "soạn … trước" hay "đánh giá dd/mm": người dùng bỏ 30/10).
 2. Khối đỏ hồ sơ còn thiếu (giữ nguyên như trước).
 3. 6 ô số liệu: GPA tích lũy (kèm thay đổi so với học kỳ trước), tín chỉ đã đạt, năng lực chung, mức phù hợp nghề, xét tốt nghiệp, Lộ trình AI.
-4. **Tiến độ học tập** (STU-PROG-02): thanh tín chỉ (đã đạt, đang học, trễ kế hoạch, còn lại) và từng học kỳ của kế hoạch đào tạo; bấm một học kỳ để xem môn. Bên cạnh là **Xét tốt nghiệp**: từng điều kiện của tiêu chuẩn của chính sinh viên.
-5. **Năng lực và nghề mục tiêu** (3 kỹ năng mạnh nhất, kỹ năng còn thiếu, mức phù hợp) và **Điểm trung bình theo học kỳ** (biểu đồ GPA học kỳ và tích lũy, vạch 2,00, rê chuột xem số, có bảng số liệu; cặp màu #3a6ad4/#a33ea1 qua kiểm tra mù màu).
-6. **Học kỳ này** (môn đang học và kỹ năng rèn luyện) và **Học kỳ tới** (môn Lộ trình AI đề xuất kèm lý do, kỹ năng tự học, việc của tháng đầu, số tín chỉ đã xếp vào Kế hoạch học kỳ).
-7. **Hỏi nhanh Trợ lý AI**: ô hỏi và câu gợi ý; câu hỏi được chuyển sang trang Trợ lý AI và gửi ngay (`assistant-handoff.ts`, sessionStorage, tối đa 60 giây).
-8. **Cần chú ý** (STU-PROG-03) ở cuối trang.
+4. Hai cột độc lập (99762d7, người dùng thấy lưới theo hàng "xấu xấu"):
+   - cột trái: **Tiến độ học tập** (STU-PROG-02: thanh tín chỉ đã đạt, đang học, trễ kế hoạch, còn lại và từng học kỳ của kế hoạch đào tạo; bấm một học kỳ để xem môn), rồi một thẻ chia đôi **Học kỳ này** (môn đang học, kỹ năng rèn luyện) | **Học kỳ tới · theo Lộ trình AI** (môn đề xuất kèm lý do, "Lộ trình AI gợi ý luyện thêm", việc của tháng đầu, tín chỉ của học kỳ đó trong Kế hoạch học kỳ);
+   - cột phải: **Xét tốt nghiệp** (từng điều kiện của tiêu chuẩn của chính sinh viên), **Năng lực và nghề mục tiêu** (kỹ năng mạnh nhất kèm môn minh chứng, kỹ năng còn thiếu, mức phù hợp), **Điểm trung bình theo học kỳ** (GPA học kỳ tính cả môn chưa đạt, GPA tích lũy chỉ tính môn đã đạt, chép từ bảng điểm; vạch 2,00; bảng số liệu; cặp màu #3a6ad4/#a33ea1 qua kiểm tra mù màu).
+5. Màn hình hẹp: một cột.
+6. **Hỏi nhanh Trợ lý AI**: ô hỏi và câu gợi ý; câu hỏi được chuyển sang trang Trợ lý AI và gửi ngay (`assistant-handoff.ts`, sessionStorage, tối đa 60 giây).
+7. **Cần chú ý** (STU-PROG-03) ở cuối trang.
 
 Không có khối thông báo trên trang: thông báo chỉ ở chuông (`docs/notifications.md`).
 
@@ -21,7 +22,14 @@ Hợp đồng: `apps/web/src/overview-types.ts`. Một lần đọc, một giao 
 - Tiến độ: chạy engine đánh giá năng lực trên bảng điểm hiện tại (`readAssessmentInputs` với `careerOptional`, `weightsOptional`; `assessWithoutHistory`), chỉ dùng trạng thái học phần và học kỳ dự kiến; không đọc điểm kỹ năng.
 - Xét tốt nghiệp: tiêu chuẩn của chính sinh viên, như trang Điều kiện xét tốt nghiệp.
 - Năng lực: chỉ lấy lần Đánh giá năng lực đã lưu; null khi chưa có hoặc sinh viên đã rút lại sự đồng ý; `stale` khi bảng điểm, chuyên ngành hay nghề đã đổi.
-- Lộ trình AI: lần mới nhất; số tín chỉ đã xếp lấy từ Kế hoạch học kỳ đã lưu.
+- Lộ trình AI: lần mới nhất. `roadmap.plan` {credits, status} là tín chỉ của học kỳ tới trong Kế hoạch học kỳ đã lưu (nếu chưa xếp thì tổng của lộ trình), kiểm tra theo đúng mức của Kế hoạch học kỳ (`roadmap.limits` {min, max}, cùng cách tính `termLoad`), nên Tổng quan và Kế hoạch học kỳ luôn cùng kết luận, ví dụ "vượt tối đa 18 TC".
+- Kỹ năng mạnh: `courses[]` là các môn tạo nên điểm (phần đóng góp lớn trước, kèm điểm chữ được tính).
+
+## Quy tắc hiển thị chung (30/10/2026, `apps/web/src/display-format.ts`, `apps/api/src/term-name.ts`)
+- Học kỳ một kiểu: "HK1 2026–2027" (`termName`).
+- Điểm 0–100: tối đa một chữ số thập phân, làm tròn xuống tới 0,1 để không bao giờ hiện đã chạm ngưỡng 62,5/80/90 khi chưa chạm (`scoreText`); dấu phẩy thập phân ở mọi nơi.
+- Màu theo chữ (`meaningOf`): xanh lá Xuất sắc/Giỏi/Rất phù hợp/Phù hợp, xanh dương Khá, vàng Trung bình/Ít phù hợp và các mục trễ, đỏ chỉ cho chưa đạt (môn F/VT/CT, GPA dưới ngưỡng), xám chưa có điểm.
+- Chữ tối thiểu 12px, chữ thường 14px.
 
 ## Cần chú ý (`overview/warnings.ts`, hàm thuần `overviewWarnings`)
 Hệ thống tự tính, không dùng AI; chỉ để tham khảo, không thay cảnh báo học vụ của trường.

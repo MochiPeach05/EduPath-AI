@@ -1,7 +1,7 @@
 // Tổng quan (STU-PROG-01…03, 2026-10-30): the response of GET /api/student/overview. Mirror of the page's contract,
 // apps/web/src/overview-types.ts, which documents every field; keep both in step.
 
-/** A term: code "HK261" and label "Học kỳ 1, năm học 2026–2027". */
+/** A term: code "HK261" and label "HK1 2026–2027" (the one way student pages write a term, term-name.ts). */
 export type OverviewTerm = { code: string; label: string };
 
 export type OverviewWarningKind = "failed_course" | "pace" | "late_course" | "elective_short" | "gpa_below" | "on_track" | "missing_data";
@@ -62,7 +62,7 @@ export type OverviewCompetency = {
   assessedAt: string;
   overallScore: number | null;
   overallLevel: string | null;
-  strengths: { name: string; score: number }[];
+  strengths: { name: string; score: number; courses: { name: string; letter: string | null }[] }[];
   career: null | {
     name: string;
     fitScore: number | null;
@@ -81,8 +81,12 @@ export type OverviewRoadmap = {
   courses: { code: string; name: string; credits: number; reason: string }[];
   skills: string[];
   firstMonth: { label: string; text: string } | null;
-  plannedCredits: number | null;
+  plan: OverviewTermLoad | null;
+  limits: { min: number; max: number } | null;
 };
+
+/** A term of the saved Kế hoạch học kỳ as the planner checks it (credits against the limits per term). */
+export type OverviewTermLoad = { credits: number; status: "over" | "under" | "ok" | "empty" };
 
 export type OverviewRunningCourse = { code: string; name: string; credits: number; retake: boolean; skills: string[] };
 
