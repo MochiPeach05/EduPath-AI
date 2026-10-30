@@ -40,12 +40,24 @@ describe("createCompetencyAiQueue", () => {
     const params = insert[1] as unknown[];
     expect(params.slice(1, 3)).toEqual([ASSESSMENT, USER]);
     const aiInput = JSON.parse(params[3] as string);
-    expect(Object.keys(aiInput).sort()).toEqual(["options", "promptVersion", "schema", "system", "think", "user"]);
+    expect(Object.keys(aiInput).sort()).toEqual(["checks", "options", "promptVersion", "schema", "system", "think", "user"]);
     expect(aiInput.think).toBe(true);
-    expect(aiInput.promptVersion).toBe("comp-v12");
+    expect(aiInput.promptVersion).toBe("comp-v13");
+    // No saved Kế hoạch học kỳ: the comment uses the training plan's terms.
+    expect(query.mock.calls.find(([s]) => s.startsWith("SELECT data FROM stu_study_plans"))![1]).toEqual([USER]);
     const last = query.mock.calls.at(-1)!;
     expect(last[0]).toContain("SET ai_status='queued'");
     expect(last[1]).toEqual([ASSESSMENT, USER]);
+  });
+
+  it("names the term of the student's saved Kế hoạch học kỳ in the comment's data (comp-v13)", async () => {
+    const { client, query } = mockClient();
+    const saved = { schemaVersion: 1, terms: [{ code: "HK262", courses: [{ code: "tst201" }] }, { code: "bad", courses: "x" }] };
+    query.mockImplementation(async (sql: string) => (sql.startsWith("SELECT data FROM stu_study_plans") ? { rows: [{ data: saved }], rowCount: 1 } : { rows: [], rowCount: 1 }));
+    await createCompetencyAiQueue({ enabled: true }).enqueue(client, input());
+    const insert = query.mock.calls.find(([s]) => s.startsWith("INSERT INTO stu_comp_ai_jobs"))!;
+    const aiInput = JSON.parse((insert[1] as unknown[])[3] as string);
+    expect(aiInput.user).toContain("  - TST201 | Kiểm thử phần mềm cơ bản | 3 TC | chưa học | đủ điều kiện đăng ký | Kế hoạch học kỳ của bạn: HK2 2026–2027\n");
   });
 
   it("enqueue defers without a job when 25 jobs are pending", async () => {

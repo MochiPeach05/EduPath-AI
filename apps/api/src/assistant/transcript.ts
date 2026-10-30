@@ -11,11 +11,13 @@
 // result decides Đạt/Không đạt (course-state.ts attemptOutcome, the rule of the student pages: MT passes, VT and CT fail
 // without a score, a blank result cell follows the letter). A course is passed once any attempt passes, also an attempt
 // under another code with the same name (a retake with a later cohort, which comp-calc-v17 counts the same way).
-import { formatNumber, sanitizeText, termText } from "../competency-assessment/ai/prompt.js";
+import { formatNumber, sanitizeText } from "../competency-assessment/ai/prompt.js";
+import { termName as calendarTerm } from "../term-name.js";
 import { academicSections, attemptOutcome, courseKey, latestResultSection, termCode } from "../competency-assessment/course-state.js";
 import { fold } from "../competency-assessment/specialty.js";
 import { NO_SCORE_LETTERS, type TranscriptCourse, type TranscriptData, type TranscriptSection } from "../student/transcript-parser.js";
 import type { AssistantIntent } from "./intent.js";
+import { decimalComma } from "./validate.js";
 
 /**
  * Rows of the whole transcript in one prompt (a transcript has about 40–70); past it the oldest terms are left out. 40 rows
@@ -111,10 +113,10 @@ function group(rows: Row[]): TranscriptCourseGroup {
 /* ------------------------------------------------------------------------ */
 /* Text */
 
-/** "học kỳ 1 năm học 2024–2025", or the printed label of a section without a usual term ("Điểm bảo lưu"). */
+/** "HK1 2024–2025" like the pages (assistant-v7), or the printed label of a section without a usual term ("Điểm bảo lưu"). */
 function termName(section: TranscriptSection): string {
   const code = termCode(section);
-  return code ? termText(code) : sanitizeText(section.label, 60) || "phần chưa rõ học kỳ";
+  return code ? calendarTerm(code) : sanitizeText(section.label, 60) || "phần chưa rõ học kỳ";
 }
 const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(1);
 const where = (section: TranscriptSection) => (termCode(section) ? termName(section) : `phần ${termName(section)}`);
@@ -128,8 +130,9 @@ function gradeText(course: TranscriptCourse): string {
   const letter = letterOf(course);
   if (letter === "MT") return "MT (miễn thi, công nhận)";
   if (isNoScore(course)) return `${letter} (${letter === "VT" ? "vắng thi" : "cấm thi"}, không có điểm)`;
-  const score10 = course.score10 !== null ? formatNumber(course.score10) : course.printed?.score10 ? sanitizeText(course.printed.score10, 10) : "";
-  const score4 = course.score4 !== null ? formatNumber(course.score4) : course.printed?.score4 ? sanitizeText(course.printed.score4, 10) : "";
+  // A printed score keeps its digits but takes the decimal comma of the pages (assistant-v7: it answered "2.45").
+  const score10 = course.score10 !== null ? formatNumber(course.score10) : course.printed?.score10 ? decimalComma(sanitizeText(course.printed.score10, 10)) : "";
+  const score4 = course.score4 !== null ? formatNumber(course.score4) : course.printed?.score4 ? decimalComma(sanitizeText(course.printed.score4, 10)) : "";
   const parts = [score10 && `${score10} điểm hệ 10`, score4 && `${score4} hệ 4`, letter && `điểm chữ ${sanitizeText(letter, 8)}`].filter(Boolean);
   return parts.join(", ") || "có kết quả, không có điểm";
 }
@@ -151,7 +154,7 @@ function rowDetails(course: TranscriptCourse): string {
 const rowLine = (course: TranscriptCourse) =>
   `- ${sanitizeText(course.code, 20) || "(không mã)"} ${printedName(course)} (${credits(course)}): ${rowDetails(course)}`;
 
-/** A short attempt: "F (3 điểm hệ 10) ở học kỳ 1 năm học 2023–2024", "VT (vắng thi) ở …", "đạt C+ (6,6 điểm hệ 10) ở …". */
+/** A short attempt: "F (3 điểm hệ 10) ở HK1 2023–2024", "VT (vắng thi) ở …", "đạt C+ (6,6 điểm hệ 10) ở …". */
 function attemptText(row: Row): string {
   const course = row.course;
   const letter = letterOf(course);
@@ -180,7 +183,7 @@ const groupCredits = (item: TranscriptCourseGroup) => credits(item.rows.at(-1)!.
 function summaryLines(section: TranscriptSection, lead: string): string[] {
   const items = section.summaries
     .filter((summary) => summary.value?.trim() && /\b(diem|tin chi|tc|xep loai|hoc luc|ren luyen)\b/.test(fold(summary.label ?? "")))
-    .map((summary) => `${sanitizeText(summary.label, 80)}: ${sanitizeText(summary.value, 60)}`);
+    .map((summary) => `${sanitizeText(summary.label, 80)}: ${decimalComma(sanitizeText(summary.value, 60))}`);
   const lines: string[] = [];
   for (let at = 0; at < items.length; at += SUMMARIES_PER_LINE) {
     lines.push(`${at ? "Tổng kết (tiếp):" : lead} ${items.slice(at, at + SUMMARIES_PER_LINE).join("; ")}`);
@@ -213,7 +216,7 @@ export function transcriptSummaryLines(data: TranscriptData, groups: readonly Tr
   const cumulative = cumulativeSection(data);
   if (cumulative) {
     const items = cumulative.summaries.filter((summary) => summary.value?.trim() && fold(summary.label ?? "").includes("tich luy"))
-      .map((summary) => `${sanitizeText(summary.label, 80)}: ${sanitizeText(summary.value, 60)}`);
+      .map((summary) => `${sanitizeText(summary.label, 80)}: ${decimalComma(sanitizeText(summary.value, 60))}`);
     lines.push(`Tích lũy in trên bảng điểm ở cuối ${termName(cumulative)}${cumulative === graded ? "" : " (học kỳ gần nhất có in dòng tích lũy)"}: ${items.join("; ")}.`);
     lines.push("Điểm TB tích lũy là điểm trung bình chung tích lũy, tức GPA (điểm tổng) hiện tại của bạn, hệ 4 và hệ 10 như in trên bảng điểm.");
   } else {

@@ -256,9 +256,15 @@ Bảng `ai_knowledge_chunks` (migration 055) chỉ chứa dữ liệu danh mục
 - Bước viết lại câu hỏi (v3) chạy trên worker, nên cần khởi động lại worker sau bản v3. Worker cũ bỏ qua prompt viết lại, và API vẫn tìm bằng văn bản của nó.
 - API chỉ nhận câu hỏi khi có `AI_WORKER_KEY`. Trang báo "Trợ lý AI đang tạm ngưng" khi worker không quảng bá `assistant_chat`.
 
+## Dấu thập phân và tên học kỳ (assistant-v7, 30/10/2026)
+Người dùng (30/10): "Trợ lý AI trả lời “2.45”" và "Học kỳ đang được gọi theo 4 kiểu".
+- Điểm in trên bảng điểm và các dòng tổng kết đưa cho AI dùng dấu phẩy (cùng chữ số); câu trả lời qua `decimalComma` trong `checkAnswer` và trên web (`assistant-format.ts`), nên câu trả lời đã lưu cũng hiện "2,45". Số phiên bản, ngày tháng, địa chỉ IP và đường link giữ nguyên.
+- Học kỳ trong dữ liệu Bảng điểm, facts và các đoạn KHĐT của chỉ mục viết "HK1 2023–2024 (năm thứ 1, học kỳ 1)" như các trang; câu hỏi viết kiểu cũ (HK231, "học kỳ 1 năm học …") vẫn được hiểu. Các đoạn KHĐT được worker embed lại tự động.
+- System prompt không đổi; worker không cần khởi động lại.
+
 ## Mã nguồn
 - **API** (`apps/api/src/assistant/`):
-  - `protocol.ts` (giao thức worker), `intent.ts`, `facts.ts`, `transcript.ts` (nguồn Bảng điểm), `prompt.ts` (assistant-v6), `validate.ts` (kiểm tra câu trả lời, gộp số nguồn);
+  - `protocol.ts` (giao thức worker), `intent.ts`, `facts.ts`, `transcript.ts` (nguồn Bảng điểm), `prompt.ts` (assistant-v7), `validate.ts` (kiểm tra câu trả lời, gộp số nguồn);
   - `readiness.ts` (trả lời ngay khi chưa có kết quả, câu hỏi gợi ý);
   - `chat.ts` (hội thoại và job), `router.ts` (API cho sinh viên), `wakeup.ts`;
   - `knowledge.ts`, `knowledge-jobs.ts`, `guides.ts`, `search.ts`, `learning-resources.json`.

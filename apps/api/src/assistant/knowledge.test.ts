@@ -237,11 +237,11 @@ describe("knowledgeChunksFrom", () => {
   it("writes a KHĐT overview and one chunk per term with its choices", () => {
     const overview = chunkOf(chunks, "plan", "plan-31");
     expect(overview).toMatchObject({ title: "Kế hoạch đào tạo Công nghệ thông tin K31", link: "#plans" });
-    expect(linesOf(overview)).toContain("- HK251 (năm thứ 1, học kỳ 1 năm học 2025–2026): 12 tín chỉ, 1 học phần");
+    expect(linesOf(overview)).toContain("- HK1 2025–2026 (năm thứ 1, học kỳ 1): 12 tín chỉ, 1 học phần");
     const term = chunkOf(chunks, "plan", "plan-31:HK262");
     expect(term.title).toBe("Kế hoạch đào tạo Công nghệ thông tin K31 – HK262");
     expect(linesOf(term)).toEqual([
-      "Kế hoạch đào tạo ngành Công nghệ thông tin khóa K31, học kỳ HK262 (năm thứ 2, học kỳ 2 năm học 2026–2027).",
+      "Kế hoạch đào tạo ngành Công nghệ thông tin khóa K31, HK2 2026–2027 (năm thứ 2, học kỳ 2).",
       "Số tín chỉ theo kế hoạch: 15.",
       "Học phần:",
       "- Học phần tự chọn khác: chưa ghi số tín chỉ, chưa ghi loại",

@@ -17,6 +17,7 @@ import { CAREER_THRESHOLDS, LEVEL_THRESHOLDS } from "../competency-assessment/co
 import { fold } from "../competency-assessment/specialty.js";
 import { fullMajorName, majorKey, MAJORS } from "../curricula/majors.js";
 import type { DatabasePool } from "../db/pool.js";
+import { termName } from "../term-name.js";
 import { portalGuides } from "./guides.js";
 
 type Db = Pick<DatabasePool, "query">;
@@ -68,13 +69,6 @@ const credits = (value: number | null) => (value === null ? "chưa ghi số tín
 const percent = (weight: number) => `${formatNumber(Math.round(weight * 1000) / 10)}%`;
 /** "K29" → 29; a code without a number sorts last. */
 const cohortNumber = (cohort: string) => Number(/(\d+)/.exec(cohort)?.[1] ?? Number.POSITIVE_INFINITY);
-/** "HK251" → "học kỳ 1 năm học 2025–2026". */
-function termWords(code: string): string {
-  const match = /^HK(\d{2})(\d)$/.exec(code);
-  if (!match) return code;
-  const start = 2000 + Number(match[1]);
-  return `học kỳ ${match[2]} năm học ${start}–${start + 1}`;
-}
 /** "[71ITBS10203]Cơ sở lập trình" → "71ITBS10203 Cơ sở lập trình": a bracketed code reads as a code. */
 const bracketCodes = (raw: string) => raw.replace(/\[([^[\]]+)\]\s*/g, "$1 ").trim();
 /** GDTC/GDQP: condition-only (*) courses (apps/web student-curriculum-types.ts CONDITION_ONLY_CODE). */
@@ -602,8 +596,11 @@ function planChunks(row: PlanRow): KnowledgeChunkInput[] {
     };
   }).filter((item) => item.name);
   const title = `Kế hoạch đào tạo ${major.label} ${cohort}`;
-  const termTitle = (term: (typeof terms)[number]) =>
-    `${term.code} (${term.studyYear !== null ? `năm thứ ${term.studyYear}, ` : ""}${termWords(term.code)})`;
+  // "HK1 2023–2024 (năm thứ 1, học kỳ 1)": the term as the pages write it (user review 2026-10-30), with the words a
+  // question uses ("năm thứ 1", "học kỳ 1") for the search.
+  const termTitle = (term: (typeof terms)[number]) => /^HK\d{2}[1-3]$/.test(term.code)
+    ? `${termName(term.code)} (${term.studyYear !== null ? `năm thứ ${term.studyYear}, ` : ""}học kỳ ${term.code.slice(4)})`
+    : `${term.code}${term.studyYear !== null ? ` (năm thứ ${term.studyYear})` : ""}`;
   const itemLine = (item: (typeof items)[number]) =>
     `- ${item.code ? `${item.code} ` : ""}${item.name}: ${credits(item.credits)}, ${shortTypeText(item.code, item.type)}`;
 
@@ -621,7 +618,7 @@ function planChunks(row: PlanRow): KnowledgeChunkInput[] {
     if (!planned.length) return [];
     const blocks: Block[] = [
       { lines: [
-        `Kế hoạch đào tạo ngành ${major.label} khóa ${cohort}, học kỳ ${termTitle(term)}.`,
+        `Kế hoạch đào tạo ngành ${major.label} khóa ${cohort}, ${termTitle(term)}.`,
         `Số tín chỉ theo kế hoạch: ${term.credits !== null ? formatNumber(term.credits) : "KHĐT chưa ghi"}.`,
       ] },
       { heading: "Học phần", lines: planned.filter((item) => !sections.has(item.sectionId)).map(itemLine) },

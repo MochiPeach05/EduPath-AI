@@ -1,7 +1,7 @@
 import { Fragment, createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { formatAnswer, parseAnswer, parseInline, safeHttpsUrl, type AnswerFormatOptions } from "./assistant-format";
+import { decimalComma, formatAnswer, parseAnswer, parseInline, safeHttpsUrl, type AnswerFormatOptions } from "./assistant-format";
 import type { AssistantSource } from "./assistant-types";
 
 const html = (text: string, options?: AnswerFormatOptions) => renderToStaticMarkup(createElement(Fragment, null, ...formatAnswer(text, options)));
@@ -47,6 +47,21 @@ describe("answer lines", () => {
       { kind: "link", href: "https://example.edu/docker", text: "https://example.edu/docker" },
       { kind: "text", text: "." },
     ]);
+  });
+
+  it("shows score-like decimals with a comma, also in answers stored before, but not in addresses or versions", () => {
+    expect(parseInline("GPA tích lũy của bạn là **2.45** [1], tăng từ 2.10.")).toEqual([
+      { kind: "text", text: "GPA tích lũy của bạn là " },
+      { kind: "bold", children: [{ kind: "text", text: "2,45" }] },
+      { kind: "text", text: " " },
+      { kind: "cite", n: 1 },
+      { kind: "text", text: ", tăng từ 2,10." },
+    ]);
+    expect(parseInline("Xem https://example.edu/v2.10/a")).toEqual([
+      { kind: "text", text: "Xem " }, { kind: "link", href: "https://example.edu/v2.10/a", text: "https://example.edu/v2.10/a" },
+    ]);
+    for (const kept of ["Python 3.12", "phiên bản 3.12", "ngày 30.10.2026", "192.168.1.1"]) expect(decimalComma(kept)).toBe(kept);
+    expect(decimalComma("Điểm TB tích lũy (Hệ 4): 3.10; IELTS 6.5")).toBe("Điểm TB tích lũy (Hệ 4): 3,10; IELTS 6,5");
   });
 
   it("reads [1, 2] as two citations and keeps a lone ** as text", () => {

@@ -6,7 +6,7 @@
 // Since assistant-v4 (2026-10-29) the stored transcript is a source too (transcript.ts): its scores and printed
 // summaries are copied as printed, so a student can look up a grade, the GPA or the credits in the chat.
 import { levelOf } from "../competency-assessment/calculate.js";
-import { formatNumber, sanitizeText, termText } from "../competency-assessment/ai/prompt.js";
+import { formatNumber, sanitizeText } from "../competency-assessment/ai/prompt.js";
 import { fold, specialtyLabel } from "../competency-assessment/specialty.js";
 import type { AssessmentResult, LevelCode, SkillResult, SpecialtyCode } from "../competency-assessment/types.js";
 import type { DatabasePool } from "../db/pool.js";
@@ -18,6 +18,7 @@ import { activeConsentVersion, isValidConsent } from "../student/consent.js";
 import { readSurvey, surveyFacts } from "../student/survey.js";
 import { withoutSettledReviews, type TranscriptData } from "../student/transcript-parser.js";
 import type { AssistantIntent } from "./intent.js";
+import { termName } from "../term-name.js";
 import { transcriptLines } from "./transcript.js";
 
 type Db = Pick<DatabasePool, "query">;
@@ -66,7 +67,7 @@ function transcriptSource(transcript: StoredTranscript, question: string, intent
 function skillLevel(skill: Pick<SkillResult, "score" | "status" | "upcoming" | "upcomingTerm">): string {
   if (skill.score === null) {
     if (skill.status === "exempt_only") return LEVELS.exempt;
-    return skill.upcoming ? `Sắp học${skill.upcomingTerm ? ` (${termText(skill.upcomingTerm)})` : ""}` : "Chưa có điểm";
+    return skill.upcoming ? `Sắp học${skill.upcomingTerm ? ` (${termName(skill.upcomingTerm)})` : ""}` : "Chưa có điểm";
   }
   return `${LEVELS[levelOf(skill.score)]} (${formatNumber(skill.score)} điểm)`;
 }
@@ -115,7 +116,7 @@ export function aiRoadmapLines(row: RoadmapRow, newestAssessmentId: string): str
   for (const item of facts.improve) names.set(item.code, item.name);
   const skillNames = new Map(facts.skills.map((skill) => [skill.key, skill.name]));
   const course = (code: string) => `${names.get(code) ?? code} (${code})`;
-  const lines = [`Lộ trình cho ${facts.window.term ? termText(facts.window.term) : "học kỳ tới"}, tạo ngày ${dateText(row.createdAt)}${row.assessmentId === newestAssessmentId ? "" : " từ một kết quả đánh giá cũ hơn"}.`];
+  const lines = [`Lộ trình cho ${facts.window.term ? termName(facts.window.term) : "học kỳ tới"}, tạo ngày ${dateText(row.createdAt)}${row.assessmentId === newestAssessmentId ? "" : " từ một kết quả đánh giá cũ hơn"}.`];
   lines.push(`Nhận định: ${output.summary}`);
   for (const advice of output.advice ?? []) lines.push(`- Lời khuyên: ${advice}`);
   for (const item of output.study) lines.push(`- Nên học ${course(item.code)}: ${item.advice}`);

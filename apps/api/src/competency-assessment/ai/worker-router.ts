@@ -54,7 +54,7 @@ import { createKnowledgeRefresh } from "../../assistant/knowledge.js";
 import { CLAIM_WAIT_MS, EMBEDDING_DIMENSIONS, prepareBodySchema, progressBodySchema } from "../../assistant/protocol.js";
 import { waitForAssistantWork } from "../../assistant/wakeup.js";
 import { cleanAiOutputKeys, keyNamesFrom } from "./key-cleanup.js";
-import { validateAiOutput, validationContextFromAiInput } from "./validate.js";
+import { repairAiOutput, retryNote, validateAiOutput, validationContextFromAiInput } from "./validate.js";
 import {
   AI_HOUSEKEEPING_INTERVAL_MS,
   AI_JOB_LEASE_MINUTES,
@@ -101,7 +101,7 @@ type JobRow = {
   valid: boolean | null;
   assessment_id: string;
   user_id: string;
-  ai_input: { schema?: unknown; user?: unknown; promptVersion?: unknown } | null;
+  ai_input: { schema?: unknown; user?: unknown; promptVersion?: unknown; checks?: unknown; retryNote?: unknown } | null;
 };
 
 /**
@@ -195,7 +195,8 @@ export function createCompetencyWorkerRouter(pool: DatabasePool | undefined, aiW
     leaseToken: claimed.leaseToken,
     promptVersion: claimed.aiInput.promptVersion,
     system: claimed.aiInput.system,
-    user: claimed.aiInput.user,
+    // A comment asked once more (comp-v13) carries what was wrong after the data block.
+    user: typeof claimed.aiInput.retryNote === "string" ? `${String(claimed.aiInput.user)}\n\n${claimed.aiInput.retryNote}` : claimed.aiInput.user,
     schema: claimed.aiInput.schema,
     options: claimed.aiInput.options,
     ...(claimed.aiInput.think === true ? { think: true } : {})
@@ -350,16 +351,33 @@ export function createCompetencyWorkerRouter(pool: DatabasePool | undefined, aiW
 
       let errorCode: string | null = "error" in input ? input.error : null;
       let output: unknown = null;
+      const retried = typeof job.ai_input?.retryNote === "string";
+      let repaired = 0;
       if (!("error" in input)) {
-        const context = job.ai_input ? validationContextFromAiInput({ schema: job.ai_input.schema, user: job.ai_input.user }) : null;
+        const context = job.ai_input ? validationContextFromAiInput({ schema: job.ai_input.schema, user: job.ai_input.user, checks: job.ai_input.checks }) : null;
         const checked = context ? validateAiOutput(input.output, context) : null;
-        if (checked?.ok) {
+        let accepted = checked?.ok ? checked.output : null;
+        if (context && checked && !checked.ok && checked.problems && checked.output) {
+          // comp-v13 (user review 2026-10-30): a comment whose schema holds is asked for once more with what was wrong;
+          // after that the sentences and items at fault are dropped instead of failing the whole comment.
+          if (!retried) {
+            await client.query(
+              `UPDATE stu_comp_ai_jobs SET status='queued',lease_token=NULL,lease_until=NULL,ai_input=ai_input||jsonb_build_object('retryNote',$2::text),updated_at=now() WHERE id=$1`,
+              [id, retryNote(checked.problems, checked.output, context)]);
+            await client.query("COMMIT");
+            res.json({ ok: true });
+            return;
+          }
+          accepted = repairAiOutput(checked.output, context);
+          if (accepted) repaired = checked.problems.length;
+        }
+        if (accepted) {
           // Keys the model wrote into prose are replaced by names before storing (comp-v3).
           const names = await client.query<{ skills: unknown; groups: unknown }>(
             `SELECT computed->'skillDirectory' AS skills,computed->'groups' AS groups FROM stu_comp_assessments WHERE id=$1 AND user_id=$2`,
             [job.assessment_id, job.user_id]);
           const row = names.rows[0];
-          output = cleanAiOutputKeys(checked.output, keyNamesFrom(row?.skills, row?.groups));
+          output = cleanAiOutputKeys(accepted, keyNamesFrom(row?.skills, row?.groups));
         } else errorCode = "invalid_ai_output";
       }
       const promptVersion = typeof job.ai_input?.promptVersion === "string" ? job.ai_input.promptVersion : null;
@@ -377,7 +395,8 @@ export function createCompetencyWorkerRouter(pool: DatabasePool | undefined, aiW
       }
       await client.query(
         `UPDATE stu_comp_ai_jobs SET status=$2,error_code=$3,metrics=$4::jsonb,ai_input=NULL,lease_until=NULL,updated_at=now() WHERE id=$1`,
-        [id, errorCode ? "failed" : "completed", errorCode, "metrics" in input ? JSON.stringify(input.metrics) : null]);
+        [id, errorCode ? "failed" : "completed", errorCode,
+          "metrics" in input ? JSON.stringify({ ...input.metrics, ...(retried ? { retried: true } : {}), ...(repaired ? { repairedProblems: repaired } : {}) }) : null]);
       await client.query("COMMIT");
       res.json({ ok: true });
     } catch (error) {

@@ -41,6 +41,28 @@ export function compactCitations(text: string): string {
   }).join("");
 }
 
+/** A word before a number that names a version, not a score: "Python 3.12", "phiên bản 3.12", "Node.js 20.11". */
+const VERSION_WORDS = /^(?:bản|version|ver)$/i;
+/** ASCII words that do come before a score: "GPA 2.45", "IELTS 6.5", "C+ 6.6". */
+const SCORE_WORDS = /^(?:gpa|cpa|tb|tbc|ielts|toefl|toeic|vstep|[a-f][+-]?)$/i;
+const ASCII_WORD = /^[A-Za-z0-9.+#_-]+$/;
+/** One or two decimals after a point, not part of a longer dotted run (a date, an IP address, 1.500.000) or of a word. */
+const POINT_DECIMAL = /(?<![\p{L}\p{N}.,])(\d{1,3})\.(\d{1,2})(?![\p{N}\p{L}]|[.,]\d)/gu;
+
+/**
+ * Decimals written with a point become Vietnamese decimals, as on the pages (user review 2026-10-30: the assistant
+ * answered "2.45"): "GPA của bạn là 2.45" → "2,45". Addresses keep their dots, and so does a number after a technology
+ * name or "phiên bản" (a version).
+ */
+export function decimalComma(text: string): string {
+  return text.split(/(https?:\/\/\S+)/).map((part, index) => (index % 2 ? part : part.replace(POINT_DECIMAL,
+    (match: string, whole: string, fraction: string, offset: number, all: string) => {
+      const before = /(\S+)\s?$/.exec(all.slice(0, offset))?.[1] ?? "";
+      const version = VERSION_WORDS.test(before) || (ASCII_WORD.test(before) && !SCORE_WORDS.test(before));
+      return version ? match : `${whole},${fraction}`;
+    }))).join("");
+}
+
 export function checkAnswer(raw: string, context: AnswerContext): CheckedAnswer {
   const warnings = new Set<string>();
   let text = raw.replace(/\r\n?/g, "\n").replace(/^#{1,6}\s+/gm, "").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
@@ -63,7 +85,7 @@ export function checkAnswer(raw: string, context: AnswerContext): CheckedAnswer 
     for (const n of numbers) cited.add(n);
     return [...new Set(numbers)].map((n) => `[${n}]`).join("");
   });
-  text = compactCitations(text);
+  text = decimalComma(compactCitations(text));
 
   const known = new Set(context.knownCodes.map((code) => code.toUpperCase()));
   for (const code of text.match(CODE_PATTERN) ?? []) if (!known.has(code.toUpperCase())) warnings.add(`unknown_code:${code}`);

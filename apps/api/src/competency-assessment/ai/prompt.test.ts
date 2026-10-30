@@ -10,6 +10,8 @@ import {
   formatNumber,
   formatScore,
   sanitizeText,
+  termAfter,
+  termNameOf,
   termText
 } from "./prompt.js";
 import { numbersIn } from "./validate.js";
@@ -56,7 +58,13 @@ describe("formatting helpers", () => {
     expect(formatNumber(72.456)).toBe("72,46");
     expect(formatNumber(85)).toBe("85");
   });
-  it("writes HKyyS term codes in words", () => {
+  it("writes a term like the pages (comp-v13), and in words for the graduation advice", () => {
+    expect(termNameOf("HK253")).toBe("HK3 2025–2026");
+    expect(termNameOf("HK261")).toBe("HK1 2026–2027");
+    expect(termNameOf("Học kỳ hè")).toBe("Học kỳ hè");
+    expect(termNameOf(null)).toBe("chưa xếp lịch");
+    expect(termAfter("HK261")).toBe("HK262");
+    expect(termAfter("HK263")).toBe("HK271");
     expect(termText("HK253")).toBe("học kỳ 3 năm học 2025–2026");
     expect(termText("HK261")).toBe("học kỳ 1 năm học 2026–2027");
     expect(termText("HK093")).toBe("học kỳ 3 năm học 2009–2010");
@@ -94,8 +102,8 @@ describe("buildAiInput", () => {
   };
 
   it("uses the spec system prompt verbatim plus the output description", () => {
-    expect(PROMPT_VERSION).toBe("comp-v12");
-    expect(input.promptVersion).toBe("comp-v12");
+    expect(PROMPT_VERSION).toBe("comp-v13");
+    expect(input.promptVersion).toBe("comp-v13");
     expect(input.think).toBe(true);
     expect(input.system).toBe(SYSTEM_PROMPT);
     expect(input.system.startsWith("Bạn là cố vấn học tập của EduPath AI, đồng hành cùng sinh viên ngành Công nghệ Thông tin, Trường Đại học Văn Lang.\n")).toBe(true);
@@ -109,7 +117,8 @@ describe("buildAiInput", () => {
     expect(input.system).toContain("không viết khóa S…/G… và không viết mã học phần");
     expect(input.system).toContain("không đưa ra chỉ số hay phần trăm phù hợp");
     expect(input.system).toContain("chép đúng từng chữ số như trong dữ liệu, không thêm chữ số thập phân");
-    expect(input.system).toContain('8. Gọi học kỳ bằng chữ đúng như trong dữ liệu, ví dụ "học kỳ 3 năm học 2025–2026"; không viết mã học kỳ dạng HK253.');
+    expect(input.system).toContain('8. Viết học kỳ đúng như trong dữ liệu, dạng "HK2 2026–2027"; không viết mã học kỳ dạng HK262. Chỉ nhắc học kỳ đang học và các học kỳ sau đó có trong dữ liệu; không bao giờ khuyên học hay đăng ký ở một học kỳ đã qua.');
+    expect(input.system).toContain("16. Trang in tên kỹ năng làm tiêu đề của mỗi mục strengths, improvements và gaps, nên mỗi mục chỉ nói về đúng kỹ năng đó");
     expect(input.system).toContain('"high" (cần làm sớm) | "medium" (nên làm) | "low" (có thể để sau)');
     expect(noCareer.system).toBe(SYSTEM_PROMPT);
   });
@@ -151,13 +160,13 @@ describe("buildAiInput", () => {
     expect(user).toContain("S04 | Làm việc nhóm | nhóm G2 | ngoài nghề mục tiêu | Chưa có minh chứng");
     expect(user).toContain("S05 | Điện toán đám mây | Chưa đủ dữ liệu");
     expect(user).not.toContain("Cần tự học (");
-    expect(user).toContain("  - TST202 | Đảm bảo chất lượng phần mềm | 3 TC | chưa học | chưa đủ điều kiện: cần đạt trước Kiểm thử phần mềm cơ bản (TST201) | kế hoạch: học kỳ 2 năm học 2026–2027\n");
+    expect(user).toContain("  - TST202 | Đảm bảo chất lượng phần mềm | 3 TC | chưa học | chưa đủ điều kiện: cần đạt trước Kiểm thử phần mềm cơ bản (TST201) | kế hoạch: HK2 2026–2027\n");
     expect(user).toContain("thiếu 30 (Thiếu nhiều)");
     expect(user).toContain("Ảnh hưởng: Điểm kỹ năng có thể thấp hơn thực tế.");
     expect(user).toContain("Có thể nêu là điểm mạnh: S01\n");
     expect(user).toContain("Có thể nêu là cần cải thiện: S02, S03\n");
     expect(noCareer.user).toContain("S01 | Lập trình hướng đối tượng | nhóm G1 | điểm 88 | Giỏi");
-    expect(noCareer.user).toContain("Có thể nêu là điểm mạnh: S01, S02\n");
+    expect(noCareer.user).toContain("Có thể nêu là điểm mạnh: S01\n");
     expect(noCareer.user).toContain("Có thể nêu là cần cải thiện: S06, S07, S03\n");
   });
 
@@ -173,11 +182,11 @@ describe("buildAiInput", () => {
     expect(sixth).toBe([
       "[6. KỸ NĂNG CỦA NGHỀ MỤC TIÊU CẦN CẢI THIỆN HOẶC NÂNG LÊN VÀ HỌC PHẦN GỢI Ý] (dùng cho improvements; chỉ chọn học phần trong danh sách của đúng kỹ năng)",
       "S02 Cơ sở dữ liệu (kỹ năng của nghề mục tiêu đã đạt ngưỡng, có thể nâng lên mức Giỏi):",
-      "  - TST240 | Hệ quản trị cơ sở dữ liệu | 3 TC | chưa học | đủ điều kiện đăng ký | kế hoạch: học kỳ 1 năm học 2026–2027",
+      "  - TST240 | Hệ quản trị cơ sở dữ liệu | 3 TC | chưa học | đủ điều kiện đăng ký | kế hoạch: HK1 2026–2027",
       "  - TST130 | Nhập môn cơ sở dữ liệu | 3 TC | đã đạt, điểm 6,8 (C+) – có thể học cải thiện",
       "S03 Kiểm thử phần mềm (kỹ năng của nghề mục tiêu dưới ngưỡng):",
-      "  - TST201 | Kiểm thử phần mềm cơ bản | 3 TC | chưa học | đủ điều kiện đăng ký | kế hoạch: học kỳ 1 năm học 2026–2027",
-      "  - TST202 | Đảm bảo chất lượng phần mềm | 3 TC | chưa học | chưa đủ điều kiện: cần đạt trước Kiểm thử phần mềm cơ bản (TST201) | kế hoạch: học kỳ 2 năm học 2026–2027"
+      "  - TST201 | Kiểm thử phần mềm cơ bản | 3 TC | chưa học | đủ điều kiện đăng ký | kế hoạch: HK1 2026–2027",
+      "  - TST202 | Đảm bảo chất lượng phần mềm | 3 TC | chưa học | chưa đủ điều kiện: cần đạt trước Kiểm thử phần mềm cơ bản (TST201) | kế hoạch: HK2 2026–2027"
     ].join("\n"));
     // Mạng máy tính and Sử dụng tiếng Anh are below Khá but outside the career: context only, no courses at all.
     for (const text of ["S06 |", "S07 |", "TST120", "TST310"]) expect(input.user).not.toContain(text);
@@ -195,15 +204,15 @@ describe("buildAiInput", () => {
     expect(sectionOf(noCareer.user, "[6. ")).toBe([
       "[6. KỸ NĂNG DƯỚI MỨC KHÁ VÀ HỌC PHẦN GỢI Ý] (dùng cho improvements; chỉ chọn học phần trong danh sách của đúng kỹ năng)",
       "S06 Mạng máy tính (dưới mức Khá):",
-      "  - TST310 | Quản trị mạng | 3 TC | chưa học | chưa đủ điều kiện: cần đạt trước Hệ điều hành (TST210) | kế hoạch: học kỳ 2 năm học 2026–2027",
-      // Planned before the latest graded term (học kỳ 3 năm học 2025–2026): overdue.
-      "  - TST150 | Toán rời rạc | 3 TC | chưa đạt – cần học lại | đủ điều kiện đăng ký | kế hoạch: học kỳ 2 năm học 2025–2026 (đã qua)",
+      "  - TST310 | Quản trị mạng | 3 TC | chưa học | chưa đủ điều kiện: cần đạt trước Hệ điều hành (TST210) | kế hoạch: HK2 2026–2027",
+      // Planned before the term being studied (HK3 2025–2026): its term is not sent, it can be registered from the next one (comp-v13).
+      "  - TST150 | Toán rời rạc | 3 TC | chưa đạt – cần học lại | đủ điều kiện đăng ký | đã trễ kế hoạch, đăng ký sớm nhất từ HK1 2026–2027",
       "  - TST120 | Mạng máy tính căn bản | 3 TC | đã đạt, điểm 6,5 (C+) – có thể học cải thiện",
       "S07 Sử dụng tiếng Anh (dưới mức Khá):",
       "  (không có học phần phù hợp; gợi ý tự học kèm sản phẩm kiểm chứng)",
       "S03 Kiểm thử phần mềm (dưới mức Khá):",
-      "  - TST201 | Kiểm thử phần mềm cơ bản | 3 TC | chưa học | đủ điều kiện đăng ký | kế hoạch: học kỳ 1 năm học 2026–2027",
-      "  - TST202 | Đảm bảo chất lượng phần mềm | 3 TC | chưa học | chưa đủ điều kiện: cần đạt trước Kiểm thử phần mềm cơ bản (TST201) | kế hoạch: học kỳ 2 năm học 2026–2027"
+      "  - TST201 | Kiểm thử phần mềm cơ bản | 3 TC | chưa học | đủ điều kiện đăng ký | kế hoạch: HK1 2026–2027",
+      "  - TST202 | Đảm bảo chất lượng phần mềm | 3 TC | chưa học | chưa đủ điều kiện: cần đạt trước Kiểm thử phần mềm cơ bản (TST201) | kế hoạch: HK2 2026–2027"
     ].join("\n"));
     const none = syntheticResult({ career: false });
     none.skillPlans = [];
@@ -222,19 +231,28 @@ describe("buildAiInput", () => {
     ];
     const user = buildAiInput(result).user;
     expect(user).toContain("  - TST401 | Cơ sở dữ liệu phân tán | 3 TC | chưa học | cần xác nhận điều kiện với Khoa | chưa xếp lịch\n");
-    expect(user).toContain("  - TST402 | Kho dữ liệu | 3 TC | chưa học | chưa đủ điều kiện: cần đạt trước học phần TST499; cần học trước Hệ điều hành (TST210) | kế hoạch: học kỳ 1 năm học 2026–2027\n");
+    expect(user).toContain("  - TST402 | Kho dữ liệu | 3 TC | chưa học | chưa đủ điều kiện: cần đạt trước học phần TST499; cần học trước Hệ điều hành (TST210) | kế hoạch: HK1 2026–2027\n");
     expect(user).toContain("  - TST403 | Khai phá dữ liệu | 3 TC | đang học\n");
-    expect(user).toContain("  - TST404 | Dữ liệu lớn | 3 TC | đã có điểm, chưa rõ kết quả | đủ điều kiện đăng ký | kế hoạch: học kỳ 3 năm học 2025–2026 (đã qua)\n");
+    expect(user).toContain("  - TST404 | Dữ liệu lớn | 3 TC | đã có điểm, chưa rõ kết quả | đủ điều kiện đăng ký | đã trễ kế hoạch, đăng ký sớm nhất từ HK1 2026–2027\n");
   });
 
-  it("marks the planned term the engine calls overdue as past, up to the term being studied (comp-calc-v17)", () => {
+  it("sends a course the engine calls overdue to the next term, never its passed term (comp-calc-v17, comp-v13)", () => {
     const result = syntheticResult();
     const take = result.skillPlans[0]!.take[0]!;
     // HK261 is after the latest graded term but is the term being studied: overdue; overdue: false wins over an old term.
     result.skillPlans[0]!.take = [{ ...take, code: "TST405", name: "Học máy", term: "HK261", overdue: true }, { ...take, code: "TST406", name: "Thị giác máy tính", term: "HK252", overdue: false }];
     const user = buildAiInput(result).user;
-    expect(user).toContain("  - TST405 | Học máy | 3 TC | chưa học | đủ điều kiện đăng ký | kế hoạch: học kỳ 1 năm học 2026–2027 (đã qua)\n");
-    expect(user).toContain("  - TST406 | Thị giác máy tính | 3 TC | chưa học | đủ điều kiện đăng ký | kế hoạch: học kỳ 2 năm học 2025–2026\n");
+    expect(user).toContain("  - TST405 | Học máy | 3 TC | chưa học | đủ điều kiện đăng ký | đã trễ kế hoạch, đăng ký sớm nhất từ HK1 2026–2027\n");
+    expect(user).toContain("  - TST406 | Thị giác máy tính | 3 TC | chưa học | đủ điều kiện đăng ký | kế hoạch: HK2 2025–2026\n");
+  });
+
+  it("names the term the student chose in Kế hoạch học kỳ, and only a coming one (comp-v13)", () => {
+    const result = syntheticResult();
+    const user = buildAiInput(result, { planned: new Map([["TST201", "HK262"], ["TST150", "HK263"], ["TST240", "HK252"]]) }).user;
+    expect(user).toContain("  - TST201 | Kiểm thử phần mềm cơ bản | 3 TC | chưa học | đủ điều kiện đăng ký | Kế hoạch học kỳ của bạn: HK2 2026–2027\n");
+    expect(user).toContain("- trễ: TST150 Toán rời rạc (Kế hoạch học kỳ của bạn: HK3 2026–2027)");
+    // A plan term that has passed is not used.
+    expect(user).toContain("  - TST240 | Hệ quản trị cơ sở dữ liệu | 3 TC | chưa học | đủ điều kiện đăng ký | kế hoạch: HK1 2026–2027\n");
   });
 
   it("names the weakest skills of each group below Khá and, with a career, whether each belongs to it", () => {
@@ -258,7 +276,7 @@ describe("buildAiInput", () => {
     };
     result.excludedThesisReplacements = ["TST405"];
     const line = (value: typeof result) => buildAiInput(value).user.split("\n").find((text) => text.startsWith("S02 |"))!;
-    expect(line(result)).toContain("| sắp học (chưa phải minh chứng): TST240 Hệ quản trị cơ sở dữ liệu (sắp học vào học kỳ 1 năm học 2026–2027)");
+    expect(line(result)).toContain("| sắp học (chưa phải minh chứng): TST240 Hệ quản trị cơ sở dữ liệu (sắp học vào HK1 2026–2027)");
     expect(line(result)).not.toContain("TST405");
     // A result stored before comp-calc-v7 has no such list.
     delete (result as Partial<typeof result>).excludedThesisReplacements;
@@ -320,12 +338,12 @@ describe("buildAiInput", () => {
     const line = buildAiInput(result).user.split("\n").find((text) => text.startsWith("S01 |"))!;
     expect(line).toContain("| minh chứng: TST101 Nhập môn lập trình (điểm 8,5, A)");
     expect(line).toContain("| đang học: TST202 Đảm bảo chất lượng phần mềm (đang học)");
-    expect(line).toContain("| sắp học (chưa phải minh chứng): TST201 Kiểm thử phần mềm cơ bản (sắp học vào học kỳ 1 năm học 2026–2027)");
+    expect(line).toContain("| sắp học (chưa phải minh chứng): TST201 Kiểm thử phần mềm cơ bản (sắp học vào HK1 2026–2027)");
     expect(line.indexOf("minh chứng: TST101")).toBeLessThan(line.indexOf("đang học"));
     expect(line.split("minh chứng:")[1]!.split("|")[0]).not.toContain("TST201");
   });
 
-  it("sends the numbers the page shows: whole 100-point scores, whole percentages, no term codes", () => {
+  it("sends the numbers the page shows: whole 100-point scores, whole percentages, no term codes, no passed term", () => {
     const result = syntheticResult();
     result.overall.score = 83.92;
     result.groups[0] = { ...result.groups[0]!, score: 89.56 };
@@ -339,9 +357,11 @@ describe("buildAiInput", () => {
     for (const shown of [83.92, 89.56, 93.44, 75.56, 9.44, 45.67]) expect(numbersIn(user)).not.toContain(shown);
     // Course scores stay on the 10-point scale with up to two decimals, like the page.
     expect(user).toContain("TST101 Nhập môn lập trình (điểm 8,5, A)");
-    expect(user).toContain("Học kỳ gần nhất có điểm: học kỳ 3 năm học 2025–2026");
-    expect(user).toContain("Học kỳ hiện tại: học kỳ 3 năm học 2025–2026; học kỳ kế tiếp: học kỳ 1 năm học 2026–2027");
-    expect(user).toContain("- trễ: TST150 Toán rời rạc (kế hoạch: học kỳ 2 năm học 2025–2026)");
+    expect(user).toContain("Học kỳ đang học: HK3 2025–2026; học kỳ tới: HK1 2026–2027\n");
+    expect(user).toContain("Học kỳ đang học: HK3 2025–2026; học kỳ kế tiếp theo kế hoạch đào tạo: HK1 2026–2027\n");
+    expect(user).toContain("- trễ: TST150 Toán rời rạc (đã trễ kế hoạch, đăng ký sớm nhất từ HK1 2026–2027)");
+    expect(user).not.toContain("Học kỳ gần nhất có điểm");
+    expect(user).not.toContain("HK2 2025–2026");
     for (const user of [input.user, noCareer.user]) expect(user).not.toMatch(/HK\d{3}/);
   });
 
@@ -428,7 +448,8 @@ describe("buildPromptContext", () => {
       groupKeys: ["G1", "G2"],
       // The 5 strongest, the plans and the weakest of the groups below Khá (already among them).
       skillKeys: ["S01", "S02", "S06", "S07", "S03"],
-      strengthKeys: ["S01", "S02"],
+      // Only the page's "Điểm mạnh" (comp-v13): Cơ sở dữ liệu (72,5) is not one of them in this fixture.
+      strengthKeys: ["S01"],
       improvementKeys: ["S06", "S07", "S03"],
       // Plan take courses, then the one to improve; a plan without any course.
       improvementSkills: [
@@ -452,10 +473,40 @@ describe("buildPromptContext", () => {
     const context = buildPromptContext(plain);
     expect(context.improvementSkills).toEqual([{ key: "S06", courseCodes: [] }, { key: "S07", courseCodes: [] }, { key: "S03", courseCodes: [] }]);
     expect(buildAiInput(plain).user).toContain("S06 Mạng máy tính (dưới mức Khá):\n  (chưa có danh sách học phần gợi ý; có thể gợi ý ôn lại học phần minh chứng ở mục [3])\n");
-    // With a career: only its gap; its met Khá skill is a strength again.
+    // With a career: only its gap; its met Khá skill is a strength again when the page shows it as one (comp-v13).
     const career = syntheticResult();
     delete (career as Partial<typeof career>).skillPlans;
-    expect(buildPromptContext(career)).toMatchObject({ strengthKeys: ["S01", "S02"], improvementKeys: ["S03"], improvementSkills: [{ key: "S03", courseCodes: ["TST201", "TST202"] }] });
+    expect(buildPromptContext(career)).toMatchObject({ strengthKeys: ["S01"], improvementKeys: ["S03"], improvementSkills: [{ key: "S03", courseCodes: ["TST201", "TST202"] }] });
+    career.highlights.strengths = ["S01", "S02"];
+    expect(buildPromptContext(career)).toMatchObject({ strengthKeys: ["S01", "S02"], improvementKeys: ["S03"] });
+  });
+
+  it("takes the strengths from the page's Điểm mạnh and never offers one of them to improve (comp-v13)", () => {
+    // Cơ sở dữ liệu (72,5, met, with a plan to deepen) shown as a strength: a strength, not an improvement.
+    const shown = syntheticResult();
+    shown.highlights.strengths = ["S01", "S02"];
+    expect(buildPromptContext(shown)).toMatchObject({ strengthKeys: ["S01", "S02"], improvementKeys: ["S03"] });
+    expect(buildAiInput(shown).user).toContain("Có thể nêu là điểm mạnh: S01, S02\nCó thể nêu là cần cải thiện: S03\n");
+    // Below a Bắt buộc threshold too: left to the gaps, neither a strength nor an improvement.
+    shown.career!.requirements[1] = { ...shown.career!.requirements[1]!, threshold: 85, score: 72.5, status: "below" };
+    const below = buildPromptContext(shown);
+    expect(below.strengthKeys).toEqual(["S01"]);
+    expect(below.improvementKeys).toEqual(["S03"]);
+    // A page strength outside the sent skills is added to them, so the comment has its data.
+    const extra = syntheticResult({ career: false });
+    extra.highlights.strengths = ["S01", "S04"];
+    extra.skills[3] = { ...extra.skills[3]!, status: "scored", score: 81, level: "proficient", levelLabel: "Giỏi", confidence: "medium", confidenceLabel: "Trung bình" };
+    expect(buildPromptContext(extra).skillKeys).toContain("S04");
+    expect(buildPromptContext(extra).strengthKeys).toEqual(["S01", "S04"]);
+  });
+
+  it("keeps what the comment is checked against: coming terms, skill names and the courses of each skill (comp-v13)", () => {
+    const checks = buildAiInput(syntheticResult()).checks;
+    // The term being studied, the next one and the later terms of the data block; never a passed one.
+    expect(checks.terms).toEqual(["HK253", "HK261", "HK262"]);
+    expect(checks.names).toMatchObject({ S01: "Lập trình hướng đối tượng", S03: "Kiểm thử phần mềm", S04: "Làm việc nhóm", S05: "Điện toán đám mây" });
+    expect(checks.courses.S03).toEqual(expect.arrayContaining(["Kiểm thử phần mềm cơ bản", "Đảm bảo chất lượng phần mềm"]));
+    expect(checks.courses.S01).toEqual(["Nhập môn lập trình"]);
   });
 
   it("has no gap candidates when no career is selected", () => {

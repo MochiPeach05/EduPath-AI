@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addressesIn, checkAnswer, codesIn, compactCitations } from "./validate.js";
+import { addressesIn, checkAnswer, codesIn, compactCitations, decimalComma } from "./validate.js";
 
 const context = { sourceCount: 3, allowedUrls: ["https://developer.mozilla.org/vi/docs/Learn"], knownCodes: ["71ITSE30103"] };
 
@@ -36,6 +36,16 @@ describe("assistant answer check", () => {
     // A group keeps the numbers cited for the last time there.
     expect(compactCitations("A [1][2]. B [2].")).toBe("A [1]. B [2].");
     expect(compactCitations("Không có số nguồn.")).toBe("Không có số nguồn.");
+  });
+
+  it("writes score-like decimals with a comma, not versions, dates or addresses (assistant-v7)", () => {
+    expect(checkAnswer("GPA tích lũy của bạn là 2.45 [1], học kỳ trước 1.85.", context).content).toBe("GPA tích lũy của bạn là 2,45 [1], học kỳ trước 1,85.");
+    expect(decimalComma("Điểm TB tích lũy (Hệ 4): 3.10; GPA 2.45; IELTS 6.5; điểm C+ 6.6; (8.5)")).toBe("Điểm TB tích lũy (Hệ 4): 3,10; GPA 2,45; IELTS 6,5; điểm C+ 6,6; (8,5)");
+    for (const kept of ["Python 3.12", "Node.js 20.11", "phiên bản 3.12", "ngày 30.10.2026", "192.168.1.1", "1.500.000 đồng", "3.141 điểm", "https://example.org/v2.10/a"]) {
+      expect(decimalComma(kept)).toBe(kept);
+    }
+    // A numbered list and a sentence that ends on a number stay as they are.
+    expect(decimalComma("1. Học lại môn X.\nBạn đạt 8.")).toBe("1. Học lại môn X.\nBạn đạt 8.");
   });
 
   it("finds the addresses and codes of a prompt block", () => {

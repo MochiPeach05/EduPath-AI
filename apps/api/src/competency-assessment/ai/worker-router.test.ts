@@ -92,7 +92,8 @@ describe("heartbeat and claim", () => {
   it("claims the oldest job with SKIP LOCKED, a 15 minute lease and returns the stored input", async () => {
     const { app, run, sql } = setup((s) => (s.includes("FOR UPDATE SKIP LOCKED") ? { rows: [{ id: JOB, leaseToken: LEASE, aiInput }] } : undefined));
     const res = await request(app).post("/w/claim").set("Authorization", AUTH).expect(200);
-    expect(res.body.job).toEqual({ kind: "competency_assessment", id: JOB, leaseToken: LEASE, promptVersion: "comp-v12", system: aiInput.system, user: aiInput.user, schema: aiInput.schema, options: aiInput.options, think: true });
+    // The checks stay on the server (comp-v13).
+    expect(res.body.job).toEqual({ kind: "competency_assessment", id: JOB, leaseToken: LEASE, promptVersion: "comp-v13", system: aiInput.system, user: aiInput.user, schema: aiInput.schema, options: aiInput.options, think: true });
     const claim = run.mock.calls.find(([s]) => s.includes("SKIP LOCKED"))!;
     expect(claim[0]).toContain("ORDER BY created_at, id FOR UPDATE SKIP LOCKED LIMIT 1");
     expect(claim[0]).toContain("status='processing' AND lease_until<now() AND attempts<$2");
@@ -175,7 +176,7 @@ describe("complete", () => {
     await request(app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success()).expect(200, { ok: true });
     const calls = run.mock.calls.map(([s, p]) => [s, p] as const);
     const assessment = calls.find(([s]) => s.includes("SET ai_status='completed'"))!;
-    expect(assessment[1]).toEqual([ASSESSMENT, USER, JSON.stringify(validOutput()), "gemma4:e4b", "dc35e8d9c606", "0.40.2", "comp-v12"]);
+    expect(assessment[1]).toEqual([ASSESSMENT, USER, JSON.stringify(validOutput()), "gemma4:e4b", "dc35e8d9c606", "0.40.2", "comp-v13"]);
     const job = calls.find(([s]) => s.startsWith("UPDATE stu_comp_ai_jobs SET status=$2"))!;
     expect(job[0]).toContain("ai_input=NULL");
     expect(job[1]).toEqual([JOB, "completed", null, JSON.stringify({ eval_count: 900, total_ms: 120000 })]);
@@ -211,16 +212,21 @@ describe("complete", () => {
     const stored = JSON.parse((run.mock.calls.find(([s]) => s.includes("SET ai_status='completed'"))![1] as unknown[])[2] as string);
     expect(stored.improvements).toEqual([{ ...improvement, courses: [{ courseCode: "TST130", reason: "Đã đạt 6,8 (C+), học cải thiện để nâng Cơ sở dữ liệu." }] }]);
 
-    // A course of another skill (TST201 belongs to S03) fails the job.
-    const foreign = setup(withJob(jobRow()));
+    // A course of another skill (TST201 belongs to S03): asked once more, then the course is dropped (comp-v13).
     const wrong = { ...improvement, courses: [{ courseCode: "TST201", reason: "Học mới." }] };
+    const foreign = setup(withJob(jobRow()));
     await request(foreign.app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success({ ...validOutput(), improvements: [wrong] })).expect(200, { ok: true });
-    expect(foreign.run.mock.calls.find(([s]) => s.includes("SET ai_status='failed'"))![1]).toEqual([ASSESSMENT, USER, "invalid_ai_output"]);
+    expect(foreign.run.mock.calls.some(([s]) => s.includes("SET ai_status='failed'") || s.includes("SET ai_status='completed'"))).toBe(false);
+    expect(foreign.run.mock.calls.find(([s]) => s.includes("SET status='queued'"))).toBeDefined();
+    const again = setup(withJob(jobRow({ ai_input: { ...aiInput, retryNote: "[BẢN TRƯỚC CHƯA ĐẠT]" } })));
+    await request(again.app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success({ ...validOutput(), improvements: [wrong] })).expect(200, { ok: true });
+    const kept = JSON.parse((again.run.mock.calls.find(([s]) => s.includes("SET ai_status='completed'"))![1] as unknown[])[2] as string);
+    expect(kept.improvements).toEqual([{ ...improvement, courses: [] }]);
 
-    // With a career, a weak skill outside it (Mạng máy tính) is no improvement at all (comp-v5).
-    const outside = setup(withJob(jobRow()));
+    // With a career, a weak skill outside it (Mạng máy tính) is no improvement at all (comp-v5): dropped after the retry.
+    const outside = setup(withJob(jobRow({ ai_input: { ...aiInput, retryNote: "[BẢN TRƯỚC CHƯA ĐẠT]" } })));
     await request(outside.app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success({ ...validOutput(), improvements: [{ ...improvement, skillKey: "S06", courses: [] }] })).expect(200, { ok: true });
-    expect(outside.run.mock.calls.find(([s]) => s.includes("SET ai_status='failed'"))![1]).toEqual([ASSESSMENT, USER, "invalid_ai_output"]);
+    expect(JSON.parse((outside.run.mock.calls.find(([s]) => s.includes("SET ai_status='completed'"))![1] as unknown[])[2] as string).improvements).toEqual([]);
   });
 
   it("still completes a job queued before comp-v4 with its own schema and prompt version", async () => {
@@ -233,15 +239,53 @@ describe("complete", () => {
     expect(params[6]).toBe("comp-v3");
   });
 
-  it("fails the assessment with invalid_ai_output when the output does not validate", async () => {
+  it("asks once more with what was wrong when the output does not validate (comp-v13)", async () => {
     const { app, run } = setup(withJob(jobRow()));
-    const output = { ...validOutput(), summary: "Điểm của bạn là 91 trên https://example.org" };
+    const output = { ...validOutput(), summary: "Điểm của bạn là 91 trên https://example.org", nextSteps: ["Học lại Toán rời rạc ở HK2 2025–2026.", "Làm một sản phẩm nhỏ.", "Ôn tập."] };
     await request(app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success(output)).expect(200, { ok: true });
+    const queued = run.mock.calls.find(([s]) => s.includes("SET status='queued'"))!;
+    expect(queued[0]).toContain("ai_input=ai_input||jsonb_build_object('retryNote',$2::text)");
+    expect(queued[0]).toContain("lease_token=NULL");
+    expect(queued[1]![0]).toBe(JOB);
+    const note = queued[1]![1] as string;
+    expect(note).toContain("summary: có đường link, email hoặc thẻ HTML");
+    expect(note).toContain("nextSteps, việc thứ 1: nhắc HK2 2025–2026, học kỳ đã qua hoặc không có trong dữ liệu");
+    expect(run.mock.calls.some(([s]) => s.includes("SET ai_status='failed'") || s.includes("SET ai_status='completed'"))).toBe(false);
+    expect(run.mock.calls.at(-1)![0]).toBe("COMMIT");
+    // The worker gets the note after the data block.
+    const claimed = setup((s) => (s.includes("FOR UPDATE SKIP LOCKED") ? { rows: [{ id: JOB, leaseToken: LEASE, aiInput: { ...aiInput, retryNote: note } }] } : undefined));
+    const res = await request(claimed.app).post("/w/claim").set("Authorization", AUTH).expect(200);
+    expect(res.body.job.user).toBe(`${aiInput.user}\n\n${note}`);
+  });
+
+  it("drops the sentences and items at fault after the retry, and fails only when nothing usable is left (comp-v13)", async () => {
+    const retried = jobRow({ ai_input: { ...aiInput, retryNote: "[BẢN TRƯỚC CHƯA ĐẠT]" } });
+    const kept = setup(withJob(retried));
+    const output = {
+      ...validOutput(),
+      summary: "Bạn có nền tảng lập trình hướng đối tượng vững với điểm 88. Xem thêm tại https://example.org nhé.",
+      nextSteps: ["Học lại Toán rời rạc ở HK2 2025–2026.", "Làm một sản phẩm nhỏ.", "Ôn lại Toán rời rạc."]
+    };
+    await request(kept.app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success(output)).expect(200, { ok: true });
+    const stored = JSON.parse((kept.run.mock.calls.find(([s]) => s.includes("SET ai_status='completed'"))![1] as unknown[])[2] as string);
+    expect(stored.summary).toBe("Bạn có nền tảng lập trình hướng đối tượng vững với điểm 88.");
+    expect(stored.nextSteps).toEqual(["Làm một sản phẩm nhỏ.", "Ôn lại Toán rời rạc."]);
+    const job = kept.run.mock.calls.find(([s]) => s.startsWith("UPDATE stu_comp_ai_jobs SET status=$2"))!;
+    expect(job[1]).toEqual([JOB, "completed", null, JSON.stringify({ eval_count: 900, total_ms: 120000, retried: true, repairedProblems: 2 })]);
+
+    const { app, run } = setup(withJob(retried));
+    await request(app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success({ ...validOutput(), summary: "Điểm của bạn là 91 trên https://example.org" })).expect(200, { ok: true });
     const failed = run.mock.calls.find(([s]) => s.includes("SET ai_status='failed'"))!;
     expect(failed[1]).toEqual([ASSESSMENT, USER, "invalid_ai_output"]);
-    const job = run.mock.calls.find(([s]) => s.startsWith("UPDATE stu_comp_ai_jobs SET status=$2"))!;
-    expect((job[1] as unknown[]).slice(0, 3)).toEqual([JOB, "failed", "invalid_ai_output"]);
+    const failedJob = run.mock.calls.find(([s]) => s.startsWith("UPDATE stu_comp_ai_jobs SET status=$2"))!;
+    expect((failedJob[1] as unknown[]).slice(0, 3)).toEqual([JOB, "failed", "invalid_ai_output"]);
     expect(run.mock.calls.some(([s]) => s.includes("SET ai_status='completed'"))).toBe(false);
+
+    // A wrong schema fails at once, without a retry.
+    const shape = setup(withJob(jobRow()));
+    await request(shape.app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success({ ...validOutput(), nextSteps: [] })).expect(200, { ok: true });
+    expect(shape.run.mock.calls.find(([s]) => s.includes("SET ai_status='failed'"))![1]).toEqual([ASSESSMENT, USER, "invalid_ai_output"]);
+    expect(shape.run.mock.calls.some(([s]) => s.includes("SET status='queued'"))).toBe(false);
   });
 
   it("records a worker error code", async () => {

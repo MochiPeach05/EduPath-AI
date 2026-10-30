@@ -130,7 +130,8 @@ export function syntheticResult(options: { career?: boolean } = {}): AssessmentR
       ...skills.map((s) => ({ key: s.key, skillId: s.skillId, name: s.name, measured: true })),
       { key: "S05", skillId: "skill-S05", name: "Điện toán đám mây", measured: false }
     ],
-    highlights: { strengths: ["S01", "S02"], improvements: ["S03", "S07", "S06"] },
+    // S02 is not one of the page's "Điểm mạnh" here, so it keeps its plan to deepen (comp-v13 tests add it to show the other case).
+    highlights: { strengths: ["S01"], improvements: ["S03", "S07", "S06"] },
     promptSelection: withCareer
       ? { careerSkillKeys: ["S01", "S02", "S03", "S05"], topSkillKeys: ["S04"], bottomSkillKeys: [] }
       : { careerSkillKeys: [], topSkillKeys: ["S01", "S02", "S06", "S07", "S03"], bottomSkillKeys: [] },

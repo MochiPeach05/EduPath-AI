@@ -55,8 +55,26 @@ async function othersPending(client: PoolClient, userId: string): Promise<number
   return result.rows[0]?.count ?? 0;
 }
 
+/**
+ * The courses of the student's saved Kế hoạch học kỳ (stu_study_plans), by code: the comment names the term the student
+ * chose for a course (comp-v13). Empty without a saved plan or with one the page could not have saved.
+ */
+export async function plannedTermsOf(client: Pick<PoolClient, "query">, userId: string): Promise<Map<string, string>> {
+  const result = await client.query<{ data: unknown }>("SELECT data FROM stu_study_plans WHERE user_id=$1", [userId]);
+  const terms = (result.rows[0]?.data as { terms?: unknown } | undefined)?.terms;
+  const planned = new Map<string, string>();
+  if (!Array.isArray(terms)) return planned;
+  for (const term of terms as { code?: unknown; courses?: unknown }[]) {
+    if (typeof term?.code !== "string" || !Array.isArray(term.courses)) continue;
+    for (const course of term.courses as { code?: unknown }[]) {
+      if (typeof course?.code === "string" && !planned.has(course.code.toUpperCase())) planned.set(course.code.toUpperCase(), term.code);
+    }
+  }
+  return planned;
+}
+
 async function insertJob(client: PoolClient, input: QueueInput): Promise<"queued"> {
-  const aiInput = buildAiInput(input.result);
+  const aiInput = buildAiInput(input.result, { planned: await plannedTermsOf(client, input.userId) });
   await client.query(
     "INSERT INTO stu_comp_ai_jobs(id,assessment_id,user_id,status,ai_input) VALUES($1,$2,$3,'queued',$4::jsonb)",
     [randomUUID(), input.assessmentId, input.userId, JSON.stringify(aiInput)]);

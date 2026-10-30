@@ -154,10 +154,25 @@ describe("validateAiOutput", () => {
     expect(reasonOf({ ...valid(), groupInsights: [{ groupKey: "G1", comment: "Nhóm đạt 80,5." }] })).toBe("invented_number@groupInsights.0.comment");
   });
 
-  it("accepts a term written in words or as the code of a term in the data block, and rejects an invented term code", () => {
+  it("accepts a coming term of the data block however it is written, and rejects a passed or invented one (comp-v13)", () => {
+    expect(reasonOf({ ...valid(), progress: "Bạn đang ở HK3 2025–2026, học kỳ tới là HK1 2026–2027." })).toBe("ok");
     expect(reasonOf({ ...valid(), progress: "Bạn đang ở học kỳ 3 năm học 2025–2026, học kỳ tới là học kỳ 1 năm học 2026–2027." })).toBe("ok");
     expect(reasonOf({ ...valid(), progress: "Bạn nên đăng ký Kiểm thử phần mềm cơ bản ở HK261." })).toBe("ok");
-    expect(reasonOf({ ...valid(), progress: "Bạn nên đăng ký Kiểm thử phần mềm cơ bản ở HK271." })).toBe("invented_number@progress");
+    expect(reasonOf({ ...valid(), progress: "Bạn nên đăng ký Kiểm thử phần mềm cơ bản ở HK271." })).toBe("term_not_in_plan@progress");
+    // The term Toán rời rạc was planned in (HK2 2025–2026) has passed: never a term to take it in.
+    expect(reasonOf({ ...valid(), nextSteps: ["Học lại Toán rời rạc ở HK2 2025–2026.", "Làm dự án.", "Ôn tập."] })).toBe("term_not_in_plan@nextSteps.0");
+    // A job queued before comp-v13 has no checks: only the number check applies.
+    const { checks: _old, ...before } = context;
+    expect(validateAiOutput({ ...valid(), progress: "Bạn nên đăng ký ở HK271." }, before)).toMatchObject({ ok: false, error: { reason: "invented_number" } });
+  });
+
+  it("rejects a strength, improvement or gap that talks about another skill, not a text that names none (comp-v13)", () => {
+    // Làm việc nhóm (S04) has no evidence, so the check uses the skills of this job: S01 is the strength.
+    expect(reasonOf({ ...valid(), strengths: [{ skillKey: "S01", comment: "Bạn làm tốt Kiểm thử phần mềm qua đồ án." }] })).toBe("off_topic_skill@strengths.0.comment");
+    expect(reasonOf({ ...valid(), strengths: [{ skillKey: "S01", comment: "Bạn vững lập trình hướng đối tượng và cả kiểm thử phần mềm." }] })).toBe("ok");
+    expect(reasonOf({ ...valid(), strengths: [{ skillKey: "S01", comment: "Điểm cao ở học phần nền tảng cho thấy bạn nắm chắc nội dung." }] })).toBe("ok");
+    expect(reasonOf({ ...valid(), improvements: [{ ...valid().improvements[0]!, comment: "Hãy học thêm về Cơ sở dữ liệu." }] })).toBe("off_topic_skill@improvements.0.comment");
+    expect(reasonOf({ ...valid(), gaps: [{ ...valid().gaps[0]!, explanation: "Điện toán đám mây là kỹ năng bắt buộc." }, valid().gaps[1]!] })).toBe("off_topic_skill@gaps.0.explanation");
   });
 
   it("rejects URLs, emails and HTML", () => {

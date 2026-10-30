@@ -45,6 +45,27 @@ export function safeHttpsUrl(raw: string): string | null {
   }
 }
 
+/** A word before a number that names a version, not a score: "Python 3.12", "phiên bản 3.12", "Node.js 20.11". */
+const VERSION_WORDS = /^(?:bản|version|ver)$/i;
+/** ASCII words that do come before a score: "GPA 2.45", "IELTS 6.5", "C+ 6.6". */
+const SCORE_WORDS = /^(?:gpa|cpa|tb|tbc|ielts|toefl|toeic|vstep|[a-f][+-]?)$/i;
+const ASCII_WORD = /^[A-Za-z0-9.+#_-]+$/;
+/** One or two decimals after a point, not part of a longer dotted run (a date, an IP address, 1.500.000) or of a word. */
+const POINT_DECIMAL = /(?<![\p{L}\p{N}.,])(\d{1,3})\.(\d{1,2})(?![\p{N}\p{L}]|[.,]\d)/gu;
+
+/**
+ * Decimals written with a point read as Vietnamese decimals, like the rest of the portal (user review 2026-10-30: the
+ * assistant answered "2.45"). The server writes new answers this way (apps/api assistant/validate.ts decimalComma, the
+ * same rule); this also covers answers stored before. A version after a technology name or "phiên bản" keeps its point.
+ */
+export function decimalComma(text: string): string {
+  return text.replace(POINT_DECIMAL, (match: string, whole: string, fraction: string, offset: number, all: string) => {
+    const before = /(\S+)\s?$/.exec(all.slice(0, offset))?.[1] ?? "";
+    const version = VERSION_WORDS.test(before) || (ASCII_WORD.test(before) && !SCORE_WORDS.test(before));
+    return version ? match : `${whole},${fraction}`;
+  });
+}
+
 /** A bare address ends before the punctuation of its sentence; ")" stays when the address opened one. */
 function trimUrl(raw: string): string {
   let url = raw;
@@ -57,7 +78,9 @@ function trimUrl(raw: string): string {
 
 function lineInlines(text: string, insideBold: boolean): AnswerLine {
   const out: AnswerLine = [];
-  const addText = (value: string) => {
+  // Text between the pieces: links keep their own text, so an address never gets a comma.
+  const addText = (raw: string) => {
+    const value = decimalComma(raw);
     if (!value) return;
     const last = out[out.length - 1];
     if (last?.kind === "text") last.text += value;

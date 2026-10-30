@@ -41,8 +41,11 @@ export const documentEmbeddingText = (title: string, text: string) => `title: ${
  * v6 (2026-10-29, user: "Tôi thấy hiện tại nó trả lời không có human lắm"): the voice of an anh/chị khóa trên (prompt.ts):
  * the answer first, prose rather than lists, no stock phrases, each source cited once per paragraph (validate.ts compacts
  * repeated and stacked citations), a follow-up question only when useful, contrast examples with invented names.
+ * v7 (user review 2026-10-30: "Trợ lý AI trả lời 2.45", "Học kỳ đang được gọi theo 4 kiểu"): the sources write decimals
+ * with a comma (printed transcript values too) and terms "HK1 2026–2027" like the pages, and the check of an answer turns
+ * a score-like "2.45" into "2,45" (validate.ts decimalComma). The system prompt is unchanged.
  */
-export const ASSISTANT_PROMPT_VERSION = "assistant-v6";
+export const ASSISTANT_PROMPT_VERSION = "assistant-v7";
 export const KNOWLEDGE_PROMPT_VERSION = "knowledge-v1";
 /** An answer takes well under a minute; a lost worker frees the job after this lease (the worker extends every 3 min). */
 export const ASSISTANT_LEASE_MINUTES = 5;

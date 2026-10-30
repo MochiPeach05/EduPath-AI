@@ -136,7 +136,7 @@ describe("assistant student sources", () => {
     const uploaded = await studentSources(db({ assessment: false }), userId, "Điểm tổng của mình là bao nhiêu?", ["transcript"], ROADMAP_NOW);
     expect(uploaded.sources.map((source) => source.kind)).toEqual(["profile", "transcript"]);
     expect(uploaded.sources[0]?.text).toContain("Bạn đã import bảng điểm nhưng chưa thực hiện Đánh giá năng lực nên EduPath AI chưa có cơ sở để tư vấn");
-    expect(uploaded.sources[1]?.text).toContain("Điểm TB tích lũy (Hệ 4): 3.10");
+    expect(uploaded.sources[1]?.text).toContain("Điểm TB tích lũy (Hệ 4): 3,10");
   });
 });
 
@@ -144,21 +144,21 @@ describe("assistant transcript source (assistant-v4)", () => {
   it("summarizes the newest printed GPA and credits, the term being studied and the courses not passed", async () => {
     const text = await transcriptText("Chào bạn");
     expect(text).toContain("cập nhật ngày 20/10/2026");
-    expect(text).toContain("Học kỳ gần nhất có điểm: học kỳ 2 năm học 2024–2025.");
+    expect(text).toContain("Học kỳ gần nhất có điểm: HK2 2024–2025.");
     // Copied as printed, from the latest graded term (not the older terms' cumulative lines).
-    expect(text).toContain("Tích lũy in trên bảng điểm ở cuối học kỳ 2 năm học 2024–2025: Tổng số tín chỉ tích lũy: 18; Điểm TB tích lũy (Hệ 4): 3.10; Điểm TB tích lũy (Hệ 10): 7.55; Xếp loại học tập tích lũy: Khá.");
+    expect(text).toContain("Tích lũy in trên bảng điểm ở cuối HK2 2024–2025: Tổng số tín chỉ tích lũy: 18; Điểm TB tích lũy (Hệ 4): 3,10; Điểm TB tích lũy (Hệ 10): 7,55; Xếp loại học tập tích lũy: Khá.");
     expect(text).toContain("tức GPA (điểm tổng) hiện tại của bạn");
-    expect(text).toContain("Đang học, chưa có điểm (học kỳ 1 năm học 2025–2026): 2 học phần: Kỹ thuật lập trình (71ITSE30103); Kiểm thử phần mềm (71ITSE41203).");
+    expect(text).toContain("Đang học, chưa có điểm (HK1 2025–2026): 2 học phần: Kỹ thuật lập trình (71ITSE30103); Kiểm thử phần mềm (71ITSE41203).");
     // 11 courses in 14 rows: the retakes count once, Cơ sở dữ liệu under both codes too.
     expect(text).toContain("Số học phần trên bảng điểm: 11 (đã đạt 8, chưa đạt 1, đang học 2), trong 14 dòng vì có học phần học nhiều lần.");
     // CT (cấm thi) fails without a score; its old review marks are gone (withoutSettledReviews).
-    expect(text).toContain("Học phần chưa đạt (chưa có lần học nào đạt, cần học lại):\n- Phát triển ứng dụng di động (71ITSE30603), 3 TC: CT (cấm thi) ở học kỳ 1 năm học 2024–2025");
+    expect(text).toContain("Học phần chưa đạt (chưa có lần học nào đạt, cần học lại):\n- Phát triển ứng dụng di động (71ITSE30603), 3 TC: CT (cấm thi) ở HK1 2024–2025");
     expect(text).not.toContain("đối chiếu");
     // VT (vắng thi), registered again in the term being studied.
-    expect(text).toContain("Học phần chưa đạt, đang học lại:\n- Kỹ thuật lập trình (71ITSE30103), 3 TC: VT (vắng thi) ở học kỳ 2 năm học 2023–2024; đang học ở học kỳ 1 năm học 2025–2026");
+    expect(text).toContain("Học phần chưa đạt, đang học lại:\n- Kỹ thuật lập trình (71ITSE30103), 3 TC: VT (vắng thi) ở HK2 2023–2024; đang học ở HK1 2025–2026");
     // A failed course passed later, under the same code or under another code with the same name.
-    expect(text).toContain("- Cơ sở lập trình (71ITBS10203): F (3,2 điểm hệ 10) ở học kỳ 1 năm học 2023–2024; đạt C+ (6,6 điểm hệ 10) ở học kỳ 2 năm học 2023–2024");
-    expect(text).toContain("- Cơ sở dữ liệu (mã DIT0070, sau đó 71ITIS30103): F (3,5 điểm hệ 10) ở học kỳ 2 năm học 2023–2024; đạt B (7,5 điểm hệ 10) ở học kỳ 1 năm học 2024–2025");
+    expect(text).toContain("- Cơ sở lập trình (71ITBS10203): F (3,2 điểm hệ 10) ở HK1 2023–2024; đạt C+ (6,6 điểm hệ 10) ở HK2 2023–2024");
+    expect(text).toContain("- Cơ sở dữ liệu (mã DIT0070, sau đó 71ITIS30103): F (3,5 điểm hệ 10) ở HK2 2023–2024; đạt B (7,5 điểm hệ 10) ở HK1 2024–2025");
     // Not a grade question: no rows beyond the summary.
     expect(text).not.toContain("Toàn bộ bảng điểm");
     expect(text).not.toContain("Nhập môn Công nghệ phần mềm");
@@ -167,28 +167,28 @@ describe("assistant transcript source (assistant-v4)", () => {
   it("gives the rows of a course the question names, by name or by code, and says when a code is not on the transcript", async () => {
     const byName = await transcriptText("Môn Cơ sở dữ liệu mình được mấy điểm?");
     expect(byName).toContain("Học phần bạn hỏi: Cơ sở dữ liệu (mã DIT0070, sau đó 71ITIS30103), 3 TC: đã đạt.\n"
-      + "- Học kỳ 2 năm học 2023–2024: mã DIT0070, 3,5 điểm hệ 10, 0 hệ 4, điểm chữ F, Không đạt\n"
-      + "- Học kỳ 1 năm học 2024–2025: mã 71ITIS30103, 7,5 điểm hệ 10, 3 hệ 4, điểm chữ B, Đạt");
+      + "- HK2 2023–2024: mã DIT0070, 3,5 điểm hệ 10, 0 hệ 4, điểm chữ F, Không đạt\n"
+      + "- HK1 2024–2025: mã 71ITIS30103, 7,5 điểm hệ 10, 3 hệ 4, điểm chữ B, Đạt");
     // The longer name wins: "Hệ quản trị cơ sở dữ liệu" is not also "Cơ sở dữ liệu", and the reverse.
     expect(byName).not.toContain("Học phần bạn hỏi: Hệ quản trị");
     const longer = await transcriptText("Hệ quản trị cơ sở dữ liệu mình được bao nhiêu điểm?");
-    expect(longer).toContain("Học phần bạn hỏi: Hệ quản trị cơ sở dữ liệu (71ITIS30203), 3 TC: đã đạt.\n- Học kỳ 2 năm học 2024–2025: 6,4 điểm hệ 10, 2 hệ 4, điểm chữ C, Đạt");
+    expect(longer).toContain("Học phần bạn hỏi: Hệ quản trị cơ sở dữ liệu (71ITIS30203), 3 TC: đã đạt.\n- HK2 2024–2025: 6,4 điểm hệ 10, 2 hệ 4, điểm chữ C, Đạt");
     expect(longer).not.toContain("Học phần bạn hỏi: Cơ sở dữ liệu");
     // Specific rows, so not the whole transcript.
     expect(byName).not.toContain("Toàn bộ bảng điểm");
 
     const byCode = await transcriptText("Điểm của 71itse30603 và 71ITAI40103?");
-    expect(byCode).toContain("Học phần bạn hỏi: Phát triển ứng dụng di động (71ITSE30603), 3 TC: chưa đạt.\n- Học kỳ 1 năm học 2024–2025: CT (cấm thi, không có điểm), Không đạt");
+    expect(byCode).toContain("Học phần bạn hỏi: Phát triển ứng dụng di động (71ITSE30603), 3 TC: chưa đạt.\n- HK1 2024–2025: CT (cấm thi, không có điểm), Không đạt");
     expect(byCode).toContain("Bảng điểm không có học phần mã 71ITAI40103.");
   });
 
   it("gives the rows and printed summaries of a term the question names", async () => {
     const text = await transcriptText("Học kỳ 1 năm 2024-2025 mình học những môn nào?");
-    expect(text).toContain("Học kỳ 1 năm học 2024–2025 (học kỳ bạn hỏi) (3 dòng):\n"
+    expect(text).toContain("HK1 2024–2025 (học kỳ bạn hỏi) (3 dòng):\n"
       + "- 71ITIS30103 Cơ sở dữ liệu (3 TC): 7,5 điểm hệ 10, 3 hệ 4, điểm chữ B, Đạt\n"
       + "- 71ITSE30503 Lập trình ứng dụng Web (3 TC): 8,2 điểm hệ 10, 3,5 hệ 4, điểm chữ B+, Đạt\n"
       + "- 71ITSE30603 Phát triển ứng dụng di động (3 TC): CT (cấm thi, không có điểm), Không đạt\n"
-      + "Tổng kết in trên bảng điểm: Tổng số tín chỉ tích lũy: 12; Điểm TB tích lũy (Hệ 4): 3.15");
+      + "Tổng kết in trên bảng điểm: Tổng số tín chỉ tích lũy: 12; Điểm TB tích lũy (Hệ 4): 3,15");
     expect(text).not.toContain("Nhập môn Công nghệ phần mềm");
   });
 
@@ -202,10 +202,10 @@ describe("assistant transcript source (assistant-v4)", () => {
     // A blank result cell follows the letter.
     expect(text).toContain("- 71ITIS30203 Hệ quản trị cơ sở dữ liệu (3 TC): 6,4 điểm hệ 10, 2 hệ 4, điểm chữ C, Đạt");
     expect(text).toContain("- 71ITSE41203 Kiểm thử phần mềm (3 TC): đang học, chưa có điểm");
-    expect(text).toContain("Tổng kết in trên bảng điểm: Số tín chỉ đạt học kỳ: 3; Điểm TB học kỳ (Hệ 4): 1.85; Tổng số tín chỉ tích lũy: 3; Điểm TB tích lũy (Hệ 4): 3.70");
+    expect(text).toContain("Tổng kết in trên bảng điểm: Số tín chỉ đạt học kỳ: 3; Điểm TB học kỳ (Hệ 4): 1,85; Tổng số tín chỉ tích lũy: 3; Điểm TB tích lũy (Hệ 4): 3,70");
     // Terms in time order: "Điểm bảo lưu" first, the term being studied last.
-    expect(text.indexOf("Điểm bảo lưu (1 dòng)")).toBeLessThan(text.indexOf("Học kỳ 1 năm học 2023–2024 ("));
-    expect(text.indexOf("Học kỳ 2 năm học 2024–2025 (")).toBeLessThan(text.indexOf("Học kỳ 1 năm học 2025–2026 ("));
+    expect(text.indexOf("Điểm bảo lưu (1 dòng)")).toBeLessThan(text.indexOf("HK1 2023–2024 ("));
+    expect(text.indexOf("HK2 2024–2025 (")).toBeLessThan(text.indexOf("HK1 2025–2026 ("));
   });
 
   it("reads an older cohort's F printed Đạt as passed, says what the transcript lacks and leaves identity lines out", async () => {
@@ -229,7 +229,7 @@ describe("assistant transcript source (assistant-v4)", () => {
     data.sections.splice(1, 0, ...older);
     const text = await transcriptText("Môn nào mình điểm cao nhất?", { transcript: data });
     expect(MAX_TRANSCRIPT_ROWS).toBe(80);
-    expect(text).toMatch(/\(Không đưa vào \d+ dòng của các học kỳ cũ hơn: (phần Điểm bảo lưu|Điểm bảo lưu), học kỳ 1 năm học 2016–2017/);
+    expect(text).toMatch(/\(Không đưa vào \d+ dòng của các học kỳ cũ hơn: (phần Điểm bảo lưu|Điểm bảo lưu), HK1 2016–2017/);
     expect(text).toContain("- 71ITSE41203 Kiểm thử phần mềm (3 TC): đang học, chưa có điểm");
     const listed = text.slice(text.indexOf("Toàn bộ bảng điểm")).split("\n").filter((line) => line.startsWith("- "));
     expect(listed.length).toBeLessThanOrEqual(MAX_TRANSCRIPT_ROWS);
