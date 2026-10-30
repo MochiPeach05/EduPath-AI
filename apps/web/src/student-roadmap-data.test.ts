@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  choiceText, failureText, monthTitle, normalizeRoadmapResponse, normalizeRoadmapStatus, pendingCopy, requestErrorMessage, roadmapWindowTitle, skillTags, studyTag, termShort,
+  choiceText, failureText, monthTitle, normalizeRoadmapResponse, normalizeRoadmapStatus, pendingCopy, requestErrorMessage, ROADMAP_RETRY_CODE, roadmapWindowTitle, skillTags, studyTag, termShort,
 } from "./student-roadmap-data";
 
 describe("normalizeRoadmapResponse", () => {
@@ -13,10 +13,14 @@ describe("normalizeRoadmapResponse", () => {
       skills: [{ key: "S01", courses: [], steps: [] }] });
     expect(data).toMatchObject({ stale: true, aiEnabled: true, worker: { online: true, supportsRoadmap: false }, assessment: { id: "a1", hasCareer: true } });
     // An API without surveyDone (before the profile survey) never blocks "Tạo lộ trình".
-    expect(normalizeRoadmapResponse(null)).toEqual({ roadmap: null, assessment: null, stale: false, surveyDone: true, aiEnabled: false, worker: { online: false, supportsRoadmap: false }, upcoming: null });
+    expect(normalizeRoadmapResponse(null)).toEqual({ roadmap: null, assessment: null, stale: false, surveyDone: true, aiEnabled: false, worker: { online: false, supportsRoadmap: false }, upcoming: null, basis: null });
+    // Where the advice comes from (roadmap-v9), strings only; an empty one is none.
+    expect(normalizeRoadmapResponse({ basis: { recorded: ["React: chưa có điểm", 1], selfReported: ["Thực tập: Đang thực tập"], surveyChanged: true } }).basis)
+      .toEqual({ recorded: ["React: chưa có điểm"], selfReported: ["Thực tập: Đang thực tập"], surveyChanged: true });
+    expect(normalizeRoadmapResponse({ basis: { recorded: [], selfReported: [] } }).basis).toBeNull();
     // The term a new roadmap would cover (2026-10-25); a 3-month roadmap made before has no term.
     expect(normalizeRoadmapResponse({ upcoming: { term: "HK262", start: "2026-12-21", end: "2027-04-04" } }).upcoming).toEqual({ term: "HK262", start: "2026-12-21", end: "2027-04-04" });
-    expect([roadmapWindowTitle({ term: "HK262" }), roadmapWindowTitle({})]).toEqual(["Lộ trình HK2 · 2026–2027", "Lộ trình 3 tháng"]);
+    expect([roadmapWindowTitle({ term: "HK262" }), roadmapWindowTitle({})]).toEqual(["Lộ trình HK2 2026–2027", "Lộ trình 3 tháng"]);
     expect(normalizeRoadmapResponse({ surveyDone: false }).surveyDone).toBe(false);
     expect(normalizeRoadmapResponse({ roadmap: { id: 1 } }).roadmap).toBeNull();
     expect(normalizeRoadmapStatus({ id: "r1", status: "processing" })).toEqual({ id: "r1", status: "processing", errorCode: null, worker: { online: false, supportsRoadmap: false } });
@@ -36,7 +40,7 @@ describe("labels", () => {
     expect(skillTags({ isRequired: false, kind: "deepen" })).toEqual(["Ưu tiên", "Nâng cao"]);
     expect(monthTitle({ month: 1, start: "2026-10-24", end: "2026-11-23" })).toBe("Tháng 1 · 24/10 – 23/11/2026");
     expect(choiceText({ label: "Nhóm tự chọn TC309", source: "late", termCode: "HK243", need: "3 TC", options: [] }))
-      .toBe("Nhóm tự chọn TC309: còn thiếu 3 TC (theo kế hoạch ở học kỳ 3 năm học 2024–2025)");
+      .toBe("Nhóm tự chọn TC309: còn thiếu 3 TC (theo kế hoạch ở HK3 2024–2025)");
   });
 
   it("explains waiting, failures and refusals", () => {
@@ -44,6 +48,10 @@ describe("labels", () => {
     expect(pendingCopy("queued", { online: false, supportsRoadmap: false }).title).toBe("Lộ trình sẽ được soạn khi máy AI hoạt động trở lại");
     expect(pendingCopy("queued", { online: true, supportsRoadmap: false }).title).toBe("Máy AI đang chạy phiên bản cũ…");
     expect(pendingCopy("queued", { online: true, supportsRoadmap: true }).title).toBe("Đang chờ đến lượt…");
+    // A second try because the first answer did not hold to the data (roadmap-v9).
+    expect(pendingCopy("processing", { online: true, supportsRoadmap: true }, ROADMAP_RETRY_CODE).title).toBe("EduPath AI đang viết lại lộ trình…");
+    expect(pendingCopy("queued", { online: true, supportsRoadmap: true }, ROADMAP_RETRY_CODE).text).toContain("chưa khớp dữ liệu của bạn");
+    expect(pendingCopy("queued", { online: false, supportsRoadmap: false }, ROADMAP_RETRY_CODE).title).toBe("Lộ trình sẽ được soạn khi máy AI hoạt động trở lại");
     expect(failureText("invalid_ai_output")).toContain("chưa đạt yêu cầu kiểm tra");
     expect(failureText(null)).toBe("Đã có lỗi khi soạn lộ trình.");
     expect(requestErrorMessage("roadmap_too_frequent")).toContain("nửa phút");

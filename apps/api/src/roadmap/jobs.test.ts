@@ -1,6 +1,6 @@
 import type { PoolClient } from "pg";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { claimRoadmap, completeRoadmap, createRoadmap, createRoadmapExpiry, expireRoadmaps, extendRoadmap, RoadmapError, type RoadmapRow } from "./jobs.js";
+import { claimRoadmap, completeRoadmap, createRoadmap, createRoadmapExpiry, expireRoadmaps, extendRoadmap, retryInput, RoadmapError, ROADMAP_RETRY_CODE, type RoadmapRow } from "./jobs.js";
 import { TRANSCRIPT_POLICY_VERSION } from "../student/consent.js";
 import { surveyFacts } from "../student/survey.js";
 import { buildRoadmapInput, ROADMAP_PROMPT_VERSION } from "./prompt.js";
@@ -101,7 +101,11 @@ describe("createRoadmap", () => {
     await createRoadmap(client, USER, { now: ROADMAP_NOW });
     const params = calls().find(([text]) => text.startsWith("INSERT INTO stu_roadmaps"))![1] as unknown[];
     const user = (JSON.parse(params[6] as string) as { user: string }).user;
-    expect(user).toContain("[8. HỒ SƠ ĐỊNH HƯỚNG] (sinh viên tự khai)");
+    expect(user).toContain("[8. BẠN TỰ KHAI TRONG KHẢO SÁT ĐỊNH HƯỚNG] (chưa kiểm chứng)");
+    // roadmap-v9: what the system has on record about those claims, next to them.
+    expect(user).toContain("[9. HỆ THỐNG GHI NHẬN VỀ CÁC ĐIỀU BẠN TỰ KHAI] (từ bảng điểm và kết quả đánh giá)\n"
+      + "- Chưa có minh chứng (chưa có điểm từ học phần nào): Web front-end, HTML, CSS, JavaScript, React, Trí tuệ nhân tạo, học máy\n"
+      + "- Học phần thực tập trong chương trình: Đồ án thực tập (chưa học)");
     expect(user).toContain("- Mục tiêu sau tốt nghiệp: Đi làm ngay");
     expect(user).toContain("- Thời gian tự học mỗi tuần: 5–10 giờ");
     expect(user).toContain("- Thế mạnh (công nghệ thành thạo): Web front-end (HTML, CSS, JavaScript, React); Trí tuệ nhân tạo, học máy");
@@ -109,6 +113,7 @@ describe("createRoadmap", () => {
     expect(user).toContain("- Sở trường: Tự làm dự án, viết code; Thể thao, vận động");
     expect(user).toContain("  + Giải Ba cuộc thi lập trình cấp khoa 2025\n  + Học bổng khuyến khích học tập");
     expect(params[5] as string).not.toContain("Giải Ba");
+    expect(params[5] as string).not.toContain("Thành thạo React");
   });
 
   it("needs an assessment, the answered profile survey and an active account", async () => {
@@ -185,6 +190,54 @@ describe("worker side", () => {
     const errored = workerClient(locked());
     expect(await completeRoadmap(errored.client, ROADMAP, { leaseToken: LEASE, error: "ai_output_truncated" })).toBe("ok");
     expect((errored.update()![1] as unknown[]).slice(0, 3)).toEqual([ROADMAP, "failed", "ai_output_truncated"]);
+  });
+
+  // roadmap-v9 (user 2026-10-30: "kiểm tra lại đầu ra trước khi hiện"): one more try when the answer does not hold to the data.
+  const stray = { ...output, summary: `${output.summary} Bạn có nền tảng vững chắc về React.`, improve: [{ code: "71ITBS10203", advice: "Học lại ở HK3 2024–2025." }] };
+  const requeue = (client: ReturnType<typeof workerClient>) => client.client.query as unknown as { mock: { calls: [string, unknown[]][] } };
+
+  it("asks the model once more, with what was wrong, when the answer names a past term or praises what only the student said", async () => {
+    const first = workerClient(locked());
+    expect(await completeRoadmap(first.client, ROADMAP, success(stray))).toBe("ok");
+    expect(first.update()).toBeUndefined();
+    const [sql, params] = requeue(first).mock.calls.find(([text]) => text.startsWith("UPDATE stu_roadmaps SET status='queued'"))!;
+    expect(sql).toContain("lease_token=NULL,lease_until=NULL");
+    expect(params.slice(0, 2)).toEqual([ROADMAP, ROADMAP_RETRY_CODE]);
+    const again = JSON.parse(params[2] as string) as { system: string; user: string; retry: { issues: string[]; fallback: { summary: string; improve: unknown[] } } };
+    expect(again.user).toBe(aiInput.user);
+    expect(again.system).toContain("LƯU Ý CHO LẦN VIẾT NÀY");
+    expect(again.retry.issues).toHaveLength(2);
+    expect(again.retry.fallback).toMatchObject({ summary: output.summary, improve: [] });
+
+    // The second answer is stored as checked, its stray sentences dropped; never a third try.
+    const second = workerClient(locked({ ai_input: again }));
+    expect(await completeRoadmap(second.client, ROADMAP, success(stray))).toBe("ok");
+    expect((second.update()![1] as unknown[]).slice(0, 3)).toEqual([ROADMAP, "completed", null]);
+    expect(JSON.parse((second.update()![1] as unknown[])[3] as string)).toMatchObject({ summary: output.summary, improve: [] });
+    expect(retryInput(again, ["x"], again.retry.fallback as never)).toBeNull();
+  });
+
+  it("asks again when every item had to go for not holding to the data, and fails if the second answer is no better", async () => {
+    const empty = { ...output, study: [{ code: "71ITIS30203", advice: "Đăng ký ở HK1 2024–2025." }], improve: [], skills: [],
+      months: output.months.map((month) => ({ ...month, tasks: ["Học bù môn trễ ở HK3 2024–2025."] })) };
+    const first = workerClient(locked());
+    expect(await completeRoadmap(first.client, ROADMAP, success(empty))).toBe("ok");
+    const [, params] = requeue(first).mock.calls.find(([text]) => text.startsWith("UPDATE stu_roadmaps SET status='queued'"))!;
+    const again = JSON.parse(params[2] as string) as Record<string, unknown> & { retry: { fallback: unknown } };
+    expect(again.retry.fallback).toBeNull();
+    const second = workerClient(locked({ ai_input: again }));
+    expect(await completeRoadmap(second.client, ROADMAP, success(empty))).toBe("ok");
+    expect((second.update()![1] as unknown[]).slice(0, 4)).toEqual([ROADMAP, "failed", "invalid_ai_output", null]);
+  });
+
+  it("keeps the first answer, its stray sentences dropped, when the second one is unusable or the model fails", async () => {
+    const again = retryInput(aiInput, ["Câu sai."], { ...output, summary: "Bản đầu.", improve: [], months: [] } as never)!;
+    for (const answer of [success({ summary: "x" }), { leaseToken: LEASE, error: "ai_output_truncated" }]) {
+      const second = workerClient(locked({ ai_input: again }));
+      expect(await completeRoadmap(second.client, ROADMAP, answer)).toBe("ok");
+      expect((second.update()![1] as unknown[]).slice(0, 3)).toEqual([ROADMAP, "completed", null]);
+      expect(JSON.parse((second.update()![1] as unknown[])[3] as string)).toMatchObject({ summary: "Bản đầu." });
+    }
   });
 
   it("is idempotent for the same lease, expired for another or lost lease or a cancelled row, and missing for an unknown id", async () => {

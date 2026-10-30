@@ -5,10 +5,16 @@
 // that is not in the data block, or an unknown skill key is dropped and the rest are kept; skill keys (S01…) and course
 // codes written into prose become their names (the page shows names only). The job fails only when the summary is
 // unusable or nothing at all remains.
+// roadmap-v9 (user review 2026-10-30) also holds every sentence to the data: terms are written "HK2 2026–2027", a sentence
+// naming a term the roadmap may not name (one already past, or outside the plan) or stating as fact what the student only
+// said in the survey is dropped and reported as an issue; jobs.ts asks the model once more with the issues.
 import { z } from "zod";
 import { sanitizeText } from "../competency-assessment/ai/prompt.js";
 import { cleanKeyText } from "../competency-assessment/ai/key-cleanup.js";
 import { courseCodesIn, hasForbiddenContent, numbersIn, termCodeNumbers } from "../competency-assessment/ai/validate.js";
+import { fold } from "../competency-assessment/specialty.js";
+import { termName, termsNamedIn } from "../term-name.js";
+import { INTERNSHIP_TOPIC, nameParts } from "./basis.js";
 import { ROADMAP_LIMITS as L } from "./schema.js";
 
 /** The cleaned roadmap stored in stu_roadmaps.ai_output (the router adds names and dates from the facts). */
@@ -36,11 +42,23 @@ export type RoadmapContext = {
   numbers: ReadonlySet<number>;
   /** Every course-code-like token of the data block. */
   courseCodes: ReadonlySet<string>;
+  /** roadmap-v9: the terms the text may name; null for an input made before, which is not held to the checks below. */
+  terms: ReadonlySet<string> | null;
+  /** Skills and technologies the system has no evidence for (or a weak one): stated as fact only with "bạn tự đánh giá…". */
+  unproven: readonly string[];
+  /** An internship course is passed, so "kinh nghiệm thực tập" is on record. */
+  internshipDone: boolean;
+  /** The roadmap's term, for the summary written when every sentence of the model's had to go. */
+  windowTerm: string | null;
 };
 
+/**
+ * issues: the sentences dropped for not holding to the data (roadmap-v9), what the model is told when asked again; also
+ * on an empty result, which those drops can cause.
+ */
 type RoadmapValidation =
-  | { ok: true; output: RoadmapOutput; dropped: number }
-  | { ok: false; reason: "schema" | "summary" | "empty"; path: string };
+  | { ok: true; output: RoadmapOutput; dropped: number; issues: string[] }
+  | { ok: false; reason: "schema" | "summary" | "empty"; path: string; issues?: string[] };
 
 const raw = z.string().max(4000);
 /** The shape only; lengths and counts are capped by the grammar and trimmed below. */
@@ -79,6 +97,7 @@ export function roadmapContextFromAiInput(input: unknown): RoadmapContext | null
     thesis: typeof group.thesis === "string" ? group.thesis : null,
     topics: Array.isArray(group.topics) ? group.topics.filter((item): item is string => typeof item === "string") : [],
   })) : [];
+  const strings = (value: unknown) => (Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []);
   return {
     courses: new Set(courses.map(([code]) => code)),
     improve: new Set(improve.map(([code]) => code)),
@@ -88,6 +107,10 @@ export function roadmapContextFromAiInput(input: unknown): RoadmapContext | null
     months,
     numbers: new Set([...numbersIn(input.user), ...termCodeNumbers(input.user)]),
     courseCodes: new Set(courseCodesIn(input.user)),
+    terms: Array.isArray(input.keys.terms) ? new Set(strings(input.keys.terms)) : null,
+    unproven: strings(input.keys.unproven),
+    internshipDone: input.keys.internshipDone === true,
+    windowTerm: typeof input.keys.windowTerm === "string" ? input.keys.windowTerm : null,
   };
 }
 
@@ -115,19 +138,99 @@ export function cleanCourseCodes(text: string, names: ReadonlyMap<string, string
   return out.replace(/ {2,}/g, " ").replace(/\s+([.,;:!?)\]])/g, "$1").replace(/\(\s*\)/g, "").trim();
 }
 
+/* ------------------------------------------------------------- holding to the data (roadmap-v9) */
+
+const SPELLED_TERM = /(?<![\p{L}\p{N}])(?:HK|học (?:kỳ|kì))\s*([1-3])\s*(?:[·,\-–]\s*)?(?:năm học\s*|năm\s*)?(20\d{2})\s*[-–]\s*(20\d{2})(?![\p{L}\p{N}])/giu;
+const CODE_TERM = /(?<![\p{L}\p{N}])HK(\d{2})([1-3])(?![\p{L}\p{N}])/gu;
+/** Every term the text names, written as on the pages: "HK262", "học kỳ 2 năm học 2026-2027" → "HK2 2026–2027". */
+export function normalizeTermNames(text: string): string {
+  return text
+    .replace(SPELLED_TERM, (match, semester: string, start: string, end: string) => (Number(end) === Number(start) + 1 ? termName(`HK${start.slice(2)}${semester}`) : match))
+    .replace(CODE_TERM, (_match, year: string, semester: string) => termName(`HK${year}${semester}`));
+}
+
+/** A sentence ends with . ! ? before the next one starts. */
+const sentencesOf = (text: string) => text.split(/(?<=[.!?…])\s+(?=[\p{Lu}\p{N}"'“(])/u).map((part) => part.trim()).filter(Boolean);
+/** Praise of what someone knows: "nền tảng vững chắc", "thành thạo", "giỏi", "thế mạnh"… */
+const PRAISE = /(?<![\p{L}\p{N}])(?:nền tảng\s+(?:rất\s+)?(?:vững chắc|vững|tốt|chắc chắn|chắc|mạnh|ổn định)|vững chắc|vững vàng|thành thạo|nắm vững|nắm chắc|am hiểu|giỏi|thế mạnh|điểm mạnh|mạnh về|sở trường về)(?![\p{L}\p{N}])/iu;
+/** Experience stated as had: "có kinh nghiệm", "đã thực tập", "đang thực tập", "từng dẫn dắt"… */
+const EXPERIENCE = /(?<![\p{L}\p{N}])(?:(?:có|với|nhờ|sẵn có|sẵn)\s+(?:[\p{L}\p{N}]+\s+){0,2}?kinh nghiệm|(?:đã|đang|từng)\s+(?:từng\s+)?(?:đi thực tập|thực tập|làm thêm|dẫn dắt|làm trưởng nhóm|làm việc tại|làm việc ở|đi làm|tham gia dự án|làm dự án|làm \d+ dự án|có \d+ dự án))(?![\p{L}\p{N}])/iu;
+/** Before the praise, a goal, advice or a negation: "để thành thạo", "hãy", "chưa có kinh nghiệm"… */
+const NOT_A_CLAIM = /(?<![\p{L}\p{N}])(?:để|nhằm|giúp|hãy|nên|cần|sẽ|muốn|mục tiêu|hướng tới|trở thành|tích lũy|tích luỹ|bổ sung|chưa|không|thiếu|khi|nếu|có thể|nâng|lên mức|chứng minh|kiểm chứng)(?![\p{L}\p{N}])/iu;
+/** Praise is about the student when someone has it ("bạn có", "với", "đã"…) or it is "của bạn": "Nắm vững Docker giúp…" is not. */
+const HOLDER_BEFORE = /(?<![\p{L}\p{N}])(?:bạn|với|nhờ|có|sẵn|vốn|đã|đang|là)(?![\p{L}\p{N}])/iu;
+const HOLDER_AFTER = /^[^,;:.]{0,48}?(?<![\p{L}\p{N}])của bạn(?![\p{L}\p{N}])/iu;
+/** The sentence gives the claim as the student's own word. */
+const ATTRIBUTED = /(?<![\p{L}\p{N}])(?:tự đánh giá|tự khai|tự nhận|tự mô tả|tự viết|theo khảo sát|trong khảo sát|khảo sát định hướng|bạn cho biết|bạn chia sẻ|bạn nói|theo bạn|bạn đã chọn|bạn liệt kê|bạn kể|bạn ghi)(?![\p{L}\p{N}])/iu;
+const quoted = (sentence: string) => `"${sentence.length > 160 ? `${sentence.slice(0, 157)}…` : sentence}"`;
+
+/**
+ * Why a sentence states as fact what only the student said, or null: in one of its clauses the student is said to have a
+ * praise word with a skill or technology the system has no evidence for, or experience is stated as had (only a passed
+ * internship course is on record), with no goal, advice or negation before it and nothing in the sentence giving it as
+ * the student's word ("bạn tự đánh giá…", "bạn cho biết…").
+ */
+export function unattributedClaim(sentence: string, context: Pick<RoadmapContext, "unproven" | "internshipDone">): string | null {
+  if (ATTRIBUTED.test(sentence)) return null;
+  for (const clause of sentence.split(/[,;:]|\s(?:nhưng|tuy nhiên)\s/u)) {
+    const asserted = (match: RegExpExecArray | null): match is RegExpExecArray => match !== null && !NOT_A_CLAIM.test(clause.slice(0, match.index));
+    const folded = fold(clause);
+    const names = (topic: string) => new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(fold(topic))}(?![\\p{L}\\p{N}+#])`, "u").test(folded);
+    const praise = PRAISE.exec(clause);
+    if (asserted(praise) && (HOLDER_BEFORE.test(clause.slice(0, praise.index)) || HOLDER_AFTER.test(clause.slice(praise.index)))) {
+      const topic = context.unproven.find((name) => [name, ...nameParts(name)].some(names));
+      if (topic) return topic;
+    }
+    const experience = EXPERIENCE.exec(clause);
+    if (asserted(experience)) {
+      const internship = names(INTERNSHIP_TOPIC);
+      if (!(internship && context.internshipDone)) return internship ? INTERNSHIP_TOPIC : experience[0].trim();
+    }
+  }
+  return null;
+}
+
+/** The text with every sentence that does not hold to the data dropped; each dropped sentence is reported in issues. */
+function groundedText(text: string, context: RoadmapContext, claims: boolean, issues: string[]): string {
+  const kept: string[] = [];
+  for (const sentence of sentencesOf(text)) {
+    const outside = termsNamedIn(sentence).filter((code) => !context.terms!.has(code));
+    if (outside.length) {
+      issues.push(`Nhắc học kỳ không có trong danh sách được nhắc tới (đã qua hoặc ngoài kế hoạch): ${outside.map(termName).join(", ")}. Câu: ${quoted(sentence)}`);
+      continue;
+    }
+    const topic = claims ? unattributedClaim(sentence, context) : null;
+    if (topic) {
+      issues.push(`Viết như sự thật điều bạn chỉ tự khai hoặc hệ thống chưa có minh chứng (${topic}); cần ghi rõ "bạn tự đánh giá…" hay "bạn cho biết…". Câu: ${quoted(sentence)}`);
+      continue;
+    }
+    kept.push(sentence);
+  }
+  return kept.join(" ");
+}
+
+/** The summary when every sentence of the model's had to go: plain, and true of any roadmap. */
+export const fallbackSummary = (windowTerm: string | null) =>
+  `Lộ trình ${windowTerm ? termName(windowTerm) : "học kỳ tới"} gồm các học phần cần học, học phần cần cải thiện và kỹ năng nên bổ sung bên dưới. Hãy trao đổi với cố vấn học tập trước khi đăng ký học phần.`;
+
 /** Tokens that look like a skill key; one that is not a key of the job makes the text invalid. */
 const KEY_TOKEN = /(?<![\p{L}\p{N}_])S\d{1,3}(?![\p{L}\p{N}_])/gu;
 const SECTION_REFERENCE = /\[\s*\d{1,2}\s*\]|(?<![\p{L}\p{N}_])mục\s*\[?\s*\d/iu;
 
-/** One prose field as stored: sanitized, skill keys replaced by names, length capped, or null when it must be dropped. */
-function cleanText(value: string, max: number, context: RoadmapContext): string | null {
+/**
+ * One prose field as stored: sanitized, skill keys replaced by names, terms written one way and the sentences that do not
+ * hold to the data dropped (roadmap-v9; claims: also the praise and experience check, for the fields that describe the
+ * student rather than set a goal), length capped, or null when it must be dropped.
+ */
+function cleanText(value: string, max: number, context: RoadmapContext, issues: string[] = [], claims = false): string | null {
   // Special tokens, links and markup in the raw text already disqualify it (sanitizeText would hide them).
   if (hasForbiddenContent(value)) return null;
   // "mục [4]", "[6]": section numbers of the data block mean nothing to the student.
   if (SECTION_REFERENCE.test(value)) return null;
   const sanitized = sanitizeText(value, 4000);
   if ((sanitized.match(KEY_TOKEN) ?? []).some((token) => !context.skills.has(token))) return null;
-  const text = sanitizeText(cleanCourseCodes(cleanKeyText(sanitized, context.skills), context.names), max * 2);
+  let text = sanitizeText(cleanCourseCodes(cleanKeyText(sanitized, context.skills), context.names), max * 2);
+  if (context.terms) text = groundedText(normalizeTermNames(text), context, claims, issues);
   if (!text || hasForbiddenContent(text)) return null;
   if (numbersIn(text).some((number) => !context.numbers.has(number))) return null;
   if (courseCodesIn(text).some((code) => !context.courseCodes.has(code))) return null;
@@ -135,12 +238,12 @@ function cleanText(value: string, max: number, context: RoadmapContext): string 
 }
 
 /** Items whose id is allowed, the first of each id only, with their text cleaned; the rest are dropped. */
-function cleanItems<T extends { code: string; advice: string }>(items: readonly T[], allowed: ReadonlySet<string>, max: number, context: RoadmapContext) {
+function cleanItems<T extends { code: string; advice: string }>(items: readonly T[], allowed: ReadonlySet<string>, max: number, context: RoadmapContext, issues: string[]) {
   const seen = new Set<string>();
   const out: { code: string; advice: string }[] = [];
   for (const item of items) {
     if (!allowed.has(item.code) || seen.has(item.code)) continue;
-    const advice = cleanText(item.advice, L.advice, context);
+    const advice = cleanText(item.advice, L.advice, context, issues, true);
     if (!advice) continue;
     seen.add(item.code);
     out.push({ code: item.code, advice });
@@ -155,7 +258,11 @@ export function validateRoadmapOutput(output: unknown, context: RoadmapContext):
     return { ok: false, reason: "schema", path: issue ? issue.path.join(".") : "" };
   }
   const data = parsed.data;
-  const summary = cleanText(data.summary, L.summary, context);
+  const issues: string[] = [];
+  const summaryIssues: string[] = [];
+  // A summary whose every sentence had to go is replaced by a plain one (the issues ask the model again first).
+  const summary = cleanText(data.summary, L.summary, context, summaryIssues, true) ?? (summaryIssues.length ? fallbackSummary(context.windowTerm) : null);
+  issues.push(...summaryIssues);
   if (!summary) return { ok: false, reason: "summary", path: "summary" };
 
   // The thesis group is done one way: the first way the model names wins, the courses of the other are dropped.
@@ -167,31 +274,32 @@ export function validateRoadmapOutput(output: unknown, context: RoadmapContext):
     if (!way.has(index)) way.set(index, kind);
     return way.get(index) === kind;
   });
-  const study = cleanItems(studyItems, context.courses, L.studyMax, context);
-  const advice = (data.advice ?? []).map((item) => cleanText(item, L.adviceItem, context)).filter((item): item is string => Boolean(item)).slice(0, L.adviceMax);
-  const improve = cleanItems(data.improve, context.improve, L.improveMax, context);
+  const study = cleanItems(studyItems, context.courses, L.studyMax, context, issues);
+  const advice = (data.advice ?? []).map((item) => cleanText(item, L.adviceItem, context, issues, true)).filter((item): item is string => Boolean(item)).slice(0, L.adviceMax);
+  const improve = cleanItems(data.improve, context.improve, L.improveMax, context, issues);
 
   const skills: RoadmapOutput["skills"] = [];
   for (const item of data.skills) {
     if (!context.skills.has(item.key) || skills.some((skill) => skill.key === item.key)) continue;
-    const why = cleanText(item.why, L.why, context);
-    const steps = item.steps.map((step) => cleanText(step, L.step, context)).filter((step): step is string => Boolean(step)).slice(0, L.stepsMax);
+    const why = cleanText(item.why, L.why, context, issues, true);
+    // Steps and the outcome set goals ("thành thạo React sau học kỳ"): only their terms are checked.
+    const steps = item.steps.map((step) => cleanText(step, L.step, context, issues)).filter((step): step is string => Boolean(step)).slice(0, L.stepsMax);
     if (!why || !steps.length) continue;
-    skills.push({ key: item.key, why, steps, outcome: cleanText(item.outcome, L.outcome, context) });
+    skills.push({ key: item.key, why, steps, outcome: cleanText(item.outcome, L.outcome, context, issues) });
   }
 
   const months: RoadmapOutput["months"] = [];
   for (const item of data.months) {
     const month = Number(item.month);
     if (!Number.isInteger(month) || month < 1 || month > context.months || months.some((entry) => entry.month === month)) continue;
-    const tasks = item.tasks.map((task) => cleanText(task, L.task, context)).filter((task): task is string => Boolean(task)).slice(0, L.tasksMax);
+    const tasks = item.tasks.map((task) => cleanText(task, L.task, context, issues)).filter((task): task is string => Boolean(task)).slice(0, L.tasksMax);
     if (!tasks.length) continue;
-    months.push({ month, focus: cleanText(item.focus, L.focus, context), tasks });
+    months.push({ month, focus: cleanText(item.focus, L.focus, context, issues), tasks });
   }
   months.sort((a, b) => a.month - b.month);
 
   const kept: RoadmapOutput = { summary, advice, study, improve, skills: skills.slice(0, L.skillsMax), months };
-  if (!study.length && !improve.length && !kept.skills.length && !months.length) return { ok: false, reason: "empty", path: "" };
+  if (!study.length && !improve.length && !kept.skills.length && !months.length) return { ok: false, reason: "empty", path: "", issues };
   const returned = data.study.length + data.improve.length + data.skills.length + data.months.length + (data.advice?.length ?? 0);
-  return { ok: true, output: kept, dropped: returned - study.length - improve.length - kept.skills.length - months.length - advice.length };
+  return { ok: true, output: kept, dropped: returned - study.length - improve.length - kept.skills.length - months.length - advice.length, issues };
 }

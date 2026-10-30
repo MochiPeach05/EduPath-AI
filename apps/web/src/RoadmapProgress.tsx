@@ -1,21 +1,30 @@
 import { useState } from "react";
+import { programName } from "./display-format";
 import {
-  auditGroups, auditNote, courseList, creditProgress, formatNumber, groupCountText, planChoiceText, termLabel, unmatchedNote,
-  type AuditMark, type AuditView, type PlanOrigin, type StudyPlanContext, type StudyPlanData, type StudyPlanProjection,
+  auditGroups, auditNote, courseList, creditProgress, formatNumber, groupCountText, neededTone, planChoiceText, termLabel, unmatchedNote,
+  type AuditMark, type AuditView, type NeededTone, type PlanOrigin, type StudyPlanContext, type StudyPlanData, type StudyPlanProjection,
 } from "./study-plan-data";
 
 // "Theo dõi tiến độ" of #roadmap (user 2026-10-24, after Stellic's "Track your progress" and "Symbols overview", the
 // symbols folded in as "Ý nghĩa các ký hiệu"): the program's requirements with every course's state, official or with the plan.
 
-/** One audit symbol (Stellic's legend), with a label for screen readers. */
-export function Mark({ kind, count }: { kind: AuditMark | "remaining" | "retake" | "not_counted" | "equivalent" | "unknown"; count?: number }) {
+/** The label of a course still needed, by its colour (user 2026-10-30: red only for Chưa đạt). */
+const NEEDED_LABELS: Record<NeededTone, string> = { failed: "Chưa đạt", overdue: "Trễ kế hoạch đào tạo", upcoming: "Còn thiếu" };
+
+/**
+ * One audit symbol (Stellic's legend), with a label for screen readers. tone colours a course still needed: grey until its
+ * term, amber once overdue, red only when failed. "Không được tính" is a grey "i" (AV0, kiểm tra đầu khóa are normal) and
+ * "warning" the amber "!" of a planner check.
+ */
+export function Mark({ kind, count, tone }: { kind: AuditMark | "remaining" | "retake" | "not_counted" | "equivalent" | "unknown" | "warning"; count?: number; tone?: NeededTone }) {
   const labels: Record<string, [string, string]> = {
-    done: ["✓", "Đã hoàn thành"], running: ["✓✓", "Đang học"], planned: ["✓", "Đã lên kế hoạch"], needed: ["", "Còn thiếu"],
+    done: ["✓", "Đã hoàn thành"], running: ["✓✓", "Đang học"], planned: ["✓", "Đã lên kế hoạch"], needed: ["", NEEDED_LABELS[tone ?? "upcoming"]],
     remaining: [String(count ?? ""), `Còn thiếu ${count ?? ""}`], retake: ["↻", "Đã học nhiều lần, chỉ tính một lần"],
-    not_counted: ["!", "Không được tính"], equivalent: ["⇄", "Tính qua học phần tương đương"], unknown: ["?", "Chưa rõ yêu cầu"],
+    not_counted: ["i", "Không được tính"], equivalent: ["⇄", "Tính qua học phần tương đương"], unknown: ["?", "Chưa rõ yêu cầu"], warning: ["!", "Cần chú ý"],
   };
   const [glyph, label] = labels[kind]!;
-  return <span className={`rm-mark rm-mark-${kind.replace("_", "-")}`} role="img" aria-label={label} title={label}>{glyph}</span>;
+  const toneClass = kind === "needed" && tone && tone !== "upcoming" ? ` rm-tone-${tone}` : "";
+  return <span className={`rm-mark rm-mark-${kind.replace("_", "-")}${toneClass}`} role="img" aria-label={label} title={label}>{glyph}</span>;
 }
 
 function ProgressBar({ done, running, planned, total }: { done: number; running: number; planned: number; total: number | null }) {
@@ -55,7 +64,7 @@ export function RoadmapTrack({ context, plan, projection, origin = null, onOpenP
       <header className="rm-track-title">
         <div>
           <h2 id="rm-track-title">Theo dõi tiến độ của bạn</h2>
-          <p>{context.graduation ? `Theo ${context.graduation.standardName}.` : "Theo chương trình đào tạo của khóa (chưa có tiêu chuẩn xét tốt nghiệp)."}</p>
+          <p>{context.graduation ? `Theo ${programName(context.graduation.standardName)}.` : "Theo chương trình đào tạo của khóa (chưa có tiêu chuẩn xét tốt nghiệp)."}</p>
         </div>
         <div className="rm-segmented" role="group" aria-label="Chế độ xem">
           <button type="button" aria-pressed={view === "official"} onClick={() => setView("official")}>Chính thức</button>
@@ -67,7 +76,7 @@ export function RoadmapTrack({ context, plan, projection, origin = null, onOpenP
         {onOpenPlanner && <button type="button" className="sw-outline" onClick={onOpenPlanner}>Mở Kế hoạch học kỳ</button>}
       </div>}
       <dl className="rm-facts">
-        <div><dt>Chương trình</dt><dd>{context.curriculum?.name ?? "Chưa có chương trình đào tạo"}</dd></div>
+        <div><dt>Chương trình</dt><dd>{context.curriculum ? programName(context.curriculum.name) : "Chưa có chương trình đào tạo"}</dd></div>
         <div><dt>Khóa · Chuyên ngành</dt><dd>{[context.cohortCode, context.specialtyLabel].filter(Boolean).join(" · ") || "Chưa cập nhật"}</dd></div>
         <div><dt>Điểm TB tích lũy</dt><dd>{gpa?.actual != null ? `${formatNumber(gpa.actual)} / ${gpa.scale}` : "—"}{gpa?.required != null && <small> · cần {formatNumber(gpa.required)}</small>}</dd></div>
         <div><dt>Học kỳ đang học</dt><dd>{context.studyTerm && running.length ? `${termLabel(context.studyTerm)} · ${running.length} học phần` : "Không có học phần đang học"}</dd></div>
@@ -95,17 +104,20 @@ export function RoadmapTrack({ context, plan, projection, origin = null, onOpenP
         {group.mark === "unknown" && <p className="rm-req-rule">{context.graduation
           ? "Tiêu chuẩn xét tốt nghiệp không ghi số tín chỉ cần chọn của nhóm này. Hãy hỏi cố vấn học tập."
           : "Chương trình đào tạo không ghi số tín chỉ cần chọn của nhóm này, và kế hoạch đào tạo của khóa không có quy định “Chọn … trong …” cho nhóm. Hãy hỏi cố vấn học tập."}</p>}
-        <ul className="rm-req-rows">{group.rows.map((row) => <li key={row.course.code} className={`rm-req-row rm-row-${row.mark}`}>
-          <Mark kind={row.mark} />
-          <span className="rm-row-code">{row.course.code}</span>
-          <span className="rm-row-name">{row.course.name}{row.course.attempts > 1 && <> <Mark kind="retake" /></>}{row.course.equivalent && <> <Mark kind="equivalent" /><small> qua {row.course.equivalent}</small></>}</span>
-          <span className="rm-row-credits">{formatNumber(row.course.credits)} TC</span>
-          <span className="rm-row-note">{auditNote(row)}</span>
-        </li>)}</ul>
+        <ul className="rm-req-rows">{group.rows.map((row) => {
+          const tone = row.mark === "needed" ? neededTone(row.course, context.currentTerm) : undefined;
+          return <li key={row.course.code} className={`rm-req-row rm-row-${row.mark}${tone ? ` rm-needed-${tone}` : ""}`}>
+            <Mark kind={row.mark} tone={tone} />
+            <span className="rm-row-code">{row.course.code}</span>
+            <span className="rm-row-name">{row.course.name}{row.course.attempts > 1 && <> <Mark kind="retake" /></>}{row.course.equivalent && <> <Mark kind="equivalent" /><small> qua {row.course.equivalent}</small></>}</span>
+            <span className="rm-row-credits">{formatNumber(row.course.credits)} TC</span>
+            <span className="rm-row-note">{auditNote(row, context.currentTerm)}</span>
+          </li>;
+        })}</ul>
       </details>)}</div>
       {context.unmatched.length > 0 && <div className="rm-unmatched">
         <h3><Mark kind="not_counted" /> Học phần không được tính ({context.unmatched.length})</h3>
-        <p>Học phần đã học hoặc đang học nhưng không thuộc yêu cầu nào của chương trình (học phần chuyên ngành khác, học phần ngoài chương trình).</p>
+        <p>Học phần đã học hoặc đang học nhưng không thuộc yêu cầu nào của chương trình (học phần chuyên ngành khác, học phần ngoài chương trình như Anh văn đầu vào). Đây không phải lỗi: các học phần này chỉ không được tính vào tiến độ.</p>
         <ul className="rm-req-rows">{context.unmatched.map((course) => <li key={course.code} className="rm-req-row">
           <Mark kind="not_counted" />
           <span className="rm-row-code">{course.code}</span>
@@ -122,13 +134,16 @@ export function RoadmapTrack({ context, plan, projection, origin = null, onOpenP
 export function RoadmapLegend() {
   const rows: [Parameters<typeof Mark>[0], string, string][] = [
     [{ kind: "done" }, "Đã hoàn thành", "Học phần hoặc yêu cầu đã đạt bằng kết quả đã có. Giống nhau ở chế độ Chính thức và Theo kế hoạch."],
-    [{ kind: "needed" }, "Còn thiếu", "Chính thức: chưa học, chưa đăng ký hoặc chưa đạt. Theo kế hoạch: còn chưa có trong kế hoạch của bạn."],
+    [{ kind: "needed" }, "Còn thiếu", "Chính thức: chưa học hoặc chưa đăng ký, chưa tới học kỳ dự kiến. Theo kế hoạch: còn chưa có trong kế hoạch của bạn."],
+    [{ kind: "needed", tone: "overdue" }, "Trễ kế hoạch đào tạo", "Học phần bắt buộc đã tới hoặc qua học kỳ dự kiến của kế hoạch đào tạo mà bạn chưa học, chưa đăng ký."],
+    [{ kind: "needed", tone: "failed" }, "Chưa đạt", "Học phần chưa đạt (F, VT, CT), cần học lại. Chỉ trạng thái này dùng màu đỏ."],
     [{ kind: "running" }, "Đang học", "Học phần bạn đang học trong học kỳ này (đã đăng ký, chưa có điểm). Ở một yêu cầu: sẽ đủ khi bạn học đạt các học phần đang học."],
     [{ kind: "planned" }, "Đã lên kế hoạch", "Học phần đã có trong kế hoạch; sẽ được tính khi bạn học đạt. Ở một yêu cầu: sẽ đủ khi bạn học đạt kế hoạch. Chỉ thấy ở chế độ Theo kế hoạch."],
     [{ kind: "remaining", count: 3 }, "Số còn thiếu", "Số học phần (hoặc số tín chỉ với nhóm tự chọn) còn thiếu để đủ yêu cầu."],
     [{ kind: "unknown" }, "Chưa rõ yêu cầu", "Chưa biết nhóm cần bao nhiêu tín chỉ hay bao nhiêu môn: tiêu chuẩn xét tốt nghiệp, chương trình đào tạo và kế hoạch đào tạo của khóa đều không ghi."],
     [{ kind: "retake" }, "Học nhiều lần", "Học phần đã học hơn một lần (học lại, học cải thiện) nhưng chỉ được tính một lần."],
-    [{ kind: "not_counted" }, "Không được tính", "Đã học hoặc đăng ký nhưng không được tính cho yêu cầu nào; được liệt kê ở mục Học phần không được tính ở cuối trang."],
+    [{ kind: "not_counted" }, "Không được tính", "Đã học hoặc đăng ký nhưng không được tính cho yêu cầu nào (như Anh văn đầu vào); được liệt kê ở mục Học phần không được tính ở cuối trang. Đây không phải lỗi."],
+    [{ kind: "warning" }, "Cần chú ý", "Ở Kế hoạch học kỳ: học phần thiếu môn tiên quyết, chưa học trước hoặc thường không mở trong học kỳ đã xếp."],
     [{ kind: "equivalent" }, "Học phần tương đương", "Yêu cầu được tính qua một học phần tương đương: mã cũ của học phần, hoặc học phần bạn đã học trả nợ với khóa sau."],
   ];
   return <details className="rm-legend">
@@ -139,6 +154,6 @@ export function RoadmapLegend() {
       <tbody>{rows.map(([mark, name, text]) => <tr key={name}><td><Mark {...mark} /></td><th scope="row">{name}</th><td>{text}</td></tr>)}</tbody>
     </table>
     <h3>Học phần không được tính</h3>
-    <p>Cuối mục Theo dõi tiến độ là các học phần đã học hoặc đã đăng ký nhưng không thuộc yêu cầu nào của chương trình, ví dụ học phần của chuyên ngành khác hoặc học phần ngoài chương trình đào tạo. Học phần chưa đạt (F, VT, CT) vẫn nằm trong yêu cầu tương ứng, với ký hiệu Còn thiếu.</p>
+    <p>Cuối mục Theo dõi tiến độ là các học phần đã học hoặc đã đăng ký nhưng không thuộc yêu cầu nào của chương trình, ví dụ học phần của chuyên ngành khác hoặc học phần ngoài chương trình đào tạo. Học phần chưa đạt (F, VT, CT) vẫn nằm trong yêu cầu tương ứng, với ký hiệu Chưa đạt màu đỏ.</p>
   </details>;
 }

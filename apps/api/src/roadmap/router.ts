@@ -10,8 +10,9 @@ import { STUDY_ROADMAP_KIND } from "../competency-assessment/ai/worker-protocol.
 import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
 import { activeConsentVersion, isValidConsent } from "../student/consent.js";
-import { readSurvey } from "../student/survey.js";
-import { createRoadmap, createRoadmapExpiry, newestAssessmentInfo, readNewestRoadmap, RoadmapError, type RoadmapStatus } from "./jobs.js";
+import { readSurvey, surveyFacts } from "../student/survey.js";
+import { roadmapBasis } from "./basis.js";
+import { createRoadmap, createRoadmapExpiry, newestAssessmentInfo, readNewestRoadmap, RoadmapError, type RoadmapRow, type RoadmapStatus } from "./jobs.js";
 import { presentRoadmap } from "./present.js";
 import { roadmapWindow, vietnamToday } from "./window.js";
 
@@ -28,6 +29,17 @@ const today = () => vietnamToday(new Date());
 function upcomingTerm() {
   const window = roadmapWindow(new Date());
   return { term: window.term ?? null, start: window.start, end: window.end };
+}
+
+/**
+ * Where the advice of a roadmap comes from (roadmap-v9; user 2026-10-30: "Nên tách riêng phần 'bạn tự đánh giá' với 'hệ
+ * thống ghi nhận'"): what the student says in the profile survey, read now (the roadmap never stores it), next to what the
+ * system had on record. Null for a roadmap made before roadmap-v9 or without the survey under a valid consent.
+ */
+function roadmapBasisView(row: RoadmapRow | null, survey: Awaited<ReturnType<typeof readSurvey>>, consented: boolean) {
+  if (!row?.facts.recorded || !survey || !consented) return null;
+  const { selfReported, recorded } = roadmapBasis(row.facts, surveyFacts(survey));
+  return { selfReported, recorded, surveyChanged: new Date(survey.updatedAt).getTime() > new Date(row.createdAt).getTime() };
 }
 
 async function inTransaction<T>(pool: DatabasePool, work: (client: PoolClient) => Promise<T>): Promise<T> {
@@ -100,6 +112,7 @@ export function createRoadmapRouter(pool: DatabasePool | undefined, webOrigin: s
       stale: Boolean(row && assessment && row.assessmentId !== assessment.id),
       // A new roadmap needs the answered profile survey, agreed to under the current policy.
       surveyDone: survey?.complete === true && isValidConsent(surveyConsent),
+      basis: roadmapBasisView(row, survey, isValidConsent(surveyConsent)),
       aiEnabled: enabled,
       worker: await workerStatus(),
       upcoming: upcomingTerm(),

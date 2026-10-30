@@ -143,7 +143,7 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
                   <div>
                     <strong>{course?.name ?? item.code}</strong><span className="rm-course-code">{item.code}</span>
                     {course && <small className="rm-course-facts">{formatNumber(course.credits)} TC{course.state === "failed" ? " · học lại" : ""}{course.conditional ? " · môn điều kiện" : ""}</small>}
-                    {problems.map((text) => <small key={text} className="rm-issue"><Mark kind="not_counted" /> {text}</small>)}
+                    {problems.map((text) => <small key={text} className="rm-issue"><Mark kind="warning" /> {text}</small>)}
                   </div>
                   <div className="rm-term-actions">
                     <select aria-label={`Chuyển ${course?.name ?? item.code} sang học kỳ khác`} value={term.code} onChange={(event) => move(item.code, event.target.value || null)}>

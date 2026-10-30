@@ -71,7 +71,7 @@ describe("study plan model", () => {
   it("orders and names terms, and finds the running term in Vietnam time", () => {
     expect([nextTerm("HK261"), nextTerm("HK262"), nextTerm("HK263"), nextTerm("HK993")]).toEqual(["HK262", "HK263", "HK271", "HK001"]);
     expect(termIndex("HK263") < termIndex("HK271")).toBe(true);
-    expect(termLabel("HK262")).toBe("HK2 · 2026–2027");
+    expect(termLabel("HK262")).toBe("HK2 2026–2027");
     expect(["2026-10-23T08:00:00Z", "2027-01-20T08:00:00Z", "2027-02-01T08:00:00Z", "2027-07-15T08:00:00Z", "2026-08-31T18:00:00Z"]
       .map((date) => calendarTermCode(new Date(date)))).toEqual(["HK261", "HK261", "HK262", "HK263", "HK261"]);
   });

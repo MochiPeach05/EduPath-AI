@@ -4,7 +4,7 @@
 // emails, classes or interests (the privacy policy of 2026-10-11 keeps interests away from the model).
 import { FAIL_LETTERS } from "../competency-assessment/constants.js";
 import { fold } from "../competency-assessment/specialty.js";
-import type { AssessmentResult, CourseFact, GapStatus, PlanCourseRef } from "../competency-assessment/types.js";
+import type { AssessmentResult, CourseFact, CourseState, GapStatus, PlanCourseRef } from "../competency-assessment/types.js";
 import { THESIS_NAME_PATTERN } from "../graduation/thesis.js";
 import type { RoadmapWindow } from "./window.js";
 
@@ -60,6 +60,16 @@ export type RoadmapFacts = {
     openGroups: { label: string; unit: "môn" | "TC"; done: number | null; required: number | null }[];
     termsLeft: string[]; lastTerm: string | null; creditsPerTerm: number | null; lateCount: number;
   };
+  /**
+   * What the system has on record, to hold what the student only says in the profile survey against (user 2026-10-30:
+   * "Nên tách riêng phần 'bạn tự đánh giá' với 'hệ thống ghi nhận'"): every skill of the assessment with its score (null:
+   * no evidence yet) and the program's internship courses with their state. Absent in roadmaps made before roadmap-v9.
+   */
+  recorded?: RoadmapRecorded;
+};
+export type RoadmapRecorded = {
+  skills: { name: string; score: number | null; levelLabel: string | null }[];
+  internship: { name: string; state: CourseState }[];
 };
 
 /** Skills offered to the model: required first, the widest gaps first. */
@@ -70,6 +80,8 @@ const IMPROVE_LETTERS = new Set(["D", "D+"]);
 /** English courses are never offered for improvement (user, 2026-10-24); a failed one is still a retake. */
 const isEnglish = (item: Pick<CourseFact, "code" | "name">) => /^71ENG/i.test(item.code) || /^(?:anh van|tieng anh)\b/.test(fold(item.name));
 const TOPIC_NAME_PATTERN = /\bchuyen de tot nghiep\b/;
+/** "Đồ án thực tập", "Thực tập tốt nghiệp": the program's internship, what "kinh nghiệm thực tập" can be checked against. */
+const INTERNSHIP_NAME_PATTERN = /\bthuc tap\b/;
 /** The levels in order, to name the next one a met skill can reach. */
 const LEVEL_LADDER = ["Yếu", "Trung bình", "Khá", "Giỏi", "Xuất sắc"];
 const RETAKE_LETTERS = new Set(FAIL_LETTERS);
@@ -205,11 +217,18 @@ export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult
     lateCount: result.progress?.lateCount ?? 0,
   };
 
+  const recorded: RoadmapRecorded = {
+    skills: (result.skills ?? []).map((skill) => ({ name: skill.name, score: skill.score, levelLabel: skill.score === null ? null : skill.levelLabel })),
+    internship: (result.courses ?? []).filter((item) => item.applicable && INTERNSHIP_NAME_PATTERN.test(fold(item.name)))
+      .map((item) => ({ name: item.name, state: item.state })),
+  };
+
   return {
     window, assessmentId, calcVersion: result.meta.calcVersion, pace,
     cohortCode: result.student.cohortCode, specialtyLabel: result.student.specialtyLabel, careerName: result.career?.nameVi ?? null,
     currentTerm: result.transcript?.latestTerm ?? null, runningTerm, nextTerm,
     study, choices, improve, skills: ordered,
     graduation: { status: result.graduation.status, statusLabel: result.graduation.statusLabel },
+    recorded,
   };
 }

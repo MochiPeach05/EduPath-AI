@@ -36,6 +36,23 @@ const context: StudyPlanContext = {
 const empty: StudyPlanData = { schemaVersion: 1, terms: [{ code: "HK261", courses: [] }, { code: "HK262", courses: [] }] };
 
 describe("Theo dõi tiến độ", () => {
+  it("keeps red for Chưa đạt only: a course not due yet is grey, an overdue one amber, Không được tính a grey i", () => {
+    const colours: StudyPlanContext = { ...context,
+      courses: [...context.courses.map((item) => item.code === "C" ? { ...item, planTerm: "HK252" } : item.code === "D" ? { ...item, planTerm: "HK262" } : item),
+        course("F1", { state: "failed", grade: "F", takenTerm: "HK251", planTerm: "HK251" })],
+      graduation: { ...context.graduation!, groups: [{ ...context.graduation!.groups[0]!, required: 4, courseCodes: ["A", "C", "D", "F1"] }, context.graduation!.groups[1]!] },
+      unmatched: [{ code: "AV0", name: "Anh văn đầu vào", credits: 0, state: "passed", grade: "Đạt", term: "HK231" }],
+    };
+    const html = renderToStaticMarkup(createElement(RoadmapTrack, { context: colours, plan: empty, projection: null }));
+    expect(html).toMatch(/rm-req-row rm-row-needed rm-needed-overdue">.*?Trễ kế hoạch đào tạo \(dự kiến HK2 2025–2026\)/);
+    expect(html).toMatch(/rm-req-row rm-row-needed rm-needed-upcoming">.*?Chưa học · dự kiến HK2 2026–2027/);
+    expect(html).toMatch(/rm-req-row rm-row-needed rm-needed-failed">.*?Chưa đạt \(F\)/);
+    expect(html).toContain('class="rm-mark rm-mark-needed rm-tone-failed" role="img" aria-label="Chưa đạt"');
+    expect(html).toContain('class="rm-mark rm-mark-not-counted" role="img" aria-label="Không được tính" title="Không được tính">i</span>');
+    expect(html).toContain("Đây không phải lỗi");
+    expect(html).toContain("<dd>HK1 2026–2027 · 1 học phần</dd>");
+  });
+
   it("shows a group whose only course is being studied as ✓✓ Đang học, never Đã hoàn thành, and what the AI just added", () => {
     const plan: StudyPlanData = { ...empty, aiAdded: { completedAt: "2026-10-24T10:00:00.000Z", term: "HK262", codes: ["C"], addedAt: "2026-10-24T10:05:00.000Z" },
       terms: [{ code: "HK261", courses: [] }, { code: "HK262", courses: [{ code: "C" }] }] };
@@ -66,6 +83,8 @@ describe("Kế hoạch học kỳ", () => {
     expect(html).toContain("Đã thêm 2 học phần do lộ trình AI đề xuất (lộ trình soạn lúc 17:00 24/10/2026): Môn C (C) và Môn D (D).");
     expect(html).toContain("Ẩn thông báo");
     expect(html).toContain("8 TC · vượt mức tối đa 7 TC");
+    // A planner check is a warning (amber !), not a failure.
+    expect(html).not.toContain("rm-mark-not-counted");
     expect(html).toContain("gồm 2 TC môn điều kiện");
     expect(html).toContain("Bạn điều chỉnh kế hoạch bằng cách kéo học phần");
     expect(html).not.toContain("Kế hoạch chưa có học phần nào.");
@@ -81,6 +100,8 @@ describe("Lộ trình AI đề xuất", () => {
     },
     assessment: { id: "a2", createdAt: "2026-10-25T03:00:00.000Z", hasCareer: true }, stale: true, surveyDone, aiEnabled: true,
     worker: { online: false, supportsRoadmap: false }, upcoming: { term: "HK262", start: "2026-12-21", end: "2027-04-04" },
+    basis: { recorded: ["Chưa có minh chứng (chưa có điểm từ học phần nào): React", "Học phần thực tập trong chương trình: Đồ án thực tập (chưa học)"],
+      selfReported: ["Bạn tự mô tả: Thành thạo React", "Thực tập: Đang thực tập"], surveyChanged: false },
   });
   const page = (surveyDone: boolean) => {
     liveData.mockReturnValue({ data: response(surveyDone), error: null, loading: false });
@@ -89,8 +110,14 @@ describe("Lộ trình AI đề xuất", () => {
 
   it("names the term of the school calendar the roadmap covers (user, 2026-10-25)", () => {
     const html = page(true);
-    expect(html).toContain("Lộ trình HK2 · 2026–2027");
+    expect(html).toContain("Lộ trình HK2 2026–2027");
     expect(html).toContain("Từ 21/12/2026 đến 04/04/2027");
+  });
+
+  it("shows what the system has on record apart from what the student says (user 2026-10-30)", () => {
+    const html = page(true);
+    expect(html).toContain("Lời khuyên dựa trên");
+    expect(html).toMatch(/Hệ thống ghi nhận<\/h4>.*Chưa có minh chứng \(chưa có điểm từ học phần nào\): React.*Bạn tự đánh giá<\/h4>.*Thực tập: Đang thực tập/);
   });
 
   it("keeps Tạo lại for after Khảo sát định hướng, which a new roadmap needs", () => {

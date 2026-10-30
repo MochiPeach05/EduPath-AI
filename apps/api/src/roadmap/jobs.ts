@@ -17,6 +17,7 @@ import type { DatabasePool } from "../db/pool.js";
 import { activeConsentVersion, isValidConsent } from "../student/consent.js";
 import { readSurvey, surveyFacts } from "../student/survey.js";
 import { buildRoadmapFacts, type RoadmapFacts } from "./facts.js";
+import { sanitizeText } from "../competency-assessment/ai/prompt.js";
 import { buildRoadmapInput } from "./prompt.js";
 import { roadmapContextFromAiInput, validateRoadmapOutput, type RoadmapOutput } from "./validate.js";
 import { notifyInTransaction, roadmapFailed, roadmapReady } from "../notifications/notify.js";
@@ -30,6 +31,10 @@ const MAX_PENDING_ROADMAPS = 20;
 const MAX_ROADMAPS_PER_USER = 5;
 /** At most one insert per student within this many seconds. */
 const ROADMAP_INSERT_INTERVAL_SECONDS = 30;
+/** error_code of a roadmap asked again because its first answer did not hold to the data (roadmap-v9); cleared when it ends. */
+export const ROADMAP_RETRY_CODE = "grounding_retry";
+/** Issues named to the model when it is asked again. */
+const MAX_RETRY_ISSUES = 6;
 
 type Db = Pick<DatabasePool, "query">;
 const PENDING = "('queued','processing')";
@@ -206,6 +211,25 @@ export async function extendRoadmap(db: Db, id: string, leaseToken: string): Pro
 type LockedRoadmap = { status: string; lease_token: string | null; valid: boolean | null; ai_input: Record<string, unknown> | null };
 
 /**
+ * The input of the second try (roadmap-v9; user 2026-10-30: "kiểm tra lại đầu ra trước khi hiện"): the same data, the
+ * system message with what the first answer got wrong, and that answer's checked output, kept if the second one is
+ * unusable. Null when the input was already asked again (one retry only) or cannot be read.
+ */
+export function retryInput(input: Record<string, unknown> | null, issues: readonly string[], fallback: RoadmapOutput | null): Record<string, unknown> | null {
+  if (!input || input.retry !== undefined || typeof input.system !== "string") return null;
+  const listed = issues.slice(0, MAX_RETRY_ISSUES).map((issue) => `- ${sanitizeText(issue, 400)}`);
+  const note = ["", "LƯU Ý CHO LẦN VIẾT NÀY: bản trước bị hệ thống trả lại vì các câu sau không khớp dữ liệu:", ...listed,
+    "Chỉ nhắc các học kỳ trong danh sách học kỳ được nhắc tới; điều chỉ có trong phần bạn tự khai thì ghi rõ \"bạn tự đánh giá…\" hay \"bạn cho biết…\" và gợi ý cách chứng minh. Hãy viết lại toàn bộ lộ trình theo đúng cấu trúc JSON."].join("\n");
+  return { ...input, system: `${input.system}\n${note}`, retry: { issues: issues.slice(0, MAX_RETRY_ISSUES), fallback } };
+}
+/** The checked output of the first try, stored with the retry. */
+function retryFallback(input: Record<string, unknown> | null): RoadmapOutput | null {
+  const retry = input?.retry;
+  return retry && typeof retry === "object" && !Array.isArray(retry) && (retry as { fallback?: unknown }).fallback
+    ? (retry as { fallback: RoadmapOutput }).fallback : null;
+}
+
+/**
  * Stores the worker's result inside the worker router's transaction. Returns 'missing' when no roadmap has this id,
  * 'expired' for another or lost lease (a cancelled roadmap stays cancelled), and 'ok' when stored or already stored
  * under the same lease. The output is validated and cleaned (validate.ts); ai_input is cleared either way.
@@ -223,9 +247,23 @@ export async function completeRoadmap(client: PoolClient, id: string, input: Wor
   if (!("error" in input)) {
     const context = roadmapContextFromAiInput(job.ai_input);
     const checked = context ? validateRoadmapOutput(input.output, context) : null;
+    const issues = checked?.issues ?? [];
+    if (checked && issues.length) {
+      // The answer named a term it may not name or stated as fact what only the student said: ask once more, with what
+      // was wrong (the sentences are already dropped from this output, kept should the second answer be unusable).
+      const again = retryInput(job.ai_input, issues, checked.ok ? checked.output : null);
+      if (again) {
+        await client.query(`UPDATE stu_roadmaps SET status='queued',error_code=$2,ai_input=$3::jsonb,lease_token=NULL,lease_until=NULL,updated_at=now()
+          WHERE id=$1`, [id, ROADMAP_RETRY_CODE, JSON.stringify(again)]);
+        return "ok";
+      }
+    }
     if (checked?.ok) output = checked.output;
     else errorCode = "invalid_ai_output";
   }
+  // The second try failed: the first answer, its stray sentences dropped, is better than no roadmap.
+  const fallback = errorCode ? retryFallback(job.ai_input) : null;
+  if (fallback) { output = fallback; errorCode = null; }
   const model = "error" in input ? null : input;
   const promptVersion = typeof job.ai_input?.promptVersion === "string" ? job.ai_input.promptVersion : null;
   const updated = await client.query<{ user_id: string }>(

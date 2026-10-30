@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { surveyFacts } from "../student/survey.js";
+import { roadmapBasis } from "./basis.js";
 import { buildRoadmapFacts } from "./facts.js";
 import { presentRoadmap } from "./present.js";
-import { buildRoadmapInput, ROADMAP_OPTIONS, ROADMAP_PROMPT_VERSION, ROADMAP_THINK } from "./prompt.js";
+import { buildRoadmapInput, roadmapTerms, ROADMAP_OPTIONS, ROADMAP_PROMPT_VERSION, ROADMAP_THINK } from "./prompt.js";
 import { NONE, ROADMAP_LIMITS } from "./schema.js";
-import { ROADMAP_ASSESSMENT, ROADMAP_NOW, syntheticRoadmapFacts, syntheticRoadmapResult } from "./test-fixture.js";
-import { cleanCourseCodes, roadmapContextFromAiInput, validateRoadmapOutput } from "./validate.js";
+import { ROADMAP_ASSESSMENT, ROADMAP_NOW, syntheticRoadmapFacts, syntheticRoadmapResult, syntheticSurveyRow } from "./test-fixture.js";
+import { cleanCourseCodes, normalizeTermNames, roadmapContextFromAiInput, unattributedClaim, validateRoadmapOutput } from "./validate.js";
 import { dateText, roadmapWindow, vietnamToday } from "./window.js";
 import type { RoadmapRow } from "./jobs.js";
 
@@ -164,13 +166,22 @@ describe("buildRoadmapInput", () => {
     expect(input.think).toBe(ROADMAP_THINK);
     expect(input.options).toEqual(ROADMAP_OPTIONS);
     expect(input.options.num_ctx).toBe(16384);
-    expect(input.user).toContain("Học kỳ của lộ trình: học kỳ 2 năm học 2026–2027 (ngày dự kiến theo lịch của trường).");
+    expect(input.user).toContain("Học kỳ của lộ trình: HK2 2026–2027 (ngày dự kiến theo lịch của trường).");
     expect(input.user).toContain("Từ ngày 21/12/2026 đến ngày 04/04/2027.");
     expect(input.user).toContain("Tháng 2: từ 21/01/2027 đến 20/02/2027");
     expect(input.user).toContain("- 71ITBS10203 Cơ sở lập trình (3 TC): điểm 3,2 (F) — học lại; giúp kỹ năng nghề: Lập trình cơ bản");
-    expect(input.user).toContain("Theo kế hoạch học kỳ 2 năm học 2025–2026 (học kỳ tiếp theo, cần chuẩn bị đăng ký):");
-    expect(input.user).toContain("[3. HỌC PHẦN ĐANG HỌC] (học kỳ 1 năm học 2025–2026, chưa có kết quả)");
-    expect(input.user).toContain("học kỳ đang học: học kỳ 1 năm học 2025–2026; học kỳ tiếp theo theo kế hoạch đào tạo: học kỳ 2 năm học 2025–2026.");
+    expect(input.user).toContain("Theo kế hoạch HK2 2025–2026 (học kỳ tiếp theo, cần chuẩn bị đăng ký):");
+    expect(input.user).toContain("[3. HỌC PHẦN ĐANG HỌC] (HK1 2025–2026, chưa có kết quả)");
+    expect(input.user).toContain("Học kỳ đang học: HK1 2025–2026; học kỳ tiếp theo theo kế hoạch đào tạo: HK2 2025–2026.");
+    // roadmap-v9: the terms it may name, and no term already past (a late course says when to register instead).
+    expect(input.user).toContain("Học kỳ được nhắc tới (chỉ dùng các học kỳ này): HK1 2025–2026 (đang học), HK2 2025–2026, HK3 2025–2026, HK1 2026–2027, HK2 2026–2027 (học kỳ của lộ trình).");
+    expect(input.user).toContain("Trễ so với kế hoạch (đăng ký sớm nhất ở HK2 2026–2027):\n- 71ITIS30203 Hệ quản trị cơ sở dữ liệu (3 TC)\n");
+    expect(input.user).toContain("(trễ so với kế hoạch; đăng ký sớm nhất ở HK2 2026–2027): còn thiếu 3 TC");
+    expect(input.user).toContain("[5. HỌC PHẦN CẦN CẢI THIỆN] (đăng ký học lại, học cải thiện sớm nhất ở HK2 2026–2027)");
+    expect(input.user).not.toContain("HK3 2024–2025");
+    expect(input.user).not.toMatch(/học kỳ \d năm học|HK\d{3}/);
+    expect(input.keys).toMatchObject({ terms: ["HK251", "HK252", "HK253", "HK261", "HK262"], internshipDone: false, windowTerm: "HK262" });
+    expect(input.keys.unproven).toEqual(["C#/C++", "Docker", "thực tập"]);
     // The pace to graduate on time, with the numbers the advice may repeat.
     expect(input.user).toMatch(/Tín chỉ tích lũy: [\d,]+\/126 \(còn thiếu [\d,]+ TC\)/);
     expect(input.user).toContain("Học kỳ còn lại theo chương trình sau học kỳ đang học:");
@@ -211,6 +222,138 @@ describe("buildRoadmapInput", () => {
     expect(schema.properties.improve!.items.properties.code!.enum).toEqual([NONE]);
     expect([schema.properties.improve!.maxItems, schema.properties.skills!.minItems, schema.properties.skills!.maxItems]).toEqual([0, 0, 0]);
     expect(empty.user).toContain("[5. HỌC PHẦN CẦN CẢI THIỆN]\nKhông có.");
+  });
+});
+
+describe("roadmapTerms", () => {
+  it("names the terms from the one being studied to the plan's last, never one already past", () => {
+    const facts = syntheticRoadmapFacts();
+    expect(roadmapTerms(facts)).toEqual(["HK251", "HK252", "HK253", "HK261", "HK262"]);
+    // Nothing being studied: from the roadmap's own term.
+    expect(roadmapTerms({ ...facts, runningTerm: null, nextTerm: "HK243", pace: { ...facts.pace, termsLeft: ["HK243", "HK263"] } })).toEqual(["HK262", "HK263"]);
+    expect(roadmapTerms({ ...facts, runningTerm: null, window: { ...facts.window, term: undefined } })).toEqual([]);
+  });
+});
+
+describe("roadmapBasis", () => {
+  const row = syntheticSurveyRow();
+  const survey = surveyFacts({ answers: row.answers, interestTech: row.interest_tech, strengths: row.strengths,
+    interestHobbies: row.interest_hobbies, hasAchievements: row.has_achievements, achievements: row.achievements });
+
+  it("keeps what the student says apart from what the system has on record", () => {
+    const basis = roadmapBasis(syntheticRoadmapFacts(), survey);
+    expect(basis.selfReported).toEqual([
+      "Công nghệ bạn chọn là thế mạnh: Web front-end (HTML, CSS, JavaScript, React); Trí tuệ nhân tạo, học máy",
+      "Bạn tự mô tả: Thành thạo React và Node.js; Đã làm 2 dự án web bán hàng",
+      "Đi làm thêm: Có, liên quan CNTT", "Kinh nghiệm dẫn dắt nhóm: 1 dự án", "Dự án ngoài môn học: 1–2 dự án", "Tiếng Anh chuyên ngành: Đọc hiểu tốt",
+      "Thành tích bạn liệt kê: 2 mục",
+    ]);
+    expect(basis.recorded).toEqual([
+      "Chưa có minh chứng (chưa có điểm từ học phần nào): Web front-end, HTML, CSS, JavaScript, React, Trí tuệ nhân tạo, học máy",
+      "Học phần thực tập trong chương trình: Đồ án thực tập (chưa học)",
+      "Dự án ngoài môn học, dẫn dắt nhóm, đi làm thêm, tiếng Anh và thành tích: hệ thống không có dữ liệu để kiểm chứng.",
+    ]);
+    expect(basis.unproven).toEqual(expect.arrayContaining(["C#/C++", "Docker", "thực tập", "React", "JavaScript"]));
+    expect(basis.internshipDone).toBe(false);
+  });
+
+  it("counts a technology as shown from the Khá threshold up, and a passed internship as on record", () => {
+    const facts = syntheticRoadmapFacts();
+    const recorded = {
+      skills: [{ name: "JavaScript", score: 70, levelLabel: "Khá" }, { name: "React", score: 55.4, levelLabel: "Trung bình" }, { name: "HTML/CSS", score: 81, levelLabel: "Giỏi" }],
+      internship: [{ name: "Đồ án thực tập", state: "passed" as const }],
+    };
+    const basis = roadmapBasis({ ...facts, recorded }, survey);
+    expect(basis.recorded.slice(0, 4)).toEqual([
+      "Có điểm từ bảng điểm: HTML (mức Giỏi, 81 điểm); CSS (mức Giỏi, 81 điểm); JavaScript (mức Khá, 70 điểm)",
+      "Điểm còn dưới mức Khá: React (mức Trung bình, 55 điểm)",
+      "Chưa có minh chứng (chưa có điểm từ học phần nào): Web front-end, Trí tuệ nhân tạo, học máy",
+      "Học phần thực tập trong chương trình: Đồ án thực tập (đã đạt)",
+    ]);
+    expect(basis.unproven).toContain("React");
+    expect(basis.unproven).not.toContain("JavaScript");
+    expect(basis.unproven).not.toContain("thực tập");
+    expect(basis.internshipDone).toBe(true);
+  });
+});
+
+describe("holding the output to the data (roadmap-v9)", () => {
+  it("writes every term the way the pages do", () => {
+    expect(normalizeTermNames("Đăng ký ở HK262 hoặc học kỳ 3 năm học 2026-2027, rồi HK1 · 2027–2028; học kì 2 năm học 2025 – 2026."))
+      .toBe("Đăng ký ở HK2 2026–2027 hoặc HK3 2026–2027, rồi HK1 2027–2028; HK2 2025–2026.");
+    expect(normalizeTermNames("Học kỳ 2 của năm 2026 và HK2 2026–2028.")).toBe("Học kỳ 2 của năm 2026 và HK2 2026–2028.");
+  });
+
+  it("finds praise and experience stated as fact for what only the student said", () => {
+    const context = { unproven: ["React", "C#/C++", "thực tập"], internshipDone: false };
+    // The user's example (2026-10-30).
+    expect(unattributedClaim("Bạn có nền tảng vững chắc về React, có kinh nghiệm thực tập.", context)).toBe("React");
+    expect(unattributedClaim("Với kinh nghiệm thực tập, bạn nên ứng tuyển sớm.", context)).toBe("thực tập");
+    expect(unattributedClaim("React là thế mạnh của bạn.", context)).toBe("React");
+    expect(unattributedClaim("Bạn đã thành thạo C++ nên hãy làm dự án.", context)).toBe("C#/C++");
+    expect(unattributedClaim("Bạn đã làm dự án web bán hàng.", context)).toBe("đã làm dự án");
+    // Given as the student's word, a goal, advice, a negation or a skill on record: fine.
+    for (const sentence of [
+      "Bạn tự đánh giá thành thạo React, hãy làm một sản phẩm nhỏ để chứng minh.",
+      "Bạn cho biết đang thực tập, hãy ghi lại việc đã làm.",
+      "Hãy làm một dự án React để có nền tảng vững chắc.",
+      "Nắm vững React giúp bạn làm giao diện nhanh hơn.",
+      "Bạn chưa có kinh nghiệm thực tập nên hãy học tốt Đồ án thực tập.",
+      "Bạn có nền tảng vững về Phát triển web.",
+      "Mục tiêu cuối học kỳ là thành thạo React.",
+    ]) expect(unattributedClaim(sentence, context)).toBeNull();
+    expect(unattributedClaim("Bạn đã thực tập tại một công ty phần mềm.", { ...context, internshipDone: true })).toBeNull();
+  });
+
+  const row = syntheticSurveyRow();
+  const survey = surveyFacts({ answers: row.answers, interestTech: row.interest_tech, strengths: row.strengths,
+    interestHobbies: row.interest_hobbies, hasAchievements: row.has_achievements, achievements: row.achievements });
+  const context = roadmapContextFromAiInput(buildRoadmapInput(syntheticRoadmapFacts(), survey))!;
+  const output = (extra: Record<string, unknown> = {}) => ({
+    summary: "Học kỳ tới bạn nên hoàn thành tốt Kiểm thử phần mềm và học lại Cơ sở lập trình.",
+    study: [{ code: "71ITIS30203", advice: "Đăng ký ở HK262 vì môn này đã trễ so với kế hoạch." }],
+    improve: [{ code: "71ITBS10203", advice: "Học lại ngay để không ảnh hưởng các môn sau." }],
+    skills: [{ key: "S02", why: "Docker giúp bạn triển khai ứng dụng.", steps: ["Cài Docker và chạy thử một container."], outcome: "Thành thạo Docker cuối học kỳ." }],
+    months: [{ month: "1", focus: "Hoàn thành tốt các môn đang học.", tasks: ["Ôn tập Kiểm thử phần mềm mỗi tuần."] }],
+    ...extra,
+  });
+
+  it("keeps what holds to the data, its terms written one way", () => {
+    const checked = validateRoadmapOutput(output(), context);
+    if (!checked.ok) throw new Error("expected ok");
+    expect(checked.issues).toEqual([]);
+    expect(checked.output.study).toEqual([{ code: "71ITIS30203", advice: "Đăng ký ở HK2 2026–2027 vì môn này đã trễ so với kế hoạch." }]);
+    expect(checked.output.skills[0]!.outcome).toBe("Thành thạo Docker cuối học kỳ.");
+  });
+
+  it("drops each sentence naming a past term or praising what only the student said, and reports it", () => {
+    const checked = validateRoadmapOutput(output({
+      summary: "Bạn có nền tảng vững chắc về React, có kinh nghiệm thực tập. Học kỳ tới hãy học lại Cơ sở lập trình.",
+      improve: [{ code: "71ITBS10203", advice: "Học lại ở HK3 2024–2025." }, { code: "71ITSE30603", advice: "Học cải thiện ở HK2 2026–2027." }],
+      skills: [{ key: "S02", why: "Bạn đã thành thạo Docker nên chỉ cần ôn lại.", steps: ["Ôn lại Docker."], outcome: "Dùng Docker." }],
+    }), context);
+    if (!checked.ok) throw new Error("expected ok");
+    expect(checked.output.summary).toBe("Học kỳ tới hãy học lại Cơ sở lập trình.");
+    expect(checked.output.improve).toEqual([{ code: "71ITSE30603", advice: "Học cải thiện ở HK2 2026–2027." }]);
+    expect(checked.output.skills).toEqual([]);
+    expect(checked.issues).toHaveLength(3);
+    expect(checked.issues[0]).toContain("(React)");
+    expect(checked.issues[1]).toContain("HK3 2024–2025");
+    expect(checked.issues[2]).toContain("(Docker)");
+  });
+
+  it("writes a plain summary when every sentence of the model's had to go", () => {
+    const checked = validateRoadmapOutput(output({ summary: "Bạn có nền tảng vững chắc về React. Hãy học lại ở HK1 2024–2025." }), context);
+    if (!checked.ok) throw new Error("expected ok");
+    expect(checked.output.summary).toBe("Lộ trình HK2 2026–2027 gồm các học phần cần học, học phần cần cải thiện và kỹ năng nên bổ sung bên dưới. Hãy trao đổi với cố vấn học tập trước khi đăng ký học phần.");
+    expect(checked.issues).toHaveLength(2);
+  });
+
+  it("leaves an input made before roadmap-v9 as it was checked", () => {
+    const old = { ...context, terms: null };
+    const checked = validateRoadmapOutput(output({ summary: "Bạn có nền tảng vững chắc về React." }), old);
+    if (!checked.ok) throw new Error("expected ok");
+    expect([checked.output.summary, checked.issues]).toEqual(["Bạn có nền tảng vững chắc về React.", []]);
   });
 });
 

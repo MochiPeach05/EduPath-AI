@@ -1,5 +1,6 @@
 // Data of the #roadmap page (the 3-month study roadmap written by EduPath AI): the API shape of
 // /api/student/roadmap, its normalization and the plain-language labels of the page. Pure.
+import { termName } from "./display-format";
 
 export const ROADMAP_API = "/api/student/roadmap";
 /** How often the page asks for the job status while the AI writes. */
@@ -28,6 +29,12 @@ export type Roadmap = {
   advice: string[];
   study: RoadmapStudy[]; choices: RoadmapChoice[]; improve: RoadmapImprove[]; skills: RoadmapSkill[]; months: RoadmapMonth[];
 };
+/**
+ * Where the advice comes from (roadmap-v9; user 2026-10-30: "Nên tách riêng phần 'bạn tự đánh giá' với 'hệ thống ghi
+ * nhận'"): what the system had on record and what the student says in the profile survey (as it is now; surveyChanged:
+ * edited after the roadmap was written). Null for a roadmap made before, or without the survey.
+ */
+export type RoadmapBasis = { recorded: string[]; selfReported: string[]; surveyChanged: boolean };
 export type RoadmapResponse = {
   roadmap: Roadmap | null;
   assessment: { id: string; createdAt: string; hasCareer: boolean } | null;
@@ -38,12 +45,10 @@ export type RoadmapResponse = {
   worker: { online: boolean; supportsRoadmap: boolean };
   /** The term a roadmap made now would cover (null from an older API). */
   upcoming: { term: string | null; start: string; end: string } | null;
+  basis: RoadmapBasis | null;
 };
-/** "HK262" → "HK2 · 2026–2027". */
-export function roadmapTermLabel(code: string): string {
-  const year = 2000 + Number(code.slice(2, 4));
-  return `HK${code.slice(4)} · ${year}–${year + 1}`;
-}
+/** "HK262" → "HK2 2026–2027", as every student page writes a term (user 2026-10-30). */
+export const roadmapTermLabel = (code: string): string => termName(code);
 /** The eyebrow of a roadmap: its term, or "Lộ trình 3 tháng" for one made before roadmaps followed the school calendar. */
 export const roadmapWindowTitle = (window: { term?: string | null }) =>
   window.term ? `Lộ trình ${roadmapTermLabel(window.term)}` : "Lộ trình 3 tháng";
@@ -76,7 +81,12 @@ export function normalizeRoadmapResponse(value: unknown): RoadmapResponse {
     ? { id: data.assessment.id, createdAt: String(data.assessment.createdAt ?? ""), hasCareer: data.assessment.hasCareer === true } : null;
   const upcoming = isRecord(data.upcoming) && typeof data.upcoming.start === "string" && typeof data.upcoming.end === "string"
     ? { term: typeof data.upcoming.term === "string" && data.upcoming.term ? data.upcoming.term : null, start: data.upcoming.start, end: data.upcoming.end } : null;
-  return { roadmap: normalizeRoadmap(data.roadmap), assessment, stale: data.stale === true, surveyDone: data.surveyDone !== false, aiEnabled: data.aiEnabled === true, worker: worker(data.worker), upcoming };
+  const lines = (value: unknown) => list<unknown>(value).filter((item): item is string => typeof item === "string");
+  const basis = isRecord(data.basis) ? { recorded: lines(data.basis.recorded), selfReported: lines(data.basis.selfReported), surveyChanged: data.basis.surveyChanged === true } : null;
+  return {
+    roadmap: normalizeRoadmap(data.roadmap), assessment, stale: data.stale === true, surveyDone: data.surveyDone !== false, aiEnabled: data.aiEnabled === true,
+    worker: worker(data.worker), upcoming, basis: basis && (basis.recorded.length || basis.selfReported.length) ? basis : null,
+  };
 }
 
 export function normalizeRoadmapStatus(value: unknown): RoadmapStatusResponse {
@@ -97,22 +107,8 @@ export const isPending = (status: RoadmapStatus | null | undefined) => status ==
 export const dateText = (value: string) => value.split("-").reverse().join("/");
 /** "2026-10-24" → "24/10". */
 export const dayMonth = (value: string) => value.split("-").slice(1).reverse().join("/");
-/** "HK253" → "học kỳ 3 năm học 2025–2026"; other shapes are shown as they are. */
-export function termText(term: string | null | undefined): string | null {
-  if (!term) return null;
-  const match = /^HK(\d{2})([1-3])$/.exec(term.trim());
-  if (!match) return term;
-  const start = 2000 + Number(match[1]);
-  return `học kỳ ${match[2]} năm học ${start}–${start + 1}`;
-}
-/** "HK261" → "HK1 2026–2027"; other shapes are shown as they are. */
-export function termShort(term: string | null | undefined): string | null {
-  if (!term) return null;
-  const match = /^HK(\d{2})([1-3])$/.exec(term.trim());
-  if (!match) return term;
-  const start = 2000 + Number(match[1]);
-  return `HK${match[2]} ${start}–${start + 1}`;
-}
+/** "HK261" → "HK1 2026–2027" (termName, the one way a term is written); other shapes are shown as they are. */
+export const termShort = (term: string | null | undefined): string | null => (term ? termName(term.trim()) : null);
 const capitalize = (value: string) => value.charAt(0).toLocaleUpperCase("vi") + value.slice(1);
 
 /** The tag of a course to take. */
@@ -136,7 +132,7 @@ export function skillTags(skill: Pick<RoadmapSkill, "isRequired" | "kind">): str
 export const monthTitle = (month: Pick<RoadmapMonth, "month" | "start" | "end">) => `Tháng ${month.month} · ${dayMonth(month.start)} – ${dateText(month.end)}`;
 
 export const choiceText = (choice: RoadmapChoice) =>
-  `${choice.label}: còn thiếu ${choice.need}${choice.source === "late" && choice.termCode ? ` (theo kế hoạch ở ${termText(choice.termCode)})` : ""}`;
+  `${choice.label}: còn thiếu ${choice.need}${choice.source === "late" && choice.termCode ? ` (theo kế hoạch ở ${termShort(choice.termCode)})` : ""}`;
 
 const ERROR_MESSAGES: Record<string, string> = {
   assessment_required: "Bạn cần có kết quả Đánh giá năng lực trước khi tạo lộ trình.",
@@ -163,8 +159,14 @@ export function failureText(errorCode: string | null): string {
   }
 }
 
-/** The line under the spinner while the AI works, or the reason it waits. */
-export function pendingCopy(status: "queued" | "processing", workerState: RoadmapResponse["worker"]): { title: string; text: string } {
+/** error_code of a roadmap the AI writes once more because its first answer did not hold to the data (roadmap-v9). */
+export const ROADMAP_RETRY_CODE = "grounding_retry";
+
+/** The line under the spinner while the AI works, or the reason it waits; errorCode: a second try (ROADMAP_RETRY_CODE). */
+export function pendingCopy(status: "queued" | "processing", workerState: RoadmapResponse["worker"], errorCode: string | null = null): { title: string; text: string } {
+  if (errorCode === ROADMAP_RETRY_CODE && (status === "processing" || (workerState.online && workerState.supportsRoadmap))) {
+    return { title: "EduPath AI đang viết lại lộ trình…", text: "Bản đầu có vài câu chưa khớp dữ liệu của bạn (học kỳ đã qua, hoặc điều bạn tự đánh giá mà hệ thống chưa ghi nhận) nên AI viết lại một lần. Có thể mất thêm vài phút." };
+  }
   if (status === "processing") return { title: "EduPath AI đang soạn lộ trình…", text: "AI suy nghĩ kỹ trước khi viết nên có thể mất vài phút. Bạn có thể rời trang và quay lại sau." };
   if (!workerState.online) return { title: "Lộ trình sẽ được soạn khi máy AI hoạt động trở lại", text: "Yêu cầu đã được giữ trong hàng đợi; bạn không cần làm gì thêm." };
   if (!workerState.supportsRoadmap) return { title: "Máy AI đang chạy phiên bản cũ…", text: "Lộ trình sẽ được soạn khi máy AI được cập nhật." };

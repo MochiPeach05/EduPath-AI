@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { termName } from "../term-name.js";
 
 // "Lộ trình học tập", manual planning (user 2026-10-24, after Stellic's "Plan your path"): the courses a student places in
 // each future term. No weekly timetable ("Bỏ Lịch trình học kỳ"): a plan stored by the first version (87f61ff) also
@@ -45,11 +46,8 @@ export function nextTerm(code: string): string {
   const year = Number(code.slice(2, 4)), semester = Number(code.slice(4));
   return semester < 3 ? `HK${code.slice(2, 4)}${semester + 1}` : `HK${String((year + 1) % 100).padStart(2, "0")}1`;
 }
-/** "HK261" → "HK1 · 2026–2027" (en dash, as every other page prints a school year). */
-export function termLabel(code: string): string {
-  const year = 2000 + Number(code.slice(2, 4));
-  return `HK${code.slice(4)} · ${year}–${year + 1}`;
-}
+/** "HK261" → "HK1 2026–2027", the one way a term is written for students (user review 2026-10-30). */
+export const termLabel = (code: string): string => termName(code);
 
 /**
  * The term running on a date, in Vietnam time: HK1 from September to January, HK2 from February to June, HK3 in

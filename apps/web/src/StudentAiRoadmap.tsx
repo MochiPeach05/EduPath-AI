@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
+import { decimalText } from "./display-format";
 import { Icon } from "./student-icons";
 import { useLiveData } from "./use-live-data";
 import {
   ROADMAP_API, ROADMAP_POLL_MS, choiceText, dateText, failureText, roadmapTermLabel, roadmapWindowTitle, formatDateTime, helpsText, improveTag, isPending, modelLabel,
   monthTitle, normalizeRoadmap, normalizeRoadmapResponse, normalizeRoadmapStatus, pendingCopy, requestErrorMessage, sentence, skillTags, studyTag,
-  type Roadmap, type RoadmapImprove, type RoadmapResponse, type RoadmapSkill, type RoadmapStatus, type RoadmapStudy,
+  type Roadmap, type RoadmapBasis, type RoadmapImprove, type RoadmapResponse, type RoadmapSkill, type RoadmapStatus, type RoadmapStudy,
 } from "./student-roadmap-data";
 import "./student-roadmap.css";
 
@@ -104,7 +105,7 @@ function StudyItem({ item }: { item: RoadmapStudy }) {
       <strong>{item.name}</strong>
       <span className={`rm-tag rm-tag-${tag.tone}`}>{tag.text}</span>
     </div>
-    <p className="rm-item-meta">{item.code}{item.credits !== null ? ` · ${item.credits} tín chỉ` : ""}</p>
+    <p className="rm-item-meta">{item.code}{item.credits !== null ? ` · ${decimalText(item.credits)} tín chỉ` : ""}</p>
     {item.advice && <p className="rm-advice">{item.advice}</p>}
     {!item.advice && item.careerSkills.length > 0 && <p className="rm-item-meta">{helpsText(item.careerSkills)}</p>}
   </li>;
@@ -136,7 +137,7 @@ function ImproveItem({ item }: { item: RoadmapImprove }) {
       <strong>{item.name}</strong>
       <span className={`rm-tag ${item.action === "retake" ? "rm-tag-retake" : "rm-tag-improve"}`}>{improveTag(item.action)}</span>
     </div>
-    <p className="rm-item-meta">{item.code} · {item.credits} tín chỉ · điểm chữ {item.letter}</p>
+    <p className="rm-item-meta">{item.code} · {decimalText(item.credits)} tín chỉ · điểm chữ {item.letter}</p>
     {item.advice && <p className="rm-advice">{item.advice}</p>}
     {!item.advice && item.careerSkills.length > 0 && <p className="rm-item-meta">{helpsText(item.careerSkills)}</p>}
   </li>;
@@ -204,6 +205,29 @@ function MonthsSection({ roadmap }: { roadmap: Roadmap }) {
 
 /* -------------------------------------------------------------------- page */
 
+/**
+ * Where the advice comes from (roadmap-v9; user 2026-10-30: "Nên tách riêng phần 'bạn tự đánh giá' với 'hệ thống ghi
+ * nhận'"): what the system has on record next to what the student says in Khảo sát định hướng, which the AI may only
+ * repeat as the student's own view.
+ */
+function BasisBox({ basis }: { basis: RoadmapBasis }) {
+  return <section className="rm-basis" aria-labelledby="rm-basis-title">
+    <h3 id="rm-basis-title">Lời khuyên dựa trên</h3>
+    <div className="rm-basis-cols">
+      <div>
+        <h4>Hệ thống ghi nhận</h4>
+        <p>Từ bảng điểm và kết quả Đánh giá năng lực của bạn.</p>
+        <ul>{basis.recorded.map((line) => <li key={line}>{line}</li>)}</ul>
+      </div>
+      <div>
+        <h4>Bạn tự đánh giá</h4>
+        <p>Từ Khảo sát định hướng, chưa được kiểm chứng. AI chỉ nhắc lại là ý kiến của bạn và gợi ý cách chứng minh.{basis.surveyChanged ? " Bạn đã sửa khảo sát sau khi lộ trình này được soạn." : ""}</p>
+        {basis.selfReported.length ? <ul>{basis.selfReported.map((line) => <li key={line}>{line}</li>)}</ul> : <p>Bạn chưa nêu công nghệ hay kinh nghiệm nào.</p>}
+      </div>
+    </div>
+  </section>;
+}
+
 /** The AI advises from the profile survey (user 2026-10-24), so a roadmap needs it first. */
 const SURVEY_NOTE_ID = "rm-survey-needed";
 function SurveyNeeded({ again = false }: { again?: boolean }) {
@@ -215,7 +239,7 @@ function SurveyNeeded({ again = false }: { again?: boolean }) {
 
 function AiState({ roadmap, response, create, creating }: { roadmap: Roadmap; response: RoadmapResponse; create: () => void; creating: boolean }) {
   if (roadmap.status === "queued" || roadmap.status === "processing") {
-    const copy = pendingCopy(roadmap.status, response.worker);
+    const copy = pendingCopy(roadmap.status, response.worker, roadmap.errorCode);
     const moving = roadmap.status === "processing" || (response.worker.online && response.worker.supportsRoadmap);
     return <div className={`rm-ai-state${moving ? " rm-ai-pending" : ""}`} aria-busy={moving}>
       {moving && <span className="rm-spinner" aria-hidden="true" />}
@@ -269,6 +293,7 @@ function RoadmapView({ roadmap, response, create, creating, createError }: {
           {roadmap.advice.length > 0 && <ul className="rm-advice-list">{roadmap.advice.map((item, index) => <li key={index}>{item}</li>)}</ul>}
         </div>
       </div>}
+      {response.basis && <BasisBox basis={response.basis} />}
     </section>
     <StudySection roadmap={roadmap} />
     <ImproveSection roadmap={roadmap} />

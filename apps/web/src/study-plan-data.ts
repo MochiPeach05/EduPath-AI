@@ -1,6 +1,7 @@
 // "Lộ trình học tập" after Stellic (user 2026-10-24): the data of "Theo dõi tiến độ" (the requirements with every course's
 // state, official or with the plan) and "Lên kế hoạch (thủ công)" (terms, the courses still needed, the checks while
 // planning). Mirrors apps/api/src/study-plan. Pure.
+import { termName } from "./display-format";
 import { formatDateTime, joinVi } from "./student-roadmap-data";
 
 export type CourseState = "passed" | "exempt" | "failed" | "in_progress" | "graded_unknown" | "not_taken" | "not_in_curriculum";
@@ -69,11 +70,8 @@ export function nextTerm(code: string): string {
   const year = Number(code.slice(2, 4)), semester = Number(code.slice(4));
   return semester < 3 ? `HK${code.slice(2, 4)}${semester + 1}` : `HK${String((year + 1) % 100).padStart(2, "0")}1`;
 }
-/** "HK262" → "HK2 · 2026–2027" (en dash, as the other pages print a school year). */
-export function termLabel(code: string): string {
-  const year = 2000 + Number(code.slice(2, 4));
-  return `HK${code.slice(4)} · ${year}–${year + 1}`;
-}
+/** "HK262" → "HK2 2026–2027", as every student page writes a term (user 2026-10-30). */
+export const termLabel = (code: string): string => termName(code);
 
 /** The terms the planner shows when nothing is saved: the running term to the end of the CTĐT, at least three. */
 export function defaultTerms(context: Pick<StudyPlanContext, "currentTerm" | "standardTerms">): string[] {
@@ -406,14 +404,32 @@ export function searchCourses(context: Pick<StudyPlanContext, "courses">, query:
 
 /* ---------------------------------------------------------------- labels */
 
-/** What a row says next to its mark: the grade and term, "Đang học …", "Kế hoạch …", or why it is still needed. */
-export function auditNote(row: AuditRow): string {
+/**
+ * The colour of a course still needed (user 2026-10-30: "“Chưa học” tô đỏ cho cả những môn chưa tới kỳ. Màu đỏ nên để
+ * dành cho Chưa đạt (F, VT)"): failed (F, VT, CT) is red; a mandatory course whose training-plan term (else CTĐT term)
+ * is the current term or earlier is overdue (amber); anything else is not due yet (grey).
+ */
+export type NeededTone = "failed" | "overdue" | "upcoming";
+export function neededTone(course: Pick<StudyPlanCourse, "state" | "kind" | "planTerm" | "standardTerm">, currentTerm: string): NeededTone {
+  if (course.state === "failed") return "failed";
+  const due = course.planTerm ?? course.standardTerm;
+  return course.kind === "mandatory" && due !== null && termIndex(due) <= termIndex(currentTerm) ? "overdue" : "upcoming";
+}
+
+/**
+ * What a row says next to its mark: the grade and term, "Đang học …", "Kế hoạch …", or why it is still needed and, with
+ * the current term, whether its training-plan term has passed ("Trễ kế hoạch đào tạo") or is still ahead ("dự kiến …").
+ */
+export function auditNote(row: AuditRow, currentTerm?: string): string {
   const { course } = row;
   if (row.mark === "done") return [course.state === "exempt" ? "Miễn (MT)" : course.grade, course.takenTerm && termLabel(course.takenTerm)].filter(Boolean).join(" · ");
   if (row.mark === "running") return `Đang học${course.inProgressTerm ? ` · ${termLabel(course.inProgressTerm)}` : ""}`;
   if (row.mark === "planned") return `Kế hoạch${row.plannedTerm ? ` · ${termLabel(row.plannedTerm)}` : ""}`;
-  if (course.state === "failed") return `Chưa đạt${course.grade ? ` (${course.grade})` : ""}${row.plannedTerm ? ` · kế hoạch ${termLabel(row.plannedTerm)}` : ""}`;
-  return row.plannedTerm ? `Chưa học · kế hoạch ${termLabel(row.plannedTerm)}` : "Chưa học";
+  const planned = row.plannedTerm ? ` · kế hoạch ${termLabel(row.plannedTerm)}` : "";
+  if (course.state === "failed") return `Chưa đạt${course.grade ? ` (${course.grade})` : ""}${planned}`;
+  const due = course.planTerm ?? course.standardTerm;
+  if (currentTerm && due && neededTone(course, currentTerm) === "overdue") return `Trễ kế hoạch đào tạo (dự kiến ${termLabel(due)})${planned}`;
+  return planned ? `Chưa học${planned}` : currentTerm && due ? `Chưa học · dự kiến ${termLabel(due)}` : "Chưa học";
 }
 
 export const unmatchedNote = (course: StudyPlanUnmatched) =>

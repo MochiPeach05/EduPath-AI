@@ -100,6 +100,11 @@ describe("GET /", () => {
       upcoming: { term: expect.stringMatching(/^HK\d{3}$/), start: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/), end: expect.stringMatching(/^\d{4}-\d{2}-\d{2}$/) },
     });
     expect(res.body.roadmap.study.map((item: { code: string }) => item.code)).toEqual(["71ITSE41203", "71ITIS30203", "71ITIN40304"]);
+    // Where the advice comes from (roadmap-v9): the survey as it is now, next to what the system had on record.
+    expect(res.body.basis.selfReported[0]).toBe("Công nghệ bạn chọn là thế mạnh: Web front-end (HTML, CSS, JavaScript, React); Trí tuệ nhân tạo, học máy");
+    expect(res.body.basis.recorded).toContain("Học phần thực tập trong chương trình: Đồ án thực tập (chưa học)");
+    expect(res.body.basis.surveyChanged).toBe(false);
+    expect(res.body.basis).not.toHaveProperty("unproven");
     // Nothing server-only leaves: no ai_input, no scores of the skills.
     expect(JSON.stringify(res.body)).not.toMatch(/"aiInput"|"ai_input"|"threshold"/);
   });
@@ -111,6 +116,10 @@ describe("GET /", () => {
 
   it("says whether the profile survey a new roadmap needs is answered", async () => {
     expect((await request(setup({ survey: false }).app).get("/roadmap")).body.surveyDone).toBe(false);
+    // No survey under a valid consent, or a roadmap made before roadmap-v9 (no recorded facts): no basis.
+    expect((await request(setup({ survey: false, rows: [row()] }).app).get("/roadmap")).body.basis).toBeNull();
+    const { recorded: _recorded, ...older } = row().facts;
+    expect((await request(setup({ rows: [row({ facts: older })] }).app).get("/roadmap")).body.basis).toBeNull();
     await request(setup({ survey: false }).app).post("/roadmap").set("Origin", origin).send({}).expect(409, { error: "survey_required" });
   });
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  aiAddedText, applyProposal, auditGroups, auditNote, creditProgress, groupCountText, moveCourse, offering, ownRelations, planChoiceText, planIssues,
+  aiAddedText, applyProposal, auditGroups, auditNote, creditProgress, groupCountText, moveCourse, neededTone, offering, ownRelations, planChoiceText, planIssues,
   poolSections, searchCourses, termLabel, termLoad, termLoadText, withTerms, type StudyPlanContext, type StudyPlanCourse, type StudyPlanData,
 } from "./study-plan-data";
 
@@ -50,9 +50,26 @@ describe("auditGroups", () => {
     expect([mandatory!.remaining, mandatory!.complete, mandatory!.mark]).toEqual([0, false, "planned"]);
     expect(groupCountText(mandatory!)).toBe("Đã đạt 1/4 môn · phần còn lại đã có trong kế hoạch");
     expect(elective!.remaining).toBe(3);
-    expect(auditNote(mandatory!.rows[2]!)).toBe("Kế hoạch · HK2 · 2026–2027");
-    expect(auditNote(auditGroups(context(), plan, "official")[0]!.rows[3]!)).toBe("Chưa đạt (F) · kế hoạch HK2 · 2026–2027");
-    expect(auditNote(mandatory!.rows[0]!)).toBe("B+ · HK1 · 2024–2025");
+    expect(auditNote(mandatory!.rows[2]!)).toBe("Kế hoạch · HK2 2026–2027");
+    expect(auditNote(auditGroups(context(), plan, "official")[0]!.rows[3]!)).toBe("Chưa đạt (F) · kế hoạch HK2 2026–2027");
+    expect(auditNote(mandatory!.rows[0]!)).toBe("B+ · HK1 2024–2025");
+  });
+
+  it("colours a course still needed by what it is (user 2026-10-30: red only for Chưa đạt)", () => {
+    const due = (planTerm: string | null, extra: Partial<StudyPlanCourse> = {}) => course("Z", { planTerm, ...extra });
+    expect(neededTone(due("HK251", { state: "failed" }), "HK261")).toBe("failed");
+    // Its training-plan term (else the CTĐT one) is the current term or earlier: overdue.
+    expect(neededTone(due("HK261"), "HK261")).toBe("overdue");
+    expect(neededTone(due(null, { standardTerm: "HK252" }), "HK261")).toBe("overdue");
+    // Not due yet, an elective, or no term known: grey.
+    expect(neededTone(due("HK262"), "HK261")).toBe("upcoming");
+    expect(neededTone(due("HK252", { kind: "elective" }), "HK261")).toBe("upcoming");
+    expect(neededTone(due(null), "HK261")).toBe("upcoming");
+    const row = (code: string, plannedTerm: string | null = null) => ({ course: course(code, { planTerm: code === "LATE" ? "HK252" : "HK271" }), mark: "needed" as const, plannedTerm });
+    expect(auditNote(row("LATE"), "HK261")).toBe("Trễ kế hoạch đào tạo (dự kiến HK2 2025–2026)");
+    expect(auditNote(row("LATE", "HK262"), "HK261")).toBe("Trễ kế hoạch đào tạo (dự kiến HK2 2025–2026) · kế hoạch HK2 2026–2027");
+    expect(auditNote(row("NEXT"), "HK261")).toBe("Chưa học · dự kiến HK1 2027–2028");
+    expect(auditNote(row("NEXT", "HK263"), "HK261")).toBe("Chưa học · kế hoạch HK3 2026–2027");
   });
 
   it("marks a group done only by results: a course being studied makes it ✓✓ Đang học, not ✓ Đã hoàn thành", () => {
@@ -94,7 +111,7 @@ describe("auditGroups", () => {
     // As the AI tab counts it ("còn thiếu … môn"): 1 of the 2 courses passed.
     expect([chosen!.unit, chosen!.required, chosen!.done, chosen!.mark, groupCountText(chosen!)]).toEqual(["môn", 2, 1, "open", "1/2 môn · còn thiếu 1 môn"]);
     expect(chosen!.planChoice).toEqual(choice);
-    expect(planChoiceText(choice)).toBe("Số môn cần chọn theo kế hoạch đào tạo của khóa: Chọn 2 trong 6 HP tự chọn Cơ sở ngành (HK2 · 2025–2026).");
+    expect(planChoiceText(choice)).toBe("Số môn cần chọn theo kế hoạch đào tạo của khóa: Chọn 2 trong 6 HP tự chọn Cơ sở ngành (HK2 2025–2026).");
     // Nothing says how much TC406 needs: a neutral "?" instead of a group that can never be met.
     expect([unknown!.required, unknown!.remaining, unknown!.complete, unknown!.mark, groupCountText(unknown!)])
       .toEqual([null, null, false, "unknown", "Chưa rõ số tín chỉ yêu cầu · đã có 3 TC"]);
@@ -124,7 +141,7 @@ describe("planning", () => {
     expect(withTerms(context(), next).aiAdded).toEqual(next.aiAdded);
     expect(moveCourse(next, "E", "HK263").aiAdded).toEqual(next.aiAdded);
     expect(aiAddedText(context(), next.aiAdded!)).toBe(`Đã thêm 1 học phần do lộ trình AI đề xuất (lộ trình soạn lúc 17:00 24/10/2026): Môn E (E). `
-      + "Các học phần được xếp từ HK2 · 2026–2027 trở đi, vào học kỳ mà kế hoạch đào tạo mở môn đó; bạn điều chỉnh tiếp bên dưới.");
+      + "Các học phần được xếp từ HK2 2026–2027 trở đi, vào học kỳ mà kế hoạch đào tạo mở môn đó; bạn điều chỉnh tiếp bên dưới.");
     expect(aiAddedText(context(), { ...next.aiAdded!, codes: [] })).toBe("Các học phần lộ trình AI đề xuất (lộ trình soạn lúc 17:00 24/10/2026) đã có sẵn trong kế hoạch.");
     // A term the plan does not show yet is added in order; moving a course keeps the roadmap it came from.
     const later = applyProposal(plan, { ...proposal, courses: [{ code: "E", term: "HK271" }] }).plan;
@@ -172,7 +189,7 @@ describe("planning", () => {
   });
 
   it("names a term with the school year's en dash", () => {
-    expect(termLabel("HK262")).toBe("HK2 · 2026–2027");
+    expect(termLabel("HK262")).toBe("HK2 2026–2027");
   });
 
   it("lists the courses still needed by requirement, finds courses by name and sums the credits", () => {
