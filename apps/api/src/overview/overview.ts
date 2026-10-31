@@ -499,8 +499,11 @@ async function readSavedPlan(db: PoolClient, userId: string): Promise<StudyPlanD
   return row?.data && Array.isArray(row.data.terms) ? row.data : null;
 }
 
-/** The whole overview of one student, read inside the caller's REPEATABLE READ READ ONLY transaction. */
-export async function readOverview(db: PoolClient, userId: string, now: Date = new Date()): Promise<OverviewResponse> {
+/**
+ * The whole overview of one student, read inside the caller's REPEATABLE READ READ ONLY transaction. The admin reports
+ * pass plannerFacts: false: they never show the roadmap's credit check, and the planner's facts cost about 180 ms a student.
+ */
+export async function readOverview(db: PoolClient, userId: string, now: Date = new Date(), options: { plannerFacts?: boolean } = {}): Promise<OverviewResponse> {
   const profileRow = (await db.query<{ cohort_code: string | null; specialty: string | null; major_code: string | null; career_position_id: string | null; career: string | null }>(
     `SELECT p.cohort_code,p.specialty,p.major_code,p.career_position_id,c.name_vi AS career FROM student_profiles p
       LEFT JOIN career_positions c ON c.id=p.career_position_id AND c.deleted_at IS NULL WHERE p.user_id=$1`, [userId])).rows[0];
@@ -558,7 +561,7 @@ export async function readOverview(db: PoolClient, userId: string, now: Date = n
 
   const credits = new Map<string, number>((inputs?.curriculum.courses ?? []).map((course) => [courseKey(course.code), course.credits]));
   const roadmapRow = await readNewestRoadmap(db, userId);
-  const roadmap = roadmapOverview(roadmapRow, saved, credits, now, roadmapRow ? await readPlannerFacts(db, userId, now) : null);
+  const roadmap = roadmapOverview(roadmapRow, saved, credits, now, roadmapRow && options.plannerFacts !== false ? await readPlannerFacts(db, userId, now) : null);
   const running = engine && inputs ? runningOverview(engine, inputs) : transcript ? transcriptRunning(transcript, studyTerm) : [];
 
   // "Cần chú ý"

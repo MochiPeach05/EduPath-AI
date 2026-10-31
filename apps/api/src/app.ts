@@ -39,6 +39,9 @@ import type { UserRepository } from "./users/user-repository.js";
 import type { AuthActivity } from "./auth/activity.js";
 import { createStudentProfilesRouter, type StudentProfileRepository } from "./admin/student-profiles.js";
 import { createAdminAccountsRouter, type AdminAccountRepository } from "./admin/accounts.js";
+import { auditAdminMutations } from "./admin/audit/middleware.js";
+import { createAuditLogRouter } from "./admin/audit/router.js";
+import { createReportsRouter } from "./admin/reports/router.js";
 import {
   requireAuthentication,
   requireAdminAccess
@@ -190,6 +193,10 @@ export function createApp({
     response.json({ authenticated: true, user: request.session.user });
   });
 
+  // Nhật ký thao tác (AD-REPORT-12): every successful admin change is logged; it must run before the admin routers.
+  app.use("/api/admin", auditAdminMutations(databasePool));
+  app.use("/api/admin/audit-log", createAuditLogRouter(databasePool));
+  app.use("/api/admin/reports", createReportsRouter(databasePool));
   app.use("/api/admin/accounts", createAdminAccountsRouter(adminAccountRepository, config.webOrigin));
   app.use("/api/admin/curricula", createCurriculaRouter(databasePool, config.webOrigin));
   app.use("/api/admin/careers", createCareersRouter(databasePool, config.webOrigin, false, { aiSuggestions: Boolean(config.aiWorkerKey) }));
