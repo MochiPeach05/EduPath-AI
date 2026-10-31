@@ -733,7 +733,9 @@ function Composer({ input, pending, waiting, sending, error, onSend, suggestions
       {error && <p className="as-send-error" role="alert">{error}</p>}
       <div className="as-input">
         <label htmlFor="as-question" className="sr-only">Câu hỏi của bạn</label>
-        <textarea id="as-question" ref={input} rows={1} value={draft} maxLength={ASSISTANT_MAX_QUESTION} placeholder="Nhập câu hỏi của bạn…"
+        {/* Clicking the pen puts the caret in the box. */}
+        <label htmlFor="as-question" className="as-input-icon" aria-hidden="true"><Icon name="edit" /></label>
+        <textarea id="as-question" ref={input} rows={1} value={draft} maxLength={ASSISTANT_MAX_QUESTION} placeholder="Nhập câu hỏi của bạn tại đây…"
           aria-describedby={hint ? "as-composer-hint as-composer-notes" : "as-composer-notes"}
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {
