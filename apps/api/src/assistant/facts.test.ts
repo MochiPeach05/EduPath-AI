@@ -60,7 +60,7 @@ function transcriptData(): TranscriptData {
       term("2024-2025", "HK02", [
         ["71ITSE41003", "Nhập môn Công nghệ phần mềm", 3, 9, 4, "A", "Đạt"],
         ["71ITIS30203", "Hệ quản trị cơ sở dữ liệu", 3, 6.4, 2, "C", null],
-      ], [["Điểm TB học kỳ (Hệ 4)", "3.00"], ["Tổng số tín chỉ tích lũy", "18"], ["Điểm TB tích lũy (Hệ 4)", "3.10"], ["Điểm TB tích lũy (Hệ 10)", "7.55"], ["Xếp loại học tập tích lũy", "Khá"]]),
+      ], [["Điểm TB học kỳ (Hệ 4)", "3.00"], ["Tổng số tín chỉ đăng ký", "21"], ["Điểm TB học tập (Hệ 4)", "2.66"], ["Tổng số tín chỉ tích lũy", "18"], ["Điểm TB tích lũy (Hệ 4)", "3.10"], ["Điểm TB tích lũy (Hệ 10)", "7.55"], ["Xếp loại học tập tích lũy", "Khá"]]),
       term("2025-2026", "HK01", [
         ["71ITSE30103", "Kỹ thuật lập trình", 3, null, null, null, null],
         ["71ITSE41203", "Kiểm thử phần mềm", 3, null, null, null, null],
@@ -146,8 +146,10 @@ describe("assistant transcript source (assistant-v4)", () => {
     expect(text).toContain("cập nhật ngày 20/10/2026");
     expect(text).toContain("Học kỳ gần nhất có điểm: HK2 2024–2025.");
     // Copied as printed, from the latest graded term (not the older terms' cumulative lines).
-    expect(text).toContain("Tích lũy in trên bảng điểm ở cuối HK2 2024–2025: Tổng số tín chỉ tích lũy: 18; Điểm TB tích lũy (Hệ 4): 3,10; Điểm TB tích lũy (Hệ 10): 7,55; Xếp loại học tập tích lũy: Khá.");
-    expect(text).toContain("tức GPA (điểm tổng) hiện tại của bạn");
+    // The term prints three running figures: học tập (every registered credit, failed courses too) and tích lũy (passed only).
+    expect(text).toContain("Tích lũy in trên bảng điểm ở cuối HK2 2024–2025: Tổng số tín chỉ đăng ký: 21; Điểm TB học tập (Hệ 4): 2,66; Tổng số tín chỉ tích lũy: 18; Điểm TB tích lũy (Hệ 4): 3,10; Điểm TB tích lũy (Hệ 10): 7,55; Xếp loại học tập tích lũy: Khá.");
+    expect(text).toContain("tức GPA (điểm tổng) hiện tại của bạn, chỉ tính các môn đã đạt");
+    expect(text).toContain("Điểm TB học tập tính mọi tín chỉ đã đăng ký, kể cả môn chưa đạt");
     expect(text).toContain("Đang học, chưa có điểm (HK1 2025–2026): 2 học phần: Kỹ thuật lập trình (71ITSE30103); Kiểm thử phần mềm (71ITSE41203).");
     // 11 courses in 14 rows: the retakes count once, Cơ sở dữ liệu under both codes too.
     expect(text).toContain("Số học phần trên bảng điểm: 11 (đã đạt 8, chưa đạt 1, đang học 2), trong 14 dòng vì có học phần học nhiều lần.");

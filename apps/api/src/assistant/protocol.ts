@@ -44,8 +44,11 @@ export const documentEmbeddingText = (title: string, text: string) => `title: ${
  * v7 (user review 2026-10-30: "Trợ lý AI trả lời 2.45", "Học kỳ đang được gọi theo 4 kiểu"): the sources write decimals
  * with a comma (printed transcript values too) and terms "HK1 2026–2027" like the pages, and the check of an answer turns
  * a score-like "2.45" into "2,45" (validate.ts decimalComma). The system prompt is unchanged.
+ * v8 (user 2026-10-31: "hãy xem cách tính của bảng điểm thật và học theo"): the transcript source also carries the printed
+ * "Điểm TB học tập" and "Tổng số tín chỉ đăng ký" (every registered credit, failed courses included) next to the "tích lũy"
+ * lines (passed courses only), with one sentence on the difference. The system prompt is unchanged.
  */
-export const ASSISTANT_PROMPT_VERSION = "assistant-v7";
+export const ASSISTANT_PROMPT_VERSION = "assistant-v8";
 export const KNOWLEDGE_PROMPT_VERSION = "knowledge-v1";
 /** An answer takes well under a minute; a lost worker frees the job after this lease (the worker extends every 3 min). */
 export const ASSISTANT_LEASE_MINUTES = 5;

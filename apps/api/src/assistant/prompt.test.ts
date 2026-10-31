@@ -56,7 +56,7 @@ describe("assistant prompt", () => {
     expect(examples.replace(/\[\d\]/g, "")).not.toMatch(/\d/);
     const prompt = buildAssistantPrompt({ sources, history: [], question: "Chào bạn" });
     expect(prompt.user.split("\n").at(-1)).toBe("Hãy trả lời câu hỏi trên theo đúng nguyên tắc và giọng văn ở trên; ghi số nguồn [n] ở cuối câu hoặc đoạn có thông tin lấy từ dữ liệu.");
-    expect(prompt.promptVersion).toBe("assistant-v7");
+    expect(prompt.promptVersion).toBe("assistant-v8");
   });
 
   it("asks Gemma to write a follow-up out in full from the conversation, with the answer's num_ctx", () => {

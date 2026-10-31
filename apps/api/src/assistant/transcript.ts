@@ -215,10 +215,17 @@ export function transcriptSummaryLines(data: TranscriptData, groups: readonly Tr
   lines.push(`Học kỳ gần nhất có điểm: ${graded ? termName(graded) : "bảng điểm chưa có học kỳ nào có điểm"}.`);
   const cumulative = cumulativeSection(data);
   if (cumulative) {
-    const items = cumulative.summaries.filter((summary) => summary.value?.trim() && fold(summary.label ?? "").includes("tich luy"))
+    // The running averages the term prints (assistant-v8, user 2026-10-31: "hãy xem cách tính của bảng điểm thật và học
+    // theo"): the "tích lũy" lines (passed courses) and "Điểm TB học tập" with "Tổng số tín chỉ đăng ký" (every registered
+    // credit, failed courses included).
+    const runningFigure = (label: string) => label.includes("tich luy") || /diem\s*(?:tb|trung\s*binh)\s*hoc\s*tap/.test(label) || label.includes("tin chi dang ky");
+    const items = cumulative.summaries.filter((summary) => summary.value?.trim() && runningFigure(fold(summary.label ?? "")))
       .map((summary) => `${sanitizeText(summary.label, 80)}: ${decimalComma(sanitizeText(summary.value, 60))}`);
     lines.push(`Tích lũy in trên bảng điểm ở cuối ${termName(cumulative)}${cumulative === graded ? "" : " (học kỳ gần nhất có in dòng tích lũy)"}: ${items.join("; ")}.`);
-    lines.push("Điểm TB tích lũy là điểm trung bình chung tích lũy, tức GPA (điểm tổng) hiện tại của bạn, hệ 4 và hệ 10 như in trên bảng điểm.");
+    lines.push("Điểm TB tích lũy là điểm trung bình chung tích lũy, tức GPA (điểm tổng) hiện tại của bạn, chỉ tính các môn đã đạt, hệ 4 và hệ 10 như in trên bảng điểm.");
+    if (cumulative.summaries.some((summary) => summary.value?.trim() && /diem\s*(?:tb|trung\s*binh)\s*hoc\s*tap/.test(fold(summary.label ?? "")))) {
+      lines.push("Điểm TB học tập tính mọi tín chỉ đã đăng ký, kể cả môn chưa đạt, nên thấp hơn Điểm TB tích lũy khi có môn rớt.");
+    }
   } else {
     lines.push("Bảng điểm không in điểm trung bình tích lũy hay tổng số tín chỉ tích lũy.");
   }
