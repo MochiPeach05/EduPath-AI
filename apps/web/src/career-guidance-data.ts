@@ -1,7 +1,10 @@
 // "Định hướng nghề nghiệp" (#career): every career of the catalog against the student's competencies (the same fit as
 // Khoảng trống kỹ năng shows for the target career) and against Khảo sát định hướng. Computed by the API
 // (apps/api/src/career-guidance), shown here; no AI.
-import { careerDataText, careerSummaryText, formatDateTime, formatScore, gapStatusDisplay, gradedCourseText, scoreSourcesText, sortRequirements, type StatusTone } from "./student-competency-data";
+import {
+  careerDataText, careerSummaryText, FIT_LABELS, formatDateTime, formatScore, gapStatusDisplay, gradedCourseText, needsSelfStudy, scoreSourcesText, shownScore,
+  sortRequirements, type StatusTone,
+} from "./student-competency-data";
 
 export const CAREER_GUIDANCE_API = "/api/student/career-guidance";
 /** At most this many careers side by side. */
@@ -15,6 +18,8 @@ export type GuidanceRequirement = {
   exemptOnly: boolean; noDataReason: "no_skill" | "not_measured" | "other_specialty" | "elective_not_chosen" | null; otherSpecialtyCourses: string[];
   /** The courses the score comes from, largest share first (absent from an older API). */
   sources?: { name: string; score10: number | null; letter: string | null }[];
+  /** How many times the skill counts in the điểm phù hợp: Bắt buộc 2, Ưu tiên 1 (absent from an older API). */
+  coefficient?: number;
 };
 export type GuidanceFit = { score: number | null; code: FitCode; label: string; dataShare: number; met: number; below: number; notStudied: number; upcoming: number; noData: number; total: number;
   summaryText: string; dataText: string };
@@ -76,14 +81,112 @@ export const interestPicks = (careers: GuidanceCareer[], count = 3) => careers.f
 /**
  * What the page shows first (user 2026-10-31: "Ưu tiên kết quả phù hợp nhất; phân cấp nội dung và giảm các phần phụ", then
  * "1 cái theo bảng xếp hạng, 1 cái theo sở thích mà sinh viên chọn ở Khảo sát định hướng"): the best fit, the next ones by
- * fit, and the survey matches not shown yet. No career appears twice.
+ * fit, and the survey matches not shown yet. No career appears twice: the target career has its own card above the picks
+ * (targetStanding), so the lists leave it out, and on equal scores it is the best fit.
  */
 export function careerPicks(careers: GuidanceCareer[], count = 3): { top: GuidanceCareer | null; ranked: GuidanceCareer[]; liked: GuidanceCareer[]; scored: number } {
-  const ordered = careers.filter(hasFit).sort((a, b) => fitRank(b) - fitRank(a));
+  const ordered = careers.filter(hasFit).sort((a, b) => fitRank(b) - fitRank(a) || Number(b.isTarget) - Number(a.isTarget));
   const top = ordered[0] ?? null;
-  const ranked = ordered.slice(1, 1 + count);
+  const ranked = ordered.filter((career) => career !== top && !career.isTarget).slice(0, count);
   const shown = new Set([top, ...ranked].flatMap((career) => (career ? [career.id] : [])));
-  return { top, ranked, liked: interestPicks(careers.filter((career) => !shown.has(career.id)), count), scored: ordered.length };
+  return { top, ranked, liked: interestPicks(careers.filter((career) => !shown.has(career.id) && !career.isTarget), count), scored: ordered.length };
+}
+
+/** The place of a career by điểm phù hợp: 1 + the careers scoring higher, so equal scores share a place; null without a fit. */
+export const rankOf = (careers: readonly GuidanceCareer[], career: GuidanceCareer) =>
+  (hasFit(career) ? 1 + careers.filter((other) => fitRank(other) > fitRank(career)).length : null);
+
+/** The lower bound of each fit level from Ít phù hợp up (fitLevelOf of Khoảng trống kỹ năng). */
+const FIT_BOUNDS: readonly [FitCode, number][] = [["low_fit", 50], ["average", 62.5], ["fit", 80], ["very_fit", 90]];
+/** The next fit level and the points the shown score lacks for it (54,78 is shown 54,7: Trung bình, 7,8 điểm); null at Rất phù hợp. */
+export function nextFitLevel(score: number): { label: string; points: number } | null {
+  const shown = shownScore(score);
+  const next = FIT_BOUNDS.find(([, bound]) => shown + 1e-9 < bound);
+  return next ? { label: FIT_LABELS[next[0]], points: Math.round((next[1] - shown) * 10) / 10 } : null;
+}
+
+const coefficientOf = (row: Pick<GuidanceRequirement, "coefficient" | "isRequired">) => row.coefficient ?? (row.isRequired ? 2 : 1);
+/** A skill without a score: it counts 0 in the điểm phù hợp (Chưa học, Sắp học, Cần tự học, Chưa đủ dữ liệu). */
+const countsZero = (row: Computed) => row.status !== "met" && row.status !== "below";
+/**
+ * The two parts of a career's điểm phù hợp (the engine's fitScoreOf: Bắt buộc counted twice, a skill without a score 0,
+ * miễn/công nhận only left out): the share of the coefficients that count 0, and the average of the skills with a score.
+ * The điểm phù hợp is (1 − zeroShare) × scoredMean.
+ */
+function fitParts(career: GuidanceCareer): { zeroShare: number; scoredMean: number | null } {
+  let weight = 0, zero = 0, scoredWeight = 0, sum = 0;
+  for (const row of computed(career)) {
+    if (!countsZero(row) && row.score === null) continue;
+    const coefficient = coefficientOf(row);
+    weight += coefficient;
+    if (countsZero(row)) zero += coefficient;
+    else { scoredWeight += coefficient; sum += coefficient * row.score!; }
+  }
+  return { zeroShare: weight ? zero / weight : 0, scoredMean: scoredWeight ? sum / scoredWeight : null };
+}
+
+/**
+ * Why the target career ranks below the best fit, the larger cause first. As the điểm phù hợp is (1 − zeroShare) × scoredMean
+ * (fitParts), the gap splits exactly into the target's larger share of skills at 0 points, scoredMean(target) × (zeroShare(target)
+ * − zeroShare(top)), and its lower scores on the skills that have one, (1 − zeroShare(top)) × (scoredMean(top) − scoredMean(target)).
+ * A cause is named when it makes at least a fifth of the gap.
+ */
+function belowTopReasons(target: GuidanceCareer, top: GuidanceCareer): string[] {
+  const t = fitParts(target), p = fitParts(top);
+  const zeroOf = (career: GuidanceCareer) => computed(career).filter(countsZero);
+  const tZero = zeroOf(target), pZero = zeroOf(top);
+  const tTotal = target.requirements.length, pTotal = top.requirements.length;
+  if (t.scoredMean === null) {
+    const pScored = computed(top).filter((row) => row.score !== null).length;
+    return [`Chưa kỹ năng nào của ${target.nameVi} có điểm nên cả ${tTotal} kỹ năng đều tính 0 điểm, còn ${top.nameVi} đã có ${pScored}/${pTotal} kỹ năng có điểm.`];
+  }
+  const upcoming = tZero.filter((row) => row.status === "upcoming").length;
+  const later = !upcoming ? "" : upcoming < tZero.length ? ` Trong đó ${upcoming} kỹ năng sắp học sẽ có điểm khi bạn học tới.`
+    : upcoming === 1 ? " Kỹ năng này sắp học nên sẽ có điểm khi bạn học tới." : " Các kỹ năng này đều sắp học nên sẽ có điểm khi bạn học tới.";
+  const below = target.requirements.filter((row) => row.status === "below").length;
+  const causes = [
+    { part: t.scoredMean * (t.zeroShare - p.zeroShare),
+      text: `${tZero.length}/${tTotal} kỹ năng của ${target.nameVi} chưa có điểm nên tính 0 điểm, ${pZero.length ? `so với ${pZero.length}/${pTotal} của ${top.nameVi}` : `còn mọi kỹ năng của ${top.nameVi} đều đã có điểm`}.${later}` },
+    { part: (1 - p.zeroShare) * ((p.scoredMean ?? 0) - t.scoredMean),
+      text: `Các kỹ năng đã có điểm của ${target.nameVi} có điểm thấp hơn: trung bình ${formatScore(t.scoredMean)}, so với ${formatScore(p.scoredMean ?? 0)} của ${top.nameVi}${below ? `; ${below} kỹ năng còn dưới ngưỡng` : ""}.` },
+  ];
+  const gap = causes[0]!.part + causes[1]!.part;
+  return causes.filter((cause) => cause.part > 0 && cause.part >= gap / 5).sort((a, b) => b.part - a.part).map((cause) => cause.text);
+}
+
+/** The skills without a score, grouped as Khoảng trống kỹ năng names them, in the order of its count line (careerSummaryText). */
+const ZERO_GROUPS: readonly { why: string; keep: (row: Computed) => boolean }[] = [
+  { why: "chưa học", keep: (row) => row.status === "not_studied" },
+  { why: "sắp học", keep: (row) => row.status === "upcoming" },
+  { why: "cần tự học", keep: needsSelfStudy },
+  { why: "chưa đủ dữ liệu", keep: (row) => row.status === "no_data" && !needsSelfStudy(row) },
+];
+
+export type TargetStanding = {
+  /** rankOf among `scored` careers with a fit; null without a fit. */
+  rank: number | null; scored: number;
+  next: ReturnType<typeof nextFitLevel>;
+  /** The target's skills by what they do to its điểm phù hợp, in the order of Khoảng trống kỹ năng. */
+  met: string[]; below: string[]; zero: { why: string; names: string[] }[];
+  /** The best fit when it scores higher than the target, and why the target ranks below it (belowTopReasons). */
+  belowTop: { career: GuidanceCareer; reasons: string[] } | null;
+};
+/**
+ * "Nghề mục tiêu của bạn" (user 2026-10-31: "Kết quả định hướng chưa giải thích rõ nghề mục tiêu sinh viên đã chọn có phù hợp
+ * hay không và tại sao xếp ở vị trí thấp hơn nghề khác. Cần làm nổi bật và giải thích kết quả của nghề đang chọn"): its place,
+ * the points to the next level, the skills behind its score and why it ranks below the best fit. Only the system's numbers.
+ */
+export function targetStanding(careers: GuidanceCareer[], target: GuidanceCareer): TargetStanding {
+  const rows = sortRequirements(computed(target));
+  const names = (keep: (row: Computed) => boolean) => rows.filter(keep).map(requirementName);
+  const top = careerPicks(careers).top;
+  return {
+    rank: rankOf(careers, target), scored: careers.filter(hasFit).length,
+    next: hasFit(target) ? nextFitLevel(target.fit!.score!) : null,
+    met: names((row) => row.status === "met"), below: names((row) => row.status === "below"),
+    zero: ZERO_GROUPS.map(({ why, keep }) => ({ why, names: names(keep) })).filter((group) => group.names.length > 0),
+    belowTop: top && top !== target && hasFit(target) && fitRank(top) > fitRank(target) ? { career: top, reasons: belowTopReasons(target, top) } : null,
+  };
 }
 
 /** The skills the student meets for a career, in the order of Khoảng trống kỹ năng. */

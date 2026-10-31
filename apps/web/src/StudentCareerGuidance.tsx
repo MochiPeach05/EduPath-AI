@@ -2,9 +2,9 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { Icon } from "./student-icons";
 import {
   CAREER_GUIDANCE_API, COMPARE_MAX, FIT_RULE_TEXT, FIT_STEP, bestFitsHeading, blockedAction, blockedText, careerPicks, compareRows, filterCareers, fitRuleText,
-  fitScoreText, fitSummary, gapNote, hasFit, interestReason, matchesInterests, metSkills, missingSkills, nameList, orderedRequirements, requirementName,
-  requirementScoreText, requirementSourcesText, requirementState, surveyInterests, toggleCompare, type CareerFilters, type GuidanceCareer, type GuidanceResponse,
-  type GuidanceRequirement,
+  fitScoreText, fitSummary, gapNote, hasFit, interestReason, matchesInterests, metSkills, missingSkills, nameList, orderedRequirements, rankOf, requirementName,
+  requirementScoreText, requirementSourcesText, requirementState, surveyInterests, targetStanding, toggleCompare, type CareerFilters, type GuidanceCareer,
+  type GuidanceResponse, type GuidanceRequirement, type TargetStanding,
 } from "./career-guidance-data";
 import { meaningClass } from "./display-format";
 import { fitMeaning } from "./student-competency-data";
@@ -120,6 +120,74 @@ function TopPick({ career, scored, saving, onDetail, onChoose }: { career: Guida
   </article>;
 }
 
+/** A career's điểm phù hợp as a bar on 0–100, in the colour of its word, beside the best fit's. */
+function ScoreBar({ career, role, rank }: { career: GuidanceCareer; role: string; rank: number | null }) {
+  const score = hasFit(career) ? Math.min(100, Math.max(0, career.fit!.score!)) : 0;
+  return <div className="cg-bar-row">
+    <span className="cg-bar-name"><b>{career.nameVi}</b>
+      <small>{[role, rank !== null && `Hạng ${rank}`, career.fit && `Đạt ${career.fit.met}/${career.fit.total} kỹ năng`].filter(Boolean).join(" · ")}</small></span>
+    <span className="cg-bar-track" aria-hidden="true"><i className={`cg-bar-${career.fit ? fitMeaning(career.fit.code) : "none"}`} style={{ width: `${score}%` }} /></span>
+    <span className="cg-bar-value"><FitScore career={career} /><FitBadge career={career} compact /></span>
+  </div>;
+}
+
+/**
+ * "Nghề mục tiêu của bạn" (user 2026-10-31: "Kết quả định hướng chưa giải thích rõ nghề mục tiêu sinh viên đã chọn có phù hợp
+ * hay không và tại sao xếp ở vị trí thấp hơn nghề khác. Cần làm nổi bật và giải thích kết quả của nghề đang chọn"): the level
+ * and place of the target career, the skills behind its score and, below the best fit, the two side by side with why.
+ */
+function TargetCard({ career, standing, careers, note, onDetail, onCompare }: {
+  career: GuidanceCareer; standing: TargetStanding; careers: GuidanceCareer[]; note: string | null; onDetail: () => void; onCompare: (other: GuidanceCareer) => void;
+}) {
+  const fit = career.fit!;
+  const above = standing.belowTop;
+  const zero = standing.zero.reduce((sum, group) => sum + group.names.length, 0);
+  return <article className="sw-panel cg-top cg-target" aria-labelledby="cg-target-name">
+    <div className="cg-top-main">
+      {standing.rank !== null && <span className="cg-kicker">Hạng {standing.rank} / {standing.scored} nghề</span>}
+      <h3 id="cg-target-name">{career.nameVi}</h3>
+      <p className="cg-en">{career.nameEn} · {career.categoryName}</p>
+      {hasFit(career)
+        ? <p className="cg-verdict">Với năng lực hiện tại, nghề này ở mức <span className="cg-keep"><b className={meaningClass(fitMeaning(fit.code))}>{fit.label}</b>.</span>
+          {standing.rank === 1 && " Đây cũng là nghề phù hợp nhất với bạn."}
+          {standing.next && <> Cần thêm {fitScoreText(standing.next.points)} điểm phù hợp để lên mức <strong>{standing.next.label}</strong>.</>}</p>
+        : <p className="cg-verdict">{career.requirements.length ? "Chưa đủ dữ liệu để xếp mức phù hợp: phần lớn kỹ năng của nghề này không có điểm để tính."
+          : "Khoa chưa cập nhật yêu cầu kỹ năng cho nghề này nên chưa tính được mức phù hợp."}</p>}
+      {matchesInterests(career) && <p className="cg-interest"><Icon name="spark" /><span>Hợp Khảo sát định hướng của bạn: {interestReason(career).replace(/^Khớp: /, "")}</span></p>}
+      {hasFit(career) && <>
+        <h4 className="cg-why-title">Vì sao được {fitScoreText(fit.score!)} điểm</h4>
+        <ul className="cg-why">
+          {standing.met.length > 0 && <li className="cg-why-ok"><i aria-hidden="true">✓</i><span><b>Đạt {standing.met.length}/{career.requirements.length} kỹ năng:</b> {nameList(standing.met, 5)}</span></li>}
+          {standing.below.length > 0 && <li className="cg-why-below"><i aria-hidden="true">✗</i><span><b>{standing.below.length} kỹ năng có điểm nhưng dưới ngưỡng:</b> {nameList(standing.below, 5)}</span></li>}
+          {zero > 0 && <li className="cg-why-zero"><i aria-hidden="true">0</i><span><b>{zero} kỹ năng chưa có điểm nên tính 0 điểm:</b>{" "}
+            {standing.zero.map((group) => `${nameList(group.names)} (${group.why})`).join("; ")}</span></li>}
+        </ul>
+      </>}
+    </div>
+    <div className="cg-top-score">
+      <FitGauge career={career} />
+      <FitScore career={career} />
+      <FitBadge career={career} />
+      <small>Điểm phù hợp / 100</small>
+    </div>
+    {above && <section className="cg-versus" aria-labelledby="cg-versus-title">
+      <h4 id="cg-versus-title">Vì sao xếp sau {above.career.nameVi}</h4>
+      <div className="cg-bars">
+        <ScoreBar career={career} role="Nghề mục tiêu" rank={standing.rank} />
+        <ScoreBar career={above.career} role="Phù hợp nhất" rank={rankOf(careers, above.career)} />
+      </div>
+      <ul className="cg-reasons">{above.reasons.map((text) => <li key={text}>{text}</li>)}</ul>
+    </section>}
+    <div className="cg-top-actions">
+      <a className="sw-primary" href="#skill-gap">Xem Khoảng trống kỹ năng <Icon name="arrow" /></a>
+      {above && <button type="button" className="sr-secondary" onClick={() => onCompare(above.career)}>So sánh với {above.career.nameVi}</button>}
+      <button type="button" className="sr-secondary" onClick={onDetail} aria-label={`Xem chi tiết ${career.nameVi}`}><Icon name="eye" />Xem chi tiết</button>
+    </div>
+    {above && <p className="cg-target-foot">Mức phù hợp chỉ dựa trên điểm kỹ năng hiện tại. Nếu bạn vẫn muốn theo nghề này, trang Khoảng trống kỹ năng cho biết học phần nên học cho từng kỹ năng còn thiếu.</p>}
+    {note && <p className="cg-note cg-note-warn">{note}</p>}
+  </article>;
+}
+
 /** "Đạt 3/5 kỹ năng · thiếu Node.js, Docker": the line of a career in "Theo bảng xếp hạng". */
 function rankLine(career: GuidanceCareer): string {
   const missing = missingSkills(career);
@@ -217,6 +285,8 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
   const [detailId, setDetailId] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
+  // "So sánh với …" of the target card: the comparison is drawn on the next render, then scrolled to.
+  const [comparePending, setComparePending] = useState(false);
   const toast = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -273,6 +343,12 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
   const detail = careers.find((career) => career.id === detailId) ?? null;
   const target = careers.find((career) => career.isTarget) ?? null;
 
+  useEffect(() => {
+    if (!comparePending || compared.length < 2) return;
+    setComparePending(false);
+    showCompare();
+  });
+
   if (error) return <section className="sw-panel cg-problem" role="alert"><strong>Chưa tải được định hướng nghề nghiệp</strong><p>{error}</p>
     <button type="button" className="sw-outline" onClick={() => setRevision((value) => value + 1)}><Icon name="refresh" />Thử lại</button></section>;
   if (!data) return <section className="sw-panel" aria-busy="true"><p role="status">Đang tính mức phù hợp với từng nghề…</p></section>;
@@ -286,6 +362,12 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
   const targetNote = target && data.blocked !== "assessment_withdrawn" ? gapNote(data, target) : null;
   const unblock = data.blocked ? blockedAction(data.blocked) : null;
   const openDetail = (career: GuidanceCareer) => () => setDetailId(career.id);
+  // The target career's own card once its fit is computed; while blocked it stays one line, as before.
+  const standing = target?.fit ? targetStanding(careers, target) : null;
+  const compareWith = (other: GuidanceCareer) => {
+    setCompare([target!.id, other.id]);
+    setComparePending(true);
+  };
 
   return <div className="cg-page">
     <section className="cg-intro" aria-label="Về trang này">
@@ -295,30 +377,36 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
       </details>
     </section>
 
-    <div className="cg-target-line">
+    {target && standing ? <>
+      <div className="cg-level"><h3>Nghề mục tiêu của bạn</h3><p>Mức phù hợp của nghề bạn đã chọn, và vì sao.</p></div>
+      <TargetCard career={target} standing={standing} careers={careers} note={targetNote} onDetail={openDetail(target)} onCompare={compareWith} />
+    </> : <div className="cg-target-line">
       <span className="cg-target-label">Nghề mục tiêu hiện tại:</span>
       {target ? <><strong>{target.nameVi}</strong><FitScore career={target} /><FitBadge career={target} />
         <a className="sw-text-link" href="#skill-gap">Xem Khoảng trống kỹ năng <Icon name="arrow" /></a></>
         : data.deletedTargetName ? <span>{data.deletedTargetName}: nghề này không còn trong danh mục; bạn nên chọn nghề khác.</span>
           : <span>chưa chọn. Hãy chọn một nghề bên dưới.</span>}
       {targetNote && <p className="cg-note cg-note-warn">{targetNote}</p>}
-    </div>
+    </div>}
 
     {data.blocked && <div className="cg-note cg-note-warn" role="note"><p>{blockedText(data.blocked)} Bạn vẫn xem được danh mục nghề và yêu cầu của từng nghề.</p>
       {unblock && <a className="sw-outline" href={unblock.href}>{unblock.label}</a>}</div>}
 
     {!data.blocked && <>
-      <div className="cg-level"><h3 id="cg-best-title">{heading.title === "Mức phù hợp cao nhất hiện nay" ? heading.title : "Phù hợp nhất với bạn"}</h3>
-        <p>{heading.title === "Mức phù hợp cao nhất hiện nay" ? heading.note : "Xếp theo điểm phù hợp với năng lực hiện tại của bạn."}</p></div>
-      {picks.top ? <TopPick career={picks.top} scored={picks.scored} saving={saving === picks.top.id} onDetail={openDetail(picks.top)} onChoose={() => void choose(picks.top!)} />
-        : <p className="cg-empty">Chưa đủ dữ liệu để gợi ý: các kỹ năng của nghề chưa được đo bằng học phần bạn đã học.</p>}
+      {/* A target that is the best fit already has its card above. */}
+      {!picks.top?.isTarget && <>
+        <div className="cg-level"><h3 id="cg-best-title">{heading.title === "Mức phù hợp cao nhất hiện nay" ? heading.title : "Phù hợp nhất với bạn"}</h3>
+          <p>{heading.title === "Mức phù hợp cao nhất hiện nay" ? heading.note : "Xếp theo điểm phù hợp với năng lực hiện tại của bạn."}</p></div>
+        {picks.top ? <TopPick career={picks.top} scored={picks.scored} saving={saving === picks.top.id} onDetail={openDetail(picks.top)} onChoose={() => void choose(picks.top!)} />
+          : <p className="cg-empty">Chưa đủ dữ liệu để gợi ý: các kỹ năng của nghề chưa được đo bằng học phần bạn đã học.</p>}
+      </>}
 
       <div className="cg-level"><h3>Các lựa chọn khác</h3><p>Không lặp lại nghề đã hiện ở trên.</p></div>
       <div className="cg-pairs">
         <section className="sw-panel cg-pick" aria-labelledby="cg-rank-title">
           <header><h4 id="cg-rank-title">Theo bảng xếp hạng</h4><p>Các nghề tiếp theo, xếp theo điểm phù hợp với năng lực của bạn.</p></header>
-          {picks.ranked.length ? <ol className="cg-pick-list">{picks.ranked.map((career, index) =>
-            <PickRow key={career.id} career={career} marker={String(index + 2)} line={rankLine(career)} onDetail={openDetail(career)} />)}</ol>
+          {picks.ranked.length ? <ol className="cg-pick-list">{picks.ranked.map((career) =>
+            <PickRow key={career.id} career={career} marker={String(rankOf(careers, career))} line={rankLine(career)} onDetail={openDetail(career)} />)}</ol>
             : <p className="cg-empty">Chưa có nghề nào khác tính được mức phù hợp.</p>}
         </section>
         <section className="sw-panel cg-pick cg-pick-like" aria-labelledby="cg-liked-title">

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   bestFits, bestFitsHeading, blockedAction, blockedText, careerPicks, compareRows, filterCareers, fitRuleText, fitScoreText, fitSummary, gapNote, interestPicks,
-  interestReason, metSkills, missingSkills, nameList, surveyInterests,
+  interestReason, metSkills, missingSkills, nameList, nextFitLevel, rankOf, surveyInterests, targetStanding,
   orderedRequirements, requirementSourcesText, requirementState, toggleCompare, FIT_RULE_TEXT, type GuidanceCareer, type GuidanceRequirement,
 } from "./career-guidance-data";
 
@@ -56,6 +56,67 @@ describe("career guidance", () => {
     expect(interestReason(many[1]!)).toBe("Khớp: lĩnh vực Web · thế mạnh Web front-end");
     expect(nameList(["A", "B"])).toBe("A, B");
     expect(nameList(["A", "B", "C", "D", "E"])).toBe("A, B, C và 2 kỹ năng khác");
+  });
+
+  it("leaves the target career out of the lists, and makes it the best fit on equal scores", () => {
+    const list = [career("p1", "Nghề một", 80), career("p2", "Nghề hai", 75, { isTarget: true }), career("p3", "Nghề ba", 70),
+      career("p4", "Nghề bốn", 65, { interests: { field: "Web", tech: [] } }), career("p5", "Nghề năm", 60)];
+    const picks = careerPicks(list);
+    expect(picks.top?.id).toBe("p1");
+    expect(picks.ranked.map((item) => item.id)).toEqual(["p3", "p4", "p5"]);
+    expect(rankOf(list, list[2]!)).toBe(3);
+    const tied = [career("p1", "Nghề một", 80), career("p2", "Nghề hai", 80, { isTarget: true }), career("p3", "Nghề ba", 70)];
+    expect(careerPicks(tied).top?.id).toBe("p2");
+    expect(careerPicks(tied).ranked.map((item) => item.id)).toEqual(["p1", "p3"]);
+    // Equal scores share a place.
+    expect(rankOf(tied, tied[0]!)).toBe(1);
+    expect(rankOf(tied, career("x", "Không điểm", null))).toBeNull();
+  });
+
+  it("names the next fit level and the points the shown score lacks", () => {
+    expect(nextFitLevel(54.78)).toEqual({ label: "Trung bình", points: 7.8 });
+    expect(nextFitLevel(62.49)).toEqual({ label: "Trung bình", points: 0.1 });
+    expect(nextFitLevel(62.5)).toEqual({ label: "Phù hợp", points: 17.5 });
+    expect(nextFitLevel(79.99)).toEqual({ label: "Phù hợp", points: 0.1 });
+    expect(nextFitLevel(49.99)).toEqual({ label: "Ít phù hợp", points: 0.1 });
+    expect(nextFitLevel(90)).toBeNull();
+  });
+
+  it("explains the target career's score and why it ranks below the best fit (user 2026-10-31)", () => {
+    const must = (name: string, status: GuidanceRequirement["status"], score: number | null, extra: Partial<GuidanceRequirement> = {}) =>
+      req(name, status, { isRequired: true, threshold: 80, score, ...extra });
+    const may = (name: string, status: GuidanceRequirement["status"], score: number | null, extra: Partial<GuidanceRequirement> = {}) =>
+      req(name, status, { score, ...extra });
+    // 904/12 = 75,33: one Ưu tiên skill without a score; the scored ones average 904/11 = 82,18.
+    const best = career("a", "Nghề A", 75.33, { requirements: [must("Node.js", "met", 86), must("SQL", "met", 88), must("API", "met", 84), must("OOP", "met", 82),
+      may("Git", "met", 90), may("Kiểm thử", "met", 76), may("Docker", "upcoming", null), may("Bảo mật", "below", 58, { deficit: 4.5 })] });
+    // 767/14 = 54,78: 4 of the 14 coefficients without a score; the scored ones average 767/10 = 76,7.
+    const target = career("b", "Nghề B", 54.78, { isTarget: true, requirements: [must("Linux", "met", 84), must("Mạng máy tính", "met", 81.5), must("CI/CD", "met", 82),
+      must("Hệ điều hành", "below", 71, { deficit: 9 }), must("Docker", "upcoming", null), may("Lập trình Python", "met", 72), may("Bảo mật", "below", 58, { deficit: 4.5 }),
+      may("Điện toán đám mây", "no_data", null, { noDataReason: "other_specialty" }), may("Giám sát hệ thống", "not_studied", null)] });
+    const standing = targetStanding([best, career("c", "Nghề C", 60), target], target);
+    expect(standing).toMatchObject({ rank: 3, scored: 3, next: { label: "Trung bình", points: 7.8 } });
+    expect(standing.met).toEqual(["CI/CD", "Linux", "Mạng máy tính", "Lập trình Python"]);
+    expect(standing.below).toEqual(["Hệ điều hành", "Bảo mật"]);
+    expect(standing.zero).toEqual([{ why: "chưa học", names: ["Giám sát hệ thống"] }, { why: "sắp học", names: ["Docker"] }, { why: "cần tự học", names: ["Điện toán đám mây"] }]);
+    // The gap of 20,55 splits into 15,52 from the skills at 0 points and 5,03 from the lower scores: both named, the larger first.
+    expect(standing.belowTop?.career.id).toBe("a");
+    expect(standing.belowTop?.reasons).toEqual([
+      "3/9 kỹ năng của Nghề B chưa có điểm nên tính 0 điểm, so với 1/8 của Nghề A. Trong đó 1 kỹ năng sắp học sẽ có điểm khi bạn học tới.",
+      "Các kỹ năng đã có điểm của Nghề B có điểm thấp hơn: trung bình 76,7, so với 82,1 của Nghề A; 2 kỹ năng còn dưới ngưỡng.",
+    ]);
+    // The best fit itself: no comparison.
+    const mine = { ...best, isTarget: true };
+    const own = targetStanding([mine, { ...target, isTarget: false }], mine);
+    expect(own.rank).toBe(1);
+    expect(own.belowTop).toBeNull();
+    // Nothing scored yet: every skill counts 0.
+    const ahead = career("d", "Nghề D", 0, { isTarget: true, requirements: [must("React", "upcoming", null), may("Docker", "upcoming", null)] });
+    expect(targetStanding([best, ahead], ahead).belowTop?.reasons).toEqual(["Chưa kỹ năng nào của Nghề D có điểm nên cả 2 kỹ năng đều tính 0 điểm, còn Nghề A đã có 7/8 kỹ năng có điểm."]);
+    // A smaller cause under a fifth of the gap is left out.
+    // (2 × 62 + 70) / 3 = 64,66 with every skill scored: only the lower scores explain the gap.
+    const lowScores = career("e", "Nghề E", 64.66, { isTarget: true, requirements: [must("SQL", "below", 62, { deficit: 18 }), may("Git", "met", 70)] });
+    expect(targetStanding([best, lowScores], lowScores).belowTop?.reasons).toEqual(["Các kỹ năng đã có điểm của Nghề E có điểm thấp hơn: trung bình 64,6, so với 82,1 của Nghề A; 1 kỹ năng còn dưới ngưỡng."]);
   });
 
   it("says how the student stands on each requirement and what is still missing", () => {
