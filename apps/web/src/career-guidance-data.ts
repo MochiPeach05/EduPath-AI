@@ -137,6 +137,11 @@ export const orderedRequirements = (career: GuidanceCareer): GuidanceRequirement
 /** "Kỹ năng còn thiếu" of Khoảng trống kỹ năng: every skill that lowers the fit (below, not studied, Cần tự học, Chưa đủ dữ liệu). */
 export const missingSkills = (career: GuidanceCareer) => sortRequirements(computed(career))
   .filter((row) => row.status === "below" || row.status === "not_studied" || row.status === "no_data").map(requirementName);
+/**
+ * The name of the 0–100 number beside every career, on every place it is shown (user 2026-10-31: "Các số như 68, 51, 47 không
+ * có tên cột/đơn vị, người dùng không hiểu. Bổ sung tiêu đề và giải thích đây là điểm phù hợp kỹ năng với vị trí nghề nghiệp").
+ */
+export const FIT_SCORE_LABEL = "Điểm phù hợp kỹ năng";
 /** How the điểm phù hợp is counted (comp-calc-v14), as "Thang mức phù hợp" of Khoảng trống kỹ năng says it. */
 export const FIT_RULE_TEXT = "Điểm phù hợp là trung bình điểm các kỹ năng của nghề, kỹ năng Bắt buộc tính gấp đôi kỹ năng Ưu tiên; "
   + "kỹ năng chưa có điểm (chưa học, sắp học, cần tự học, chưa đủ dữ liệu) tính 0 điểm.";
