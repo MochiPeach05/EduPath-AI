@@ -1,4 +1,4 @@
-// Nhật ký thao tác (AD-REPORT-12, 2026-10-31). recordAudit is the one way any admin code writes the log (table
+// Nhật ký thao tác (AD-REPORT-11, 2026-10-31). recordAudit is the one way any admin code writes the log (table
 // ad_audit_log, migration 057). A row says who did what to which object, never the data itself: no grades, no file contents.
 import { randomUUID } from "node:crypto";
 import type { AuthenticatedUser } from "../../auth/types.js";

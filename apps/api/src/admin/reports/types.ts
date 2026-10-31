@@ -1,4 +1,4 @@
-// Báo cáo của cổng quản trị (AD-REPORT-01…12, 2026-10-31): the responses of /api/admin/reports/* and
+// Báo cáo của cổng quản trị (AD-REPORT-01…11, 2026-10-31): the responses of /api/admin/reports/* and
 // /api/admin/audit-log. Mirror of the pages' contract, apps/web/src/admin-report-types.ts, which documents every field; keep both in step.
 //
 // User decisions (2026-10-31): every admin sees and exports everything, students by name included ("hiện đầy đủ",
@@ -12,7 +12,7 @@ export type ReportTerm = { code: string; label: string };
 /** One aggregate for the whole scope and the same aggregate for each cohort present in it, oldest cohort first. */
 export type CohortSplit<T> = { all: T; byCohort: ({ cohort: string } & T)[] };
 
-/** Query of every report: the shared filter bar (AD-REPORT-11, with the search of AD-REPORT-10). */
+/** Query of every report: the shared filter bar (AD-REPORT-10: search and filters, one row since the function-list merge of 2026-10-31). */
 export type ReportFilters = { cohort?: string; major?: string; specialty?: string; q?: string };
 
 /** GET /api/admin/reports/options: the choices of the filter bar. */
@@ -181,7 +181,7 @@ export type CoursesReport = ReportHead & {
 export type CourseStudent = ReportStudentBase & { how: CourseHow; gpa: number | null };
 export type CourseStudents = { code: string; name: string; items: CourseStudent[] };
 
-// ------------------------------------------------------------- AD-REPORT-12 Nhật ký thao tác
+// ------------------------------------------------------------- AD-REPORT-11 Nhật ký thao tác
 
 export type AuditKind = "account" | "training" | "career" | "competency" | "notify" | "report" | "access" | "other";
 export type AuditEntry = { id: string; at: string; actorName: string; actorRole: string | null; kind: AuditKind; action: string; summary: string };

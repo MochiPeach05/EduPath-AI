@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReportFilters } from "./admin-report-types";
 
-// Requests of the admin reports (AD-REPORT-01…12, 2026-10-31). Contract: admin-report-types.ts. Every report takes the
+// Requests of the admin reports (AD-REPORT-01…11, 2026-10-31). Contract: admin-report-types.ts. Every report takes the
 // shared filters (cohort, major, specialty, q); the student lists add status/level, sort, dir, page and pageSize, the
 // Excel exports take the same query as the page they export.
 

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import { decimalText, scoreText } from "./display-format";
 import { layoutZoom } from "./page-scale";
 
-// Charts of the admin reports (AD-REPORT-01…12, 2026-10-31), drawn without a library: HTML bars where text matters most
+// Charts of the admin reports (AD-REPORT-01…11, 2026-10-31), drawn without a library: HTML bars where text matters most
 // (labels keep the page's 12–14 px), SVG for the line chart (drawn at its measured width), gauges, rings and the donut.
 // Colours (checked with the dataviz validator, 2026-10-31):
 // - statuses (đúng tiến độ / trễ / nguy cơ / chưa có dữ liệu) use the shared status colours;

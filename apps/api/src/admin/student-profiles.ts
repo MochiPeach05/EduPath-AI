@@ -127,7 +127,7 @@ export class PostgresStudentProfileRepository implements StudentProfileRepositor
     const row = result.rows[0];
     if (!row) throw new AccountError("student_not_found", 404);
     if (!row.updatedAt || !row.data) return { transcript: null };
-    // Nhật ký thao tác (AD-REPORT-12, 2026-10-31): every look at a student's grades is logged, who looked at whose
+    // Nhật ký thao tác (AD-REPORT-11, 2026-10-31): every look at a student's grades is logged, who looked at whose
     // transcript, never the grades. The write never fails the read.
     const student = [row.studentCode, row.name].filter(Boolean).join(" ") || id;
     await recordAudit(this.pool, auditActorOf(actor), { kind: "access", action: "Xem bảng điểm", summary: `Xem bảng điểm của sinh viên ${student}`,

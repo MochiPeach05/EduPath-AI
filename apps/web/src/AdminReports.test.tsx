@@ -159,13 +159,16 @@ describe("report pages", () => {
   };
 
   it("lists students by progress with status tabs, credits against the plan and an Excel export", () => {
-    const html = renderToStaticMarkup(<ProgressView data={progressReport} status="all" setStatus={noop} page={1} setPage={noop} sortHeader={plainHeader} exportUrl="/api/admin/reports/progress.xlsx" />);
+    const html = renderToStaticMarkup(<ProgressView data={progressReport} status="all" setStatus={noop} page={1} setPage={noop} sortHeader={plainHeader} exportUrl="/api/admin/reports/progress.xlsx" navigate={noop} />);
     expect(html).toContain("Trễ kế hoạch<b>40</b>");
     expect(html).toContain("86/150 · kế hoạch 117");
     expect(html).toContain('<span class="rp-chip meaning-warn">Trễ kế hoạch</span><span class="rp-chip meaning-warn">Cần chú ý</span>');
     expect(html).toContain("Chưa có MSSV");
     expect(html).toContain("Xuất Excel");
     expect(html).toContain('aria-pressed="true">Toàn khóa</button>');
+    // "Xem hồ sơ" on every row opens the student's details on the Sinh viên page (user, 2026-10-31).
+    expect(html).toContain('<a class="rp-link" href="/quantri/sinh-vien?id=u1" aria-label="Xem hồ sơ của Trần Minh An">Xem hồ sơ</a>');
+    expect(html).toContain('href="/quantri/sinh-vien?id=u2"');
   });
 
   it("explains each risk with its reasons", () => {
@@ -176,10 +179,11 @@ describe("report pages", () => {
       page: { page: 1, pageSize: 10, total: 1, items: [{ userId: "u1", studentCode: "2374802019001", name: "Trần Minh An", cohort: "K29", majorName: null, specialtyName: "Công nghệ phần mềm", level: "risk", gpa: 1.95,
         reasons: [{ kind: "failed_course", level: "risk", text: "Môn bắt buộc chưa đạt: Cơ sở dữ liệu" }, { kind: "gpa_below", level: "risk", text: "GPA tích lũy 1,95, dưới 2,00" }] }] },
     };
-    const html = renderToStaticMarkup(<RiskView data={risk} level="all" setLevel={noop} page={1} setPage={noop} sortHeader={plainHeader} exportUrl="/api/admin/reports/risk.xlsx" />);
+    const html = renderToStaticMarkup(<RiskView data={risk} level="all" setLevel={noop} page={1} setPage={noop} sortHeader={plainHeader} exportUrl="/api/admin/reports/risk.xlsx" navigate={noop} />);
     expect(html).toContain('<span class="rp-chip meaning-bad">Môn bắt buộc chưa đạt: Cơ sở dữ liệu</span>');
     expect(html).toContain("Không kịp tín chỉ");
     expect(html).toContain(">1,95</td>");
+    expect(html).toContain('href="/quantri/sinh-vien?id=u1" aria-label="Xem hồ sơ của Trần Minh An"');
   });
 
   it("counts missing skills, careers and suggested courses for all cohorts and each one", () => {
@@ -187,10 +191,11 @@ describe("report pages", () => {
       { items: [{ name: "Docker", below: 2, notStudied: 3, selfStudy: 10, noData: 1, total: 16 }] },
       { items: [{ name: "Docker", below: 1, notStudied: 1, selfStudy: 6, noData: 0, total: 8 }] }, { items: [{ name: "Docker", below: 1, notStudied: 2, selfStudy: 4, noData: 1, total: 8 }] }) };
     const skillHtml = renderToStaticMarkup(<SkillsView data={skills} career="" setCareer={noop} selected="Docker" setSelected={noop} students={{ data: { skill: "Docker", items: [
-      { userId: "u1", studentCode: "2374802019001", name: "Trần Minh An", cohort: "K29", majorName: null, specialtyName: null, careerName: "Kỹ sư dữ liệu", status: "self_study", fitScore: 58.4, fitLabel: "Ít phù hợp" }] }, error: null, loading: false, retry: noop }} exportUrl="/x.xlsx" />);
+      { userId: "u1", studentCode: "2374802019001", name: "Trần Minh An", cohort: "K29", majorName: null, specialtyName: null, careerName: "Kỹ sư dữ liệu", status: "self_study", fitScore: 58.4, fitLabel: "Ít phù hợp" }] }, error: null, loading: false, retry: noop }} exportUrl="/x.xlsx" navigate={noop} />);
     expect(skillHtml).toContain("Docker: sinh viên còn thiếu");
     expect(skillHtml).toContain('<span class="rp-chip rp-chip-violet">Cần tự học ngoài chương trình</span>');
     expect(skillHtml).toContain("58,4");
+    expect(skillHtml).toContain('href="/quantri/sinh-vien?id=u1"');
 
     const careers: CareersReport = { ...head, withoutCareer: 38, careers: split(
       { items: [{ name: "Kỹ sư phần mềm", students: 30, average: 72.4, levels: [{ label: "Phù hợp", students: 10 }, { label: "Trung bình", students: 20 }], topGaps: [{ name: "Docker", students: 12 }] }] },
@@ -203,10 +208,13 @@ describe("report pages", () => {
     const courses: CoursesReport = { ...head, withRoadmap: 97, courses: split(
       { items: [{ code: "71ITSE30503", name: "Lập trình ứng dụng Web", newStudents: 20, retake: 5, improve: 2, total: 27 }] },
       { items: [{ code: "71ITSE30503", name: "Lập trình ứng dụng Web", newStudents: 0, retake: 5, improve: 2, total: 7 }] }, { items: [{ code: "71ITSE30503", name: "Lập trình ứng dụng Web", newStudents: 20, retake: 0, improve: 0, total: 20 }] }) };
-    const courseHtml = renderToStaticMarkup(<CoursesView data={courses} selected={null} setSelected={noop} students={null} />);
+    const courseHtml = renderToStaticMarkup(<CoursesView data={courses} selected={null} setSelected={noop} students={null} navigate={noop} />);
     expect(courseHtml).toContain("1 môn được AI đề xuất");
     expect(courseHtml).toContain("97 sinh viên đã có Lộ trình AI");
     expect(courseHtml).toContain("Lập trình ứng dụng Web");
+    const chosen = renderToStaticMarkup(<CoursesView data={courses} selected="71ITSE30503" setSelected={noop} navigate={noop} students={{ data: { code: "71ITSE30503", name: "Lập trình ứng dụng Web", items: [
+      { userId: "u3", studentCode: "2374802019003", name: "Phạm Gia Huy", cohort: "K30", majorName: null, specialtyName: null, how: "retake", gpa: 2.1 }] }, error: null, loading: false, retry: noop }} />);
+    expect(chosen).toContain('<a class="rp-link" href="/quantri/sinh-vien?id=u3" aria-label="Xem hồ sơ của Phạm Gia Huy">Xem hồ sơ</a>');
   });
 
   it("shows the log newest first with who, what and when", () => {
@@ -228,5 +236,7 @@ describe("report pages", () => {
     const audit = renderToStaticMarkup(<AdminReports path="/quantri/nhat-ky" navigate={noop} />);
     expect(audit).not.toContain('aria-label="Tìm kiếm và lọc dữ liệu báo cáo"');
     expect(audit).toContain("Tìm trong nhật ký");
+    // Codes after the function-list merge of 2026-10-31: the filter bar is AD-REPORT-10, Nhật ký is AD-REPORT-11.
+    expect(audit).toContain(">AD-REPORT-11</span>Nhật ký thao tác</p>");
   });
 });

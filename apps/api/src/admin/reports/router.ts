@@ -1,4 +1,4 @@
-// Báo cáo của cổng quản trị (AD-REPORT-01…11, 2026-10-31): GET /api/admin/reports/*. Every active admin role reads and
+// Báo cáo của cổng quản trị (AD-REPORT-01…10, 2026-10-31): GET /api/admin/reports/*. Every active admin role reads and
 // exports everything, students by name included (user: "hiện đầy đủ", "mọi quản trị viên"); every Excel export is
 // written to the Nhật ký thao tác. The rows come from the cached source (cache.ts), the answers from aggregate.ts.
 import { Router } from "express";

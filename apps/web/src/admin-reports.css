@@ -1,4 +1,4 @@
-/* Báo cáo của cổng quản trị (AdminReports.tsx, AD-REPORT-01…12, 2026-10-31): the look of the approved preview inside
+/* Báo cáo của cổng quản trị (AdminReports.tsx, AD-REPORT-01…11, 2026-10-31): the look of the approved preview inside
    the admin portal — white cards with soft shadows on the portal's light canvas, a 12 px floor for every text, tabular
    numbers in columns. Every rule sits under .rp; the colours of level and fit words come from display-format.css. */
 .rp {
@@ -50,7 +50,7 @@
 .rp-small-btn:hover { border-color: var(--rp-brand); color: var(--rp-brand); }
 .rp-small-btn .ep-icon, .rp-btn .ep-icon { width: 16px; height: 16px; }
 
-/* Filter bar (AD-REPORT-10/11) */
+/* Filter bar (AD-REPORT-10) */
 .rp-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; padding: 12px 14px; border-radius: 16px; background: var(--rp-surface); box-shadow: var(--rp-shadow); }
 .rp-filters-inline { padding: 0; box-shadow: none; }
 .rp-field { display: grid; gap: 4px; min-width: 0; font-size: 12px; font-weight: 700; color: var(--rp-muted); }

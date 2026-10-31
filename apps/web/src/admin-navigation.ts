@@ -1,5 +1,5 @@
 export const adminNavigation = [
-  // AD-REPORT-01…12 (2026-10-31): the reports come first and Tổng quan is the page /quantri opens.
+  // AD-REPORT-01…11 (2026-10-31): the reports come first and Tổng quan is the page /quantri opens.
   { path: "/quantri/tong-quan", label: "Tổng quan", eyebrow: "BÁO CÁO", icon: "home" },
   { path: "/quantri/bao-cao-tien-do", label: "Tiến độ", eyebrow: "BÁO CÁO", icon: "route" },
   { path: "/quantri/bao-cao-nguy-co", label: "Nguy cơ", eyebrow: "BÁO CÁO", icon: "bell" },
@@ -83,7 +83,7 @@ export function toggleAdminGroup(openGroup: string | null, clicked: string) {
   return openGroup === clicked ? null : clicked;
 }
 
-/** The report pages (AD-REPORT-01…12) and the view each one shows. */
+/** The report pages (AD-REPORT-01…11) and the view each one shows. */
 export const REPORT_PATHS = {
   dashboard: "/quantri/tong-quan",
   progress: "/quantri/bao-cao-tien-do",
@@ -102,3 +102,22 @@ export function reportViewOf(path: string): ReportView | null {
   return entry ? entry[0] : null;
 }
 export const isReportPath = (path: string) => reportViewOf(path) !== null;
+
+/**
+ * One student's details on the Sinh viên page, by link ("Xem hồ sơ" in the reports, user 2026-10-31): ?id=<users.id>, the
+ * id GET /api/admin/students/:id reads. The address opens the details, a reload keeps them, closing drops the parameter.
+ */
+export const STUDENT_PROFILE_PATH = "/quantri/sinh-vien";
+export const studentProfileLink = (userId: string) => `${STUDENT_PROFILE_PATH}?${new URLSearchParams({ id: userId })}`;
+/** The student an address opens ("?id=…"), or null. Any id is kept as written, so an unknown one gets the API's not-found message. */
+export function profileIdOf(search: string): string | null {
+  const id = new URLSearchParams(search).get("id")?.trim();
+  return id ? id.slice(0, 100) : null;
+}
+/** The same query without the student ("?id=…&x=1" → "?x=1"; "" when nothing is left). */
+export function withoutProfileId(search: string): string {
+  const params = new URLSearchParams(search);
+  params.delete("id");
+  const text = params.toString();
+  return text ? `?${text}` : "";
+}

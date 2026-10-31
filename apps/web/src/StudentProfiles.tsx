@@ -8,6 +8,7 @@ import { majorLabel } from "./majors";
 import TranscriptTables, { transcriptNotes } from "./TranscriptTables";
 import { formatUpdatedAt } from "./student-overview-data";
 import { sortParams, useTableSort } from "./table-sort";
+import { profileIdOf, studentProfileLink, withoutProfileId } from "./admin-navigation";
 import type { Transcript } from "./StudentTranscript";
 import "./student-profiles.css";
 
@@ -58,7 +59,19 @@ export default function StudentProfiles() {
   const { draft, setDraft, filters, page, setPage, flush, reset } = useLiveFilters(emptyFilters);
   // The server sorts the whole list (admin/student-profiles.ts); STT stays the row's number in the list by name.
   const { sort, sortHeader } = useTableSort(() => setPage(1));
-  const [selected, setSelected] = useState<Student | null>(null);
+  // One student's details by link (?id=<users.id>, "Xem hồ sơ" in the reports, 2026-10-31): the address opens them, a reload
+  // keeps them, closing drops the parameter. Opening from the list writes the address too, without a new history entry.
+  const [selectedId, setSelectedId] = useState<string | null>(() => (typeof window === "undefined" ? null : profileIdOf(window.location.search)));
+  useEffect(() => {
+    const onPopState = () => setSelectedId(profileIdOf(window.location.search));
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+  const openStudent = (id: string) => { setSelectedId(id); window.history.replaceState(window.history.state, "", studentProfileLink(id)); };
+  const closeStudent = () => {
+    setSelectedId(null);
+    if (profileIdOf(window.location.search)) window.history.replaceState(window.history.state, "", `${window.location.pathname}${withoutProfileId(window.location.search)}`);
+  };
   const [cohortCodes, setCohortCodes] = useState<string[]>([]);
   const [cohortYears, setCohortYears] = useState<number[]>([]);
   const params = sortParams(sort, new URLSearchParams({ page: String(page), pageSize: "10" }));
@@ -76,9 +89,9 @@ export default function StudentProfiles() {
       <label htmlFor="student-active">Trạng thái tài khoản<select id="student-active" value={draft.active} onChange={(e) => setDraft({ ...draft, active: e.target.value })}><option value="">Tất cả tài khoản</option><option value="true">Đang hoạt động</option><option value="false">Đã khóa</option></select></label>
       <div className="sp-filter-actions"><button className="am-outline" type="button" onClick={reset}>Xóa bộ lọc</button></div>
     </form>
-    <Status {...state} />{state.data && <><div className="am-table-scroll" tabIndex={0} role="region" aria-label="Bảng hồ sơ sinh viên, cuộn ngang trên màn hình nhỏ"><table className="am-table sp-table"><thead><tr>{sortHeader("STT", "stt")}{sortHeader("Sinh viên", "name")}{sortHeader("Mã sinh viên", "studentCode")}{sortHeader("Khóa học", "cohortCode")}{sortHeader("Lớp học", "className")}{sortHeader("Năm nhập học", "cohortYear")}{sortHeader("Hồ sơ", "profileStatus")}{sortHeader("Tài khoản", "isActive")}<th scope="col">Thao tác</th></tr></thead><tbody>{state.data.items.map((student, index) => <tr key={student.id}><td>{student.stt ?? (page - 1) * 10 + index + 1}</td><td><div className="am-person"><span className="am-avatar" aria-hidden="true">{student.name.slice(0, 1)}</span><div><button className="am-name-link" onClick={() => setSelected(student)}>{student.name}</button><small>{student.email ?? "Chưa có email"}</small></div></div></td><td>{student.studentCode ?? "Chưa cập nhật"}</td><td>{student.cohortCode ?? "—"}</td><td>{student.className ?? "—"}</td><td>{student.cohortYear ?? "—"}</td><td><ProfileBadge status={student.profileStatus} /></td><td><span className={`am-state ${student.isActive ? "" : "am-state-locked"}`}>{student.isActive ? "Đang hoạt động" : "Đã khóa"}</span></td><td><button className="am-outline" onClick={() => setSelected(student)}><Icon name="eye" />Xem chi tiết</button></td></tr>)}</tbody></table></div>
+    <Status {...state} />{state.data && <><div className="am-table-scroll" tabIndex={0} role="region" aria-label="Bảng hồ sơ sinh viên, cuộn ngang trên màn hình nhỏ"><table className="am-table sp-table"><thead><tr>{sortHeader("STT", "stt")}{sortHeader("Sinh viên", "name")}{sortHeader("Mã sinh viên", "studentCode")}{sortHeader("Khóa học", "cohortCode")}{sortHeader("Lớp học", "className")}{sortHeader("Năm nhập học", "cohortYear")}{sortHeader("Hồ sơ", "profileStatus")}{sortHeader("Tài khoản", "isActive")}<th scope="col">Thao tác</th></tr></thead><tbody>{state.data.items.map((student, index) => <tr key={student.id}><td>{student.stt ?? (page - 1) * 10 + index + 1}</td><td><div className="am-person"><span className="am-avatar" aria-hidden="true">{student.name.slice(0, 1)}</span><div><button className="am-name-link" onClick={() => openStudent(student.id)}>{student.name}</button><small>{student.email ?? "Chưa có email"}</small></div></div></td><td>{student.studentCode ?? "Chưa cập nhật"}</td><td>{student.cohortCode ?? "—"}</td><td>{student.className ?? "—"}</td><td>{student.cohortYear ?? "—"}</td><td><ProfileBadge status={student.profileStatus} /></td><td><span className={`am-state ${student.isActive ? "" : "am-state-locked"}`}>{student.isActive ? "Đang hoạt động" : "Đã khóa"}</span></td><td><button className="am-outline" onClick={() => openStudent(student.id)}><Icon name="eye" />Xem chi tiết</button></td></tr>)}</tbody></table></div>
       {!state.data.items.length && <div className="am-empty"><h3>{filtered ? "Không tìm thấy hồ sơ phù hợp" : "Chưa có sinh viên trong danh sách"}</h3><p>{filtered ? "Thử từ khóa khác hoặc xóa bộ lọc." : "Danh sách sẽ hiển thị khi có tài khoản mang vai trò Sinh viên trong hệ thống."}</p></div>}
       <Pagination total={state.data.total} page={page} setPage={setPage} /></>}
     <p className="am-table-note"></p>
-  </section>{selected && <Modal title="Chi tiết hồ sơ sinh viên" onClose={() => setSelected(null)}><StudentDetails id={selected.id} /><div className="am-form-actions am-dialog-footer"><button className="am-outline" type="button" onClick={() => setSelected(null)}><Icon name="close" /> Đóng</button></div></Modal>}</>;
+  </section>{selectedId && <Modal title="Chi tiết hồ sơ sinh viên" onClose={closeStudent}><StudentDetails key={selectedId} id={selectedId} /><div className="am-form-actions am-dialog-footer"><button className="am-outline" type="button" onClick={closeStudent}><Icon name="close" /> Đóng</button></div></Modal>}</>;
 }

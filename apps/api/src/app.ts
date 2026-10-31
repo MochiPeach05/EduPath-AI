@@ -193,7 +193,7 @@ export function createApp({
     response.json({ authenticated: true, user: request.session.user });
   });
 
-  // Nhật ký thao tác (AD-REPORT-12): every successful admin change is logged; it must run before the admin routers.
+  // Nhật ký thao tác (AD-REPORT-11): every successful admin change is logged; it must run before the admin routers.
   app.use("/api/admin", auditAdminMutations(databasePool));
   app.use("/api/admin/audit-log", createAuditLogRouter(databasePool));
   app.use("/api/admin/reports", createReportsRouter(databasePool));

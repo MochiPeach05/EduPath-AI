@@ -1,4 +1,4 @@
-// Nhật ký thao tác (AD-REPORT-12): GET /api/admin/audit-log, newest first, for every admin role. Rows older than one
+// Nhật ký thao tác (AD-REPORT-11): GET /api/admin/audit-log, newest first, for every admin role. Rows older than one
 // year are deleted when the log is read, at most once an hour.
 import { Router } from "express";
 import { z } from "zod";

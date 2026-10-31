@@ -1,4 +1,4 @@
-// Nhật ký thao tác (AD-REPORT-12): what each admin change is called in the log. Every POST/PUT/PATCH/DELETE of the admin
+// Nhật ký thao tác (AD-REPORT-11): what each admin change is called in the log. Every POST/PUT/PATCH/DELETE of the admin
 // routers (app.ts, /api/admin/...) has a rule here, specific paths before general ones; a route without a rule is still
 // logged with a generic line (unknownRoute). Summaries name the object from the route, the request's JSON fields or the
 // JSON answer, or a small lookup by id; never grades or file contents.

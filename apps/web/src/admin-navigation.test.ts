@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { REPORT_PATHS, adminGroupOf, adminNavigation, adminSidebar, isReportPath, reportViewOf, resolveAdminPage } from "./admin-navigation";
+import { REPORT_PATHS, adminGroupOf, adminNavigation, adminSidebar, isReportPath, profileIdOf, reportViewOf, resolveAdminPage, studentProfileLink, withoutProfileId } from "./admin-navigation";
 describe("admin section navigation", () => {
   it("has account, student-profile, curriculum, graduation, training-plan, career, career-field, skill and competency sections", () => {
     expect(adminNavigation.map(item => item.path)).toEqual(["/quantri/tong-quan", "/quantri/bao-cao-tien-do", "/quantri/bao-cao-nguy-co", "/quantri/bao-cao-ky-nang", "/quantri/bao-cao-nghe-nghiep", "/quantri/bao-cao-mon-hoc", "/quantri/nhat-ky", "/quantri/tai-khoan", "/quantri/sinh-vien", "/quantri/chuong-trinh", "/quantri/tieu-chuan-tot-nghiep", "/quantri/ke-hoach", "/quantri/linh-vuc-nghe-nghiep", "/quantri/ky-nang", "/quantri/vi-tri-nghe-nghiep", "/quantri/nhom-nang-luc", "/quantri/cau-hinh-nang-luc", "/quantri/cau-hinh-mon-hoc", "/quantri/gui-thong-bao", "/quantri/thong-bao-da-gui"]);
@@ -54,5 +54,16 @@ describe("admin section navigation", () => {
     expect(reportViewOf("/quantri/nhat-ky?q=xuat")).toBe("audit");
     expect(isReportPath("/quantri/ky-nang")).toBe(false);
     expect(isReportPath("/quantri/tong-quan")).toBe(true);
+  });
+  it("links one student's details on the Sinh viên page and reads the link back", () => {
+    const id = "6f1c2a9e-0b7d-4c1e-9a3f-2d4e5f607182";
+    expect(studentProfileLink(id)).toBe(`/quantri/sinh-vien?id=${id}`);
+    expect(resolveAdminPage(studentProfileLink(id).split("?")[0]!)).toMatchObject({ path: "/quantri/sinh-vien", label: "Sinh viên" });
+    expect(profileIdOf(`?id=${id}`)).toBe(id);
+    expect(profileIdOf("?id=%20abc%20")).toBe("abc");
+    expect(profileIdOf("?id=")).toBeNull();
+    expect(profileIdOf("")).toBeNull();
+    expect(withoutProfileId(`?id=${id}&tab=2`)).toBe("?tab=2");
+    expect(withoutProfileId(`?id=${id}`)).toBe("");
   });
 });

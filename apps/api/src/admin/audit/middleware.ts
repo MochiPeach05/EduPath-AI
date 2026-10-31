@@ -1,4 +1,4 @@
-// Nhật ký thao tác (AD-REPORT-12): logs every change made in the admin portal. Mounted on /api/admin before the admin
+// Nhật ký thao tác (AD-REPORT-11): logs every change made in the admin portal. Mounted on /api/admin before the admin
 // routers (after the session), it waits for the answer: a POST/PUT/PATCH/DELETE that ends below 400 is written with the
 // action and summary of its rule (routes.ts), or a generic line when no rule names the route yet. Reads are not logged
 // here; the routers that read students' data log those reads themselves (student-profiles.ts, the report exports).

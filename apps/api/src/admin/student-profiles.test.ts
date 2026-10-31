@@ -145,7 +145,7 @@ describe("student transcript for admins", () => {
     const missing = vi.fn().mockResolvedValueOnce({ rows: [] });
     await expect(new PostgresStudentProfileRepository({ query: missing } as unknown as DatabasePool).transcript(actor, id)).rejects.toMatchObject({ code: "student_not_found" });
   });
-  // Nhật ký thao tác (AD-REPORT-12, 2026-10-31): who looked at whose grades, never the grades.
+  // Nhật ký thao tác (AD-REPORT-11, 2026-10-31): who looked at whose grades, never the grades.
   it("logs each view of a stored transcript, with the student's MSSV and name only", async () => {
     const viewer = { userId: "3f2b8c1e-5d4a-4b6f-9a1e-2c3d4e5f6a7b", tenantId: "tenant", name: "Lê Quốc Bảo", role: "lecturer" } as AuthenticatedUser;
     const query = vi.fn().mockResolvedValueOnce({ rows: [{ updatedAt: "2026-10-25T10:00:00.000Z", data: data(), studentCode: "2374802019917", name: "Nguyễn Minh Khoa" }] })

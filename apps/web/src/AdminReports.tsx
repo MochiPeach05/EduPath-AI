@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Icon } from "./admin-account-shared";
 import { Pagination } from "./admin-ui";
-import { REPORT_PATHS, reportViewOf, type ReportView } from "./admin-navigation";
+import { REPORT_PATHS, reportViewOf, studentProfileLink, type ReportView } from "./admin-navigation";
 import { meaningClass, meaningOf, termName } from "./display-format";
 import { sortRows, useTableSort, type SortRule, type TableSort } from "./table-sort";
 import {
@@ -19,7 +19,7 @@ import type {
 import "./table-sort.css";
 import "./admin-reports.css";
 
-// Báo cáo của cổng quản trị (AD-REPORT-01…12, 2026-10-31), built from the preview the user approved ("Triển khai đi")
+// Báo cáo của cổng quản trị (AD-REPORT-01…11, 2026-10-31), built from the preview the user approved ("Triển khai đi")
 // with one more rule: "mọi phần đều có xem trung bình toàn khóa với từng khóa hết á" — every section reads for all
 // cohorts together (Toàn khóa) and for each cohort (Từng khóa). Every admin sees and exports everything ("hiện đầy đủ",
 // "mọi quản trị viên"). Progress and risk are the student's own Tổng quan numbers (server: readOverview), never AI.
@@ -34,7 +34,7 @@ const PAGE_TEXT: Record<ReportView, { code: string; title: string; lead: string 
   skills: { code: "06–07", title: "Thống kê kỹ năng còn thiếu", lead: "Từ lần Đánh giá năng lực mới nhất của mỗi sinh viên, so với nghề mục tiêu. Bấm một kỹ năng để xem sinh viên còn thiếu." },
   careers: { code: "08", title: "Thống kê nghề nghiệp mục tiêu", lead: "Nghề sinh viên chọn trong Đánh giá năng lực và mức phù hợp hiện tại." },
   courses: { code: "09", title: "Thống kê môn học được đề xuất", lead: "Các môn Lộ trình AI đề xuất cho sinh viên. Bấm một môn để xem sinh viên được đề xuất." },
-  audit: { code: "12", title: "Nhật ký thao tác", lead: "Ai đã làm gì, lúc nào: thay đổi dữ liệu và cấu hình, gửi thông báo, xem bảng điểm và xuất báo cáo có tên sinh viên. Lưu 1 năm; không lưu nội dung dữ liệu của sinh viên." },
+  audit: { code: "11", title: "Nhật ký thao tác", lead: "Ai đã làm gì, lúc nào: thay đổi dữ liệu và cấu hình, gửi thông báo, xem bảng điểm và xuất báo cáo có tên sinh viên. Lưu 1 năm; không lưu nội dung dữ liệu của sinh viên." },
 };
 
 export const STATUS_TEXT: Record<ProgressStatus, { label: string; tone: string }> = {
@@ -153,7 +153,7 @@ function useReportFilters(): [ReportFilterState, (next: ReportFilterState) => vo
   return [filters, set];
 }
 
-/** The shared filter bar (AD-REPORT-11, with the search of AD-REPORT-10). */
+/** The shared filter bar (AD-REPORT-10: search and filters, one row since the user's function-list merge of 2026-10-31). */
 export function FilterBar({ filters, setFilters, options }: { filters: ReportFilterState; setFilters: (next: ReportFilterState) => void; options: ReportOptions | null }) {
   const [draft, setDraft] = useState(filters.q);
   useEffect(() => setDraft(filters.q), [filters.q]);
@@ -223,6 +223,15 @@ export function ExportButton({ url, fallbackName }: { url: string; fallbackName:
 
 /** A stored student's name and MSSV, the way every report table shows a student. */
 const Student = ({ name, code }: { name: string; code: string | null }) => <span className="rp-who"><b>{name}</b><small>{code ?? "Chưa có MSSV"}</small></span>;
+/**
+ * "Xem hồ sơ" (user, 2026-10-31): the student's details on the Sinh viên page, through the workspace navigation. A real link,
+ * so a middle click or Ctrl+click still opens them in a new tab.
+ */
+function ProfileLink({ userId, name, navigate }: { userId: string; name: string; navigate: (path: string) => void }) {
+  const href = studentProfileLink(userId);
+  return <a className="rp-link" href={href} aria-label={`Xem hồ sơ của ${name}`}
+    onClick={(event) => { if (event.button === 0 && !event.ctrlKey && !event.metaKey && !event.shiftKey && !event.altKey) { event.preventDefault(); navigate(href); } }}>Xem hồ sơ</a>;
+}
 
 /* ------------------------------------------------------------------ AD-REPORT-01 Tổng quan */
 
@@ -469,9 +478,9 @@ function CreditsCell({ student }: { student: ProgressStudent }) {
   </span>;
 }
 
-export function ProgressView({ data, status, setStatus, page, setPage, sortHeader, exportUrl }: {
+export function ProgressView({ data, status, setStatus, page, setPage, sortHeader, exportUrl, navigate }: {
   data: ProgressReport; status: "all" | ProgressStatus; setStatus: (status: "all" | ProgressStatus) => void; page: number; setPage: (page: number) => void;
-  sortHeader: (label: ReactNode, column: string, className?: string) => ReactNode; exportUrl: string;
+  sortHeader: (label: ReactNode, column: string, className?: string) => ReactNode; exportUrl: string; navigate: (path: string) => void;
 }) {
   const [mode, setMode] = useState<CohortMode>("all");
   const counts = data.counts.all;
@@ -488,19 +497,20 @@ export function ProgressView({ data, status, setStatus, page, setPage, sortHeade
       <Segmented label="Tình trạng" value={status} onChange={setStatus} options={[{ value: "all", label: "Tất cả", count: counts.total }, { value: "on_track", label: "Đúng tiến độ", count: counts.onTrack },
         { value: "late", label: "Trễ kế hoạch", count: counts.late }, { value: "unknown", label: "Chưa đủ dữ liệu", count: counts.unknown }, { value: "no_transcript", label: "Chưa có bảng điểm", count: counts.noTranscript }]} />
       <div className="rp-table-wrap" tabIndex={0} role="region" aria-label="Danh sách sinh viên theo tiến độ"><table className="rp-table">
-        <thead><tr><th scope="col" className="rp-num">STT</th>{sortHeader("Sinh viên", "name")}{sortHeader("Khóa", "cohort")}{sortHeader("Chuyên ngành", "specialty")}{sortHeader("Tín chỉ đã đạt", "credits")}{sortHeader("GPA tích lũy", "gpa", "rp-num")}{sortHeader("Tình trạng", "status")}</tr></thead>
+        <thead><tr><th scope="col" className="rp-num">STT</th>{sortHeader("Sinh viên", "name")}{sortHeader("Khóa", "cohort")}{sortHeader("Chuyên ngành", "specialty")}{sortHeader("Tín chỉ đã đạt", "credits")}{sortHeader("GPA tích lũy", "gpa", "rp-num")}{sortHeader("Tình trạng", "status")}<th scope="col">Thao tác</th></tr></thead>
         <tbody>{data.page.items.length ? data.page.items.map((student, index) => <tr key={student.userId}>
           <td className="rp-num">{countText((data.page.page - 1) * data.page.pageSize + index + 1)}</td><td><Student name={student.name} code={student.studentCode} /></td>
           <td>{student.cohort ?? "—"}</td><td>{student.specialtyName ?? "Chưa xác định"}</td><td><CreditsCell student={student} /></td><td className="rp-num">{gpaText(student.gpa)}</td>
           <td><span className="rp-chips"><Chip tone={STATUS_TEXT[student.status].tone}>{STATUS_TEXT[student.status].label}</Chip>{student.risk && <Chip tone={LEVEL_TEXT[student.risk].tone}>{LEVEL_TEXT[student.risk].label}</Chip>}</span></td>
-        </tr>) : <tr><td colSpan={7} className="rp-empty">Không có sinh viên phù hợp với bộ lọc.</td></tr>}</tbody>
+          <td><ProfileLink userId={student.userId} name={student.name} navigate={navigate} /></td>
+        </tr>) : <tr><td colSpan={8} className="rp-empty">Không có sinh viên phù hợp với bộ lọc.</td></tr>}</tbody>
       </table></div>
       <Pagination total={data.page.total} page={page} setPage={setPage} />
     </section>
   </div>;
 }
 
-function ProgressPage({ filters, studyTerm, bar }: { filters: ReportFilterState; studyTerm: ReportTerm | null; bar: ReactNode }) {
+function ProgressPage({ filters, studyTerm, bar, navigate }: { filters: ReportFilterState; studyTerm: ReportTerm | null; bar: ReactNode; navigate: (path: string) => void }) {
   const [status, setStatus] = useState<"all" | ProgressStatus>("all");
   const [page, setPage] = usePageFor(`${filtersToSearch(filters)}|${status}`);
   const { sort, sortHeader } = useTableSort(() => setPage(1));
@@ -509,15 +519,15 @@ function ProgressPage({ filters, studyTerm, bar }: { filters: ReportFilterState;
   return <>
     <Intro view="progress" head={state.data} studyTerm={studyTerm} />
     {bar}
-    <Loading state={state}>{(data) => <ProgressView data={data} status={status} setStatus={setStatus} page={page} setPage={setPage} sortHeader={sortHeader} exportUrl={reportUrl("/progress.xlsx", filters, query)} />}</Loading>
+    <Loading state={state}>{(data) => <ProgressView data={data} status={status} setStatus={setStatus} page={page} setPage={setPage} sortHeader={sortHeader} exportUrl={reportUrl("/progress.xlsx", filters, query)} navigate={navigate} />}</Loading>
   </>;
 }
 
 /* ------------------------------------------------------------------ AD-REPORT-04/05 Nguy cơ */
 
-export function RiskView({ data, level, setLevel, page, setPage, sortHeader, exportUrl }: {
+export function RiskView({ data, level, setLevel, page, setPage, sortHeader, exportUrl, navigate }: {
   data: RiskReport; level: "all" | "risk" | "warn"; setLevel: (level: "all" | "risk" | "warn") => void; page: number; setPage: (page: number) => void;
-  sortHeader: (label: ReactNode, column: string, className?: string) => ReactNode; exportUrl: string;
+  sortHeader: (label: ReactNode, column: string, className?: string) => ReactNode; exportUrl: string; navigate: (path: string) => void;
 }) {
   const [mode, setMode] = useState<CohortMode>("all");
   const kinds = (items: { kind: RiskKind; label: string; students: number }[]) => RISK_ORDER.map((kind) => items.find((item) => item.kind === kind) ?? { kind, label: RISK_TEXT[kind], students: 0 });
@@ -541,19 +551,20 @@ export function RiskView({ data, level, setLevel, page, setPage, sortHeader, exp
         <div className="rp-card-actions"><ExportButton url={exportUrl} fallbackName="sinh-vien-co-nguy-co.xlsx" /></div></div>
       <Segmented label="Mức" value={level} onChange={setLevel} options={[{ value: "all", label: "Tất cả", count: counts.total }, { value: "risk", label: "Nguy cơ", count: counts.risk }, { value: "warn", label: "Cần chú ý", count: counts.warn }]} />
       <div className="rp-table-wrap" tabIndex={0} role="region" aria-label="Danh sách sinh viên cần chú ý"><table className="rp-table">
-        <thead><tr><th scope="col" className="rp-num">STT</th>{sortHeader("Sinh viên", "name")}{sortHeader("Khóa", "cohort")}{sortHeader("Mức", "level")}<th scope="col">Lý do</th>{sortHeader("GPA", "gpa", "rp-num")}</tr></thead>
+        <thead><tr><th scope="col" className="rp-num">STT</th>{sortHeader("Sinh viên", "name")}{sortHeader("Khóa", "cohort")}{sortHeader("Mức", "level")}<th scope="col">Lý do</th>{sortHeader("GPA", "gpa", "rp-num")}<th scope="col">Thao tác</th></tr></thead>
         <tbody>{data.page.items.length ? data.page.items.map((student: RiskStudent, index) => <tr key={student.userId}>
           <td className="rp-num">{countText((data.page.page - 1) * data.page.pageSize + index + 1)}</td><td><Student name={student.name} code={student.studentCode} /></td>
           <td>{student.cohort ?? "—"}<small className="rp-sub">{student.specialtyName ?? ""}</small></td><td><Chip tone={LEVEL_TEXT[student.level].tone}>{LEVEL_TEXT[student.level].label}</Chip></td>
           <td><span className="rp-chips">{student.reasons.map((reason, reasonIndex) => <Chip key={reasonIndex} tone={LEVEL_TEXT[reason.level].tone}>{reason.text}</Chip>)}</span></td><td className="rp-num">{gpaText(student.gpa)}</td>
-        </tr>) : <tr><td colSpan={6} className="rp-empty">Không có sinh viên cần chú ý trong phạm vi lọc.</td></tr>}</tbody>
+          <td><ProfileLink userId={student.userId} name={student.name} navigate={navigate} /></td>
+        </tr>) : <tr><td colSpan={7} className="rp-empty">Không có sinh viên cần chú ý trong phạm vi lọc.</td></tr>}</tbody>
       </table></div>
       <Pagination total={data.page.total} page={page} setPage={setPage} />
     </section>
   </div>;
 }
 
-function RiskPage({ filters, studyTerm, bar }: { filters: ReportFilterState; studyTerm: ReportTerm | null; bar: ReactNode }) {
+function RiskPage({ filters, studyTerm, bar, navigate }: { filters: ReportFilterState; studyTerm: ReportTerm | null; bar: ReactNode; navigate: (path: string) => void }) {
   const [level, setLevel] = useState<"all" | "risk" | "warn">("all");
   const [page, setPage] = usePageFor(`${filtersToSearch(filters)}|${level}`);
   const { sort, sortHeader } = useTableSort(() => setPage(1));
@@ -562,7 +573,7 @@ function RiskPage({ filters, studyTerm, bar }: { filters: ReportFilterState; stu
   return <>
     <Intro view="risk" head={state.data} studyTerm={studyTerm} />
     {bar}
-    <Loading state={state}>{(data) => <RiskView data={data} level={level} setLevel={setLevel} page={page} setPage={setPage} sortHeader={sortHeader} exportUrl={reportUrl("/risk.xlsx", filters, query)} />}</Loading>
+    <Loading state={state}>{(data) => <RiskView data={data} level={level} setLevel={setLevel} page={page} setPage={setPage} sortHeader={sortHeader} exportUrl={reportUrl("/risk.xlsx", filters, query)} navigate={navigate} />}</Loading>
   </>;
 }
 
@@ -575,24 +586,24 @@ const gapParts = (row: SkillGapRow): BarPart[] => [
   { label: GAP_TEXT.no_data.label, value: row.noData, color: GAP_TEXT.no_data.color },
 ];
 
-function SkillStudentsTable({ data }: { data: SkillStudents }) {
+function SkillStudentsTable({ data, navigate }: { data: SkillStudents; navigate: (path: string) => void }) {
   const { sort, sortHeader } = useTableSort();
   const rules: Record<string, SortRule<SkillStudents["items"][number]>> = {
     name: { value: (row) => row.name, by: "name" }, cohort: { value: (row) => row.cohort }, career: { value: (row) => row.careerName },
     status: { value: (row) => row.status, order: ["below", "not_studied", "self_study", "no_data"] }, fit: { value: (row) => row.fitScore, by: "number" },
   };
   return <div className="rp-table-wrap" tabIndex={0} role="region" aria-label={`Sinh viên còn thiếu ${data.skill}`}><table className="rp-table">
-    <thead><tr>{sortHeader("Sinh viên", "name")}{sortHeader("Khóa", "cohort")}{sortHeader("Nghề mục tiêu", "career")}{sortHeader("Tình trạng kỹ năng", "status")}{sortHeader("Điểm phù hợp", "fit")}</tr></thead>
+    <thead><tr>{sortHeader("Sinh viên", "name")}{sortHeader("Khóa", "cohort")}{sortHeader("Nghề mục tiêu", "career")}{sortHeader("Tình trạng kỹ năng", "status")}{sortHeader("Điểm phù hợp", "fit")}<th scope="col">Thao tác</th></tr></thead>
     <tbody>{data.items.length ? sortRows(data.items, rules, sort).map(({ row }) => <tr key={row.userId}>
       <td><Student name={row.name} code={row.studentCode} /></td><td>{row.cohort ?? "—"}</td><td>{row.careerName ?? "—"}</td>
-      <td><Chip tone={GAP_TEXT[row.status].tone}>{GAP_TEXT[row.status].label}</Chip></td><td>{scoreOrDash(row.fitScore)} <Word word={row.fitLabel} /></td>
-    </tr>) : <tr><td colSpan={5} className="rp-empty">Không có sinh viên nào còn thiếu kỹ năng này trong phạm vi lọc.</td></tr>}</tbody>
+      <td><Chip tone={GAP_TEXT[row.status].tone}>{GAP_TEXT[row.status].label}</Chip></td><td>{scoreOrDash(row.fitScore)} <Word word={row.fitLabel} /></td><td><ProfileLink userId={row.userId} name={row.name} navigate={navigate} /></td>
+    </tr>) : <tr><td colSpan={6} className="rp-empty">Không có sinh viên nào còn thiếu kỹ năng này trong phạm vi lọc.</td></tr>}</tbody>
   </table></div>;
 }
 
-export function SkillsView({ data, career, setCareer, selected, setSelected, students, exportUrl }: {
+export function SkillsView({ data, career, setCareer, selected, setSelected, students, exportUrl, navigate }: {
   data: SkillsReport; career: string; setCareer: (career: string) => void; selected: string | null; setSelected: (skill: string | null) => void;
-  students: { data: SkillStudents | null; error: string | null; loading: boolean; retry: () => void } | null; exportUrl: string;
+  students: { data: SkillStudents | null; error: string | null; loading: boolean; retry: () => void } | null; exportUrl: string; navigate: (path: string) => void;
 }) {
   const [mode, setMode] = useState<CohortMode>("all");
   const rows: BarRow[] = data.skills.all.items.map((item) => ({ key: item.name, label: item.name, parts: gapParts(item) }));
@@ -610,13 +621,13 @@ export function SkillsView({ data, career, setCareer, selected, setSelected, stu
       </> : <CohortMatrix rows={matrix} cohorts={cohortsOf(data.skills)} label="Số sinh viên còn thiếu mỗi kỹ năng theo từng khóa" rowHeader="Kỹ năng" onSelect={toggle} selected={selected} />}
       {selected && <div className="rp-panel">
         <div className="rp-card-head"><div><h3>{selected}: sinh viên còn thiếu</h3></div><button type="button" className="rp-link" onClick={() => setSelected(null)}>Đóng</button></div>
-        {students && <Loading state={students}>{(list) => <SkillStudentsTable data={list} />}</Loading>}
+        {students && <Loading state={students}>{(list) => <SkillStudentsTable data={list} navigate={navigate} />}</Loading>}
       </div>}
     </section>
   </div>;
 }
 
-function SkillsPage({ filters, studyTerm, bar }: { filters: ReportFilterState; studyTerm: ReportTerm | null; bar: ReactNode }) {
+function SkillsPage({ filters, studyTerm, bar, navigate }: { filters: ReportFilterState; studyTerm: ReportTerm | null; bar: ReactNode; navigate: (path: string) => void }) {
   const [career, setCareer] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   useEffect(() => setSelected(null), [filters, career]);
@@ -626,7 +637,7 @@ function SkillsPage({ filters, studyTerm, bar }: { filters: ReportFilterState; s
     <Intro view="skills" head={state.data} studyTerm={studyTerm} />
     {bar}
     <Loading state={state}>{(data) => <SkillsView data={data} career={career} setCareer={setCareer} selected={selected} setSelected={setSelected} students={selected ? students : null}
-      exportUrl={reportUrl("/skills.xlsx", filters, { career: career || null })} />}</Loading>
+      exportUrl={reportUrl("/skills.xlsx", filters, { career: career || null })} navigate={navigate} />}</Loading>
   </>;
 }
 
@@ -676,24 +687,24 @@ const howParts = (row: CourseRow): BarPart[] => [
   { label: HOW_TEXT.improve.label, value: row.improve, color: HOW_TEXT.improve.color },
 ];
 
-function CourseStudentsTable({ data }: { data: CourseStudents }) {
+function CourseStudentsTable({ data, navigate }: { data: CourseStudents; navigate: (path: string) => void }) {
   const { sort, sortHeader } = useTableSort();
   const rules: Record<string, SortRule<CourseStudents["items"][number]>> = {
     name: { value: (row) => row.name, by: "name" }, cohort: { value: (row) => row.cohort }, specialty: { value: (row) => row.specialtyName },
     how: { value: (row) => row.how, order: ["new", "retake", "improve"] }, gpa: { value: (row) => row.gpa, by: "number" },
   };
   return <div className="rp-table-wrap" tabIndex={0} role="region" aria-label={`Sinh viên được đề xuất ${data.name}`}><table className="rp-table">
-    <thead><tr>{sortHeader("Sinh viên", "name")}{sortHeader("Khóa", "cohort")}{sortHeader("Chuyên ngành", "specialty")}{sortHeader("Cách học", "how")}{sortHeader("GPA tích lũy", "gpa", "rp-num")}</tr></thead>
+    <thead><tr>{sortHeader("Sinh viên", "name")}{sortHeader("Khóa", "cohort")}{sortHeader("Chuyên ngành", "specialty")}{sortHeader("Cách học", "how")}{sortHeader("GPA tích lũy", "gpa", "rp-num")}<th scope="col">Thao tác</th></tr></thead>
     <tbody>{data.items.length ? sortRows(data.items, rules, sort).map(({ row }) => <tr key={`${row.userId}-${row.how}`}>
       <td><Student name={row.name} code={row.studentCode} /></td><td>{row.cohort ?? "—"}</td><td>{row.specialtyName ?? "Chưa xác định"}</td>
-      <td><Chip tone={HOW_TEXT[row.how].tone}>{HOW_TEXT[row.how].label}</Chip></td><td className="rp-num">{gpaText(row.gpa)}</td>
-    </tr>) : <tr><td colSpan={5} className="rp-empty">Không có sinh viên nào được đề xuất môn này trong phạm vi lọc.</td></tr>}</tbody>
+      <td><Chip tone={HOW_TEXT[row.how].tone}>{HOW_TEXT[row.how].label}</Chip></td><td className="rp-num">{gpaText(row.gpa)}</td><td><ProfileLink userId={row.userId} name={row.name} navigate={navigate} /></td>
+    </tr>) : <tr><td colSpan={6} className="rp-empty">Không có sinh viên nào được đề xuất môn này trong phạm vi lọc.</td></tr>}</tbody>
   </table></div>;
 }
 
-export function CoursesView({ data, selected, setSelected, students }: {
+export function CoursesView({ data, selected, setSelected, students, navigate }: {
   data: CoursesReport; selected: string | null; setSelected: (code: string | null) => void;
-  students: { data: CourseStudents | null; error: string | null; loading: boolean; retry: () => void } | null;
+  students: { data: CourseStudents | null; error: string | null; loading: boolean; retry: () => void } | null; navigate: (path: string) => void;
 }) {
   const [mode, setMode] = useState<CohortMode>("all");
   const items = data.courses.all.items;
@@ -711,13 +722,13 @@ export function CoursesView({ data, selected, setSelected, students }: {
       </> : <CohortMatrix rows={matrixRows(data.courses, (row) => row.code, label, (row) => row.total)} cohorts={cohortsOf(data.courses)} label="Số sinh viên được đề xuất mỗi môn theo từng khóa" rowHeader="Môn học" onSelect={toggle} selected={selected} />}
       {selected && <div className="rp-panel">
         <div className="rp-card-head"><div><h3>{chosen ? label(chosen) : selected}: sinh viên được đề xuất</h3></div><button type="button" className="rp-link" onClick={() => setSelected(null)}>Đóng</button></div>
-        {students && <Loading state={students}>{(list) => <CourseStudentsTable data={list} />}</Loading>}
+        {students && <Loading state={students}>{(list) => <CourseStudentsTable data={list} navigate={navigate} />}</Loading>}
       </div>}
     </section>
   </div>;
 }
 
-function CoursesPage({ filters, studyTerm, bar }: { filters: ReportFilterState; studyTerm: ReportTerm | null; bar: ReactNode }) {
+function CoursesPage({ filters, studyTerm, bar, navigate }: { filters: ReportFilterState; studyTerm: ReportTerm | null; bar: ReactNode; navigate: (path: string) => void }) {
   const [selected, setSelected] = useState<string | null>(null);
   useEffect(() => setSelected(null), [filters]);
   const state = useReport<CoursesReport>(reportUrl("/courses", filters));
@@ -725,11 +736,11 @@ function CoursesPage({ filters, studyTerm, bar }: { filters: ReportFilterState; 
   return <>
     <Intro view="courses" head={state.data} studyTerm={studyTerm} />
     {bar}
-    <Loading state={state}>{(data) => <CoursesView data={data} selected={selected} setSelected={setSelected} students={selected ? students : null} />}</Loading>
+    <Loading state={state}>{(data) => <CoursesView data={data} selected={selected} setSelected={setSelected} students={selected ? students : null} navigate={navigate} />}</Loading>
   </>;
 }
 
-/* ------------------------------------------------------------------ AD-REPORT-12 Nhật ký thao tác */
+/* ------------------------------------------------------------------ AD-REPORT-11 Nhật ký thao tác */
 
 export function AuditTable({ data, page, setPage, sortHeader }: { data: AuditPage; page: number; setPage: (page: number) => void; sortHeader: (label: ReactNode, column: string, className?: string) => ReactNode }) {
   return <>
@@ -787,11 +798,11 @@ export default function AdminReports({ path, navigate }: { path: string; navigat
   return <div className="rp">
     <TooltipLayer root="rp" />
     {view === "dashboard" ? <DashboardPage filters={filters} studyTerm={studyTerm} navigate={navigate} bar={bar} />
-      : view === "progress" ? <ProgressPage filters={filters} studyTerm={studyTerm} bar={bar} />
-        : view === "risk" ? <RiskPage filters={filters} studyTerm={studyTerm} bar={bar} />
-          : view === "skills" ? <SkillsPage filters={filters} studyTerm={studyTerm} bar={bar} />
+      : view === "progress" ? <ProgressPage filters={filters} studyTerm={studyTerm} bar={bar} navigate={navigate} />
+        : view === "risk" ? <RiskPage filters={filters} studyTerm={studyTerm} bar={bar} navigate={navigate} />
+          : view === "skills" ? <SkillsPage filters={filters} studyTerm={studyTerm} bar={bar} navigate={navigate} />
             : view === "careers" ? <CareersPage filters={filters} studyTerm={studyTerm} bar={bar} />
-              : view === "courses" ? <CoursesPage filters={filters} studyTerm={studyTerm} bar={bar} />
+              : view === "courses" ? <CoursesPage filters={filters} studyTerm={studyTerm} bar={bar} navigate={navigate} />
                 : <AuditLogPage />}
   </div>;
 }

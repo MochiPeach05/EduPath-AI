@@ -1,4 +1,4 @@
-# Báo cáo của cổng quản trị (AD-REPORT-01…12)
+# Báo cáo của cổng quản trị (AD-REPORT-01…11)
 
 Người dùng (31/10/2026) duyệt bản xem trước 2 (https://claude.ai/code/artifact/99829f4b-d63a-4c73-805c-96b5d827f438) với hai quyết định:
 - "hiện đầy đủ": báo cáo có tên và MSSV, kể cả kỹ năng còn thiếu, nghề mục tiêu và môn AI đề xuất;
@@ -15,8 +15,10 @@ Sau đó người dùng yêu cầu: "mọi phần đều có xem trung bình to�
 | 06, 07 | Kỹ năng thiếu | Theo nghề mục tiêu; bấm một kỹ năng để xem sinh viên; xuất Excel |
 | 08 | Nghề mục tiêu | Số sinh viên và phân bố mức phù hợp theo nghề |
 | 09 | Môn đề xuất | Môn Lộ trình AI đề xuất: học mới, học lại, học cải thiện |
-| 10 + 11 | Bộ lọc chung | Tìm MSSV / họ tên, khóa, ngành, chuyên ngành |
-| 12 | Nhật ký | Thay đổi dữ liệu và cấu hình, xem bảng điểm, xuất báo cáo |
+| 10 | Bộ lọc chung | Tìm MSSV / họ tên, khóa, ngành, chuyên ngành (gộp dòng tìm kiếm cũ vào dòng lọc) |
+| 11 | Nhật ký | Thay đổi dữ liệu và cấu hình, xem bảng điểm, xuất báo cáo (trước là AD-REPORT-12) |
+
+Function list (`requirements/Nhom1_DanhSachChucNang_ver0.5.xlsx`, sửa từ bản (9) của người dùng ngày 31/10, không commit): gộp dòng tìm kiếm cũ vào dòng lọc, đánh lại mã, nhóm mới "Quản lý thông báo" (AD-NOTI-01, 02).
 
 ## API (`apps/api/src/admin/reports/`)
 Hợp đồng: `apps/web/src/admin-report-types.ts` (bản sao `types.ts`).
@@ -56,4 +58,4 @@ Bản 31/10/2026 (`policyVersion`, `TRANSCRIPT_POLICY_VERSION`):
 - câu trả lời khảo sát và thành tích không có trong báo cáo;
 - mỗi lần xem bảng điểm hoặc xuất báo cáo có tên sinh viên đều được ghi nhật ký.
 
-Không hỏi sinh viên đồng ý lại (như đợt 26/10; `CONSENT_VALID_SINCE` vẫn 2026-10-25). Lưu ý: mục "Thay đổi chính sách" vẫn hứa sẽ hỏi ý kiến khi cách dùng dữ liệu thay đổi. Người dùng cần quyết có giữ câu đó không.
+Không hỏi sinh viên đồng ý lại (như đợt 26/10; `CONSENT_VALID_SINCE` vẫn 2026-10-25). Mục "Thay đổi chính sách" vẫn hứa sẽ hỏi ý kiến khi cách dùng dữ liệu thay đổi; người dùng quyết giữ nguyên câu đó (31/10: "giữ nguyên đi").
