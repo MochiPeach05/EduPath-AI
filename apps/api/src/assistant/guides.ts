@@ -146,7 +146,7 @@ export function portalGuides(): PortalGuide[] {
       "Khảo sát định hướng nằm trong Hồ sơ và bảng điểm và là một trong 4 mục hồ sơ bắt buộc. Bảng điểm cho biết bạn đã học gì; khảo sát cho EduPath AI biết bạn muốn đi đâu, để Lộ trình AI đưa ra lời khuyên sát với bạn.",
       "Khảo sát gồm 10 câu chọn một đáp án (mục tiêu sau tốt nghiệp, môi trường học tập và làm việc, nơi làm việc mong muốn, đi làm thêm, kinh nghiệm dẫn dắt nhóm, dự án ngoài môn học, thực tập, thời gian tự học mỗi tuần, tiếng Anh chuyên ngành, lĩnh vực quan tâm nhất), câu Thế mạnh của bạn (chọn 1 đến 5 công nghệ bạn thành thạo và viết mô tả ngắn), câu Sở trường (chọn 1 đến 5 mục) và câu Có/Không về thành tích; chọn Có thì liệt kê, mỗi dòng một thành tích.",
       "Khi lưu, bạn tích ô đồng ý để EduPath AI dùng câu trả lời cho việc tư vấn lộ trình học tập bằng AI. Bạn cần hoàn thành khảo sát trước khi tạo Lộ trình AI.",
-      "Sửa câu trả lời bằng Chỉnh sửa khảo sát. Xóa câu trả lời xóa toàn bộ câu trả lời, thành tích và các lộ trình AI đã tạo. Đừng ghi họ tên, mã số sinh viên, số điện thoại hay thông tin của người khác vào ô mô tả thế mạnh hoặc thành tích.",
+      "Sửa câu trả lời bằng Chỉnh sửa khảo sát. Xóa câu trả lời xóa toàn bộ câu trả lời, thành tích và các lộ trình AI đã tạo. Đừng ghi họ tên, mã số sinh viên, số điện thoại hay thông tin của người khác vào ô thành tích.",
     ]],
     ["lo-trinh-ai", "Lộ trình AI đề xuất", "#roadmap", [
       "Tab Lộ trình AI đề xuất trong trang Lộ trình học tập: EduPath AI soạn lộ trình cho học kỳ tới như một cố vấn học tập. Cần có kết quả Đánh giá năng lực và Khảo sát định hướng đã hoàn thành.",

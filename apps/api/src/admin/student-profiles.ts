@@ -57,10 +57,10 @@ export interface StudentProfileRepository {
   detail(actor: AuthenticatedUser, id: string): Promise<StudentProfileDetail>;
   transcript(actor: AuthenticatedUser, id: string): Promise<AdminTranscriptView>;
 }
-// The survey counts when it holds the interest lists and the strengths (survey-v3, 050, 051) and the student's consent for it
+// The survey counts when it holds the interest lists (survey-v3 or later; v4 dropped the written strengths, 050, 051) and the student's consent for it
 // still counts (consent.ts isValidConsent; the constant is code, not input).
 const surveyComplete = `EXISTS (SELECT 1 FROM stu_profile_surveys s WHERE s.user_id = u.id
-    AND cardinality(s.interest_tech) > 0 AND cardinality(s.interest_hobbies) > 0 AND s.strengths IS NOT NULL
+    AND s.survey_version NOT IN ('survey-v1', 'survey-v2') AND cardinality(s.interest_tech) > 0 AND cardinality(s.interest_hobbies) > 0
     AND EXISTS (SELECT 1 FROM data_consents c WHERE c.user_id = s.user_id AND c.purpose = 'profile_survey' AND c.ended_at IS NULL
       AND c.policy_version >= '${CONSENT_VALID_SINCE}'))`;
 // Derive completion from saved data so profile edits and transcript deletion stay in sync. Since 2026-10-24 the

@@ -4,6 +4,13 @@ Yêu cầu của người dùng ngày 24/10/2026: hồ sơ sinh viên có thêm 
 
 Cùng ngày, ô **Sở thích** (văn bản tự do) thành hai danh sách chọn sẵn ("dạng radius, để tránh việc sv bỏ trống hoặc nhập bừa"), rồi hai danh sách này được gộp vào khảo sát ("Công nghệ bạn thích và Sở thích khi rảnh có áp dụng vào được Khảo sát định hướng luôn không"; người dùng chọn "Gộp và cho AI dùng", chính sách bản 2026-10-25). Sau đó người dùng đổi câu 11 thành **Thế mạnh của bạn** kèm ô "mô tả công nghệ mà nó thành thạo", câu 12 thành **Sở trường**, và hai đáp án thành "Khó khăn trong việc đọc hiểu", "Trên 4 dự án".
 
+## survey-v4 (31/10/2026)
+Người dùng: "Bỏ cái câu tự luận ở thế mạnh của bạn đi". Câu 11 "Thế mạnh của bạn" chỉ còn chọn 1–5 công nghệ:
+- Bỏ ô "Mô tả công nghệ bạn thành thạo" khỏi form và khỏi phần xem câu trả lời; bỏ lỗi strengths_required / strengths_too_long và `strengthsMax`.
+- Mô tả đã lưu (cột `strengths`, migration 051) không còn được đọc, hiển thị hay gửi cho AI (Lộ trình AI roadmap-v10, Trợ lý AI assistant-v9); lưu lại khảo sát sẽ xóa nó (`strengths=NULL`).
+- Khảo sát survey-v3 vẫn tính là đủ. survey-v1 và survey-v2 vẫn chưa đủ: hai danh sách khi đó mang nghĩa khác ("Công nghệ bạn thích", "Sở thích khi rảnh"), nên sinh viên chọn lại.
+- Chính sách bản 31/10/2026 ghi thêm việc bỏ phần tự mô tả; không hỏi đồng ý lại (thu thập ít đi).
+
 ## Câu hỏi (survey-v3)
 
 Cả 10 câu chọn một đáp án, hai danh sách sở thích và câu thành tích đều bắt buộc. Câu hỏi và danh sách do API gửi (`apps/api/src/student/survey.ts`, `SURVEY_QUESTIONS`; `interests.ts`), trang chỉ hiển thị.

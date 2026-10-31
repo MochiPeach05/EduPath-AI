@@ -100,7 +100,7 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
   const done = survey?.complete === true && !needsConsent;
   // Stored answers that no longer count: what to add before they do.
   const gaps = surveyGaps(questions, survey, data.consentVersion);
-  const problems = surveyProblems(questions, draft, { needsConsent, consented, achievementsMax, strengthsMax: data.strengthsMax });
+  const problems = surveyProblems(questions, draft, { needsConsent, consented, achievementsMax });
   const shown = new Map<SurveyField, string>(attempted ? problems : []);
   const errorId = (field: SurveyField) => `ps-error-${field.replace(":", "-")}`;
   const fieldError = (field: SurveyField) => shown.has(field) ? <p className="ps-field-error" id={errorId(field)}>{shown.get(field)}</p> : null;
@@ -137,7 +137,7 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
     setError("");
     try {
       const body = {
-        answers: draft.answers, interestTech: draft.interestTech, strengths: draft.strengths, interestHobbies: draft.interestHobbies,
+        answers: draft.answers, interestTech: draft.interestTech, interestHobbies: draft.interestHobbies,
         hasAchievements: draft.hasAchievements, achievements: draft.hasAchievements ? draft.achievements : null,
       };
       const saved = await send<Pick<SurveyResponse, "survey" | "consentVersion">>("save", { method: "PUT", body: JSON.stringify(body), consent: needsConsent });
@@ -210,19 +210,10 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
           })}
           {data.previous?.text && !survey?.interestTech.length && <li className="pi-legacy ps-wide">Trước đây bạn đã ghi sở thích: “{data.previous.text}”. Hãy chọn theo hai danh sách dưới đây.</li>}
           <li className="ps-wide">
-            <InterestGroup name="tech" number={questions.length + 1} legend="Thế mạnh của bạn" hint={`Chọn từ 1 đến ${interests.max} công nghệ bạn thành thạo, rồi mô tả ngắn bên dưới.`}
+            {/* Technologies only since survey-v4 (user 2026-10-31: "Bỏ cái câu tự luận ở thế mạnh của bạn đi"). */}
+            <InterestGroup name="tech" number={questions.length + 1} legend="Thế mạnh của bạn" hint={`Chọn từ 1 đến ${interests.max} công nghệ bạn thành thạo.`}
               options={interests.tech} max={interests.max} value={draft.interestTech} error={shown.get("tech") ?? ""}
-              onChange={(interestTech) => setDraft({ ...draft, interestTech })}>
-              <label className="ps-achievements" data-field="strengths">
-                <span>Mô tả công nghệ bạn thành thạo<span className="ps-required" aria-hidden="true">*</span></span>
-                <textarea rows={3} value={draft.strengths} aria-invalid={shown.has("strengths") || undefined}
-                  aria-describedby={`ps-strengths-hint${shown.has("strengths") ? ` ${errorId("strengths")}` : ""}`}
-                  placeholder="Ví dụ: Thành thạo React và Node.js, đã làm 2 dự án web bán hàng; dùng Git hằng ngày."
-                  onChange={(event) => setDraft({ ...draft, strengths: event.target.value })} />
-                <small id="ps-strengths-hint">Nêu công nghệ, mức độ và việc bạn đã làm với chúng. Không ghi họ tên hay thông tin của người khác. {draft.strengths.trim().length.toLocaleString("vi-VN")}/{data.strengthsMax.toLocaleString("vi-VN")} ký tự.</small>
-                {fieldError("strengths")}
-              </label>
-            </InterestGroup>
+              onChange={(interestTech) => setDraft({ ...draft, interestTech })} />
           </li>
           <li className="ps-wide">
             <InterestGroup name="hobbies" number={questions.length + 2} legend="Sở trường" hint={`Chọn từ 1 đến ${interests.max} hoạt động bạn làm tốt hoặc hay làm.`}
@@ -274,7 +265,6 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
       <dl className="ps-answers">
         {questions.map((question) => <div key={question.id}><dt>{question.label}</dt><dd>{answerLabel(question, survey.answers) ?? "Chưa trả lời"}</dd></div>)}
         <div className="ps-answers-wide"><dt>Thế mạnh của bạn</dt><dd>{interestLabels(interests.tech, survey.interestTech).join(", ") || "Chưa chọn"}</dd></div>
-        <div className="ps-answers-wide"><dt>Mô tả thế mạnh</dt><dd className="ps-text">{survey.strengths || "Chưa mô tả"}</dd></div>
         <div className="ps-answers-wide"><dt>Sở trường</dt><dd>{interestLabels(interests.hobbies, survey.interestHobbies).join(", ") || "Chưa chọn"}</dd></div>
         <div className="ps-answers-wide"><dt>Thành tích</dt><dd>{survey.hasAchievements && survey.achievements
           ? <ul>{survey.achievements.split("\n").map((line, index) => <li key={index}>{line}</li>)}</ul> : "Không có"}</dd></div>

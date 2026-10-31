@@ -43,7 +43,7 @@ export const syntheticRoadmapFacts = (result: AssessmentResult = syntheticRoadma
 
 /** An invented profile survey as stu_profile_surveys returns it (readSurvey). */
 export const syntheticSurveyRow = () => ({
-  version: "survey-v1",
+  version: "survey-v4",
   answers: { goal: "work", environment: "team", company: "startup", partTime: "it", leadership: "one", projects: "some", internship: "none",
     selfStudy: "medium", english: "reading", field: "web" },
   interest_tech: ["web_frontend", "ai_ml"],

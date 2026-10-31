@@ -14,7 +14,7 @@ const OTHER_LEASE = "66666666-6666-4666-8666-666666666666";
 const OLD_ASSESSMENT = "77777777-7777-4777-8777-777777777777";
 const facts = syntheticRoadmapFacts();
 const survey = syntheticSurveyRow();
-const aiInput = buildRoadmapInput(facts, surveyFacts({ answers: survey.answers, interestTech: survey.interest_tech, strengths: survey.strengths,
+const aiInput = buildRoadmapInput(facts, surveyFacts({ answers: survey.answers, interestTech: survey.interest_tech,
   interestHobbies: survey.interest_hobbies, hasAchievements: survey.has_achievements, achievements: survey.achievements }));
 
 const row = (extra: Partial<RoadmapRow> = {}): RoadmapRow => ({
@@ -109,7 +109,9 @@ describe("createRoadmap", () => {
     expect(user).toContain("- Mục tiêu sau tốt nghiệp: Đi làm ngay");
     expect(user).toContain("- Thời gian tự học mỗi tuần: 5–10 giờ");
     expect(user).toContain("- Thế mạnh (công nghệ thành thạo): Web front-end (HTML, CSS, JavaScript, React); Trí tuệ nhân tạo, học máy");
-    expect(user).toContain("- Mô tả thế mạnh (sinh viên tự viết): Thành thạo React và Node.js; Đã làm 2 dự án web bán hàng");
+    // survey-v4: no written description of the strengths reaches the AI, even one still stored from survey-v3.
+    expect(user).not.toContain("Mô tả thế mạnh");
+    expect(user).not.toContain("Thành thạo React");
     expect(user).toContain("- Sở trường: Tự làm dự án, viết code; Thể thao, vận động");
     expect(user).toContain("  + Giải Ba cuộc thi lập trình cấp khoa 2025\n  + Học bổng khuyến khích học tập");
     expect(params[5] as string).not.toContain("Giải Ba");

@@ -292,7 +292,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
             paragraphs: [
               [
                 "Chuyên ngành và vị trí nghề nghiệp mong muốn mà bạn chọn trong hồ sơ. Sở thích bạn đã ghi hoặc chọn trong hồ sơ trước ngày 25/10/2026 được dùng để điền sẵn khảo sát và bị xóa khi bạn lưu khảo sát.",
-                "Câu trả lời khảo sát định hướng: mục tiêu sau tốt nghiệp, môi trường học tập và làm việc bạn thích, loại hình công ty mong muốn, việc làm thêm, kinh nghiệm dẫn dắt nhóm, dự án ngoài môn học, thực tập, thời gian tự học mỗi tuần, tiếng Anh chuyên ngành, lĩnh vực quan tâm nhất (chọn trong các câu trả lời có sẵn), cùng thế mạnh của bạn (chọn từ 1 đến 5 công nghệ bạn thành thạo, kèm phần tự mô tả) và sở trường (chọn từ 1 đến 5 mục).",
+                "Câu trả lời khảo sát định hướng: mục tiêu sau tốt nghiệp, môi trường học tập và làm việc bạn thích, loại hình công ty mong muốn, việc làm thêm, kinh nghiệm dẫn dắt nhóm, dự án ngoài môn học, thực tập, thời gian tự học mỗi tuần, tiếng Anh chuyên ngành, lĩnh vực quan tâm nhất (chọn trong các câu trả lời có sẵn), cùng thế mạnh của bạn (chọn từ 1 đến 5 công nghệ bạn thành thạo) và sở trường (chọn từ 1 đến 5 mục).",
                 "Thành tích bạn liệt kê, như cuộc thi, giải thưởng, danh hiệu hay học bổng.",
                 "Bảng điểm PDF bạn tải lên, cùng các thông tin đọc được từ đó: môn học, số tín chỉ, điểm, kết quả và học kỳ.",
                 "Kế hoạch học kỳ bạn lập trên trang Lộ trình học tập."
@@ -328,7 +328,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
                 "Số căn cước, số điện thoại, địa chỉ nhà hay thông tin tài khoản ngân hàng.",
                 "Thông tin sức khỏe, tôn giáo, quan điểm chính trị hay vị trí địa lý của bạn."
               ],
-              "Vì vậy, bạn cũng không nên ghi những thông tin này vào ô Mô tả thế mạnh hay ô Thành tích."
+              "Vì vậy, bạn cũng không nên ghi những thông tin này vào ô Thành tích."
             ]
           }
         ]
@@ -477,8 +477,8 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
           {
             title: "Khảo sát định hướng dùng để làm gì?",
             paragraphs: [
-              "Khảo sát định hướng trong Hồ sơ và bảng điểm gồm các câu hỏi có đáp án cho sẵn về mục tiêu sau tốt nghiệp, môi trường làm việc, kinh nghiệm, thời gian tự học, tiếng Anh chuyên ngành và lĩnh vực quan tâm, câu Thế mạnh của bạn (chọn công nghệ bạn thành thạo và tự mô tả), câu Sở trường, cùng câu hỏi bạn có thành tích hay không (nếu có, bạn liệt kê). EduPath AI dùng các câu trả lời này để lộ trình học tập do AI soạn sát với mục tiêu, sở thích và hoàn cảnh của bạn, ví dụ chọn bài tập, dự án tự học dựa trên thế mạnh của bạn.",
-              "Bạn cần hoàn thành khảo sát trước khi tạo Lộ trình AI. Khi mô tả thế mạnh hay liệt kê thành tích, đừng ghi họ tên, mã số sinh viên, số điện thoại hay thông tin của người khác."
+              "Khảo sát định hướng trong Hồ sơ và bảng điểm gồm các câu hỏi có đáp án cho sẵn về mục tiêu sau tốt nghiệp, môi trường làm việc, kinh nghiệm, thời gian tự học, tiếng Anh chuyên ngành và lĩnh vực quan tâm, câu Thế mạnh của bạn (chọn công nghệ bạn thành thạo), câu Sở trường, cùng câu hỏi bạn có thành tích hay không (nếu có, bạn liệt kê). EduPath AI dùng các câu trả lời này để lộ trình học tập do AI soạn sát với mục tiêu, sở thích và hoàn cảnh của bạn, ví dụ chọn bài tập, dự án tự học dựa trên thế mạnh của bạn.",
+              "Bạn cần hoàn thành khảo sát trước khi tạo Lộ trình AI. Khi liệt kê thành tích, đừng ghi họ tên, mã số sinh viên, số điện thoại hay thông tin của người khác."
             ]
           },
           {
@@ -683,7 +683,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
               "Bản cập nhật ngày 26/10/2026 cho phép quản trị viên của Khoa Công nghệ Thông tin xem điểm và kết quả từng môn trong bảng điểm (không gồm tệp PDF) của sinh viên, kể cả bảng điểm đã tải lên trước ngày này, để hỗ trợ học tập và tư vấn, và ghi Lộ trình AI theo học kỳ tới của lịch trường thay cho 3 tháng. Sự đồng ý bạn đã đưa ra theo bản ngày 25/10/2026 vẫn còn hiệu lực.",
               "Bản cập nhật ngày 28/10/2026 bổ sung Trợ lý AI: trợ lý trả lời câu hỏi của bạn từ kết quả đánh giá năng lực, lộ trình, khảo sát định hướng (khi bạn đã đồng ý cho khảo sát) và dữ liệu chung của Khoa, và EduPath AI lưu cuộc trò chuyện cho đến khi bạn xóa hoặc 90 ngày sau tin nhắn cuối cùng. Trợ lý chỉ xử lý dữ liệu của bạn khi bạn gửi câu hỏi; sự đồng ý bạn đã đưa ra theo bản ngày 25/10/2026 vẫn còn hiệu lực.",
               "Bản cập nhật ngày 29/10/2026 cho Trợ lý AI dùng điểm trong bảng điểm bạn đã tải lên (không gồm tệp PDF), để bạn tra cứu điểm ngay trong cuộc trò chuyện: với mọi câu hỏi, trợ lý dùng điểm trung bình và số tín chỉ tích lũy, học phần đang học và học phần chưa đạt; khi câu hỏi nói về điểm, trợ lý dùng thêm điểm của các học phần liên quan hoặc cả bảng điểm. Điểm được chép đúng như in trên bảng điểm, không tính lại. Sự đồng ý bạn đã đưa ra theo bản ngày 25/10/2026 vẫn còn hiệu lực.",
-              "Bản cập nhật ngày 31/10/2026 cho phép quản trị viên của Khoa Công nghệ Thông tin xem tiến độ học tập, điểm trung bình, kết quả đánh giá năng lực (điểm kỹ năng, kỹ năng còn thiếu, nghề mục tiêu và mức phù hợp) và các môn Lộ trình AI đề xuất cho sinh viên trong các báo cáo thống kê của Khoa (kèm họ tên và mã số sinh viên, xuất được ra tệp Excel), để hỗ trợ học tập. Câu trả lời khảo sát và thành tích không có trong báo cáo. Mỗi lần quản trị viên xem bảng điểm hoặc xuất báo cáo có tên sinh viên đều được ghi vào nhật ký thao tác. Sự đồng ý bạn đã đưa ra theo bản ngày 25/10/2026 vẫn còn hiệu lực."
+              "Bản cập nhật ngày 31/10/2026 cho phép quản trị viên của Khoa Công nghệ Thông tin xem tiến độ học tập, điểm trung bình, kết quả đánh giá năng lực (điểm kỹ năng, kỹ năng còn thiếu, nghề mục tiêu và mức phù hợp) và các môn Lộ trình AI đề xuất cho sinh viên trong các báo cáo thống kê của Khoa (kèm họ tên và mã số sinh viên, xuất được ra tệp Excel), để hỗ trợ học tập. Câu trả lời khảo sát và thành tích không có trong báo cáo. Mỗi lần quản trị viên xem bảng điểm hoặc xuất báo cáo có tên sinh viên đều được ghi vào nhật ký thao tác. Bản này cũng bỏ phần tự mô tả thế mạnh khỏi Khảo sát định hướng: mô tả đã lưu không còn được hiển thị hay dùng cho AI, và được xóa khi bạn lưu lại khảo sát. Sự đồng ý bạn đã đưa ra theo bản ngày 25/10/2026 vẫn còn hiệu lực."
             ]
           }
         ]

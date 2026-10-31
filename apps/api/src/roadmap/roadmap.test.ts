@@ -237,14 +237,13 @@ describe("roadmapTerms", () => {
 
 describe("roadmapBasis", () => {
   const row = syntheticSurveyRow();
-  const survey = surveyFacts({ answers: row.answers, interestTech: row.interest_tech, strengths: row.strengths,
+  const survey = surveyFacts({ answers: row.answers, interestTech: row.interest_tech,
     interestHobbies: row.interest_hobbies, hasAchievements: row.has_achievements, achievements: row.achievements });
 
   it("keeps what the student says apart from what the system has on record", () => {
     const basis = roadmapBasis(syntheticRoadmapFacts(), survey);
     expect(basis.selfReported).toEqual([
       "Công nghệ bạn chọn là thế mạnh: Web front-end (HTML, CSS, JavaScript, React); Trí tuệ nhân tạo, học máy",
-      "Bạn tự mô tả: Thành thạo React và Node.js; Đã làm 2 dự án web bán hàng",
       "Đi làm thêm: Có, liên quan CNTT", "Kinh nghiệm dẫn dắt nhóm: 1 dự án", "Dự án ngoài môn học: 1–2 dự án", "Tiếng Anh chuyên ngành: Đọc hiểu tốt",
       "Thành tích bạn liệt kê: 2 mục",
     ]);
@@ -306,7 +305,7 @@ describe("holding the output to the data (roadmap-v9)", () => {
   });
 
   const row = syntheticSurveyRow();
-  const survey = surveyFacts({ answers: row.answers, interestTech: row.interest_tech, strengths: row.strengths,
+  const survey = surveyFacts({ answers: row.answers, interestTech: row.interest_tech,
     interestHobbies: row.interest_hobbies, hasAchievements: row.has_achievements, achievements: row.achievements });
   const context = roadmapContextFromAiInput(buildRoadmapInput(syntheticRoadmapFacts(), survey))!;
   const output = (extra: Record<string, unknown> = {}) => ({

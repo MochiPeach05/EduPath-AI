@@ -63,7 +63,7 @@ export function roadmapBasis(facts: Pick<RoadmapFacts, "skills" | "recorded">, s
   if (!survey) return { selfReported: [], recorded: [], unproven: [...unproven.values()], internshipDone };
 
   // The technologies the student claims: the "Thế mạnh" labels, and every skill of the assessment their words name.
-  const words = fold([...survey.tech, survey.strengths ?? "", survey.achievements ?? ""].join(" | "));
+  const words = fold([...survey.tech, survey.achievements ?? ""].join(" | "));
   const topics = new Map(techTopics(survey.tech).map((topic) => [fold(topic), topic]));
   for (const skill of skills) {
     // Already there by name or by a part ("HTML/CSS" when HTML is a topic).
@@ -85,7 +85,6 @@ export function roadmapBasis(facts: Pick<RoadmapFacts, "skills" | "recorded">, s
 
   const selfReported: string[] = [];
   if (survey.tech.length) selfReported.push(`Công nghệ bạn chọn là thế mạnh: ${survey.tech.join("; ")}`);
-  if (survey.strengths) selfReported.push(`Bạn tự mô tả: ${survey.strengths.replace(/\s*\n+\s*/g, "; ")}`);
   for (const item of survey.answers) {
     if (EXPERIENCE_QUESTIONS.has(item.question) && !NOTHING_CLAIMED.test(fold(item.answer))) selfReported.push(`${item.question}: ${item.answer}`);
   }

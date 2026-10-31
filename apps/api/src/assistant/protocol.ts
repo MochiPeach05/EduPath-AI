@@ -47,8 +47,9 @@ export const documentEmbeddingText = (title: string, text: string) => `title: ${
  * v8 (user 2026-10-31: "hãy xem cách tính của bảng điểm thật và học theo"): the transcript source also carries the printed
  * "Điểm TB học tập" and "Tổng số tín chỉ đăng ký" (every registered credit, failed courses included) next to the "tích lũy"
  * lines (passed courses only), with one sentence on the difference. The system prompt is unchanged.
+ * v9 (user 2026-10-31, survey-v4): the survey source has no written description of the strengths any more.
  */
-export const ASSISTANT_PROMPT_VERSION = "assistant-v8";
+export const ASSISTANT_PROMPT_VERSION = "assistant-v9";
 export const KNOWLEDGE_PROMPT_VERSION = "knowledge-v1";
 /** An answer takes well under a minute; a lost worker frees the job after this lease (the worker extends every 3 min). */
 export const ASSISTANT_LEASE_MINUTES = 5;

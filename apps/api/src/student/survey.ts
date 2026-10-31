@@ -12,12 +12,12 @@ import { INTEREST_HOBBIES, INTEREST_HOBBY_IDS, INTEREST_TECH, INTEREST_TECH_IDS,
 // the two interest lists (1 to 5 each, interests.ts, migration 050); a v1 survey is incomplete until saved again.
 // survey-v3 (user, same day): question 11 is "Thế mạnh của bạn" (the technologies, plus a required description of those
 // the student is proficient in, migration 051), question 12 "Sở trường"; a v2 survey is incomplete until saved again.
+// survey-v4 (user 2026-10-31: "Bỏ cái câu tự luận ở thế mạnh của bạn đi"): "Thế mạnh của bạn" is the technologies only. A
+// stored description is no longer read, shown or given to the AI, and saving the survey clears it; v3 surveys stay complete.
 
-export const SURVEY_VERSION = "survey-v3";
+export const SURVEY_VERSION = "survey-v4";
 /** Characters of the achievements list. */
 export const ACHIEVEMENTS_MAX = 1000;
-/** Characters of the description of the strengths. */
-export const STRENGTHS_MAX = 500;
 
 type SurveyQuestion = { id: string; label: string; options: readonly { id: string; label: string }[] };
 
@@ -49,15 +49,15 @@ export const SURVEY_QUESTIONS = [
 ] as const satisfies readonly SurveyQuestion[];
 
 export type SurveyAnswers = Record<string, string>;
-/** interestTech and strengths make "Thế mạnh của bạn", interestHobbies "Sở trường". */
+/** interestTech makes "Thế mạnh của bạn", interestHobbies "Sở trường". */
 export type StudentSurvey = {
-  version: string; answers: SurveyAnswers; interestTech: string[]; strengths: string | null; interestHobbies: string[];
+  version: string; answers: SurveyAnswers; interestTech: string[]; interestHobbies: string[];
   hasAchievements: boolean; achievements: string | null; updatedAt: string;
   /** Every question of the current set is answered (a newer set may add questions). */
   complete: boolean;
 };
 export type SurveyInput = {
-  answers: SurveyAnswers; interestTech: string[]; strengths: string; interestHobbies: string[]; hasAchievements: boolean; achievements: string | null;
+  answers: SurveyAnswers; interestTech: string[]; interestHobbies: string[]; hasAchievements: boolean; achievements: string | null;
 };
 
 const answersSchema = z.object(Object.fromEntries(SURVEY_QUESTIONS.map((question) =>
@@ -70,39 +70,40 @@ export const cleanAchievements = (value: string) => value.normalize("NFC").repla
 const surveySchema = z.object({
   answers: answersSchema,
   interestTech: interestChoices(INTEREST_TECH_IDS),
-  strengths: z.string().max(STRENGTHS_MAX * 4),
+  // The description of survey-v3; a page loaded before survey-v4 may still send it. Accepted and ignored.
+  strengths: z.string().max(2000).optional(),
   interestHobbies: interestChoices(INTEREST_HOBBY_IDS),
   hasAchievements: z.boolean(),
   achievements: z.string().max(ACHIEVEMENTS_MAX * 4).nullable().optional(),
 }).strict();
 
 /** PUT /api/student/survey body → the answers to store, or the error code to send (400). */
-export function parseSurveyInput(body: unknown): { value: SurveyInput } | { error: "invalid_survey" | "strengths_required" | "strengths_too_long" | "achievements_required" | "achievements_too_long" } {
+export function parseSurveyInput(body: unknown): { value: SurveyInput } | { error: "invalid_survey" | "achievements_required" | "achievements_too_long" } {
   const parsed = surveySchema.safeParse(body);
   if (!parsed.success) return { error: "invalid_survey" };
   const { answers, interestTech, interestHobbies, hasAchievements } = parsed.data;
-  const strengths = cleanAchievements(parsed.data.strengths);
-  if (!strengths) return { error: "strengths_required" };
-  if (strengths.length > STRENGTHS_MAX) return { error: "strengths_too_long" };
-  if (!hasAchievements) return { value: { answers, interestTech, strengths, interestHobbies, hasAchievements, achievements: null } };
+  if (!hasAchievements) return { value: { answers, interestTech, interestHobbies, hasAchievements, achievements: null } };
   const achievements = cleanAchievements(parsed.data.achievements ?? "");
   if (!achievements) return { error: "achievements_required" };
   if (achievements.length > ACHIEVEMENTS_MAX) return { error: "achievements_too_long" };
-  return { value: { answers, interestTech, strengths, interestHobbies, hasAchievements, achievements } };
+  return { value: { answers, interestTech, interestHobbies, hasAchievements, achievements } };
 }
 
-const isComplete = (row: Pick<StudentSurvey, "answers" | "interestTech" | "strengths" | "interestHobbies">) =>
-  SURVEY_QUESTIONS.every((question) => question.options.some((option) => option.id === row.answers[question.id]))
-  && row.interestTech.length > 0 && Boolean(row.strengths) && row.interestHobbies.length > 0;
+/** Before survey-v3 the two lists meant other things ("Công nghệ bạn thích", "Sở thích khi rảnh"): such a survey stays incomplete. */
+const BEFORE_STRENGTHS = new Set(["survey-v1", "survey-v2"]);
+const isComplete = (row: Pick<StudentSurvey, "version" | "answers" | "interestTech" | "interestHobbies">) =>
+  !BEFORE_STRENGTHS.has(row.version)
+  && SURVEY_QUESTIONS.every((question) => question.options.some((option) => option.id === row.answers[question.id]))
+  && row.interestTech.length > 0 && row.interestHobbies.length > 0;
 
 type SurveyRow = {
-  version: string; answers: SurveyAnswers; interest_tech: string[] | null; strengths: string | null; interest_hobbies: string[] | null;
+  version: string; answers: SurveyAnswers; interest_tech: string[] | null; interest_hobbies: string[] | null;
   has_achievements: boolean; achievements: string | null; updated_at: Date | string;
 };
-const surveyColumns = "survey_version AS version,answers,interest_tech,strengths,interest_hobbies,has_achievements,achievements,updated_at";
+const surveyColumns = "survey_version AS version,answers,interest_tech,interest_hobbies,has_achievements,achievements,updated_at";
 function fromRow(row: SurveyRow): StudentSurvey {
   const survey = {
-    version: row.version, answers: row.answers, interestTech: row.interest_tech ?? [], strengths: row.strengths, interestHobbies: row.interest_hobbies ?? [],
+    version: row.version, answers: row.answers, interestTech: row.interest_tech ?? [], interestHobbies: row.interest_hobbies ?? [],
     hasAchievements: row.has_achievements, achievements: row.achievements, updatedAt: new Date(row.updated_at).toISOString(),
   };
   return { ...survey, complete: isComplete(survey) };
@@ -115,14 +116,14 @@ export async function readSurvey(db: Pick<DatabasePool, "query"> | PoolClient, u
 
 /**
  * Caller holds the user's row lock and has checked the consent. The interests chosen in the profile before the move (049)
- * and the free text before that are cleared: the survey holds them now.
+ * and the free text before that are cleared: the survey holds them now. So is a survey-v3 description of the strengths.
  */
 export async function saveSurvey(client: PoolClient, userId: string, input: SurveyInput): Promise<StudentSurvey> {
   const result = await client.query<SurveyRow>(`INSERT INTO stu_profile_surveys(user_id,survey_version,answers,interest_tech,interest_hobbies,has_achievements,achievements,strengths)
     VALUES($1,$2,$3::jsonb,$4,$5,$6,$7,$8) ON CONFLICT(user_id) DO UPDATE SET survey_version=EXCLUDED.survey_version,answers=EXCLUDED.answers,
     interest_tech=EXCLUDED.interest_tech,interest_hobbies=EXCLUDED.interest_hobbies,has_achievements=EXCLUDED.has_achievements,
-    achievements=EXCLUDED.achievements,strengths=EXCLUDED.strengths,updated_at=now() RETURNING ${surveyColumns}`,
-  [userId, SURVEY_VERSION, JSON.stringify(input.answers), input.interestTech, input.interestHobbies, input.hasAchievements, input.achievements, input.strengths]);
+    achievements=EXCLUDED.achievements,strengths=NULL,updated_at=now() RETURNING ${surveyColumns}`,
+  [userId, SURVEY_VERSION, JSON.stringify(input.answers), input.interestTech, input.interestHobbies, input.hasAchievements, input.achievements, null]);
   await client.query("UPDATE student_profiles SET interest_tech='{}',interest_hobbies='{}',interests=NULL WHERE user_id=$1", [userId]);
   return fromRow(result.rows[0]!);
 }
@@ -147,17 +148,16 @@ export async function deleteSurvey(client: PoolClient, userId: string): Promise<
 
 /**
  * What the AI study roadmap reads: each answered question with the label of its answer, the strengths (technologies by
- * label and the student's description), the "sở trường" by label, and the achievements list.
+ * label), the "sở trường" by label, and the achievements list.
  */
-export type SurveyFacts = { answers: { question: string; answer: string }[]; tech: string[]; strengths: string | null; hobbies: string[]; achievements: string | null };
-export function surveyFacts(survey: Pick<StudentSurvey, "answers" | "interestTech" | "strengths" | "interestHobbies" | "hasAchievements" | "achievements">): SurveyFacts {
+export type SurveyFacts = { answers: { question: string; answer: string }[]; tech: string[]; hobbies: string[]; achievements: string | null };
+export function surveyFacts(survey: Pick<StudentSurvey, "answers" | "interestTech" | "interestHobbies" | "hasAchievements" | "achievements">): SurveyFacts {
   return {
     answers: SURVEY_QUESTIONS.flatMap((question) => {
       const option = question.options.find((item) => item.id === survey.answers[question.id]);
       return option ? [{ question: question.label, answer: option.label }] : [];
     }),
     tech: interestLabels(INTEREST_TECH, survey.interestTech),
-    strengths: survey.strengths,
     hobbies: interestLabels(INTEREST_HOBBIES, survey.interestHobbies),
     achievements: survey.hasAchievements ? survey.achievements : null,
   };

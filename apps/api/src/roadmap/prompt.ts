@@ -29,9 +29,10 @@ import { dateText } from "./window.js";
  * survey and told a student to retake a course in a term already past): what the student only said ([8]) is kept apart
  * from what the system has on record ([9]); the roadmap names only the terms listed in [2], never a past one, written
  * "HK2 2026–2027"; the validator holds the output to both and asks the model once more when it does not (validate.ts).
+ * v10 (user 2026-10-31: "Bỏ cái câu tự luận ở thế mạnh của bạn đi", survey-v4): the survey part has no written description
+ * of the strengths any more, only the technologies the student picked.
  */
-export const ROADMAP_PROMPT_VERSION = "roadmap-v9";
-const STRENGTHS_MAX = 500;
+export const ROADMAP_PROMPT_VERSION = "roadmap-v10";
 /** Lines and characters per line of the achievements list in the data block. */
 const ACHIEVEMENT_LINES = 10;
 const ACHIEVEMENT_LINE_MAX = 160;
@@ -229,7 +230,6 @@ export function roadmapDataSections(facts: RoadmapFacts, survey: SurveyFacts | n
   if (survey) {
     surveyLines = survey.answers.map((item) => `- ${sanitizeText(item.question)}: ${sanitizeText(item.answer)}`);
     surveyLines.push(`- Thế mạnh (công nghệ thành thạo): ${survey.tech.length ? survey.tech.map((label) => sanitizeText(label)).join("; ") : "Chưa chọn"}`);
-    surveyLines.push(`- Mô tả thế mạnh (sinh viên tự viết): ${survey.strengths ? sanitizeText(survey.strengths.replace(/\n+/g, "; "), STRENGTHS_MAX) : "Chưa có"}`);
     surveyLines.push(`- Sở trường: ${survey.hobbies.length ? survey.hobbies.map((label) => sanitizeText(label)).join("; ") : "Chưa chọn"}`);
     const achievements = (survey.achievements ?? "").split("\n").map((line) => sanitizeText(line, ACHIEVEMENT_LINE_MAX)).filter(Boolean);
     surveyLines.push(`- Thành tích (cuộc thi, giải thưởng, danh hiệu, học bổng): ${achievements.length ? "" : "Không có"}`.trimEnd());
