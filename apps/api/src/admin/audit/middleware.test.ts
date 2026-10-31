@@ -109,7 +109,7 @@ describe("audit log of admin changes", () => {
     await request(app).delete(`/api/admin/careers/${fieldId}`).send({ confirmed: true }).expect(200);
     await settleAuditWrites();
     expect(entry(0)).toMatchObject({ kind: "other", action: "Thay đổi dữ liệu", summary: "Yêu cầu POST /api/admin/something/new" });
-    expect(entry(1)).toMatchObject({ kind: "career", action: "Xóa nghề", summary: `Xóa nghề ${fieldId}` });
+    expect(entry(1)).toMatchObject({ kind: "career", action: "Xóa vị trí nghề nghiệp", summary: `Xóa vị trí nghề nghiệp ${fieldId}` });
     error.mockRestore();
   });
 });

@@ -125,14 +125,14 @@ export async function skillsWorkbook(rows: readonly ReportRow[], scoped: readonl
   sheet(workbook, "Theo khóa", [{ header: "Khóa", width: 10 }, { header: "Kỹ năng", width: 36 }, ...countColumns],
     split.byCohort.flatMap((entry) => counts(entry.items.filter((item) => item.total > 0)).map((line) => [entry.cohort, ...line])));
   sheet(workbook, "Sinh viên", [
-    { header: "MSSV", width: 16 }, { header: "Họ và tên", width: 28 }, { header: "Khóa", width: 8 }, { header: "Nghề mục tiêu", width: 34 },
+    { header: "MSSV", width: 16 }, { header: "Họ và tên", width: 28 }, { header: "Khóa", width: 8 }, { header: "Vị trí nghề nghiệp mục tiêu", width: 34 },
     { header: "Kỹ năng", width: 36 }, { header: "Tình trạng", width: 28 }, { header: "Điểm phù hợp", width: 13, format: "0.0" },
   ], rows.flatMap((row) => (row.competency?.career?.gaps ?? []).map((gap) => [
     row.studentCode, row.name, row.cohort, row.competency!.career!.name, gap.name, SKILL_STATUS_LABELS[gap.status], row.competency!.career!.fitScore,
   ])));
   notes(workbook, "Thống kê các kỹ năng còn thiếu của sinh viên (AD-REPORT-07)", filters, scopeOf(scoped), now, [
-    "Từ lần Đánh giá năng lực mới nhất của mỗi sinh viên, so với nghề mục tiêu (như trang Khoảng trống kỹ năng). Sinh viên đã xóa kết quả đánh giá không được tính.",
-    "Dưới ngưỡng: có điểm nhưng thấp hơn ngưỡng của nghề. Chưa học: môn trong chương trình chưa học hoặc sắp học. Cần tự học ngoài chương trình: chỉ học phần của chuyên ngành khác hoặc môn tự chọn chưa chọn dạy kỹ năng này. Chưa có điểm: chưa đủ dữ liệu.",
+    "Từ lần Đánh giá năng lực mới nhất của mỗi sinh viên, so với vị trí nghề nghiệp mục tiêu (như trang Khoảng trống kỹ năng). Sinh viên đã xóa kết quả đánh giá không được tính.",
+    "Dưới ngưỡng: có điểm nhưng thấp hơn ngưỡng của vị trí nghề nghiệp. Chưa học: môn trong chương trình chưa học hoặc sắp học. Cần tự học ngoài chương trình: chỉ học phần của chuyên ngành khác hoặc môn tự chọn chưa chọn dạy kỹ năng này. Chưa có điểm: chưa đủ dữ liệu.",
   ]);
   return buffer(workbook);
 }

@@ -35,7 +35,7 @@ const pages = [
   { id: "roadmap", label: "Lộ trình học tập", icon: "route" },
   { id: "curriculum", label: "Chương trình đào tạo", icon: "book" },
   { id: "plans", label: "Kế hoạch đào tạo", icon: "clock" },
-  { id: "graduation", label: "Điều kiện xét tốt nghiệp", icon: "shield" },
+  { id: "graduation", label: "Xét tốt nghiệp", icon: "shield" },
   { id: "assistant", label: "Trợ lý AI", icon: "spark" }
 ] as const;
 export type StudentPage = typeof pages[number]["id"];
@@ -84,11 +84,11 @@ export function nameInitials(name: string): string {
 // "?" help: one short step per page, in the order a new student needs them.
 const helpSteps: [string, string][] = [
   ["Hồ sơ và bảng điểm", "Import bảng điểm, chọn chuyên ngành và làm Khảo sát định hướng."],
-  ["Định hướng nghề nghiệp", "xem các nghề hợp với bạn và chọn nghề mục tiêu."],
+  ["Định hướng nghề nghiệp", "xem các vị trí nghề nghiệp hợp với bạn và chọn vị trí nghề nghiệp mục tiêu."],
   ["Đánh giá năng lực", "bấm Đánh giá năng lực để xem điểm theo nhóm năng lực và mức thành thạo từng kỹ năng."],
-  ["Khoảng trống kỹ năng", "xem kỹ năng còn thiếu so với nghề mục tiêu và học phần nên học."],
+  ["Khoảng trống kỹ năng", "xem kỹ năng còn thiếu so với vị trí nghề nghiệp mục tiêu và học phần nên học."],
   ["Lộ trình học tập", "theo dõi tiến độ, nhờ EduPath AI soạn lộ trình cho học kỳ tới và lên kế hoạch các học kỳ."],
-  ["Điều kiện xét tốt nghiệp", "tự kiểm tra các điều kiện xét tốt nghiệp và đọc lời khuyên của EduPath AI."],
+  ["Xét tốt nghiệp", "đối chiếu kết quả học tập của bạn với các điều kiện xét tốt nghiệp và đọc lời khuyên của EduPath AI."],
   ["Trợ lý AI", "hỏi về kỹ năng còn thiếu, lộ trình học tập, nghề nghiệp và tài liệu tự học."],
   ["Chương trình đào tạo và Kế hoạch đào tạo", "tra cứu học phần và kế hoạch từng học kỳ (trong menu tài khoản)."]
 ];
@@ -318,7 +318,7 @@ export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) 
               : <button type="button" onClick={error.kind === "logout" ? () => void exit() : () => setReload(n => n + 1)}>Thử lại</button>}
           </div>}
           <div className="sw-page-heading">
-            <div><p className="sw-eyebrow">CỔNG QUẢN LÝ HỌC TẬP</p><h1 ref={headingRef} tabIndex={-1}>{selected.label}</h1><p>{page === "overview" ? `Xin chào, ${name}. Cùng tiếp tục hành trình của bạn nhé.` : page === "profile" ? "Thông tin cá nhân và kết quả học tập của bạn, tại một nơi." : page === "plans" ? "Xem các học phần dự kiến theo năm học và học kỳ." : page === "roadmap" ? "Theo dõi tiến độ theo yêu cầu của chương trình, rồi tự lên kế hoạch các học kỳ tới hoặc để EduPath AI soạn lộ trình cho học kỳ tới." : page === "graduation" ? "Đối chiếu bảng điểm với tiêu chuẩn xét tốt nghiệp của khóa và chuyên ngành của bạn." : page === "curriculum" ? "Tra cứu học phần, tín chỉ và điều kiện học theo chương trình đào tạo." : page === "competency" ? "Điểm theo nhóm năng lực, mức thành thạo từng kỹ năng, tiến độ học tập và xét tốt nghiệp, tính từ bảng điểm của bạn." : page === "skill-gap" ? "So sánh năng lực của bạn với yêu cầu của nghề mục tiêu: kỹ năng còn thiếu, mức thiếu hụt, học phần nên học và kỹ năng cần tự học." : page === "career" ? "Gợi ý nghề phù hợp với năng lực và sở thích của bạn, so sánh các nghề và chọn nghề mục tiêu." : page === "assistant" ? "Hỏi EduPath AI về kỹ năng còn thiếu, lộ trình học tập, nghề nghiệp và tài liệu tự học, dựa trên hồ sơ của bạn." : "Khám phá bước tiếp theo trên hành trình học tập của bạn."}</p></div>
+            <div><p className="sw-eyebrow">CỔNG QUẢN LÝ HỌC TẬP</p><h1 ref={headingRef} tabIndex={-1}>{selected.label}</h1><p>{page === "overview" ? `Xin chào, ${name}. Cùng tiếp tục hành trình của bạn nhé.` : page === "profile" ? "Thông tin cá nhân và kết quả học tập của bạn, tại một nơi." : page === "plans" ? "Xem các học phần dự kiến theo năm học và học kỳ." : page === "roadmap" ? "Theo dõi tiến độ theo yêu cầu của chương trình, rồi tự lên kế hoạch các học kỳ tới hoặc để EduPath AI soạn lộ trình cho học kỳ tới." : page === "graduation" ? "Đối chiếu bảng điểm với tiêu chuẩn xét tốt nghiệp của khóa và chuyên ngành của bạn." : page === "curriculum" ? "Tra cứu học phần, tín chỉ và điều kiện học theo chương trình đào tạo." : page === "competency" ? "Điểm theo nhóm năng lực, mức thành thạo từng kỹ năng, tiến độ học tập và xét tốt nghiệp, tính từ bảng điểm của bạn." : page === "skill-gap" ? "So sánh năng lực của bạn với yêu cầu của vị trí nghề nghiệp mục tiêu: kỹ năng còn thiếu, mức thiếu hụt, học phần nên học và kỹ năng cần tự học." : page === "career" ? "Gợi ý vị trí nghề nghiệp phù hợp với năng lực và sở thích của bạn, so sánh các vị trí nghề nghiệp và chọn vị trí nghề nghiệp mục tiêu." : page === "assistant" ? "Hỏi EduPath AI về kỹ năng còn thiếu, lộ trình học tập, nghề nghiệp và tài liệu tự học, dựa trên hồ sơ của bạn." : "Khám phá bước tiếp theo trên hành trình học tập của bạn."}</p></div>
             {page === "overview" && <button className="sw-outline" onClick={() => navigate("profile")}>Xem Hồ sơ và bảng điểm <Icon name="arrow" /></button>}
           </div>
           {/* Not on Trợ lý AI either: the chat fills the window under the heading. */}

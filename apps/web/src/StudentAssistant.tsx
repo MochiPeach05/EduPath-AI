@@ -27,7 +27,7 @@ const OPEN_THREAD_KEY = "edupath.assistant.thread";
 
 /** One starter question per function of the assistant, STU-CHAT-01..05 in order. */
 export const STARTER_QUESTIONS = [
-  { icon: "target", text: "Mình còn thiếu những kỹ năng nào cho nghề mục tiêu?" },
+  { icon: "target", text: "Mình còn thiếu những kỹ năng nào cho vị trí nghề nghiệp mục tiêu?" },
   { icon: "route", text: "Học kỳ tới mình nên học những môn nào?" },
   { icon: "shield", text: "Điều kiện xét tốt nghiệp của khóa mình là gì?" },
   { icon: "help", text: "Vì sao lộ trình đề xuất các môn này cho mình?" },

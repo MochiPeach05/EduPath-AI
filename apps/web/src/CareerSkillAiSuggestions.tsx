@@ -230,7 +230,7 @@ function Review({ suggestion, career, catalog, linked, linkedState, refreshLinke
         <label htmlFor={`${id}-title`} className="cai-wide"><RequiredLabel>Nội dung yêu cầu</RequiredLabel><input id={`${id}-title`} maxLength={TITLE_MAX} value={row.title} onChange={(event) => update(row.key, { title: event.target.value })} /></label>
         <label htmlFor={`${id}-description`} className="cai-wide">Mô tả<textarea id={`${id}-description`} rows={2} maxLength={DESCRIPTION_MAX} value={row.description} onChange={(event) => update(row.key, { description: event.target.value })} /></label>
       </fieldset>
-      {similar && <p className="cai-similar">Nghề này đã có kỹ năng “{similar}”. Chỉ chọn nếu đây là kỹ năng khác.</p>}
+      {similar && <p className="cai-similar">Vị trí nghề nghiệp này đã có kỹ năng “{similar}”. Chỉ chọn nếu đây là kỹ năng khác.</p>}
       {row.reason && <p className="cai-reason">Lý do AI đề xuất: {row.reason}</p>}
       {rowErrors.length > 0 && <ul className="cai-row-errors" role="alert">{rowErrors.map((message) => <li key={message}>{message}</li>)}</ul>}
     </li>;
@@ -241,7 +241,7 @@ function Review({ suggestion, career, catalog, linked, linkedState, refreshLinke
   return <>
     <div className="cai-review-head">
       <h3>{suggestion.items.length ? `AI đề xuất ${suggestion.items.length.toLocaleString("vi-VN")} kỹ năng cho ${career.nameVi}` : `AI chưa đề xuất kỹ năng nào cho ${career.nameVi}`}</h3>
-      <p className="cai-muted">{suggestion.items.length ? "Bỏ chọn hoặc xóa dòng không phù hợp, sửa nội dung rồi lưu." : "AI chưa tìm thấy kỹ năng nào còn thiếu cho vị trí này. Bạn có thể tạo lại đề xuất hoặc thêm kỹ năng thủ công."}</p>
+      <p className="cai-muted">{suggestion.items.length ? "Bỏ chọn hoặc xóa dòng không phù hợp, sửa nội dung rồi lưu." : "AI chưa tìm thấy kỹ năng nào còn thiếu cho vị trí nghề nghiệp này. Bạn có thể tạo lại đề xuất hoặc thêm kỹ năng thủ công."}</p>
       <p className="cai-meta">Gợi ý bởi {suggestion.model ?? "mô hình AI"} chạy cục bộ · {formatDateTime(suggestion.completedAt)}</p>
     </div>
     <Status {...linkedState} /><Status {...catalog} />

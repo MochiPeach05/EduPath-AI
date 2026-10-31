@@ -6,7 +6,7 @@ import { specialtiesFor, specialtyLabel } from "./competency-assessment-types";
 import { PROFILE_SECTIONS } from "./student-overview-data";
 import "./student-records.css";
 // "Sở thích" (technologies and free-time interests) moved into Khảo sát định hướng on 2026-10-24 (StudentProfileSurvey).
-// "Mục tiêu học tập" (was "Thông tin cá nhân"): the career and the specialty. A career is chosen in Khám phá nghề nghiệp
+// "Mục tiêu học tập" (was "Thông tin cá nhân"): the career and the specialty. A career is chosen in Khám phá vị trí nghề nghiệp
 // and saved at once, so the form opened by "Chỉnh sửa thông tin" holds only what Hủy can undo: the specialty and
 // clearing the career.
 type EditableStudentProfile = {
@@ -32,7 +32,7 @@ async function updateProfile(input: ProfileChanges) {
     if (res.status === 401) window.dispatchEvent(new Event("edupath-session-expired"));
     throw new Error(
       body.error === "career_unavailable"
-        ? "Nghề này vừa bị xóa khỏi danh mục. Hãy chọn nghề khác."
+        ? "Vị trí nghề nghiệp này vừa bị xóa khỏi danh mục. Hãy chọn vị trí nghề nghiệp khác."
         : body.error === "specialty_unavailable"
           ? "Chuyên ngành này không áp dụng cho khóa của bạn. Hãy chọn chuyên ngành khác."
         : res.status === 401
@@ -92,7 +92,7 @@ export default function StudentProfileEditor({
     setSaved((current) => ({ ...current, careerPositionId: career.id, careerPosition: { id: career.id, nameVi: career.nameVi, nameEn: career.nameEn, deletedAt: null } }));
     setExplorer(null);
     setError("");
-    setMessage(`Đã lưu nghề mục tiêu: ${career.nameVi}.`);
+    setMessage(`Đã lưu vị trí nghề nghiệp mục tiêu: ${career.nameVi}.`);
     onSaved();
   };
   const save = async (event: FormEvent) => {
@@ -141,12 +141,12 @@ export default function StudentProfileEditor({
         <form ref={form} onSubmit={(e) => void save(e)}>
           <fieldset disabled={busy} className="sr-form-fields">
             <div className="sr-wide sr-career-target">
-              <strong>Nghề mục tiêu</strong>
+              <strong>Vị trí nghề nghiệp mục tiêu</strong>
               <div className="sr-career-selection">
-                <span>{draftCareer ? `${draftCareer.nameVi} — ${draftCareer.nameEn}${draftCareer.deletedAt ? " (đã ngừng sử dụng)" : ""}` : "Chưa chọn nghề mục tiêu."}</span>
-                {draft.careerPositionId && <button type="button" className="sr-career-icon sr-career-clear" aria-label="Bỏ chọn nghề mục tiêu" title="Bỏ chọn" onClick={() => { setDraft({ ...draft, careerPositionId: "" }); setDraftCareer(null); }}><Icon name="close" /></button>}
+                <span>{draftCareer ? `${draftCareer.nameVi} — ${draftCareer.nameEn}${draftCareer.deletedAt ? " (đã ngừng sử dụng)" : ""}` : "Chưa chọn vị trí nghề nghiệp mục tiêu."}</span>
+                {draft.careerPositionId && <button type="button" className="sr-career-icon sr-career-clear" aria-label="Bỏ chọn vị trí nghề nghiệp mục tiêu" title="Bỏ chọn" onClick={() => { setDraft({ ...draft, careerPositionId: "" }); setDraftCareer(null); }}><Icon name="close" /></button>}
               </div>
-              <small className="sr-field-note">Để đổi nghề mục tiêu, hãy lưu hoặc hủy chỉnh sửa rồi bấm Chọn nghề mục tiêu.</small>
+              <small className="sr-field-note">Để đổi vị trí nghề nghiệp mục tiêu, hãy lưu hoặc hủy chỉnh sửa rồi bấm Chọn vị trí nghề nghiệp mục tiêu.</small>
             </div>
             {supportsSpecialty && <label className="sr-wide">
               <span><span id="sr-specialty-label">Chuyên ngành</span><span className="sr-required" aria-hidden="true"> *</span></span>
@@ -180,7 +180,7 @@ export default function StudentProfileEditor({
       ) : (
         <dl className="sr-personal">
           <div>
-            <dt>Nghề mục tiêu</dt>
+            <dt>Vị trí nghề nghiệp mục tiêu</dt>
             <dd className="sr-career-selection">
               <span>{shown.careerPosition ? (
                 <>
@@ -189,17 +189,17 @@ export default function StudentProfileEditor({
                   {shown.careerPosition.deletedAt && (
                     <small>
                       {" "}
-                      (đã ngừng sử dụng; bạn có thể chọn nghề khác)
+                      (đã ngừng sử dụng; bạn có thể chọn vị trí nghề nghiệp khác)
                     </small>
                   )}
                 </>
               ) : (
-                "Chưa chọn nghề mục tiêu."
+                "Chưa chọn vị trí nghề nghiệp mục tiêu."
               )}</span>
-              {shown.careerPositionId && !shown.careerPosition?.deletedAt && <button type="button" className="sr-career-icon" aria-label="Xem yêu cầu nghề nghiệp" title="Xem yêu cầu" onClick={() => setExplorer({ initialCareerId: shown.careerPositionId! })}><Icon name="eye" /></button>}
+              {shown.careerPositionId && !shown.careerPosition?.deletedAt && <button type="button" className="sr-career-icon" aria-label="Xem yêu cầu của vị trí nghề nghiệp" title="Xem yêu cầu" onClick={() => setExplorer({ initialCareerId: shown.careerPositionId! })}><Icon name="eye" /></button>}
             </dd>
             <div className="sr-actions">
-              <button type="button" className="sr-secondary sr-career-choose" onClick={() => setExplorer({})}>Chọn nghề mục tiêu</button>
+              <button type="button" className="sr-secondary sr-career-choose" onClick={() => setExplorer({})}>Chọn vị trí nghề nghiệp mục tiêu</button>
             </div>
           </div>
           {supportsSpecialty && <div>

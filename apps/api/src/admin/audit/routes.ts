@@ -153,26 +153,26 @@ export const AUDIT_ROUTES: readonly AuditRoute[] = [
   { method: "POST", path: "/careers/requirements/ai-suggestions/:id/cancel", kind: "career", action: "Hủy AI gợi ý kỹ năng",
     describe: async ({ params, lookup }) => {
       const career = await lookup(`SELECT p.code, p.name_vi AS name FROM career_ai_suggestions s JOIN career_positions p ON p.id=s.career_position_id WHERE s.id::text=$1`, [params.id]);
-      return { summary: `Hủy lượt AI gợi ý kỹ năng cho nghề ${careerName(career) || "(không rõ)"}`, ...target("career_ai_suggestion", params.id) };
+      return { summary: `Hủy lượt AI gợi ý kỹ năng cho vị trí nghề nghiệp ${careerName(career) || "(không rõ)"}`, ...target("career_ai_suggestion", params.id) };
     } },
   { method: "POST", path: "/careers/requirements/ai-suggestions/:id/apply", kind: "career", action: "Lưu kỹ năng AI gợi ý",
     describe: async ({ params, body, lookup }) => {
       const career = await lookup(`SELECT p.code, p.name_vi AS name FROM career_ai_suggestions s JOIN career_positions p ON p.id=s.career_position_id WHERE s.id::text=$1`, [params.id]);
-      return { summary: `Lưu ${list(body.items).length} kỹ năng AI gợi ý cho nghề ${careerName(career) || "(không rõ)"}`, ...target("career_ai_suggestion", params.id) };
+      return { summary: `Lưu ${list(body.items).length} kỹ năng AI gợi ý cho vị trí nghề nghiệp ${careerName(career) || "(không rõ)"}`, ...target("career_ai_suggestion", params.id) };
     } },
   { method: "POST", path: "/careers/requirements/ai-suggestions", kind: "career", action: "Chạy AI gợi ý kỹ năng",
     describe: async ({ body, lookup }) => {
       const career = await lookup("SELECT code, name_vi AS name FROM career_positions WHERE id::text=$1", [str(body.careerPositionId)]);
-      return { summary: `Chạy AI gợi ý kỹ năng cho nghề ${careerName(career) || "(không rõ)"}`, ...target("career", body.careerPositionId) };
+      return { summary: `Chạy AI gợi ý kỹ năng cho vị trí nghề nghiệp ${careerName(career) || "(không rõ)"}`, ...target("career", body.careerPositionId) };
     } },
-  { method: "POST", path: "/careers", kind: "career", action: "Thêm nghề",
-    describe: ({ result }) => { const row = obj(result); return { summary: `Thêm nghề ${join(row.code, row.nameVi)}${countOf(row.skills, "kỹ năng yêu cầu")}`, ...target("career", row.id) }; } },
-  { method: "PATCH", path: "/careers/:id", kind: "career", action: "Sửa nghề",
-    describe: ({ params, result }) => { const row = obj(result); return { summary: `Sửa nghề ${join(row.code, row.nameVi) || params.id}${countOf(row.skills, "kỹ năng yêu cầu")}`, ...target("career", params.id) }; } },
-  { method: "DELETE", path: "/careers/:id", kind: "career", action: "Xóa nghề",
+  { method: "POST", path: "/careers", kind: "career", action: "Thêm vị trí nghề nghiệp",
+    describe: ({ result }) => { const row = obj(result); return { summary: `Thêm vị trí nghề nghiệp ${join(row.code, row.nameVi)}${countOf(row.skills, "kỹ năng yêu cầu")}`, ...target("career", row.id) }; } },
+  { method: "PATCH", path: "/careers/:id", kind: "career", action: "Sửa vị trí nghề nghiệp",
+    describe: ({ params, result }) => { const row = obj(result); return { summary: `Sửa vị trí nghề nghiệp ${join(row.code, row.nameVi) || params.id}${countOf(row.skills, "kỹ năng yêu cầu")}`, ...target("career", params.id) }; } },
+  { method: "DELETE", path: "/careers/:id", kind: "career", action: "Xóa vị trí nghề nghiệp",
     describe: async ({ params, lookup }) => {
       const career = await lookup("SELECT code, name_vi AS name FROM career_positions WHERE id::text=$1", [params.id]);
-      return { summary: `Xóa nghề ${careerName(career) || params.id}`, ...target("career", params.id) };
+      return { summary: `Xóa vị trí nghề nghiệp ${careerName(career) || params.id}`, ...target("career", params.id) };
     } },
 
   // Năng lực (competencies/router.ts, competencies/ai/router.ts)

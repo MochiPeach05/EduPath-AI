@@ -131,11 +131,11 @@ describe("StudentGraduation loading", () => {
   it("shows a status while loading and an alert with a reload button on error", () => {
     const loading = render({ data: null, error: null, loading: true }, { data: null, error: null, loading: true });
     expect(loading).toContain('role="status"');
-    expect(loading).toContain("Đang tải điều kiện xét tốt nghiệp…");
+    expect(loading).toContain("Đang tải kết quả xét tốt nghiệp…");
     expect(loading).not.toContain("sg-stats");
-    const failed = render({ data: null, error: "Không thể tải điều kiện xét tốt nghiệp. Vui lòng thử lại.", loading: false });
+    const failed = render({ data: null, error: "Không thể tải kết quả xét tốt nghiệp. Vui lòng thử lại.", loading: false });
     expect(failed).toContain('role="alert"');
-    expect(failed).toContain("Không thể tải điều kiện xét tốt nghiệp. Vui lòng thử lại.");
+    expect(failed).toContain("Không thể tải kết quả xét tốt nghiệp. Vui lòng thử lại.");
     expect(failed).toContain("Thử lại");
   });
 });

@@ -167,7 +167,7 @@ export const fixtureAiOutput: AiOutput = {
   groupInsights: [{ groupKey: "G1", comment: "Nhóm kiến thức chuyên môn ở mức Khá, kéo lên chủ yếu nhờ các học phần lập trình." }, { groupKey: "G9", comment: "Không ánh xạ được, phải bị bỏ." }],
   strengths: [{ skillKey: "S01", comment: "Điểm học phần Lập trình web cao cho thấy bạn làm chủ được giao diện và xử lý phía máy chủ." }],
   improvements: [{ skillKey: "S04", priority: "high", comment: "Ôn lại các cấu trúc dữ liệu cơ bản và luyện bài tập có giới hạn thời gian.", courses: [{ courseCode: "TST102", reason: "Đã đạt với điểm 6,4; học cải thiện để nâng kỹ năng giải thuật." }, { courseCode: "XXX998", reason: "Không có trong danh sách, phải bị bỏ." }] }],
-  careerFit: { comment: "Với nghề Lập trình viên web, bạn đã đạt kỹ năng lập trình web; cần nâng thiết kế cơ sở dữ liệu lên mức Thành thạo." },
+  careerFit: { comment: "Với vị trí nghề nghiệp Lập trình viên web, bạn đã đạt kỹ năng lập trình web; cần nâng thiết kế cơ sở dữ liệu lên mức Thành thạo." },
   gaps: [{ skillKey: "S07", priority: "medium", explanation: "Học phần Kiểm thử phần mềm nằm ở học kỳ tới, nên chuẩn bị trước.", courses: [{ courseCode: "TST105", reason: "Đo trực tiếp kỹ năng kiểm thử." }, { courseCode: "XXX999", reason: "Không có trong danh sách, phải bị bỏ." }], selfStudy: ["Viết kiểm thử đơn vị cho một dự án cá nhân."] },
     { skillKey: "S09", priority: "low", explanation: "Chương trình chưa có học phần đo Docker.", courses: [], selfStudy: ["Đóng gói ứng dụng web của bạn bằng Docker."] }],
   progress: "Bạn đang chậm 1 học phần so với kế hoạch; nên đăng ký Công nghệ phần mềm sớm vì đây là điều kiện của Kiểm thử phần mềm.",

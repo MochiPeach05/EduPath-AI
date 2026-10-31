@@ -90,14 +90,14 @@ describe("career guidance", () => {
 
   it("titles the best fits and says their order, and why they are low when none reaches Trung bình (user 2026-10-31)", () => {
     const title = "Vị trí nghề nghiệp phù hợp với năng lực hiện tại";
-    expect(bestFitsHeading(bestFits(careers))).toEqual({ title, note: "Sắp xếp theo điểm phù hợp giảm dần: nghề đứng đầu ở đây, các nghề tiếp theo ở mục Theo bảng xếp hạng bên dưới." });
+    expect(bestFitsHeading(bestFits(careers))).toEqual({ title, note: "Sắp xếp theo điểm phù hợp giảm dần: vị trí đứng đầu ở đây, các vị trí tiếp theo ở mục Theo bảng xếp hạng bên dưới." });
     // K31: 48, 48 and 47, all Không phù hợp, most skills still ahead.
     const low = (id: string, score: number) => career(id, `Nghề ${id}`, score, { fit: { score, code: "not_fit", label: "Không phù hợp", dataShare: 0.4, met: 1, below: 1,
       notStudied: 2, upcoming: 4, noData: 0, total: 8, summaryText: "", dataText: "" } });
     const heading = bestFitsHeading(bestFits([low("p", 48), low("q", 48), low("r", 47)]));
     expect(heading.title).toBe(title);
-    expect(heading.note).toMatch(/^Sắp xếp theo điểm phù hợp giảm dần\. Chưa nghề nào đạt mức Trung bình/);
-    expect(heading.note).toContain("phần lớn kỹ năng của các nghề này bạn chưa học tới");
+    expect(heading.note).toMatch(/^Sắp xếp theo điểm phù hợp giảm dần\. Chưa vị trí nghề nghiệp nào đạt mức Trung bình/);
+    expect(heading.note).toContain("phần lớn kỹ năng của các vị trí này bạn chưa học tới");
     // Low because of skills below the threshold, not of skills ahead.
     const below = career("s", "Nghề s", 30, { fit: { score: 30, code: "low_fit", label: "Ít phù hợp", dataShare: 1, met: 1, below: 5, notStudied: 0, upcoming: 0, noData: 0,
       total: 6, summaryText: "", dataText: "" } });
@@ -114,7 +114,7 @@ describe("career guidance", () => {
     const target = career("c1", "Lập trình viên toàn diện", 60);
     const stored = { gapCurrent: false, gapAssessedAt: "2026-10-24T18:52:14.000Z", gapCareerId: "c2", gapCareerName: "Kỹ sư dữ liệu" };
     // Another career is assessed: say which, not "dữ liệu cũ hơn".
-    expect(gapNote(stored, target)).toBe("Khoảng trống kỹ năng vẫn đang hiển thị nghề Kỹ sư dữ liệu. Bấm Đánh giá lại ở trang Đánh giá năng lực để cập nhật theo nghề mới.");
+    expect(gapNote(stored, target)).toBe("Khoảng trống kỹ năng vẫn đang hiển thị vị trí nghề nghiệp Kỹ sư dữ liệu. Bấm Đánh giá lại ở trang Đánh giá năng lực để cập nhật theo vị trí mới.");
     // The same career from older data, at the app's time format.
     expect(gapNote({ ...stored, gapCareerId: "c1", gapCareerName: target.nameVi }, target))
       .toBe("Trang Khoảng trống kỹ năng đang hiển thị lần đánh giá lúc 01:52 25/10/2026, tính trên dữ liệu cũ hơn nên có thể khác mức ở đây. Bấm Đánh giá lại ở trang Đánh giá năng lực để cập nhật.");
@@ -135,7 +135,7 @@ describe("career guidance", () => {
   });
 
   it("says why no fit is computed after the assessment results were deleted, and where to assess again", () => {
-    expect(blockedText("assessment_withdrawn")).toBe("Bạn đã xóa kết quả đánh giá năng lực và rút lại sự đồng ý, nên EduPath AI không tính mức phù hợp của bạn với từng nghề. Muốn xem lại, hãy bấm Đánh giá năng lực ở trang Đánh giá năng lực.");
+    expect(blockedText("assessment_withdrawn")).toBe("Bạn đã xóa kết quả đánh giá năng lực và rút lại sự đồng ý, nên EduPath AI không tính mức phù hợp của bạn với từng vị trí nghề nghiệp. Muốn xem lại, hãy bấm Đánh giá năng lực ở trang Đánh giá năng lực.");
     expect(blockedAction("assessment_withdrawn")).toEqual({ href: "#competency", label: "Mở Đánh giá năng lực" });
     expect(blockedAction("specialty_required")).toEqual({ href: "#profile", label: "Mở Hồ sơ và bảng điểm" });
     expect(blockedAction("cohort_unknown")).toBeNull();

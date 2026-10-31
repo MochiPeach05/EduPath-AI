@@ -33,6 +33,11 @@
 .rm-section-icon { display: inline-grid; flex: none; place-items: center; width: 36px; height: 36px; border-radius: 9px; background: var(--sw-soft); color: var(--sw-red); }
 .rm-section-icon svg { width: 18px; height: 18px; }
 .rm-empty { margin: 0; color: var(--sw-muted); font-size: 14px; }
+/* Học lại and học cải thiện apart, each with what it means (user 2026-10-31). */
+.rm-improve-group { display: grid; gap: 8px; }
+.rm-improve-group + .rm-improve-group { margin-top: 6px; padding-top: 14px; border-top: 1px solid var(--sw-border); }
+.rm-improve-group h3 { margin: 0; color: var(--sw-ink); font-size: 15px; }
+.rm-improve-group > p { margin: -4px 0 2px; color: var(--sw-muted); font-size: 13px; line-height: 1.5; }
 
 .rm-items, .rm-skills { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
 .rm-item, .rm-skill { display: grid; gap: 6px; min-width: 0; padding: 12px 14px; border: 1px solid var(--sw-border); border-left: 3px solid #cfdaeb; border-radius: 0 8px 8px 0; background: #fff; }

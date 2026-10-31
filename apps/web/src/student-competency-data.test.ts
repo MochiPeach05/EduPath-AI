@@ -149,11 +149,11 @@ describe("fit scale (2026-10-22: a 0–100 điểm phù hợp on the bounds of t
   it("describes each fit level by its score band, never by the skills' statuses (2026-10-25 audit)", () => {
     // A career whose 4 skills were all met read "một số kỹ năng còn dưới ngưỡng hoặc chưa học" at Trung bình.
     expect(FIT_SCALE.map((item) => item.text)).toEqual([
-      "Điểm trung bình các kỹ năng của nghề ở mức Xuất sắc (từ 90).",
-      "Điểm trung bình các kỹ năng của nghề ở mức Giỏi (80 đến dưới 90).",
-      "Điểm trung bình các kỹ năng của nghề ở mức Khá (62,5 đến dưới 80).",
-      "Điểm trung bình các kỹ năng của nghề ở mức Trung bình (50 đến dưới 62,5).",
-      "Điểm trung bình các kỹ năng của nghề ở mức Yếu (dưới 50).",
+      "Điểm trung bình các kỹ năng của vị trí nghề nghiệp ở mức Xuất sắc (từ 90).",
+      "Điểm trung bình các kỹ năng của vị trí nghề nghiệp ở mức Giỏi (80 đến dưới 90).",
+      "Điểm trung bình các kỹ năng của vị trí nghề nghiệp ở mức Khá (62,5 đến dưới 80).",
+      "Điểm trung bình các kỹ năng của vị trí nghề nghiệp ở mức Trung bình (50 đến dưới 62,5).",
+      "Điểm trung bình các kỹ năng của vị trí nghề nghiệp ở mức Yếu (dưới 50).",
     ]);
   });
 });
@@ -179,7 +179,7 @@ describe("career skills by term (STU-GAP-07)", () => {
       ["Kiểm thử tự động", [null, null, null, null, null], null],
       ["Docker", [null, null, null, null, null], null],
     ]);
-    expect(history.sentence).toBe("Từ HK1 2023–2024 đến HK2 2025–2026, số kỹ năng nghề đạt ngưỡng tăng từ 0 lên 1/5. Tăng nhiều nhất: Lập trình web (+19 điểm).");
+    expect(history.sentence).toBe("Từ HK1 2023–2024 đến HK2 2025–2026, số kỹ năng của vị trí nghề nghiệp đạt ngưỡng tăng từ 0 lên 1/5. Tăng nhiều nhất: Lập trình web (+19 điểm).");
   });
   it("asks for a new assessment when the history predates it, and is absent without a career", () => {
     const old = { ...fixtureResult, history: fixtureResult.history!.map(({ career: _career, ...point }) => point) };
@@ -254,10 +254,10 @@ describe("errors", () => {
   });
   it("asks for all three of the checklist before an assessment (2026-10-21)", () => {
     expect(missingRequirements(true, { careerPositionId: "career-1", specialty: "CNPM" })).toEqual([]);
-    expect(missingRequirements(false, { careerPositionId: null, specialty: null })).toEqual(["bảng điểm", "nghề mục tiêu", "chuyên ngành"]);
-    expect(missingRequirementsMessage(["nghề mục tiêu", "chuyên ngành"]))
-      .toBe("Cần đủ bảng điểm, nghề mục tiêu và chuyên ngành để đánh giá năng lực. Hãy bổ sung nghề mục tiêu và chuyên ngành rồi bấm lại.");
-    expect(missingRequirementsMessage(["bảng điểm", "nghề mục tiêu", "chuyên ngành"])).toContain("bổ sung bảng điểm, nghề mục tiêu và chuyên ngành rồi");
+    expect(missingRequirements(false, { careerPositionId: null, specialty: null })).toEqual(["bảng điểm", "vị trí nghề nghiệp mục tiêu", "chuyên ngành"]);
+    expect(missingRequirementsMessage(["vị trí nghề nghiệp mục tiêu", "chuyên ngành"]))
+      .toBe("Cần đủ bảng điểm, vị trí nghề nghiệp mục tiêu và chuyên ngành để đánh giá năng lực. Hãy bổ sung vị trí nghề nghiệp mục tiêu và chuyên ngành rồi bấm lại.");
+    expect(missingRequirementsMessage(["bảng điểm", "vị trí nghề nghiệp mục tiêu", "chuyên ngành"])).toContain("bổ sung bảng điểm, vị trí nghề nghiệp mục tiêu và chuyên ngành rồi");
     // Values not known yet (loading, an older API without the specialty) are left to the server.
     expect(missingRequirements(null, null)).toEqual([]);
     expect(missingRequirements(true, { careerPositionId: "career-1" })).toEqual([]);
@@ -544,7 +544,7 @@ describe("mapAiOutput", () => {
       ...fixtureAiOutput,
       strengths: [
         { skillKey: "S01", comment: "Tốt." },
-        { skillKey: "S03", comment: "Dưới ngưỡng nghề nhưng bị nêu là điểm mạnh." },
+        { skillKey: "S03", comment: "Dưới ngưỡng của vị trí nghề nghiệp nhưng bị nêu là điểm mạnh." },
         { skillKey: "S04", comment: "Cũng nằm trong mục cần cải thiện." },
       ],
     }, fixtureResult)!;

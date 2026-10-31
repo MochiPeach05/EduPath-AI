@@ -17,7 +17,7 @@ describe("admin workspace", () => {
   it("shows the short names in the sidebar, in order, with the groups and their pages", () => {
     const nav = render("/quantri/tai-khoan").match(/<nav id="admin-navigation".*?<\/nav>/s)?.[0] ?? "";
     expect([...nav.matchAll(/<span>([^<]*)<\/span>/g)].map(match => match[1])).toEqual(
-      ["Báo cáo", "Tổng quan", "Tiến độ", "Nguy cơ", "Kỹ năng thiếu", "Nghề mục tiêu", "Môn đề xuất", "Nhật ký", "Tài khoản", "Sinh viên", "Chương trình", "Tốt nghiệp", "Kế hoạch", "Quản lý nghề nghiệp", "Lĩnh vực", "Kỹ năng", "Nghề nghiệp",
+      ["Báo cáo", "Tổng quan", "Tiến độ", "Nguy cơ", "Kỹ năng thiếu", "Vị trí mục tiêu", "Môn đề xuất", "Nhật ký", "Tài khoản", "Sinh viên", "Chương trình", "Tốt nghiệp", "Kế hoạch", "Quản lý nghề nghiệp", "Lĩnh vực", "Kỹ năng", "Vị trí nghề nghiệp",
         "Quản lý năng lực", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học", "Quản lý thông báo", "Gửi thông báo", "Đã gửi"]);
   });
 

@@ -45,13 +45,13 @@ export type StudentCareerDetail = Pick<Career, "id" | "code" | "nameVi" | "nameE
 };
 export const careerFailures: Record<string, string> = {
   requirement_changed: "Yêu cầu đã được cập nhật hoặc xóa. Đóng hộp thoại và tải lại trước khi lưu.",
-  requirement_exists: "Kỹ năng đã được liên kết với nghề này.",
+  requirement_exists: "Kỹ năng đã được liên kết với vị trí nghề nghiệp này.",
   requirement_not_found: "Yêu cầu không còn trong danh mục.",
-  invalid_requirement: "Thông tin chưa hợp lệ. Kiểm tra nghề nghiệp, nội dung, kỹ năng và tính chất yêu cầu.",
+  invalid_requirement: "Thông tin chưa hợp lệ. Kiểm tra vị trí nghề nghiệp, nội dung, kỹ năng và tính chất yêu cầu.",
   skill_not_found: "Kỹ năng không còn trong danh mục. Hãy tải lại và chọn lại.",
   skill_exists: "Tên kỹ năng đã tồn tại. Hãy dùng tên khác.",
   skill_changed: "Kỹ năng đã được cập nhật hoặc xóa. Đóng hộp thoại và tải lại trước khi lưu.",
-  skill_in_use: "Kỹ năng còn được dùng bởi nghề nghiệp hoặc mục Quản lý năng lực. Hãy kiểm tra các liên kết và cấu hình năng lực trước khi xóa kỹ năng dùng chung.",
+  skill_in_use: "Kỹ năng còn được dùng bởi vị trí nghề nghiệp hoặc mục Quản lý năng lực. Hãy kiểm tra các liên kết và cấu hình năng lực trước khi xóa kỹ năng dùng chung.",
   invalid_skill: "Thông tin chưa hợp lệ. Kiểm tra tên và mô tả kỹ năng.",
   field_exists: "Tên lĩnh vực đã tồn tại. Hãy dùng tên khác.",
   field_changed: "Lĩnh vực đã được cập nhật hoặc xóa. Đóng hộp thoại và tải lại trước khi lưu.",
@@ -60,8 +60,8 @@ export const careerFailures: Record<string, string> = {
   invalid_field: "Thông tin chưa hợp lệ. Kiểm tra tên và mô tả lĩnh vực.",
   career_exists: "Tên song ngữ đã tồn tại. Hãy dùng tên khác.",
   career_changed:
-    "Vị trí đã được cập nhật hoặc xóa. Đóng hộp thoại và tải lại trước khi lưu.",
-  career_not_found: "Vị trí không còn trong danh mục.",
+    "Vị trí nghề nghiệp đã được cập nhật hoặc xóa. Đóng hộp thoại và tải lại trước khi lưu.",
+  career_not_found: "Vị trí nghề nghiệp không còn trong danh mục.",
   invalid_career:
     "Thông tin chưa hợp lệ. Kiểm tra tên, lĩnh vực và các trường đã nhập.",
   insufficient_role: "Bạn không còn quyền thực hiện thao tác này.",

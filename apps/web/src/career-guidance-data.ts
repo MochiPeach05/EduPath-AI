@@ -60,15 +60,15 @@ export const FIT_ORDER_TEXT = "Sắp xếp theo điểm phù hợp giảm dần"
 export function bestFitsHeading(best: readonly GuidanceCareer[]): { title: string; note: string } {
   const title = "Vị trí nghề nghiệp phù hợp với năng lực hiện tại";
   if (!best.length || best.some((career) => FIT_STEP[career.fit!.code] >= FIT_STEP.average)) {
-    return { title, note: `${FIT_ORDER_TEXT}: nghề đứng đầu ở đây, các nghề tiếp theo ở mục Theo bảng xếp hạng bên dưới.` };
+    return { title, note: `${FIT_ORDER_TEXT}: vị trí đứng đầu ở đây, các vị trí tiếp theo ở mục Theo bảng xếp hạng bên dưới.` };
   }
   const total = best.reduce((sum, career) => sum + career.fit!.total, 0);
   const ahead = best.reduce((sum, career) => sum + career.fit!.upcoming + career.fit!.notStudied, 0);
   return {
     title,
     note: `${FIT_ORDER_TEXT}. ${ahead * 2 >= total
-      ? "Chưa nghề nào đạt mức Trung bình vì phần lớn kỹ năng của các nghề này bạn chưa học tới (sắp học, chưa học) nên đang tính 0 điểm; mức phù hợp sẽ tăng khi bạn học các học phần còn lại."
-      : "Chưa nghề nào đạt mức Trung bình: nhiều kỹ năng của các nghề này còn dưới ngưỡng hoặc chưa có điểm. Xem chi tiết từng nghề để biết kỹ năng nên bổ sung."}`,
+      ? "Chưa vị trí nghề nghiệp nào đạt mức Trung bình vì phần lớn kỹ năng của các vị trí này bạn chưa học tới (sắp học, chưa học) nên đang tính 0 điểm; mức phù hợp sẽ tăng khi bạn học các học phần còn lại."
+      : "Chưa vị trí nghề nghiệp nào đạt mức Trung bình: nhiều kỹ năng của các vị trí này còn dưới ngưỡng hoặc chưa có điểm. Xem chi tiết từng vị trí để biết kỹ năng nên bổ sung."}`,
   };
 }
 
@@ -143,7 +143,7 @@ export const missingSkills = (career: GuidanceCareer) => sortRequirements(comput
  */
 export const FIT_SCORE_LABEL = "Điểm phù hợp kỹ năng";
 /** How the điểm phù hợp is counted (comp-calc-v14), as "Thang mức phù hợp" of Khoảng trống kỹ năng says it. */
-export const FIT_RULE_TEXT = "Điểm phù hợp là trung bình điểm các kỹ năng của nghề, kỹ năng Bắt buộc tính gấp đôi kỹ năng Ưu tiên; "
+export const FIT_RULE_TEXT = "Điểm phù hợp là trung bình điểm các kỹ năng của vị trí nghề nghiệp, kỹ năng Bắt buộc tính gấp đôi kỹ năng Ưu tiên; "
   + "kỹ năng chưa có điểm (chưa học, sắp học, cần tự học, chưa đủ dữ liệu) tính 0 điểm.";
 /** FIT_RULE_TEXT, with "Điểm sẽ tăng…" only for a career that has Sắp học skills. */
 export const fitRuleText = (career: Pick<GuidanceCareer, "fit" | "requirements">) =>
@@ -157,12 +157,12 @@ export const fitRuleText = (career: Pick<GuidanceCareer, "fit" | "requirements">
  */
 export function gapNote(data: Pick<GuidanceResponse, "gapCurrent" | "gapAssessedAt" | "gapCareerId" | "gapCareerName">, target: Pick<GuidanceCareer, "id" | "fit">): string | null {
   if (data.gapCurrent) return null;
-  if (!data.gapAssessedAt) return "Bạn chưa đánh giá năng lực với nghề này; bấm Đánh giá năng lực để xem Khoảng trống kỹ năng.";
+  if (!data.gapAssessedAt) return "Bạn chưa đánh giá năng lực với vị trí nghề nghiệp này; bấm Đánh giá năng lực để xem Khoảng trống kỹ năng.";
   const assessedAt = formatDateTime(data.gapAssessedAt);
   if (data.gapCareerId !== target.id) {
     return data.gapCareerName
-      ? `Khoảng trống kỹ năng vẫn đang hiển thị nghề ${data.gapCareerName}. Bấm Đánh giá lại ở trang Đánh giá năng lực để cập nhật theo nghề mới.`
-      : `Lần đánh giá năng lực lúc ${assessedAt} chưa có nghề mục tiêu. Bấm Đánh giá lại ở trang Đánh giá năng lực để xem Khoảng trống kỹ năng của nghề này.`;
+      ? `Khoảng trống kỹ năng vẫn đang hiển thị vị trí nghề nghiệp ${data.gapCareerName}. Bấm Đánh giá lại ở trang Đánh giá năng lực để cập nhật theo vị trí mới.`
+      : `Lần đánh giá năng lực lúc ${assessedAt} chưa có vị trí nghề nghiệp mục tiêu. Bấm Đánh giá lại ở trang Đánh giá năng lực để xem Khoảng trống kỹ năng của vị trí này.`;
   }
   // The same career: while this page cannot compute (blocked) there is nothing to compare.
   if (!target.fit) return null;
@@ -199,16 +199,16 @@ export function toggleCompare(ids: readonly string[], id: string): string[] {
 }
 
 const BLOCKED: Record<string, string> = {
-  transcript_required: "Bạn cần tải bảng điểm lên ở Hồ sơ và bảng điểm để EduPath AI tính mức phù hợp với từng nghề.",
-  specialty_required: "Bạn cần chọn chuyên ngành ở Hồ sơ và bảng điểm để EduPath AI tính mức phù hợp với từng nghề.",
+  transcript_required: "Bạn cần tải bảng điểm lên ở Hồ sơ và bảng điểm để EduPath AI tính mức phù hợp với từng vị trí nghề nghiệp.",
+  specialty_required: "Bạn cần chọn chuyên ngành ở Hồ sơ và bảng điểm để EduPath AI tính mức phù hợp với từng vị trí nghề nghiệp.",
   cohort_unknown: "Hồ sơ của bạn chưa có khóa học nên chưa tính được mức phù hợp. Hãy liên hệ Khoa để cập nhật.",
   curriculum_unavailable: "Khoa chưa có chương trình đào tạo cho khóa của bạn nên chưa tính được mức phù hợp.",
   curriculum_ambiguous: "Khóa của bạn đang có nhiều chương trình đào tạo nên chưa tính được mức phù hợp. Hãy liên hệ Khoa.",
   competency_weights_unavailable: "Khoa chưa gắn kỹ năng cho các học phần nên chưa tính được mức phù hợp.",
   // 2026-10-29, user: "Khi người dùng đã xóa kết quả năng lực cũ thì nó nên ghi rõ đây là kết quả cũ hoặc là xóa luôn chứ".
-  assessment_withdrawn: "Bạn đã xóa kết quả đánh giá năng lực và rút lại sự đồng ý, nên EduPath AI không tính mức phù hợp của bạn với từng nghề. Muốn xem lại, hãy bấm Đánh giá năng lực ở trang Đánh giá năng lực.",
+  assessment_withdrawn: "Bạn đã xóa kết quả đánh giá năng lực và rút lại sự đồng ý, nên EduPath AI không tính mức phù hợp của bạn với từng vị trí nghề nghiệp. Muốn xem lại, hãy bấm Đánh giá năng lực ở trang Đánh giá năng lực.",
 };
-export const blockedText = (code: string) => BLOCKED[code] ?? "Chưa tính được mức phù hợp với từng nghề. Vui lòng thử lại sau.";
+export const blockedText = (code: string) => BLOCKED[code] ?? "Chưa tính được mức phù hợp với từng vị trí nghề nghiệp. Vui lòng thử lại sau.";
 /** Where the student can lift the block: the profile (transcript, specialty) or Đánh giá năng lực (consent withdrawn); null otherwise. */
 export function blockedAction(code: string): { href: string; label: string } | null {
   if (code === "transcript_required" || code === "specialty_required") return { href: "#profile", label: "Mở Hồ sơ và bảng điểm" };

@@ -485,7 +485,7 @@ describe("loading and request errors", () => {
   it("explains failed requests", () => {
     expect(loadErrorMessage(401, null)).toBe("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
     expect(loadErrorMessage(403, "account_unavailable")).toContain("Tài khoản của bạn hiện không dùng được");
-    expect(loadErrorMessage(500, null)).toBe("Không thể tải điều kiện xét tốt nghiệp. Vui lòng thử lại.");
+    expect(loadErrorMessage(500, null)).toBe("Không thể tải kết quả xét tốt nghiệp. Vui lòng thử lại.");
     expect(requestErrorMessage("advice_too_frequent")).toBe("Bạn vừa thử lại. Hãy đợi khoảng 30 giây rồi thử lại.");
     expect(requestErrorMessage("queue_full")).toBe("Hàng đợi AI đang đầy. Vui lòng thử lại sau ít phút.");
     expect(requestErrorMessage("advice_not_retryable")).toContain("đang được tạo hoặc đã có");

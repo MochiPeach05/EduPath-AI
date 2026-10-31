@@ -30,7 +30,7 @@ export const PORTAL_PAGES: readonly { link: string; label: string }[] = [
   { link: "#competency", label: "Đánh giá năng lực" }, { link: "#skill-gap", label: "Khoảng trống kỹ năng" },
   { link: "#career", label: "Định hướng nghề nghiệp" }, { link: "#roadmap", label: "Lộ trình học tập" },
   { link: "#curriculum", label: "Chương trình đào tạo" }, { link: "#plans", label: "Kế hoạch đào tạo" },
-  { link: "#graduation", label: "Điều kiện xét tốt nghiệp" }, { link: "#assistant", label: "Trợ lý AI" },
+  { link: "#graduation", label: "Xét tốt nghiệp" }, { link: "#assistant", label: "Trợ lý AI" },
 ];
 
 /* ------------------------------------------------------------------ requests */

@@ -130,7 +130,7 @@ describe("assistant student sources", () => {
     const none = await studentSources(db({ assessment: false, transcript: null }), userId, "Mình thiếu gì?", ["gaps"], ROADMAP_NOW);
     expect(none.gapSkills).toEqual([]);
     expect(none.sources).toHaveLength(1);
-    expect(none.sources[0]?.text).toContain("Nghề mục tiêu: Lập trình viên Web");
+    expect(none.sources[0]?.text).toContain("Vị trí nghề nghiệp mục tiêu: Lập trình viên Web");
     expect(none.sources[0]?.text).toContain("Bạn chưa import bảng điểm và chưa thực hiện Đánh giá năng lực nên EduPath AI chưa có cơ sở để tư vấn");
 
     const uploaded = await studentSources(db({ assessment: false }), userId, "Điểm tổng của mình là bao nhiêu?", ["transcript"], ROADMAP_NOW);

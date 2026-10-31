@@ -226,7 +226,7 @@ export function CompetencySkillsTab({ canManage, revision, onSaved }: TabProps) 
             <td><GroupNames skill={skill} /></td>
             <td className="comp-description">{skill.scope || "Chưa bổ sung"}</td>
             <td><ProfileState active={skill.isActive} /></td>
-            <td>{skill.courseCount} môn học<br />{skill.careerCount} nghề nghiệp</td>
+            <td>{skill.courseCount} môn học<br />{skill.careerCount} vị trí nghề nghiệp</td>
             <td><ActionMenu label={`Thao tác với kỹ năng ${skill.name}`} items={[
               { key: "detail", icon: "eye", label: "Xem chi tiết", onSelect: () => { setSelected(skill); setMode("detail"); } },
               ...(canManage ? [
@@ -307,7 +307,7 @@ export function SkillEditor({ current, revision, groups, close, saved }: EditorP
           <legend><RequiredLabel>Nhóm năng lực</RequiredLabel></legend>
           {groupOptions.map((group, index) => <label key={group.id} className="cm-check"><input ref={index === 0 ? firstGroupBox : undefined} type="checkbox"
             checked={form.groupIds.includes(group.id)} onChange={() => toggleGroup(group.id)} /> {group.name}{group.isActive ? "" : " (ngừng sử dụng)"}</label>)}
-          <p className="comp-hint">Chọn một hoặc nhiều nhóm. Điểm kỹ năng được tính vào từng nhóm đã chọn. Mức độ quan trọng của kỹ năng đối với từng nghề được đặt trong phần yêu cầu của nghề (Bắt buộc/Ưu tiên).</p>
+          <p className="comp-hint">Chọn một hoặc nhiều nhóm. Điểm kỹ năng được tính vào từng nhóm đã chọn. Mức độ quan trọng của kỹ năng đối với từng vị trí nghề nghiệp được đặt trong phần yêu cầu của vị trí đó (Bắt buộc/Ưu tiên).</p>
         </fieldset>
         {!groups.length && <p className="comp-hint">Chưa tải được nhóm năng lực. Đóng hộp thoại và tải lại danh sách nhóm trước khi lưu.</p>}
         <DescriptionField label="Phạm vi đánh giá" maxWords={LONG_DESCRIPTION_MAX_WORDS} rows={5} maxLength={4000} value={form.scope} placeholder="Nội dung và phạm vi đánh giá kỹ năng…" onChange={event => setForm({ ...form, scope: event.target.value })} />
@@ -339,7 +339,7 @@ function SkillDetails({ current, revision, canManage, close, edit }: { current: 
           <div><dt>Mô tả kỹ năng chung</dt><dd className="comp-description">{detail.description || "Chưa bổ sung."}</dd></div>
           <div><dt>Phạm vi đánh giá</dt><dd className="comp-description">{detail.scope || "Chưa bổ sung."}</dd></div>
           <div><dt>Trạng thái sử dụng</dt><dd><ProfileState active={detail.isActive} /></dd></div>
-          <div><dt>Liên kết nghề nghiệp</dt><dd>{detail.careerCount} nghề nghiệp</dd></div>
+          <div><dt>Liên kết vị trí nghề nghiệp</dt><dd>{detail.careerCount} vị trí nghề nghiệp</dd></div>
           {detail.legacySkillId && <div><dt>Dữ liệu đánh giá cũ</dt><dd>Giữ liên kết với dữ liệu đánh giá cũ.</dd></div>}
         </dl>
         <section className="comp-section">
@@ -411,7 +411,7 @@ function SkillDelete({ current, close, saved }: { current: Skill; close: () => v
       finally { submitting.current = false; setBusy(false); }
     }}>
       <strong>{current.name}</strong>
-      <p>Cấu hình năng lực sẽ bị xóa, kỹ năng không còn được dùng để đánh giá năng lực. Kỹ năng chung và các liên kết nghề nghiệp vẫn được giữ lại.</p>
+      <p>Cấu hình năng lực sẽ bị xóa, kỹ năng không còn được dùng để đánh giá năng lực. Kỹ năng chung và các liên kết với vị trí nghề nghiệp vẫn được giữ lại.</p>
       <p className="comp-hint">Cần xóa liên kết kỹ năng này khỏi các cấu hình môn học đang áp dụng trước khi xóa cấu hình.</p>
       <label className="cm-check"><input type="checkbox" required checked={confirmed} disabled={busy} onChange={event => setConfirmed(event.target.checked)} /> Tôi xác nhận xóa cấu hình năng lực này.</label>
       {error && <p className="admin-error cm-prewrap" role="alert">{error}</p>}

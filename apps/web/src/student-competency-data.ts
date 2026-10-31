@@ -21,8 +21,8 @@ export function isPreconditionError(code: string | null | undefined): code is Pr
 /** Title, explanation and next step for each precondition. */
 export const PRECONDITION_COPY: Record<PreconditionError, { title: string; text: string; action: { label: string; href: string } | null }> = {
   transcript_required: { title: "Cần bảng điểm để bắt đầu", text: "EduPath AI tính năng lực từ kết quả các học phần bạn đã học. Hãy import bảng điểm PDF xuất từ cổng đào tạo, rồi quay lại đây.", action: { label: "Import bảng điểm", href: "#profile" } },
-  career_required: { title: "Cần chọn nghề mục tiêu", text: "Đánh giá năng lực cần đủ bảng điểm, nghề mục tiêu và chuyên ngành. Hãy chọn nghề mục tiêu ở trang Định hướng nghề nghiệp, rồi quay lại đây.", action: { label: "Chọn nghề mục tiêu", href: "#career" } },
-  specialty_required: { title: "Cần chọn chuyên ngành", text: "Đánh giá năng lực cần đủ bảng điểm, nghề mục tiêu và chuyên ngành. Hãy chọn chuyên ngành trong hồ sơ, rồi quay lại đây.", action: { label: "Chọn chuyên ngành", href: "#profile" } },
+  career_required: { title: "Cần chọn vị trí nghề nghiệp mục tiêu", text: "Đánh giá năng lực cần đủ bảng điểm, vị trí nghề nghiệp mục tiêu và chuyên ngành. Hãy chọn vị trí nghề nghiệp mục tiêu ở trang Định hướng nghề nghiệp, rồi quay lại đây.", action: { label: "Chọn vị trí nghề nghiệp mục tiêu", href: "#career" } },
+  specialty_required: { title: "Cần chọn chuyên ngành", text: "Đánh giá năng lực cần đủ bảng điểm, vị trí nghề nghiệp mục tiêu và chuyên ngành. Hãy chọn chuyên ngành trong hồ sơ, rồi quay lại đây.", action: { label: "Chọn chuyên ngành", href: "#profile" } },
   cohort_unknown: { title: "Hồ sơ chưa có khóa học", text: "Hệ thống cần biết bạn thuộc khóa nào để chọn đúng chương trình đào tạo. Thông tin khóa được đồng bộ từ tài khoản trường; nếu mục Khóa học trong hồ sơ còn trống, hãy liên hệ Khoa để được cập nhật.", action: { label: "Xem hồ sơ", href: "#profile" } },
   curriculum_unavailable: { title: "Chưa có chương trình đào tạo cho khóa của bạn", text: "Khoa chưa công bố chương trình đào tạo đang áp dụng cho khóa này trên EduPath AI. Bạn có thể quay lại sau khi chương trình được cập nhật.", action: null },
   curriculum_ambiguous: { title: "Khóa của bạn đang có nhiều chương trình đào tạo", text: "Có hơn một chương trình đào tạo đang áp dụng cho khóa này nên hệ thống chưa chọn được bản đúng. Khoa sẽ rà soát lại; bạn chưa cần làm gì thêm.", action: null },
@@ -60,14 +60,14 @@ export function errorMessage(code: string | null | undefined, fallback = "Thao t
 export function missingRequirements(hasTranscript: boolean | null, profile: { careerPositionId?: string | null; specialty?: string | null } | null): string[] {
   return [
     hasTranscript === false ? "bảng điểm" : null,
-    profile && !profile.careerPositionId ? "nghề mục tiêu" : null,
+    profile && !profile.careerPositionId ? "vị trí nghề nghiệp mục tiêu" : null,
     profile && profile.specialty !== undefined && !profile.specialty ? "chuyên ngành" : null,
   ].filter((item): item is string => item !== null);
 }
 /** "a", "a và b", "a, b và c". */
 const joinWords = (words: readonly string[]) => words.length < 2 ? words.join("") : `${words.slice(0, -1).join(", ")} và ${words.at(-1)}`;
 export const missingRequirementsMessage = (missing: readonly string[]) =>
-  `Cần đủ bảng điểm, nghề mục tiêu và chuyên ngành để đánh giá năng lực. Hãy bổ sung ${joinWords(missing)} rồi bấm lại.`;
+  `Cần đủ bảng điểm, vị trí nghề nghiệp mục tiêu và chuyên ngành để đánh giá năng lực. Hãy bổ sung ${joinWords(missing)} rồi bấm lại.`;
 
 /** Why the AI comment failed, in the student's words. */
 const AI_ERROR_MESSAGES: Record<string, string> = {
@@ -381,7 +381,7 @@ const nameList = (names: readonly string[]) => names.length > 3 ? `${names.slice
  */
 export function noGapText(career: Pick<CareerResult, "requirements">): { met: string; zero: string | null } {
   const ahead = sortRequirements(career.requirements).filter((req) => req.status === "upcoming").map((req) => req.skillName ?? req.title);
-  if (!ahead.length) return { met: "Bạn đã đạt mọi kỹ năng của nghề này.", zero: null };
+  if (!ahead.length) return { met: "Bạn đã đạt mọi kỹ năng của vị trí nghề nghiệp này.", zero: null };
   const level = fitLevelOf(career);
   const effect = level === "insufficient_data" ? "nên chưa đủ dữ liệu để xếp mức phù hợp"
     : `kéo điểm phù hợp xuống ${formatScore(fitScoreOf(career.requirements))}/100`;
@@ -445,11 +445,11 @@ export const FIT_LABELS: Record<FitLevel, string> = {
  * số kỹ năng còn dưới ngưỡng hoặc chưa học").
  */
 export const FIT_SCALE: readonly { code: Exclude<FitLevel, "insufficient_data">; label: string; range: string; text: string }[] = [
-  { code: "very_fit", label: FIT_LABELS.very_fit, range: "từ 90", text: "Điểm trung bình các kỹ năng của nghề ở mức Xuất sắc (từ 90)." },
-  { code: "fit", label: FIT_LABELS.fit, range: "80 đến dưới 90", text: "Điểm trung bình các kỹ năng của nghề ở mức Giỏi (80 đến dưới 90)." },
-  { code: "average", label: FIT_LABELS.average, range: "62,5 đến dưới 80", text: "Điểm trung bình các kỹ năng của nghề ở mức Khá (62,5 đến dưới 80)." },
-  { code: "low_fit", label: FIT_LABELS.low_fit, range: "50 đến dưới 62,5", text: "Điểm trung bình các kỹ năng của nghề ở mức Trung bình (50 đến dưới 62,5)." },
-  { code: "not_fit", label: FIT_LABELS.not_fit, range: "dưới 50", text: "Điểm trung bình các kỹ năng của nghề ở mức Yếu (dưới 50)." },
+  { code: "very_fit", label: FIT_LABELS.very_fit, range: "từ 90", text: "Điểm trung bình các kỹ năng của vị trí nghề nghiệp ở mức Xuất sắc (từ 90)." },
+  { code: "fit", label: FIT_LABELS.fit, range: "80 đến dưới 90", text: "Điểm trung bình các kỹ năng của vị trí nghề nghiệp ở mức Giỏi (80 đến dưới 90)." },
+  { code: "average", label: FIT_LABELS.average, range: "62,5 đến dưới 80", text: "Điểm trung bình các kỹ năng của vị trí nghề nghiệp ở mức Khá (62,5 đến dưới 80)." },
+  { code: "low_fit", label: FIT_LABELS.low_fit, range: "50 đến dưới 62,5", text: "Điểm trung bình các kỹ năng của vị trí nghề nghiệp ở mức Trung bình (50 đến dưới 62,5)." },
+  { code: "not_fit", label: FIT_LABELS.not_fit, range: "dưới 50", text: "Điểm trung bình các kỹ năng của vị trí nghề nghiệp ở mức Yếu (dưới 50)." },
 ];
 export const fitLabelOf = (career: Pick<CareerResult, "requirements">) => FIT_LABELS[fitLevelOf(career)];
 /** Ramp step of a fit level, like levelStep (5 = Rất phù hợp … 1 = Không phù hợp; 0 = Chưa đủ dữ liệu). */
@@ -613,8 +613,8 @@ export function gapHistory(result: Pick<AssessmentResult, "career" | "history">)
   const from = first.career!.met, to = last.career!.met, total = last.career!.total;
   const best = rows.reduce<GapHistoryRow | null>((top, row) => row.change !== null && row.change > 0 && (!top || row.change > top.change!) ? row : top, null);
   const sentence = points.length < 2
-    ? `Mới có ${termInWords(last)} có điểm nên chưa so sánh được; ${to}/${total} kỹ năng nghề đạt ngưỡng.`
-    : `Từ ${termInWords(first)} đến ${termInWords(last)}, số kỹ năng nghề đạt ngưỡng ${to > from ? `tăng từ ${from} lên ${to}` : to < from ? `giảm từ ${from} xuống ${to}` : `giữ ở ${to}`}/${total}.`
+    ? `Mới có ${termInWords(last)} có điểm nên chưa so sánh được; ${to}/${total} kỹ năng của vị trí nghề nghiệp đạt ngưỡng.`
+    : `Từ ${termInWords(first)} đến ${termInWords(last)}, số kỹ năng của vị trí nghề nghiệp đạt ngưỡng ${to > from ? `tăng từ ${from} lên ${to}` : to < from ? `giảm từ ${from} xuống ${to}` : `giữ ở ${to}`}/${total}.`
       + (best ? ` Tăng nhiều nhất: ${best.name} (${formatDifference(best.change!)} điểm).` : "");
   return { state: "ready", points, rows, sentence };
 }

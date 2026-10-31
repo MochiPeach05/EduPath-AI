@@ -3,9 +3,9 @@ export const adminNavigation = [
   { path: "/quantri/tong-quan", label: "Tổng quan", eyebrow: "BÁO CÁO", icon: "home" },
   { path: "/quantri/bao-cao-tien-do", label: "Tiến độ", eyebrow: "BÁO CÁO", icon: "route" },
   { path: "/quantri/bao-cao-nguy-co", label: "Nguy cơ", eyebrow: "BÁO CÁO", icon: "bell" },
-  // "Kỹ năng" and "Nghề nghiệp" already name the catalog pages of Quản lý nghề nghiệp, so the reports say what they count.
+  // "Kỹ năng" and "Vị trí nghề nghiệp" already name the catalog pages of Quản lý nghề nghiệp, so the reports say what they count.
   { path: "/quantri/bao-cao-ky-nang", label: "Kỹ năng thiếu", eyebrow: "BÁO CÁO", icon: "spark" },
-  { path: "/quantri/bao-cao-nghe-nghiep", label: "Nghề mục tiêu", eyebrow: "BÁO CÁO", icon: "target" },
+  { path: "/quantri/bao-cao-nghe-nghiep", label: "Vị trí mục tiêu", eyebrow: "BÁO CÁO", icon: "target" },
   { path: "/quantri/bao-cao-mon-hoc", label: "Môn đề xuất", eyebrow: "BÁO CÁO", icon: "book" },
   { path: "/quantri/nhat-ky", label: "Nhật ký", eyebrow: "BÁO CÁO", icon: "clock" },
   { path: "/quantri/tai-khoan", label: "Tài khoản", eyebrow: "QUẢN LÝ TÀI KHOẢN", icon: "users" },
@@ -15,7 +15,7 @@ export const adminNavigation = [
   { path: "/quantri/ke-hoach", label: "Kế hoạch", eyebrow: "QUẢN LÝ ĐÀO TẠO", icon: "book" },
   { path: "/quantri/linh-vuc-nghe-nghiep", label: "Lĩnh vực", eyebrow: "QUẢN LÝ NGHỀ NGHIỆP", icon: "book" },
   { path: "/quantri/ky-nang", label: "Kỹ năng", eyebrow: "QUẢN LÝ NGHỀ NGHIỆP", icon: "book" },
-  { path: "/quantri/vi-tri-nghe-nghiep", label: "Nghề nghiệp", eyebrow: "QUẢN LÝ NGHỀ NGHIỆP", icon: "users" },
+  { path: "/quantri/vi-tri-nghe-nghiep", label: "Vị trí nghề nghiệp", eyebrow: "QUẢN LÝ NGHỀ NGHIỆP", icon: "users" },
   { path: "/quantri/nhom-nang-luc", label: "Nhóm năng lực", eyebrow: "QUẢN LÝ NĂNG LỰC", icon: "book" },
   { path: "/quantri/cau-hinh-nang-luc", label: "Cấu hình năng lực", eyebrow: "QUẢN LÝ NĂNG LỰC", icon: "profile" },
   { path: "/quantri/cau-hinh-mon-hoc", label: "Cấu hình môn học", eyebrow: "QUẢN LÝ NĂNG LỰC", icon: "chart" },

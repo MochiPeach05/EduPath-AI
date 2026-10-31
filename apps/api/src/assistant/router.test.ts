@@ -62,7 +62,7 @@ describe("assistant student API", () => {
     expect(online.body).toEqual({
       threads: [{ id: threadId, title: thread.title, createdAt: "2026-10-28T01:00:00.000Z", updatedAt: "2026-10-28T01:00:00.000Z" }], workerOnline: true,
       suggestions: [
-        "Làm sao để import bảng điểm PDF?", "Làm sao để chọn chuyên ngành và nghề mục tiêu?", "Khảo sát định hướng dùng để làm gì?",
+        "Làm sao để import bảng điểm PDF?", "Làm sao để chọn chuyên ngành và vị trí nghề nghiệp mục tiêu?", "Khảo sát định hướng dùng để làm gì?",
         "Làm sao để chạy Đánh giá năng lực?", "Điều kiện xét tốt nghiệp của khóa mình là gì?", "EduPath AI dùng dữ liệu của mình như thế nào?",
       ],
     });

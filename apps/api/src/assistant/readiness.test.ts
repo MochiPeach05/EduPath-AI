@@ -41,7 +41,7 @@ describe("readinessAnswer", () => {
     expect(answer.content.split("\n")).toEqual([
       "Hiện bạn chưa import bảng điểm và chưa làm Đánh giá năng lực, nên mình chưa có cơ sở để tư vấn câu này. Bạn hoàn thành giúp mình mấy bước sau nhé:",
       "1. Import bảng điểm PDF ở trang Hồ sơ và bảng điểm.",
-      "2. Chọn chuyên ngành và nghề mục tiêu.",
+      "2. Chọn chuyên ngành và vị trí nghề nghiệp mục tiêu.",
       "3. Làm Khảo sát định hướng ở trang Hồ sơ và bảng điểm.",
       "4. Bấm Đánh giá năng lực ở trang Đánh giá năng lực.",
       "5. Bấm Tạo lộ trình ở trang Lộ trình học tập.",
@@ -62,7 +62,7 @@ describe("readinessAnswer", () => {
     expect(links(onlyAssessment)).toEqual(["#competency"]);
     const noCareer = ask({ ...all, career: false, assessment: false, roadmap: false }, "Học kỳ tới em nên học những môn nào?")!;
     expect(noCareer.content).toBe("Hiện bạn chưa làm Đánh giá năng lực, nên mình chưa có cơ sở để tư vấn câu này. Bạn hoàn thành giúp mình mấy bước sau nhé:\n"
-      + "1. Chọn nghề mục tiêu ở trang Định hướng nghề nghiệp.\n2. Bấm Đánh giá năng lực ở trang Đánh giá năng lực.\n"
+      + "1. Chọn vị trí nghề nghiệp mục tiêu ở trang Định hướng nghề nghiệp.\n2. Bấm Đánh giá năng lực ở trang Đánh giá năng lực.\n"
       + `Xong rồi bạn hỏi lại câu này, mình sẽ trả lời sát với bạn hơn. ${MEANWHILE}`);
     expect(links(noCareer)).toEqual(["#career", "#competency"]);
     const noSpecialty = ask({ ...all, specialty: false, survey: false, assessment: false, roadmap: false }, "Mình còn thiếu kỹ năng nào?")!;
@@ -102,7 +102,7 @@ describe("readinessAnswer", () => {
   it("checks the student's own graduation standing against the transcript only", () => {
     const answer = ask(none, "Mình đủ điều kiện tốt nghiệp chưa?")!;
     expect(answer.content).toBe("Bạn chưa import bảng điểm nên mình chưa có cơ sở để đối chiếu kết quả học tập của bạn với tiêu chuẩn xét tốt nghiệp. "
-      + "Bạn import bảng điểm PDF ở trang Hồ sơ và bảng điểm trước nhé, sau đó xem trang Điều kiện xét tốt nghiệp hoặc hỏi lại mình.");
+      + "Bạn import bảng điểm PDF ở trang Hồ sơ và bảng điểm trước nhé, sau đó xem trang Xét tốt nghiệp hoặc hỏi lại mình.");
     expect(links(answer)).toEqual(["#profile", "#graduation"]);
     expect(ask({ ...none, transcript: true }, "Mình đủ điều kiện tốt nghiệp chưa?")).toBeNull();
     // The standard itself needs no result of the student's.
@@ -150,15 +150,15 @@ describe("readinessAnswer", () => {
 describe("suggestedQuestions", () => {
   it("offers the setup questions first, then questions about the student's own results", () => {
     expect(suggestedQuestions(none)).toEqual([
-      "Làm sao để import bảng điểm PDF?", "Làm sao để chọn chuyên ngành và nghề mục tiêu?", "Khảo sát định hướng dùng để làm gì?",
+      "Làm sao để import bảng điểm PDF?", "Làm sao để chọn chuyên ngành và vị trí nghề nghiệp mục tiêu?", "Khảo sát định hướng dùng để làm gì?",
       "Làm sao để chạy Đánh giá năng lực?", "Điều kiện xét tốt nghiệp của khóa mình là gì?", "EduPath AI dùng dữ liệu của mình như thế nào?",
     ]);
     expect(suggestedQuestions({ ...all, roadmap: false })).toEqual([
       "Làm sao để tạo Lộ trình AI?", "Điểm trung bình tích lũy của mình là bao nhiêu?", "Mình còn nợ môn nào không?",
-      "Mình còn thiếu những kỹ năng nào cho nghề mục tiêu?", "Học kỳ tới mình nên học những môn nào?", "Điều kiện xét tốt nghiệp của khóa mình là gì?",
+      "Mình còn thiếu những kỹ năng nào cho vị trí nghề nghiệp mục tiêu?", "Học kỳ tới mình nên học những môn nào?", "Điều kiện xét tốt nghiệp của khóa mình là gì?",
     ]);
     expect(suggestedQuestions(all)).toEqual([
-      "Điểm trung bình tích lũy của mình là bao nhiêu?", "Mình còn nợ môn nào không?", "Mình còn thiếu những kỹ năng nào cho nghề mục tiêu?",
+      "Điểm trung bình tích lũy của mình là bao nhiêu?", "Mình còn nợ môn nào không?", "Mình còn thiếu những kỹ năng nào cho vị trí nghề nghiệp mục tiêu?",
       "Học kỳ tới mình nên học những môn nào?", "Vì sao lộ trình đề xuất các môn này cho mình?", "Điều kiện xét tốt nghiệp của khóa mình là gì?",
     ]);
   });

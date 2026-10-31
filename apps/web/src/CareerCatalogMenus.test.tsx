@@ -50,7 +50,7 @@ describe.each(pages)("%s page", (_name, add, Page, row) => {
   });
 });
 
-describe("Nghề nghiệp page", () => {
+describe("Vị trí nghề nghiệp page", () => {
   const career = { id: "c1", code: "NN001", nameVi: "Kỹ sư dữ liệu", nameEn: "Data engineer", category: "1", description: "", skills: [], version: "1", deletedAt: null };
   function render(items: unknown[], canManage = true) {
     vi.mocked(useData).mockReturnValue({ data: { items }, error: null, loading: false, retry: () => undefined } as never);

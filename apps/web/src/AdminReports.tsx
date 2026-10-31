@@ -28,11 +28,11 @@ import "./admin-reports.css";
 /* ------------------------------------------------------------------ words */
 
 const PAGE_TEXT: Record<ReportView, { code: string; title: string; lead: string }> = {
-  dashboard: { code: "01", title: "Tổng quan dữ liệu và hoạt động", lead: "Điểm trung bình, năng lực, mức phù hợp với nghề và tiến độ của sinh viên trong phạm vi lọc." },
+  dashboard: { code: "01", title: "Tổng quan dữ liệu và hoạt động", lead: "Điểm trung bình, năng lực, mức phù hợp với vị trí nghề nghiệp và tiến độ của sinh viên trong phạm vi lọc." },
   progress: { code: "02–03", title: "Thống kê sinh viên theo tiến độ", lead: "Tính giống trang Tổng quan của sinh viên: tín chỉ đã đạt so với kế hoạch đào tạo của khóa, đến học kỳ đang học." },
   risk: { code: "04–05", title: "Sinh viên có nguy cơ chậm tiến độ", lead: "Đúng các mục \"Cần chú ý\" sinh viên thấy trên trang của mình. Hệ thống tự tính, không dùng AI; chỉ để tham khảo, không thay cảnh báo học vụ." },
-  skills: { code: "06–07", title: "Thống kê kỹ năng còn thiếu", lead: "Từ lần Đánh giá năng lực mới nhất của mỗi sinh viên, so với nghề mục tiêu. Bấm một kỹ năng để xem sinh viên còn thiếu." },
-  careers: { code: "08", title: "Thống kê nghề nghiệp mục tiêu", lead: "Nghề sinh viên chọn trong Đánh giá năng lực và mức phù hợp hiện tại." },
+  skills: { code: "06–07", title: "Thống kê kỹ năng còn thiếu", lead: "Từ lần Đánh giá năng lực mới nhất của mỗi sinh viên, so với vị trí nghề nghiệp mục tiêu. Bấm một kỹ năng để xem sinh viên còn thiếu." },
+  careers: { code: "08", title: "Thống kê vị trí nghề nghiệp mục tiêu", lead: "Vị trí nghề nghiệp sinh viên chọn trong Đánh giá năng lực và mức phù hợp hiện tại." },
   courses: { code: "09", title: "Thống kê môn học được đề xuất", lead: "Các môn Lộ trình AI đề xuất cho sinh viên. Bấm một môn để xem sinh viên được đề xuất." },
   audit: { code: "11", title: "Nhật ký thao tác", lead: "Ai đã làm gì, lúc nào: thay đổi dữ liệu và cấu hình, gửi thông báo, xem bảng điểm và xuất báo cáo có tên sinh viên. Lưu 1 năm; không lưu nội dung dữ liệu của sinh viên." },
 };
@@ -246,9 +246,9 @@ function KpiCards({ kpis, sparkline }: { kpis: DashboardKpis; sparkline: number[
     <div className="rp-kpi"><div className="rp-kpi-top"><span className="rp-kpi-icon rp-teal"><Icon name="spark" /></span><span>Độ thành thạo kỹ năng trung bình</span></div>
       <div className="rp-kpi-body"><b className="rp-kpi-value">{scoreOrDash(kpis.competency)}<small>/ 100</small></b><Gauge value={kpis.competency} size="mini" label="Độ thành thạo kỹ năng trung bình" /></div>
       <p className="rp-kpi-foot"><Word word={kpis.competencyLevel} /> Năng lực chung của {countText(kpis.assessed)} sinh viên</p></div>
-    <div className="rp-kpi"><div className="rp-kpi-top"><span className="rp-kpi-icon rp-amber"><Icon name="target" /></span><span>Độ phù hợp với nghề trung bình</span></div>
-      <div className="rp-kpi-body"><b className="rp-kpi-value">{scoreOrDash(kpis.fit)}<small>/ 100</small></b><Gauge value={kpis.fit} size="mini" color={SERIES_COLORS.amber} label="Độ phù hợp với nghề trung bình" /></div>
-      <p className="rp-kpi-foot"><Word word={kpis.fitLabel} /> So với nghề mục tiêu</p></div>
+    <div className="rp-kpi"><div className="rp-kpi-top"><span className="rp-kpi-icon rp-amber"><Icon name="target" /></span><span>Độ phù hợp với vị trí nghề nghiệp trung bình</span></div>
+      <div className="rp-kpi-body"><b className="rp-kpi-value">{scoreOrDash(kpis.fit)}<small>/ 100</small></b><Gauge value={kpis.fit} size="mini" color={SERIES_COLORS.amber} label="Độ phù hợp với vị trí nghề nghiệp trung bình" /></div>
+      <p className="rp-kpi-foot"><Word word={kpis.fitLabel} /> So với vị trí nghề nghiệp mục tiêu</p></div>
     <div className="rp-kpi"><div className="rp-kpi-top"><span className="rp-kpi-icon rp-red"><Icon name="bell" /></span><span>Cần chú ý</span></div>
       <div className="rp-kpi-body"><b className="rp-kpi-value">{countText(kpis.risk + kpis.warn)}</b></div>
       <span className="rp-split" data-tip={`Nguy cơ: ${countText(kpis.risk)}\nCần chú ý: ${countText(kpis.warn)}`} tabIndex={0}><i style={{ flexGrow: kpis.risk || 0.0001, background: STATUS_COLORS.bad }} /><i style={{ flexGrow: kpis.warn || 0.0001, background: STATUS_COLORS.warn }} /></span>
@@ -266,7 +266,7 @@ function KpiTable({ kpis }: { kpis: CohortSplit<DashboardKpis> }) {
   </tr>;
   return <div className="rp-table-wrap" tabIndex={0} role="region" aria-label="Số liệu chính theo từng khóa"><table className="rp-table">
     <thead><tr><th scope="col">Khóa</th><th scope="col" className="rp-num">Sinh viên</th><th scope="col" className="rp-num">Đã tải bảng điểm</th><th scope="col" className="rp-num">Đã đánh giá</th>
-      <th scope="col" className="rp-num">GPA TB tích lũy</th><th scope="col">Thành thạo kỹ năng TB</th><th scope="col">Phù hợp nghề TB</th><th scope="col" className="rp-num">Nguy cơ</th><th scope="col" className="rp-num">Cần chú ý</th></tr></thead>
+      <th scope="col" className="rp-num">GPA TB tích lũy</th><th scope="col">Thành thạo kỹ năng TB</th><th scope="col">Phù hợp vị trí nghề nghiệp TB</th><th scope="col" className="rp-num">Nguy cơ</th><th scope="col" className="rp-num">Cần chú ý</th></tr></thead>
     <tbody>{kpis.byCohort.map((item) => row(item.cohort, item))}</tbody>
     <tfoot>{row("Toàn khóa", kpis.all, true)}</tfoot>
   </table></div>;
@@ -347,7 +347,7 @@ export function AveragesTable({ table }: { table: AverageTable }) {
   </tr>;
   return <div className="rp-table-wrap" tabIndex={0} role="region" aria-label={`Bảng điểm trung bình theo ${head.toLowerCase()}`}><table className="rp-table">
     <thead><tr>{sortHeader(head, "label")}{sortHeader("Sinh viên", "students", "rp-num")}{sortHeader("GPA TB tích lũy", "gpa")}{sortHeader("GPA TB học kỳ gần nhất", "lastTermGpa", "rp-num")}
-      {sortHeader("Tín chỉ TB đã đạt", "credits", "rp-num")}{sortHeader("GPA dưới 2,00", "below2", "rp-num")}{sortHeader("Thành thạo kỹ năng TB", "competency")}{sortHeader("Phù hợp nghề TB", "fit")}</tr></thead>
+      {sortHeader("Tín chỉ TB đã đạt", "credits", "rp-num")}{sortHeader("GPA dưới 2,00", "below2", "rp-num")}{sortHeader("Thành thạo kỹ năng TB", "competency")}{sortHeader("Phù hợp vị trí nghề nghiệp TB", "fit")}</tr></thead>
     <tbody>{table.rows.length ? sortAverages(table.rows, sort).map((item) => row(item)) : <tr><td colSpan={8} className="rp-empty">{EMPTY_SCOPE}</td></tr>}</tbody>
     {table.rows.length > 0 && <tfoot>{row(table.all, true)}</tfoot>}
   </table></div>;
@@ -394,16 +394,16 @@ function FitSection({ split, navigate }: { split: CohortSplit<FitSummary>; navig
   const parts = fitParts(split.all);
   const total = parts.reduce((sum, part) => sum + part.value, 0);
   const careers = [...split.all.careers].sort((a, b) => b.students - a.students).slice(0, 5);
-  return <Card id="rp-fit" title="Độ phù hợp với nghề mục tiêu" sub={`${countText(total)} sinh viên đã chọn nghề; kỹ năng chưa có điểm tính 0.`}
-    actions={<><ModeSwitch value={mode} onChange={setMode} label="độ phù hợp với nghề" /><button type="button" className="rp-link" onClick={() => navigate(REPORT_PATHS.careers)}>Nghề mục tiêu</button></>}>
+  return <Card id="rp-fit" title="Độ phù hợp với vị trí nghề nghiệp mục tiêu" sub={`${countText(total)} sinh viên đã chọn vị trí nghề nghiệp; kỹ năng chưa có điểm tính 0.`}
+    actions={<><ModeSwitch value={mode} onChange={setMode} label="độ phù hợp với vị trí nghề nghiệp" /><button type="button" className="rp-link" onClick={() => navigate(REPORT_PATHS.careers)}>Vị trí nghề nghiệp mục tiêu</button></>}>
     {total === 0 ? <p className="rp-empty">{EMPTY_ASSESSED}</p> : mode === "all" ? <>
-      <div className="rp-donut-wrap"><Donut parts={parts} center={scoreOrDash(split.all.average)} sub="điểm TB" label="Mức phù hợp với nghề, toàn khóa" />
+      <div className="rp-donut-wrap"><Donut parts={parts} center={scoreOrDash(split.all.average)} sub="điểm TB" label="Mức phù hợp với vị trí nghề nghiệp, toàn khóa" />
         <ul className="rp-donut-legend">{parts.map((part) => <li key={part.label}><i style={{ background: part.color }} aria-hidden="true" /><span>{part.label}</span><b>{countText(part.value)}</b><small>{percent(part.value, total)}%</small></li>)}</ul></div>
       {careers.length > 0 && <ul className="rp-career-list">{careers.map((career) => <li key={career.name} data-tip={`${career.name}: ${countText(career.students)} sinh viên, điểm phù hợp TB ${scoreOrDash(career.average)}`} tabIndex={0}>
         <span>{career.name} <small>{countText(career.students)} SV</small></span><span className="rp-meter"><i style={{ width: `${career.average ?? 0}%` }} /></span><b>{scoreOrDash(career.average)}</b></li>)}</ul>}
     </> : <>
       <Legend items={parts.map((part) => [part.label, part.color] as const)} label="Mức phù hợp" />
-      <ShareBars label="Mức phù hợp với nghề theo từng khóa" rows={split.byCohort.map((cohort) => ({ key: cohort.cohort, label: cohort.cohort, sub: `TB ${scoreOrDash(cohort.average)}${cohort.label ? ` · ${cohort.label}` : ""}`, parts: fitParts(cohort) }))} />
+      <ShareBars label="Mức phù hợp với vị trí nghề nghiệp theo từng khóa" rows={split.byCohort.map((cohort) => ({ key: cohort.cohort, label: cohort.cohort, sub: `TB ${scoreOrDash(cohort.average)}${cohort.label ? ` · ${cohort.label}` : ""}`, parts: fitParts(cohort) }))} />
     </>}
   </Card>;
 }
@@ -593,7 +593,7 @@ function SkillStudentsTable({ data, navigate }: { data: SkillStudents; navigate:
     status: { value: (row) => row.status, order: ["below", "not_studied", "self_study", "no_data"] }, fit: { value: (row) => row.fitScore, by: "number" },
   };
   return <div className="rp-table-wrap" tabIndex={0} role="region" aria-label={`Sinh viên còn thiếu ${data.skill}`}><table className="rp-table">
-    <thead><tr>{sortHeader("Sinh viên", "name")}{sortHeader("Khóa", "cohort")}{sortHeader("Nghề mục tiêu", "career")}{sortHeader("Tình trạng kỹ năng", "status")}{sortHeader("Điểm phù hợp", "fit")}<th scope="col">Thao tác</th></tr></thead>
+    <thead><tr>{sortHeader("Sinh viên", "name")}{sortHeader("Khóa", "cohort")}{sortHeader("Vị trí nghề nghiệp mục tiêu", "career")}{sortHeader("Tình trạng kỹ năng", "status")}{sortHeader("Điểm phù hợp", "fit")}<th scope="col">Thao tác</th></tr></thead>
     <tbody>{data.items.length ? sortRows(data.items, rules, sort).map(({ row }) => <tr key={row.userId}>
       <td><Student name={row.name} code={row.studentCode} /></td><td>{row.cohort ?? "—"}</td><td>{row.careerName ?? "—"}</td>
       <td><Chip tone={GAP_TEXT[row.status].tone}>{GAP_TEXT[row.status].label}</Chip></td><td>{scoreOrDash(row.fitScore)} <Word word={row.fitLabel} /></td><td><ProfileLink userId={row.userId} name={row.name} navigate={navigate} /></td>
@@ -613,7 +613,7 @@ export function SkillsView({ data, career, setCareer, selected, setSelected, stu
     <Coverage head={data} />
     <section className="rp-card" aria-labelledby="rp-skills-title">
       <div className="rp-card-head"><div><h2 id="rp-skills-title">12 kỹ năng thiếu nhiều nhất</h2><p>{countText(data.scope.assessed)} sinh viên đã đánh giá năng lực trong phạm vi lọc.</p></div>
-        <div className="rp-card-actions"><label className="rp-field rp-field-inline">Nghề mục tiêu<select id="rp-career" value={career} onChange={(event) => setCareer(event.target.value)}><option value="">Mọi nghề</option>{data.careers.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
+        <div className="rp-card-actions"><label className="rp-field rp-field-inline">Vị trí nghề nghiệp mục tiêu<select id="rp-career" value={career} onChange={(event) => setCareer(event.target.value)}><option value="">Mọi vị trí nghề nghiệp</option>{data.careers.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
           <ModeSwitch value={mode} onChange={setMode} label="kỹ năng còn thiếu" /><ExportButton url={exportUrl} fallbackName="ky-nang-con-thieu.xlsx" /></div></div>
       {!rows.length ? <p className="rp-empty">{data.scope.assessed ? "Không có kỹ năng nào còn thiếu trong phạm vi lọc." : EMPTY_ASSESSED}</p> : mode === "all" ? <>
         <Legend items={(["below", "not_studied", "self_study", "no_data"] as const).map((status) => [GAP_TEXT[status].label, GAP_TEXT[status].color] as const)} label="Tình trạng kỹ năng" />
@@ -641,7 +641,7 @@ function SkillsPage({ filters, studyTerm, bar, navigate }: { filters: ReportFilt
   </>;
 }
 
-/* ------------------------------------------------------------------ AD-REPORT-08 Nghề nghiệp mục tiêu */
+/* ------------------------------------------------------------------ AD-REPORT-08 Vị trí nghề nghiệp mục tiêu */
 
 export function CareersView({ data }: { data: CareersReport }) {
   const [mode, setMode] = useState<CohortMode>("all");
@@ -651,17 +651,17 @@ export function CareersView({ data }: { data: CareersReport }) {
   const levelParts = (row: CareerRow) => FIT_ORDER.map((label, index) => ({ label, value: row.levels.find((level) => level.label === label)?.students ?? 0, color: LEVEL_RAMP[index]! }));
   return <div className="rp-stack">
     <Coverage head={data} />
-    <Card id="rp-careers-count" title={`${countText(items.reduce((sum, row) => sum + row.students, 0))} sinh viên đã chọn nghề`}
-      sub={`${countText(data.withoutCareer)} sinh viên đã tải bảng điểm nhưng chưa đánh giá năng lực (chưa có nghề mục tiêu).`}
-      actions={<ModeSwitch value={mode} onChange={setMode} label="nghề mục tiêu" />}>
+    <Card id="rp-careers-count" title={`${countText(items.reduce((sum, row) => sum + row.students, 0))} sinh viên đã chọn vị trí nghề nghiệp`}
+      sub={`${countText(data.withoutCareer)} sinh viên đã tải bảng điểm nhưng chưa đánh giá năng lực (chưa có vị trí nghề nghiệp mục tiêu).`}
+      actions={<ModeSwitch value={mode} onChange={setMode} label="vị trí nghề nghiệp mục tiêu" />}>
       {!items.length ? <p className="rp-empty">{EMPTY_ASSESSED}</p> : mode === "all"
-        ? <HBarList rows={items.map((row) => ({ key: row.name, label: row.name, parts: [{ label: "Sinh viên", value: row.students, color: SERIES_COLORS.blue }] }))} label="Số sinh viên chọn mỗi nghề, toàn khóa" labelWidth={260} />
-        : <CohortMatrix rows={matrixRows(data.careers, (row) => row.name, (row) => row.name, (row) => row.students)} cohorts={cohortsOf(data.careers)} label="Số sinh viên chọn mỗi nghề theo từng khóa" rowHeader="Nghề" />}
+        ? <HBarList rows={items.map((row) => ({ key: row.name, label: row.name, parts: [{ label: "Sinh viên", value: row.students, color: SERIES_COLORS.blue }] }))} label="Số sinh viên chọn mỗi vị trí nghề nghiệp, toàn khóa" labelWidth={260} />
+        : <CohortMatrix rows={matrixRows(data.careers, (row) => row.name, (row) => row.name, (row) => row.students)} cohorts={cohortsOf(data.careers)} label="Số sinh viên chọn mỗi vị trí nghề nghiệp theo từng khóa" rowHeader="Vị trí nghề nghiệp" />}
     </Card>
-    <Card id="rp-careers-fit" title="Mức phù hợp theo nghề" sub="Mức phù hợp hiện tại (toàn khóa); kỹ năng chưa có điểm tính 0, như trên trang của sinh viên.">
+    <Card id="rp-careers-fit" title="Mức phù hợp theo vị trí nghề nghiệp" sub="Mức phù hợp hiện tại (toàn khóa); kỹ năng chưa có điểm tính 0, như trên trang của sinh viên.">
       <Legend items={FIT_ORDER.map((label, index) => [label, LEVEL_RAMP[index]!] as const)} label="Mức phù hợp" />
-      <div className="rp-table-wrap" tabIndex={0} role="region" aria-label="Mức phù hợp theo nghề"><table className="rp-table">
-        <thead><tr>{sortHeader("Nghề", "name")}{sortHeader("Số sinh viên", "students", "rp-num")}{sortHeader("Điểm phù hợp TB", "average")}<th scope="col">Phân bố mức phù hợp</th><th scope="col">Kỹ năng thiếu nhiều nhất</th></tr></thead>
+      <div className="rp-table-wrap" tabIndex={0} role="region" aria-label="Mức phù hợp theo vị trí nghề nghiệp"><table className="rp-table">
+        <thead><tr>{sortHeader("Vị trí nghề nghiệp", "name")}{sortHeader("Số sinh viên", "students", "rp-num")}{sortHeader("Điểm phù hợp TB", "average")}<th scope="col">Phân bố mức phù hợp</th><th scope="col">Kỹ năng thiếu nhiều nhất</th></tr></thead>
         <tbody>{items.length ? sortRows(items, rules, sort).map(({ row }) => { const parts = levelParts(row); return <tr key={row.name}>
           <th scope="row">{row.name}</th><td className="rp-num">{countText(row.students)}</td><td>{scoreOrDash(row.average)} <Word word={row.average === null ? null : fitWord(row.average)} /></td>
           <td><span className="rp-dist" data-tip={parts.map((part) => `${part.label}: ${countText(part.value)}`).join("\n")} tabIndex={0}>{parts.filter((part) => part.value > 0).map((part) => <i key={part.label} style={{ flexGrow: part.value, background: part.color }} />)}</span></td>

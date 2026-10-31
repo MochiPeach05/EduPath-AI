@@ -39,7 +39,7 @@ describe("GET /api/student/overview", () => {
       transcript: null, progress: null, graduation: null, competency: null, roadmap: null, running: [],
       warnings: { level: "none", items: [expect.objectContaining({ kind: "missing_data", key: "missing:transcript" })] },
       suggestions: [
-        "Làm sao để import bảng điểm PDF?", "Làm sao để chọn chuyên ngành và nghề mục tiêu?", "Khảo sát định hướng dùng để làm gì?",
+        "Làm sao để import bảng điểm PDF?", "Làm sao để chọn chuyên ngành và vị trí nghề nghiệp mục tiêu?", "Khảo sát định hướng dùng để làm gì?",
         "Làm sao để chạy Đánh giá năng lực?", "Điều kiện xét tốt nghiệp của khóa mình là gì?", "EduPath AI dùng dữ liệu của mình như thế nào?",
       ],
     });

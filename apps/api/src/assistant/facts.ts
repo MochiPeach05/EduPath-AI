@@ -74,9 +74,9 @@ function skillLevel(skill: Pick<SkillResult, "score" | "status" | "upcoming" | "
 
 function careerLines(result: AssessmentResult): string[] {
   const career = result.career;
-  if (!career) return ["Nghề mục tiêu: chưa chọn (chọn ở trang Định hướng nghề nghiệp để mình so kỹ năng với nghề)."];
+  if (!career) return ["Vị trí nghề nghiệp mục tiêu: chưa chọn (chọn ở trang Định hướng nghề nghiệp để mình so kỹ năng với vị trí nghề nghiệp)."];
   const fit = typeof career.fitScore === "number" ? `điểm phù hợp ${formatNumber(career.fitScore)}/100 (${career.fitLabel})` : `mức phù hợp: ${career.fitLabel}`;
-  return [`Nghề mục tiêu: ${career.nameVi}; ${fit}; ${career.summaryText}.`];
+  return [`Vị trí nghề nghiệp mục tiêu: ${career.nameVi}; ${fit}; ${career.summaryText}.`];
 }
 
 function overallLine(result: AssessmentResult): string {
@@ -102,7 +102,7 @@ export function skillLevelLines(result: AssessmentResult, question: string): str
   const scored = skills.filter((skill) => skill.score !== null).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
   for (const skill of scored.slice(0, 4)) add(skill);
   for (const skill of scored.slice(-4)) add(skill);
-  return [...picked.values()].map((skill) => `- ${skill.name}${skill.careerSkill ? " (kỹ năng của nghề mục tiêu)" : ""}: ${skillLevel(skill)}`);
+  return [...picked.values()].map((skill) => `- ${skill.name}${skill.careerSkill ? " (kỹ năng của vị trí nghề nghiệp mục tiêu)" : ""}: ${skillLevel(skill)}`);
 }
 
 /** The newest AI roadmap as the student page shows it: names instead of codes and keys. */
@@ -120,7 +120,11 @@ export function aiRoadmapLines(row: RoadmapRow, newestAssessmentId: string): str
   lines.push(`Nhận định: ${output.summary}`);
   for (const advice of output.advice ?? []) lines.push(`- Lời khuyên: ${advice}`);
   for (const item of output.study) lines.push(`- Nên học ${course(item.code)}: ${item.advice}`);
-  for (const item of output.improve) lines.push(`- Nên học lại hoặc cải thiện ${course(item.code)}: ${item.advice}`);
+  // A course not passed is "học lại", a passed one "học cải thiện" (user 2026-10-31: "Phải phân biệt học lại (chưa đạt) với học cải thiện").
+  const actions = new Map(facts.improve.map((item) => [item.code, item.action]));
+  for (const item of output.improve) {
+    lines.push(`- ${actions.get(item.code) === "retake" ? "Nên học lại" : "Có thể học cải thiện"} ${course(item.code)}: ${item.advice}`);
+  }
   for (const item of output.skills) lines.push(`- Nên tự học kỹ năng ${skillNames.get(item.key) ?? item.key}: ${item.why}`);
   return lines;
 }
@@ -136,12 +140,12 @@ async function profileOnly(db: Db, userId: string, hasTranscript: boolean): Prom
     text: clean([
       `Khóa: ${row?.cohortCode ?? "chưa cập nhật"}`,
       `Chuyên ngành: ${specialtyLabel(row?.specialty ?? null) ?? "Chưa xác định"}`,
-      `Nghề mục tiêu: ${row?.career ?? "Chưa chọn"}`,
+      `Vị trí nghề nghiệp mục tiêu: ${row?.career ?? "Chưa chọn"}`,
       // assistant-v5 (2026-10-29, user: "nên trả lời một cách rõ ràng hơn bạn chưa thực hiện đánh giá năng lực nên chúng tôi
       // chưa có cơ sở để tư vấn"): the missing results and the steps, for the answer to say first.
       hasTranscript
-        ? "Bạn đã import bảng điểm nhưng chưa thực hiện Đánh giá năng lực nên EduPath AI chưa có cơ sở để tư vấn về kỹ năng, học phần nên học, lộ trình và tiến độ tốt nghiệp của bạn. Cần làm: bấm Đánh giá năng lực ở trang Đánh giá năng lực (cần đủ bảng điểm, chuyên ngành và nghề mục tiêu)."
-        : "Bạn chưa import bảng điểm và chưa thực hiện Đánh giá năng lực nên EduPath AI chưa có cơ sở để tư vấn về điểm, kỹ năng, học phần nên học, lộ trình và tiến độ tốt nghiệp của bạn. Cần làm: import bảng điểm PDF ở Hồ sơ và bảng điểm, chọn chuyên ngành và nghề mục tiêu, rồi bấm Đánh giá năng lực ở trang Đánh giá năng lực.",
+        ? "Bạn đã import bảng điểm nhưng chưa thực hiện Đánh giá năng lực nên EduPath AI chưa có cơ sở để tư vấn về kỹ năng, học phần nên học, lộ trình và tiến độ tốt nghiệp của bạn. Cần làm: bấm Đánh giá năng lực ở trang Đánh giá năng lực (cần đủ bảng điểm, chuyên ngành và vị trí nghề nghiệp mục tiêu)."
+        : "Bạn chưa import bảng điểm và chưa thực hiện Đánh giá năng lực nên EduPath AI chưa có cơ sở để tư vấn về điểm, kỹ năng, học phần nên học, lộ trình và tiến độ tốt nghiệp của bạn. Cần làm: import bảng điểm PDF ở Hồ sơ và bảng điểm, chọn chuyên ngành và vị trí nghề nghiệp mục tiêu, rồi bấm Đánh giá năng lực ở trang Đánh giá năng lực.",
     ]),
   };
 }
@@ -172,14 +176,14 @@ export async function studentSources(db: Db, userId: string, question: string, i
     },
     ...transcriptPart,
     {
-      kind: "assessment", title: "Kỹ năng của nghề mục tiêu (kết quả đánh giá năng lực)", link: "#skill-gap",
+      kind: "assessment", title: "Kỹ năng của vị trí nghề nghiệp mục tiêu (kết quả đánh giá năng lực)", link: "#skill-gap",
       // The S01… keys of the roadmap prompt mean nothing to the student: the lines go without them.
-      text: clean([...careerLines(assessment.computed), overallLine(assessment.computed), "Kỹ năng nghề cần bổ sung:",
+      text: clean([...careerLines(assessment.computed), overallLine(assessment.computed), "Kỹ năng của vị trí nghề nghiệp cần bổ sung:",
         ...sections.skills.map((line) => line.replace(/^- \[S\d+\] /, "- "))]),
     },
     {
-      kind: "roadmap", title: "Học phần đang học, cần học và cần cải thiện", link: "#roadmap",
-      text: clean(["Đang học:", ...sections.running, "Cần học theo kế hoạch đào tạo:", ...sections.needed, "Cần học lại hoặc cải thiện:", ...sections.improve]),
+      kind: "roadmap", title: "Học phần đang học, cần học, cần học lại và có thể học cải thiện", link: "#roadmap",
+      text: clean(["Đang học:", ...sections.running, "Cần học theo kế hoạch đào tạo:", ...sections.needed, "Cần học lại (chưa đạt) và có thể học cải thiện (đã đạt, muốn nâng điểm):", ...sections.improve]),
     },
     { kind: "graduation", title: "Tiến độ xét tốt nghiệp của bạn", link: "#graduation", text: clean(sections.graduation) },
   ];

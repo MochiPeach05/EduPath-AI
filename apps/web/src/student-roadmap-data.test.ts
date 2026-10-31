@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  choiceText, failureText, monthTitle, normalizeRoadmapResponse, normalizeRoadmapStatus, pendingCopy, requestErrorMessage, ROADMAP_RETRY_CODE, roadmapWindowTitle, skillTags, studyTag, termShort,
+  choiceText, failureText, improveHeading, monthTitle, normalizeRoadmapResponse, normalizeRoadmapStatus, pendingCopy, requestErrorMessage, ROADMAP_RETRY_CODE, roadmapWindowTitle, skillTags, studyTag, termShort,
 } from "./student-roadmap-data";
 
 describe("normalizeRoadmapResponse", () => {
@@ -38,6 +38,11 @@ describe("labels", () => {
     expect(studyTag({ source: "choice", termCode: "HK243", choiceLabel: "Nhóm tự chọn TC309" }).text).toBe("Tự chọn: Nhóm tự chọn TC309");
     expect(skillTags({ isRequired: true, kind: "self_study" })).toEqual(["Bắt buộc", "Cần tự học"]);
     expect(skillTags({ isRequired: false, kind: "deepen" })).toEqual(["Ưu tiên", "Nâng cao"]);
+    // Học lại (not passed) and học cải thiện (passed) named apart; both together under the user's title (2026-10-31).
+    expect(improveHeading([{ action: "retake" }, { action: "improve" }])).toBe("Môn học bạn cần học lại và cải thiện");
+    expect(improveHeading([{ action: "retake" }])).toBe("Môn học bạn cần học lại");
+    expect(improveHeading([{ action: "improve" }])).toBe("Môn học bạn có thể học cải thiện");
+    expect(improveHeading([])).toBe("Môn học bạn cần học lại và cải thiện");
     expect(monthTitle({ month: 1, start: "2026-10-24", end: "2026-11-23" })).toBe("Tháng 1 · 24/10 – 23/11/2026");
     expect(choiceText({ label: "Nhóm tự chọn TC309", source: "late", termCode: "HK243", need: "3 TC", options: [] }))
       .toBe("Nhóm tự chọn TC309: còn thiếu 3 TC (theo kế hoạch ở HK3 2024–2025)");

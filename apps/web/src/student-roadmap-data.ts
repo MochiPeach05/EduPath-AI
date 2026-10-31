@@ -123,6 +123,18 @@ export function studyTag(item: Pick<RoadmapStudy, "source" | "termCode" | "choic
 }
 
 export const improveTag = (action: RoadmapImprove["action"]) => (action === "retake" ? "Học lại" : "Học cải thiện");
+/**
+ * The title of the học lại / học cải thiện list (user 2026-10-31: "Phải phân biệt học lại (chưa đạt) với học cải thiện (đã đạt
+ * nhưng muốn nâng điểm). Nếu hiển thị cả hai, dùng tiêu đề 'Môn học bạn cần học lại và cải thiện'"): it names only the kinds shown;
+ * a passed course is improved by choice, so alone it is "có thể".
+ */
+export function improveHeading(items: readonly Pick<RoadmapImprove, "action">[]): string {
+  const retake = items.some((item) => item.action === "retake");
+  const improve = items.some((item) => item.action !== "retake");
+  if (retake && !improve) return "Môn học bạn cần học lại";
+  if (improve && !retake) return "Môn học bạn có thể học cải thiện";
+  return "Môn học bạn cần học lại và cải thiện";
+}
 
 export function skillTags(skill: Pick<RoadmapSkill, "isRequired" | "kind">): string[] {
   return [skill.isRequired ? "Bắt buộc" : "Ưu tiên", ...(skill.kind === "self_study" ? ["Cần tự học"] : skill.kind === "deepen" ? ["Nâng cao"] : [])];

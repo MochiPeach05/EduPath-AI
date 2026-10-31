@@ -67,8 +67,8 @@ export default function CareerRequirementsManagement({ canManage, career, revisi
             <td><ActionMenu label={`Thao tác với yêu cầu ${item.title}`} items={[
               { key: "detail", icon: "eye", label: "Xem chi tiết", onSelect: () => { setSelected(item); setMode("detail"); } },
               ...(canManage ? [
-                { key: "edit", icon: "edit", label: item.skillId ? "Chỉnh sửa liên kết kỹ năng" : "Chỉnh sửa yêu cầu nghề nghiệp", onSelect: () => { setSelected(item); setKind(item.skillId ? "skill" : "other"); setMode("edit"); } },
-                { key: "delete", icon: "trash", label: item.skillId ? "Xóa liên kết kỹ năng" : "Xóa yêu cầu nghề nghiệp", danger: true, onSelect: () => { setSelected(item); setMode("delete"); } },
+                { key: "edit", icon: "edit", label: item.skillId ? "Chỉnh sửa liên kết kỹ năng" : "Chỉnh sửa yêu cầu vị trí nghề nghiệp", onSelect: () => { setSelected(item); setKind(item.skillId ? "skill" : "other"); setMode("edit"); } },
+                { key: "delete", icon: "trash", label: item.skillId ? "Xóa liên kết kỹ năng" : "Xóa yêu cầu vị trí nghề nghiệp", danger: true, onSelect: () => { setSelected(item); setMode("delete"); } },
               ] : []),
             ]} /></td>
           </tr>)}</tbody>
@@ -86,7 +86,7 @@ export default function CareerRequirementsManagement({ canManage, career, revisi
 
 function RequirementDetail({ id, close }: { id: string; close: () => void }) {
   const remote = useData<CareerRequirement>(`${endpoint}/${id}`);
-  return <Modal title="Chi tiết yêu cầu nghề nghiệp" onClose={close}>
+  return <Modal title="Chi tiết yêu cầu vị trí nghề nghiệp" onClose={close}>
     <div className="cm-dialog-body career-detail"><Status {...remote} />{remote.data && <>
       <h3>{remote.data.title}</h3><p className="career-description">{remote.data.description || "Chưa bổ sung mô tả."}</p>
       <dl><div><dt>Vị trí nghề nghiệp</dt><dd>{remote.data.careerName} · {remote.data.categoryName}</dd></div>
@@ -122,7 +122,7 @@ function RequirementEditor({ current, kind, career, catalog, close, saved }: {
     title: !previous.title || previous.title === (skills.find(skill => skill.id === previous.skillId)?.name ?? previous.skillName) ? name : previous.title,
     }));
   };
-  return <Modal title={current ? (isSkill ? "Chỉnh sửa liên kết kỹ năng" : "Chỉnh sửa yêu cầu nghề nghiệp") : (isSkill ? "Tạo liên kết kỹ năng với nghề nghiệp" : "Thêm yêu cầu nghề nghiệp")} onClose={close} busy={busy}>
+  return <Modal title={current ? (isSkill ? "Chỉnh sửa liên kết kỹ năng" : "Chỉnh sửa yêu cầu vị trí nghề nghiệp") : (isSkill ? "Tạo liên kết kỹ năng với vị trí nghề nghiệp" : "Thêm yêu cầu vị trí nghề nghiệp")} onClose={close} busy={busy}>
     <CheckedForm className="cm-dialog-body cm-form" onSubmit={async event => {
       event.preventDefault();
       if (!ready) return;
@@ -166,7 +166,7 @@ function RequirementEditor({ current, kind, career, catalog, close, saved }: {
       {error && !duplicate && <p className="admin-error" role="alert">{error}</p>}
       <div className="cm-actions cm-dialog-actions">
         <button type="button" className="am-outline" disabled={busy} onClick={close}><Icon name="close" /> Hủy</button>
-        <button className="am-primary" disabled={busy || !ready || duplicate}><Icon name="save" /> {busy ? "Đang lưu…" : isSkill ? "Lưu liên kết kỹ năng" : "Lưu yêu cầu nghề nghiệp"}</button>
+        <button className="am-primary" disabled={busy || !ready || duplicate}><Icon name="save" /> {busy ? "Đang lưu…" : isSkill ? "Lưu liên kết kỹ năng" : "Lưu yêu cầu vị trí nghề nghiệp"}</button>
       </div>
     </CheckedForm>
   </Modal>;
@@ -174,9 +174,9 @@ function RequirementEditor({ current, kind, career, catalog, close, saved }: {
 
 function RequirementDelete({ current, close, saved }: { current: CareerRequirement; close: () => void; saved: () => void }) {
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
-  return <Modal title={current.skillId ? "Xóa liên kết kỹ năng" : "Xóa yêu cầu nghề nghiệp"} onClose={close} busy={busy} size="sm">
+  return <Modal title={current.skillId ? "Xóa liên kết kỹ năng" : "Xóa yêu cầu vị trí nghề nghiệp"} onClose={close} busy={busy} size="sm">
     <div className="cm-dialog-body cm-form"><strong>{current.title}</strong>
-      <p>{current.skillId ? `Xóa liên kết kỹ năng với ${current.careerName}. Kỹ năng vẫn được giữ để sử dụng cho các nghề khác.` : `Xóa yêu cầu này khỏi ${current.careerName}.`}</p>
+      <p>{current.skillId ? `Xóa liên kết kỹ năng với ${current.careerName}. Kỹ năng vẫn được giữ để sử dụng cho các vị trí nghề nghiệp khác.` : `Xóa yêu cầu này khỏi ${current.careerName}.`}</p>
       {error && <p className="admin-error" role="alert">{error}</p>}
       <div className="cm-actions cm-dialog-actions">
         <button className="am-outline" disabled={busy} onClick={close}><Icon name="close" /> Hủy</button>

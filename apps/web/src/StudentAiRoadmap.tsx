@@ -3,7 +3,7 @@ import { decimalText } from "./display-format";
 import { Icon } from "./student-icons";
 import { useLiveData } from "./use-live-data";
 import {
-  ROADMAP_API, ROADMAP_POLL_MS, choiceText, dateText, failureText, roadmapTermLabel, roadmapWindowTitle, formatDateTime, helpsText, improveTag, isPending, modelLabel,
+  ROADMAP_API, ROADMAP_POLL_MS, choiceText, dateText, failureText, roadmapTermLabel, roadmapWindowTitle, formatDateTime, helpsText, improveHeading, improveTag, isPending, modelLabel,
   monthTitle, normalizeRoadmap, normalizeRoadmapResponse, normalizeRoadmapStatus, pendingCopy, requestErrorMessage, sentence, skillTags, studyTag,
   type Roadmap, type RoadmapBasis, type RoadmapImprove, type RoadmapResponse, type RoadmapSkill, type RoadmapStatus, type RoadmapStudy,
 } from "./student-roadmap-data";
@@ -143,15 +143,28 @@ function ImproveItem({ item }: { item: RoadmapImprove }) {
   </li>;
 }
 
+/**
+ * Học lại (not passed) and học cải thiện (passed, to raise the grade) apart, each with what it means (user 2026-10-31: "Hệ thống
+ * đang gọi môn bị rớt là 'môn cần cải thiện'"); the title names the kinds shown (improveHeading).
+ */
 function ImproveSection({ roadmap }: { roadmap: Roadmap }) {
+  const retake = roadmap.improve.filter((item) => item.action === "retake");
+  const improve = roadmap.improve.filter((item) => item.action !== "retake");
   return <section className="sw-panel rm-section" aria-labelledby="rm-improve">
     <header className="rm-section-head"><span className="rm-section-icon" aria-hidden="true"><Icon name="refresh" /></span><div>
-      <h2 id="rm-improve">Môn bạn cần cải thiện</h2>
-      <p>Học lại học phần chưa đạt (F, VT, CT); học cải thiện học phần điểm D hoặc D+.</p>
+      <h2 id="rm-improve">{improveHeading(roadmap.improve)}</h2>
     </div></header>
-    {roadmap.improve.length
-      ? <ul className="rm-items">{roadmap.improve.map((item) => <ImproveItem key={item.code} item={item} />)}</ul>
-      : <p className="rm-empty">Bạn không có học phần nào cần học lại hay học cải thiện.</p>}
+    {!roadmap.improve.length && <p className="rm-empty">Bạn không có học phần nào cần học lại hay học cải thiện.</p>}
+    {retake.length > 0 && <div className="rm-improve-group">
+      <h3>Học lại</h3>
+      <p>Học phần chưa đạt (điểm F, VT hoặc CT), cần học lại.</p>
+      <ul className="rm-items">{retake.map((item) => <ImproveItem key={item.code} item={item} />)}</ul>
+    </div>}
+    {improve.length > 0 && <div className="rm-improve-group">
+      <h3>Học cải thiện</h3>
+      <p>Học phần đã đạt nhưng điểm D hoặc D+; học lại nếu bạn muốn nâng điểm.</p>
+      <ul className="rm-items">{improve.map((item) => <ImproveItem key={item.code} item={item} />)}</ul>
+    </div>}
   </section>;
 }
 
@@ -176,12 +189,12 @@ function SkillsSection({ roadmap, completed }: { roadmap: Roadmap; completed: bo
   return <section className="sw-panel rm-section" aria-labelledby="rm-skills">
     <header className="rm-section-head"><span className="rm-section-icon" aria-hidden="true"><Icon name="target" /></span><div>
       <h2 id="rm-skills">Kỹ năng, kiến thức nên bổ sung</h2>
-      <p>{roadmap.careerName ? `Để nâng cao trình độ và tăng khả năng làm việc ở vị trí ${roadmap.careerName}.` : "Để nâng cao trình độ và tăng khả năng làm việc."}</p>
+      <p>{roadmap.careerName ? `Để nâng cao trình độ và tăng khả năng làm việc ở vị trí nghề nghiệp ${roadmap.careerName}.` : "Để nâng cao trình độ và tăng khả năng làm việc."}</p>
     </div></header>
-    {!roadmap.skills.length && <p className="rm-empty">Bạn đã đạt các kỹ năng của nghề mục tiêu theo kết quả hiện có.</p>}
+    {!roadmap.skills.length && <p className="rm-empty">Bạn đã đạt các kỹ năng của vị trí nghề nghiệp mục tiêu theo kết quả hiện có.</p>}
     {picked.length > 0 && <ul className="rm-skills">{picked.map((skill) => <SkillItem key={skill.key} skill={skill} outcomeTitle={roadmap.window.term ? "Cuối học kỳ" : "Sau 3 tháng"} />)}</ul>}
     {others.length > 0 && (completed && picked.length
-      ? <p className="rm-others">Kỹ năng khác của nghề còn có thể bổ sung: {others.map((skill) => skill.name).join(", ")}.</p>
+      ? <p className="rm-others">Kỹ năng khác của vị trí nghề nghiệp còn có thể bổ sung: {others.map((skill) => skill.name).join(", ")}.</p>
       : <ul className="rm-items rm-items-compact">{others.map((skill) => <li key={skill.key} className="rm-item rm-item-plain">
         <div className="rm-item-head"><strong>{skill.name}</strong><span className="rm-tags">{skillTags(skill).map((tag) => <span key={tag} className="rm-tag">{tag}</span>)}</span></div>
         <p className="rm-item-meta">{sentence(skill.statusLabel)}</p>
@@ -193,7 +206,7 @@ function MonthsSection({ roadmap }: { roadmap: Roadmap }) {
   return <section className="sw-panel rm-section" aria-labelledby="rm-months">
     <header className="rm-section-head"><span className="rm-section-icon" aria-hidden="true"><Icon name="clock" /></span><div>
       <h2 id="rm-months">Kế hoạch theo tháng</h2>
-      <p>Cân đối giữa học trên lớp, cải thiện điểm và tự học kỹ năng.</p>
+      <p>Cân đối giữa học trên lớp, học lại hoặc học cải thiện và tự học kỹ năng.</p>
     </div></header>
     <ol className="rm-months">{roadmap.months.map((month) => <li key={month.month} className="rm-month">
       <h3>{monthTitle(month)}</h3>
@@ -274,7 +287,7 @@ function RoadmapView({ roadmap, response, create, creating, createError }: {
         <div>
           <p className="rm-eyebrow">{roadmapWindowTitle(roadmap.window)}</p>
           <h2 id="rm-title">Từ {dateText(roadmap.window.start)} đến {dateText(roadmap.window.end)}</h2>
-          <p className="rm-hero-meta">{[roadmap.careerName && `Nghề mục tiêu: ${roadmap.careerName}`, roadmap.specialtyLabel && `Chuyên ngành: ${roadmap.specialtyLabel}`].filter(Boolean).join(" · ")}</p>
+          <p className="rm-hero-meta">{[roadmap.careerName && `Vị trí nghề nghiệp mục tiêu: ${roadmap.careerName}`, roadmap.specialtyLabel && `Chuyên ngành: ${roadmap.specialtyLabel}`].filter(Boolean).join(" · ")}</p>
         </div>
         {/* A new roadmap needs the survey (POST answers 409 survey_required): "Tạo lại" waits for it. */}
         {!pending && <button type="button" className="sw-outline" disabled={creating || !response.surveyDone}
@@ -326,14 +339,14 @@ export default function StudentAiRoadmap() {
     <p>EduPath AI đóng vai cố vấn học tập, soạn cho bạn kế hoạch {response.upcoming?.term ? roadmapTermLabel(response.upcoming.term) : "học kỳ tới"}{response.upcoming ? ` (dự kiến từ ${dateText(response.upcoming.start)} đến ${dateText(response.upcoming.end)})` : ""}:</p>
     <ul className="rm-start-list">
       <li><Icon name="book" /><span><strong>Môn bạn cần học</strong> theo kế hoạch đào tạo: học phần đang học, học phần trễ và học phần của học kỳ tới.</span></li>
-      <li><Icon name="refresh" /><span><strong>Môn bạn cần cải thiện</strong>: học lại học phần chưa đạt, học cải thiện học phần điểm D, D+.</span></li>
-      <li><Icon name="target" /><span><strong>Kỹ năng, kiến thức nên bổ sung</strong> để nâng cao trình độ và tăng khả năng làm việc ở nghề mục tiêu.</span></li>
+      <li><Icon name="refresh" /><span><strong>Môn học bạn cần học lại và cải thiện</strong>: học lại học phần chưa đạt; học cải thiện học phần đã đạt điểm D, D+ nếu bạn muốn nâng điểm.</span></li>
+      <li><Icon name="target" /><span><strong>Kỹ năng, kiến thức nên bổ sung</strong> để nâng cao trình độ và tăng khả năng làm việc ở vị trí nghề nghiệp mục tiêu.</span></li>
       <li><Icon name="spark" /><span><strong>Lời khuyên theo mục tiêu của bạn</strong>: tiến độ tốt nghiệp, nên học gì để làm việc thực tế tốt hơn, dựa trên kết quả đánh giá và Khảo sát định hướng.</span></li>
     </ul>
     {!response.aiEnabled
       ? <p className="rm-note">Lộ trình do EduPath AI soạn hiện chưa được bật.</p>
       : <>
-        {assessment && !assessment.hasCareer && <p className="rm-note">Kết quả đánh giá của bạn chưa có nghề mục tiêu nên lộ trình sẽ chưa có phần kỹ năng nghề. Hãy chọn nghề mục tiêu ở Hồ sơ và bảng điểm rồi đánh giá lại để có lộ trình đầy đủ.</p>}
+        {assessment && !assessment.hasCareer && <p className="rm-note">Kết quả đánh giá của bạn chưa có vị trí nghề nghiệp mục tiêu nên lộ trình sẽ chưa có phần kỹ năng của vị trí nghề nghiệp. Hãy chọn vị trí nghề nghiệp mục tiêu ở Hồ sơ và bảng điểm rồi đánh giá lại để có lộ trình đầy đủ.</p>}
         {!response.surveyDone ? <SurveyNeeded /> : <>
           {!response.worker.online && <p className="rm-note">Máy AI đang tạm nghỉ: yêu cầu của bạn sẽ được giữ trong hàng đợi và lộ trình sẽ được soạn khi máy hoạt động trở lại.</p>}
           <div className="rm-actions"><button type="button" className="sw-primary" disabled={creating} onClick={create}><Icon name="spark" />{creating ? "Đang gửi…" : "Tạo lộ trình"}</button></div>

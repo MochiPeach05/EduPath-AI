@@ -50,6 +50,8 @@ export type RoadmapContext = {
   internshipDone: boolean;
   /** The roadmap's term, for the summary written when every sentence of the model's had to go. */
   windowTerm: string | null;
+  /** roadmap-v11: the courses not passed (học lại), code → name; empty for an input made before. */
+  retakes: ReadonlyMap<string, string>;
 };
 
 /**
@@ -98,11 +100,12 @@ export function roadmapContextFromAiInput(input: unknown): RoadmapContext | null
     topics: Array.isArray(group.topics) ? group.topics.filter((item): item is string => typeof item === "string") : [],
   })) : [];
   const strings = (value: unknown) => (Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []);
+  const allNames = new Map([...courses, ...improve, ...names]);
   return {
     courses: new Set(courses.map(([code]) => code)),
     improve: new Set(improve.map(([code]) => code)),
     skills: new Map(skills),
-    names: new Map([...courses, ...improve, ...names]),
+    names: allNames,
     thesis,
     months,
     numbers: new Set([...numbersIn(input.user), ...termCodeNumbers(input.user)]),
@@ -111,6 +114,7 @@ export function roadmapContextFromAiInput(input: unknown): RoadmapContext | null
     unproven: strings(input.keys.unproven),
     internshipDone: input.keys.internshipDone === true,
     windowTerm: typeof input.keys.windowTerm === "string" ? input.keys.windowTerm : null,
+    retakes: new Map(strings(input.keys.retakes).map((code) => [code, allNames.get(code) ?? code])),
   };
 }
 
@@ -190,8 +194,25 @@ export function unattributedClaim(sentence: string, context: Pick<RoadmapContext
   return null;
 }
 
+const IMPROVE_WORD = /(?<![\p{L}\p{N}])cai thien(?![\p{L}\p{N}])/u;
+const RETAKE_WORD = /(?<![\p{L}\p{N}])hoc lai(?![\p{L}\p{N}])/u;
+/**
+ * The course not passed that a sentence calls "cải thiện" without saying "học lại", or null (roadmap-v11, user 2026-10-31:
+ * "Hệ thống đang gọi môn bị rớt là 'môn cần cải thiện'"). `about` is the course the text is the advice of (an improve item),
+ * whose sentences need not name it; any other sentence names the course by name or code.
+ */
+export function retakeCalledImprove(sentence: string, context: Pick<RoadmapContext, "retakes">, about: string | null = null): string | null {
+  const folded = fold(sentence);
+  if (!IMPROVE_WORD.test(folded) || RETAKE_WORD.test(folded)) return null;
+  if (about && context.retakes.has(about)) return context.retakes.get(about)!;
+  for (const [code, name] of context.retakes) {
+    if (new RegExp(`(?<![\\p{L}\\p{N}])${escapeRegExp(fold(name))}(?![\\p{L}\\p{N}])`, "u").test(folded) || folded.includes(fold(code))) return name;
+  }
+  return null;
+}
+
 /** The text with every sentence that does not hold to the data dropped; each dropped sentence is reported in issues. */
-function groundedText(text: string, context: RoadmapContext, claims: boolean, issues: string[]): string {
+function groundedText(text: string, context: RoadmapContext, claims: boolean, issues: string[], about: string | null = null): string {
   const kept: string[] = [];
   for (const sentence of sentencesOf(text)) {
     const outside = termsNamedIn(sentence).filter((code) => !context.terms!.has(code));
@@ -204,6 +225,11 @@ function groundedText(text: string, context: RoadmapContext, claims: boolean, is
       issues.push(`Viết như sự thật điều bạn chỉ tự khai hoặc hệ thống chưa có minh chứng (${topic}); cần ghi rõ "bạn tự đánh giá…" hay "bạn cho biết…". Câu: ${quoted(sentence)}`);
       continue;
     }
+    const retake = retakeCalledImprove(sentence, context, about);
+    if (retake) {
+      issues.push(`Gọi học phần chưa đạt ${retake} là "cải thiện"; học phần chưa đạt phải gọi là "học lại", chỉ học phần đã đạt (D, D+) mới là "học cải thiện". Câu: ${quoted(sentence)}`);
+      continue;
+    }
     kept.push(sentence);
   }
   return kept.join(" ");
@@ -211,7 +237,7 @@ function groundedText(text: string, context: RoadmapContext, claims: boolean, is
 
 /** The summary when every sentence of the model's had to go: plain, and true of any roadmap. */
 export const fallbackSummary = (windowTerm: string | null) =>
-  `Lộ trình ${windowTerm ? termName(windowTerm) : "học kỳ tới"} gồm các học phần cần học, học phần cần cải thiện và kỹ năng nên bổ sung bên dưới. Hãy trao đổi với cố vấn học tập trước khi đăng ký học phần.`;
+  `Lộ trình ${windowTerm ? termName(windowTerm) : "học kỳ tới"} gồm các học phần cần học, học phần cần học lại hoặc học cải thiện và kỹ năng nên bổ sung bên dưới. Hãy trao đổi với cố vấn học tập trước khi đăng ký học phần.`;
 
 /** Tokens that look like a skill key; one that is not a key of the job makes the text invalid. */
 const KEY_TOKEN = /(?<![\p{L}\p{N}_])S\d{1,3}(?![\p{L}\p{N}_])/gu;
@@ -222,7 +248,7 @@ const SECTION_REFERENCE = /\[\s*\d{1,2}\s*\]|(?<![\p{L}\p{N}_])mục\s*\[?\s*\d/
  * hold to the data dropped (roadmap-v9; claims: also the praise and experience check, for the fields that describe the
  * student rather than set a goal), length capped, or null when it must be dropped.
  */
-function cleanText(value: string, max: number, context: RoadmapContext, issues: string[] = [], claims = false): string | null {
+function cleanText(value: string, max: number, context: RoadmapContext, issues: string[] = [], claims = false, about: string | null = null): string | null {
   // Special tokens, links and markup in the raw text already disqualify it (sanitizeText would hide them).
   if (hasForbiddenContent(value)) return null;
   // "mục [4]", "[6]": section numbers of the data block mean nothing to the student.
@@ -230,7 +256,7 @@ function cleanText(value: string, max: number, context: RoadmapContext, issues: 
   const sanitized = sanitizeText(value, 4000);
   if ((sanitized.match(KEY_TOKEN) ?? []).some((token) => !context.skills.has(token))) return null;
   let text = sanitizeText(cleanCourseCodes(cleanKeyText(sanitized, context.skills), context.names), max * 2);
-  if (context.terms) text = groundedText(normalizeTermNames(text), context, claims, issues);
+  if (context.terms) text = groundedText(normalizeTermNames(text), context, claims, issues, about);
   if (!text || hasForbiddenContent(text)) return null;
   if (numbersIn(text).some((number) => !context.numbers.has(number))) return null;
   if (courseCodesIn(text).some((code) => !context.courseCodes.has(code))) return null;
@@ -243,7 +269,8 @@ function cleanItems<T extends { code: string; advice: string }>(items: readonly 
   const out: { code: string; advice: string }[] = [];
   for (const item of items) {
     if (!allowed.has(item.code) || seen.has(item.code)) continue;
-    const advice = cleanText(item.advice, L.advice, context, issues, true);
+    // The advice of a course not passed must call it "học lại" (roadmap-v11).
+    const advice = cleanText(item.advice, L.advice, context, issues, true, item.code);
     if (!advice) continue;
     seen.add(item.code);
     out.push({ code: item.code, advice });

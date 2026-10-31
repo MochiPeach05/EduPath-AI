@@ -17,7 +17,7 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
     question: "EduPath AI dành cho ai?",
     answer: [
       "EduPath AI dành cho sinh viên Công nghệ Thông tin tại Trường Đại học Văn Lang muốn theo dõi việc học và chuẩn bị cho nghề nghiệp sau này. Bạn có thể xem mình đã học những môn nào, môn nào còn thiếu và các môn dự kiến trong những học kỳ tiếp theo.",
-      "Nếu mới bắt đầu, bạn nên kiểm tra thông tin khóa học, lớp học trong hồ sơ rồi tải bảng điểm lên. Từ đó, khi xem chương trình đào tạo hoặc kế hoạch đào tạo, bạn sẽ thấy kết quả của các môn đã có trong bảng điểm. Bạn cũng có thể tìm hiểu các vị trí nghề nghiệp ở Định hướng nghề nghiệp, chọn một mục tiêu phù hợp với sở thích của mình, rồi xem Khoảng trống kỹ năng để biết kỹ năng hiện tại đã đáp ứng yêu cầu của nghề đó đến đâu."
+      "Nếu mới bắt đầu, bạn nên kiểm tra thông tin khóa học, lớp học trong hồ sơ rồi tải bảng điểm lên. Từ đó, khi xem chương trình đào tạo hoặc kế hoạch đào tạo, bạn sẽ thấy kết quả của các môn đã có trong bảng điểm. Bạn cũng có thể tìm hiểu các vị trí nghề nghiệp ở Định hướng nghề nghiệp, chọn một mục tiêu phù hợp với sở thích của mình, rồi xem Khoảng trống kỹ năng để biết kỹ năng hiện tại đã đáp ứng yêu cầu của vị trí đó đến đâu."
     ]
   },
   {
@@ -33,20 +33,20 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
   {
     question: "Tôi có thể sử dụng những chức năng học tập nào?",
     answer: [
-      "Bạn có thể xem và cập nhật hồ sơ, tải bảng điểm PDF lên, tra cứu chương trình đào tạo, xem kế hoạch đào tạo theo năm học và học kỳ, đối chiếu những nhóm môn cần hoàn thành để xét tốt nghiệp, đồng thời đánh giá năng lực của mình so với nghề mục tiêu.",
-      "Sau khi có bảng điểm, cột Kết quả trong chương trình và kế hoạch đào tạo giúp bạn nhận ra môn đã đạt hoặc chưa đạt. Trong phần điều kiện xét tốt nghiệp, bạn có thể xem tiến độ của từng nhóm và số tín chỉ đã đạt. Ở Định hướng nghề nghiệp, bạn có thể xem lĩnh vực, vị trí và yêu cầu kỹ năng của từng nghề, so sánh các nghề và chọn nghề mục tiêu.",
-      "Trong Đánh giá năng lực, bạn xem được điểm từng kỹ năng và nhóm năng lực, mức phù hợp với nghề mục tiêu; kỹ năng còn thiếu và học phần nên ưu tiên nằm ở trang Khoảng trống kỹ năng, kèm nhận xét do AI viết để tham khảo."
+      "Bạn có thể xem và cập nhật hồ sơ, tải bảng điểm PDF lên, tra cứu chương trình đào tạo, xem kế hoạch đào tạo theo năm học và học kỳ, đối chiếu những nhóm môn cần hoàn thành để xét tốt nghiệp, đồng thời đánh giá năng lực của mình so với vị trí nghề nghiệp mục tiêu.",
+      "Sau khi có bảng điểm, cột Kết quả trong chương trình và kế hoạch đào tạo giúp bạn nhận ra môn đã đạt hoặc chưa đạt. Trong phần điều kiện xét tốt nghiệp, bạn có thể xem tiến độ của từng nhóm và số tín chỉ đã đạt. Ở Định hướng nghề nghiệp, bạn có thể xem lĩnh vực và yêu cầu kỹ năng của từng vị trí nghề nghiệp, so sánh các vị trí nghề nghiệp và chọn vị trí nghề nghiệp mục tiêu.",
+      "Trong Đánh giá năng lực, bạn xem được điểm từng kỹ năng và nhóm năng lực, mức phù hợp với vị trí nghề nghiệp mục tiêu; kỹ năng còn thiếu và học phần nên ưu tiên nằm ở trang Khoảng trống kỹ năng, kèm nhận xét do AI viết để tham khảo."
     ],
-    note: "Bạn nên bắt đầu ở Hồ sơ và bảng điểm, chọn nghề mục tiêu ở Định hướng nghề nghiệp, rồi lần lượt xem Đánh giá năng lực, Khoảng trống kỹ năng và Lộ trình học tập. Chương trình đào tạo, Kế hoạch đào tạo và Điều kiện xét tốt nghiệp giúp bạn tra cứu thêm khi cần. Những mục đang được phát triển sẽ có thông báo ngay trên màn hình."
+    note: "Bạn nên bắt đầu ở Hồ sơ và bảng điểm, chọn vị trí nghề nghiệp mục tiêu ở Định hướng nghề nghiệp, rồi lần lượt xem Đánh giá năng lực, Khoảng trống kỹ năng và Lộ trình học tập. Chương trình đào tạo, Kế hoạch đào tạo và Điều kiện xét tốt nghiệp giúp bạn tra cứu thêm khi cần. Những mục đang được phát triển sẽ có thông báo ngay trên màn hình."
   },
   {
     question: "EduPath AI dùng AI vào việc gì?",
     answer: [
-      "EduPath AI dùng mô hình ngôn ngữ Gemma 4 E4B ở bốn trang. Trong Đánh giá năng lực, mô hình viết nhận xét học tập giúp bạn hiểu kết quả của mình: điểm mạnh nằm ở đâu, kỹ năng nào còn thiếu so với nghề mục tiêu, nên ưu tiên học phần nào trong danh sách hệ thống gợi ý và nên tự học thêm những gì.",
-      "Mô hình cũng soạn Lộ trình AI (lộ trình cho học kỳ tới) trong trang Lộ trình học tập: học phần nên học, học phần cần cải thiện, kỹ năng nên tự học và lời khuyên theo mục tiêu của bạn, dựa trên kết quả đánh giá năng lực và Khảo sát định hướng trong hồ sơ. Các học phần được đề xuất được thêm vào Kế hoạch học kỳ để bạn điều chỉnh.",
-      "Trong Điều kiện xét tốt nghiệp, mục Lời khuyên từ EduPath AI gợi ý cách hoàn thành những điều kiện còn thiếu, dựa trên kết quả đối chiếu bảng điểm của bạn với tiêu chuẩn xét tốt nghiệp của khóa và chuyên ngành.",
+      "EduPath AI dùng mô hình ngôn ngữ Gemma 4 E4B ở bốn trang. Trong Đánh giá năng lực, mô hình viết nhận xét học tập giúp bạn hiểu kết quả của mình: điểm mạnh nằm ở đâu, kỹ năng nào còn thiếu so với vị trí nghề nghiệp mục tiêu, nên ưu tiên học phần nào trong danh sách hệ thống gợi ý và nên tự học thêm những gì.",
+      "Mô hình cũng soạn Lộ trình AI (lộ trình cho học kỳ tới) trong trang Lộ trình học tập: học phần nên học, học phần cần học lại và học cải thiện, kỹ năng nên tự học và lời khuyên theo mục tiêu của bạn, dựa trên kết quả đánh giá năng lực và Khảo sát định hướng trong hồ sơ. Các học phần được đề xuất được thêm vào Kế hoạch học kỳ để bạn điều chỉnh.",
+      "Trong trang Xét tốt nghiệp, mục Lời khuyên từ EduPath AI gợi ý cách hoàn thành những điều kiện còn thiếu, dựa trên kết quả đối chiếu bảng điểm của bạn với tiêu chuẩn xét tốt nghiệp của khóa và chuyên ngành.",
       "Trang Trợ lý AI trả lời câu hỏi của bạn về điểm trong bảng điểm, kỹ năng còn thiếu, lộ trình, lý do học phần được đề xuất, chương trình đào tạo, điều kiện tốt nghiệp và tài nguyên tự học. Trợ lý tìm thông tin liên quan trong bảng điểm, kết quả của bạn và trong dữ liệu chung của Khoa (bằng mô hình EmbeddingGemma, cũng chạy cục bộ), rồi Gemma 4 E4B trả lời kèm số nguồn như [1], [2]; điểm được chép đúng như in trên bảng điểm, tài nguyên tự học chỉ lấy từ danh sách đã được kiểm tra.",
-      "Mọi con số như điểm kỹ năng, mức năng lực, khoảng trống kỹ năng, mức phù hợp nghề và kết quả đối chiếu xét tốt nghiệp đều do hệ thống tính (điểm kỹ năng theo trọng số học phần mà Khoa cấu hình), không do AI đưa ra. Mô hình chạy cục bộ trên một máy tính do nhóm phát triển EduPath AI quản lý, nên dữ liệu của bạn không được gửi tới dịch vụ AI đám mây nào."
+      "Mọi con số như điểm kỹ năng, mức năng lực, khoảng trống kỹ năng, mức phù hợp với vị trí nghề nghiệp và kết quả đối chiếu xét tốt nghiệp đều do hệ thống tính (điểm kỹ năng theo trọng số học phần mà Khoa cấu hình), không do AI đưa ra. Mô hình chạy cục bộ trên một máy tính do nhóm phát triển EduPath AI quản lý, nên dữ liệu của bạn không được gửi tới dịch vụ AI đám mây nào."
     ],
     note: "Nhận xét, lộ trình và lời khuyên do AI viết chỉ để tham khảo và có thể chưa chính xác. Hãy đối chiếu với số liệu trên trang và trao đổi với giảng viên hoặc cố vấn học tập trước khi quyết định."
   },
@@ -95,48 +95,48 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
     note: "Kết quả xét tốt nghiệp chính thức do nhà trường công bố. Bạn nên đối chiếu thêm các thông báo của trường và liên hệ cố vấn học tập nếu cần xác nhận trường hợp cụ thể."
   },
   {
-    question: "Tôi chọn mục tiêu nghề nghiệp ở đâu?",
-    answer: ["Nơi thuận tiện nhất là trang Định hướng nghề nghiệp: EduPath AI tính mức phù hợp của bạn với từng nghề trong danh mục (cùng cách với trang Khoảng trống kỹ năng, từ bảng điểm hiện tại), gợi ý các nghề hợp với năng lực và với Khảo sát định hướng của bạn, và cho phép so sánh tối đa 3 nghề. Bạn cũng có thể chọn trong phần Thông tin cá nhân ở Hồ sơ và bảng điểm."],
+    question: "Tôi chọn vị trí nghề nghiệp mục tiêu ở đâu?",
+    answer: ["Nơi thuận tiện nhất là trang Định hướng nghề nghiệp: EduPath AI tính mức phù hợp của bạn với từng vị trí nghề nghiệp trong danh mục (cùng cách với trang Khoảng trống kỹ năng, từ bảng điểm hiện tại), gợi ý các vị trí nghề nghiệp hợp với năng lực và với Khảo sát định hướng của bạn, và cho phép so sánh tối đa 3 vị trí nghề nghiệp. Bạn cũng có thể chọn trong phần Thông tin cá nhân ở Hồ sơ và bảng điểm."],
     steps: [
-      "Mở Định hướng nghề nghiệp, xem Vị trí nghề nghiệp phù hợp với năng lực hiện tại (sắp xếp theo điểm phù hợp giảm dần), rồi Các lựa chọn khác theo bảng xếp hạng và theo Khảo sát định hướng.",
-      "Mở Tất cả nghề để lọc theo lĩnh vực hoặc tìm theo tên; đánh dấu So sánh ở tối đa 3 nghề để xem bảng so sánh từng kỹ năng.",
+      "Mở Định hướng nghề nghiệp, xem Vị trí nghề nghiệp phù hợp với năng lực hiện tại (sắp xếp theo điểm phù hợp giảm dần), rồi Các lựa chọn khác: Theo bảng xếp hạng và Vị trí nghề nghiệp phù hợp với sở thích và thế mạnh.",
+      "Mở Đánh giá điểm phù hợp kỹ năng với tất cả vị trí nghề nghiệp để lọc theo lĩnh vực hoặc tìm theo tên; bấm + So sánh ở 2 hoặc 3 vị trí, rồi bấm Xem so sánh trên thanh So sánh ở cuối màn hình để mở bảng so sánh từng kỹ năng.",
       "Bấm Xem chi tiết để đọc mô tả, các yêu cầu kỹ năng và mức hiện tại của bạn ở từng yêu cầu.",
-      "Bấm Chọn nghề mục tiêu. Mục tiêu được lưu ngay; sau đó bấm Đánh giá lại ở trang Đánh giá năng lực để Khoảng trống kỹ năng và Lộ trình học tập được cập nhật theo nghề mới."
+      "Bấm Chọn làm vị trí nghề nghiệp mục tiêu. Mục tiêu được lưu ngay; sau đó bấm Đánh giá lại ở trang Đánh giá năng lực để Khoảng trống kỹ năng và Lộ trình học tập được cập nhật theo vị trí nghề nghiệp mới."
     ],
-    note: "Bạn có thể chọn một mục tiêu khác khi định hướng thay đổi. Trong mục Mục tiêu học tập ở Hồ sơ và bảng điểm, dùng nút Xem yêu cầu cạnh mục tiêu để đọc lại yêu cầu của nghề đang chọn. Nếu muốn bỏ chọn, bấm Chỉnh sửa thông tin, bấm nút Bỏ chọn cạnh mục tiêu rồi bấm Lưu thay đổi."
+    note: "Bạn có thể chọn một mục tiêu khác khi định hướng thay đổi. Trong mục Mục tiêu học tập ở Hồ sơ và bảng điểm, dùng nút Xem yêu cầu cạnh mục tiêu để đọc lại yêu cầu của vị trí nghề nghiệp đang chọn. Nếu muốn bỏ chọn, bấm Chỉnh sửa thông tin, bấm nút Bỏ chọn cạnh mục tiêu rồi bấm Lưu thay đổi."
   },
   {
     question: "Làm thế nào để đánh giá năng lực?",
-    answer: ["Đánh giá năng lực dựa trên bảng điểm bạn đã tải lên, cùng chuyên ngành và nghề mục tiêu trong hồ sơ. Cần có đủ cả ba thì mới đánh giá được."],
+    answer: ["Đánh giá năng lực dựa trên bảng điểm bạn đã tải lên, cùng chuyên ngành và vị trí nghề nghiệp mục tiêu trong hồ sơ. Cần có đủ cả ba thì mới đánh giá được."],
     steps: [
       "Tải bảng điểm PDF lên ở Hồ sơ và bảng điểm, nếu bạn chưa có bảng điểm trên EduPath AI.",
-      "Trong mục Mục tiêu học tập, chọn chuyên ngành (Chỉnh sửa thông tin) và nghề mục tiêu (Chọn nghề mục tiêu, hoặc chọn ở trang Định hướng nghề nghiệp).",
+      "Trong mục Mục tiêu học tập, chọn chuyên ngành (Chỉnh sửa thông tin) và vị trí nghề nghiệp mục tiêu (Chọn vị trí nghề nghiệp mục tiêu, hoặc chọn ở trang Định hướng nghề nghiệp).",
       "Mở trang Đánh giá năng lực và bấm nút Đánh giá năng lực.",
       "Ở lần đầu, đọc phần giải thích về cách xử lý dữ liệu, tích ô đồng ý rồi xác nhận. Kết quả tính toán hiện ngay, còn nhận xét AI được tạo sau và có thể mất vài phút."
     ],
-    note: "Khi đổi chuyên ngành hoặc nghề mục tiêu, hãy bấm Đánh giá lại để cập nhật kết quả. Khi bạn thay bảng điểm mới, kết quả cũ bị xóa và bạn cần đánh giá lại."
+    note: "Khi đổi chuyên ngành hoặc vị trí nghề nghiệp mục tiêu, hãy bấm Đánh giá lại để cập nhật kết quả. Khi bạn thay bảng điểm mới, kết quả cũ bị xóa và bạn cần đánh giá lại."
   },
   {
     question: "Điểm năng lực được tính như thế nào?",
     answer: [
       "Mỗi học phần rèn luyện một số kỹ năng ở những mức độ khác nhau, và Khoa cấu hình mức độ đó thành trọng số cho từng cặp học phần và kỹ năng. Điểm một kỹ năng là trung bình có trọng số của điểm các học phần liên quan mà bạn đã học, quy về thang 100: học phần càng nhiều tín chỉ và càng rèn luyện kỹ năng đó nhiều thì càng ảnh hưởng lớn đến điểm. Nếu một môn được học nhiều lần, hệ thống dùng lần đạt có điểm cao nhất; môn có điểm MT được tính là đã học nhưng không đưa vào điểm trung bình.",
-      "Từ điểm kỹ năng, hệ thống xếp mức theo cùng ngưỡng xếp loại học lực trên bảng điểm (điểm hệ 4 × 25): từ 90 (3,6) trở lên là Xuất sắc, từ 80 (3,2) đến dưới 90 là Giỏi, từ 62,5 (2,5) đến dưới 80 là Khá, từ 50 (2,0) đến dưới 62,5 là Trung bình và dưới 50 là Yếu. Điểm nhóm năng lực và điểm tổng được tính theo cùng cách: điểm nhóm gộp các kỹ năng trong nhóm, điểm tổng gộp tất cả kỹ năng, nên học phần càng nhiều tín chỉ và trọng số càng lớn thì ảnh hưởng càng nhiều; Giáo dục thể chất và Giáo dục quốc phòng không tính vào hai điểm này. Với nghề mục tiêu, mỗi kỹ năng yêu cầu được so với ngưỡng 62,5 (mức Khá) nếu là kỹ năng Ưu tiên và 80 (mức Giỏi) nếu là kỹ năng Bắt buộc."
+      "Từ điểm kỹ năng, hệ thống xếp mức theo cùng ngưỡng xếp loại học lực trên bảng điểm (điểm hệ 4 × 25): từ 90 (3,6) trở lên là Xuất sắc, từ 80 (3,2) đến dưới 90 là Giỏi, từ 62,5 (2,5) đến dưới 80 là Khá, từ 50 (2,0) đến dưới 62,5 là Trung bình và dưới 50 là Yếu. Điểm nhóm năng lực và điểm tổng được tính theo cùng cách: điểm nhóm gộp các kỹ năng trong nhóm, điểm tổng gộp tất cả kỹ năng, nên học phần càng nhiều tín chỉ và trọng số càng lớn thì ảnh hưởng càng nhiều; Giáo dục thể chất và Giáo dục quốc phòng không tính vào hai điểm này. Với vị trí nghề nghiệp mục tiêu, mỗi kỹ năng yêu cầu được so với ngưỡng 62,5 (mức Khá) nếu là kỹ năng Ưu tiên và 80 (mức Giỏi) nếu là kỹ năng Bắt buộc."
     ],
-    note: "Kỹ năng có học phần liên quan mà bạn đang học hoặc chưa học tới được ghi là Sắp học; kỹ năng có học phần liên quan đã học nhưng bảng điểm chưa có điểm số được ghi là Chưa có điểm; còn kỹ năng nghề mà chương trình đào tạo chưa có học phần nào đo thì được ghi là Chưa đủ dữ liệu. Các trường hợp này đều không có nghĩa là bạn yếu kỹ năng đó."
+    note: "Kỹ năng có học phần liên quan mà bạn đang học hoặc chưa học tới được ghi là Sắp học; kỹ năng có học phần liên quan đã học nhưng bảng điểm chưa có điểm số được ghi là Chưa có điểm; còn kỹ năng của vị trí nghề nghiệp mà chương trình đào tạo chưa có học phần nào đo thì được ghi là Chưa đủ dữ liệu. Các trường hợp này đều không có nghĩa là bạn yếu kỹ năng đó."
   },
   {
     question: "Mô hình AI nhận những dữ liệu nào của tôi?",
     answer: [
-      "Để viết nhận xét, mô hình chỉ nhận mã và tên học phần theo chương trình đào tạo, điểm của bạn ở các học phần đó, khóa, chuyên ngành, nghề mục tiêu và các kết quả hệ thống đã tính như điểm kỹ năng, khoảng trống và học phần gợi ý.",
+      "Để viết nhận xét, mô hình chỉ nhận mã và tên học phần theo chương trình đào tạo, điểm của bạn ở các học phần đó, khóa, chuyên ngành, vị trí nghề nghiệp mục tiêu và các kết quả hệ thống đã tính như điểm kỹ năng, khoảng trống và học phần gợi ý.",
       "Mô hình không nhận họ tên, mã số sinh viên, email, lớp hay tệp PDF bảng điểm của bạn. Mô hình chạy cục bộ trên máy tính do nhóm phát triển EduPath AI quản lý, nhận yêu cầu qua một kênh có xác thực, và dữ liệu không được gửi tới dịch vụ AI đám mây nào."
     ],
-    note: "Khi soạn Lộ trình AI, mô hình nhận thêm câu trả lời Khảo sát định hướng (kể cả thế mạnh, phần mô tả công nghệ bạn thành thạo và sở trường) và danh sách thành tích bạn liệt kê. Khi trả lời trong Trợ lý AI, mô hình nhận câu hỏi, vài lượt trò chuyện gần nhất, những phần kết quả liên quan đến câu hỏi và điểm trong bảng điểm của bạn (điểm trung bình và tín chỉ tích lũy, học phần chưa đạt; điểm từng học phần khi bạn hỏi về điểm). Dữ liệu gửi cho mô hình được xóa sau khi xử lý xong; chỉ nhận xét, lộ trình và cuộc trò chuyện được lưu lại. Chi tiết xem mục Đánh giá năng lực và AI, mục Khảo sát và lộ trình AI, mục Trợ lý AI trong Chính sách bảo mật."
+    note: "Khi soạn Lộ trình AI, mô hình nhận thêm câu trả lời Khảo sát định hướng (kể cả thế mạnh và sở trường) và danh sách thành tích bạn liệt kê. Khi trả lời trong Trợ lý AI, mô hình nhận câu hỏi, vài lượt trò chuyện gần nhất, những phần kết quả liên quan đến câu hỏi và điểm trong bảng điểm của bạn (điểm trung bình và tín chỉ tích lũy, học phần chưa đạt; điểm từng học phần khi bạn hỏi về điểm). Dữ liệu gửi cho mô hình được xóa sau khi xử lý xong; chỉ nhận xét, lộ trình và cuộc trò chuyện được lưu lại. Chi tiết xem mục Đánh giá năng lực và AI, mục Khảo sát và lộ trình AI, mục Trợ lý AI trong Chính sách bảo mật."
   },
   {
     question: "Vì sao tôi phải làm Khảo sát định hướng?",
     answer: [
       "Bảng điểm chỉ cho biết bạn đã học những gì. Khảo sát định hướng cho EduPath AI biết bạn muốn đi đâu: mục tiêu sau tốt nghiệp, môi trường làm việc bạn thích, kinh nghiệm làm thêm, dẫn dắt nhóm, dự án, thực tập, thời gian tự học, tiếng Anh chuyên ngành, lĩnh vực quan tâm và thành tích. Nhờ đó lộ trình AI đưa ra lời khuyên sát với bạn hơn, kể cả khi bảng điểm đã tốt.",
-      "Khảo sát gồm các câu chọn đáp án có sẵn, câu Thế mạnh của bạn (chọn từ 1 đến 5 công nghệ bạn thành thạo và mô tả ngắn), câu Sở trường (chọn từ 1 đến 5 mục) và một câu Có/Không về thành tích; nếu chọn Có, bạn liệt kê thành tích, mỗi dòng một thành tích. Bạn cần hoàn thành khảo sát trước khi tạo Lộ trình AI."
+      "Khảo sát gồm các câu chọn đáp án có sẵn, câu Thế mạnh của bạn (chọn từ 1 đến 5 công nghệ bạn thành thạo), câu Sở trường (chọn từ 1 đến 5 mục) và một câu Có/Không về thành tích; nếu chọn Có, bạn liệt kê thành tích, mỗi dòng một thành tích. Bạn cần hoàn thành khảo sát trước khi tạo Lộ trình AI."
     ],
     note: "Bạn có thể sửa câu trả lời bất cứ lúc nào bằng Chỉnh sửa khảo sát, hoặc xóa bằng Xóa câu trả lời trong Hồ sơ và bảng điểm."
   },
@@ -144,13 +144,13 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
     question: "Nhận xét từ AI có thay thế tư vấn của giảng viên không?",
     answer: [
       "Không. Kết quả đánh giá năng lực và nhận xét từ AI giúp bạn chuẩn bị phương án và có thêm thông tin để trao đổi với giảng viên hoặc cố vấn học tập. Quyết định đăng ký môn, đổi kế hoạch hay định hướng chuyên ngành vẫn nên dựa trên chương trình đào tạo và thông báo của trường.",
-      "Ví dụ, nếu dự định học một môn được gợi ý vào học kỳ tới, hãy kiểm tra môn tiên quyết, môn phải học trước và việc môn đó có được mở trong đợt đăng ký hay không. Nếu đang phân vân giữa nhiều hướng nghề nghiệp, bạn có thể xem yêu cầu của từng vị trí để chuẩn bị câu hỏi cụ thể cho giảng viên."
+      "Ví dụ, nếu dự định học một môn được gợi ý vào học kỳ tới, hãy kiểm tra môn tiên quyết, môn phải học trước và việc môn đó có được mở trong đợt đăng ký hay không. Nếu đang phân vân giữa nhiều hướng nghề nghiệp, bạn có thể xem yêu cầu của từng vị trí nghề nghiệp để chuẩn bị câu hỏi cụ thể cho giảng viên."
     ]
   },
   {
     question: "Làm thế nào để xóa kết quả đánh giá năng lực?",
     answer: [
-      "Trên trang Đánh giá năng lực, bạn có thể bấm Xóa kết quả đánh giá để rút lại sự đồng ý cho việc đánh giá năng lực. Khi đó, toàn bộ kết quả đánh giá và nhận xét AI của bạn bị xóa; hồ sơ và bảng điểm vẫn được giữ. Trang Định hướng nghề nghiệp cũng thôi tính mức phù hợp của bạn với từng nghề cho đến khi bạn đánh giá lại. Nếu muốn đánh giá lại sau này, bạn cần đồng ý lại.",
+      "Trên trang Đánh giá năng lực, bạn có thể bấm Xóa kết quả đánh giá để rút lại sự đồng ý cho việc đánh giá năng lực. Khi đó, toàn bộ kết quả đánh giá và nhận xét AI của bạn bị xóa; hồ sơ và bảng điểm vẫn được giữ. Trang Định hướng nghề nghiệp cũng thôi tính mức phù hợp của bạn với từng vị trí nghề nghiệp cho đến khi bạn đánh giá lại. Nếu muốn đánh giá lại sau này, bạn cần đồng ý lại.",
       "Kết quả đánh giá cũng bị xóa khi bạn xóa bảng điểm hoặc khi bảng điểm mới thay thế bản cũ, vì kết quả được tính từ bảng điểm đó. Ngoài ra, EduPath AI chỉ giữ tối đa 20 lần đánh giá gần nhất của bạn."
     ],
     note: "Kết quả đánh giá đã xóa không khôi phục được."
@@ -166,7 +166,7 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
   {
     question: "Tôi có thể chỉnh sửa hoặc xóa dữ liệu đã nhập không?",
     answer: [
-      "Trong mục Mục tiêu học tập, bấm Chỉnh sửa thông tin để đổi Chuyên ngành rồi bấm Lưu thay đổi; nghề mục tiêu được đổi bằng nút Chọn nghề mục tiêu và lưu ngay. Lớp học và các thông tin định danh lấy từ tài khoản trường chỉ để xem.",
+      "Trong mục Mục tiêu học tập, bấm Chỉnh sửa thông tin để đổi Chuyên ngành rồi bấm Lưu thay đổi; vị trí nghề nghiệp mục tiêu được đổi bằng nút Chọn vị trí nghề nghiệp mục tiêu và lưu ngay. Lớp học và các thông tin định danh lấy từ tài khoản trường chỉ để xem.",
       "Với Khảo sát định hướng (gồm cả Thế mạnh của bạn và Sở trường), bấm Chỉnh sửa khảo sát để đổi câu trả lời, hoặc Xóa câu trả lời để xóa toàn bộ câu trả lời và thành tích; các lộ trình AI đã tạo cũng bị xóa theo.",
       "Để xóa bảng điểm, mở Hồ sơ và bảng điểm, bấm Xóa bảng điểm và xác nhận. Việc này xóa PDF, toàn bộ dữ liệu môn học đã import và các kết quả đánh giá năng lực; thông tin cá nhân vẫn được giữ lại. Sau đó bạn có thể tải một bảng điểm mới lên."
     ],
@@ -176,7 +176,7 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
     question: "Ai có thể xem bảng điểm và thông tin cá nhân của tôi?",
     answer: [
       "Bạn xem được tệp bảng điểm, điểm, kết quả từng môn và kết quả đánh giá năng lực khi đăng nhập bằng tài khoản của mình. Sinh viên khác không xem được hồ sơ hay bảng điểm của bạn.",
-      "Trong nhà trường, chỉ cán bộ, giảng viên có nhiệm vụ liên quan mới được xem những thông tin hồ sơ cần thiết để hỗ trợ học tập và quản lý đào tạo. Từ ngày 26/10/2026, quản trị viên của Khoa Công nghệ Thông tin xem được thêm điểm và kết quả từng môn trong bảng điểm bạn đã tải lên (không gồm tệp PDF) để hỗ trợ học tập. Từ ngày 31/10/2026, quản trị viên của Khoa còn xem được tiến độ học tập, kết quả đánh giá năng lực (điểm kỹ năng, kỹ năng còn thiếu, nghề mục tiêu và mức phù hợp) và các môn Lộ trình AI đề xuất cho bạn trong các báo cáo của Khoa, để hỗ trợ học tập. Câu trả lời khảo sát và thành tích của bạn không có trong các báo cáo này."
+      "Trong nhà trường, chỉ cán bộ, giảng viên có nhiệm vụ liên quan mới được xem những thông tin hồ sơ cần thiết để hỗ trợ học tập và quản lý đào tạo. Từ ngày 26/10/2026, quản trị viên của Khoa Công nghệ Thông tin xem được thêm điểm và kết quả từng môn trong bảng điểm bạn đã tải lên (không gồm tệp PDF) để hỗ trợ học tập. Từ ngày 31/10/2026, quản trị viên của Khoa còn xem được tiến độ học tập, kết quả đánh giá năng lực (điểm kỹ năng, kỹ năng còn thiếu, vị trí nghề nghiệp mục tiêu và mức phù hợp) và các môn Lộ trình AI đề xuất cho bạn trong các báo cáo của Khoa, để hỗ trợ học tập. Câu trả lời khảo sát và thành tích của bạn không có trong các báo cáo này."
     ],
     note: "EduPath AI không bán dữ liệu, không dùng thông tin của bạn để quảng cáo và không cung cấp cho bên ngoài nhà trường vì mục đích thương mại. Chi tiết xem mục Chia sẻ thông tin trong Chính sách bảo mật."
   },

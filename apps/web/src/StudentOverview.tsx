@@ -40,7 +40,7 @@ export function requiredProfileItems(profile: StudentProfile | null, hasTranscri
   return [
     { id: "transcript", label: "Bảng điểm học tập", hint: "Tải lên bảng điểm PDF của bạn", done: hasTranscript },
     { id: "specialty", label: "Chuyên ngành", hint: "Chọn trong Mục tiêu học tập", done: Boolean(profile?.specialty) },
-    { id: "career", label: "Nghề mục tiêu", hint: "Chọn trong Mục tiêu học tập hoặc Định hướng nghề nghiệp", done: Boolean(profile?.careerPositionId) },
+    { id: "career", label: "Vị trí nghề nghiệp mục tiêu", hint: "Chọn trong Mục tiêu học tập hoặc Định hướng nghề nghiệp", done: Boolean(profile?.careerPositionId) },
     { id: "survey", label: "Khảo sát định hướng", hint: profile?.surveyUpdatedAt ? surveyHint || "Cập nhật các mục còn thiếu" : "Câu hỏi, thế mạnh, sở trường và thành tích", done: profile?.surveyComplete === true },
   ];
 }
@@ -226,9 +226,9 @@ function Kpis({ data, navigate, openTranscript }: { data: OverviewResponse; navi
     {tile("competency", "Năng lực chung", competency?.overallScore != null ? <>{scoreText(competency.overallScore)}<small>/ 100</small></> : "—",
       competency ? <>{competency.overallLevel && <Chip meaning={meaningOf(competency.overallLevel)}>{competency.overallLevel}</Chip>}</> : "Chưa đánh giá năng lực",
       () => navigate("competency"))}
-    {tile("fit", "Mức phù hợp nghề", competency?.career?.fitScore != null ? <>{scoreText(competency.career.fitScore)}<small>/ 100</small></> : "—",
+    {tile("fit", "Mức phù hợp với vị trí nghề nghiệp", competency?.career?.fitScore != null ? <>{scoreText(competency.career.fitScore)}<small>/ 100</small></> : "—",
       competency?.career ? <><Chip meaning={meaningOf(competency.career.fitLabel)}>{competency.career.fitLabel}</Chip>{competency.career.met}/{competency.career.total} kỹ năng đạt ngưỡng</>
-        : data.readiness.career ? "Chưa đánh giá năng lực" : "Chưa chọn nghề mục tiêu",
+        : data.readiness.career ? "Chưa đánh giá năng lực" : "Chưa chọn vị trí nghề nghiệp mục tiêu",
       () => navigate(competency?.career ? "skill-gap" : "career"))}
     {tile("graduation", "Xét tốt nghiệp", graduation ? graduation.eligible ? "Đủ điều kiện" : "Chưa đủ" : "—",
       graduation ? <GraduationChip graduation={graduation} /> : "Chưa đối chiếu được",
@@ -310,14 +310,14 @@ function GraduationCard({ data, navigate }: { data: OverviewResponse; navigate: 
         </div>}
         {condition.note && <small>{condition.note}</small>}
       </li>)}</ul>}
-    <button type="button" className="sw-text-link ov-foot-link" onClick={() => navigate("graduation")}>Mở Điều kiện xét tốt nghiệp <Icon name="arrow" /></button>
+    <button type="button" className="sw-text-link ov-foot-link" onClick={() => navigate("graduation")}>Mở Xét tốt nghiệp <Icon name="arrow" /></button>
   </section>;
 }
 
 function SkillsCard({ data, navigate }: { data: OverviewResponse; navigate: Navigate }) {
   const competency = data.competency;
   return <section className="sw-panel ov-card" aria-labelledby="ov-skill-title">
-    <Head id="ov-skill-title" title="Năng lực và nghề mục tiêu" sub={competency && data.profile.careerName ? `Nghề mục tiêu: ${data.profile.careerName}` : "Từ lần Đánh giá năng lực mới nhất"}>
+    <Head id="ov-skill-title" title="Năng lực và vị trí nghề nghiệp mục tiêu" sub={competency && data.profile.careerName ? `Vị trí nghề nghiệp mục tiêu: ${data.profile.careerName}` : "Từ lần Đánh giá năng lực mới nhất"}>
       <button type="button" className="sw-text-link" onClick={() => navigate("skill-gap")}>Khoảng trống kỹ năng <Icon name="arrow" /></button>
     </Head>
     {!competency ? <Empty text="Bạn chưa có kết quả Đánh giá năng lực." action="Đánh giá năng lực" onAction={() => navigate("competency")} /> : <>
@@ -331,10 +331,10 @@ function SkillsCard({ data, navigate }: { data: OverviewResponse; navigate: Navi
           </div>) : <p className="ov-sub">Chưa có kỹ năng nào có điểm.</p>}
           {competency.strengths.length > 0 && <small className="ov-sub">Vạch đen: ngưỡng Khá (62,5)</small>}
         </div>
-        <div className="ov-gaps"><b>Còn thiếu cho nghề mục tiêu</b>
-          {!competency.career ? <p className="ov-sub">Bạn chưa chọn nghề mục tiêu.</p>
+        <div className="ov-gaps"><b>Còn thiếu cho vị trí nghề nghiệp mục tiêu</b>
+          {!competency.career ? <p className="ov-sub">Bạn chưa chọn vị trí nghề nghiệp mục tiêu.</p>
             : competency.career.gaps.length ? <ul className="ov-rows">{competency.career.gaps.map((gap) => <li key={gap.name}><span>{gap.name}</span><Chip meaning={gapMeaning(gap.status)}>{gap.label}</Chip></li>)}</ul>
-              : <p className="ov-sub">Bạn đã đạt mọi kỹ năng của nghề này.</p>}
+              : <p className="ov-sub">Bạn đã đạt mọi kỹ năng của vị trí nghề nghiệp này.</p>}
         </div>
       </div>
       {competency.career && <div className="ov-fit"><span>Mức phù hợp với <b>{competency.career.name}</b>:</span>

@@ -127,7 +127,7 @@ export const assessmentComment = (): NotificationInput => ({
 
 export const roadmapReady = (): NotificationInput => ({
   type: "ai", kind: "roadmap_ready", title: "Lộ trình AI cho học kỳ tới đã soạn xong",
-  body: "Lộ trình AI đề xuất của bạn đã sẵn sàng, gồm môn nên học, môn nên cải thiện, kỹ năng nên bổ sung và kế hoạch theo từng tháng.",
+  body: "Lộ trình AI đề xuất của bạn đã sẵn sàng, gồm môn nên học, môn cần học lại hoặc học cải thiện, kỹ năng nên bổ sung và kế hoạch theo từng tháng.",
   link: "#roadmap", linkLabel: "Mở Lộ trình AI đề xuất",
 });
 

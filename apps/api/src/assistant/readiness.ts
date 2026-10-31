@@ -66,7 +66,7 @@ const PAGES = {
   career: { kind: "guide", title: "Định hướng nghề nghiệp", link: "#career" },
   competency: { kind: "guide", title: "Đánh giá năng lực", link: "#competency" },
   roadmap: { kind: "guide", title: "Lộ trình học tập", link: "#roadmap" },
-  graduation: { kind: "guide", title: "Điều kiện xét tốt nghiệp", link: "#graduation" },
+  graduation: { kind: "guide", title: "Xét tốt nghiệp", link: "#graduation" },
 } as const;
 type Page = keyof typeof PAGES;
 
@@ -81,9 +81,9 @@ type Step = { text: string; pages: Page[] };
 function assessmentSteps(readiness: Readiness, roadmap: boolean): Step[] {
   const steps: Step[] = [];
   if (!readiness.transcript) steps.push({ text: "Import bảng điểm PDF ở trang Hồ sơ và bảng điểm.", pages: ["profile"] });
-  if (!readiness.specialty && !readiness.career) steps.push({ text: "Chọn chuyên ngành và nghề mục tiêu.", pages: ["profile", "career"] });
+  if (!readiness.specialty && !readiness.career) steps.push({ text: "Chọn chuyên ngành và vị trí nghề nghiệp mục tiêu.", pages: ["profile", "career"] });
   else if (!readiness.specialty) steps.push({ text: "Chọn chuyên ngành ở trang Hồ sơ và bảng điểm.", pages: ["profile"] });
-  else if (!readiness.career) steps.push({ text: "Chọn nghề mục tiêu ở trang Định hướng nghề nghiệp.", pages: ["career"] });
+  else if (!readiness.career) steps.push({ text: "Chọn vị trí nghề nghiệp mục tiêu ở trang Định hướng nghề nghiệp.", pages: ["career"] });
   if (!readiness.survey) steps.push({ text: "Làm Khảo sát định hướng ở trang Hồ sơ và bảng điểm.", pages: ["profile"] });
   steps.push({ text: "Bấm Đánh giá năng lực ở trang Đánh giá năng lực.", pages: ["competency"] });
   if (roadmap && !readiness.roadmap) steps.push({ text: "Bấm Tạo lộ trình ở trang Lộ trình học tập.", pages: ["roadmap"] });
@@ -112,7 +112,7 @@ export function readinessAnswer(readiness: Readiness, intents: readonly Assistan
   if (intents.includes("graduation") && GRADUATION_STANDING.test(text)) {
     return readiness.transcript ? null : answer([
       "Bạn chưa import bảng điểm nên mình chưa có cơ sở để đối chiếu kết quả học tập của bạn với tiêu chuẩn xét tốt nghiệp. "
-        + "Bạn import bảng điểm PDF ở trang Hồ sơ và bảng điểm trước nhé, sau đó xem trang Điều kiện xét tốt nghiệp hoặc hỏi lại mình.",
+        + "Bạn import bảng điểm PDF ở trang Hồ sơ và bảng điểm trước nhé, sau đó xem trang Xét tốt nghiệp hoặc hỏi lại mình.",
     ], ["profile", "graduation"]);
   }
   if (CATALOG.test(text)) return null;
@@ -151,12 +151,12 @@ export function readinessAnswer(readiness: Readiness, intents: readonly Assistan
 export function suggestedQuestions(readiness: Readiness): string[] {
   const list: string[] = [];
   if (!readiness.transcript) list.push("Làm sao để import bảng điểm PDF?");
-  if (!readiness.specialty || !readiness.career) list.push("Làm sao để chọn chuyên ngành và nghề mục tiêu?");
+  if (!readiness.specialty || !readiness.career) list.push("Làm sao để chọn chuyên ngành và vị trí nghề nghiệp mục tiêu?");
   if (!readiness.survey) list.push("Khảo sát định hướng dùng để làm gì?");
   if (!readiness.assessment) list.push("Làm sao để chạy Đánh giá năng lực?");
   else if (!readiness.roadmap) list.push("Làm sao để tạo Lộ trình AI?");
   if (readiness.transcript) list.push("Điểm trung bình tích lũy của mình là bao nhiêu?", "Mình còn nợ môn nào không?");
-  if (readiness.assessment) list.push("Mình còn thiếu những kỹ năng nào cho nghề mục tiêu?", "Học kỳ tới mình nên học những môn nào?");
+  if (readiness.assessment) list.push("Mình còn thiếu những kỹ năng nào cho vị trí nghề nghiệp mục tiêu?", "Học kỳ tới mình nên học những môn nào?");
   if (readiness.assessment && readiness.roadmap) list.push("Vì sao lộ trình đề xuất các môn này cho mình?");
   list.push("Điều kiện xét tốt nghiệp của khóa mình là gì?");
   if (readiness.assessment) list.push("Mình nên tự học kỹ năng còn thiếu ở đâu?");

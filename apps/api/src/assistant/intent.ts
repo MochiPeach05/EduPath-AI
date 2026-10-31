@@ -22,7 +22,7 @@ const NOT_GRADES = /\b(ky nang|nang luc|phu hop|nghe|diem (manh|yeu))\b/;
 
 /** Patterns over the folded question (no diacritics, lower case). */
 const PATTERNS: readonly (readonly [AssistantIntent, RegExp | ((text: string) => boolean)])[] = [
-  ["gaps", /\b(thieu|khoang trong|chua dat|duoi nguong|diem yeu|yeu (o|ve|nhat)|nang luc|ky nang|phu hop|nghe muc tieu|danh gia|muc do|diem manh|gioi (o|ve|nhat))\b/],
+  ["gaps", /\b(thieu|khoang trong|chua dat|duoi nguong|diem yeu|yeu (o|ve|nhat)|nang luc|ky nang|phu hop|nghe (nghiep )?muc tieu|vi tri muc tieu|danh gia|muc do|diem manh|gioi (o|ve|nhat))\b/],
   ["roadmap", /\b(lo trinh|hoc ky (toi|sau|tiep|nay)|ky (toi|sau|nay)|nam (toi|sau)|nen hoc|hoc (gi|mon gi|mon nao|nhung mon)|dang ky|ke hoach|tien do|hoc lai|hoc cai thien|cai thien|tre han|no mon|rot mon)\b/],
   ["course_reason", /\b(tai sao|vi sao|ly do|de xuat|goi y mon|sao lai|co can (hoc|thiet))\b/],
   ["graduation", /\b(tot nghiep|ra truong|khoa luan|do an tot nghiep|chuyen de tot nghiep|tin chi|diem trung binh|gpa|chuan dau ra)\b/],
@@ -35,7 +35,7 @@ export function detectIntents(question: string): AssistantIntent[] {
   return PATTERNS.filter(([, pattern]) => (typeof pattern === "function" ? pattern(text) : pattern.test(text))).map(([intent]) => intent);
 }
 
-const FOLLOW_UP_START = /^(con|vay|the|thi|nhung|neu vay|sao|tai sao|vi sao|mon do|mon nay|cai do|cai nay|no|ky nang do|ky nang nay|nghe do)\b/;
+const FOLLOW_UP_START = /^(con|vay|the|thi|nhung|neu vay|sao|tai sao|vi sao|mon do|mon nay|cai do|cai nay|no|ky nang do|ky nang nay|nghe do|vi tri do|vi tri nay)\b/;
 
 /**
  * A short or pronoun-led question ("còn môn kia thì sao?", "vì sao vậy?") is searched together with the previous

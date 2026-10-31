@@ -175,7 +175,7 @@ describe("knowledgeChunksFrom", () => {
       "Phạm vi kỹ năng trong chương trình đào tạo: Phát triển hoặc tích hợp giao tiếp dịch vụ.",
       "Học phần rèn luyện kỹ năng này (trọng số do Khoa cấu hình):",
       "- 71ITSE30503 Lập trình ứng dụng web: 40%",
-      "Nghề yêu cầu kỹ năng này:",
+      "Vị trí nghề nghiệp yêu cầu kỹ năng này:",
       "- NN014 Lập trình viên phía máy chủ (Ưu tiên)",
     ]);
     expect(linesOf(chunkOf(chunks, "skill", ALGO))).toContain("Nhóm năng lực: Chuyên môn, Kiến thức nền tảng.");
@@ -183,7 +183,7 @@ describe("knowledgeChunksFrom", () => {
     expect(linesOf(chunkOf(chunks, "skill", SQL_SKILL))).toEqual([
       "Kỹ năng: SQL.",
       "Chưa có học phần nào trong các chương trình đào tạo hiện hành rèn luyện kỹ năng này.",
-      "Nghề yêu cầu kỹ năng này:",
+      "Vị trí nghề nghiệp yêu cầu kỹ năng này:",
       "- NN014 Lập trình viên phía máy chủ (Bắt buộc)",
     ]);
     expect(chunks.some((chunk) => chunk.sourceKey === ORPHAN)).toBe(false);
@@ -191,13 +191,13 @@ describe("knowledgeChunksFrom", () => {
 
   it("writes careers with their requirements and thresholds, and fields with their careers", () => {
     const backend = chunkOf(chunks, "career", "NN014");
-    expect(backend).toMatchObject({ title: "Nghề NN014 Lập trình viên phía máy chủ", link: "#career" });
+    expect(backend).toMatchObject({ title: "Vị trí nghề nghiệp NN014 Lập trình viên phía máy chủ", link: "#career" });
     expect(linesOf(backend)).toEqual([
-      "Nghề NN014: Lập trình viên phía máy chủ (tiếng Anh: Backend Developer).",
+      "Vị trí nghề nghiệp NN014: Lập trình viên phía máy chủ (tiếng Anh: Backend Developer).",
       "Lĩnh vực: Phát triển phần mềm.",
       "Mô tả: Phát triển API phía máy chủ.",
       "Trên trang Khoảng trống kỹ năng, kỹ năng Bắt buộc đạt khi từ 80 điểm (mức Giỏi), kỹ năng Ưu tiên khi từ 62,5 điểm (mức Khá).",
-      "Yêu cầu kỹ năng của nghề:",
+      "Yêu cầu kỹ năng của vị trí nghề nghiệp:",
       "- SQL (Bắt buộc)",
       "- API (Ưu tiên): Thiết kế REST API.",
       "- REST API (Ưu tiên)",
@@ -205,11 +205,11 @@ describe("knowledgeChunksFrom", () => {
     expect(linesOf(chunkOf(chunks, "field", "7"))).toEqual([
       "Lĩnh vực nghề nghiệp: Phát triển phần mềm.",
       "Mô tả: Các nghề lập trình.",
-      "Các nghề trong lĩnh vực (2):",
+      "Các vị trí nghề nghiệp trong lĩnh vực (2):",
       "- NN013 Lập trình viên giao diện web (Frontend Developer)",
       "- NN014 Lập trình viên phía máy chủ (Backend Developer)",
     ]);
-    expect(chunkOf(chunks, "field", "3").content).toBe("Lĩnh vực nghề nghiệp: Dữ liệu & Trí tuệ nhân tạo.\nLĩnh vực chưa có nghề nào trong danh mục.");
+    expect(chunkOf(chunks, "field", "3").content).toBe("Lĩnh vực nghề nghiệp: Dữ liệu & Trí tuệ nhân tạo.\nLĩnh vực chưa có vị trí nghề nghiệp nào trong danh mục.");
   });
 
   it("summarizes each CTĐT with its blocks, elective groups, specialties and the courses of each block", () => {

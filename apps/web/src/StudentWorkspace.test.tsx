@@ -82,12 +82,13 @@ describe("student shell", () => {
     expect(render("#competency")).not.toContain("sw-avatar-here");
   });
 
-  it("puts Điều kiện xét tốt nghiệp in the main nav just before Trợ lý AI, not in the account menu", () => {
+  it("puts Xét tốt nghiệp in the main nav just before Trợ lý AI, not in the account menu (named Xét tốt nghiệp since 2026-11-01)", () => {
     const html = render("#graduation");
     const nav = html.slice(html.indexOf('id="student-navigation"'), html.indexOf("</nav>", html.indexOf('id="student-navigation"')));
     expect(nav.indexOf("Lộ trình học tập")).toBeGreaterThan(-1);
-    expect(nav.indexOf("Điều kiện xét tốt nghiệp")).toBeGreaterThan(nav.indexOf("Lộ trình học tập"));
-    expect(nav.indexOf("Trợ lý AI")).toBeGreaterThan(nav.indexOf("Điều kiện xét tốt nghiệp"));
+    expect(nav.indexOf("Xét tốt nghiệp")).toBeGreaterThan(nav.indexOf("Lộ trình học tập"));
+    expect(nav.indexOf("Trợ lý AI")).toBeGreaterThan(nav.indexOf("Xét tốt nghiệp"));
+    expect(nav).not.toContain("Điều kiện xét tốt nghiệp");
     expect(nav).toMatch(/href="#graduation" aria-current="page"/);
     expect(html).not.toContain("sw-avatar-here");
   });

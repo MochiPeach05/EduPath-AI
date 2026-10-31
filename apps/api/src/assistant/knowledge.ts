@@ -527,7 +527,7 @@ function skillChunks(skill: SkillRow, courses: readonly CourseRef[], careers: re
   return chunksOf("skill", skill.id, `Kỹ năng ${name}`, "#skill-gap", [
     { lines: intro },
     { heading: "Học phần rèn luyện kỹ năng này (trọng số do Khoa cấu hình)", lines: courses.map((course) => `- ${course.code} ${course.name}: ${percent(course.weight)}`) },
-    { heading: "Nghề yêu cầu kỹ năng này", lines: careers.map((career) => `- ${career.code} ${career.name} (${career.isRequired ? "Bắt buộc" : "Ưu tiên"})`) },
+    { heading: "Vị trí nghề nghiệp yêu cầu kỹ năng này", lines: careers.map((career) => `- ${career.code} ${career.name} (${career.isRequired ? "Bắt buộc" : "Ưu tiên"})`) },
   ]);
 }
 
@@ -548,14 +548,14 @@ function careerChunks(career: CareerRow): KnowledgeChunkInput[] {
     const detail = clean(item.description, 300);
     return `- ${label} (${item.isRequired === true ? "Bắt buộc" : "Ưu tiên"})${detail ? `: ${detail}` : ""}`;
   });
-  return chunksOf("career", code, `Nghề ${code} ${nameVi}`, "#career", [
+  return chunksOf("career", code, `Vị trí nghề nghiệp ${code} ${nameVi}`, "#career", [
     { lines: [
-      `Nghề ${code}: ${nameVi}${nameEn && fold(nameEn) !== fold(nameVi) ? ` (tiếng Anh: ${nameEn})` : ""}.`,
+      `Vị trí nghề nghiệp ${code}: ${nameVi}${nameEn && fold(nameEn) !== fold(nameVi) ? ` (tiếng Anh: ${nameEn})` : ""}.`,
       `Lĩnh vực: ${clean(career.fieldName, 160)}.`,
       description ? `Mô tả: ${description}` : "",
-      requirements.length ? thresholdLine() : "Nghề chưa có yêu cầu kỹ năng.",
+      requirements.length ? thresholdLine() : "Vị trí nghề nghiệp chưa có yêu cầu kỹ năng.",
     ] },
-    { heading: "Yêu cầu kỹ năng của nghề", lines: requirements },
+    { heading: "Yêu cầu kỹ năng của vị trí nghề nghiệp", lines: requirements },
   ]);
 }
 
@@ -563,8 +563,8 @@ function fieldChunks(field: FieldRow, careers: readonly CareerRow[]): KnowledgeC
   const name = clean(field.name, 160);
   const description = clean(field.description, 1000);
   return chunksOf("field", clean(field.code, 40), `Lĩnh vực nghề nghiệp ${name}`, "#career", [
-    { lines: [`Lĩnh vực nghề nghiệp: ${name}.`, description ? `Mô tả: ${description}` : "", careers.length ? "" : "Lĩnh vực chưa có nghề nào trong danh mục."] },
-    { heading: `Các nghề trong lĩnh vực (${careers.length})`, lines: careers.map((career) => {
+    { lines: [`Lĩnh vực nghề nghiệp: ${name}.`, description ? `Mô tả: ${description}` : "", careers.length ? "" : "Lĩnh vực chưa có vị trí nghề nghiệp nào trong danh mục."] },
+    { heading: `Các vị trí nghề nghiệp trong lĩnh vực (${careers.length})`, lines: careers.map((career) => {
       const nameEn = clean(career.nameEn, 200);
       return `- ${clean(career.code, 40)} ${clean(career.nameVi, 200)}${nameEn && fold(nameEn) !== fold(career.nameVi) ? ` (${nameEn})` : ""}`;
     }) },

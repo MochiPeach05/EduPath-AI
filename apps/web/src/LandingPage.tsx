@@ -52,9 +52,9 @@ const features = [
     id: "nghe-nghiep",
     icon: "target" as const,
     number: "03",
-    title: "Đến gần nghề nghiệp mong muốn",
+    title: "Đến gần vị trí nghề nghiệp mong muốn",
     description:
-      "Đối chiếu kỹ năng hiện tại với yêu cầu nghề nghiệp để xác định môn tự chọn, kỹ năng tự học và trải nghiệm cần bổ sung.",
+      "Đối chiếu kỹ năng hiện tại với yêu cầu của vị trí nghề nghiệp để xác định môn tự chọn, kỹ năng tự học và trải nghiệm cần bổ sung.",
     status: "Minh họa tính năng đang triển khai"
   }
 ];
@@ -149,7 +149,7 @@ function FeaturePreview({ selected, active }: { selected: number; active: boolea
         <div className="lp-preview-body">
           <p className="lp-mini-label">ĐỊNH HƯỚNG NGHỀ NGHIỆP</p>
           <h3>Học hôm nay, cho ngày mai.</h3>
-          <p>Từ mục tiêu nghề nghiệp đến kỹ năng cần trau dồi.</p>
+          <p>Từ vị trí nghề nghiệp mục tiêu đến kỹ năng cần trau dồi.</p>
           <div className="lp-career-target">
             <span className="lp-feature-icon">
               <Icon name="target" />

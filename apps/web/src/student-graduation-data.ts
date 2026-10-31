@@ -908,7 +908,7 @@ const LOAD_ERRORS: Record<string, string> = {
 /** The message for a failed GET /api/student/graduation. */
 export function loadErrorMessage(status: number, code: string | null | undefined): string {
   if (status === 401) return "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.";
-  return LOAD_ERRORS[code ?? ""] ?? "Không thể tải điều kiện xét tốt nghiệp. Vui lòng thử lại.";
+  return LOAD_ERRORS[code ?? ""] ?? "Không thể tải kết quả xét tốt nghiệp. Vui lòng thử lại.";
 }
 
 /* --------------------------------------------------------------------- AI */

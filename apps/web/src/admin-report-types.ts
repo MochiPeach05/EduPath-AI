@@ -152,7 +152,7 @@ export type SkillsReport = ReportHead & {
 export type SkillStudent = ReportStudentBase & { careerName: string | null; status: SkillGapStatus; fitScore: number | null; fitLabel: string | null };
 export type SkillStudents = { skill: string; items: SkillStudent[] };
 
-// ------------------------------------------------------------- AD-REPORT-08 Nghề nghiệp mục tiêu
+// ------------------------------------------------------------- AD-REPORT-08 Vị trí nghề nghiệp mục tiêu
 
 export type CareerRow = {
   name: string;

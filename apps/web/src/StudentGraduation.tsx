@@ -490,10 +490,10 @@ export default function StudentGraduation() {
   const advice = useGraduationAdvice();
   const data = live.data;
   return <div className="sg-page">
-    {!data && live.loading && <section className="sw-panel sg-section" aria-busy="true"><p role="status" className="sg-muted">Đang tải điều kiện xét tốt nghiệp…</p></section>}
+    {!data && live.loading && <section className="sw-panel sg-section" aria-busy="true"><p role="status" className="sg-muted">Đang tải kết quả xét tốt nghiệp…</p></section>}
     {!data && !live.loading && <section className="sw-panel sg-section">
       <div className="sw-error sg-load-error" role="alert">
-        <span>{live.error ?? "Không thể tải điều kiện xét tốt nghiệp. Vui lòng thử lại."}</span>
+        <span>{live.error ?? "Không thể tải kết quả xét tốt nghiệp. Vui lòng thử lại."}</span>
         <button type="button" onClick={() => setRevision((value) => value + 1)}>Thử lại</button>
       </div>
     </section>}

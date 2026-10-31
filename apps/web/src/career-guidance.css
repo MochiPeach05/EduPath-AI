@@ -31,14 +31,17 @@
   color: #33415c; font-size: 14px; line-height: 1.6; max-width: 860px; }
 .cg-define b { color: var(--sw-ink); }
 .cg-score-label { color: #5f6b7a; font-size: 12px; font-weight: 700; }
-.cg-target-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 16px; border: 1px solid var(--sw-border);
-  border-radius: var(--sw-radius); background: #fff; font-size: 14px; }
+/* The target line: what and how well on the left, the link on the right; one column on phones. The score keeps its name and its
+   level word beside it at every width (advisor 2026-10-31: the label "bị lệch"). */
+.cg-target-line { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px 16px; padding: 12px 16px;
+  border: 1px solid var(--sw-border); border-radius: var(--sw-radius); background: #fff; font-size: 14px; }
+.cg-target-main { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; min-width: 0; }
 .cg-target-line .cg-target-label { color: #4a5465; }
 .cg-target-line strong { color: var(--sw-ink); }
 .cg-target-line .cg-score { font-size: 18px; }
-.cg-target-score { display: inline-flex; align-items: baseline; gap: 6px; white-space: nowrap; }
-.cg-target-line .sw-text-link { margin-left: auto; }
-.cg-target-line > .cg-note { flex: 1 1 100%; }
+.cg-target-score { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+.cg-keep { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.cg-target-line > .cg-note { grid-column: 1 / -1; }
 .cg-level { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: -8px; }
 .cg-level p { margin: 0; color: var(--sw-muted); font-size: 13px; }
 
@@ -69,7 +72,12 @@
 /* Level 2: "Theo bảng xếp hạng" and "Theo Khảo sát định hướng" side by side */
 .cg-pairs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
 .cg-pick { display: grid; gap: 10px; align-content: start; }
-.cg-pick header p { margin: 4px 0 0; color: var(--sw-muted); font-size: 13px; line-height: 1.5; }
+/* "Căn cứ" and "Thứ tự" of each short list (advisor 2026-10-31). */
+.cg-basis { display: grid; gap: 2px; margin: 6px 0 0; color: var(--sw-muted); font-size: 13px; line-height: 1.5; }
+.cg-basis > div { display: flex; gap: 4px; }
+.cg-basis dt { flex: none; color: #4a5465; font-weight: 700; }
+.cg-basis dd { margin: 0; }
+.cg-basis b { color: #3b4456; }
 .cg-pick-like { border-color: #efc9d3; }
 /* Column titles: the rows' grid, the score title right-aligned over the right-aligned scores. */
 .cg-pick-head { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--sw-border);
@@ -126,11 +134,19 @@
 
 .cg-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
 .cg-actions .sr-secondary, .cg-actions .sw-outline { min-height: 36px; padding: 6px 12px; font-size: 13px; }
-.cg-compare-toggle { display: inline-flex; align-items: center; gap: 6px; color: #3b4456; font-size: 13px; cursor: pointer; }
-.cg-compare-toggle input { width: 16px; height: 16px; margin: 0; accent-color: var(--sw-red); }
-.cg-compare-toggle.is-disabled { opacity: .5; cursor: not-allowed; }
+/* "+ So sánh": blue, apart from the red of "Chọn làm vị trí nghề nghiệp mục tiêu"; filled once chosen. */
+.cg-page .cg-compare-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 12px; border: 1px dashed #8fa6cc; border-radius: 8px;
+  background: #fff; color: var(--meaning-fine); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.cg-page .cg-compare-btn:hover:not(:disabled) { background: #eef3fb; }
+.cg-page .cg-compare-btn.is-on { border-style: solid; border-color: var(--meaning-fine); background: var(--meaning-fine-soft); }
+.cg-page .cg-compare-btn:disabled { opacity: .5; cursor: not-allowed; }
+.cg-page .cg-compare-btn svg { width: 16px; height: 16px; }
 .cg-target-tag { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px; background: #e7f4ec; color: var(--sw-green); font-size: 12px; font-weight: 700; }
 .cg-target-tag svg { width: 14px; height: 14px; }
+/* In place of the "Chọn làm vị trí nghề nghiệp mục tiêu" button: the buttons' height and corners, so it lines up with the button beside it. */
+.cg-page .cg-target-tag-action { min-height: var(--ep-button-height, var(--ep-control-height)); padding: 0 14px; border-radius: var(--ep-control-radius);
+  font-size: var(--ep-control-font-size); }
+.cg-page .cg-target-tag-action svg { width: 16px; height: 16px; }
 
 /* Level 3: every career, folded */
 .cg-all { padding: 0; }
@@ -152,10 +168,10 @@
   border: 1px solid var(--sw-border); border-radius: var(--sw-radius); background: #fff; }
 .cg-list > li.is-target { border-color: #b9dcc7; background: #fbfefc; }
 .cg-row-main { display: grid; gap: 4px; min-width: 0; }
-.cg-row-fit { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+/* Each card of the full list names its number on a line of its own, so the name stays with it at every width. */
+.cg-row-fit { display: grid; grid-template-columns: auto auto; justify-content: start; align-items: center; gap: 4px 10px; }
 .cg-row-fit .cg-score { font-size: 20px; }
-/* Each card of "Tất cả nghề" names its number on a line of its own, so the name stays with it at every width. */
-.cg-row-fit .cg-score-label { flex: 1 1 100%; }
+.cg-row-fit .cg-score-label { grid-column: 1 / -1; }
 
 .cg-table-scroll { max-width: 100%; overflow-x: auto; border: 1px solid var(--sw-border); border-radius: 8px; }
 .cg-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -193,13 +209,27 @@
 .cg-dialog footer { margin: 0 !important; padding: 14px 20px; border-top: 1px solid var(--sw-border); }
 .cg-detail-fit { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; color: #4a5465; font-size: 13px; }
 .cg-description { margin: 0; color: #3b4456; font-size: 14px; line-height: 1.7; white-space: pre-line; }
+.cg-dialog-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-inline-start: auto; }
+/* "Xem so sánh" opens the comparison here, wide enough for three columns. */
+.cg-compare-dialog { width: min(1040px, calc(100vw - 32px)); }
 
-/* The bottom of the screen: the notice of "Chọn nghề mục tiêu", then the comparison tray. */
+/* The bottom of the screen: the notice of "Chọn làm vị trí nghề nghiệp mục tiêu", then the comparison bar: what to do, three slots, and
+   "Xem so sánh" always in view (advisor 2026-10-31: "nút 'Xem so sánh' xuất hiện thế nào"). */
 .cg-dock { position: sticky; bottom: 12px; z-index: 5; display: grid; gap: 8px; }
-.cg-tray { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 12px 16px;
-  border: 1px solid #dfe3ea; border-radius: 12px; background: #fff; box-shadow: 0 10px 28px rgb(20 24 35 / 14%); font-size: 13px; color: #33415c; }
-.cg-tray-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
-.cg-tray-hint { color: var(--sw-muted); font-size: 12px; }
+.cg-tray { display: grid; grid-template-columns: minmax(220px, 1fr) auto auto; align-items: center; gap: 10px 16px; padding: 12px 16px;
+  border: 1px solid #c9d6ea; border-radius: 12px; background: #fff; box-shadow: 0 10px 28px rgb(20 24 35 / 14%); font-size: 13px; color: #33415c; }
+.cg-tray-text { display: grid; gap: 2px; min-width: 0; line-height: 1.5; }
+.cg-tray-text strong { color: var(--sw-ink); font-size: 14px; }
+.cg-slots { display: flex; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.cg-slots li { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; max-width: 190px; border-radius: 8px; font-size: 13px; }
+.cg-slots li.is-filled { padding: 2px 4px 2px 10px; background: var(--meaning-fine-soft); color: #1c3f7a; font-weight: 700; }
+.cg-slots li.is-filled span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cg-slots li.is-empty { padding: 2px 12px; border: 1px dashed #c3ccda; color: #8a93a3; }
+.cg-page .cg-slots button { flex: none; display: grid; place-items: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: 6px;
+  background: transparent; color: inherit; cursor: pointer; }
+.cg-page .cg-slots button:hover { background: rgb(36 86 166 / 12%); }
+.cg-page .cg-slots svg { width: 12px; height: 12px; }
+.cg-tray-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; }
 /* .cg-dock > raises the specificity over .sr-success/.sr-error (student-records.css), whatever the order the sheets load in. */
 .cg-dock > .cg-toast { display: flex; align-items: flex-start; gap: 10px; margin: 0 !important; border: 1px solid currentColor; border-radius: 12px;
   box-shadow: 0 10px 28px rgb(20 24 35 / 14%); font-size: 13px; }
@@ -212,27 +242,29 @@
 .cg-dock .cg-toast-close:hover { background: rgb(20 24 35 / 8%); }
 .cg-toast-close svg { width: 14px; height: 14px; }
 
-/* "Xem so sánh" scrolls here: keep the heading clear of the sticky top bar (as profile-survey.css does). */
-.cg-compare { scroll-margin-top: calc(var(--sw-header-height, 72px) + 16px); }
 .cg-problem { display: grid; gap: 10px; justify-items: start; }
 .cg-problem p { margin: 0; }
 
 @media (max-width: 1000px) {
   .cg-pairs { grid-template-columns: minmax(0, 1fr); }
-  .cg-list > li { grid-template-columns: minmax(0, 1fr) minmax(160px, auto); }
+  .cg-list > li { grid-template-columns: minmax(0, 1fr) auto; }
   .cg-list > li .cg-actions { grid-column: 1 / -1; }
+  .cg-tray { grid-template-columns: minmax(0, 1fr) auto; }
+  .cg-slots { grid-column: 1 / -1; grid-row: 2; flex-wrap: wrap; }
 }
 
 @media (max-width: 760px) {
   .cg-top { grid-template-columns: minmax(0, 1fr); }
   .cg-top-score { padding: 16px 0 0; border-left: 0; border-top: 1px solid var(--sw-border); }
+  .cg-list > li { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 600px) {
-  .cg-list > li { grid-template-columns: minmax(0, 1fr); }
   .cg-filters { grid-template-columns: minmax(0, 1fr); }
-  .cg-target-line .sw-text-link { margin-left: 0; }
+  .cg-target-line { grid-template-columns: minmax(0, 1fr); }
   .cg-dock { bottom: 8px; }
+  .cg-tray { grid-template-columns: minmax(0, 1fr); }
+  .cg-slots li.is-empty { display: none; }
 }
 
 /* How the điểm phù hợp is counted (comp-calc-v14) and each skill's score in the detail table. */

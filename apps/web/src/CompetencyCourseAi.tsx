@@ -36,7 +36,7 @@ export default function CompetencyCourseAi({ course, close, saved }: Props) {
           <span className="cai-intro-icon" aria-hidden="true"><Icon name="spark" /></span>
           <div>
             <h3>{course.code} · {course.name}</h3>
-            <p>AI đọc tên, mô tả, khối kiến thức và số giờ của môn học cùng các kỹ năng đã có cấu hình năng lực (gồm cả kỹ năng nghề nghiệp chưa có môn học đo), đề xuất những kỹ năng môn học rèn luyện và chia 100% trọng số cho các kỹ năng của môn học{course.skillCount ? `, kể cả ${course.skillCount} kỹ năng đã liên kết` : ""}. Bạn xem, sửa rồi lưu bản nháp hoặc áp dụng.</p>
+            <p>AI đọc tên, mô tả, khối kiến thức và số giờ của môn học cùng các kỹ năng đã có cấu hình năng lực (gồm cả kỹ năng của vị trí nghề nghiệp chưa có môn học đo), đề xuất những kỹ năng môn học rèn luyện và chia 100% trọng số cho các kỹ năng của môn học{course.skillCount ? `, kể cả ${course.skillCount} kỹ năng đã liên kết` : ""}. Bạn xem, sửa rồi lưu bản nháp hoặc áp dụng.</p>
             <p className="cai-muted">AI chỉ nhận dữ liệu chương trình đào tạo, không nhận dữ liệu sinh viên. Kết quả chỉ là gợi ý.</p>
           </div>
         </div>
@@ -113,7 +113,7 @@ function LinksReview({ suggestion, course, busy, setBusy, createError, canCreate
           <label className="cai-check"><input type="checkbox" checked={row.checked || row.alreadyLinked} disabled={row.alreadyLinked || busy !== null} onChange={(event) => update(row.key, { checked: event.target.checked })} /><span>{row.skillName || "kỹ năng mới"}</span></label>
           {row.alreadyLinked && <span className="cai-tag">Đã liên kết</span>}
           {row.isNewSkill && <span className="cai-tag cai-tag-similar">Kỹ năng mới</span>}
-          {!row.hasProfile && !row.isNewSkill && <span className="cai-tag cai-tag-required">Kỹ năng nghề chưa đo</span>}
+          {!row.hasProfile && !row.isNewSkill && <span className="cai-tag cai-tag-required">Kỹ năng của vị trí nghề nghiệp chưa đo</span>}
           <label className="comp-percent cai-percent">Trọng số (%)<input type="number" min="0" max="100" step="any" value={row.percent} disabled={busy !== null || suggestion.stale || (!row.checked && !row.alreadyLinked)}
             onChange={(event) => update(row.key, { percent: event.target.value })} /></label>
           {!row.alreadyLinked && <button type="button" className="am-icon-btn am-delete-icon cai-remove" disabled={busy !== null} aria-label={`Bỏ đề xuất ${row.skillName}`} title="Bỏ đề xuất" onClick={() => setRows((previous) => previous.filter((item) => item.key !== row.key))}><Icon name="trash" /></button>}
@@ -125,7 +125,7 @@ function LinksReview({ suggestion, course, busy, setBusy, createError, canCreate
             <option value="">Chọn nhóm</option>{options.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}
           </select></label>
         </fieldset>}
-        {!row.hasProfile && !row.alreadyLinked && <p className="cai-similar">{row.isNewSkill ? "Khi lưu, kỹ năng mới được thêm vào mục Kỹ năng (Quản lý nghề nghiệp) và được tạo cấu hình năng lực." : "Kỹ năng này đang được nghề nghiệp yêu cầu nhưng chưa có môn học đo. Khi lưu, kỹ năng được tạo cấu hình năng lực."}</p>}
+        {!row.hasProfile && !row.alreadyLinked && <p className="cai-similar">{row.isNewSkill ? "Khi lưu, kỹ năng mới được thêm vào mục Kỹ năng (Quản lý nghề nghiệp) và được tạo cấu hình năng lực." : "Kỹ năng này đang được vị trí nghề nghiệp yêu cầu nhưng chưa có môn học đo. Khi lưu, kỹ năng được tạo cấu hình năng lực."}</p>}
         {row.reason && <p className="cai-reason">Lý do AI đề xuất: {row.reason}</p>}
         {rowErrors.length > 0 && <ul className="cai-row-errors" role="alert">{rowErrors.map((message) => <li key={message}>{message}</li>)}</ul>}
       </li>;

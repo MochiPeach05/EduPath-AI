@@ -11,15 +11,15 @@ import type { AssistantMessage, AssistantThread } from "./assistant-types";
 const now = new Date("2026-10-28T05:00:00.000Z"); // 12:00 in Vietnam
 const thread = (id: string, title: string, updatedAt: string): AssistantThread => ({ id, title, createdAt: updatedAt, updatedAt });
 const threads = [
-  thread("t1", "Mình còn thiếu những kỹ năng nào cho nghề mục tiêu?", "2026-10-28T02:40:00.000Z"),
+  thread("t1", "Mình còn thiếu những kỹ năng nào cho vị trí nghề nghiệp mục tiêu?", "2026-10-28T02:40:00.000Z"),
   thread("t2", "Học kỳ tới mình nên học những môn nào?", "2026-10-27T03:00:00.000Z"),
 ];
 const message = (id: string, role: AssistantMessage["role"], content: string, extra: Partial<AssistantMessage> = {}): AssistantMessage => ({
   id, threadId: "t1", role, content, status: "completed", errorCode: null, sources: [], feedback: null,
   createdAt: "2026-10-28T02:40:00.000Z", completedAt: role === "assistant" ? "2026-10-28T02:40:30.000Z" : null, ...extra,
 });
-const question = message("q1", "user", "Mình còn thiếu những kỹ năng nào cho nghề mục tiêu?");
-const answer = message("a1", "assistant", "So với nghề mục tiêu, bạn còn thiếu [1]:\n- **Kiểm thử phần mềm** [2]\n- Điện toán đám mây, tự học ở https://example.edu/cloud [3]", {
+const question = message("q1", "user", "Mình còn thiếu những kỹ năng nào cho vị trí nghề nghiệp mục tiêu?");
+const answer = message("a1", "assistant", "So với vị trí nghề nghiệp mục tiêu, bạn còn thiếu [1]:\n- **Kiểm thử phần mềm** [2]\n- Điện toán đám mây, tự học ở https://example.edu/cloud [3]", {
   sources: [
     { n: 1, kind: "assessment", title: "Kết quả Đánh giá năng lực", link: "#competency" },
     { n: 2, kind: "skill", title: "Khoảng trống kỹ năng", link: "#skill-gap" },
@@ -68,7 +68,7 @@ describe("Trợ lý AI page", () => {
 
   it("shows a finished answer with its bullets, citations, source chips and feedback", () => {
     const html = conversation([question, answer]);
-    expect(html).toContain('<li class="as-question"><span class="sr-only">Bạn hỏi: </span>Mình còn thiếu những kỹ năng nào cho nghề mục tiêu?</li>');
+    expect(html).toContain('<li class="as-question"><span class="sr-only">Bạn hỏi: </span>Mình còn thiếu những kỹ năng nào cho vị trí nghề nghiệp mục tiêu?</li>');
     expect(html).toContain("<ul><li><strong>Kiểm thử phần mềm</strong> <sup class=\"as-cite\"><button");
     expect(html).toContain('aria-label="Xem nguồn 2: Khoảng trống kỹ năng">2</button>');
     expect(html).toContain('<a href="https://example.edu/cloud" target="_blank" rel="noopener noreferrer">https://example.edu/cloud');

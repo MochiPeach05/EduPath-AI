@@ -61,7 +61,7 @@ describe("CompetencyCourseAi", () => {
       item({ index: 3, skillId: "s-team", skillName: "Làm việc nhóm", alreadyLinked: true, percent: 20 }),
     ] }));
     expect(html).toContain("AI đề xuất thêm 3 kỹ năng và trọng số cho 71ITSE40103");
-    expect(html).toContain("Kỹ năng nghề chưa đo");
+    expect(html).toContain("Kỹ năng của vị trí nghề nghiệp chưa đo");
     expect(html).toContain("Kỹ năng mới");
     expect(html).toContain("Đã liên kết");
     expect(html).toContain("Chọn nhóm năng lực.");

@@ -53,7 +53,7 @@ export function filterWords(query: Filters & { status?: string | undefined; leve
   if (query.specialty) words.push(`chuyên ngành ${SPECIALTIES.find((item) => item.code === query.specialty)?.label ?? query.specialty}`);
   if (query.status) words.push(`tình trạng ${STATUS_LABELS[query.status as keyof typeof STATUS_LABELS] ?? query.status}`);
   if (query.level) words.push(query.level === "risk" ? "mức Nguy cơ" : "mức Cần chú ý");
-  if (query.career) words.push(`nghề ${query.career}`);
+  if (query.career) words.push(`vị trí nghề nghiệp ${query.career}`);
   if (query.q) words.push(`tìm "${query.q}"`);
   return words;
 }

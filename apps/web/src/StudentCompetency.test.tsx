@@ -77,7 +77,7 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
     expect(html).toContain("có thể chưa chính xác");
     expect(html).toContain("Bạn đang có nền tảng lập trình web rất tốt");
     expect(html).toContain("Nên cải thiện");
-    expect(html).not.toContain("Với nghề mục tiêu");
+    expect(html).not.toContain("Với vị trí nghề nghiệp mục tiêu");
     expect(html).not.toContain("Không ánh xạ được");
     // comp-v4: each improvement names its course; codes outside the engine's list are dropped.
     expect(html).toContain("Học phần Cấu trúc dữ liệu và giải thuật (TST102): Đã đạt với điểm 6,4; học cải thiện để nâng kỹ năng giải thuật.");
@@ -166,7 +166,7 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
     expect(row).toContain('<span class="sr-only">Xuất sắc · Độ tin cậy trung bình · độ phủ 50%</span>');
     // The tooltip: score and level first, then the skill, confidence and its evidence courses with their results.
     expect(row).toContain("<strong>91 điểm</strong><span>Xuất sắc</span>");
-    expect(row).toContain("Lập trình web · kỹ năng của nghề mục tiêu");
+    expect(row).toContain("Lập trình web · kỹ năng của vị trí nghề nghiệp mục tiêu");
     expect(row).toContain("<span>Độ tin cậy trung bình · độ phủ 50%</span>");
     expect(row).toContain("<span>Lập trình web (TST104)</span><b>9,1 · A+</b>");
     expect(row).toContain("Bấm để xem học phần minh chứng");
@@ -286,7 +286,7 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
     expect(html).toContain("Chưa có kết quả đánh giá");
     expect(html).toContain("Đánh giá năng lực</button>");
     // All three of the checklist are required (2026-10-21): the intro says so, a missing specialty reads "Chưa chọn".
-    expect(html).toContain("Khi hồ sơ có đủ bảng điểm, nghề mục tiêu và chuyên ngành");
+    expect(html).toContain("Khi hồ sơ có đủ bảng điểm, vị trí nghề nghiệp mục tiêu và chuyên ngành");
     expect(html).toContain("<span>Chưa chọn</span>");
     expect(html).not.toContain("Xóa kết quả đánh giá");
   });
@@ -329,7 +329,7 @@ describe("StudentCompetency — Khoảng trống kỹ năng", () => {
     const html = withAi("completed", "gap");
     const section = html.slice(html.indexOf('id="sgap-history"'), html.indexOf('id="scomp-courses"'));
     expect(section).toContain("Theo dõi mức độ cải thiện kỹ năng");
-    expect(section).toContain("số kỹ năng nghề đạt ngưỡng tăng từ 0 lên 1/5. Tăng nhiều nhất: Lập trình web (+19 điểm).");
+    expect(section).toContain("số kỹ năng của vị trí nghề nghiệp đạt ngưỡng tăng từ 0 lên 1/5. Tăng nhiều nhất: Lập trình web (+19 điểm).");
     expect(section).toContain('<th scope="colgroup" colSpan="2" class="scomp-gap-year">Năm học 2023–2024</th>');
     expect(section).toContain('<span class="sg-status-pass" title="Đạt ngưỡng">91 ✓</span>');
     expect(section).toContain('<span class="sg-status-fail" title="Dưới ngưỡng">75</span>');
@@ -362,7 +362,7 @@ describe("StudentCompetency — Khoảng trống kỹ năng", () => {
     // The điểm phù hợp (56,62 since comp-calc-v15) in points with a pip badge, like "82/100 · Giỏi" (2026-10-22: "đơn vị điểm thôi chứ khỏi %").
     expect(summary).toMatch(/<span class="scomp-kicker">Mức phù hợp<\/span><p class="scomp-big"><strong>56,6<\/strong><span>\/100<\/span><\/p><p class="scomp-score-tags"><span class="scomp-level scomp-level-2 meaning-warn">.*?<\/span>Ít phù hợp<\/span><\/p>/);
     expect(summary).not.toContain("%");
-    expect(summary).not.toContain("Điểm trung bình các kỹ năng nghề có điểm");
+    expect(summary).not.toContain("Điểm trung bình các kỹ năng của vị trí nghề nghiệp có điểm");
     // Five badged levels, the student's marked; "Chưa đủ dữ liệu" is no row of the scale.
     const scale = summary.slice(summary.indexOf("<summary>Thang mức phù hợp</summary>"));
     expect([...scale.matchAll(/<\/span>([^<]+)<\/span>(?:<span class="scomp-career-tag">Mức của bạn<\/span>)?<\/span><span class="scomp-legend-range">([^<]+)<\/span>/g)].map((match) => `${match[1]} ${match[2]}`)).toEqual([
@@ -373,12 +373,12 @@ describe("StudentCompetency — Khoảng trống kỹ năng", () => {
     expect(scale).toContain("Cùng ngưỡng với Thang mức năng lực ở trang Đánh giá năng lực.");
     expect(summary).not.toContain("Khá phù hợp");
     expect(summary.match(/Mức của bạn/g)).toHaveLength(1);
-    expect(summary).toContain("Cách tính điểm phù hợp: trung bình điểm các kỹ năng của nghề, kỹ năng Bắt buộc tính gấp đôi kỹ năng Ưu tiên; kỹ năng chưa có điểm (chưa học, sắp học, cần tự học, chưa đủ dữ liệu) tính 0 điểm.");
+    expect(summary).toContain("Cách tính điểm phù hợp: trung bình điểm các kỹ năng của vị trí nghề nghiệp, kỹ năng Bắt buộc tính gấp đôi kỹ năng Ưu tiên; kỹ năng chưa có điểm (chưa học, sắp học, cần tự học, chưa đủ dữ liệu) tính 0 điểm.");
   });
   it("shows the gap part of the AI text with its courses", () => {
     const html = withAi("completed", "gap");
     expect(html).toContain("Nhận xét từ EduPath AI về khoảng trống kỹ năng");
-    expect(html).toContain("Với nghề mục tiêu");
+    expect(html).toContain("Với vị trí nghề nghiệp mục tiêu");
     expect(html).toContain("Học phần Kiểm thử phần mềm (TST105)");
     expect(html).not.toContain("XXX999");
     expect(html).not.toContain("Bước tiếp theo");
@@ -414,18 +414,18 @@ describe("StudentCompetency — Khoảng trống kỹ năng", () => {
       { ...fixtureResult.skillPlans![1]!, skillKey: "S03", name: "Git", level: "good" as const, levelLabel: "Khá", score: 78, careerSkill: true, purpose: "deepen" as const },
     ];
     const html = render({ assessment: { ...assessment, result: { ...fixtureResult, skillPlans: deepen } }, aiEnabled: true, workerOnline: true }, { view: "gap" });
-    const plans = html.slice(html.indexOf("Nâng kỹ năng của nghề lên mức Giỏi"), html.indexOf(">Kỹ năng cần tự học ngoài chương trình</h3>"));
-    expect(plans).toContain("Kỹ năng nghề Lập trình viên web mà bạn đã đạt ngưỡng nhưng chưa lên mức Giỏi (từ 80)");
+    const plans = html.slice(html.indexOf("Nâng kỹ năng của vị trí nghề nghiệp lên mức Giỏi"), html.indexOf(">Kỹ năng cần tự học ngoài chương trình</h3>"));
+    expect(plans).toContain("Kỹ năng của vị trí nghề nghiệp Lập trình viên web mà bạn đã đạt ngưỡng nhưng chưa lên mức Giỏi (từ 80)");
     expect(plans).toContain("Kỹ năng: Lập trình web");
     expect(plans).toContain("Khá · 76");
-    expect(plans).toContain("Bạn đã học hết học phần đo kỹ năng này trong chương trình; hãy làm một dự án nhỏ gắn với nghề");
+    expect(plans).toContain("Bạn đã học hết học phần đo kỹ năng này trong chương trình; hãy làm một dự án nhỏ gắn với vị trí nghề nghiệp");
     expect(html).not.toContain("Kỹ năng cần củng cố (dưới mức Khá)");
     // Weak skills outside the career (plans of an older result) are never advised on once a career is chosen.
     const older = withAi("completed", "gap");
     expect(older).not.toContain("Kỹ năng cần củng cố (dưới mức Khá)");
     expect(older).not.toContain("Kỹ năng: Sử dụng tiếng Anh");
     // The AI's advice on the career's own skills shows on this page too.
-    expect(older).toContain("Nâng kỹ năng của nghề");
+    expect(older).toContain("Nâng kỹ năng của vị trí nghề nghiệp");
     expect(older).toContain("Học phần Cấu trúc dữ liệu và giải thuật (TST102)");
   });
   it("without a target career, gives each weak skill its courses: retake, take with prerequisites checked, or self-study", () => {
@@ -461,25 +461,25 @@ describe("StudentCompetency — Khoảng trống kỹ năng", () => {
     // With nothing still to come, every skill is reached.
     const done = requirements.filter((req) => req.requirementId !== "q4");
     const all = render({ assessment: { ...assessment, result: { ...assessment.result, career: { ...career, requirements: done } } }, aiEnabled: true, workerOnline: true }, { view: "gap" });
-    expect(all).toContain("✓ Bạn đã đạt mọi kỹ năng của nghề này.");
+    expect(all).toContain("✓ Bạn đã đạt mọi kỹ năng của vị trí nghề nghiệp này.");
   });
   it("says the self-study list is only the skills the program has no course for", () => {
     const assessment = fixtureAssessment("completed");
     const html = render({ assessment: { ...assessment, result: { ...assessment.result, selfStudy: [] } }, aiEnabled: true, workerOnline: true }, { view: "gap" });
-    expect(html).toContain("Chương trình của bạn có học phần cho mọi kỹ năng của nghề này, nên không có kỹ năng nào phải tự học ngoài chương trình.");
+    expect(html).toContain("Chương trình của bạn có học phần cho mọi kỹ năng của vị trí nghề nghiệp này, nên không có kỹ năng nào phải tự học ngoài chương trình.");
     expect(html).not.toContain("Không có kỹ năng nào cần tự học");
   });
   it("does not praise a career that has no requirements yet", () => {
     const assessment = fixtureAssessment("completed");
     const result = { ...assessment.result, career: { ...assessment.result.career!, requirements: [] } };
     const html = render({ assessment: { ...assessment, result }, aiEnabled: true, workerOnline: true }, { view: "gap" });
-    expect(html).toContain("Nghề này chưa có yêu cầu kỹ năng trong danh mục nên chưa so sánh được.");
-    expect(html).not.toContain("Bạn đã đạt mọi kỹ năng có dữ liệu của nghề này.");
+    expect(html).toContain("Vị trí nghề nghiệp này chưa có yêu cầu kỹ năng trong danh mục nên chưa so sánh được.");
+    expect(html).not.toContain("Bạn đã đạt mọi kỹ năng có dữ liệu của vị trí nghề nghiệp này.");
   });
   it("asks for a target career when none is chosen", () => {
     const assessment = fixtureAssessment("completed");
     const html = render({ assessment: { ...assessment, result: { ...assessment.result, career: null } }, aiEnabled: true, workerOnline: true }, { view: "gap" });
-    expect(html).toContain("Bạn chưa chọn nghề mục tiêu");
+    expect(html).toContain("Bạn chưa chọn vị trí nghề nghiệp mục tiêu");
     expect(html).not.toContain('id="scomp-career"');
   });
   it("introduces the page before the first assessment", () => {
@@ -504,8 +504,8 @@ describe("StudentCompetency — audit of 2026-10-25", () => {
     const html = withAi("completed");
     expect(html).toContain('href="#skill-gap">Xem Khoảng trống kỹ năng');
     const none = withResult((result) => ({ ...result, career: null }));
-    expect(none).toContain('<a class="sw-text-link" href="#career">Chọn nghề mục tiêu');
-    expect(withResult((result) => ({ ...result, career: null }), "gap")).toContain('<a class="sw-outline" href="#career">Chọn nghề mục tiêu</a>');
+    expect(none).toContain('<a class="sw-text-link" href="#career">Chọn vị trí nghề nghiệp mục tiêu');
+    expect(withResult((result) => ({ ...result, career: null }), "gap")).toContain('<a class="sw-outline" href="#career">Chọn vị trí nghề nghiệp mục tiêu</a>');
   });
 
   it("explains Chưa học and names a planned evidence course Sắp học after the term being studied", () => {

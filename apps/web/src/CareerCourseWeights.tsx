@@ -71,7 +71,7 @@ export function CareerWeightCell({ state, skillId, skillName }: { state: WeightS
       <div className="cm-dialog-body career-weight-detail">
         <p><strong>{revisionLabel(selected)}</strong></p>
         {courses[0]?.scope && <p>Phạm vi kỹ năng: {courses[0].scope}</p>}
-        <p>Mỗi tỷ lệ là phần của kỹ năng này trong 100% trọng số của học phần tương ứng. Các tỷ lệ dưới đây không cộng thành trọng số của nghề nghiệp.</p>
+        <p>Mỗi tỷ lệ là phần của kỹ năng này trong 100% trọng số của học phần tương ứng. Các tỷ lệ dưới đây không cộng thành trọng số của vị trí nghề nghiệp.</p>
         <CourseWeightTable courses={courses} />
         <div className="cm-actions cm-dialog-actions"><button className="am-outline" type="button" onClick={() => setOpen(false)}><Icon name="close" /> Đóng</button></div>
       </div>

@@ -71,7 +71,7 @@ const full: OverviewResponse = {
       { level: "warn", kind: "elective_short", key: "TC309", text: "Nhóm tự chọn TC309 còn thiếu 3 TC.", strong: ["TC309"], action: null },
     ],
   },
-  suggestions: ["Học kỳ tới mình nên học những môn nào?", "Mình còn thiếu kỹ năng gì cho nghề mục tiêu?"],
+  suggestions: ["Học kỳ tới mình nên học những môn nào?", "Mình còn thiếu kỹ năng gì cho vị trí nghề nghiệp mục tiêu?"],
 };
 const empty: OverviewResponse = {
   generatedAt: "2026-10-30T03:00:00.000Z",
@@ -150,8 +150,8 @@ describe("Tổng quan dashboard", () => {
     const html = dashboard(full);
     const plain = text(html);
     for (const figure of ["GPA tích lũy 2,85 / 4 Khá +0,03 so với học kỳ trước", "Tín chỉ đã đạt 79 / 126 63% chương trình · 9 TC đang học", "Năng lực chung 68,4 / 100 Khá",
-      "Mức phù hợp nghề 74,6 / 100 Phù hợp 4/6 kỹ năng đạt ngưỡng", "Xét tốt nghiệp Chưa đủ Còn 4 điều kiện", "Lộ trình AI Đã có"]) expect(plain).toContain(figure);
-    const order = ["Tiến độ học tập", "Học kỳ này", "Học kỳ tới · theo Lộ trình AI", "Xét tốt nghiệp", "Năng lực và nghề mục tiêu", "Điểm trung bình theo học kỳ", "Hỏi nhanh Trợ lý AI", "Cần chú ý"]
+      "Mức phù hợp với vị trí nghề nghiệp 74,6 / 100 Phù hợp 4/6 kỹ năng đạt ngưỡng", "Xét tốt nghiệp Chưa đủ Còn 4 điều kiện", "Lộ trình AI Đã có"]) expect(plain).toContain(figure);
+    const order = ["Tiến độ học tập", "Học kỳ này", "Học kỳ tới · theo Lộ trình AI", "Xét tốt nghiệp", "Năng lực và vị trí nghề nghiệp mục tiêu", "Điểm trung bình theo học kỳ", "Hỏi nhanh Trợ lý AI", "Cần chú ý"]
       .map((title) => html.indexOf(`>${title}</h2>`));
     expect(order.every((at) => at >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);

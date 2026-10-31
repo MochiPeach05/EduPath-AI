@@ -123,7 +123,7 @@ describe("Tổng quan", () => {
   const html = renderToStaticMarkup(<DashboardView data={dashboard} navigate={noop} />);
 
   it("offers Toàn khóa and Từng khóa on every section", () => {
-    for (const title of ["Số liệu chính", "Điểm trung bình theo học kỳ", "Xếp loại học lực", "Độ thành thạo kỹ năng trung bình", "Độ phù hợp với nghề mục tiêu", "Tiến độ học tập"]) expect(html).toContain(`>${title}</h2>`);
+    for (const title of ["Số liệu chính", "Điểm trung bình theo học kỳ", "Xếp loại học lực", "Độ thành thạo kỹ năng trung bình", "Độ phù hợp với vị trí nghề nghiệp mục tiêu", "Tiến độ học tập"]) expect(html).toContain(`>${title}</h2>`);
     expect(html.match(/aria-pressed="true">Toàn khóa<\/button>/g)).toHaveLength(6);
     expect(html.match(/>Từng khóa<\/button>/g)).toHaveLength(7);
     expect(html).toContain("Bảng điểm trung bình");
@@ -201,7 +201,7 @@ describe("report pages", () => {
       { items: [{ name: "Kỹ sư phần mềm", students: 30, average: 72.4, levels: [{ label: "Phù hợp", students: 10 }, { label: "Trung bình", students: 20 }], topGaps: [{ name: "Docker", students: 12 }] }] },
       { items: [{ name: "Kỹ sư phần mềm", students: 18, average: 74, levels: [], topGaps: [] }] }, { items: [{ name: "Kỹ sư phần mềm", students: 12, average: 70, levels: [], topGaps: [] }] }) };
     const careerHtml = renderToStaticMarkup(<CareersView data={careers} />);
-    expect(careerHtml).toContain("30 sinh viên đã chọn nghề");
+    expect(careerHtml).toContain("30 sinh viên đã chọn vị trí nghề nghiệp");
     expect(careerHtml).toContain("38 sinh viên đã tải bảng điểm nhưng chưa đánh giá năng lực");
     expect(careerHtml).toContain("Docker (12)");
 

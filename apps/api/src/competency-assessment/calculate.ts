@@ -784,7 +784,7 @@ function assess(inputs: AssessmentInputs): Assessment {
   const nameByKey = new Map<string, string>([...work.map((skill) => [skill.key, skill.name] as const), ...careerOnlyOrdered.map(([id, name]) => [skillKeyById.get(id)!, name] as const)]);
   const courseSuggestions = [...merged.values()].map((entry) => ({
     ...entry, priority: round(entry.priority, 4),
-    reason: `${entry.kind === "improve" ? "Học cải thiện cho" : "Hỗ trợ"} ${entry.skills.length} kỹ năng của nghề: ${entry.skills.map((skill) => nameByKey.get(skill.key) ?? skill.key).join(", ")}`,
+    reason: `${entry.kind === "improve" ? "Học cải thiện cho" : "Hỗ trợ"} ${entry.skills.length} kỹ năng của vị trí nghề nghiệp: ${entry.skills.map((skill) => nameByKey.get(skill.key) ?? skill.key).join(", ")}`,
   })).sort((a, b) => b.priority - a.priority || (a.kind === b.kind ? 0 : a.kind === "take" ? -1 : 1) || compareCode(a.code, b.code));
 
   /* ---- 9. training-plan progress (§7.8) ---- */

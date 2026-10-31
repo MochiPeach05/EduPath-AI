@@ -62,7 +62,7 @@ export default function CareersManagement({
         <div className="career-list-heading">
           <div>
             <h2>Vị trí nghề nghiệp{list.data && <span className="am-count">{list.data.items.length}</span>}</h2>
-            <p>Danh mục nghề nghiệp song ngữ để sinh viên lựa chọn định hướng.</p>
+            <p>Danh mục vị trí nghề nghiệp song ngữ để sinh viên lựa chọn định hướng.</p>
           </div>
           {canManage && <button className="am-primary" onClick={add}><Icon name="plus" /> Thêm vị trí nghề nghiệp</button>}
         </div>

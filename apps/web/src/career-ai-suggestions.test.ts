@@ -33,7 +33,7 @@ describe("career AI suggestion helpers", () => {
     expect(failureMessage("worker_timeout")).toContain("chưa xử lý xong");
     expect(failureMessage("something_new")).toBe("Chưa tạo được đề xuất.");
     expect(requestErrorMessage("ai_queue_full")).toBe("Hàng đợi AI đang đầy. Vui lòng thử lại sau ít phút.");
-    expect(requestErrorMessage("requirement_exists", ["SQL", "Python"])).toBe("Các kỹ năng sau đã được liên kết với nghề này: SQL, Python.");
+    expect(requestErrorMessage("requirement_exists", ["SQL", "Python"])).toBe("Các kỹ năng sau đã được liên kết với vị trí nghề nghiệp này: SQL, Python.");
     // The API answers a bad body under /requirements/ai-suggestions with invalid_ai_suggestion.
     expect(requestErrorMessage("invalid_ai_suggestion")).toBe("Thông tin chưa hợp lệ. Kiểm tra kỹ năng, nội dung yêu cầu và mô tả của các dòng đã chọn.");
     expect(requestErrorMessage("insufficient_role")).toBe("Bạn không còn quyền thực hiện thao tác này.");
@@ -89,9 +89,9 @@ describe("career AI suggestion helpers", () => {
     const rows = rowsFromSuggestion(items).map((row) => row.isNewSkill ? { ...row, checked: true, skillName: "sql " } : row);
     expect(validateRows(rows, [], catalog).errors["row-3"]).toEqual(["Kỹ năng này được chọn ở nhiều dòng."]);
     const linked = validateRows(rowsFromSuggestion(items), [{ skillId: "s-py", skillName: "Lập trình Python" }], catalog);
-    expect(linked.errors["row-1"]).toEqual(["Kỹ năng này đã được liên kết với nghề này."]);
+    expect(linked.errors["row-1"]).toEqual(["Kỹ năng này đã được liên kết với vị trí nghề nghiệp này."]);
     const byName = rowsFromSuggestion(items).map((row) => row.isNewSkill ? { ...row, checked: true, skillName: "Ke chuyen bang du lieu" } : row);
-    expect(validateRows(byName, [{ skillId: "old", skillName: "Kể chuyện bằng dữ liệu" }], catalog).errors["row-3"]).toEqual(["Kỹ năng này đã được liên kết với nghề này."]);
+    expect(validateRows(byName, [{ skillId: "old", skillName: "Kể chuyện bằng dữ liệu" }], catalog).errors["row-3"]).toEqual(["Kỹ năng này đã được liên kết với vị trí nghề nghiệp này."]);
   });
   it("sends only ticked rows with their source index", () => {
     const rows = rowsFromSuggestion(items).map((row) => row.isNewSkill ? { ...row, checked: true, title: " Kể chuyện bằng dữ liệu cho lãnh đạo " } : row);

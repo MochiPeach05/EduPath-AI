@@ -77,14 +77,14 @@ const REQUEST_ERRORS: Record<string, string> = {
   suggestion_not_active: "Đề xuất đã xử lý xong hoặc đã được hủy.",
   suggestion_not_completed: "Đề xuất chưa hoàn tất nên chưa lưu được.",
   suggestion_already_applied: "Đề xuất này đã được lưu trước đó. Đóng hộp thoại để xem danh sách liên kết.",
-  requirement_exists: "Có kỹ năng đã được liên kết với nghề này. Hãy kiểm tra lại danh sách.",
+  requirement_exists: "Có kỹ năng đã được liên kết với vị trí nghề nghiệp này. Hãy kiểm tra lại danh sách.",
   // Body errors under /requirements/ai-suggestions come back as invalid_ai_suggestion.
   invalid_ai_suggestion: "Thông tin chưa hợp lệ. Kiểm tra kỹ năng, nội dung yêu cầu và mô tả của các dòng đã chọn.",
   invalid_origin: "Phiên thao tác không hợp lệ. Vui lòng tải lại trang.",
   database_required: "Chưa kết nối được cơ sở dữ liệu. Vui lòng thử lại sau.",
 };
 export function requestErrorMessage(code: string | null | undefined, skills: string[] = []): string {
-  if (code === "requirement_exists" && skills.length) return `Các kỹ năng sau đã được liên kết với nghề này: ${skills.join(", ")}.`;
+  if (code === "requirement_exists" && skills.length) return `Các kỹ năng sau đã được liên kết với vị trí nghề nghiệp này: ${skills.join(", ")}.`;
   return REQUEST_ERRORS[code ?? ""] ?? "Không thể thực hiện thao tác. Vui lòng thử lại.";
 }
 
@@ -209,7 +209,7 @@ export function validateRows(rows: SuggestionRow[], linked: LinkedSkill[], catal
     const key = identity(row);
     if (row.isNewSkill && !row.skillName.trim()) list.push("Nhập tên kỹ năng mới.");
     if (!row.isNewSkill && !row.skillId) list.push("Chọn kỹ năng.");
-    if (key && linkedKeys.has(key)) list.push("Kỹ năng này đã được liên kết với nghề này.");
+    if (key && linkedKeys.has(key)) list.push("Kỹ năng này đã được liên kết với vị trí nghề nghiệp này.");
     else if (key && (counts.get(key) ?? 0) > 1) list.push("Kỹ năng này được chọn ở nhiều dòng.");
     if (!row.title.trim()) list.push("Nhập nội dung yêu cầu.");
     if (list.length) errors[row.key] = list;

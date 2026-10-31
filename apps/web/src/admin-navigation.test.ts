@@ -5,11 +5,11 @@ describe("admin section navigation", () => {
     expect(adminNavigation.map(item => item.path)).toEqual(["/quantri/tong-quan", "/quantri/bao-cao-tien-do", "/quantri/bao-cao-nguy-co", "/quantri/bao-cao-ky-nang", "/quantri/bao-cao-nghe-nghiep", "/quantri/bao-cao-mon-hoc", "/quantri/nhat-ky", "/quantri/tai-khoan", "/quantri/sinh-vien", "/quantri/chuong-trinh", "/quantri/tieu-chuan-tot-nghiep", "/quantri/ke-hoach", "/quantri/linh-vuc-nghe-nghiep", "/quantri/ky-nang", "/quantri/vi-tri-nghe-nghiep", "/quantri/nhom-nang-luc", "/quantri/cau-hinh-nang-luc", "/quantri/cau-hinh-mon-hoc", "/quantri/gui-thong-bao", "/quantri/thong-bao-da-gui"]);
   });
   it("uses short sidebar names, which are also the page title and breadcrumb", () => {
-    expect(adminNavigation.map(item => item.label)).toEqual(["Tổng quan", "Tiến độ", "Nguy cơ", "Kỹ năng thiếu", "Nghề mục tiêu", "Môn đề xuất", "Nhật ký", "Tài khoản", "Sinh viên", "Chương trình", "Tốt nghiệp", "Kế hoạch", "Lĩnh vực", "Kỹ năng", "Nghề nghiệp", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học", "Gửi thông báo", "Đã gửi"]);
+    expect(adminNavigation.map(item => item.label)).toEqual(["Tổng quan", "Tiến độ", "Nguy cơ", "Kỹ năng thiếu", "Vị trí mục tiêu", "Môn đề xuất", "Nhật ký", "Tài khoản", "Sinh viên", "Chương trình", "Tốt nghiệp", "Kế hoạch", "Lĩnh vực", "Kỹ năng", "Vị trí nghề nghiệp", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học", "Gửi thông báo", "Đã gửi"]);
   });
   it("groups the career pages under Quản lý nghề nghiệp, the competency pages under Quản lý năng lực and the announcements under Quản lý thông báo", () => {
     expect(adminSidebar.map(entry => entry.kind === "page" ? entry.page.label : `${entry.label}: ${entry.pages.map(page => page.label).join(", ")}`))
-      .toEqual(["Báo cáo: Tổng quan, Tiến độ, Nguy cơ, Kỹ năng thiếu, Nghề mục tiêu, Môn đề xuất, Nhật ký", "Tài khoản", "Sinh viên", "Chương trình", "Tốt nghiệp", "Kế hoạch", "Quản lý nghề nghiệp: Lĩnh vực, Kỹ năng, Nghề nghiệp",
+      .toEqual(["Báo cáo: Tổng quan, Tiến độ, Nguy cơ, Kỹ năng thiếu, Vị trí mục tiêu, Môn đề xuất, Nhật ký", "Tài khoản", "Sinh viên", "Chương trình", "Tốt nghiệp", "Kế hoạch", "Quản lý nghề nghiệp: Lĩnh vực, Kỹ năng, Vị trí nghề nghiệp",
         "Quản lý năng lực: Nhóm năng lực, Cấu hình năng lực, Cấu hình môn học", "Quản lý thông báo: Gửi thông báo, Đã gửi"]);
     expect(adminGroupOf("/quantri/thong-bao-da-gui")).toBe("announcements");
     expect(adminNavigation.filter(item => item.eyebrow === "QUẢN LÝ NĂNG LỰC").map(item => item.label)).toEqual(["Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học"]);

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Icon } from "./student-icons";
 import {
   CAREER_GUIDANCE_API, COMPARE_MAX, FIT_ORDER_TEXT, FIT_RULE_TEXT, FIT_SCORE_LABEL, FIT_STEP, bestFitsHeading, blockedAction, blockedText, careerPicks, compareRows, filterCareers, fitRuleText,
@@ -16,12 +16,12 @@ import "./career-guidance.css";
 // Read top-down since 2026-10-31 (user: "Giao diện đưa ra quá nhiều thông tin, sinh viên không biết nên đọc gì. Ưu tiên kết
 // quả phù hợp nhất; phân cấp nội dung và giảm các phần phụ không cần thiết"; approved preview
 // https://claude.ai/code/artifact/1207975d-ae6e-444f-97ba-b449810e7555): the best fit with why, then "Theo bảng xếp hạng"
-// and "Theo Khảo sát định hướng" side by side, then every career folded.
+// and the survey matches side by side, then every career folded.
+// One term for a career of the catalog, "vị trí nghề nghiệp" ("vị trí" once named in the same place), since 2026-10-31 (advisor:
+// "Thống nhất thuật ngữ 'Vị trí nghề nghiệp' trên toàn hệ thống").
 
 /** link: the text asks to re-assess, so the notice links to Đánh giá năng lực. */
 type Notice = { tone: "success" | "error"; text: string; link?: boolean } | null;
-
-const reducedMotion = () => Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches);
 
 async function readGuidance(): Promise<GuidanceResponse> {
   const response = await fetch(CAREER_GUIDANCE_API, { credentials: "include", cache: "no-store" });
@@ -37,7 +37,8 @@ async function saveTarget(careerId: string): Promise<void> {
   if (response.ok) return;
   const body = await response.json().catch(() => ({})) as { error?: string };
   if (response.status === 401) window.dispatchEvent(new Event("edupath-session-expired"));
-  throw new Error(body.error === "career_unavailable" ? "Nghề này vừa bị xóa khỏi danh mục. Hãy chọn nghề khác." : "Chưa lưu được nghề mục tiêu. Vui lòng thử lại.");
+  throw new Error(body.error === "career_unavailable" ? "Vị trí này vừa bị xóa khỏi danh mục. Hãy chọn vị trí nghề nghiệp khác."
+    : "Chưa lưu được vị trí nghề nghiệp mục tiêu. Vui lòng thử lại.");
 }
 
 /** The fit in the colour of its word, as on Khoảng trống kỹ năng (fitMeaning: Ít phù hợp amber, never green). */
@@ -73,14 +74,25 @@ function StateChip({ requirement }: { requirement: GuidanceRequirement }) {
   return <span className={`cg-state cg-state-${state.tone}`}><span aria-hidden="true">{state.glyph}</span> {state.text}</span>;
 }
 
-const TargetTag = () => <span className="cg-target-tag"><Icon name="check" />Nghề mục tiêu của bạn</span>;
+/**
+ * The student's target among the vị trí nghề nghiệp. `action` stands in for the "Chọn làm vị trí nghề nghiệp mục tiêu" button, so it takes the
+ * buttons' height and corners and lines up with the button beside it (advisor 2026-10-31: the label "bị lệch").
+ */
+const TargetTag = ({ action = false }: { action?: boolean }) =>
+  <span className={`cg-target-tag${action ? " cg-target-tag-action" : ""}`}><Icon name="check" />Vị trí nghề nghiệp mục tiêu</span>;
 
-/** The compare checkbox of a career in "Tất cả nghề" (at most COMPARE_MAX careers). */
-function CompareToggle({ career, compared, compareFull, onCompare }: { career: GuidanceCareer; compared: boolean; compareFull: boolean; onCompare: () => void }) {
-  return <label className={`cg-compare-toggle${!compared && compareFull ? " is-disabled" : ""}`}>
-    <input type="checkbox" checked={compared} disabled={!compared && compareFull} onChange={onCompare} aria-label={`So sánh ${career.nameVi}`} />
-    <span>So sánh</span>
-  </label>;
+/**
+ * "+ So sánh" (advisor 2026-10-31: "Luồng chọn tối đa 3 vị trí để so sánh khó hiểu; người dùng không biết cần bấm ở đâu"): adds
+ * the vị trí to the comparison bar or takes it out; disabled, with why, once COMPARE_MAX are chosen. `long` words it for the
+ * details, where the button stands alone.
+ */
+function CompareButton({ career, compared, full, long = false, onToggle }: { career: GuidanceCareer; compared: boolean; full: boolean; long?: boolean; onToggle: () => void }) {
+  const blocked = !compared && full;
+  return <button type="button" className={`cg-compare-btn${compared ? " is-on" : ""}`} disabled={blocked} onClick={onToggle}
+    aria-pressed={long ? undefined : compared} aria-label={long ? undefined : `So sánh ${career.nameVi}`}
+    title={blocked ? `Đã chọn đủ ${COMPARE_MAX} vị trí. Bỏ bớt một vị trí trên thanh So sánh để chọn vị trí khác.` : undefined}>
+    <Icon name={compared ? "check" : "plus"} />{long ? (compared ? "Bỏ khỏi so sánh" : "Thêm vào so sánh") : (compared ? "Đã chọn" : "So sánh")}
+  </button>;
 }
 
 /** The fit as a half gauge in the colour of its word (fitMeaning), next to the score of the best fit. */
@@ -99,7 +111,7 @@ function TopPick({ career, scored, saving, onDetail, onChoose }: { career: Guida
   const met = metSkills(career), missing = missingSkills(career);
   return <article className="sw-panel cg-top" aria-labelledby="cg-top-name">
     <div className="cg-top-main">
-      <span className="cg-kicker">Hạng 1 / {scored} nghề</span>
+      <span className="cg-kicker">Hạng 1 / {scored} vị trí</span>
       <h3 id="cg-top-name">{career.nameVi}</h3>
       <p className="cg-en">{career.nameEn} · {career.categoryName}</p>
       <ul className="cg-why">
@@ -108,8 +120,8 @@ function TopPick({ career, scored, saving, onDetail, onChoose }: { career: Guida
         {missing.length > 0 && <li className="cg-why-gap"><i aria-hidden="true">!</i><span><b>Còn thiếu:</b> {nameList(missing)}</span></li>}
       </ul>
       <div className="cg-top-actions">
-        {career.isTarget ? <TargetTag />
-          : <button type="button" className="sw-primary" disabled={saving} onClick={onChoose}><Icon name="check" />{saving ? "Đang lưu…" : "Chọn làm nghề mục tiêu"}</button>}
+        {career.isTarget ? <TargetTag action />
+          : <button type="button" className="sw-primary" disabled={saving} onClick={onChoose}><Icon name="check" />{saving ? "Đang lưu…" : "Chọn làm vị trí nghề nghiệp mục tiêu"}</button>}
         <button type="button" className="sr-secondary" onClick={onDetail} aria-label={`Xem chi tiết ${career.nameVi}`}><Icon name="eye" />Xem chi tiết</button>
       </div>
     </div>
@@ -122,13 +134,13 @@ function TopPick({ career, scored, saving, onDetail, onChoose }: { career: Guida
   </article>;
 }
 
-/** "Đạt 3/5 kỹ năng · thiếu Node.js, Docker": the line of a career in "Theo bảng xếp hạng". */
+/** "Đạt 3/5 kỹ năng · thiếu Node.js, Docker": the line of a vị trí in "Theo bảng xếp hạng". */
 function rankLine(career: GuidanceCareer): string {
   const missing = missingSkills(career);
-  return career.fit ? `Đạt ${career.fit.met}/${career.fit.total} kỹ năng${missing.length ? ` · thiếu ${nameList(missing, 2)}` : ""}` : "Chưa tính được mức phù hợp";
+  return career.fit ? `Đạt ${career.fit.met}/${career.fit.total} kỹ năng${missing.length ? ` · thiếu ${nameList(missing, 2)}` : ""}` : "Chưa tính được điểm phù hợp";
 }
 
-/** One row of "Theo bảng xếp hạng" (its rank) or "Theo Khảo sát định hướng" (a heart); the name opens the details. */
+/** One row of "Theo bảng xếp hạng" (its rank) or of the survey matches (a heart); the name opens the details. */
 function PickRow({ career, marker, line, onDetail }: { career: GuidanceCareer; marker: string; line: string; onDetail: () => void }) {
   return <li>
     <span className="cg-pos" aria-hidden="true">{marker}</span>
@@ -137,10 +149,15 @@ function PickRow({ career, marker, line, onDetail }: { career: GuidanceCareer; m
   </li>;
 }
 
-/** The column titles above the rows of "Theo bảng xếp hạng" and "Theo Khảo sát định hướng" (screen readers get them from FitScore `named`). */
+/** The column titles above the rows of the two short lists (screen readers get them from FitScore `named`). */
 const PickHead = () => <div className="cg-pick-head" aria-hidden="true"><span /><span>Vị trí nghề nghiệp</span><span>{FIT_SCORE_LABEL}</span></div>;
 
-function DetailDialog({ career, saving, onChoose, onClose }: { career: GuidanceCareer; saving: boolean; onChoose: () => void; onClose: () => void }) {
+/** "Căn cứ" and "Thứ tự" under the title of a short list (advisor 2026-10-31: "bổ sung mô tả căn cứ đánh giá và thứ tự sắp xếp"). */
+const PickBasis = ({ basis, order }: { basis: ReactNode; order: ReactNode }) =>
+  <dl className="cg-basis"><div><dt>Căn cứ:</dt><dd>{basis}</dd></div><div><dt>Thứ tự:</dt><dd>{order}</dd></div></dl>;
+
+/** A modal that opens over the page, gives focus back to what opened it, and closes with Esc through onClose. */
+function useModal() {
   const dialog = useRef<HTMLDialogElement>(null);
   useLayoutEffect(() => {
     const opener = document.activeElement as HTMLElement | null;
@@ -148,17 +165,24 @@ function DetailDialog({ career, saving, onChoose, onClose }: { career: GuidanceC
     element?.showModal();
     return () => { element?.close(); if (opener?.isConnected) opener.focus(); };
   }, []);
+  return dialog;
+}
+
+function DetailDialog({ career, saving, compared, compareFull, onCompare, onChoose, onClose }: {
+  career: GuidanceCareer; saving: boolean; compared: boolean; compareFull: boolean; onCompare: () => void; onChoose: () => void; onClose: () => void;
+}) {
+  const dialog = useModal();
   const missing = missingSkills(career);
   return <dialog ref={dialog} className="cg-dialog" aria-labelledby="cg-detail-title" onCancel={(event) => { event.preventDefault(); onClose(); }}>
     <header>
       <div><h2 id="cg-detail-title">{career.nameVi}</h2><p className="cg-en">{career.nameEn} · {career.categoryName}</p></div>
-      <button type="button" className="sr-secondary" onClick={onClose} aria-label="Đóng chi tiết nghề"><Icon name="close" />Đóng</button>
+      <button type="button" className="sr-secondary" onClick={onClose} aria-label="Đóng chi tiết vị trí nghề nghiệp"><Icon name="close" />Đóng</button>
     </header>
     <div className="cg-dialog-body">
       <div className="cg-detail-fit"><span className="cg-score-label">{FIT_SCORE_LABEL}</span><FitScore career={career} /><FitBadge career={career} />{career.fit && <span>{fitSummary(career)}</span>}</div>
       {career.fit && <p className="cg-fit-rule">{fitRuleText(career)}</p>}
       <InterestTags career={career} />
-      <p className="cg-description">{career.description || "Khoa chưa bổ sung mô tả công việc cho nghề này."}</p>
+      <p className="cg-description">{career.description || "Khoa chưa bổ sung mô tả công việc cho vị trí nghề nghiệp này."}</p>
       <h3>Yêu cầu kỹ năng và mức hiện tại của bạn</h3>
       {career.requirements.length ? <div className="cg-table-scroll" tabIndex={0} role="region" aria-label={`Yêu cầu của ${career.nameVi}`}>
         <table className="cg-table">
@@ -175,41 +199,85 @@ function DetailDialog({ career, saving, onChoose, onClose }: { career: GuidanceC
                 : "Chương trình đào tạo chưa có học phần đo kỹ năng này — không phải điểm yếu."}</small>}</td>
           </tr>)}</tbody>
         </table>
-      </div> : <p>Khoa chưa cập nhật yêu cầu kỹ năng cho nghề này.</p>}
-      {missing.length > 0 && <p className="cg-note">Để phù hợp hơn với nghề này, bạn nên bổ sung các kỹ năng: {missing.join(", ")}. {career.isTarget
+      </div> : <p>Khoa chưa cập nhật yêu cầu kỹ năng cho vị trí nghề nghiệp này.</p>}
+      {missing.length > 0 && <p className="cg-note">Để phù hợp hơn với vị trí này, bạn nên bổ sung các kỹ năng: {missing.join(", ")}. {career.isTarget
         ? "Các học phần nên học cho từng kỹ năng có ở trang Khoảng trống kỹ năng."
-        : "Các học phần nên học cho từng kỹ năng sẽ hiện ở trang Khoảng trống kỹ năng sau khi bạn chọn nghề này làm mục tiêu và đánh giá lại."}</p>}
+        : "Các học phần nên học cho từng kỹ năng sẽ hiện ở trang Khoảng trống kỹ năng sau khi bạn chọn vị trí này làm mục tiêu và đánh giá lại."}</p>}
     </div>
     <footer className="sr-actions sr-form-actions">
       <button type="button" className="sr-secondary" onClick={onClose}><Icon name="close" />Đóng</button>
-      {career.isTarget ? <span className="cg-target-tag"><Icon name="check" />Nghề mục tiêu của bạn</span>
-        : <button type="button" className="sw-primary" disabled={saving} onClick={onChoose}><Icon name="check" />{saving ? "Đang lưu…" : "Chọn nghề mục tiêu"}</button>}
+      <div className="cg-dialog-actions">
+        <CompareButton career={career} compared={compared} full={compareFull} long onToggle={onCompare} />
+        {career.isTarget ? <TargetTag action />
+          : <button type="button" className="sw-primary" disabled={saving} onClick={onChoose}><Icon name="check" />{saving ? "Đang lưu…" : "Chọn làm vị trí nghề nghiệp mục tiêu"}</button>}
+      </div>
     </footer>
   </dialog>;
 }
 
-function CompareSection({ careers, onRemove }: { careers: GuidanceCareer[]; onRemove: (id: string) => void }) {
-  const rows = compareRows(careers);
-  return <section className="sw-panel cg-compare" id="cg-compare" aria-labelledby="cg-compare-title" tabIndex={-1}>
-    <div className="cg-section-head"><div><h3 id="cg-compare-title">So sánh nghề nghiệp</h3><p className="sw-muted">Mức phù hợp và từng kỹ năng của các nghề bạn chọn, tính từ năng lực hiện tại của bạn.</p></div></div>
-    <div className="cg-table-scroll" tabIndex={0} role="region" aria-label="Bảng so sánh nghề nghiệp">
-      <table className="cg-table cg-compare-table">
-        <thead><tr><th scope="col">Tiêu chí</th>{careers.map((career) => <th key={career.id} scope="col">
-          <span className="cg-compare-name">{career.nameVi}</span><small>{career.nameEn}</small>
-          <button type="button" className="cg-remove" onClick={() => onRemove(career.id)} aria-label={`Bỏ ${career.nameVi} khỏi so sánh`}><Icon name="close" /></button>
-        </th>)}</tr></thead>
-        <tbody>
-          <tr><th scope="row">Lĩnh vực</th>{careers.map((career) => <td key={career.id}>{career.categoryName}</td>)}</tr>
-          <tr><th scope="row">{FIT_SCORE_LABEL}</th>{careers.map((career) => <td key={career.id}><div className="cg-compare-fit"><FitScore career={career} /><FitBadge career={career} /></div></td>)}</tr>
-          <tr><th scope="row">Kỹ năng đạt</th>{careers.map((career) => <td key={career.id}>{career.fit ? `${career.fit.met}/${career.fit.total}` : "—"}</td>)}</tr>
-          <tr><th scope="row">Hợp với khảo sát của bạn</th>{careers.map((career) => <td key={career.id}>{matchesInterests(career) ? [career.interests.field, ...career.interests.tech].filter(Boolean).join(", ") : "—"}</td>)}</tr>
-          {rows.map((row) => <tr key={row.name}><th scope="row">{row.name}</th>{row.cells.map((cell, index) => <td key={careers[index]!.id}>
-            {cell ? <><StateChip requirement={cell} /><small className="cg-priority">{cell.isRequired ? "Bắt buộc" : "Ưu tiên"}</small></> : <span className="cg-not-needed">Không yêu cầu</span>}
-          </td>)}</tr>)}
-        </tbody>
-      </table>
+/**
+ * The comparison bar at the bottom of the screen (advisor 2026-10-31: "người dùng không biết cần bấm ở đâu, nút 'Xem so sánh' xuất
+ * hiện thế nào. Thiết kế lại hướng dẫn, nút thao tác và điểm đến sau khi nhấn"). It shows while the full list is open or a vị trí is
+ * chosen: what to do, one slot per vị trí (up to COMPARE_MAX), and "Xem so sánh", always in view and enabled from the second vị trí.
+ */
+function CompareBar({ chosen, onRemove, onClear, onOpen }: { chosen: GuidanceCareer[]; onRemove: (id: string) => void; onClear: () => void; onOpen: () => void }) {
+  const lacking = Math.max(0, 2 - chosen.length);
+  return <div className="cg-tray" role="region" aria-label="So sánh vị trí nghề nghiệp">
+    <div className="cg-tray-text">
+      <strong>So sánh vị trí nghề nghiệp</strong>
+      <span role="status">{!chosen.length ? <>Bấm <b>+ So sánh</b> ở 2 hoặc 3 vị trí, rồi bấm <b>Xem so sánh</b>.</>
+        : lacking ? `Đã chọn ${chosen.length}/${COMPARE_MAX}. Chọn thêm ít nhất ${lacking} vị trí để so sánh.`
+          : `Đã chọn ${chosen.length}/${COMPARE_MAX}. Bấm Xem so sánh để mở bảng so sánh.`}</span>
     </div>
-  </section>;
+    <ol className="cg-slots" aria-label="Vị trí đã chọn">{Array.from({ length: COMPARE_MAX }, (_, index) => {
+      const career = chosen[index];
+      return career
+        ? <li key={career.id} className="is-filled"><span title={career.nameVi}>{career.nameVi}</span>
+          <button type="button" onClick={() => onRemove(career.id)} aria-label={`Bỏ ${career.nameVi} khỏi so sánh`}><Icon name="close" /></button></li>
+        : <li key={`empty-${index}`} className="is-empty" aria-hidden="true">Chưa chọn</li>;
+    })}</ol>
+    <div className="cg-tray-actions">
+      {chosen.length > 0 && <button type="button" className="sr-secondary" onClick={onClear}>Bỏ chọn</button>}
+      <button type="button" className="sw-primary" disabled={chosen.length < 2} onClick={onOpen}>Xem so sánh{chosen.length >= 2 ? ` (${chosen.length})` : ""}</button>
+    </div>
+  </div>;
+}
+
+/** Where "Xem so sánh" leads: the comparison over the page; closing it comes back to the list as it was. */
+function CompareDialog({ careers, onRemove, onClear, onClose }: { careers: GuidanceCareer[]; onRemove: (id: string) => void; onClear: () => void; onClose: () => void }) {
+  const dialog = useModal();
+  const rows = compareRows(careers);
+  return <dialog ref={dialog} className="cg-dialog cg-compare-dialog" aria-labelledby="cg-compare-title" onCancel={(event) => { event.preventDefault(); onClose(); }}>
+    <header>
+      <div><h2 id="cg-compare-title">So sánh {careers.length} vị trí nghề nghiệp</h2>
+        <p className="cg-en">{FIT_SCORE_LABEL} và từng kỹ năng của các vị trí bạn chọn, tính từ năng lực hiện tại của bạn.</p></div>
+      <button type="button" className="sr-secondary" onClick={onClose} aria-label="Đóng bảng so sánh"><Icon name="close" />Đóng</button>
+    </header>
+    <div className="cg-dialog-body">
+      {careers.length < 2 ? <p className="cg-empty">Cần ít nhất 2 vị trí để so sánh. Đóng bảng này rồi bấm + So sánh ở vị trí khác.</p>
+        : <div className="cg-table-scroll" tabIndex={0} role="region" aria-label="Bảng so sánh vị trí nghề nghiệp">
+          <table className="cg-table cg-compare-table">
+            <thead><tr><th scope="col">Tiêu chí</th>{careers.map((career) => <th key={career.id} scope="col">
+              <span className="cg-compare-name">{career.nameVi}</span><small>{career.nameEn}</small>
+              <button type="button" className="cg-remove" onClick={() => onRemove(career.id)} aria-label={`Bỏ ${career.nameVi} khỏi so sánh`}><Icon name="close" /></button>
+            </th>)}</tr></thead>
+            <tbody>
+              <tr><th scope="row">Lĩnh vực</th>{careers.map((career) => <td key={career.id}>{career.categoryName}</td>)}</tr>
+              <tr><th scope="row">{FIT_SCORE_LABEL}</th>{careers.map((career) => <td key={career.id}><div className="cg-compare-fit"><FitScore career={career} /><FitBadge career={career} /></div></td>)}</tr>
+              <tr><th scope="row">Kỹ năng đạt</th>{careers.map((career) => <td key={career.id}>{career.fit ? `${career.fit.met}/${career.fit.total}` : "—"}</td>)}</tr>
+              <tr><th scope="row">Hợp với khảo sát của bạn</th>{careers.map((career) => <td key={career.id}>{matchesInterests(career) ? [career.interests.field, ...career.interests.tech].filter(Boolean).join(", ") : "—"}</td>)}</tr>
+              {rows.map((row) => <tr key={row.name}><th scope="row">{row.name}</th>{row.cells.map((cell, index) => <td key={careers[index]!.id}>
+                {cell ? <><StateChip requirement={cell} /><small className="cg-priority">{cell.isRequired ? "Bắt buộc" : "Ưu tiên"}</small></> : <span className="cg-not-needed">Không yêu cầu</span>}
+              </td>)}</tr>)}
+            </tbody>
+          </table>
+        </div>}
+    </div>
+    <footer className="sr-actions sr-form-actions">
+      <button type="button" className="sr-secondary" onClick={onClear}>Bỏ chọn tất cả</button>
+      <button type="button" className="sw-primary" onClick={onClose}>Đóng</button>
+    </footer>
+  </dialog>;
 }
 
 export default function StudentCareerGuidance({ onProfileChanged }: { onProfileChanged: () => void }) {
@@ -219,6 +287,7 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
   const [filters, setFilters] = useState<CareerFilters>({ q: "", field: "" });
   const [allOpen, setAllOpen] = useState(false);
   const [compare, setCompare] = useState<string[]>([]);
+  const [compareOpen, setCompareOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
@@ -231,7 +300,7 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
     return () => { alive = false; };
   }, [revision]);
 
-  // Every career stays one click away; opened at once when no fit can be computed (nothing else to read then).
+  // Every vị trí stays one click away; opened at once when no fit can be computed (nothing else to read then).
   const blocked = data?.blocked ?? null;
   useEffect(() => { if (blocked) setAllOpen(true); }, [blocked]);
 
@@ -253,24 +322,17 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
       careers: value.careers.map((item) => ({ ...item, isTarget: item.id === career.id })),
     }));
     setNotice(fresh?.gapCareerId === career.id
-      ? { tone: "success", text: `Đã chọn ${career.nameVi} làm nghề mục tiêu. Khoảng trống kỹ năng cũng đang hiển thị nghề này.` }
-      : { tone: "success", text: `Đã chọn ${career.nameVi} làm nghề mục tiêu. Bấm Đánh giá lại ở trang Đánh giá năng lực để cập nhật Khoảng trống kỹ năng và Lộ trình học tập theo nghề mới.`, link: true });
+      ? { tone: "success", text: `Đã chọn ${career.nameVi} làm vị trí nghề nghiệp mục tiêu. Khoảng trống kỹ năng cũng đang hiển thị vị trí này.` }
+      : { tone: "success", text: `Đã chọn ${career.nameVi} làm vị trí nghề nghiệp mục tiêu. Bấm Đánh giá lại ở trang Đánh giá năng lực để cập nhật Khoảng trống kỹ năng và Lộ trình học tập theo vị trí mới.`, link: true });
     setSaving(null);
   }, [onProfileChanged]);
 
-  // The chosen row's button gives way to "Nghề mục tiêu của bạn": keyboard focus goes to the notice instead of the page top.
+  // The chosen row's button gives way to "Vị trí nghề nghiệp mục tiêu": keyboard focus goes to the notice instead of the page top.
   useEffect(() => {
     if (notice?.tone !== "success") return;
     const active = document.activeElement;
     if ((!active || active === document.body) && !document.querySelector("dialog[open]")) toast.current?.focus({ preventScroll: true });
   }, [notice]);
-
-  const showCompare = () => {
-    const section = document.getElementById("cg-compare");
-    if (!section) return;
-    section.focus({ preventScroll: true });
-    section.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "start" });
-  };
 
   const careers = data?.careers ?? [];
   const visible = useMemo(() => filterCareers(careers, filters), [careers, filters]);
@@ -280,21 +342,27 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
 
   if (error) return <section className="sw-panel cg-problem" role="alert"><strong>Chưa tải được định hướng nghề nghiệp</strong><p>{error}</p>
     <button type="button" className="sw-outline" onClick={() => setRevision((value) => value + 1)}><Icon name="refresh" />Thử lại</button></section>;
-  if (!data) return <section className="sw-panel" aria-busy="true"><p role="status">Đang tính mức phù hợp với từng nghề…</p></section>;
+  if (!data) return <section className="sw-panel" aria-busy="true"><p role="status">Đang tính điểm phù hợp với từng vị trí nghề nghiệp…</p></section>;
 
   const picks = careerPicks(careers);
   const shownPicks = [picks.top, ...picks.ranked].filter((career): career is GuidanceCareer => Boolean(career));
   // The order of the ranking; before any career reaches Trung bình, also why the scores are low.
   const heading = bestFitsHeading(shownPicks);
   const interests = surveyInterests(careers);
+  const surveyed = data.surveyDone && (interests.field !== null || interests.tech.length > 0);
   // After "Xóa kết quả đánh giá" the note of the page says it all.
   const targetNote = target && data.blocked !== "assessment_withdrawn" ? gapNote(data, target) : null;
   const unblock = data.blocked ? blockedAction(data.blocked) : null;
   const openDetail = (career: GuidanceCareer) => () => setDetailId(career.id);
+  const toggle = (career: GuidanceCareer) => () => setCompare((value) => toggleCompare(value, career.id));
+  const removeCompared = (id: string) => setCompare((value) => value.filter((item) => item !== id));
+  const compareFull = compare.length >= COMPARE_MAX;
+  const showBar = allOpen || compared.length > 0;
 
   return <div className="cg-page">
     <section className="cg-intro" aria-label="Về trang này">
-      <p className="cg-lead">Nghề hợp với bạn nhất trong {careers.length} nghề của Khoa, tính từ điểm kỹ năng trong bảng điểm và Khảo sát định hướng. Kết quả chỉ để tham khảo.</p>
+      <p className="cg-lead">Trang này đánh giá mức phù hợp của bạn với {careers.length} vị trí nghề nghiệp của Khoa, từ điểm kỹ năng trong bảng điểm và Khảo sát
+        định hướng. Kết quả chỉ để tham khảo.</p>
       <p className="cg-define"><b>{FIT_SCORE_LABEL}</b> (gọi tắt là điểm phù hợp, thang 100) là con số cạnh mỗi vị trí nghề nghiệp: cho biết kỹ năng
         hiện tại của bạn đáp ứng yêu cầu kỹ năng của vị trí đó đến đâu. Điểm càng cao, vị trí càng phù hợp với bạn.</p>
       <details className="cg-how"><summary>Cách tính điểm phù hợp kỹ năng</summary>
@@ -303,54 +371,61 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
     </section>
 
     <div className="cg-target-line">
-      <span className="cg-target-label">Nghề mục tiêu hiện tại:</span>
-      {target ? <><strong>{target.nameVi}</strong><span className="cg-target-score"><span className="cg-target-label">{FIT_SCORE_LABEL}:</span><FitScore career={target} /></span><FitBadge career={target} />
-        <a className="sw-text-link" href="#skill-gap">Xem Khoảng trống kỹ năng <Icon name="arrow" /></a></>
-        : data.deletedTargetName ? <span>{data.deletedTargetName}: nghề này không còn trong danh mục; bạn nên chọn nghề khác.</span>
-          : <span>chưa chọn. Hãy chọn một nghề bên dưới.</span>}
+      <div className="cg-target-main">
+        <span className="cg-target-label">Vị trí nghề nghiệp mục tiêu:</span>
+        {target ? <><strong>{target.nameVi}</strong>
+          <span className="cg-target-score"><span className="cg-target-label">{FIT_SCORE_LABEL}:</span><span className="cg-keep"><FitScore career={target} /><FitBadge career={target} /></span></span></>
+          : data.deletedTargetName ? <span>{data.deletedTargetName}: vị trí này không còn trong danh mục; bạn nên chọn vị trí nghề nghiệp khác.</span>
+            : <span>chưa chọn. Hãy chọn một vị trí bên dưới.</span>}
+      </div>
+      {target && <a className="sw-text-link" href="#skill-gap">Xem Khoảng trống kỹ năng <Icon name="arrow" /></a>}
       {targetNote && <p className="cg-note cg-note-warn">{targetNote}</p>}
     </div>
 
-    {data.blocked && <div className="cg-note cg-note-warn" role="note"><p>{blockedText(data.blocked)} Bạn vẫn xem được danh mục nghề và yêu cầu của từng nghề.</p>
+    {data.blocked && <div className="cg-note cg-note-warn" role="note"><p>{blockedText(data.blocked)} Bạn vẫn xem được danh mục vị trí nghề nghiệp và yêu cầu của từng vị trí.</p>
       {unblock && <a className="sw-outline" href={unblock.href}>{unblock.label}</a>}</div>}
 
     {!data.blocked && <>
       <div className="cg-level"><h3 id="cg-best-title">{heading.title}</h3><p>{heading.note}</p></div>
       {picks.top ? <TopPick career={picks.top} scored={picks.scored} saving={saving === picks.top.id} onDetail={openDetail(picks.top)} onChoose={() => void choose(picks.top!)} />
-        : <p className="cg-empty">Chưa đủ dữ liệu để gợi ý: các kỹ năng của nghề chưa được đo bằng học phần bạn đã học.</p>}
+        : <p className="cg-empty">Chưa đủ dữ liệu để gợi ý: các kỹ năng của các vị trí nghề nghiệp chưa được đo bằng học phần bạn đã học.</p>}
 
-      <div className="cg-level"><h3>Các lựa chọn khác</h3><p>Không lặp lại nghề đã hiện ở trên.</p></div>
+      <div className="cg-level"><h3>Các lựa chọn khác</h3><p>Không lặp lại vị trí đã hiện ở trên.</p></div>
       <div className="cg-pairs">
         <section className="sw-panel cg-pick" aria-labelledby="cg-rank-title">
-          <header><h4 id="cg-rank-title">Theo bảng xếp hạng</h4><p>Các nghề tiếp theo, sắp xếp theo điểm phù hợp giảm dần.</p></header>
+          <header><h4 id="cg-rank-title">Theo bảng xếp hạng</h4>
+            <PickBasis basis={<>{FIT_SCORE_LABEL.toLowerCase()} của bạn với từng vị trí nghề nghiệp.</>} order="điểm phù hợp giảm dần, tiếp sau vị trí đứng đầu ở trên." /></header>
           {picks.ranked.length ? <><PickHead /><ol className="cg-pick-list">{picks.ranked.map((career, index) =>
             <PickRow key={career.id} career={career} marker={String(index + 2)} line={rankLine(career)} onDetail={openDetail(career)} />)}</ol></>
-            : <p className="cg-empty">Chưa có nghề nào khác tính được mức phù hợp.</p>}
+            : <p className="cg-empty">Chưa có vị trí nghề nghiệp nào khác tính được điểm phù hợp.</p>}
         </section>
         <section className="sw-panel cg-pick cg-pick-like" aria-labelledby="cg-liked-title">
-          <header><h4 id="cg-liked-title">Theo Khảo sát định hướng</h4>
-            <p>{data.surveyDone && (interests.field || interests.tech.length > 0)
-              ? <>Khớp {interests.field && <>lĩnh vực <b>{interests.field}</b></>}{interests.field && interests.tech.length > 0 && " và "}{interests.tech.length > 0 && <>thế mạnh <b>{interests.tech.join(", ")}</b></>} bạn chọn.</>
-              : "Theo lĩnh vực quan tâm và thế mạnh bạn chọn trong Khảo sát định hướng."}</p></header>
+          <header><h4 id="cg-liked-title">Vị trí nghề nghiệp phù hợp với sở thích và thế mạnh</h4>
+            <PickBasis
+              basis={surveyed ? <>{interests.field && <>lĩnh vực quan tâm nhất <b>{interests.field}</b></>}{interests.field && interests.tech.length > 0 && " và "}
+                {interests.tech.length > 0 && <>thế mạnh <b>{interests.tech.join(", ")}</b></>} bạn chọn trong Khảo sát định hướng.</>
+                : "lĩnh vực quan tâm nhất và thế mạnh (công nghệ thành thạo) bạn chọn trong Khảo sát định hướng."}
+              order="vị trí khớp lĩnh vực quan tâm xếp trước, rồi vị trí khớp nhiều thế mạnh hơn, rồi điểm phù hợp cao hơn." /></header>
           {!data.surveyDone ? <div className="cg-empty"><p>Bạn chưa hoàn thành Khảo sát định hướng nên chưa có gợi ý theo sở thích và thế mạnh.</p><a className="sw-outline" href="#profile">Làm khảo sát ở Hồ sơ và bảng điểm</a></div>
             : picks.liked.length ? <><PickHead /><ol className="cg-pick-list">{picks.liked.map((career) =>
               <PickRow key={career.id} career={career} marker="♥" line={interestReason(career)} onDetail={openDetail(career)} />)}</ol></>
-              : <p className="cg-empty">Không còn nghề nào khác khớp lĩnh vực và thế mạnh bạn chọn. Bạn có thể xem tất cả nghề bên dưới.</p>}
+              : <p className="cg-empty">Không còn vị trí nghề nghiệp nào khác khớp lĩnh vực và thế mạnh bạn chọn. Bạn có thể xem tất cả vị trí bên dưới.</p>}
         </section>
       </div>
     </>}
 
+    {/* "Tất cả nghề nghiệp" named by what it does (advisor 2026-10-31: "đánh giá/tính điểm phù hợp đối với tất cả vị trí nghề nghiệp"). */}
     <details className="sw-panel cg-all" open={allOpen} onToggle={(event) => setAllOpen(event.currentTarget.open)}>
-      <summary><span className="cg-all-title" id="cg-all-title">Tất cả {careers.length} nghề</span>
-        <span className="cg-all-hint">{data.blocked ? "Sắp xếp theo tên" : FIT_ORDER_TEXT} · tìm theo tên, lọc theo lĩnh vực, chọn tối đa {COMPARE_MAX} nghề để so sánh</span></summary>
+      <summary><span className="cg-all-title" id="cg-all-title">Đánh giá điểm phù hợp kỹ năng với tất cả {careers.length} vị trí nghề nghiệp</span>
+        <span className="cg-all-hint">{data.blocked ? "Sắp xếp theo tên" : FIT_ORDER_TEXT} · tìm theo tên, lọc theo lĩnh vực, bấm + So sánh ở 2–3 vị trí để so sánh</span></summary>
       <div className="cg-all-body">
         <div className="cg-filters">
-          <label>Tìm nghề<input value={filters.q} maxLength={100} placeholder="Tên tiếng Việt hoặc tiếng Anh…" onChange={(event) => setFilters({ ...filters, q: event.target.value })} /></label>
+          <label>Tìm vị trí nghề nghiệp<input value={filters.q} maxLength={100} placeholder="Tên tiếng Việt hoặc tiếng Anh…" onChange={(event) => setFilters({ ...filters, q: event.target.value })} /></label>
           <label>Lĩnh vực<select value={filters.field} onChange={(event) => setFilters({ ...filters, field: event.target.value })}>
             <option value="">Tất cả lĩnh vực</option>{data.fields.map((field) => <option key={field.code} value={field.code}>{field.name}</option>)}
           </select></label>
         </div>
-        <p className="sw-muted" role="status">{visible.length} nghề</p>
+        <p className="sw-muted" role="status">{visible.length} vị trí nghề nghiệp</p>
         <ul className="cg-list">{visible.map((career) => <li key={career.id} className={career.isTarget ? "is-target" : undefined}>
           <div className="cg-row-main">
             <h4>{career.nameVi}</h4><p className="cg-en">{career.nameEn} · {career.categoryName}</p>
@@ -359,34 +434,28 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
           </div>
           <div className="cg-row-fit"><span className="cg-score-label">{FIT_SCORE_LABEL}</span><FitScore career={career} /><FitBadge career={career} /></div>
           <div className="cg-actions">
-            <CompareToggle career={career} compared={compare.includes(career.id)} compareFull={compare.length >= COMPARE_MAX} onCompare={() => setCompare((value) => toggleCompare(value, career.id))} />
+            <CompareButton career={career} compared={compare.includes(career.id)} full={compareFull} onToggle={toggle(career)} />
             <button type="button" className="sr-secondary" onClick={openDetail(career)} aria-label={`Xem chi tiết ${career.nameVi}`}><Icon name="eye" />Chi tiết</button>
           </div>
         </li>)}</ul>
-        {!visible.length && <p className="cg-empty">Không có nghề phù hợp với bộ lọc.</p>}
+        {!visible.length && <p className="cg-empty">Không có vị trí nghề nghiệp nào khớp bộ lọc.</p>}
       </div>
     </details>
 
-    {compared.length >= 2 && <CompareSection careers={compared} onRemove={(id) => setCompare((value) => value.filter((item) => item !== id))} />}
-
-    {/* Kept at the bottom of the screen: the notice of "Chọn nghề mục tiêu" (a row far down the list would put it out of view
-        at the top of the page) and the comparison tray. */}
-    {(notice || compared.length > 0) && <div className="cg-dock">
+    {/* Kept at the bottom of the screen: the notice of "Chọn làm vị trí nghề nghiệp mục tiêu" (a row far down the list would put it out of view
+        at the top of the page) and the comparison bar. */}
+    {(notice || showBar) && <div className="cg-dock">
       {notice && <div ref={toast} tabIndex={-1} className={`cg-toast ${notice.tone === "success" ? "sr-success" : "sr-error"}`}
         role={notice.tone === "success" ? "status" : "alert"}>
         <p>{notice.text}{notice.link && <> <a href="#competency">Mở Đánh giá năng lực</a></>}</p>
         <button type="button" className="cg-toast-close" onClick={() => setNotice(null)} aria-label="Đóng thông báo"><Icon name="close" /></button>
       </div>}
-      {compared.length > 0 && <div className="cg-tray" role="region" aria-label="Nghề đang chọn để so sánh">
-        <span>Đã chọn {compared.length}/{COMPARE_MAX} nghề: {compared.map((career) => career.nameVi).join(", ")}</span>
-        <div className="cg-tray-actions">
-          {compared.length >= 2 && <a className="sw-primary" href="#career" onClick={(event) => { event.preventDefault(); showCompare(); }}>Xem so sánh</a>}
-          {compared.length < 2 && <span className="cg-tray-hint">Chọn thêm ít nhất 1 nghề để so sánh</span>}
-          <button type="button" className="sr-secondary" onClick={() => setCompare([])}>Bỏ chọn</button>
-        </div>
-      </div>}
+      {showBar && <CompareBar chosen={compared} onRemove={removeCompared} onClear={() => setCompare([])} onOpen={() => setCompareOpen(true)} />}
     </div>}
 
-    {detail && <DetailDialog career={detail} saving={saving === detail.id} onChoose={() => void choose(detail)} onClose={() => setDetailId(null)} />}
+    {detail && <DetailDialog career={detail} saving={saving === detail.id} compared={compare.includes(detail.id)} compareFull={compareFull}
+      onCompare={toggle(detail)} onChoose={() => void choose(detail)} onClose={() => setDetailId(null)} />}
+    {compareOpen && <CompareDialog careers={compared} onRemove={removeCompared}
+      onClear={() => { setCompare([]); setCompareOpen(false); }} onClose={() => setCompareOpen(false)} />}
   </div>;
 }

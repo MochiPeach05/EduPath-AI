@@ -177,7 +177,7 @@ describe("buildRoadmapInput", () => {
     expect(input.user).toContain("Học kỳ được nhắc tới (chỉ dùng các học kỳ này): HK1 2025–2026 (đang học), HK2 2025–2026, HK3 2025–2026, HK1 2026–2027, HK2 2026–2027 (học kỳ của lộ trình).");
     expect(input.user).toContain("Trễ so với kế hoạch (đăng ký sớm nhất ở HK2 2026–2027):\n- 71ITIS30203 Hệ quản trị cơ sở dữ liệu (3 TC)\n");
     expect(input.user).toContain("(trễ so với kế hoạch; đăng ký sớm nhất ở HK2 2026–2027): còn thiếu 3 TC");
-    expect(input.user).toContain("[5. HỌC PHẦN CẦN CẢI THIỆN] (đăng ký học lại, học cải thiện sớm nhất ở HK2 2026–2027)");
+    expect(input.user).toContain("[5. HỌC PHẦN CẦN HỌC LẠI VÀ HỌC CẢI THIỆN] (đăng ký học lại, học cải thiện sớm nhất ở HK2 2026–2027)");
     expect(input.user).not.toContain("HK3 2024–2025");
     expect(input.user).not.toMatch(/học kỳ \d năm học|HK\d{3}/);
     expect(input.keys).toMatchObject({ terms: ["HK251", "HK252", "HK253", "HK261", "HK262"], internshipDone: false, windowTerm: "HK262" });
@@ -188,7 +188,7 @@ describe("buildRoadmapInput", () => {
     expect(input.user).toMatch(/Để tốt nghiệp đúng hạn cần trung bình khoảng \d+ TC mỗi học kỳ còn lại\./);
     expect(input.user).toContain("- [S01] C#/C++ (Ưu tiên): CTĐT chưa có học phần đo kỹ năng này — cần tự học");
     for (const section of ["[1. HỒ SƠ]", "[2. THỜI GIAN CỦA LỘ TRÌNH]", "[3. HỌC PHẦN ĐANG HỌC]", "[4. HỌC PHẦN CẦN HỌC THEO KẾ HOẠCH ĐÀO TẠO]",
-      "[5. HỌC PHẦN CẦN CẢI THIỆN]", "[6. KỸ NĂNG NGHỀ CẦN BỔ SUNG]", "[7. TIẾN ĐỘ XÉT TỐT NGHIỆP]"]) expect(input.user).toContain(section);
+      "[5. HỌC PHẦN CẦN HỌC LẠI VÀ HỌC CẢI THIỆN]", "[6. KỸ NĂNG NGHỀ CẦN BỔ SUNG]", "[7. TIẾN ĐỘ XÉT TỐT NGHIỆP]"]) expect(input.user).toContain(section);
     // No identity, interest or file field ever reaches the model.
     expect(`${input.system}\n${input.user}`).not.toMatch(/@|mã số sinh viên:|Họ tên|Lớp:|sở thích:|\.pdf/i);
     expect(input.user.length).toBeLessThan(8000);
@@ -221,7 +221,7 @@ describe("buildRoadmapInput", () => {
     const schema = empty.schema as { properties: Record<string, { minItems: number; maxItems: number; items: { properties: Record<string, { enum?: string[] }> } }> };
     expect(schema.properties.improve!.items.properties.code!.enum).toEqual([NONE]);
     expect([schema.properties.improve!.maxItems, schema.properties.skills!.minItems, schema.properties.skills!.maxItems]).toEqual([0, 0, 0]);
-    expect(empty.user).toContain("[5. HỌC PHẦN CẦN CẢI THIỆN]\nKhông có.");
+    expect(empty.user).toContain("[5. HỌC PHẦN CẦN HỌC LẠI VÀ HỌC CẢI THIỆN]\nKhông có.");
   });
 });
 
@@ -341,10 +341,23 @@ describe("holding the output to the data (roadmap-v9)", () => {
     expect(checked.issues[2]).toContain("(Docker)");
   });
 
+  it("drops a sentence that calls a course not passed 'cải thiện' without 'học lại' (roadmap-v11, user 2026-10-31)", () => {
+    expect([...context.retakes]).toEqual([["71ITBS10203", "Cơ sở lập trình"]]);
+    const checked = validateRoadmapOutput(output({
+      advice: ["Hãy cải thiện môn Cơ sở lập trình ngay trong HK2 2026–2027.", "Đăng ký học lại Cơ sở lập trình để cải thiện điểm trung bình."],
+      improve: [{ code: "71ITBS10203", advice: "Cần cải thiện môn này sớm. Ôn lại kiến thức nền." }, { code: "71ITSE30603", advice: "Học cải thiện để nâng điểm." }],
+    }), context);
+    if (!checked.ok) throw new Error("expected ok");
+    expect(checked.output.advice).toEqual(["Đăng ký học lại Cơ sở lập trình để cải thiện điểm trung bình."]);
+    expect(checked.output.improve).toEqual([{ code: "71ITBS10203", advice: "Ôn lại kiến thức nền." }, { code: "71ITSE30603", advice: "Học cải thiện để nâng điểm." }]);
+    expect(checked.issues).toHaveLength(2);
+    for (const issue of checked.issues) expect(issue).toMatch(/^Gọi học phần chưa đạt Cơ sở lập trình là "cải thiện"; học phần chưa đạt phải gọi là "học lại"/);
+  });
+
   it("writes a plain summary when every sentence of the model's had to go", () => {
     const checked = validateRoadmapOutput(output({ summary: "Bạn có nền tảng vững chắc về React. Hãy học lại ở HK1 2024–2025." }), context);
     if (!checked.ok) throw new Error("expected ok");
-    expect(checked.output.summary).toBe("Lộ trình HK2 2026–2027 gồm các học phần cần học, học phần cần cải thiện và kỹ năng nên bổ sung bên dưới. Hãy trao đổi với cố vấn học tập trước khi đăng ký học phần.");
+    expect(checked.output.summary).toBe("Lộ trình HK2 2026–2027 gồm các học phần cần học, học phần cần học lại hoặc học cải thiện và kỹ năng nên bổ sung bên dưới. Hãy trao đổi với cố vấn học tập trước khi đăng ký học phần.");
     expect(checked.issues).toHaveLength(2);
   });
 
