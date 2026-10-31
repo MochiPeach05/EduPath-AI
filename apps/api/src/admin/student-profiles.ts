@@ -8,6 +8,7 @@ import type { SpecialtyCode } from "../competency-assessment/types.js";
 import { CONSENT_VALID_SINCE } from "../student/consent.js";
 import { withoutSettledReviews, type TranscriptData } from "../student/transcript-parser.js";
 import { byGivenName, byOrder, byText, orderBy, sortSchema, type OwnOrder, type SortDirection } from "./table-sort.js";
+import { auditActorOf, recordAudit } from "./audit/record.js";
 
 export interface StudentProfileQuery {
   q: string; page: number; pageSize: number;
@@ -118,13 +119,21 @@ export class PostgresStudentProfileRepository implements StudentProfileRepositor
     if (!result.rows[0]) throw new AccountError("student_not_found", 404);
     return result.rows[0];
   }
-  async transcript(_actor: AuthenticatedUser, id: string): Promise<AdminTranscriptView> {
-    const result = await this.pool.query<{ updatedAt: string | null; data: TranscriptData | null }>(`SELECT t.updated_at AS "updatedAt", t.parsed_data AS data
-      FROM users u LEFT JOIN student_transcripts t ON t.user_id = u.id WHERE u.id = $1 AND ${studentScope}`, [id]);
+  async transcript(actor: AuthenticatedUser, id: string): Promise<AdminTranscriptView> {
+    const result = await this.pool.query<{ updatedAt: string | null; data: TranscriptData | null; studentCode: string | null; name: string | null }>(`SELECT
+      t.updated_at AS "updatedAt", t.parsed_data AS data, p.student_code AS "studentCode", COALESCE(p.full_name, u.display_name) AS name
+      FROM users u LEFT JOIN student_transcripts t ON t.user_id = u.id LEFT JOIN student_profiles p ON p.user_id = u.id
+      WHERE u.id = $1 AND ${studentScope}`, [id]);
     const row = result.rows[0];
     if (!row) throw new AccountError("student_not_found", 404);
+    if (!row.updatedAt || !row.data) return { transcript: null };
+    // Nhật ký thao tác (AD-REPORT-12, 2026-10-31): every look at a student's grades is logged, who looked at whose
+    // transcript, never the grades. The write never fails the read.
+    const student = [row.studentCode, row.name].filter(Boolean).join(" ") || id;
+    await recordAudit(this.pool, auditActorOf(actor), { kind: "access", action: "Xem bảng điểm", summary: `Xem bảng điểm của sinh viên ${student}`,
+      targetType: "student", targetId: id, method: "GET", path: `/api/admin/students/${id}/transcript` });
     // Marks that are not errors are left out, as on the student page (withoutSettledReviews).
-    return { transcript: row.updatedAt && row.data ? { updatedAt: row.updatedAt, data: withoutSettledReviews(row.data) } : null };
+    return { transcript: { updatedAt: row.updatedAt, data: withoutSettledReviews(row.data) } };
   }
 }
 

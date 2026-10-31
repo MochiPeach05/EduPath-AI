@@ -145,4 +145,21 @@ describe("student transcript for admins", () => {
     const missing = vi.fn().mockResolvedValueOnce({ rows: [] });
     await expect(new PostgresStudentProfileRepository({ query: missing } as unknown as DatabasePool).transcript(actor, id)).rejects.toMatchObject({ code: "student_not_found" });
   });
+  // Nhật ký thao tác (AD-REPORT-12, 2026-10-31): who looked at whose grades, never the grades.
+  it("logs each view of a stored transcript, with the student's MSSV and name only", async () => {
+    const viewer = { userId: "3f2b8c1e-5d4a-4b6f-9a1e-2c3d4e5f6a7b", tenantId: "tenant", name: "Lê Quốc Bảo", role: "lecturer" } as AuthenticatedUser;
+    const query = vi.fn().mockResolvedValueOnce({ rows: [{ updatedAt: "2026-10-25T10:00:00.000Z", data: data(), studentCode: "2374802019917", name: "Nguyễn Minh Khoa" }] })
+      .mockResolvedValueOnce({ rowCount: 1, rows: [] });
+    await new PostgresStudentProfileRepository({ query } as unknown as DatabasePool).transcript(viewer, id);
+    expect(query).toHaveBeenCalledTimes(2);
+    const [sql, values] = query.mock.calls[1]!;
+    expect(String(sql)).toContain("INSERT INTO ad_audit_log");
+    expect(values).toEqual(expect.arrayContaining([viewer.userId, "Lê Quốc Bảo", "lecturer", "access", "Xem bảng điểm",
+      "Xem bảng điểm của sinh viên 2374802019917 Nguyễn Minh Khoa", "student", id, "GET", `/api/admin/students/${id}/transcript`]));
+    expect(JSON.stringify(values)).not.toContain("Nhập môn mạng");
+    // Nothing to log when no transcript is stored.
+    const none = vi.fn().mockResolvedValueOnce({ rows: [{ updatedAt: null, data: null, studentCode: "2374802019917", name: "Nguyễn Minh Khoa" }] });
+    await new PostgresStudentProfileRepository({ query: none } as unknown as DatabasePool).transcript(viewer, id);
+    expect(none).toHaveBeenCalledTimes(1);
+  });
 });
