@@ -14,10 +14,10 @@ function render(pathname: string) {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("admin workspace", () => {
-  it("shows the short names in the sidebar, in order, with the three groups and their pages", () => {
+  it("shows the short names in the sidebar, in order, with the groups and their pages", () => {
     const nav = render("/quantri/tai-khoan").match(/<nav id="admin-navigation".*?<\/nav>/s)?.[0] ?? "";
     expect([...nav.matchAll(/<span>([^<]*)<\/span>/g)].map(match => match[1])).toEqual(
-      ["Tài khoản", "Sinh viên", "Chương trình", "Tốt nghiệp", "Kế hoạch", "Quản lý nghề nghiệp", "Lĩnh vực", "Kỹ năng", "Nghề nghiệp",
+      ["Báo cáo", "Tổng quan", "Tiến độ", "Nguy cơ", "Kỹ năng thiếu", "Nghề mục tiêu", "Môn đề xuất", "Nhật ký", "Tài khoản", "Sinh viên", "Chương trình", "Tốt nghiệp", "Kế hoạch", "Quản lý nghề nghiệp", "Lĩnh vực", "Kỹ năng", "Nghề nghiệp",
         "Quản lý năng lực", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học", "Quản lý thông báo", "Gửi thông báo", "Đã gửi"]);
   });
 
@@ -65,9 +65,10 @@ describe("admin workspace", () => {
     const careerPages = ["/quantri/linh-vuc-nghe-nghiep", "/quantri/ky-nang", "/quantri/vi-tri-nghe-nghiep"];
     const competencyPages = ["/quantri/nhom-nang-luc", "/quantri/cau-hinh-nang-luc", "/quantri/cau-hinh-mon-hoc"];
     const announcementPages = ["/quantri/gui-thong-bao", "/quantri/thong-bao-da-gui"];
+    const reportPages = adminNavigation.filter(item => item.eyebrow === "BÁO CÁO").map(item => item.path as string);
     for (const { path } of adminNavigation) {
       expect(openGroups(render(path))).toEqual(careerPages.includes(path) ? ["careers"] : competencyPages.includes(path) ? ["competencies"]
-        : announcementPages.includes(path) ? ["announcements"] : []);
+        : announcementPages.includes(path) ? ["announcements"] : reportPages.includes(path) ? ["reports"] : []);
     }
     // An old link or a trailing slash opens the group of the page it shows.
     expect(openGroups(render("/quantri/danh-gia-nang-luc"))).toEqual(["competencies"]);
@@ -78,5 +79,14 @@ describe("admin workspace", () => {
     const html = render(path);
     expect(html).toContain(`>${label}</h1>`);
     expect(html).toContain(`Quản trị / <strong>${label}</strong>`);
+  });
+
+  it("opens on Tổng quan of the reports, with the shared filter bar (2026-10-31)", () => {
+    const html = render("/quantri");
+    expect(html).toContain(">Tổng quan</h1>");
+    expect(html).toContain(">BÁO CÁO</p>");
+    expect(html).toContain('aria-label="Tìm kiếm và lọc dữ liệu báo cáo"');
+    expect(html).toContain('<a href="/quantri/tong-quan" aria-current="page">');
+    expect(render("/quantri/nhat-ky")).toContain("Tìm trong nhật ký");
   });
 });

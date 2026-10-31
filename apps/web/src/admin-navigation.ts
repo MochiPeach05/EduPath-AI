@@ -1,4 +1,13 @@
 export const adminNavigation = [
+  // AD-REPORT-01…12 (2026-10-31): the reports come first and Tổng quan is the page /quantri opens.
+  { path: "/quantri/tong-quan", label: "Tổng quan", eyebrow: "BÁO CÁO", icon: "home" },
+  { path: "/quantri/bao-cao-tien-do", label: "Tiến độ", eyebrow: "BÁO CÁO", icon: "route" },
+  { path: "/quantri/bao-cao-nguy-co", label: "Nguy cơ", eyebrow: "BÁO CÁO", icon: "bell" },
+  // "Kỹ năng" and "Nghề nghiệp" already name the catalog pages of Quản lý nghề nghiệp, so the reports say what they count.
+  { path: "/quantri/bao-cao-ky-nang", label: "Kỹ năng thiếu", eyebrow: "BÁO CÁO", icon: "spark" },
+  { path: "/quantri/bao-cao-nghe-nghiep", label: "Nghề mục tiêu", eyebrow: "BÁO CÁO", icon: "target" },
+  { path: "/quantri/bao-cao-mon-hoc", label: "Môn đề xuất", eyebrow: "BÁO CÁO", icon: "book" },
+  { path: "/quantri/nhat-ky", label: "Nhật ký", eyebrow: "BÁO CÁO", icon: "clock" },
   { path: "/quantri/tai-khoan", label: "Tài khoản", eyebrow: "QUẢN LÝ TÀI KHOẢN", icon: "users" },
   { path: "/quantri/sinh-vien", label: "Sinh viên", eyebrow: "QUẢN LÝ HỒ SƠ SINH VIÊN", icon: "profile" },
   { path: "/quantri/chuong-trinh", label: "Chương trình", eyebrow: "QUẢN LÝ ĐÀO TẠO", icon: "book" },
@@ -21,6 +30,7 @@ export type AdminPage = (typeof adminNavigation)[number];
  * first page is in adminNavigation; its pages keep their own paths, titles and breadcrumbs.
  */
 const adminNavigationGroups = [
+  { id: "reports", label: "Báo cáo", icon: "chart", paths: ["/quantri/tong-quan", "/quantri/bao-cao-tien-do", "/quantri/bao-cao-nguy-co", "/quantri/bao-cao-ky-nang", "/quantri/bao-cao-nghe-nghiep", "/quantri/bao-cao-mon-hoc", "/quantri/nhat-ky"] },
   // In the order they are set up: fields, then the shared skills, then the careers that use both.
   { id: "careers", label: "Quản lý nghề nghiệp", icon: "briefcase", paths: ["/quantri/linh-vuc-nghe-nghiep", "/quantri/ky-nang", "/quantri/vi-tri-nghe-nghiep"] },
   { id: "competencies", label: "Quản lý năng lực", icon: "target", paths: ["/quantri/nhom-nang-luc", "/quantri/cau-hinh-nang-luc", "/quantri/cau-hinh-mon-hoc"] },
@@ -29,6 +39,10 @@ const adminNavigationGroups = [
 
 /** Pages that moved: an old link opens the page that replaced it. */
 const adminPathAliases: Record<string, string> = {
+  // The account pages kept their old links when Tổng quan became the page /quantri opens (2026-10-31).
+  "/quantri/tao-tai-khoan": "/quantri/tai-khoan",
+  "/quantri/lich-su-dang-nhap": "/quantri/tai-khoan",
+  "/quantri/bao-cao": "/quantri/tong-quan",
   // "Năng lực" (one page with three tabs) became the three pages of "Quản lý năng lực" on 2026-10-17.
   "/quantri/danh-gia-nang-luc": "/quantri/nhom-nang-luc",
   // "Cấu hình học phần" (per CTĐT revision) became "Cấu hình môn học" (shared courses) on 2026-10-20.
@@ -54,7 +68,7 @@ export function resolveAdminPage(pathname: string) {
   return adminNavigation.find((item) => item.path === target) ?? adminNavigation[0];
 }
 
-/** The group holding a page ("careers", "competencies" or "announcements"), or null for a page outside the groups. */
+/** The group holding a page ("reports", "careers", "competencies" or "announcements"), or null for a page outside the groups. */
 export function adminGroupOf(pathname: string) {
   const { path } = resolveAdminPage(pathname);
   const group = adminSidebar.find((entry) => entry.kind === "group" && entry.pages.some((page) => page.path === path));
@@ -68,3 +82,23 @@ export function adminGroupOf(pathname: string) {
 export function toggleAdminGroup(openGroup: string | null, clicked: string) {
   return openGroup === clicked ? null : clicked;
 }
+
+/** The report pages (AD-REPORT-01…12) and the view each one shows. */
+export const REPORT_PATHS = {
+  dashboard: "/quantri/tong-quan",
+  progress: "/quantri/bao-cao-tien-do",
+  risk: "/quantri/bao-cao-nguy-co",
+  skills: "/quantri/bao-cao-ky-nang",
+  careers: "/quantri/bao-cao-nghe-nghiep",
+  courses: "/quantri/bao-cao-mon-hoc",
+  audit: "/quantri/nhat-ky",
+} as const;
+export type ReportView = keyof typeof REPORT_PATHS;
+
+/** The report a path shows ("dashboard" for /quantri/tong-quan), or null for any other page. */
+export function reportViewOf(path: string): ReportView | null {
+  const clean = path.split("?")[0]!.replace(/\/+$/, "");
+  const entry = (Object.entries(REPORT_PATHS) as [ReportView, string][]).find(([, reportPath]) => reportPath === clean);
+  return entry ? entry[0] : null;
+}
+export const isReportPath = (path: string) => reportViewOf(path) !== null;

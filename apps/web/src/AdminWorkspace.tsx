@@ -13,7 +13,8 @@ import CurriculaManagement from "./CurriculaManagement";
 import PlansManagement from "./PlansManagement";
 import CompetencyManagement from "./CompetencyManagement";
 import AnnouncementsManagement from "./AnnouncementsManagement";
-import { adminGroupOf, adminSidebar, resolveAdminPage, toggleAdminGroup, type AdminPage } from "./admin-navigation";
+import AdminReports from "./AdminReports";
+import { adminGroupOf, adminSidebar, isReportPath, resolveAdminPage, toggleAdminGroup, type AdminPage } from "./admin-navigation";
 import "./admin-workspace.css";
 
 export default function AdminWorkspace({ user, busy, error, onLogout }: { user: AuthenticatedUser; busy: boolean; error: string | null; onLogout: () => void }) {
@@ -35,8 +36,10 @@ export default function AdminWorkspace({ user, busy, error, onLogout }: { user: 
   }, []);
   const current = resolveAdminPage(path);
   const navigate = (nextPath: string) => {
-    if (window.location.pathname !== nextPath) window.history.pushState({}, "", nextPath);
-    setPath(nextPath);
+    // The report pages share their filters through the address bar: going from one report to another keeps them.
+    const target = isReportPath(nextPath) && isReportPath(window.location.pathname) && !nextPath.includes("?") ? `${nextPath}${window.location.search}` : nextPath;
+    if (`${window.location.pathname}${window.location.search}` !== target) window.history.pushState({}, "", target);
+    setPath(target.split("?")[0]!);
     setMenuOpen(false);
   };
   useEffect(() => {
@@ -73,7 +76,7 @@ export default function AdminWorkspace({ user, busy, error, onLogout }: { user: 
     <div className="am-main"><header ref={header} className="am-topbar"><div><button className="am-menu-toggle am-outline" aria-controls="admin-navigation" aria-expanded={menuOpen} aria-label="Đóng mở danh mục quản trị" onClick={() => setMenuOpen(!menuOpen)}><Icon name="menu" /></button><span>Quản trị / <strong>{current.label}</strong></span></div><div className="am-topbar-user"><span className="am-avatar" aria-hidden="true">{user.name.slice(0, 1)}</span><div><strong>{user.name}</strong><small>{roleLabels[user.role]}</small></div><button className="am-logout" disabled={busy} onClick={onLogout}><Icon name="exit" /><span>{busy ? "Đang đăng xuất…" : "Đăng xuất"}</span></button></div></header>
       <main className="am-content"><div className="am-page-heading"><div><p className="admin-eyebrow">{current.eyebrow}</p><h1 ref={heading} tabIndex={-1}>{current.label}</h1></div></div>
         {error && <p className="admin-error" role="alert">{error}</p>}
-        {current.path === "/quantri/gui-thong-bao" ? <AnnouncementsManagement key="compose" canManage={canManage} section="compose" navigate={navigate} /> : current.path === "/quantri/thong-bao-da-gui" ? <AnnouncementsManagement key="sent" canManage={canManage} section="sent" navigate={navigate} /> : current.path === "/quantri/nhom-nang-luc" ? <CompetencyManagement key="groups" canManage={canManage} section="groups" /> : current.path === "/quantri/cau-hinh-nang-luc" ? <CompetencyManagement key="profiles" canManage={canManage} section="profiles" /> : current.path === "/quantri/cau-hinh-mon-hoc" ? <CompetencyManagement key="courses" canManage={canManage} section="courses" /> : current.path === "/quantri/ky-nang" ? <CareerSkillsManagement canManage={canManage} /> : current.path === "/quantri/linh-vuc-nghe-nghiep" ? <CareerFieldsManagement canManage={canManage} /> : current.path === "/quantri/vi-tri-nghe-nghiep" ? <CareersManagement canManage={canManage} /> : current.path === "/quantri/tieu-chuan-tot-nghiep" ? <GraduationManagement canManage={canManage} /> : current.path === "/quantri/ke-hoach" ? <PlansManagement canManage={canManage} /> : current.path === "/quantri/chuong-trinh" ? <CurriculaManagement canManage={canManage} /> : current.path === "/quantri/sinh-vien" ? <StudentProfiles /> : <AccountsManagement actorId={user.userId} canManage={canManage} canAssignRoles={user.role === "admin"} />}
+        {isReportPath(current.path) ? <AdminReports path={current.path} navigate={navigate} /> : current.path === "/quantri/gui-thong-bao" ? <AnnouncementsManagement key="compose" canManage={canManage} section="compose" navigate={navigate} /> : current.path === "/quantri/thong-bao-da-gui" ? <AnnouncementsManagement key="sent" canManage={canManage} section="sent" navigate={navigate} /> : current.path === "/quantri/nhom-nang-luc" ? <CompetencyManagement key="groups" canManage={canManage} section="groups" /> : current.path === "/quantri/cau-hinh-nang-luc" ? <CompetencyManagement key="profiles" canManage={canManage} section="profiles" /> : current.path === "/quantri/cau-hinh-mon-hoc" ? <CompetencyManagement key="courses" canManage={canManage} section="courses" /> : current.path === "/quantri/ky-nang" ? <CareerSkillsManagement canManage={canManage} /> : current.path === "/quantri/linh-vuc-nghe-nghiep" ? <CareerFieldsManagement canManage={canManage} /> : current.path === "/quantri/vi-tri-nghe-nghiep" ? <CareersManagement canManage={canManage} /> : current.path === "/quantri/tieu-chuan-tot-nghiep" ? <GraduationManagement canManage={canManage} /> : current.path === "/quantri/ke-hoach" ? <PlansManagement canManage={canManage} /> : current.path === "/quantri/chuong-trinh" ? <CurriculaManagement canManage={canManage} /> : current.path === "/quantri/sinh-vien" ? <StudentProfiles /> : <AccountsManagement actorId={user.userId} canManage={canManage} canAssignRoles={user.role === "admin"} />}
       </main><footer className="am-footer">© 2026 · Bản quyền thuộc Khoa Công nghệ Thông tin · Trường Đại học Văn Lang.</footer>
     </div>
   </div>;

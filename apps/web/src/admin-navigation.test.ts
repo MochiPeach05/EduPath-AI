@@ -1,15 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { adminGroupOf, adminNavigation, adminSidebar, resolveAdminPage } from "./admin-navigation";
+import { REPORT_PATHS, adminGroupOf, adminNavigation, adminSidebar, isReportPath, reportViewOf, resolveAdminPage } from "./admin-navigation";
 describe("admin section navigation", () => {
   it("has account, student-profile, curriculum, graduation, training-plan, career, career-field, skill and competency sections", () => {
-    expect(adminNavigation.map(item => item.path)).toEqual(["/quantri/tai-khoan", "/quantri/sinh-vien", "/quantri/chuong-trinh", "/quantri/tieu-chuan-tot-nghiep", "/quantri/ke-hoach", "/quantri/linh-vuc-nghe-nghiep", "/quantri/ky-nang", "/quantri/vi-tri-nghe-nghiep", "/quantri/nhom-nang-luc", "/quantri/cau-hinh-nang-luc", "/quantri/cau-hinh-mon-hoc", "/quantri/gui-thong-bao", "/quantri/thong-bao-da-gui"]);
+    expect(adminNavigation.map(item => item.path)).toEqual(["/quantri/tong-quan", "/quantri/bao-cao-tien-do", "/quantri/bao-cao-nguy-co", "/quantri/bao-cao-ky-nang", "/quantri/bao-cao-nghe-nghiep", "/quantri/bao-cao-mon-hoc", "/quantri/nhat-ky", "/quantri/tai-khoan", "/quantri/sinh-vien", "/quantri/chuong-trinh", "/quantri/tieu-chuan-tot-nghiep", "/quantri/ke-hoach", "/quantri/linh-vuc-nghe-nghiep", "/quantri/ky-nang", "/quantri/vi-tri-nghe-nghiep", "/quantri/nhom-nang-luc", "/quantri/cau-hinh-nang-luc", "/quantri/cau-hinh-mon-hoc", "/quantri/gui-thong-bao", "/quantri/thong-bao-da-gui"]);
   });
   it("uses short sidebar names, which are also the page title and breadcrumb", () => {
-    expect(adminNavigation.map(item => item.label)).toEqual(["Tài khoản", "Sinh viên", "Chương trình", "Tốt nghiệp", "Kế hoạch", "Lĩnh vực", "Kỹ năng", "Nghề nghiệp", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học", "Gửi thông báo", "Đã gửi"]);
+    expect(adminNavigation.map(item => item.label)).toEqual(["Tổng quan", "Tiến độ", "Nguy cơ", "Kỹ năng thiếu", "Nghề mục tiêu", "Môn đề xuất", "Nhật ký", "Tài khoản", "Sinh viên", "Chương trình", "Tốt nghiệp", "Kế hoạch", "Lĩnh vực", "Kỹ năng", "Nghề nghiệp", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học", "Gửi thông báo", "Đã gửi"]);
   });
   it("groups the career pages under Quản lý nghề nghiệp, the competency pages under Quản lý năng lực and the announcements under Quản lý thông báo", () => {
     expect(adminSidebar.map(entry => entry.kind === "page" ? entry.page.label : `${entry.label}: ${entry.pages.map(page => page.label).join(", ")}`))
-      .toEqual(["Tài khoản", "Sinh viên", "Chương trình", "Tốt nghiệp", "Kế hoạch", "Quản lý nghề nghiệp: Lĩnh vực, Kỹ năng, Nghề nghiệp",
+      .toEqual(["Báo cáo: Tổng quan, Tiến độ, Nguy cơ, Kỹ năng thiếu, Nghề mục tiêu, Môn đề xuất, Nhật ký", "Tài khoản", "Sinh viên", "Chương trình", "Tốt nghiệp", "Kế hoạch", "Quản lý nghề nghiệp: Lĩnh vực, Kỹ năng, Nghề nghiệp",
         "Quản lý năng lực: Nhóm năng lực, Cấu hình năng lực, Cấu hình môn học", "Quản lý thông báo: Gửi thông báo, Đã gửi"]);
     expect(adminGroupOf("/quantri/thong-bao-da-gui")).toBe("announcements");
     expect(adminNavigation.filter(item => item.eyebrow === "QUẢN LÝ NĂNG LỰC").map(item => item.label)).toEqual(["Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học"]);
@@ -41,7 +41,18 @@ describe("admin section navigation", () => {
   it.each(["/quantri/danh-gia-nang-luc", "/quantri/danh-gia-nang-luc/"])("opens Nhóm năng lực for the old Năng lực link %s", path => {
     expect(resolveAdminPage(path)).toMatchObject({ path: "/quantri/nhom-nang-luc", label: "Nhóm năng lực" });
   });
-  it.each(["/quantri", "/quantri/tao-tai-khoan", "/quantri/lich-su-dang-nhap", "/quantri/unknown"])("preserves account fallback for %s", path => {
+  it.each(["/quantri/tao-tai-khoan", "/quantri/lich-su-dang-nhap"])("keeps the old account link %s on Tài khoản", path => {
     expect(resolveAdminPage(path).path).toBe("/quantri/tai-khoan");
+  });
+  it.each(["/quantri", "/quantri/", "/quantri/bao-cao", "/quantri/unknown"])("opens Tổng quan of the reports for %s (2026-10-31)", path => {
+    expect(resolveAdminPage(path)).toMatchObject({ path: "/quantri/tong-quan", label: "Tổng quan", eyebrow: "BÁO CÁO" });
+    expect(adminGroupOf(path)).toBe("reports");
+  });
+  it("knows which pages are reports and which report each one shows", () => {
+    expect(Object.values(REPORT_PATHS).every((path) => adminNavigation.some((item) => item.path === path && item.eyebrow === "BÁO CÁO"))).toBe(true);
+    expect(reportViewOf("/quantri/bao-cao-ky-nang/")).toBe("skills");
+    expect(reportViewOf("/quantri/nhat-ky?q=xuat")).toBe("audit");
+    expect(isReportPath("/quantri/ky-nang")).toBe(false);
+    expect(isReportPath("/quantri/tong-quan")).toBe(true);
   });
 });
