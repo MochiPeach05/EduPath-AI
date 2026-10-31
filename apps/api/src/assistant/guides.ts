@@ -135,8 +135,9 @@ export function portalGuides(): PortalGuide[] {
     ]],
     ["dinh-huong-nghe-nghiep", "Định hướng nghề nghiệp", "#career", [
       "Trang Định hướng nghề nghiệp tính mức phù hợp của bạn với mọi nghề trong danh mục, cùng cách tính với Khoảng trống kỹ năng và từ bảng điểm hiện tại; trang này không dùng AI.",
-      "- Gợi ý: Phù hợp nhất với năng lực hiện tại (các nghề có điểm phù hợp cao nhất) và Hợp với sở thích và thế mạnh của bạn (nghề khớp Lĩnh vực quan tâm nhất và Thế mạnh của bạn trong Khảo sát định hướng).",
-      "- Tất cả nghề nghiệp: lọc theo lĩnh vực, tìm theo tên, sắp xếp Phù hợp nhất trước hoặc Tên A–Z.",
+      "- Vị trí nghề nghiệp phù hợp với năng lực hiện tại: sắp xếp theo điểm phù hợp giảm dần; nghề đứng đầu kèm lý do và nút Chọn làm nghề mục tiêu.",
+      "- Các lựa chọn khác: Theo bảng xếp hạng (các nghề tiếp theo, sắp xếp theo điểm phù hợp giảm dần) và Theo Khảo sát định hướng (nghề khớp Lĩnh vực quan tâm nhất và Thế mạnh của bạn trong khảo sát).",
+      "- Tất cả nghề: sắp xếp theo điểm phù hợp giảm dần; lọc theo lĩnh vực, tìm theo tên.",
       "- Xem chi tiết: mô tả nghề, từng yêu cầu kỹ năng (Bắt buộc hoặc Ưu tiên) và mức hiện tại của bạn ở từng yêu cầu.",
       "- So sánh: đánh dấu So sánh ở 2 đến 3 nghề để xem bảng so sánh từng kỹ năng.",
       "- Chọn nghề mục tiêu: mục tiêu được lưu ngay; sau đó bấm Đánh giá lại ở trang Đánh giá năng lực để Khoảng trống kỹ năng và Lộ trình học tập theo nghề mới.",
@@ -144,7 +145,7 @@ export function portalGuides(): PortalGuide[] {
     ]],
     ["khao-sat-dinh-huong", "Khảo sát định hướng", "#profile", [
       "Khảo sát định hướng nằm trong Hồ sơ và bảng điểm và là một trong 4 mục hồ sơ bắt buộc. Bảng điểm cho biết bạn đã học gì; khảo sát cho EduPath AI biết bạn muốn đi đâu, để Lộ trình AI đưa ra lời khuyên sát với bạn.",
-      "Khảo sát gồm 10 câu chọn một đáp án (mục tiêu sau tốt nghiệp, môi trường học tập và làm việc, nơi làm việc mong muốn, đi làm thêm, kinh nghiệm dẫn dắt nhóm, dự án ngoài môn học, thực tập, thời gian tự học mỗi tuần, tiếng Anh chuyên ngành, lĩnh vực quan tâm nhất), câu Thế mạnh của bạn (chọn 1 đến 5 công nghệ bạn thành thạo và viết mô tả ngắn), câu Sở trường (chọn 1 đến 5 mục) và câu Có/Không về thành tích; chọn Có thì liệt kê, mỗi dòng một thành tích.",
+      "Khảo sát gồm 10 câu chọn một đáp án (mục tiêu sau tốt nghiệp, môi trường học tập và làm việc, nơi làm việc mong muốn, đi làm thêm, kinh nghiệm dẫn dắt nhóm, dự án ngoài môn học, thực tập, thời gian tự học mỗi tuần, tiếng Anh chuyên ngành, lĩnh vực quan tâm nhất), câu Thế mạnh của bạn (chọn 1 đến 5 công nghệ bạn thành thạo), câu Sở trường (chọn 1 đến 5 mục) và câu Có/Không về thành tích; chọn Có thì liệt kê, mỗi dòng một thành tích.",
       "Khi lưu, bạn tích ô đồng ý để EduPath AI dùng câu trả lời cho việc tư vấn lộ trình học tập bằng AI. Bạn cần hoàn thành khảo sát trước khi tạo Lộ trình AI.",
       "Sửa câu trả lời bằng Chỉnh sửa khảo sát. Xóa câu trả lời xóa toàn bộ câu trả lời, thành tích và các lộ trình AI đã tạo. Đừng ghi họ tên, mã số sinh viên, số điện thoại hay thông tin của người khác vào ô thành tích.",
     ]],

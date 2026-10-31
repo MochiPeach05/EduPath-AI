@@ -98,8 +98,8 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
     question: "Tôi chọn mục tiêu nghề nghiệp ở đâu?",
     answer: ["Nơi thuận tiện nhất là trang Định hướng nghề nghiệp: EduPath AI tính mức phù hợp của bạn với từng nghề trong danh mục (cùng cách với trang Khoảng trống kỹ năng, từ bảng điểm hiện tại), gợi ý các nghề hợp với năng lực và với Khảo sát định hướng của bạn, và cho phép so sánh tối đa 3 nghề. Bạn cũng có thể chọn trong phần Thông tin cá nhân ở Hồ sơ và bảng điểm."],
     steps: [
-      "Mở Định hướng nghề nghiệp, xem hai danh sách gợi ý: Phù hợp nhất với năng lực hiện tại và Hợp với sở thích và thế mạnh của bạn.",
-      "Ở Tất cả nghề nghiệp, lọc theo lĩnh vực hoặc tìm theo tên; đánh dấu So sánh ở tối đa 3 nghề để xem bảng so sánh từng kỹ năng.",
+      "Mở Định hướng nghề nghiệp, xem Vị trí nghề nghiệp phù hợp với năng lực hiện tại (sắp xếp theo điểm phù hợp giảm dần), rồi Các lựa chọn khác theo bảng xếp hạng và theo Khảo sát định hướng.",
+      "Mở Tất cả nghề để lọc theo lĩnh vực hoặc tìm theo tên; đánh dấu So sánh ở tối đa 3 nghề để xem bảng so sánh từng kỹ năng.",
       "Bấm Xem chi tiết để đọc mô tả, các yêu cầu kỹ năng và mức hiện tại của bạn ở từng yêu cầu.",
       "Bấm Chọn nghề mục tiêu. Mục tiêu được lưu ngay; sau đó bấm Đánh giá lại ở trang Đánh giá năng lực để Khoảng trống kỹ năng và Lộ trình học tập được cập nhật theo nghề mới."
     ],

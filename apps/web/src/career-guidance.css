@@ -59,36 +59,6 @@
 .cg-gauge-warn { stroke: #d4901f; }
 .cg-gauge-bad { stroke: var(--meaning-bad); }
 
-/* "Nghề mục tiêu của bạn" (2026-10-31, user: "Cần làm nổi bật và giải thích kết quả của nghề đang chọn"): the TopPick layout with
-   the brand accent, then why it ranks below the best fit and the actions across the card. */
-.cg-page .cg-target { border-color: #e7bcc8; box-shadow: inset 4px 0 0 var(--sw-red); }
-.cg-target > .cg-versus, .cg-target > .cg-top-actions, .cg-target > .cg-target-foot, .cg-target > .cg-note { grid-column: 1 / -1; }
-.cg-target > .cg-top-actions { margin-top: 0; }
-.cg-verdict { margin: 10px 0 0; color: #3b4456; font-size: 15px; line-height: 1.65; }
-.cg-verdict b { display: inline-block; padding: 0 8px; border-radius: 999px; line-height: 1.6; }
-.cg-keep { white-space: nowrap; }
-.cg-target .cg-interest { margin-top: 6px; }
-.cg-page .cg-why-title { margin-top: 16px; font-size: 14px; }
-.cg-target .cg-why { margin-top: 8px; }
-.cg-why-below i { background: var(--meaning-bad-soft); color: var(--meaning-bad); }
-.cg-why-zero i { background: #eef0f4; color: #4b5563; }
-.cg-versus { display: grid; gap: 12px; padding-top: 16px; border-top: 1px solid var(--sw-border); }
-.cg-bars { display: grid; gap: 12px; }
-.cg-bar-row { display: grid; grid-template-columns: minmax(160px, 240px) minmax(0, 1fr) 170px; gap: 8px 16px; align-items: center; }
-.cg-bar-name { display: grid; gap: 2px; min-width: 0; }
-.cg-bar-name b { color: var(--sw-ink); font-size: 14px; }
-.cg-bar-name small { color: var(--sw-muted); font-size: 12px; }
-.cg-bar-track { display: block; height: 10px; border-radius: 5px; background: #e9ecf1; overflow: hidden; }
-.cg-bar-track i { display: block; height: 100%; border-radius: 5px; background: var(--meaning-none); }
-.cg-bar-track .cg-bar-good { background: var(--meaning-good); }
-.cg-bar-track .cg-bar-fine { background: var(--meaning-fine); }
-.cg-bar-track .cg-bar-warn { background: #d4901f; }
-.cg-bar-track .cg-bar-bad { background: var(--meaning-bad); }
-.cg-bar-value { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
-.cg-bar-value .cg-score { font-size: 18px; }
-.cg-reasons { display: grid; gap: 6px; margin: 0; padding-left: 20px; color: #3b4456; font-size: 14px; line-height: 1.6; }
-.cg-target-foot { margin: 0; color: var(--sw-muted); font-size: 13px; line-height: 1.6; }
-
 /* Level 2: "Theo bảng xếp hạng" and "Theo Khảo sát định hướng" side by side */
 .cg-pairs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
 .cg-pick { display: grid; gap: 10px; align-content: start; }
@@ -246,8 +216,6 @@
 }
 
 @media (max-width: 600px) {
-  .cg-bar-row { grid-template-columns: minmax(0, 1fr) auto; }
-  .cg-bar-track { grid-column: 1 / -1; grid-row: 2; }
   .cg-list > li { grid-template-columns: minmax(0, 1fr); }
   .cg-filters { grid-template-columns: minmax(0, 1fr); }
   .cg-target-line .sw-text-link { margin-left: 0; }
