@@ -9,7 +9,7 @@ Thứ tự từ việc cần làm ngay tới chi tiết:
 3. 6 ô số liệu: GPA tích lũy (kèm thay đổi so với học kỳ trước), tín chỉ đã đạt, năng lực chung, mức phù hợp nghề, xét tốt nghiệp, Lộ trình AI.
 4. Hai cột độc lập (99762d7, người dùng thấy lưới theo hàng "xấu xấu"):
    - cột trái: **Tiến độ học tập** (STU-PROG-02: thanh tín chỉ đã đạt, đang học, trễ kế hoạch, còn lại và từng học kỳ của kế hoạch đào tạo; bấm một học kỳ để xem môn), rồi một thẻ chia đôi **Học kỳ này** (môn đang học, kỹ năng rèn luyện) | **Học kỳ tới · theo Lộ trình AI** (môn đề xuất kèm lý do, "Lộ trình AI gợi ý luyện thêm", việc của tháng đầu, tín chỉ của học kỳ đó trong Kế hoạch học kỳ);
-   - cột phải: **Xét tốt nghiệp** (từng điều kiện của tiêu chuẩn của chính sinh viên), **Năng lực và nghề mục tiêu** (kỹ năng mạnh nhất kèm môn minh chứng, kỹ năng còn thiếu, mức phù hợp), **Điểm trung bình theo học kỳ** (GPA học kỳ tính cả môn chưa đạt, GPA tích lũy chỉ tính môn đã đạt, chép từ bảng điểm; vạch 2,00; bảng số liệu; cặp màu #3a6ad4/#a33ea1 qua kiểm tra mù màu).
+   - cột phải: **Xét tốt nghiệp** (từng điều kiện của tiêu chuẩn của chính sinh viên), **Năng lực và nghề mục tiêu** (kỹ năng mạnh nhất kèm môn minh chứng, kỹ năng còn thiếu, mức phù hợp), **Điểm trung bình theo học kỳ** (3 dòng hệ 4 in cuối mỗi học kỳ: Điểm TB học kỳ, Điểm TB học tập, Điểm TB tích lũy; vạch 2,00; bảng số liệu; màu #3a6ad4/#1f9e89/#a33ea1 qua kiểm tra mù màu).
 5. Màn hình hẹp: một cột.
 6. **Hỏi nhanh Trợ lý AI**: ô hỏi và câu gợi ý; câu hỏi được chuyển sang trang Trợ lý AI và gửi ngay (`assistant-handoff.ts`, sessionStorage, tối đa 60 giây).
 7. **Cần chú ý** (STU-PROG-03) ở cuối trang.
@@ -18,7 +18,12 @@ Không có khối thông báo trên trang: thông báo chỉ ở chuông (`docs/
 
 ## API `GET /api/student/overview` (`apps/api/src/overview/`)
 Hợp đồng: `apps/web/src/overview-types.ts`. Một lần đọc, một giao dịch REPEATABLE READ READ ONLY, không dùng AI.
-- Bảng điểm: chép đúng các dòng tổng kết in trên bảng điểm (không tính lại GPA).
+- Bảng điểm: chép đúng các dòng tổng kết in trên bảng điểm (không tính lại GPA). Mỗi học kỳ VLU in 3 điểm trung bình hệ 4 (người dùng 31/10: "hãy xem cách tính của bảng điểm thật và học theo"):
+  - "Điểm TB học kỳ" (`termGpa4`): riêng học kỳ đó, kể cả môn chưa đạt;
+  - "Điểm TB học tập" (`studyGpa4`): mọi tín chỉ đã đăng ký đến học kỳ đó, kể cả môn chưa đạt (đi cùng "Tổng số tín chỉ đăng ký");
+  - "Điểm TB tích lũy" (`cumulativeGpa4`, `gpa4`): chỉ các môn đã đạt (đi cùng "Tổng số tín chỉ tích lũy"), nên gần như không giảm khi có môn rớt.
+
+  Ô GPA tích lũy ghi thêm Điểm TB học tập khi hai số khác nhau.
 - Tiến độ: chạy engine đánh giá năng lực trên bảng điểm hiện tại (`readAssessmentInputs` với `careerOptional`, `weightsOptional`; `assessWithoutHistory`), chỉ dùng trạng thái học phần và học kỳ dự kiến; không đọc điểm kỹ năng.
 - Xét tốt nghiệp: tiêu chuẩn của chính sinh viên, như trang Điều kiện xét tốt nghiệp.
 - Năng lực: chỉ lấy lần Đánh giá năng lực đã lưu; null khi chưa có hoặc sinh viên đã rút lại sự đồng ý; `stale` khi bảng điểm, chuyên ngành hay nghề đã đổi.

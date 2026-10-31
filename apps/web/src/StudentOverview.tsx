@@ -218,7 +218,8 @@ function Kpis({ data, navigate, openTranscript }: { data: OverviewResponse; navi
   const roadmapValue = !roadmap ? "Chưa có" : roadmap.status === "completed" ? "Đã có" : roadmap.status === "pending" ? "Đang soạn" : "Chưa soạn được";
   return <div className="ov-kpis">
     {tile("gpa", "GPA tích lũy", transcript?.gpa4 != null ? <>{formatDecimal(transcript.gpa4)}<small>/ 4</small></> : "—",
-      transcript?.gpa4 != null ? <>{transcript.rank && <Chip meaning={meaningOf(transcript.rank)}>{transcript.rank}</Chip>}{change}</> : "Cần bảng điểm", openTranscript)}
+      transcript?.gpa4 != null ? <>{transcript.rank && <Chip meaning={meaningOf(transcript.rank)}>{transcript.rank}</Chip>}{change}
+        {transcript.studyGpa4 != null && Math.abs(transcript.studyGpa4 - transcript.gpa4) >= 0.005 && <span title="Tính cả môn chưa đạt, như dòng in trên bảng điểm">Điểm TB học tập {formatDecimal(transcript.studyGpa4)}</span>}</> : "Cần bảng điểm", openTranscript)}
     {tile("credits", "Tín chỉ đã đạt", passed !== null ? <>{passed}{total !== null && <small>/ {total}</small>}</> : "—",
       passed !== null ? <>{total ? `${Math.round((passed / total) * 100)}% chương trình` : "Chưa rõ tổng tín chỉ"}{progress && !progress.blocked && progress.runningCredits > 0 ? ` · ${progress.runningCredits} TC đang học` : ""}</> : "Cần bảng điểm",
       () => navigate("roadmap"))}
@@ -368,8 +369,10 @@ function GpaChart({ data, openTranscript }: { data: OverviewResponse; openTransc
   const [hover, setHover] = useState<number | null>(null);
   const [frameRef, frameWidth] = useFrameWidth();
   const series = data.transcript?.series ?? [];
-  // The two printed averages differ on purpose (user 2026-10-30: "mấy môn rớt nó không tính vào GPA tích lũy"): the term
-  // average counts every graded course of the term, the cumulative one only the courses passed.
+  // The three averages every term of the transcript prints, as printed (user 2026-10-31: "hãy xem cách tính của bảng điểm
+  // thật và học theo"): Điểm TB học kỳ counts that term with its failed courses, Điểm TB học tập every registered credit
+  // so far with the failed courses, Điểm TB tích lũy only the courses passed, so it barely moves when courses are failed.
+  const hasStudy = series.some((point) => point.studyGpa4 !== null);
   const head = <Head id="ov-gpa-title" title="Điểm trung bình theo học kỳ" sub="Hệ 4, chép đúng các dòng tổng kết in trên bảng điểm" />;
   if (series.length < 2) {
     return <section className="sw-panel ov-card" aria-labelledby="ov-gpa-title">{head}
@@ -378,7 +381,7 @@ function GpaChart({ data, openTranscript }: { data: OverviewResponse; openTransc
   }
   const { height: H, left: L, right: R, top: T, bottom: B } = CHART;
   const W = frameWidth ?? CHART.width;
-  const { lo, hi, ticks } = gpaScale(series.flatMap((point) => [point.termGpa4, point.cumulativeGpa4]));
+  const { lo, hi, ticks } = gpaScale(series.flatMap((point) => [point.termGpa4, point.studyGpa4, point.cumulativeGpa4]));
   const last = series.length - 1;
   const x = (i: number) => L + (i * (W - L - R)) / Math.max(last, 1);
   const y = (value: number) => T + ((hi - value) * (H - T - B)) / (hi - lo);
@@ -393,12 +396,14 @@ function GpaChart({ data, openTranscript }: { data: OverviewResponse; openTransc
     return d.trim();
   };
   const cumulative = (point: typeof series[number]) => point.cumulativeGpa4;
+  const study = (point: typeof series[number]) => point.studyGpa4;
   const term = (point: typeof series[number]) => point.termGpa4;
   const lastCum = series[last]!.cumulativeGpa4, lastTerm = series[last]!.termGpa4;
-  let labelCum = lastCum !== null ? y(lastCum) : null, labelTerm = lastTerm !== null ? y(lastTerm) : null;
-  if (labelCum !== null && labelTerm !== null && Math.abs(labelCum - labelTerm) < 14) {
-    if (labelCum <= labelTerm) labelTerm = labelCum + 14; else labelCum = labelTerm + 14;
-  }
+  // End labels of the last term, top to bottom, at least 14px apart so they never overlap.
+  const endLabels = ([["cum", series[last]!.cumulativeGpa4, "tích lũy"], ["study", series[last]!.studyGpa4, "học tập"], ["term", lastTerm, "học kỳ"]] as const)
+    .flatMap(([key, value, word]) => value === null ? [] : [{ key, value, word, at: y(value) }])
+    .sort((a, b) => a.at - b.at);
+  endLabels.forEach((label, i) => { if (i > 0) label.at = Math.max(label.at, endLabels[i - 1]!.at + 14); });
   const step = (W - L - R) / Math.max(last, 1);
   const groups = termGroups(series.map((point) => ({ term: point.term, state: "done" as const, passedCredits: 0, plannedCredits: 0, courses: [] })));
   let index = 0;
@@ -411,34 +416,38 @@ function GpaChart({ data, openTranscript }: { data: OverviewResponse; openTransc
   return <section className="sw-panel ov-card" aria-labelledby="ov-gpa-title">
     {head}
     <ul className="ov-chart-legend">
-      <li><svg width="22" height="10" aria-hidden="true"><line x1="0" y1="5" x2="22" y2="5" className="ov-line-cum" /></svg>GPA tích lũy (chỉ tính môn đã đạt)</li>
-      <li><svg width="22" height="10" aria-hidden="true"><line x1="0" y1="5" x2="22" y2="5" className="ov-line-term" /></svg>GPA học kỳ (tính cả môn chưa đạt)</li>
+      <li><svg width="22" height="10" aria-hidden="true"><line x1="0" y1="5" x2="22" y2="5" className="ov-line-cum" /></svg>Điểm TB tích lũy (chỉ tính môn đã đạt)</li>
+      {hasStudy && <li><svg width="22" height="10" aria-hidden="true"><line x1="0" y1="5" x2="22" y2="5" className="ov-line-study" /></svg>Điểm TB học tập (tính cả môn chưa đạt)</li>}
+      <li><svg width="22" height="10" aria-hidden="true"><line x1="0" y1="5" x2="22" y2="5" className="ov-line-term" /></svg>Điểm TB học kỳ (riêng từng học kỳ)</li>
       {lo <= 2 && <li><svg width="22" height="10" aria-hidden="true"><line x1="0" y1="5" x2="22" y2="5" className="ov-line-limit" /></svg>Ngưỡng tốt nghiệp 2,00</li>}
     </ul>
     <div className="ov-chart" ref={frameRef} onMouseLeave={() => setHover(null)}>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ aspectRatio: `${W} / ${H}` }} role="img" aria-label={`GPA hệ 4 qua ${series.length} học kỳ có điểm.${lastCum !== null ? ` GPA tích lũy hiện tại ${formatDecimal(lastCum)}.` : ""}${lastTerm !== null ? ` Học kỳ gần nhất ${formatDecimal(lastTerm)}.` : ""}`}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ aspectRatio: `${W} / ${H}` }} role="img" aria-label={`Điểm trung bình hệ 4 qua ${series.length} học kỳ có điểm.${lastCum !== null ? ` Điểm TB tích lũy hiện tại ${formatDecimal(lastCum)}.` : ""}${series[last]!.studyGpa4 !== null ? ` Điểm TB học tập ${formatDecimal(series[last]!.studyGpa4!)}.` : ""}${lastTerm !== null ? ` Học kỳ gần nhất ${formatDecimal(lastTerm)}.` : ""}`}>
         {ticks.map((tick) => <g key={tick}><line x1={L} x2={W - R} y1={y(tick)} y2={y(tick)} className="ov-gridline" />
           <text x={L - 8} y={y(tick) + 4} textAnchor="end" className="ov-axis">{formatDecimal(tick, 1)}</text></g>)}
         {lo <= 2 && <line x1={L} x2={W - R} y1={y(2)} y2={y(2)} className="ov-line-limit" />}
         <path d={path(term)} className="ov-line-term" fill="none" />
+        {hasStudy && <path d={path(study)} className="ov-line-study" fill="none" />}
         <path d={path(cumulative)} className="ov-line-cum" fill="none" />
         {series.map((item, i) => item.termGpa4 !== null && <circle key={`t${i}`} cx={x(i)} cy={y(item.termGpa4)} r={4} className="ov-dot-term" />)}
+        {series.map((item, i) => item.studyGpa4 !== null && <circle key={`s${i}`} cx={x(i)} cy={y(item.studyGpa4)} r={4} className="ov-dot-study" />)}
         {series.map((item, i) => item.cumulativeGpa4 !== null && <circle key={`c${i}`} cx={x(i)} cy={y(item.cumulativeGpa4)} r={4} className="ov-dot-cum" />)}
-        {labelCum !== null && lastCum !== null && <text x={x(last) + 10} y={labelCum + 4} className="ov-end-label ov-end-strong">{formatDecimal(lastCum)} tích lũy</text>}
-        {labelTerm !== null && lastTerm !== null && <text x={x(last) + 10} y={labelTerm + 4} className="ov-end-label">{formatDecimal(lastTerm)} học kỳ</text>}
+        {endLabels.map((label) => <text key={label.key} x={x(last) + 10} y={label.at + 4} className={`ov-end-label${label.key === "cum" ? " ov-end-strong" : ""}`}>{formatDecimal(label.value)} {label.word}</text>)}
         {series.map((item, i) => <text key={`x${i}`} x={x(i)} y={H - B + 18} textAnchor="middle" className="ov-axis">HK{termNumber(item.term.code)}</text>)}
         {yearLabels.map((label) => <text key={label.year} x={label.x} y={H - B + 34} textAnchor="middle" className="ov-axis ov-axis-year">{label.year}</text>)}
         {point && <line x1={x(hover!)} x2={x(hover!)} y1={T} y2={H - B} className="ov-cross" />}
         {series.map((_, i) => <rect key={`h${i}`} x={x(i) - step / 2} y={T} width={step} height={H - T - B} fill="transparent" onMouseEnter={() => setHover(i)} />)}
       </svg>
-      {point && hover !== null && <div className="ov-tip" style={{ left: `${(x(hover) / W) * 100}%`, top: `${(Math.min(...[point.cumulativeGpa4, point.termGpa4].filter((v): v is number => v !== null).map(y), H - B) / H) * 100}%` }}>
-        <b>{point.term.label}</b><br />GPA học kỳ {point.termGpa4 !== null ? formatDecimal(point.termGpa4) : "—"}<br />GPA tích lũy {point.cumulativeGpa4 !== null ? formatDecimal(point.cumulativeGpa4) : "—"}
+      {point && hover !== null && <div className="ov-tip" style={{ left: `${(x(hover) / W) * 100}%`, top: `${(Math.min(...[point.cumulativeGpa4, point.studyGpa4, point.termGpa4].filter((v): v is number => v !== null).map(y), H - B) / H) * 100}%` }}>
+        <b>{point.term.label}</b><br />Điểm TB học kỳ {point.termGpa4 !== null ? formatDecimal(point.termGpa4) : "—"}
+        {hasStudy && <><br />Điểm TB học tập {point.studyGpa4 !== null ? formatDecimal(point.studyGpa4) : "—"}</>}
+        <br />Điểm TB tích lũy {point.cumulativeGpa4 !== null ? formatDecimal(point.cumulativeGpa4) : "—"}
       </div>}
     </div>
     <details className="ov-data"><summary>Xem bảng số liệu</summary>
-      <p className="ov-note">Chép từ "Điểm TB học kỳ (Hệ 4)" và "Điểm TB tích lũy (Hệ 4)" in trên bảng điểm. Điểm học kỳ tính mọi môn có điểm trong kỳ, kể cả môn chưa đạt; điểm tích lũy chỉ tính các môn đã đạt, nên thường cao hơn khi có môn rớt.</p>
-      <div className="ov-table-wrap"><table><thead><tr><th scope="col">Học kỳ</th><th scope="col">Điểm TB học kỳ</th><th scope="col">Điểm TB tích lũy</th></tr></thead>
-        <tbody>{series.map((item) => <tr key={item.term.code}><td>{item.term.label}</td><td className="ov-num">{item.termGpa4 !== null ? formatDecimal(item.termGpa4) : "—"}</td><td className="ov-num">{item.cumulativeGpa4 !== null ? formatDecimal(item.cumulativeGpa4) : "—"}</td></tr>)}</tbody>
+      <p className="ov-note">Chép đúng các dòng "Hệ 4" in cuối mỗi học kỳ trên bảng điểm. Điểm TB học kỳ: riêng học kỳ đó, kể cả môn chưa đạt. Điểm TB học tập: mọi tín chỉ đã đăng ký đến học kỳ đó, kể cả môn chưa đạt. Điểm TB tích lũy: chỉ các môn đã đạt, nên ít thay đổi khi có môn rớt.</p>
+      <div className="ov-table-wrap"><table><thead><tr><th scope="col">Học kỳ</th><th scope="col">Điểm TB học kỳ</th>{hasStudy && <th scope="col">Điểm TB học tập</th>}<th scope="col">Điểm TB tích lũy</th></tr></thead>
+        <tbody>{series.map((item) => <tr key={item.term.code}><td>{item.term.label}</td><td className="ov-num">{item.termGpa4 !== null ? formatDecimal(item.termGpa4) : "—"}</td>{hasStudy && <td className="ov-num">{item.studyGpa4 !== null ? formatDecimal(item.studyGpa4) : "—"}</td>}<td className="ov-num">{item.cumulativeGpa4 !== null ? formatDecimal(item.cumulativeGpa4) : "—"}</td></tr>)}</tbody>
       </table></div>
     </details>
   </section>;

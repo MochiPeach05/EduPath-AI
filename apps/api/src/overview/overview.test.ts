@@ -37,15 +37,16 @@ describe("transcriptOverview", () => {
       { year: "2025-2026", semester: "HK01", rows: [["71ITBS10103", 3, 8.6, 3.7, "A"]],
         summaries: [["Điểm TB học kỳ (Hệ 4)", "3,70"], ["Điểm TB tích lũy (Hệ 4)", "3,70"], ["Điểm TB tích lũy (Hệ 10)", "8,60"]] },
       { year: "2025-2026", semester: "HK02", rows: [["71ITBS10203", 3, 6.6, 2.5, "C+"]],
-        summaries: [["Điểm TB học kỳ (Hệ 4)", "2,50"], ["Điểm TB học tập (Hệ 4)", "9,99"], ["Điểm TB tích lũy (Hệ 4)", "3.10"], ["Điểm TB tích lũy (Hệ 10)", "7,60"],
+        summaries: [["Điểm TB học kỳ (Hệ 4)", "2,50"], ["Điểm TB học tập (Hệ 4)", "2,95"], ["Điểm TB tích lũy (Hệ 4)", "3.10"], ["Điểm TB tích lũy (Hệ 10)", "7,60"],
           ["Tổng số tín chỉ tích lũy", "6"], ["Xếp loại học tập tích lũy", "Khá"]] },
       { year: "2026-2027", semester: "HK01", rows: [["71ITSE30103", 3]] },
     ]);
     expect(transcriptOverview(data, "2026-10-29T02:00:00Z")).toEqual({
-      updatedAt: "2026-10-29T02:00:00.000Z", gpa4: 3.1, gpa10: 7.6, rank: "Khá", credits: 6, gpaChange: -0.6,
+      updatedAt: "2026-10-29T02:00:00.000Z", gpa4: 3.1, studyGpa4: 2.95, gpa10: 7.6, rank: "Khá", credits: 6, gpaChange: -0.6,
       series: [
-        { term: { code: "HK251", label: "HK1 2025–2026" }, termGpa4: 3.7, cumulativeGpa4: 3.7 },
-        { term: { code: "HK252", label: "HK2 2025–2026" }, termGpa4: 2.5, cumulativeGpa4: 3.1 },
+        { term: { code: "HK251", label: "HK1 2025–2026" }, termGpa4: 3.7, studyGpa4: null, cumulativeGpa4: 3.7 },
+        // "Điểm TB học tập" counts failed courses too, so it differs from the cumulative GPA (passed courses only).
+        { term: { code: "HK252", label: "HK2 2025–2026" }, termGpa4: 2.5, studyGpa4: 2.95, cumulativeGpa4: 3.1 },
       ],
     });
     expect(transcriptRunning(data, "HK261")).toEqual([{ code: "71ITSE30103", name: "Học phần tổng hợp", credits: 3, retake: false, skills: [] }]);

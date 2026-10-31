@@ -18,6 +18,8 @@
   --ov-track: #eceff3;
   --ov-series-1: #3a6ad4;
   --ov-series-2: #a33ea1;
+  /* Điểm TB học tập (2026-10-31): teal, CVD-checked with the blue and magenta series (dataviz validate_palette.js). */
+  --ov-series-3: #1f9e89;
   --ov-fs-label: 12px;
   --ov-fs-small: 13px;
   --ov-fs-text: 14px;
@@ -181,6 +183,8 @@
 .ov-line-limit { stroke: var(--ov-risk); stroke-width: 1.5; stroke-dasharray: 2 3; }
 .ov-dot-cum { fill: var(--ov-series-1); stroke: #fff; stroke-width: 2; }
 .ov-dot-term { fill: var(--ov-series-2); stroke: #fff; stroke-width: 2; }
+.ov-line-study { stroke: var(--ov-series-3); stroke-width: 2; stroke-linejoin: round; }
+.ov-dot-study { fill: var(--ov-series-3); stroke: #fff; stroke-width: 2; }
 .ov-end-label { fill: var(--sw-muted); font-size: var(--ov-fs-small); }
 .ov-end-strong { fill: var(--sw-ink); font-weight: 700; }
 .ov-cross { stroke: var(--sw-ink); stroke-width: 1; opacity: 0.25; }

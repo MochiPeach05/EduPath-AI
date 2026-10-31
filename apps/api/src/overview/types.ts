@@ -43,11 +43,12 @@ export type OverviewProgress = {
 export type OverviewTranscript = {
   updatedAt: string;
   gpa4: number | null;
+  studyGpa4: number | null;
   gpa10: number | null;
   rank: string | null;
   credits: number | null;
   gpaChange: number | null;
-  series: { term: OverviewTerm; termGpa4: number | null; cumulativeGpa4: number | null }[];
+  series: { term: OverviewTerm; termGpa4: number | null; studyGpa4: number | null; cumulativeGpa4: number | null }[];
 };
 
 export type OverviewGraduation = {

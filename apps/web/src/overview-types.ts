@@ -39,13 +39,21 @@ export type OverviewResponse = {
     updatedAt: string;
     /** Printed cumulative values of the latest graded term: "Điểm TB tích lũy (Hệ 4)" … "Xếp loại học tập tích lũy". */
     gpa4: number | null;
+    /**
+     * "Điểm TB học tập (Hệ 4)" of the latest graded term: every registered credit so far, failed courses included (gpa4
+     * counts passed courses only). Null when the transcript does not print it.
+     */
+    studyGpa4: number | null;
     gpa10: number | null;
     rank: string | null;
     credits: number | null;
     /** gpa4 minus the printed cumulative GPA of the graded term before it; null when either is missing. */
     gpaChange: number | null;
-    /** Graded terms in order (no transfer section): printed term GPA and cumulative GPA on the 4-point scale. */
-    series: { term: OverviewTerm; termGpa4: number | null; cumulativeGpa4: number | null }[];
+    /**
+     * Graded terms in order (no transfer section), the three averages each term prints on the 4-point scale: "Điểm TB học
+     * kỳ" (termGpa4), "Điểm TB học tập" (studyGpa4) and "Điểm TB tích lũy" (cumulativeGpa4).
+     */
+    series: { term: OverviewTerm; termGpa4: number | null; studyGpa4: number | null; cumulativeGpa4: number | null }[];
   };
   /**
    * Progress against the cohort's training plan for the student's specialty (the engine's course states and planned

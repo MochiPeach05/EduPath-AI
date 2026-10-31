@@ -24,10 +24,10 @@ const full: OverviewResponse = {
   readiness: { transcript: true, specialty: true, career: true, survey: true, assessment: true, roadmap: true },
   terms: { studying: term("HK261"), next: { ...term("HK262"), start: "2026-12-21", end: "2027-04-04", daysUntil: 52 } },
   transcript: {
-    updatedAt: "2026-10-28T02:00:00.000Z", gpa4: 2.85, gpa10: 7.28, rank: "Khá", credits: 79, gpaChange: 0.03,
+    updatedAt: "2026-10-28T02:00:00.000Z", gpa4: 2.85, studyGpa4: 2.62, gpa10: 7.28, rank: "Khá", credits: 79, gpaChange: 0.03,
     series: [
-      { term: term("HK231"), termGpa4: 2.62, cumulativeGpa4: 2.62 }, { term: term("HK232"), termGpa4: 2.41, cumulativeGpa4: 2.52 },
-      { term: term("HK241"), termGpa4: 3.05, cumulativeGpa4: 2.74 }, { term: term("HK251"), termGpa4: 2.5, cumulativeGpa4: 2.85 },
+      { term: term("HK231"), termGpa4: 2.62, studyGpa4: 2.62, cumulativeGpa4: 2.62 }, { term: term("HK232"), termGpa4: 2.41, studyGpa4: 2.47, cumulativeGpa4: 2.52 },
+      { term: term("HK241"), termGpa4: 3.05, studyGpa4: 2.66, cumulativeGpa4: 2.74 }, { term: term("HK251"), termGpa4: 2.5, studyGpa4: 2.62, cumulativeGpa4: 2.85 },
     ],
   },
   progress: {
@@ -170,12 +170,16 @@ describe("Tổng quan dashboard", () => {
   it("draws the GPA chart with a legend, end labels, the 2,00 threshold and a data table", () => {
     const html = dashboard(full);
     const plain = text(html);
-    expect(plain).toContain("GPA tích lũy (chỉ tính môn đã đạt) GPA học kỳ (tính cả môn chưa đạt) Ngưỡng tốt nghiệp 2,00");
+    expect(plain).toContain("Điểm TB tích lũy (chỉ tính môn đã đạt) Điểm TB học tập (tính cả môn chưa đạt) Điểm TB học kỳ (riêng từng học kỳ) Ngưỡng tốt nghiệp 2,00");
     expect(plain).toContain("2,85 tích lũy");
     expect(plain).toContain("2,50 học kỳ");
-    expect(html.match(/<circle /g)?.length).toBe(8);
+    expect(plain).toContain("2,62 học tập");
+    // Three printed averages a term (học kỳ, học tập, tích lũy): a dot each for every term.
+    expect(html.match(/<circle /g)?.length).toBe(12);
     expect(html.match(/<tr>/g)?.length).toBe(1 + full.transcript!.series.length);
-    expect(plain).toContain("HK1 2025–2026 2,50 2,85");
+    expect(plain).toContain("Học kỳ Điểm TB học kỳ Điểm TB học tập Điểm TB tích lũy");
+    expect(plain).toContain("HK1 2025–2026 2,50 2,62 2,85");
+    expect(plain).toContain("Điểm TB học tập 2,62");
   });
 
   it("lists this term's courses, the AI roadmap's choices and the warnings with their actions", () => {

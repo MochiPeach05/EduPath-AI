@@ -64,8 +64,14 @@ export function nextTermOverview(now: Date): OverviewResponse["terms"]["next"] {
 /* ------------------------------------------------------------------------ */
 /* Transcript */
 
-/** Folded summary labels of the VLU transcript ("Điểm TB học kỳ (Hệ 4)", "Điểm TB tích lũy (Hệ 10)", "Xếp loại học tập tích lũy"). */
+/**
+ * Folded summary labels of the VLU transcript. Each term prints three averages on the 4-point scale (user 2026-10-31: "hãy
+ * xem cách tính của bảng điểm thật và học theo"): "Điểm TB học kỳ" (that term, failed courses included), "Điểm TB học tập"
+ * (every registered credit so far, failed courses included; printed next to "Tổng số tín chỉ đăng ký") and "Điểm TB tích
+ * lũy" (passed courses only; next to "Tổng số tín chỉ tích lũy"). All three are copied as printed, never recomputed.
+ */
 const TERM_GPA4 = /diem\s*(?:tb|trung\s*binh)\s*hoc\s*ky\b.*he\s*4(?!\d)/;
+const STUDY_GPA4 = /diem\s*(?:tb|trung\s*binh)\s*hoc\s*tap.*he\s*4(?!\d)/;
 const CUMULATIVE_GPA4 = /diem\s*(?:tb|trung\s*binh)\s*tich\s*luy.*he\s*4(?!\d)/;
 const CUMULATIVE_GPA10 = /diem\s*(?:tb|trung\s*binh)\s*tich\s*luy.*he\s*10/;
 const CUMULATIVE_RANK = /xep\s*loai.*tich\s*luy/;
@@ -83,7 +89,7 @@ const round2 = (value: number) => Math.round(value * 100) / 100;
 export function transcriptOverview(data: TranscriptData, updatedAt: Date | string): OverviewTranscript {
   const series = academicSections(data).filter(hasScore).flatMap((section) => {
     const code = termCode(section);
-    return code ? [{ term: termRef(code), termGpa4: printed(section, TERM_GPA4, 4), cumulativeGpa4: printed(section, CUMULATIVE_GPA4, 4) }] : [];
+    return code ? [{ term: termRef(code), termGpa4: printed(section, TERM_GPA4, 4), studyGpa4: printed(section, STUDY_GPA4, 4), cumulativeGpa4: printed(section, CUMULATIVE_GPA4, 4) }] : [];
   });
   const latest = latestResultSection(data);
   const last = series.at(-1)?.cumulativeGpa4 ?? null;
@@ -92,6 +98,7 @@ export function transcriptOverview(data: TranscriptData, updatedAt: Date | strin
   return {
     updatedAt: new Date(updatedAt).toISOString(),
     gpa4: printed(latest, CUMULATIVE_GPA4, 4),
+    studyGpa4: printed(latest, STUDY_GPA4, 4),
     gpa10: printed(latest, CUMULATIVE_GPA10, 10),
     rank: printedText(latest, CUMULATIVE_RANK),
     credits: credits === null || Number.isNaN(credits) ? null : credits,
