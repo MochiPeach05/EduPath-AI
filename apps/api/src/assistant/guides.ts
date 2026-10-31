@@ -194,7 +194,7 @@ export function portalGuides(): PortalGuide[] {
     ["quyen-rieng-tu", "Tóm tắt quyền riêng tư", "#profile", [
       "Tóm tắt Chính sách bảo mật của EduPath AI (bản đầy đủ ở liên kết Chính sách & Điều khoản cuối trang):",
       "- Bạn đăng nhập bằng tài khoản Microsoft của trường; EduPath AI không biết và không lưu mật khẩu của bạn.",
-      "- Bạn xem được toàn bộ thông tin của mình; sinh viên khác không xem được hồ sơ, bảng điểm, kết quả đánh giá năng lực, khảo sát hay lộ trình của bạn. Quản trị viên của Khoa Công nghệ Thông tin xem được điểm và kết quả từng môn trong bảng điểm (không gồm tệp PDF); kết quả đánh giá năng lực, câu trả lời khảo sát, thành tích và lộ trình chỉ bạn xem được.",
+      "- Bạn xem được toàn bộ thông tin của mình; sinh viên khác không xem được hồ sơ, bảng điểm, kết quả đánh giá năng lực, khảo sát hay lộ trình của bạn. Quản trị viên của Khoa Công nghệ Thông tin xem được điểm và kết quả từng môn trong bảng điểm (không gồm tệp PDF), và từ 31/10/2026 xem được tiến độ, kết quả đánh giá năng lực và các môn Lộ trình AI đề xuất của bạn trong báo cáo của Khoa; câu trả lời khảo sát và thành tích chỉ bạn xem được.",
       "- Chuyên ngành, nghề mục tiêu, khảo sát định hướng, thành tích và bảng điểm do bạn tự cung cấp và có thể sửa hoặc xóa bất cứ lúc nào. Đánh giá năng lực và khảo sát định hướng cần sự đồng ý riêng.",
       "- Mô hình AI chạy cục bộ, không nhận họ tên, mã số sinh viên, email, lớp hay tệp PDF bảng điểm, và dữ liệu không được gửi tới dịch vụ AI đám mây.",
       "- EduPath AI không bán dữ liệu, không hiển thị quảng cáo và không theo dõi bạn trên các trang web khác. Dữ liệu được lưu trên dịch vụ lưu trữ đám mây, máy chủ có thể đặt ngoài Việt Nam.",

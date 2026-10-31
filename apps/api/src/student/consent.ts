@@ -11,10 +11,12 @@ import type { DatabasePool } from "../db/pool.js";
 // these results and the survey (under its consent) and keeps the conversations until deleted or 90 days without a message.
 // 2026-10-29 (user: "giữ nguyên json bảng điểm luôn và lấy thêm thông tin từ nó nữa để sinh viên có thể tra cứu"): Trợ lý
 // AI also reads the transcript's scores (the printed GPA, credits and courses not passed; every row for a grade question).
+// 2026-10-31 (user: "hiện đầy đủ", "Triển khai đi"): the Khoa's admin reports show each student's progress, competency
+// results and Lộ trình AI courses by name, exportable to Excel; transcript views and exports are logged.
 // Must equal `policyVersion` in apps/web/src/public-information.ts (checked by consent.test.ts).
-export const TRANSCRIPT_POLICY_VERSION = "2026-10-29";
+export const TRANSCRIPT_POLICY_VERSION = "2026-10-31";
 /**
- * The oldest policy version whose consents still count, so 2026-10-26, 2026-10-28 and 2026-10-29 ask no one again (user,
+ * The oldest policy version whose consents still count, so 2026-10-26, 2026-10-28, 2026-10-29 and 2026-10-31 ask no one again (user,
  * 2026-10-26: "không để lại ghi chú gì hết"); new consents are recorded under TRANSCRIPT_POLICY_VERSION. Must equal
  * `consentValidSince` in apps/web/src/public-information.ts (checked by consent.test.ts).
  */
