@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  bestFits, bestFitsHeading, blockedAction, blockedText, compareRows, filterCareers, fitRuleText, fitScoreText, fitSummary, gapNote, interestPicks, missingSkills,
+  bestFits, bestFitsHeading, blockedAction, blockedText, careerPicks, compareRows, filterCareers, fitRuleText, fitScoreText, fitSummary, gapNote, interestPicks,
+  interestReason, metSkills, missingSkills, nameList, surveyInterests,
   orderedRequirements, requirementSourcesText, requirementState, toggleCompare, FIT_RULE_TEXT, type GuidanceCareer, type GuidanceRequirement,
 } from "./career-guidance-data";
 
@@ -27,14 +28,34 @@ describe("career guidance", () => {
     expect(interestPicks(careers).map((item) => item.id)).toEqual(["a", "b"]);
   });
 
-  it("filters by name without diacritics, by field and by survey match, best fit first or A–Z", () => {
-    const all = { q: "", field: "", sort: "fit" as const, interestOnly: false };
+  it("filters by name without diacritics and by field, best fit first", () => {
+    const all = { q: "", field: "" };
     // No fit or too little data: last, by name.
     expect(filterCareers(careers, all).map((item) => item.id)).toEqual(["b", "a", "d", "c"]);
     expect(filterCareers(careers, { ...all, q: "ky su" }).map((item) => item.id)).toEqual(["a", "c"]);
     expect(filterCareers(careers, { ...all, field: "3" }).map((item) => item.id)).toEqual(["a"]);
-    expect(filterCareers(careers, { ...all, interestOnly: true }).map((item) => item.id)).toEqual(["b", "a"]);
-    expect(filterCareers(careers, { ...all, sort: "name" }).map((item) => item.nameVi)).toEqual(["Chuyên viên kiểm thử", "Kỹ sư dữ liệu", "Kỹ sư mạng", "Lập trình viên web"]);
+  });
+
+  it("picks the best fit, the next ones by fit and the survey matches, never one career twice (user 2026-10-31)", () => {
+    const many = [
+      career("p1", "Nghề một", 80), career("p2", "Nghề hai", 75), career("p3", "Nghề ba", 70), career("p4", "Nghề bốn", 65),
+      career("p5", "Nghề năm", 60, { interests: { field: "Web", tech: [] } }),
+      career("p6", "Nghề sáu", 55, { interests: { field: null, tech: ["Web front-end"] } }),
+      // A survey match already in the ranking stays there only.
+      career("p7", "Nghề bảy", 50, { interests: { field: null, tech: ["Cơ sở dữ liệu"] } }),
+    ];
+    many[1] = { ...many[1]!, interests: { field: "Web", tech: ["Web front-end"] } };
+    const picks = careerPicks(many);
+    expect(picks.top?.id).toBe("p1");
+    expect(picks.ranked.map((item) => item.id)).toEqual(["p2", "p3", "p4"]);
+    expect(picks.liked.map((item) => item.id)).toEqual(["p5", "p6", "p7"]);
+    expect(picks.scored).toBe(7);
+    expect(careerPicks([]).top).toBeNull();
+    expect(surveyInterests(many)).toEqual({ field: "Web", tech: ["Web front-end", "Cơ sở dữ liệu"] });
+    expect(interestReason(many[4]!)).toBe("Khớp: lĩnh vực Web");
+    expect(interestReason(many[1]!)).toBe("Khớp: lĩnh vực Web · thế mạnh Web front-end");
+    expect(nameList(["A", "B"])).toBe("A, B");
+    expect(nameList(["A", "B", "C", "D", "E"])).toBe("A, B, C và 2 kỹ năng khác");
   });
 
   it("says how the student stands on each requirement and what is still missing", () => {
@@ -63,6 +84,7 @@ describe("career guidance", () => {
       .toBe("Đạt 0/3 kỹ năng · 1 dưới ngưỡng · 1 chưa học · 1 cần tự học · 1/3 kỹ năng có điểm");
     // Every skill that lowers the fit is missing, "Chưa đủ dữ liệu" too (comp-calc-v14).
     expect(missingSkills(career("x", "X", 50, { requirements: [req("SQL", "below"), req("Git", "met"), req("Docker", "not_studied"), req("AWS", "no_data")] }))).toEqual(["SQL", "Docker", "AWS"]);
+    expect(metSkills(career("x", "X", 50, { requirements: [req("SQL", "below"), req("Git", "met"), req("Docker", "not_studied")] }))).toEqual(["Git"]);
     expect(requirementState(req("BI", "no_data", { noDataReason: "elective_not_chosen" }))).toEqual({ tone: "unknown", glyph: "!", text: "Cần tự học" });
   });
 

@@ -73,17 +73,47 @@ export const interestPicks = (careers: GuidanceCareer[], count = 3) => careers.f
     || fitRank(b) - fitRank(a))
   .slice(0, count);
 
-export type CareerFilters = { q: string; field: string; sort: "fit" | "name"; interestOnly: boolean };
+/**
+ * What the page shows first (user 2026-10-31: "Ưu tiên kết quả phù hợp nhất; phân cấp nội dung và giảm các phần phụ", then
+ * "1 cái theo bảng xếp hạng, 1 cái theo sở thích mà sinh viên chọn ở Khảo sát định hướng"): the best fit, the next ones by
+ * fit, and the survey matches not shown yet. No career appears twice.
+ */
+export function careerPicks(careers: GuidanceCareer[], count = 3): { top: GuidanceCareer | null; ranked: GuidanceCareer[]; liked: GuidanceCareer[]; scored: number } {
+  const ordered = careers.filter(hasFit).sort((a, b) => fitRank(b) - fitRank(a));
+  const top = ordered[0] ?? null;
+  const ranked = ordered.slice(1, 1 + count);
+  const shown = new Set([top, ...ranked].flatMap((career) => (career ? [career.id] : [])));
+  return { top, ranked, liked: interestPicks(careers.filter((career) => !shown.has(career.id)), count), scored: ordered.length };
+}
+
+/** The skills the student meets for a career, in the order of Khoảng trống kỹ năng. */
+export const metSkills = (career: GuidanceCareer) => sortRequirements(computed(career)).filter((row) => row.status === "met").map(requirementName);
+
+/** The survey interests the careers match (the field of interest, the technologies), for the heading of "Theo Khảo sát định hướng". */
+export function surveyInterests(careers: readonly GuidanceCareer[]): { field: string | null; tech: string[] } {
+  const field = careers.find((career) => career.interests.field)?.interests.field ?? null;
+  const tech = [...new Set(careers.flatMap((career) => career.interests.tech))];
+  return { field, tech };
+}
+
+/** "A, B, C và 2 kỹ năng khác": a few names, the rest counted. */
+export const nameList = (names: readonly string[], max = 3, noun = "kỹ năng") =>
+  names.length <= max ? names.join(", ") : `${names.slice(0, max).join(", ")} và ${names.length - max} ${noun} khác`;
+
+/** "Khớp: lĩnh vực Web · thế mạnh Web front-end": why a career is in "Theo Khảo sát định hướng". */
+export const interestReason = (career: Pick<GuidanceCareer, "interests">) =>
+  `Khớp: ${[career.interests.field && `lĩnh vực ${career.interests.field}`, career.interests.tech.length > 0 && `thế mạnh ${career.interests.tech.join(", ")}`].filter(Boolean).join(" · ")}`;
+
+/** "Tất cả nghề" (folded under the picks): by name (Vietnamese or English) and field, best fit first, then A–Z. */
+export type CareerFilters = { q: string; field: string };
 const fold = (value: string) => value.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").toLowerCase();
 
-/** "Tất cả nghề nghiệp": by name (Vietnamese or English), field and survey match, best fit or A–Z. */
 export function filterCareers(careers: GuidanceCareer[], filters: CareerFilters): GuidanceCareer[] {
   const query = fold(filters.q.trim());
   return careers
     .filter((career) => !query || fold(`${career.nameVi} ${career.nameEn} ${career.categoryName}`).includes(query))
     .filter((career) => !filters.field || career.category === filters.field)
-    .filter((career) => !filters.interestOnly || matchesInterests(career))
-    .sort((a, b) => (filters.sort === "fit" ? fitRank(b) - fitRank(a) : 0) || a.nameVi.localeCompare(b.nameVi, "vi"));
+    .sort((a, b) => fitRank(b) - fitRank(a) || a.nameVi.localeCompare(b.nameVi, "vi"));
 }
 
 /** How the student stands on one requirement: the glyph, words and tone of Khoảng trống kỹ năng (gapStatusDisplay). */

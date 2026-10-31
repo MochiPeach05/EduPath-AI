@@ -18,13 +18,66 @@
 .cg-en { margin: 2px 0 0; color: var(--sw-muted); font-size: 12px; }
 .cg-kicker { color: var(--sw-red); font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 
-.cg-header { display: grid; grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); gap: 18px 28px; align-items: start; }
-.cg-header > .cg-note { grid-column: 1 / -1; margin: 0 !important; }
-.cg-lead { margin: 8px 0 0; color: #4a5465; font-size: 14px; line-height: 1.7; max-width: 760px; }
-.cg-current { display: grid; gap: 8px; padding: 14px 16px; border: 1px solid var(--sw-border); border-radius: var(--sw-radius); background: #fafbfc; }
-.cg-current-body { display: grid; gap: 4px; }
-.cg-current-body strong { font-size: 15px; color: var(--sw-ink); }
-.cg-current-empty { margin: 0; color: #4a5465; font-size: 14px; line-height: 1.6; }
+/* Read top-down (2026-10-31, user: "Ưu tiên kết quả phù hợp nhất; phân cấp nội dung và giảm các phần phụ"): one line on
+   what the page is, the target career in one row, the best fit, two short lists, then every career folded. */
+.cg-intro { display: grid; gap: 4px; }
+.cg-lead { margin: 0; color: #4a5465; font-size: 14px; line-height: 1.7; max-width: 760px; }
+.cg-how { font-size: 13px; color: #4a5465; }
+.cg-how summary { width: max-content; color: var(--sw-red); font-weight: 700; cursor: pointer; }
+.cg-how p { margin: 6px 0 0; max-width: 760px; line-height: 1.6; }
+.cg-target-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 16px; border: 1px solid var(--sw-border);
+  border-radius: var(--sw-radius); background: #fff; font-size: 14px; }
+.cg-target-line .cg-target-label { color: #4a5465; }
+.cg-target-line strong { color: var(--sw-ink); }
+.cg-target-line .cg-score { font-size: 18px; }
+.cg-target-line .sw-text-link { margin-left: auto; }
+.cg-target-line > .cg-note { flex: 1 1 100%; }
+.cg-level { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: -8px; }
+.cg-level p { margin: 0; color: var(--sw-muted); font-size: 13px; }
+
+/* Level 1: the best fit */
+.cg-top { display: grid; grid-template-columns: minmax(0, 1fr) 230px; gap: 24px; }
+.cg-top-main { display: grid; gap: 4px; align-content: start; min-width: 0; }
+/* .cg-page raises these over the shell's .sw-shell h3 and .sw-shell svg (student-workspace.css), whatever the sheet order. */
+.cg-page .cg-top-main h3 { font-size: 22px; line-height: 1.3; }
+.cg-why { display: grid; gap: 8px; margin: 12px 0 0; padding: 0; list-style: none; font-size: 14px; color: #3b4456; }
+.cg-why li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; align-items: start; line-height: 1.55; }
+.cg-why i { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; font-size: 12px; font-style: normal; font-weight: 800; }
+.cg-why-ok i { background: #e7f4ec; color: #16804a; }
+.cg-why-like i { background: #fbeef1; color: var(--sw-red); }
+.cg-why-gap i { background: #fff4df; color: #805900; }
+.cg-top-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 16px; }
+.cg-top-score { display: grid; justify-items: center; align-content: center; gap: 8px; padding-left: 24px; border-left: 1px solid var(--sw-border); text-align: center; }
+.cg-top-score .cg-score { font-size: 32px; }
+.cg-top-score small { color: var(--sw-muted); font-size: 12px; }
+.cg-page svg.cg-gauge { width: 150px; height: 88px; }
+.cg-gauge path { fill: none; stroke-width: 11; stroke-linecap: round; }
+.cg-gauge-track { stroke: #e9ecf1; }
+.cg-gauge-value { stroke: var(--meaning-none); }
+.cg-gauge-good { stroke: var(--meaning-good); }
+.cg-gauge-fine { stroke: var(--meaning-fine); }
+.cg-gauge-warn { stroke: #d4901f; }
+.cg-gauge-bad { stroke: var(--meaning-bad); }
+
+/* Level 2: "Theo bảng xếp hạng" and "Theo Khảo sát định hướng" side by side */
+.cg-pairs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: start; }
+.cg-pick { display: grid; gap: 10px; align-content: start; }
+.cg-pick header p { margin: 4px 0 0; color: var(--sw-muted); font-size: 13px; line-height: 1.5; }
+.cg-pick-like { border-color: #efc9d3; }
+.cg-pick-list { display: grid; margin: 0; padding: 0; list-style: none; }
+.cg-pick-list li { display: grid; grid-template-columns: 26px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 0; border-top: 1px solid var(--sw-border); }
+.cg-pick-list li:first-child { border-top: 0; }
+.cg-pos { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: #f1f3f6; color: #4a5465; font-size: 12px; font-weight: 800; }
+.cg-pick-like .cg-pos { background: #fbeef1; color: var(--sw-red); }
+/* The name opens the career's details (no separate link, so the name keeps the width). */
+.cg-page .cg-pick-name { display: grid; gap: 2px; min-width: 0; padding: 0; background: none; text-align: left; color: inherit; }
+.cg-pick-name b { color: var(--sw-ink); font-size: 14px; }
+.cg-pick-name:hover b { color: var(--sw-red); text-decoration: underline; }
+.cg-pick-name small { color: var(--sw-muted); font-size: 12px; line-height: 1.5; }
+.cg-pick-fit { display: grid; justify-items: end; gap: 4px; }
+.cg-pick-fit .cg-score { font-size: 18px; }
+.cg-page .cg-link { padding: 0; border: 0; background: none; color: var(--sw-red); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.cg-page .cg-link:hover { text-decoration: underline; }
 
 .cg-note { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin: 0; padding: 12px 14px; border-radius: 8px;
   background: #f4f7fb; color: #33415c; font-size: 14px; line-height: 1.6; }
@@ -34,12 +87,6 @@
 .cg-section-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
 .cg-section-head .sw-muted { margin: 4px 0 0; font-size: 12px; }
 
-.cg-suggest { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
-.cg-suggest-col { display: grid; gap: 12px; align-content: start; }
-.cg-suggest-col .cg-section-head { margin-bottom: 2px; }
-.cg-card { display: grid; gap: 10px; padding: 14px 16px; border: 1px solid var(--sw-border); border-radius: var(--sw-radius); background: #fff; }
-.cg-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
-.cg-card-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; color: #4a5465; font-size: 12px; }
 .cg-empty { margin: 0; padding: 14px; border: 1px dashed #d7dce3; border-radius: 8px; color: var(--sw-muted); font-size: 14px; line-height: 1.6; display: grid; gap: 10px; justify-items: start; }
 .cg-empty p { margin: 0; }
 
@@ -60,6 +107,8 @@
 /* A fit wears the colour of its word (display-format.css meaning-*, as on Khoảng trống kỹ năng); its pips take that colour. */
 .cg-fit[class*="meaning-"] .cg-pips i { background: color-mix(in srgb, currentColor 22%, transparent); }
 .cg-fit[class*="meaning-"] .cg-pips i.is-on { background: currentColor; }
+/* The short lists show the word only. */
+.cg-fit-compact .cg-pips { display: none; }
 
 .cg-interest { display: flex; align-items: flex-start; gap: 6px; margin: 0; color: #8a5a00; font-size: 12px; line-height: 1.5; }
 .cg-interest svg { flex: none; width: 14px; height: 14px; margin-top: 2px; }
@@ -72,22 +121,28 @@
 .cg-target-tag { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 999px; background: #e7f4ec; color: var(--sw-green); font-size: 12px; font-weight: 700; }
 .cg-target-tag svg { width: 14px; height: 14px; }
 
-.cg-filters { display: grid; grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr)) auto; gap: 12px; align-items: end; margin-bottom: 10px; }
+/* Level 3: every career, folded */
+.cg-all { padding: 0; }
+.cg-all > summary { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; padding: 16px 20px; cursor: pointer; list-style: none; }
+.cg-all > summary::-webkit-details-marker { display: none; }
+.cg-all > summary::after { content: "Mở"; margin-left: auto; color: var(--sw-red); font-size: 13px; font-weight: 700; }
+.cg-all[open] > summary::after { content: "Thu gọn"; }
+.cg-all-title { color: var(--sw-ink); font-size: 16px; font-weight: 800; }
+.cg-all-hint { color: var(--sw-muted); font-size: 13px; }
+.cg-all-body { display: grid; gap: 10px; padding: 16px 20px 20px; border-top: 1px solid var(--sw-border); }
+.cg-row-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.cg-like-tag { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px; background: #fbeef1; color: #8d1230; font-size: 12px; font-weight: 700; }
+.cg-filters { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 12px; align-items: end; }
 .cg-filters label { display: grid; gap: 6px; min-width: 0; color: #616777; font-size: 12px; }
 .cg-filters input:not([type=checkbox]), .cg-filters select { width: 100%; min-width: 0; padding: 10px 12px; border: 1px solid #dddfe6; border-radius: 6px; background: #fff; color: #252b38; font: inherit; font-size: 13px; }
-.cg-filters .cg-check { display: inline-flex; align-items: center; gap: 8px; padding-bottom: 10px; color: #3b4456; font-size: 13px; white-space: nowrap; }
-.cg-check input { width: 16px; height: 16px; margin: 0; accent-color: var(--sw-red); }
 
 .cg-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
 .cg-list > li { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(170px, .8fr) auto; gap: 10px 20px; align-items: center; padding: 14px 16px;
   border: 1px solid var(--sw-border); border-radius: var(--sw-radius); background: #fff; }
 .cg-list > li.is-target { border-color: #b9dcc7; background: #fbfefc; }
 .cg-row-main { display: grid; gap: 4px; min-width: 0; }
-.cg-row-fit { display: grid; grid-template-columns: auto 1fr; gap: 4px 10px; align-items: center; }
-.cg-row-fit small { grid-column: 1 / -1; color: var(--sw-muted); font-size: 12px; }
-.cg-row-fit .cg-fit { justify-self: start; }
-.cg-bar { grid-column: 1 / -1; display: block; height: 6px; border-radius: 3px; background: #edf0f4; overflow: hidden; }
-.cg-bar i { display: block; height: 100%; border-radius: 3px; background: var(--cg-l3); }
+.cg-row-fit { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.cg-row-fit .cg-score { font-size: 20px; }
 
 .cg-table-scroll { max-width: 100%; overflow-x: auto; border: 1px solid var(--sw-border); border-radius: 8px; }
 .cg-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -150,19 +205,20 @@
 .cg-problem p { margin: 0; }
 
 @media (max-width: 1000px) {
-  .cg-header { grid-template-columns: minmax(0, 1fr); }
-  .cg-suggest { grid-template-columns: minmax(0, 1fr); }
+  .cg-pairs { grid-template-columns: minmax(0, 1fr); }
   .cg-list > li { grid-template-columns: minmax(0, 1fr) minmax(160px, auto); }
   .cg-list > li .cg-actions { grid-column: 1 / -1; }
-  .cg-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .cg-filters label:first-child { grid-column: 1 / -1; }
+}
+
+@media (max-width: 760px) {
+  .cg-top { grid-template-columns: minmax(0, 1fr); }
+  .cg-top-score { padding: 16px 0 0; border-left: 0; border-top: 1px solid var(--sw-border); }
 }
 
 @media (max-width: 600px) {
   .cg-list > li { grid-template-columns: minmax(0, 1fr); }
   .cg-filters { grid-template-columns: minmax(0, 1fr); }
-  .cg-filters .cg-check { padding-bottom: 0; }
-  .cg-card-head { flex-direction: column; }
+  .cg-target-line .sw-text-link { margin-left: 0; }
   .cg-dock { bottom: 8px; }
 }
 
