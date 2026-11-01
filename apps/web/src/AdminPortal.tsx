@@ -92,7 +92,7 @@ export default function AdminPortal() {
 
   return <div className={`admin-shell${signedIn ? " admin-shell-signed-in" : ""}`}>
     <header className="admin-header">
-      <EduPathBrand />
+      <EduPathBrand href="/" />
       <img className="admin-university-logo" src="/vlu-logo-horizontal.png" alt="Trường Đại học Văn Lang" width="225" height="57" />
     </header>
 
