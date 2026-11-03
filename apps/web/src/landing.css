@@ -177,8 +177,16 @@
 .lp-page h2 em {
   color: var(--lp-red);
   font-family: "Newsreader", Georgia, serif;
+  font-size-adjust: var(--ep-serif-adjust);
   font-weight: 500;
   font-style: italic;
+}
+
+/* The hero's display lines keep their size: the slightly larger text of styles.css (font-size-adjust) is for reading
+   text and would push "Chọn đúng hướng." onto two lines. */
+.lp-hero h1,
+.lp-hero h1 em {
+  font-size-adjust: none;
 }
 
 .lp-hero h1 em {
@@ -898,6 +906,7 @@
 
 .lp-step-top>span {
   font-family: "Newsreader", Georgia, serif;
+  font-size-adjust: var(--ep-serif-adjust);
   font-size: 36px;
   font-style: italic;
   line-height: 1;

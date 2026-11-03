@@ -1,4 +1,4 @@
-/* On desktop (from 1520px, where the header nav fits) the logo column stays reserved even when the sidebar is closed,
+/* On desktop (from 1240px, where the header nav fits) the logo column stays reserved even when the sidebar is closed,
    so content stays put. Narrower screens give the content the full width and overlay the drawer (see below). */
 html:has(.sw-shell) {
   scrollbar-gutter: stable;
@@ -113,7 +113,7 @@ html:has(.sw-shell) {
 }
 
 /* Balance the reserved sidebar space with an equal right margin on desktop. */
-@media (min-width: 1520px) {
+@media (min-width: 1240px) {
   .sw-body {
     grid-template-columns: var(--sw-rail-width) minmax(0, 1fr) var(--sw-rail-width);
   }
@@ -123,9 +123,9 @@ html:has(.sw-shell) {
   }
 }
 
-/* Below 1520px the header nav is hidden and the drawer is the menu: it overlays the page instead of squeezing the
+/* Below 1240px the header nav is hidden and the drawer is the menu: it overlays the page instead of squeezing the
    content, and no column is kept for it while it is closed. */
-@media (max-width: 1519.98px) {
+@media (max-width: 1239.98px) {
   .sw-body {
     grid-template-columns: minmax(0, 1fr);
   }

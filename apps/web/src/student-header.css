@@ -230,9 +230,9 @@
   color: #d8dce6;
 }
 
-/* The seven nav items need about 1490px beside the logo and the tools (pages at 100%, styles.css): below 1520px the
-   drawer behind the menu button is the navigation, as on phones. */
-@media (max-width: 1519.98px) {
+/* The seven nav items fit beside the logo and the tools from 1240px (page at 80% from 1200px, its text a little larger,
+   styles.css): below that the drawer behind the menu button is the navigation, as on phones. */
+@media (max-width: 1239.98px) {
   .sw-header-nav {
     display: none;
   }

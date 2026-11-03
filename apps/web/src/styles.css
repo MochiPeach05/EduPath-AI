@@ -8,15 +8,48 @@
   text-rendering: optimizeLegibility;
 
   /*
-    Every page is drawn at its natural size, 100%, at every width (user
-    2026-11-03: "tôi muốn nó trở về phiên bản 100% cũ luôn"). 7d635e8
-    (2026-09-20) had scaled desktops down to 75% with CSS `zoom`, df8d75c to
-    86.25%. The variables stay at their unscaled values so full-viewport lengths
-    (`calc(100 * var(--ep-vh))`) and layoutZoom (page-scale.ts) work unchanged.
+    Desktop scale (user 2026-11-03, after 75% since 7d635e8, 86.25% in df8d75c
+    and a short try at 100% in 143fd35): from 1200px the page is drawn at 80%
+    with CSS `zoom` ("100% nó lớn quá ta giảm về lại 80% đi"), its text a little
+    larger than the rest ("cho kích thước chữ to thêm 1 xíu nhé"):
+    font-size-adjust sets the x-height of Manrope (0.54 of the em) to 0.57 and
+    of the Newsreader headings (0.46) to 0.48, about 6% bigger glyphs with no
+    box changed. Phones and small laptops keep their natural size and text.
+    The student header nav needs the width it gets from 1240px.
+
+    `zoom` multiplies used lengths, and viewport units are no exception: 100dvh
+    inside a zoomed box only covers 80% of the screen. Full-viewport lengths are
+    therefore written as `calc(100 * var(--ep-vh))`, which divides the factor
+    back out and is correct whether or not the scale is active.
   */
   --ep-zoom: 1;
   --ep-vh: 1dvh;
   --ep-vw: 1vw;
+  --ep-text-adjust: none;
+  --ep-serif-adjust: none;
+  font-size-adjust: var(--ep-text-adjust);
+}
+
+@media (min-width: 1200px) {
+  :root {
+    --ep-zoom: .8;
+    --ep-vh: calc(1dvh / .8);
+    --ep-vw: calc(1vw / .8);
+    --ep-text-adjust: 0.57;
+    --ep-serif-adjust: 0.48;
+  }
+
+  body {
+    zoom: var(--ep-zoom);
+  }
+}
+
+/* The browser's own styles reset `font`, and with it font-size-adjust, on form controls. */
+button,
+input,
+select,
+textarea {
+  font-size-adjust: inherit;
 }
 
 * {

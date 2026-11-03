@@ -48,8 +48,8 @@ type Page = StudentPage;
 const navPageIds = new Set<Page>(["overview", "competency", "skill-gap", "career", "roadmap", "assistant", "graduation"]);
 const navPages = pages.filter(p => navPageIds.has(p.id));
 const accountPages = pages.filter(p => !navPageIds.has(p.id));
-// Below 1520px (pages at 100%, styles.css) the header nav does not fit: the drawer is the menu and overlays the page.
-const overlayDrawerQuery = "(max-width: 1519.98px)";
+// Below 1240px (page at 80% from 1200px, styles.css) the header nav does not fit: the drawer is the menu and overlays the page.
+const overlayDrawerQuery = "(max-width: 1239.98px)";
 type Profile = StudentProfile;
 type Panel = "notifications" | "help" | "account";
 type ShellError = { kind: "session" | "profile" | "logout"; message: string };
