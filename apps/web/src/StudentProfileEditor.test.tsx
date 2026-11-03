@@ -2,6 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
 import StudentProfileEditor from "./StudentProfileEditor";
+import StudentCareerExplorer from "./StudentCareerExplorer";
 import { installAdvisorFetch, stopActing } from "./advisor-view";
 
 const render = (profile: Parameters<typeof StudentProfileEditor>[0]["profile"]) =>
@@ -38,10 +39,31 @@ describe("Mục tiêu học tập in a cố vấn học tập's tab", () => {
     expect(html).not.toContain(">Chọn vị trí nghề nghiệp mục tiêu</button>");
   });
 
-  it("offers the changes again in the student's own tab", () => {
+  it("offers the changes again in the student's own tab, through Chỉnh sửa thông tin only (user 2026-11-03)", () => {
     const html = render({ careerPositionId: null, careerPosition: null, specialty: null, cohortCode: "K30" });
     expect(html).toContain("Chỉnh sửa thông tin");
-    expect(html).toContain(">Chọn vị trí nghề nghiệp mục tiêu</button>");
+    // The career is chosen inside the form, not by a second button beside it.
+    expect(html).not.toContain(">Chọn vị trí nghề nghiệp mục tiêu</button>");
     expect(html).not.toContain("Sinh viên tự chọn chuyên ngành và vị trí nghề nghiệp mục tiêu");
+  });
+});
+
+describe("Khám phá vị trí nghề nghiệp", () => {
+  const explorer = (mode: "pick" | "view") => renderToStaticMarkup(createElement(StudentCareerExplorer, {
+    mode, selectedId: "", onSelect: async () => {}, onClose: () => {},
+  }));
+
+  it("picks a career into the form's draft, saved with Lưu thay đổi", () => {
+    const html = explorer("pick");
+    expect(html).toContain("vị trí nghề nghiệp được lưu khi bạn bấm Lưu thay đổi ở Mục tiêu học tập");
+    expect(html).toContain("Chọn vị trí nghề nghiệp này</button>");
+    expect(html).not.toContain("Lưu mục tiêu");
+  });
+
+  it("only shows careers when opened from the eye icon", () => {
+    const html = explorer("view");
+    expect(html).toContain("Để đổi vị trí nghề nghiệp mục tiêu, bấm Chỉnh sửa thông tin ở Mục tiêu học tập.");
+    expect(html).not.toContain("Chọn vị trí nghề nghiệp này</button>");
+    expect(html).toContain(">Đóng</button>");
   });
 });

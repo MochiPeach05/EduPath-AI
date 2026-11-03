@@ -7,9 +7,10 @@ import { PROFILE_SECTIONS } from "./student-overview-data";
 import { isAdvisorView } from "./advisor-view";
 import "./student-records.css";
 // "Sở thích" (technologies and free-time interests) moved into Khảo sát định hướng on 2026-10-24 (StudentProfileSurvey).
-// "Mục tiêu học tập" (was "Thông tin cá nhân"): the career and the specialty. A career is chosen in Khám phá vị trí nghề nghiệp
-// and saved at once, so the form opened by "Chỉnh sửa thông tin" holds only what Hủy can undo: the specialty and
-// clearing the career.
+// "Mục tiêu học tập" (was "Thông tin cá nhân"): the career and the specialty, changed in one place (user 2026-11-03: "chỉ có
+// ấn vào chỉnh sửa mới cho sửa Chọn vị trí nghề nghiệp mục tiêu luôn đi chia ra 2 lối quá"): "Chỉnh sửa thông tin" opens the
+// form, where Khám phá vị trí nghề nghiệp picks the career into the draft; "Lưu thay đổi" saves the career and the specialty
+// together and Hủy drops both. Outside the form the eye icon only shows the chosen career's requirements.
 type EditableStudentProfile = {
   /** The programme of the MSSV (052): the specialties offered are those of this major. */
   majorCode?: string | null;
@@ -60,7 +61,8 @@ export default function StudentProfileEditor({
     [message, setMessage] = useState(""),
     [error, setError] = useState("");
   const [draftCareer, setDraftCareer] = useState<CareerSelection | null>(null);
-  const [explorer, setExplorer] = useState<{ initialCareerId?: string } | null>(null);
+  // pick: from the form, the career goes into the draft; view: from the eye icon, requirements only.
+  const [explorer, setExplorer] = useState<{ mode: "pick" | "view"; initialCareerId?: string } | null>(null);
   // What was just saved, shown until the reloaded profile arrives (onSaved reloads it).
   const [saved, setSaved] = useState<Partial<EditableStudentProfile> | null>(null);
   useEffect(() => setSaved(null), [profile]);
@@ -90,13 +92,12 @@ export default function StudentProfileEditor({
     setEditing(false);
     focusNext.current = () => editButton.current;
   };
-  const chooseCareer = async (career: Pick<CareerSelection, "id" | "nameVi" | "nameEn">) => {
-    await updateProfile({ careerPositionId: career.id });
-    setSaved((current) => ({ ...current, careerPositionId: career.id, careerPosition: { id: career.id, nameVi: career.nameVi, nameEn: career.nameEn, deletedAt: null } }));
+  /** The career picked in Khám phá vị trí nghề nghiệp, into the draft: "Lưu thay đổi" saves it. */
+  const pickCareer = async (career: Pick<CareerSelection, "id" | "nameVi" | "nameEn">) => {
+    setDraft((current) => ({ ...current, careerPositionId: career.id }));
+    setDraftCareer({ id: career.id, nameVi: career.nameVi, nameEn: career.nameEn, deletedAt: null });
     setExplorer(null);
     setError("");
-    setMessage(`Đã lưu vị trí nghề nghiệp mục tiêu: ${career.nameVi}.`);
-    onSaved();
   };
   const save = async (event: FormEvent) => {
     event.preventDefault();
@@ -149,7 +150,9 @@ export default function StudentProfileEditor({
                 <span>{draftCareer ? `${draftCareer.nameVi} — ${draftCareer.nameEn}${draftCareer.deletedAt ? " (đã ngừng sử dụng)" : ""}` : "Chưa chọn vị trí nghề nghiệp mục tiêu."}</span>
                 {draft.careerPositionId && <button type="button" className="sr-career-icon sr-career-clear" aria-label="Bỏ chọn vị trí nghề nghiệp mục tiêu" title="Bỏ chọn" onClick={() => { setDraft({ ...draft, careerPositionId: "" }); setDraftCareer(null); }}><Icon name="close" /></button>}
               </div>
-              <small className="sr-field-note">Để đổi vị trí nghề nghiệp mục tiêu, hãy lưu hoặc hủy chỉnh sửa rồi bấm Chọn vị trí nghề nghiệp mục tiêu.</small>
+              <div className="sr-actions">
+                <button type="button" className="sr-secondary sr-career-choose" onClick={() => setExplorer({ mode: "pick" })}>Chọn vị trí nghề nghiệp mục tiêu</button>
+              </div>
             </div>
             {supportsSpecialty && <label className="sr-wide">
               <span><span id="sr-specialty-label">Chuyên ngành</span><span className="sr-required" aria-hidden="true"> *</span></span>
@@ -199,11 +202,8 @@ export default function StudentProfileEditor({
               ) : (
                 "Chưa chọn vị trí nghề nghiệp mục tiêu."
               )}</span>
-              {shown.careerPositionId && !shown.careerPosition?.deletedAt && <button type="button" className="sr-career-icon" aria-label="Xem yêu cầu của vị trí nghề nghiệp" title="Xem yêu cầu" onClick={() => setExplorer({ initialCareerId: shown.careerPositionId! })}><Icon name="eye" /></button>}
+              {shown.careerPositionId && !shown.careerPosition?.deletedAt && <button type="button" className="sr-career-icon" aria-label="Xem yêu cầu của vị trí nghề nghiệp" title="Xem yêu cầu" onClick={() => setExplorer({ mode: "view", initialCareerId: shown.careerPositionId! })}><Icon name="eye" /></button>}
             </dd>
-            {!advisorView && <div className="sr-actions">
-              <button type="button" className="sr-secondary sr-career-choose" onClick={() => setExplorer({})}>Chọn vị trí nghề nghiệp mục tiêu</button>
-            </div>}
           </div>
           {supportsSpecialty && <div>
             <dt>Chuyên ngành</dt>
@@ -212,7 +212,7 @@ export default function StudentProfileEditor({
         </dl>
       )}
       {advisorView && <p className="sw-advisor-note">Sinh viên tự chọn chuyên ngành và vị trí nghề nghiệp mục tiêu; bạn chỉ xem.</p>}
-      {explorer && <StudentCareerExplorer selectedId={shown.careerPositionId ?? ""} initialCareerId={explorer.initialCareerId} onSelect={chooseCareer} onClose={() => setExplorer(null)} />}
+      {explorer && <StudentCareerExplorer mode={explorer.mode} selectedId={shown.careerPositionId ?? ""} initialCareerId={explorer.initialCareerId} onSelect={pickCareer} onClose={() => setExplorer(null)} />}
     </section>
   );
 }
