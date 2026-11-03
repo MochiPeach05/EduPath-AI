@@ -75,9 +75,15 @@ export function thesisWayReason(path: ThesisPath, gpa: ThesisGpa): string | null
   return `điểm TB tích lũy ${gpaText(gpa.actual)}, ${way === "thesis" ? `từ ${gpaText(THESIS_MIN_GPA)} trở lên` : `dưới ${gpaText(THESIS_MIN_GPA)}`}`;
 }
 
-/** The replacement path's courses: the chuyên đề courses when the group has them, else every other course of the group. */
-export function replacementPath<T extends { name: string }>(replacements: readonly T[]): T[] {
-  const topics = replacements.filter((course) => TOPIC_NAME_PATTERN.test(fold(course.name)));
+/**
+ * The replacement path's courses: the chuyên đề courses when the group has them and their credits complete the group's
+ * quota (required; unknown: they do), else every other course of the group (a group with only Chuyên đề tốt nghiệp 1
+ * beside a 6-TC thesis would otherwise ask for 6 TC from 3).
+ */
+export function replacementPath<T extends { name: string; credits: number | null }>(replacements: readonly T[], required: number | null = null): T[] {
+  const found = replacements.filter((course) => TOPIC_NAME_PATTERN.test(fold(course.name)));
+  const enough = required === null || found.reduce((sum, course) => sum + (course.credits ?? 0), 0) + 1e-9 >= required;
+  const topics = enough ? found : [];
   return topics.length ? topics : [...replacements];
 }
 

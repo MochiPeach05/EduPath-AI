@@ -414,15 +414,16 @@ describe("career gaps and fit (spec §7.5–§7.7)", () => {
   });
 
   it("lists support courses by credits × weight with three-state prerequisites and planned terms", () => {
-    // Registered for Chuyên đề Tốt nghiệp 1: the student is on the thesis replacement path, so its courses may be suggested (comp-calc-v7).
+    // Registered for Chuyên đề Tốt nghiệp 1: the student is on the thesis replacement path, so its courses may be suggested
+    // (comp-calc-v7) and the thesis no longer (v18: never both ways).
     const started = calculateAssessment({ ...inputs, transcript: { ...inputs.transcript, data: syntheticTranscript(withRows(6, [["71ITGR40203", 3]])) } });
     const courses = started.career!.requirements.find((item) => item.title === "Thuyết trình")!.supportCourses;
     expect(courses.map((course) => [course.code, course.eligibility, course.termLabel])).toEqual([
-      ["71ITGR40203", "not_eligible", "HK261"], ["71ITGR40206", "eligible", "HK261"], ["71ITIS30403", "review", "HK253"], ["71ITIN40304", "eligible", "HK253"],
+      ["71ITGR40203", "not_eligible", "HK261"], ["71ITIS30403", "review", "HK253"], ["71ITIN40304", "eligible", "HK253"],
     ]);
     // Only the CNPM block of the "SV chuyên ngành …" relation applies; 71ITSE41203 is in progress, not passed.
     expect(courses[0]!.missing).toEqual([{ code: "71ITSE41203", name: "Kiểm thử phần mềm", kind: "prerequisite" }]);
-    expect(courses[2]!.reviewNotes).toEqual(["[71ENG010012]Anh văn dự bị (AV0)"]);
+    expect(courses[1]!.reviewNotes).toEqual(["[71ENG010012]Anh văn dự bị (AV0)"]);
     expect(courses[0]!.reason).toBe("3 tín chỉ × trọng số 1 cho kỹ năng này");
     // Off that path the replacements are left out; the thesis itself stays.
     expect(row("Thuyết trình").supportCourses.map((course) => course.code)).toEqual(["71ITGR40206", "71ITIN40304"]);
@@ -647,16 +648,28 @@ describe("thesis replacement courses are never suggested off that path (comp-cal
     expect(plans.skillPlans.find((item) => item.skillId === SKILL.mobile)!.take.map((course) => course.code)).toEqual(["71ITGR40206"]);
   });
 
-  it("suggests them once the student is on the replacement path", () => {
+  it("suggests them once the student is on the replacement path, and the thesis no longer (v18)", () => {
     const registered = run(withRows(6, [["71ITGR40203", 3]]));
-    expect(registered.excludedThesisReplacements).toEqual([]);
-    expect(presenting(registered)).toEqual(["71ITGR40203", "71ITGR40206", "71ITIS30403", "71ITIN40304"]);
+    expect(registered.excludedThesisReplacements).toEqual(["71ITGR40206"]);
+    // Chuyên đề Tốt nghiệp 1 alone (3 TC) cannot complete the 6-TC group, so the other replacement stays on that path.
+    expect(presenting(registered)).toEqual(["71ITGR40203", "71ITIS30403", "71ITIN40304"]);
     // A passed replacement meets Thuyết trình (75, below Giỏi): the plan to deepen it may name the other replacement.
     const passed = run(withRows(5, [["71ITIS30403", 3, 7.5, 3, "B"]]));
-    expect(passed.excludedThesisReplacements).toEqual([]);
+    expect(passed.excludedThesisReplacements).toEqual(["71ITGR40206"]);
     expect(passed.skillPlans.map((item) => [item.name, item.purpose, item.take.map((course) => course.code)])).toEqual([
-      ["Thuyết trình", "deepen", ["71ITGR40203", "71ITGR40206", "71ITIN40304"]],
+      ["Thuyết trình", "deepen", ["71ITGR40203", "71ITIN40304"]],
     ]);
+  });
+
+  it("follows the cumulative GPA when no way is taken: the thesis from 2,80, the replacement courses below it (v18)", () => {
+    /** The synthetic terms with the printed cumulative GPA (2,85) replaced. */
+    const gpa = (value: string) => syntheticStudentTerms().map((term) => (term.summaries
+      ? { ...term, summaries: term.summaries.map(([label, text]) => [label, /TB tích lũy/.test(label) ? value : text] as [string, string]) } : term));
+    expect(run(gpa("2,80")).excludedThesisReplacements).toEqual(["71ITGR40203", "71ITIS30403"]);
+    const low = run(gpa("2,79"));
+    expect(low.excludedThesisReplacements).toEqual(["71ITGR40206"]);
+    expect(presenting(low)).toEqual(["71ITGR40203", "71ITIS30403", "71ITIN40304"]);
+    expect(low.courseSuggestions.map((course) => course.code)).not.toContain("71ITGR40206");
   });
 
   it("does not count a failed replacement or replacements next to a thesis in progress as that path", () => {

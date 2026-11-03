@@ -1,6 +1,6 @@
 import { referencedCourseCodes } from "../curricula/course-codes.js";
 import type { GraduationData } from "../graduation/model.js";
-import { startsReplacementPath, THESIS_NAME_PATTERN } from "../graduation/thesis.js";
+import { replacementPath, startsReplacementPath, THESIS_NAME_PATTERN, thesisWay, type ThesisPath } from "../graduation/thesis.js";
 import type { TranscriptData } from "../student/transcript-parser.js";
 import {
   CALC_VERSION, CAREER_COEFFICIENTS, CAREER_THRESHOLDS, CONDITION_NOMINAL_CREDITS, COVERAGE_BANDS, DEFICIT_BANDS, EVIDENCE_BANDS, FIT_BELOW_FLOOR,
@@ -12,7 +12,7 @@ import {
   electiveCodeOf, hasScore, isAttemptedState, isConditionOnly, isPassedState, isStudiedState, termCode, type TranscriptCourseRecord,
   transcriptCourses, uniqueCurriculumCourses,
 } from "./course-state.js";
-import { assessGraduation, electiveQuotas, graduationCodeAliases, programCreditMap } from "./graduation.js";
+import { assessGraduation, assessGraduationGpa, electiveQuotas, graduationCodeAliases, programCreditMap } from "./graduation.js";
 import { physicalEducationGroupsFor, planProgress, type PlanCourseInfo } from "./plan-progress.js";
 import {
   classifyCurriculumSpecialty, type CurriculumSpecialtyClass, fold, specialtyBlocks, specialtyConflict, specialtyCounts,
@@ -379,27 +379,36 @@ function assess(inputs: AssessmentInputs): Assessment {
   // A course still ahead for the student: being studied, or planned after the term being studied (v13), not studied and
   // not an unchosen elective. One rule for "Sắp học" on Đánh giá năng lực (SkillResult.upcoming, v16) and the career rows.
   const isAhead = (row: Row) => !notChosen(row) && !isStudiedState(row.state)
-    && (row.state === "in_progress" || (row.plannedTerm !== null && (studyTerm === null || row.plannedTerm > studyTerm)));
+    && (row.state === "in_progress" || (!excludedThesisReplacements.has(row.code) && row.plannedTerm !== null && (studyTerm === null || row.plannedTerm > studyTerm)));
   /** The earliest term of the courses ahead: the attempt for one in progress, else the plan's. */
   const aheadTerm = (rows: readonly Row[]): string | null => rows.filter(isAhead)
     .map((row) => (row.state === "in_progress" ? row.attemptTerm ?? row.plannedTerm : row.plannedTerm))
     .filter((term): term is string => term !== null).sort(compareCode)[0] ?? null;
   const quotaUnknownGroups = [...electiveStates.values()].filter((group) => group.quota === null && group.rows.length).map((group) => group.code).sort(compareCode);
   // comp-calc-v7, the graduation/thesis.ts rule: in an elective group whose quota one thesis course
-  // ("Đồ án/Khóa luận tốt nghiệp") completes alone, the other courses replace the thesis. They are
-  // never suggested (advisor rule) unless the student is on that path: a replacement passed, exempt,
-  // in progress or graded (a failed one does not count) and the thesis itself not in progress.
+  // ("Đồ án/Khóa luận tốt nghiệp") completes alone, the other courses replace the thesis. v18 (user 2026-11-03: "điểm của
+  // sinh viên mà ổn thì đề xuất làm đồ án tốt nghiệp còn thấp thì làm 2 môn thay thế đó", "TB tích lũy từ 2,80", and "có"
+  // to the same rule here): the way is the one thesisWay advises on every page. A path already taken stays (the thesis in
+  // progress; another course of the group passed, exempt, in progress or graded, a failed one not counting); otherwise the
+  // cumulative GPA (4-point, printed, else estimated, as Xét tốt nghiệp reads it) chooses the thesis from 2,80 and
+  // Chuyên đề tốt nghiệp 1 and 2 below it; without a GPA the thesis first (v7). The courses of the other way that are
+  // not passed are never suggested, and never "Sắp học" unless in progress (the set keeps its v7 name; it may hold the
+  // thesis since v18).
+  const thesisGpa = assessGraduationGpa(standardData ?? { minimumGpa: 0, gpaScale: 4 }, transcript, records, conditionCodes);
   const excludedThesisReplacements = new Set<string>();
+  const started = (row: Row) => row.state !== "not_in_curriculum" && startsReplacementPath(row.state);
   for (const elective of electives) {
     const quota = quotas.get(elective.code)?.quota ?? null;
     if (quota === null) continue;
     const rows = elective.courseCodes.map((code) => table.get(code)).filter((row): row is Row => row !== undefined);
     const thesis = rows.find((row) => row.credits >= quota && THESIS_NAME_PATTERN.test(fold(row.name)));
     if (!thesis) continue;
-    const replacements = rows.filter((row) => row !== thesis);
-    const replacementPath = thesis.state !== "in_progress" &&
-      replacements.some((row) => row.state !== "not_in_curriculum" && startsReplacementPath(row.state));
-    if (!replacementPath) for (const row of replacements) excludedThesisReplacements.add(row.code);
+    const others = rows.filter((row) => row !== thesis);
+    const path: ThesisPath = thesis.state === "in_progress" ? "thesis_in_progress"
+      : others.some(started) ? "replacement" : "not_started";
+    const way = thesisWay(path, thesisGpa) ?? "thesis";
+    const kept = way === "thesis" ? [thesis] : replacementPath(others, quota);
+    for (const row of rows) if (!kept.includes(row) && !isPassedState(row.state)) excludedThesisReplacements.add(row.code);
   }
 
   /* ---- 2. weights (§2.3): matched by code, credits from the current CTĐT ---- */

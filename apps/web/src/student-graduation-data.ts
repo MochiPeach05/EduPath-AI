@@ -579,11 +579,15 @@ export function thesisWay(path: ThesisOption["path"], gpa: Pick<GraduationEvalua
   if (path !== "not_started" || gpa.actual === null || gpa.scale !== 4) return null;
   return gpa.actual >= THESIS_MIN_GPA - 1e-9 ? "thesis" : "replacement";
 }
-/** Only Chuyên đề tốt nghiệp 1 and 2 replace the thesis when the group has them (user: "là môn học thay thế đồ án tốt nghiệp thôi"). */
+/**
+ * Only Chuyên đề tốt nghiệp 1 and 2 replace the thesis when the group has them (user: "là môn học thay thế đồ án tốt
+ * nghiệp thôi") and they complete its quota; else every other course (the server's replacementPath).
+ */
 const TOPIC_NAME = /\bchuyen de tot nghiep\b/;
-const replacementPath = (replacements: GraduationCourseRow[]) => {
+const replacementPath = (replacements: GraduationCourseRow[], required: number | null) => {
   const topics = replacements.filter((course) => TOPIC_NAME.test(foldName(course.name)));
-  return topics.length ? topics : replacements;
+  const enough = required === null || topics.reduce((sum, course) => sum + (course.credits ?? 0), 0) + 1e-9 >= required;
+  return topics.length && enough ? topics : replacements;
 };
 const gpaText = (value: number) => value.toFixed(2).replace(".", ",");
 
@@ -628,7 +632,7 @@ function thesisSuggestion(group: GraduationGroupEvaluation, option: ThesisOption
     };
   }
   if (way === "replacement") {
-    const path = replacementPath(replacements).filter((course) => !isPassedState(course.state));
+    const path = replacementPath(replacements, group.required).filter((course) => !isPassedState(course.state));
     return {
       key,
       text: `Học ${joinVi(path.map((course) => course.name))} để hoàn thành ${title}: điểm TB tích lũy của bạn ${gpaText(gpa.actual!)}, dưới ${gpaText(THESIS_MIN_GPA)}, nên hệ thống đề xuất học các học phần thay thế ${thesisKind(thesis)}.`,

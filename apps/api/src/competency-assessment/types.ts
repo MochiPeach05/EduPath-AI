@@ -716,9 +716,10 @@ export type AssessmentResult = {
    */
   skillPlans: SkillPlan[];
   /**
-   * Courses of a thesis elective group other than the thesis (the graduation/thesis.ts rule), left out
-   * of every course suggestion while the student is not on that replacement path; sorted by code,
-   * empty when there is none (comp-calc-v7; absent before).
+   * Courses of a thesis elective group off the way the system advises (graduation/thesis.ts thesisWay): the other courses
+   * while the thesis is advised, the thesis and the courses beside Chuyên đề tốt nghiệp 1 and 2 while those are (comp-calc-v18,
+   * cumulative GPA 2,80; a course already started never). Left out of every course suggestion and of "Sắp học"; sorted by
+   * code, empty when there is none (comp-calc-v7; absent before).
    */
   excludedThesisReplacements: string[];
   progress: PlanProgressResult | null;

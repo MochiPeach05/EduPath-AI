@@ -71,7 +71,13 @@ import type { Confidence, FitCode, GapStatus } from "./types.js";
  * - "Kỹ năng gần giống đã đo" of a self-study skill lists scored skills only;
  * - plan choice labels are spaced ("Chọn1 trong 3" → "Chọn 1 trong 3") and say the real number of options.
  */
-export const CALC_VERSION = "comp-calc-v17";
+/**
+ * v18 (user 2026-11-03, the thesis rule of Xét tốt nghiệp, Lộ trình AI and Kế hoạch học kỳ, "có" to it here): the thesis
+ * group follows the way graduation/thesis.ts thesisWay advises. A path already taken stays; otherwise the cumulative GPA
+ * chooses Đồ án/Khóa luận tốt nghiệp from 2,80 and Chuyên đề tốt nghiệp 1 and 2 below it; without a GPA the thesis first
+ * (v7). The other way's courses not started are never suggested and never make a skill "Sắp học".
+ */
+export const CALC_VERSION = "comp-calc-v18";
 /**
  * The graduation evaluation uses no skill level, so it keeps the version of its last change:
  * comp-calc-v10 changed only levels and must not re-date every student's graduation advice.

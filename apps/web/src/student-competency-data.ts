@@ -255,6 +255,15 @@ export function overallIsPooled(calcVersion: string | null | undefined): boolean
   return !Number.isFinite(version) || version >= 12;
 }
 
+/**
+ * comp-calc-v18 (2026-11-03): the thesis group follows the cumulative GPA (Đồ án tốt nghiệp from 2,80, Chuyên đề tốt nghiệp
+ * below it); earlier results suggested the thesis first.
+ */
+export function thesisByGpa(calcVersion: string | null | undefined): boolean {
+  const version = Number(/^comp-calc-v(\d+)$/.exec(calcVersion ?? "")?.[1]);
+  return !Number.isFinite(version) || version >= 18;
+}
+
 /** comp-calc-v13 (2026-10-24): the plan progress counts from the term being studied; earlier results from the latest graded term. */
 export function countsFromStudyTerm(calcVersion: string | null | undefined): boolean {
   const version = Number(/^comp-calc-v(\d+)$/.exec(calcVersion ?? "")?.[1]);

@@ -145,9 +145,10 @@ export function planThesis(courses: readonly Pick<StudyPlanCourse, "code" | "nam
     const thesis = members.find((course) => course.credits >= group.required! && THESIS_NAME_PATTERN.test(fold(course.name)));
     if (!thesis || thesis.state === "passed" || thesis.state === "exempt") continue;
     const rest = members.filter((course) => course !== thesis);
-    const replacements = replacementPath(rest);
+    const replacements = replacementPath(rest, group.required);
+    // The path as graduation/thesis.ts thesisOption reads it: any other course of the group started.
     const path: ThesisPath = thesis.state === "in_progress" ? "thesis_in_progress"
-      : replacements.some((course) => startsReplacementPath(course.state as never)) ? "replacement" : "not_started";
+      : rest.some((course) => startsReplacementPath(course.state as never)) ? "replacement" : "not_started";
     return {
       group: group.label, thesis: thesis.code, replacements: replacements.map((course) => course.code),
       others: rest.filter((course) => !replacements.includes(course)).map((course) => course.code),

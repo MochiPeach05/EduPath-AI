@@ -7,7 +7,7 @@ import { specialtyLabel, type AiStatus, type AssessmentResult, type AssessmentSt
 import {
   CHART_LEVELS, COMPETENCY_API, CONFIDENCE_LABELS, COURSE_STATE_LABELS, EMPTY_SKILL_FILTERS, FIT_LABELS, FIT_SCALE, LEVEL_COLUMNS, LEVEL_LABELS, LEVEL_SCALE, LEVEL_THRESHOLDS, PRECONDITION_COPY, PRIORITY_LABELS, UNSCORED_STATES,
   aiErrorMessage, aiReasoned, aiStateCopy, bucketSkills, canRegenerate, careerDataText, careerSkillKeys, careerThresholdsLine, chartLevelLabel, choiceLabel, confidentStrengths, courseTermText, currentImprovements, courseStanding, dataUsedLine, displayLevel, eligibilityDisplay, errorMessage, filterSkills, fitLevelOf, fitScoreOf, fitStep, formatDateTime,
-  careerSummaryText, formatDifference, formatNumber, formatPercent, formatScore, gapHistory, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isOverdue, isPreconditionError, levelChart, levelSentence, levelStep, nextCourseCount, nextTermOf, noCreditSkill, overallIsPooled, overdueText, countsFromStudyTerm, levelSummary, levelText, mapAiOutput, missingRequirements, skillGroupKeys, missingRequirementsMessage, modelLabel, needsSelfStudy,
+  careerSummaryText, formatDifference, formatNumber, formatPercent, formatScore, gapHistory, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isOverdue, isPreconditionError, levelChart, levelSentence, levelStep, nextCourseCount, nextTermOf, noCreditSkill, overallIsPooled, overdueText, countsFromStudyTerm, thesisByGpa, levelSummary, levelText, mapAiOutput, missingRequirements, skillGroupKeys, missingRequirementsMessage, modelLabel, needsSelfStudy,
   plannedCourseNote, plansFor, relatedSkillNames, scoreDifference, shouldPoll, skillName, sortRequirements, studyTermOf, upcomingText, withCurrentLevels, type ChartLevel, type DisplayLevel, type FitLevel, type LevelBar, type LevelSegment, type MappedAiOutput, type PreconditionError, type SkillFilters, type StatusTone,
   fitMeaning, historyTermName, levelMeaning, noGapText, scoreSources, scoreSourcesText,
 } from "./student-competency-data";
@@ -1031,6 +1031,7 @@ export default function StudentCompetency({ profile, view = "competency", notice
       </div>
       <Checklist hasTranscript={hasTranscript} transcriptFailed={!transcript.loading && Boolean(transcript.error)} profile={profile} suggestion={result?.specialtySuggestion?.text ?? null} />
       {profileChanged && <p className="scomp-meta">Hồ sơ đã thay đổi sau lần đánh giá này. Bấm “Đánh giá lại” để cập nhật kết quả.</p>}
+      {result && !thesisByGpa(result.meta.calcVersion) && <p className="scomp-meta">Kết quả này được tính trước khi hệ thống chọn giữa Đồ án tốt nghiệp và Chuyên đề tốt nghiệp theo điểm TB tích lũy (từ 2,80 đề xuất làm đồ án tốt nghiệp). Bấm “Đánh giá lại” để cập nhật gợi ý học phần.</p>}
       {assessment && <p className="scomp-data-line">{dataUsedLine(assessment)}</p>}
       <p className="scomp-live" role="status" aria-live="polite" aria-atomic="true">{announcement}</p>
       {error && <div className="sr-error" role="alert">{error}</div>}

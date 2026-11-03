@@ -300,7 +300,7 @@ function thesisLines(group: GraduationGroupEvaluation, head: string, option: The
     return [
       `${head}: hệ thống đề xuất học các học phần thay thế ${noun} (${reason})`,
       `- học các học phần sau ${creditsToReach(group.remaining ?? group.required)}:`,
-      ...courseLines(notPassed(replacementPath(option.replacements)), SUB),
+      ...courseLines(notPassed(replacementPath(option.replacements, group.required)), SUB),
     ];
   }
   if (option.path === "not_started") {
