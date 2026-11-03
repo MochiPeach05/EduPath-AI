@@ -1,0 +1,346 @@
+/*
+ * Import of "Bảng điểm của tôi" on Hồ sơ và bảng điểm (user 2026-11-04: students who filled in the profile did not see
+ * where the transcript goes). No transcript yet: a large drop zone at the top of the section. A transcript: a bar at the
+ * top with the last update, the file, "Cập nhật bảng điểm" and "Xóa bảng điểm". Both take a dropped PDF.
+ * Widths follow the section (the ti-import container), never the screen: from 1200px the page is drawn at zoom .8.
+ * Red stays for the primary button, the drop highlight and errors.
+ * `.sw-shell p` (student-workspace.css) resets the margins of every paragraph, hence two classes on the paragraph rules.
+ */
+
+.ti-import {
+  container: ti-import / inline-size;
+  display: grid;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.ti-import:last-child {
+  margin-bottom: 0;
+}
+
+/* No transcript yet: the drop zone. */
+.ti-zone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 260px;
+  padding: 36px 24px 30px;
+  border: 2px dashed #c4cdd9;
+  border-radius: 14px;
+  background: #f8fafc;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+}
+
+.ti-zone:not(.is-disabled):hover,
+.ti-zone:focus-within {
+  border-color: #8f9cb0;
+  background: #f3f6f9;
+}
+
+.ti-zone.is-disabled {
+  cursor: default;
+}
+
+/* Above the hover colours (same weight, later): a pointer that rests on the zone keeps :hover while dragging. */
+.ti-import .ti-zone.is-dragging,
+.ti-import .ti-bar.is-dragging {
+  border-color: var(--ep-action, #b51639);
+  background: var(--ep-control-soft, #fff5f7);
+  box-shadow: 0 0 0 4px rgb(181 22 57 / 12%);
+}
+
+/* Children would fire drag events of their own and make the highlight flicker. */
+.ti-zone.is-dragging *,
+.ti-bar.is-dragging * {
+  pointer-events: none;
+}
+
+.ti-zone-icon {
+  display: grid;
+  place-items: center;
+  width: 88px;
+  height: 88px;
+  margin-bottom: 6px;
+  border: 1px solid #e3e7ec;
+  border-radius: 50%;
+  background: #fff;
+  color: #334155;
+}
+
+/* .sw-shell svg (student-workspace.css) draws every icon at 20px. */
+.ti-zone-icon svg,
+.sw-shell .ti-zone-icon svg {
+  width: 56px;
+  height: 56px;
+}
+
+.ti-zone .ti-zone-title {
+  max-width: 34em;
+  color: var(--sw-ink, #242b39);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.ti-zone .ti-zone-or {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--sw-muted, #647081);
+  font-size: 13px;
+}
+
+.ti-zone-or::before,
+.ti-zone-or::after {
+  content: "";
+  width: 40px;
+  height: 1px;
+  background: #d5dbe3;
+}
+
+.ti-zone .sw-primary {
+  min-width: 180px;
+  max-width: 100%;
+}
+
+.ti-zone .ti-hint {
+  margin-top: 4px;
+  color: var(--sw-muted, #647081);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+/* A transcript: the bar at the top of the section. */
+.ti-bar {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px 16px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1.5px dashed #c4cdd9;
+  border-radius: 12px;
+  background: #f8fafc;
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+}
+
+.ti-file-icon {
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border: 1px solid #e3e7ec;
+  border-radius: 10px;
+  background: #fff;
+  color: #334155;
+}
+
+.ti-file-icon svg,
+.sw-shell .ti-file-icon svg {
+  width: 22px;
+  height: 22px;
+}
+
+.ti-bar-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ti-bar .ti-bar-title {
+  color: var(--sw-ink, #242b39);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+/* "14:05 03/11/2026" stays on one line. */
+.ti-bar-title time {
+  white-space: nowrap;
+}
+
+.ti-bar .ti-bar-file {
+  color: #4a5464;
+  font-size: 13px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.ti-bar .ti-bar-hint {
+  color: var(--sw-muted, #647081);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ti-bar-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px 8px;
+  min-width: 0;
+}
+
+.ti-bar-actions > button {
+  max-width: 100%;
+}
+
+.ti-bar .ti-file-error {
+  grid-column: 1 / -1;
+}
+
+/* "Xóa bảng điểm": quiet beside "Cập nhật bảng điểm"; its dialog asks before anything is deleted. */
+.ti-delete,
+.sw-shell .ti-delete {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 44px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: var(--ep-control-radius, 8px);
+  background: transparent;
+  color: #4a5464;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ti-delete:hover:not(:disabled) {
+  color: var(--ep-action-hover, #92142e);
+  background: var(--ep-control-soft, #fff5f7);
+}
+
+.ti-delete svg,
+.sw-shell .ti-delete svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* A file that cannot be imported (type, size, several at once) or an upload the API refused, next to where it happened. */
+.ti-import .ti-file-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 100%;
+  margin: 4px 0 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #fff0f2;
+  color: #a11638;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.6;
+  text-align: left;
+  overflow-wrap: anywhere;
+  cursor: auto;
+}
+
+/* The "info" icon upside down reads as "!". */
+.ti-file-error svg,
+.sw-shell .ti-file-error svg {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  transform: rotate(180deg);
+}
+
+/* The chosen PDF: confirm, then import. */
+.ti-pending {
+  min-width: 0;
+  padding: 18px 20px;
+  border: 1px solid #e3e7ec;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 6%);
+}
+
+.ti-pending-file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.ti-pending .ti-pending-name {
+  display: grid;
+  min-width: 0;
+}
+
+.ti-pending-name strong {
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.ti-pending-name span {
+  color: var(--sw-muted, #647081);
+  font-size: 12px;
+}
+
+/* What replacing the transcript deletes (running text: 14px, user review 2026-10-30). */
+.ti-pending .ti-pending-note {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 8px;
+  background: #fff7e8;
+  color: #704900;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.ti-pending .ti-file-error {
+  margin-top: 14px;
+}
+
+@container ti-import (max-width: 600px) {
+  .ti-bar {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    padding: 14px;
+  }
+
+  .ti-bar-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  .ti-bar-actions .sw-outline {
+    flex: 1 1 auto;
+  }
+}
+
+@container ti-import (max-width: 440px) {
+  .ti-zone {
+    min-height: 0;
+    padding: 28px 16px 22px;
+  }
+
+  .ti-zone-icon {
+    width: 72px;
+    height: 72px;
+  }
+
+  .ti-zone-icon svg,
+  .sw-shell .ti-zone-icon svg {
+    width: 46px;
+    height: 46px;
+  }
+
+  .ti-zone .ti-zone-title {
+    font-size: 16px;
+  }
+
+  .ti-zone .sw-primary {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .ti-pending {
+    padding: 16px;
+  }
+}

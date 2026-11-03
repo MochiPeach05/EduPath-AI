@@ -1,0 +1,195 @@
+/* "Bảng điểm của tôi" folded by term (TranscriptTables.tsx, 2026-11-04), on the student page and in the admin portal's
+   student details. Each header is one button that says what its term holds; the newest term with results and the term
+   being studied start open. The narrow layout follows the width of the tables (container query), not the screen: the
+   desktop page is zoomed (styles.css). Red is only for "chưa đạt" (display-format.css meaning classes). */
+.tt-terms {
+  container: tt-terms / inline-size;
+  margin-bottom: 14px;
+}
+
+.tt-terms-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  margin-bottom: 12px;
+}
+
+.tt-terms-bar p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #647081;
+}
+
+.tt-terms-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Mở tất cả / Thu gọn tất cả: small outline buttons in the colours of the shared controls (ui-controls.css). */
+.tt-terms .tt-text-button {
+  min-height: 36px;
+  padding: 6px 14px;
+  border: 1px solid var(--ep-control-border, #edc3cb);
+  border-radius: var(--ep-control-radius, 8px);
+  background: #fff;
+  color: var(--ep-control-ink, #45424c);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.tt-terms .tt-text-button:hover {
+  border-color: var(--ep-control-border-hover, #d58a9c);
+  background: var(--ep-control-soft, #fff5f7);
+  color: var(--ep-action-hover, #92142e);
+}
+
+.tt-terms .sr-term {
+  margin-top: 10px;
+}
+
+/* The header bar takes the place of the grey term heading (student-records.css .sr-term>h3): the whole bar is the button. */
+.tt-terms .sr-term > .tt-term-heading {
+  margin: 0;
+  padding: 0;
+  border: 1px solid #e6e7ed;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.tt-terms .sr-term.is-open > .tt-term-heading {
+  border-radius: 8px 8px 0 0;
+  background: #f3f5f8;
+}
+
+.tt-terms .tt-term-toggle {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 16px;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: #252b38;
+  font: inherit;
+  line-height: 1.45;
+  text-align: left;
+  cursor: pointer;
+}
+
+.tt-terms .tt-term-toggle:hover {
+  background: #f8f9fb;
+}
+
+.tt-terms .is-open .tt-term-toggle:hover {
+  background: #eceff4;
+}
+
+.tt-terms :is(.tt-term-toggle, .tt-text-button):focus-visible {
+  outline: 3px solid #af3659;
+  outline-offset: 2px;
+}
+
+.tt-terms .tt-chevron {
+  width: 18px;
+  height: 18px;
+  color: #647081;
+  transition: transform 150ms ease;
+}
+
+.tt-terms .is-open .tt-chevron {
+  transform: rotate(90deg);
+}
+
+.tt-term-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 12px;
+  min-width: 0;
+}
+
+.tt-term-name {
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.tt-term-facts {
+  font-size: 13px;
+  font-weight: 400;
+  color: #647081;
+}
+
+.tt-term-flags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.tt-flag {
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+/* The open term's table and printed summaries hang under its header (their borders join it). */
+.tt-term-panel > :last-child {
+  border-radius: 0 0 8px 8px;
+}
+
+/* Narrow tables: the notes go under the term name instead of at the right end of the bar, and the printed summaries
+   take one column (student-records.css does the same only below a 650px screen). */
+@container tt-terms (max-width: 560px) {
+  .tt-terms .tt-term-toggle {
+    grid-template-columns: auto minmax(0, 1fr);
+    padding-inline: 12px;
+  }
+
+  .tt-term-flags {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
+
+  .tt-terms .sr-summaries {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tt-terms .tt-chevron {
+    transition: none;
+  }
+}
+
+/* On paper every term is open; the fold buttons are of no use there. */
+@media print {
+  .tt-term-panel[hidden] {
+    display: block !important;
+  }
+
+  .tt-terms .sr-term > .tt-term-heading {
+    border-radius: 8px 8px 0 0;
+  }
+
+  .tt-terms .tt-chevron {
+    transform: rotate(90deg);
+  }
+
+  .tt-terms-bar {
+    display: none;
+  }
+}

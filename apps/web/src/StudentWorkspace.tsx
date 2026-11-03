@@ -1,9 +1,10 @@
 import StudentPlans from "./StudentPlans";
 import StudentGraduation from "./StudentGraduation";
-import { Suspense, lazy, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
+import { Suspense, lazy, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import EduPathBrand from "./EduPathBrand";
 import { layoutHeight } from "./page-scale";
 import StudentProfileEditor from "./StudentProfileEditor";
+import StudentProfileSteps, { onTranscriptUpdated } from "./StudentProfileSteps";
 import StudentProfileSurvey from "./StudentProfileSurvey";
 import StudentTranscript from "./StudentTranscript";
 import StudentCurriculum from "./StudentCurriculum";
@@ -116,6 +117,23 @@ export function AdvisorViewBanner({ advisorName, role = "advisor", studentName, 
       <button type="button" className="sw-outline sw-advisor-close" onClick={onClose}><Icon name="close" />Đóng trang sinh viên</button>
     </div>
     {blocked && <p className="sw-advisor-blocked" role="alert">{blocked}</p>}
+  </div>;
+}
+
+/**
+ * Hồ sơ và bảng điểm (2026-11-04): the four steps of the profile (StudentProfileSteps), Thông tin học tập beside Mục tiêu
+ * học tập, then the transcript, and the long Khảo sát định hướng last. Under the survey the transcript started 1.6 screens
+ * down (2.5 on a 1366px laptop), out of sight of students who had just filled in the cards above.
+ */
+export function ProfilePage({ profile, card, advisorView, onSaved }: {
+  profile: Profile | null; card: ReactNode; advisorView: boolean; onSaved: () => void;
+}) {
+  return <div className="sr-profile-layout">
+    {profile && <StudentProfileSteps profile={profile} advisorView={advisorView} />}
+    {card}
+    {profile && <StudentProfileEditor profile={profile} onSaved={onSaved} />}
+    <StudentTranscript />
+    {profile && <StudentProfileSurvey onSaved={onSaved} />}
   </div>;
 }
 
@@ -272,6 +290,9 @@ export default function StudentWorkspace({ user, advisor = null }: { user: Authe
     window.addEventListener("edupath-session-expired", expired);
     return () => window.removeEventListener("edupath-session-expired", expired);
   }, []);
+  // StudentTranscript announces an import that finished and a deleted transcript: the profile is read again, so the steps
+  // of Hồ sơ và bảng điểm (and the reminder of the other pages) follow profile.hasTranscript.
+  useEffect(() => onTranscriptUpdated(() => setReload(n => n + 1)), []);
   const selected = pages.find(p => p.id === page)!;
   // In an advisor's tab the account is the advisor's: the student's name comes from the profile only.
   const name = studentDisplayName(profile?.name ?? (advisor ? "" : user.name)) || "Sinh viên";
@@ -377,7 +398,7 @@ export default function StudentWorkspace({ user, advisor = null }: { user: Authe
               <div className="so-student-identity"><span className="sw-avatar sw-avatar-large">{avatar}</span><div><strong>{name}</strong><span>{email ?? "Chưa cập nhật email"}</span></div></div>
               <dl><div><dt>Mã sinh viên</dt><dd>{loading ? "Đang tải…" : profile?.studentCode ?? "Chưa cập nhật"}</dd></div><div><dt>Ngành</dt><dd>{loading ? "Đang tải…" : majorLabel(profile?.majorCode) ?? "Chưa cập nhật"}</dd></div><div><dt>Khóa · Lớp</dt><dd>{loading ? "Đang tải…" : [profile?.cohortCode, profile?.className].filter(Boolean).join(" · ") || "Chưa cập nhật"}</dd></div><div><dt>Năm nhập học</dt><dd>{loading ? "Đang tải…" : profile?.cohortYear ?? "Chưa cập nhật"}</dd></div></dl>
             </section>} />
-          : page === "profile" ? <div className="sr-profile-layout">{profileCard}{profile && <StudentProfileEditor profile={profile} onSaved={() => setReload(n => n + 1)} />}{profile && <StudentProfileSurvey onSaved={() => setReload(n => n + 1)} />}<StudentTranscript /></div> : page === "curriculum" ? <StudentCurriculum /> : page === "plans" ? <StudentPlans /> : page === "graduation" ? <StudentGraduation /> : page === "roadmap" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">Đang tải lộ trình học tập…</p></section>}><StudentRoadmap notice={reminder} /></Suspense> : page === "career" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">Đang tải định hướng nghề nghiệp…</p></section>}><StudentCareerGuidance onProfileChanged={() => setReload(n => n + 1)} /></Suspense> : page === "competency" || page === "skill-gap" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">{page === "skill-gap" ? "Đang tải trang khoảng trống kỹ năng…" : "Đang tải trang đánh giá năng lực…"}</p></section>}><StudentCompetency key={page} profile={profile} view={page === "skill-gap" ? "gap" : "competency"} notice={reminder} /></Suspense> : page === "assistant" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">Đang tải Trợ lý AI…</p></section>}><StudentAssistant /></Suspense> : null}
+          : page === "profile" ? <ProfilePage profile={profile} card={profileCard} advisorView={advisor !== null} onSaved={() => setReload(n => n + 1)} /> : page === "curriculum" ? <StudentCurriculum /> : page === "plans" ? <StudentPlans /> : page === "graduation" ? <StudentGraduation /> : page === "roadmap" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">Đang tải lộ trình học tập…</p></section>}><StudentRoadmap notice={reminder} /></Suspense> : page === "career" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">Đang tải định hướng nghề nghiệp…</p></section>}><StudentCareerGuidance onProfileChanged={() => setReload(n => n + 1)} /></Suspense> : page === "competency" || page === "skill-gap" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">{page === "skill-gap" ? "Đang tải trang khoảng trống kỹ năng…" : "Đang tải trang đánh giá năng lực…"}</p></section>}><StudentCompetency key={page} profile={profile} view={page === "skill-gap" ? "gap" : "competency"} notice={reminder} /></Suspense> : page === "assistant" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">Đang tải Trợ lý AI…</p></section>}><StudentAssistant /></Suspense> : null}
           <footer className="sw-footer">
             <nav className="sw-footer-links" aria-label="Liên kết cuối trang">
               {publicInformationLinks.map(link => <a key={link.href} href={link.href} target="_blank" rel="noreferrer">{link.label}<span className="sr-only"> (mở trong tab mới)</span></a>)}

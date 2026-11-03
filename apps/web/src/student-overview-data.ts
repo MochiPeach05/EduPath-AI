@@ -37,6 +37,8 @@ export function formatUpdatedAt(value: string): string {
 }
 
 /** The sections of Hồ sơ và bảng điểm that other pages open (each section carries its id). */
+/** Sent on window when a transcript import finishes or the transcript is deleted (StudentTranscript); the profile page reloads on it. */
+export const TRANSCRIPT_UPDATED_EVENT = "edupath-transcript-updated";
 export const PROFILE_SECTIONS = { goals: "muc-tieu-hoc-tap", survey: "khao-sat-dinh-huong", transcript: "bang-diem" } as const;
 export type ProfileSection = typeof PROFILE_SECTIONS[keyof typeof PROFILE_SECTIONS];
 
