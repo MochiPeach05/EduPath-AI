@@ -230,9 +230,9 @@
   color: #d8dce6;
 }
 
-/* Without the desktop zoom (styles.css, from 1200px) the six nav items do not fit beside the logo and the tools:
-   the drawer behind the menu button is the navigation, as on phones. */
-@media (max-width: 1199.98px) {
+/* The seven nav items need about 1490px beside the logo and the tools (pages at 100%, styles.css): below 1520px the
+   drawer behind the menu button is the navigation, as on phones. */
+@media (max-width: 1519.98px) {
   .sw-header-nav {
     display: none;
   }

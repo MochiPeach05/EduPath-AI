@@ -8,43 +8,15 @@
   text-rendering: optimizeLegibility;
 
   /*
-    The screens were designed to be read at 75% browser zoom, so the page scales
-    itself down instead of asking anyone to zoom by hand. Since 2026-11-03 the
-    factor is 115% of that, 86.25%, from 1300px (user: "kích thước chữ hơi nhỏ
-    và khoảng trắng 2 bên lề hơi nhiều"). From 1200px to 1300px it stays 75%:
-    the student header needs about 1490 CSS px for its seven nav items, which
-    86.25% only leaves from about 1285px. Phones and small laptops keep their
-    natural size, where the layout is already responsive and the scale would
-    leave the text too small to read.
-
-    `zoom` multiplies used lengths, and viewport units are no exception: 100dvh
-    inside a zoomed box only covers 86.25% of the screen. Full-viewport lengths
-    are therefore written as `calc(100 * var(--ep-vh))`, which divides the
-    factor back out and is correct whether or not the scale is active.
+    Every page is drawn at its natural size, 100%, at every width (user
+    2026-11-03: "tôi muốn nó trở về phiên bản 100% cũ luôn"). 7d635e8
+    (2026-09-20) had scaled desktops down to 75% with CSS `zoom`, df8d75c to
+    86.25%. The variables stay at their unscaled values so full-viewport lengths
+    (`calc(100 * var(--ep-vh))`) and layoutZoom (page-scale.ts) work unchanged.
   */
   --ep-zoom: 1;
   --ep-vh: 1dvh;
   --ep-vw: 1vw;
-}
-
-@media (min-width: 1200px) {
-  :root {
-    --ep-zoom: .75;
-    --ep-vh: calc(1dvh / .75);
-    --ep-vw: calc(1vw / .75);
-  }
-
-  body {
-    zoom: var(--ep-zoom);
-  }
-}
-
-@media (min-width: 1300px) {
-  :root {
-    --ep-zoom: .8625;
-    --ep-vh: calc(1dvh / .8625);
-    --ep-vw: calc(1vw / .8625);
-  }
 }
 
 * {
