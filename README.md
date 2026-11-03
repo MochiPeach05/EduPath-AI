@@ -3,8 +3,6 @@
 **AI đồng hành · Học tập bứt phá.** Nền tảng đánh giá năng lực và tư vấn lộ trình học tập cá nhân hóa cho sinh viên
 ngành Công nghệ Thông tin, Trường Đại học Văn Lang.
 
-Đồ án tốt nghiệp của Nhóm 1, Khoa Công nghệ Thông tin, Trường Đại học Văn Lang (2026).
-
 - Bản đang chạy: <https://edupath-ai-q28n.onrender.com>, đăng nhập bằng tài khoản Microsoft của trường.
 - Kiến trúc chi tiết: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
@@ -76,7 +74,7 @@ trình và trả lời câu hỏi.
 
   AI chỉ viết nhận xét, lời khuyên, lộ trình và câu trả lời dựa trên các số liệu đó. Đầu ra được kiểm tra trước khi
   hiển thị.
-- **Chạy cục bộ.** Model `gemma4:e4b` và `embeddinggemma` chạy bằng Ollama trên máy của nhóm. Worker AI tự lấy việc từ
+- **Chạy cục bộ.** Model `gemma4:e4b` và `embeddinggemma` chạy bằng Ollama trên một máy cá nhân có GPU. Worker AI tự lấy việc từ
   hàng đợi trong PostgreSQL qua HTTPS. Dữ liệu không được gửi tới dịch vụ AI đám mây nào. Model không nhận họ tên, MSSV,
   email hay tệp PDF bảng điểm.
 - **Có phiên bản.** Mỗi prompt và cách tính có mã phiên bản lưu cùng kết quả, để biết kết quả nào cần tạo lại khi quy
@@ -100,7 +98,7 @@ Trình duyệt (React + Vite)
 Render Web Service: API Express 5, phục vụ luôn bản build React
         │                                    ▲
         ▼                                    │ lấy việc qua HTTPS, xác thực bằng khóa worker
-PostgreSQL: dữ liệu, session,          Máy của nhóm
+PostgreSQL: dữ liệu, session,          Máy cá nhân chạy worker
 hàng đợi việc AI và OCR                 ├─ Worker AI: Ollama (gemma4:e4b, embeddinggemma)
                                         └─ Worker OCR: PaddleOCR + PyMuPDF đọc PDF bảng điểm
 
@@ -207,7 +205,7 @@ Kết quả ngày 03/11/2026: API 105 tệp, 1 666 test; web 54 tệp, 622 test;
 - Các biến bí mật (`DATABASE_URL`, `ENTRA_*`, `AI_WORKER_KEY`, `OCR_WORKER_KEY`) khai báo trên Render với `sync: false`
   và không đưa vào Git.
 - Trên Microsoft Entra, thêm redirect URI `https://<ten-service>.onrender.com/api/auth/microsoft/callback`.
-- Worker AI và worker OCR chạy trên máy của nhóm, trỏ tới API trên Render bằng khóa worker tương ứng.
+- Worker AI và worker OCR chạy trên máy cá nhân, trỏ tới API trên Render bằng khóa worker tương ứng.
 
 ## Dữ liệu và quyền riêng tư
 
