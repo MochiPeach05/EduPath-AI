@@ -1,7 +1,8 @@
-// The student portal opened by a cố vấn học tập (AD-AST-05…08; user 2026-11-03, policy 2026-11-03). Lớp phụ trách opens
-// "/dashboard?sv=<student>#overview" in a tab of its own; that tab keeps the student in sessionStorage (one tab, one
-// student, so two students in two tabs never mix), and every /api/student request of the tab carries X-Advisor-Student,
-// which the API checks against the advisor's classes on each request (apps/api/src/advisors/access.ts). The pages read
+// The student portal opened by a cố vấn học tập or a Khoa admin (AD-AST-05…08; user 2026-11-03, policy 2026-11-03).
+// "Xem chi tiết" in Quản lý sinh viên opens "/dashboard?sv=<student>#overview" in a tab of its own; that tab keeps the
+// student in sessionStorage (one tab, one student, so two students in two tabs never mix), and every /api/student request
+// of the tab carries X-Advisor-Student, which the API checks on each request against the advisor's classes, or lets pass
+// for an admin or Ban chủ nhiệm khoa (apps/api/src/advisors/access.ts). The pages read
 // isAdvisorView() to hide what an advisor cannot do for the student (the survey, consent, deletions, the student's own
 // choices, the bell); a refusal of the API all the same is announced with ADVISOR_BLOCKED_EVENT.
 import { ADVISOR_ERRORS, ADVISOR_STUDENT_HEADER, ADVISOR_STUDENT_PARAM } from "./advisor-types";
@@ -114,5 +115,15 @@ export function stopActing(): void {
 /** What to tell the advisor about a refusal of the API. */
 export const advisorBlockedMessage = (code: string) => ADVISOR_ERRORS[code] ?? ADVISOR_ERRORS.advisor_action_not_allowed!;
 
-/** Where "Đóng trang sinh viên" goes when the tab was not opened by Lớp phụ trách (a script cannot close it). */
-export const ADVISOR_HOME = "/quantri/lop-phu-trach";
+/** Where "Đóng trang sinh viên" goes when the tab was not opened by Quản lý sinh viên (a script cannot close it). */
+export const ADVISOR_HOME = "/quantri/quan-ly-sinh-vien";
+
+/**
+ * Who works in the student's page, as the banner says it ("với tư cách cố vấn học tập"): the Khoa's admins and Ban chủ
+ * nhiệm khoa by their role (they open any student's page), anyone else as the advisor of the student's class.
+ */
+export function actingAsText(role: string): string {
+  if (role === "admin") return "quản trị viên";
+  if (role === "faculty_board") return "Ban chủ nhiệm khoa";
+  return "cố vấn học tập";
+}

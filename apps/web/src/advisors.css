@@ -59,8 +59,10 @@
 .av-note-change { color: var(--cm-ink); }
 .av-note-warn { color: var(--cm-warn); }
 
-/* Lớp phụ trách */
+/* Quản lý sinh viên: the classes (with their cố vấn học tập when every class is listed), then their students */
 .av-classes-table { min-width: 860px; }
+.av-classes-table-all { min-width: 1020px; }
+.av-classes-table-all td:nth-child(3) { min-width: 160px; }
 .av-classes-table td { padding-block: 14px; }
 .av-classes-table :is(.am-outline) { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
 .av-classes-table svg { width: 18px; height: 18px; }
@@ -79,8 +81,20 @@
 .av-step-done { background: #e6f2ec; color: #1f5f49; }
 .av-step-todo { background: #eef0f4; color: var(--cm-muted); }
 
-/* Quyền cố vấn */
+/* Quyền khi làm việc với trang sinh viên: the last section of Quản lý sinh viên, folded until asked for */
 .av-lead { margin: 0; color: var(--cm-muted); font-size: 14px; }
+.av-perm-section > summary {
+  display: flex; align-items: center; gap: 10px; padding: 18px 24px; border: 1px solid var(--cm-line); border-radius: 12px;
+  background: #fff; cursor: pointer; list-style: none; font-size: 16px; font-weight: 700;
+}
+.av-perm-section > summary::-webkit-details-marker { display: none; }
+.av-perm-section > summary svg { width: 20px; height: 20px; flex: none; color: var(--cm-accent); }
+.av-perm-section > summary::after {
+  content: ""; flex: none; width: 8px; height: 8px; margin-left: auto; border-right: 2px solid var(--cm-muted);
+  border-bottom: 2px solid var(--cm-muted); transform: translateY(-2px) rotate(45deg); transition: transform 0.15s;
+}
+.av-perm-section[open] > summary::after { transform: translateY(2px) rotate(-135deg); }
+.av-perm-body { display: grid; gap: 16px; margin-top: 16px; }
 .av-perm-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
 .av-perm,
 .av-perm-notes { padding: 20px 22px; }
@@ -105,4 +119,5 @@
   .av-form-row { grid-template-columns: minmax(0, 1fr); }
   .av-open-error,
   .av-open-blocked { margin-inline: 16px; }
+  .av-perm-section > summary { padding: 16px; }
 }

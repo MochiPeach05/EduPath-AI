@@ -54,8 +54,13 @@ export class AssistantError extends Error {
 
 /** ref (server only): the knowledge chunk of a cited source, brought back by the next questions of the conversation. */
 export type AssistantSource = { n: number; kind: AssistantSourceKind; title: string; link: string | null; ref?: { kind: string; key: string } };
-/** createdBy: the cố vấn học tập who started it in the student's account (migration 058), null for the student. */
-export type ThreadRow = { id: string; title: string; createdAt: Date | string; updatedAt: Date | string; createdBy?: string | null };
+/**
+ * createdBy: the admin-portal account that started it in the student's account (migration 058), null for the student;
+ * createdByRole: "advisor" when that account advises the student's class, "admin" for a quản trị viên of the Khoa.
+ */
+export type ThreadRow = {
+  id: string; title: string; createdAt: Date | string; updatedAt: Date | string; createdBy?: string | null; createdByRole?: "advisor" | "admin" | null;
+};
 export type MessageRow = {
   id: string; threadId: string; role: "user" | "assistant"; content: string;
   status: "queued" | "processing" | "completed" | "failed" | "cancelled"; errorCode: string | null;
@@ -75,6 +80,7 @@ type AnswerInput = {
 const iso = (value: Date | string | null) => (value === null ? null : new Date(value).toISOString());
 export const presentThread = (row: ThreadRow) => ({
   id: row.id, title: row.title, createdAt: iso(row.createdAt)!, updatedAt: iso(row.updatedAt)!, byAdvisor: Boolean(row.createdBy),
+  createdByRole: row.createdBy ? row.createdByRole ?? "advisor" : null,
 });
 export const presentMessage = (row: MessageRow) => ({
   id: row.id, threadId: row.threadId, role: row.role, content: row.content, status: row.status, errorCode: row.errorCode,
@@ -83,7 +89,13 @@ export const presentMessage = (row: MessageRow) => ({
   createdAt: iso(row.createdAt)!, completedAt: iso(row.completedAt),
 });
 
-const threadColumns = `id,title,created_at AS "createdAt",updated_at AS "updatedAt",created_by AS "createdBy"`;
+// Who started a thread: the advisor of the student's class, else a quản trị viên (the table is named, never aliased, in
+// every statement that uses these columns: SELECT … FROM, INSERT/UPDATE … RETURNING).
+const threadColumns = `id,title,created_at AS "createdAt",updated_at AS "updatedAt",created_by AS "createdBy",
+  CASE WHEN stu_chat_threads.created_by IS NULL THEN NULL
+    WHEN EXISTS (SELECT 1 FROM ad_advisor_classes ac JOIN student_profiles sp ON sp.user_id=stu_chat_threads.user_id
+      WHERE ac.advisor_user_id=stu_chat_threads.created_by AND ac.class_name=upper(regexp_replace(sp.class_name, '\\s', '', 'g'))) THEN 'advisor'
+    ELSE 'admin' END AS "createdByRole"`;
 const messageColumns = `id,thread_id AS "threadId",role,content,status,error_code AS "errorCode",sources,feedback,
   created_at AS "createdAt",completed_at AS "completedAt"`;
 /** Messages of a thread in order; a question and its answer are written in one statement each, the question first. */

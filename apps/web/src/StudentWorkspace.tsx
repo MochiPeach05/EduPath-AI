@@ -16,7 +16,7 @@ import { Icon } from "./student-icons";
 import { NotificationsDrawer, NotificationsPanel, NOTIFICATION_RECOUNT_MS, badgeText, bellLabel, useUnreadNotifications, type NotificationFilter } from "./StudentNotifications";
 import type { StudentNotification } from "./notification-types";
 import type { AuthenticatedUser } from "./types";
-import { ADVISOR_BLOCKED_EVENT, ADVISOR_HOME, advisorBlockedMessage, stopActing } from "./advisor-view";
+import { ADVISOR_BLOCKED_EVENT, ADVISOR_HOME, actingAsText, advisorBlockedMessage, stopActing } from "./advisor-view";
 import { ADVISOR_ERRORS } from "./advisor-types";
 import "./student-workspace.css";
 import "./student-header.css";
@@ -98,18 +98,19 @@ const helpSteps: [string, string][] = [
 ];
 
 /**
- * The strip a cố vấn học tập sees under the header in a student's page (AD-AST-05…08, policy 2026-11-03): whose page it is,
- * what the advisor may do there, the way out, and why the API refused something.
+ * The strip a cố vấn học tập or a Khoa admin sees under the header in a student's page (AD-AST-05…08, policy 2026-11-03):
+ * whose page it is, as whom (role: the signed-in account's, actingAsText), what may be done there, the way out, and why
+ * the API refused something.
  */
-export function AdvisorViewBanner({ advisorName, studentName, studentCode, className, blocked, onClose }: {
-  advisorName: string; studentName: string; studentCode?: string | null; className?: string | null; blocked: string; onClose: () => void;
+export function AdvisorViewBanner({ advisorName, role = "advisor", studentName, studentCode, className, blocked, onClose }: {
+  advisorName: string; role?: string; studentName: string; studentCode?: string | null; className?: string | null; blocked: string; onClose: () => void;
 }) {
   const who = [studentName, studentCode, className ? `lớp ${className}` : null].filter(Boolean).join(" · ");
-  return <div className="sw-advisor-banner" role="region" aria-label="Chế độ cố vấn học tập">
+  return <div className="sw-advisor-banner" role="region" aria-label="Chế độ làm việc với trang sinh viên">
     <div className="sw-advisor-banner-inner">
       <span className="sw-advisor-icon" aria-hidden="true"><Icon name="shield" /></span>
       <p className="sw-advisor-text">
-        <strong>Bạn đang xem trang của {who} với tư cách cố vấn học tập{advisorName ? ` (${advisorName})` : ""}.</strong>{" "}
+        <strong>Bạn đang xem trang của {who} với tư cách {actingAsText(role)}{advisorName ? ` (${advisorName})` : ""}.</strong>{" "}
         Bạn làm thay được: import bảng điểm, Đánh giá năng lực, Lộ trình AI, lời khuyên xét tốt nghiệp và Trợ lý AI. Mỗi việc làm thay được ghi lại và báo cho sinh viên.
       </p>
       <button type="button" className="sw-outline sw-advisor-close" onClick={onClose}><Icon name="close" />Đóng trang sinh viên</button>
@@ -119,10 +120,10 @@ export function AdvisorViewBanner({ advisorName, studentName, studentCode, class
 }
 
 /**
- * advisor: set when a cố vấn học tập opened this student's page from Lớp phụ trách (App.tsx, advisor-view.ts); user is then
- * the advisor's own account and the page shows the student of GET /api/student/profile.
+ * advisor: set when a cố vấn học tập or a Khoa admin opened this student's page from Quản lý sinh viên (App.tsx,
+ * advisor-view.ts); user is then that account and the page shows the student of GET /api/student/profile.
  */
-export default function StudentWorkspace({ user, advisor = null }: { user: AuthenticatedUser; advisor?: { name: string } | null }) {
+export default function StudentWorkspace({ user, advisor = null }: { user: AuthenticatedUser; advisor?: { name: string; role?: string } | null }) {
   const [page, setPage] = useState<Page>(() => pageFromHash(window.location.hash) ?? "overview");
   // The page on screen, for the hashchange listener (which outlives renders).
   const pageRef = useRef(page);
@@ -293,7 +294,7 @@ export default function StudentWorkspace({ user, advisor = null }: { user: Authe
     event.preventDefault();
     navigate(id);
   };
-  // "Đóng trang sinh viên": the tab Lớp phụ trách opened closes; one opened by hand goes back to Lớp phụ trách.
+  // "Đóng trang sinh viên": the tab Quản lý sinh viên opened closes; one opened by hand goes back to Quản lý sinh viên.
   const closeAdvisorView = () => {
     stopActing();
     window.close();
@@ -356,7 +357,7 @@ export default function StudentWorkspace({ user, advisor = null }: { user: Authe
           </> : <NotificationsPanel onOpen={openNotifications} onOpenAll={filter => openNotifications(null, filter)} onUnread={notifications.setUnread} />}
         </section>}
       </header>
-      {advisor && <AdvisorViewBanner advisorName={advisor.name} studentName={name} studentCode={profile?.studentCode} className={profile?.className}
+      {advisor && <AdvisorViewBanner advisorName={advisor.name} role={advisor.role ?? "advisor"} studentName={name} studentCode={profile?.studentCode} className={profile?.className}
         blocked={advisorBlocked} onClose={closeAdvisorView} />}
       <div className={`sw-body ${menu ? "sw-body-menu-open" : ""}`}>
         {menu && <button className="sw-drawer-backdrop" aria-label="Đóng menu bên trái" tabIndex={-1} onClick={() => { setMenu(false); navigationButton.current?.focus(); }} />}

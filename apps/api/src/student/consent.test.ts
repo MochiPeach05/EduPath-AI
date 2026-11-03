@@ -43,7 +43,7 @@ function setup(options: { advisor?: boolean } = {}) {
   app.use(express.json());
   app.use((req, _res, next) => {
     req.session = { user: options.advisor ? advisor : student } as typeof req.session;
-    if (options.advisor) req.advisorActing = { advisor, student: { user: student, studentCode: null, name: "Student", className: "71K29CNTT99", advisorName: "Cố vấn" } };
+    if (options.advisor) req.advisorActing = { advisor, student: { user: student, studentCode: null, name: "Student", className: "71K29CNTT99", actorKind: "advisor", actorName: "Cố vấn", advisorName: "Cố vấn" } };
     next();
   });
   app.use("/student", createStudentDataRouter(pool, origin, true));

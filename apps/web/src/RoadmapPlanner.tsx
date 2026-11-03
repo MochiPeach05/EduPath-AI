@@ -122,7 +122,7 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
     <header className="rm-planner-head">
       <div>
         <h2 id="rm-planner-title">Kế hoạch học kỳ</h2>
-        {readOnly ? <p>Kế hoạch các học kỳ tới của sinh viên. Cố vấn học tập chỉ xem; sinh viên tự sắp xếp và điều chỉnh kế hoạch này.</p> : <p>{plannedCount
+        {readOnly ? <p>Kế hoạch các học kỳ tới của sinh viên. Bạn chỉ xem; sinh viên tự sắp xếp và điều chỉnh kế hoạch này.</p> : <p>{plannedCount
           ? <>Bạn điều chỉnh kế hoạch bằng cách kéo học phần giữa các học kỳ, kéo từ Danh sách chờ vào, hoặc chọn học kỳ ở "Thêm vào" rồi bấm Thêm.</>
           : <>Xếp các học phần còn thiếu vào từng học kỳ: kéo từ Danh sách chờ vào một học kỳ, hoặc chọn học kỳ ở "Thêm vào" rồi bấm Thêm.</>} Kế hoạch tự lưu và được tính ở chế độ Theo kế hoạch của mục Theo dõi tiến độ.</p>}
       </div>

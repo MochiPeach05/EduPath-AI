@@ -279,7 +279,8 @@ function StaffPortalNotice() {
 function AuthenticatedApp({ isLoginRoute }: { isLoginRoute: boolean }) {
   const [auth, setAuth] = useState<AuthResponse | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
-  // Cố vấn học tập (AD-AST-05…08, 2026-11-03): a tab opened from Lớp phụ trách carries ?sv=<student>, kept for this tab.
+  // Cố vấn học tập and the Khoa's admins (AD-AST-05…08, 2026-11-03): a tab opened from Quản lý sinh viên carries ?sv=<student>,
+  // kept for this tab.
   const advisorStudent = useMemo(() => takeAdvisorStudentFromUrl(), []);
 
   const refreshAuth = useCallback(async () => {
@@ -340,7 +341,7 @@ function AuthenticatedApp({ isLoginRoute }: { isLoginRoute: boolean }) {
     // on every request (advisor-view.ts). Anyone else gets the way back to the admin portal.
     if (advisorStudent && canAccessAdmin(auth.user.role)) {
       installAdvisorFetch(advisorStudent);
-      return <StudentWorkspace user={auth.user} advisor={{ name: auth.user.name }} />;
+      return <StudentWorkspace user={auth.user} advisor={{ name: auth.user.name, role: auth.user.role }} />;
     }
     return <StaffPortalNotice />;
   }

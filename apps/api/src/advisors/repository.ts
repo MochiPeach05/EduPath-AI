@@ -1,5 +1,6 @@
 // Cố vấn học tập in the database (migration 058): the Khoa's list of advisors and their classes (AD-ADV-01…05) and an
-// advisor's own classes and students (AD-AST-01…05). Changes take the lock of the account changes (accounts.ts), because
+// advisor's own classes and students (AD-AST-01…05); admins and Ban chủ nhiệm khoa get every class and every student
+// there (user 2026-11-03: AD-AST "QTV & CVHT"). Changes take the lock of the account changes (accounts.ts), because
 // adding an advisor may create a precreated account (bound to the Microsoft identity at the first sign-in) or turn a
 // lecturer's account into an advisor's; a role change signs the account out, as an account change in accounts.ts does.
 import { randomUUID } from "node:crypto";
@@ -56,17 +57,30 @@ const advisorColumns = `a.user_id AS "userId", a.full_name AS name, COALESCE(u.e
   CASE WHEN NOT u.is_active THEN 'locked' WHEN u.entra_object_id IS NULL THEN 'pending' ELSE 'active' END AS account,
   COALESCE(u.role_override, u.role) AS role, u.last_login_at AS "lastLoginAt"`;
 
-/** Per class of an advisor: its students and how many of them did each step (s = student_profiles, u = users). */
-const classStats = (where: string) => `SELECT c.class_name AS "className",
-    COALESCE(max(p.cohort_code), substring(c.class_name FROM 'K[0-9]{2,3}')) AS cohort,
+/**
+ * Per class: its students, how many of them did each step and the advisor the Khoa assigned (p = student_profiles,
+ * u = users). classes: a SELECT of class_name (OWN_CLASSES, EVERY_CLASS).
+ */
+const classStats = (classes: string) => `WITH k AS (${classes})
+  SELECT k.class_name AS "className",
+    COALESCE(max(p.cohort_code), substring(k.class_name FROM 'K[0-9]{2,3}')) AS cohort,
     count(u.id)::int AS students,
     count(u.id) FILTER (WHERE EXISTS (SELECT 1 FROM student_transcripts t WHERE t.user_id = u.id))::int AS "withTranscript",
     count(u.id) FILTER (WHERE EXISTS (SELECT 1 FROM stu_comp_assessments s WHERE s.user_id = u.id))::int AS assessed,
     count(u.id) FILTER (WHERE ${SURVEY_COMPLETE_SQL})::int AS "surveyDone",
-    count(u.id) FILTER (WHERE EXISTS (SELECT 1 FROM stu_roadmaps r WHERE r.user_id = u.id AND r.status = 'completed'))::int AS roadmap
-  FROM ad_advisor_classes c
-  LEFT JOIN (student_profiles p JOIN users u ON u.id = p.user_id AND ${ACTIVE_STUDENT}) ON ${CLASS_OF} = c.class_name
-  WHERE ${where} GROUP BY c.class_name ORDER BY c.class_name`;
+    count(u.id) FILTER (WHERE EXISTS (SELECT 1 FROM stu_roadmaps r WHERE r.user_id = u.id AND r.status = 'completed'))::int AS roadmap,
+    (SELECT a.full_name FROM ad_advisor_classes c JOIN ad_advisors a ON a.user_id = c.advisor_user_id WHERE c.class_name = k.class_name) AS "advisorName"
+  FROM k
+  LEFT JOIN (student_profiles p JOIN users u ON u.id = p.user_id AND ${ACTIVE_STUDENT}) ON ${CLASS_OF} = k.class_name
+  GROUP BY k.class_name ORDER BY k.class_name`;
+/** The classes an account advises ($1). */
+const OWN_CLASSES = "SELECT class_name FROM ad_advisor_classes WHERE advisor_user_id = $1";
+/** Every class: those of the active students' profiles and those the Khoa assigned before any student signed in. */
+const EVERY_CLASS = `SELECT DISTINCT ${CLASS_OF} AS class_name FROM student_profiles p JOIN users u ON u.id = p.user_id
+    WHERE ${ACTIVE_STUDENT} AND COALESCE(btrim(p.class_name), '') <> ''
+  UNION SELECT class_name FROM ad_advisor_classes`;
+/** Admins and Ban chủ nhiệm khoa work with every student (AD-AST "QTV & CVHT"); anyone else with their own classes. */
+const seesEveryStudent = (actor: Pick<AuthenticatedUser, "role">) => canManageAdvisors(actor.role);
 
 const isStaffEmail = (email: string, domains: ReadonlySet<string>) => domains.has(email.slice(email.lastIndexOf("@") + 1).toLowerCase());
 
@@ -100,7 +114,7 @@ export class PostgresAdvisorRepository {
         a.created_at AS "createdAt", a.updated_at AS "updatedAt"
       FROM ad_advisors a JOIN users u ON u.id = a.user_id WHERE a.user_id = $1`, [id]);
     if (!row.rows[0]) throw new AdvisorError("advisor_not_found", 404);
-    const classes = await db.query<AdvisorClass>(classStats("c.advisor_user_id = $1"), [id]);
+    const classes = await db.query<AdvisorClass>(classStats(OWN_CLASSES), [id]);
     return {
       stt: 1, ...row.rows[0],
       classDetails: classes.rows.map(({ className, cohort, students, withTranscript, assessed }) => ({ className, cohort, students, withTranscript, assessed })),
@@ -290,22 +304,24 @@ export class PostgresAdvisorRepository {
         WHERE ad_advisor_classes.advisor_user_id <> EXCLUDED.advisor_user_id` : "NOTHING"}`, [classes, userId, actor.userId]);
   }
 
-  // ------------------------------------------------------------------------------------- AD-AST-01…05 (own classes)
+  // ------------------------------------------- AD-AST-01…05: own classes, or every class for admins and Ban chủ nhiệm khoa
 
   async me(actor: AuthenticatedUser): Promise<AdvisorMe> {
     const result = await this.pool.query<{ classes: number }>("SELECT count(*)::int AS classes FROM ad_advisor_classes WHERE advisor_user_id = $1", [actor.userId]);
-    return { classes: result.rows[0]?.classes ?? 0, canManageAdvisors: canManageAdvisors(actor.role) };
+    return { classes: result.rows[0]?.classes ?? 0, canManageAdvisors: canManageAdvisors(actor.role), scope: seesEveryStudent(actor) ? "all" : "own" };
   }
 
   async classes(actor: AuthenticatedUser): Promise<AdvisorClass[]> {
-    return (await this.pool.query<AdvisorClass>(classStats("c.advisor_user_id = $1"), [actor.userId])).rows;
+    return seesEveryStudent(actor)
+      ? (await this.pool.query<AdvisorClass>(classStats(EVERY_CLASS))).rows
+      : (await this.pool.query<AdvisorClass>(classStats(OWN_CLASSES), [actor.userId])).rows;
   }
 
   async students(actor: AuthenticatedUser, query: AdvisedStudentQuery): Promise<{ items: AdvisedStudentRow[]; total: number }> {
     const order = orderBy(studentSort, studentOrder, query.sort, query.dir);
     const result = await this.pool.query<{ items: (Omit<AdvisedStudentRow, "specialty"> & { specialty: SpecialtyCode | null })[]; total: number }>(`WITH students AS (
         SELECT u.id AS "userId", p.student_code AS "studentCode", COALESCE(NULLIF(btrim(p.full_name), ''), u.display_name) AS name,
-          ${CLASS_OF} AS "className", COALESCE(p.cohort_code, substring(${CLASS_OF} FROM 'K[0-9]{2,3}')) AS cohort,
+          COALESCE(${CLASS_OF}, '') AS "className", COALESCE(p.cohort_code, substring(${CLASS_OF} FROM 'K[0-9]{2,3}')) AS cohort,
           p.specialty, cp.name_vi AS "targetCareer",
           EXISTS (SELECT 1 FROM student_transcripts t WHERE t.user_id = u.id) AS "hasTranscript",
           EXISTS (SELECT 1 FROM stu_comp_assessments s WHERE s.user_id = u.id) AS assessed,
@@ -314,7 +330,7 @@ export class PostgresAdvisorRepository {
           u.last_login_at AS "lastLoginAt"
         FROM users u JOIN student_profiles p ON p.user_id = u.id
         LEFT JOIN career_positions cp ON cp.id = p.career_position_id AND cp.deleted_at IS NULL
-        WHERE ${ACTIVE_STUDENT} AND ${CLASS_OF} IN (SELECT class_name FROM ad_advisor_classes WHERE advisor_user_id = $1)
+        WHERE ${ACTIVE_STUDENT} AND ($1::uuid IS NULL OR ${CLASS_OF} IN (SELECT class_name FROM ad_advisor_classes WHERE advisor_user_id = $1))
       ), filtered AS (
         SELECT * FROM students
         WHERE ($2::text IS NULL OR "className" = $2)
@@ -325,12 +341,12 @@ export class PostgresAdvisorRepository {
       ), numbered AS (SELECT filtered.*, row_number() OVER (ORDER BY ${orderBy(studentSort, studentOrder)})::int AS stt FROM filtered),
       paged AS (SELECT * FROM numbered ORDER BY ${order} LIMIT $5 OFFSET $6)
       SELECT COALESCE((SELECT json_agg(paged ORDER BY ${order}) FROM paged), '[]'::json) AS items, (SELECT count(*)::int FROM filtered) AS total`,
-    [actor.userId, query.className ?? null, query.q, query.status, query.pageSize, (query.page - 1) * query.pageSize]);
+    [seesEveryStudent(actor) ? null : actor.userId, query.className ?? null, query.q, query.status, query.pageSize, (query.page - 1) * query.pageSize]);
     const page = result.rows[0] ?? { items: [], total: 0 };
     return { items: page.items.map((row) => ({ ...row, specialty: specialtyLabel(row.specialty) })), total: page.total };
   }
 
-  /** AD-AST-05: the advisor opens a student's page; logged (who opened whose page), never data. */
+  /** AD-AST-05: the account opens a student's page (advisedStudent: own classes, any student for admins); logged, never data. */
   async open(actor: AuthenticatedUser, studentId: string, path: string): Promise<{ url: string }> {
     const student = await advisedStudent(this.pool, actor, studentId);
     if (!student) throw new AdvisorError("student_not_advised", 403);

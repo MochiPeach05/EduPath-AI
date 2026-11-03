@@ -151,14 +151,18 @@ export const catalogUpdated = (what: string): NotificationInput => ({
 });
 
 /**
- * What a cố vấn học tập did in the student's page (AD-AST-07, 08; policy 2026-11-03): one notification per advisor, action
- * and day (source key), so a busy afternoon of the advisor does not fill the bell.
+ * What a cố vấn học tập, or a quản trị viên of the Khoa (actor "admin", user 2026-11-03: AD-AST "QTV & CVHT"), did in the
+ * student's page (AD-AST-07, 08; policy 2026-11-03): one notification per person, action and day (source key: the caller's
+ * key names the person), so a busy afternoon does not fill the bell.
  */
-export function advisorAction(advisorName: string, did: string, link: string, day: string, key: string): NotificationInput {
-  const name = advisorName.trim() || "Cố vấn học tập của lớp bạn";
+export function advisorAction(actorName: string, did: string, link: string, day: string, key: string, actor: "advisor" | "admin" = "advisor"): NotificationInput {
+  const role = actor === "admin" ? "quản trị viên của Khoa" : "cố vấn học tập của lớp bạn";
+  const name = actorName.trim();
+  // "ThS. Nguyễn Văn A (cố vấn học tập của lớp bạn) đã …"; without a name only the role: "Quản trị viên của Khoa đã …".
+  const who = name ? `${name} (${role})` : `${role.charAt(0).toUpperCase()}${role.slice(1)}`;
   return {
-    type: "khoa", kind: "advisor_action", title: `Cố vấn học tập ${did} thay bạn`,
-    body: `${name} (cố vấn học tập của lớp bạn) ${did} thay bạn trên EduPath AI. Bạn xem lại kết quả; nếu không muốn giữ, bạn vẫn xóa được như thường.`,
+    type: "khoa", kind: "advisor_action", title: `${actor === "admin" ? "Quản trị viên của Khoa" : "Cố vấn học tập"} ${did} thay bạn`,
+    body: `${who} ${did} thay bạn trên EduPath AI. Bạn xem lại kết quả; nếu không muốn giữ, bạn vẫn xóa được như thường.`,
     link, sourceKey: `advisor:${key}:${day}`,
   };
 }

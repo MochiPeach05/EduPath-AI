@@ -211,7 +211,7 @@ export default function StudentProfileEditor({
           </div>}
         </dl>
       )}
-      {advisorView && <p className="sw-advisor-note">Sinh viên tự chọn chuyên ngành và vị trí nghề nghiệp mục tiêu; cố vấn học tập chỉ xem.</p>}
+      {advisorView && <p className="sw-advisor-note">Sinh viên tự chọn chuyên ngành và vị trí nghề nghiệp mục tiêu; bạn chỉ xem.</p>}
       {explorer && <StudentCareerExplorer selectedId={shown.careerPositionId ?? ""} initialCareerId={explorer.initialCareerId} onSelect={chooseCareer} onClose={() => setExplorer(null)} />}
     </section>
   );

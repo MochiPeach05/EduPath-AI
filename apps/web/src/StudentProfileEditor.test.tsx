@@ -33,7 +33,7 @@ describe("Mục tiêu học tập in a cố vấn học tập's tab", () => {
     installAdvisorFetch("00000000-0000-4000-8000-0000000e2e05");
     const html = render({ careerPositionId: "c1", careerPosition: { id: "c1", nameVi: "Kỹ sư phần mềm", nameEn: "Software Engineer", deletedAt: null }, specialty: "CNPM", cohortCode: "K29" });
     expect(html).toContain("Kỹ sư phần mềm — Software Engineer");
-    expect(html).toContain("Sinh viên tự chọn chuyên ngành và vị trí nghề nghiệp mục tiêu; cố vấn học tập chỉ xem.");
+    expect(html).toContain("Sinh viên tự chọn chuyên ngành và vị trí nghề nghiệp mục tiêu; bạn chỉ xem.");
     expect(html).not.toContain("Chỉnh sửa thông tin");
     expect(html).not.toContain(">Chọn vị trí nghề nghiệp mục tiêu</button>");
   });
@@ -42,6 +42,6 @@ describe("Mục tiêu học tập in a cố vấn học tập's tab", () => {
     const html = render({ careerPositionId: null, careerPosition: null, specialty: null, cohortCode: "K30" });
     expect(html).toContain("Chỉnh sửa thông tin");
     expect(html).toContain(">Chọn vị trí nghề nghiệp mục tiêu</button>");
-    expect(html).not.toContain("cố vấn học tập chỉ xem");
+    expect(html).not.toContain("Sinh viên tự chọn chuyên ngành và vị trí nghề nghiệp mục tiêu");
   });
 });

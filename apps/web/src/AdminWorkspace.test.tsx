@@ -16,9 +16,9 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("admin workspace", () => {
   it("shows the short names in the sidebar, in order, with the groups and their pages", () => {
-    // Lớp phụ trách waits for GET advisor-portal/me: an admin sees it only once the account is known to advise classes.
+    // Quản lý sinh viên is always an admin's page (every student, 2026-11-03), before GET advisor-portal/me answers too.
     expect(sidebarNames(render("/quantri/tai-khoan"))).toEqual(
-      ["Báo cáo", "Tổng quan", "Tiến độ", "Nguy cơ", "Kỹ năng thiếu", "Vị trí mục tiêu", "Môn đề xuất", "Nhật ký", "Tài khoản", "Sinh viên", "Cố vấn học tập", "Cố vấn", "Quyền cố vấn", "Chương trình", "Tốt nghiệp", "Kế hoạch", "Quản lý nghề nghiệp", "Lĩnh vực", "Kỹ năng", "Vị trí nghề nghiệp",
+      ["Báo cáo", "Tổng quan", "Tiến độ", "Nguy cơ", "Kỹ năng thiếu", "Vị trí mục tiêu", "Môn đề xuất", "Nhật ký", "Tài khoản", "Sinh viên", "Cố vấn học tập", "Cố vấn", "Quản lý sinh viên", "Chương trình", "Tốt nghiệp", "Kế hoạch", "Quản lý nghề nghiệp", "Lĩnh vực", "Kỹ năng", "Vị trí nghề nghiệp",
         "Quản lý năng lực", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học", "Quản lý thông báo", "Gửi thông báo", "Đã gửi"]);
   });
 
@@ -66,7 +66,7 @@ describe("admin workspace", () => {
     const careerPages = ["/quantri/linh-vuc-nghe-nghiep", "/quantri/ky-nang", "/quantri/vi-tri-nghe-nghiep"];
     const competencyPages = ["/quantri/nhom-nang-luc", "/quantri/cau-hinh-nang-luc", "/quantri/cau-hinh-mon-hoc"];
     const announcementPages = ["/quantri/gui-thong-bao", "/quantri/thong-bao-da-gui"];
-    const advisorPages = ["/quantri/co-van-hoc-tap", "/quantri/lop-phu-trach", "/quantri/quyen-co-van"];
+    const advisorPages = ["/quantri/co-van-hoc-tap", "/quantri/quan-ly-sinh-vien"];
     const reportPages = adminNavigation.filter(item => item.eyebrow === "BÁO CÁO").map(item => item.path as string);
     for (const { path } of adminNavigation) {
       expect(openGroups(render(path))).toEqual(careerPages.includes(path) ? ["careers"] : competencyPages.includes(path) ? ["competencies"]
@@ -74,6 +74,7 @@ describe("admin workspace", () => {
     }
     // An old link or a trailing slash opens the group of the page it shows.
     expect(openGroups(render("/quantri/danh-gia-nang-luc"))).toEqual(["competencies"]);
+    expect(openGroups(render("/quantri/quyen-co-van"))).toEqual(["advisors"]);
     expect(openGroups(render("/quantri/ky-nang/"))).toEqual(["careers"]);
   });
 
@@ -92,21 +93,35 @@ describe("admin workspace", () => {
     expect(render("/quantri/nhat-ky")).toContain("Tìm trong nhật ký");
   });
 
-  it("gives a cố vấn học tập the pages of the CVHT rows and opens Lớp phụ trách (2026-11-03)", () => {
+  it("gives a cố vấn học tập the pages of the CVHT rows and opens Quản lý sinh viên (2026-11-03)", () => {
     const advisor: AuthenticatedUser = { ...user, userId: "a1", name: "Cố vấn", role: "advisor" };
     const home = render("/quantri", advisor);
-    expect(sidebarNames(home)).toEqual(["Sinh viên", "Cố vấn học tập", "Cố vấn", "Lớp phụ trách", "Quyền cố vấn", "Chương trình", "Tốt nghiệp", "Kế hoạch",
+    expect(sidebarNames(home)).toEqual(["Sinh viên", "Cố vấn học tập", "Cố vấn", "Quản lý sinh viên", "Chương trình", "Tốt nghiệp", "Kế hoạch",
       "Quản lý nghề nghiệp", "Lĩnh vực", "Kỹ năng", "Vị trí nghề nghiệp", "Quản lý năng lực", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học"]);
-    expect(home).toContain(">Lớp phụ trách</h1>");
+    expect(home).toContain(">Quản lý sinh viên</h1>");
     expect(home).toContain(">QUẢN LÝ SINH VIÊN CỦA CỐ VẤN HỌC TẬP</p>");
-    expect(home).toContain('<a href="/quantri/lop-phu-trach" aria-current="page">');
+    expect(home).toContain('<a href="/quantri/quan-ly-sinh-vien" aria-current="page">');
     expect(home).toContain("<small>Cố vấn học tập</small>");
-    // A report, Tài khoản or an announcement page leads an advisor back to Lớp phụ trách.
-    for (const path of ["/quantri/tong-quan", "/quantri/nhat-ky", "/quantri/tai-khoan", "/quantri/gui-thong-bao"]) expect(render(path, advisor)).toContain(">Lớp phụ trách</h1>");
+    // The advisor's students only; the old pages' links open the same page.
+    expect(home).toContain("Bạn xem được sinh viên của các lớp Khoa phân công cho bạn.");
+    expect(home).toContain(">Lớp phụ trách<");
+    for (const path of ["/quantri/lop-phu-trach", "/quantri/quyen-co-van"]) expect(render(path, advisor)).toContain(">Quản lý sinh viên</h1>");
+    // A report, Tài khoản or an announcement page leads an advisor back to Quản lý sinh viên.
+    for (const path of ["/quantri/tong-quan", "/quantri/nhat-ky", "/quantri/tai-khoan", "/quantri/gui-thong-bao"]) expect(render(path, advisor)).toContain(">Quản lý sinh viên</h1>");
     // The catalog pages open read only: no add button.
     const fields = render("/quantri/linh-vuc-nghe-nghiep", advisor);
     expect(fields).toContain(">Lĩnh vực</h1>");
     expect(fields).not.toContain("Thêm lĩnh vực");
     expect(render("/quantri/linh-vuc-nghe-nghiep")).toContain("Thêm lĩnh vực");
+  });
+
+  it("shows an admin every student on Quản lý sinh viên, with the permissions folded at the end (2026-11-03)", () => {
+    const html = render("/quantri/quan-ly-sinh-vien");
+    expect(html).toContain("Bạn xem được mọi sinh viên của Khoa; cố vấn học tập chỉ xem sinh viên các lớp mình phụ trách.");
+    expect(html).not.toContain(">Lớp phụ trách<");
+    expect(html).toContain('<details class="av-perm-section"><summary>');
+    expect(html).toContain("<span>Quyền khi làm việc với trang sinh viên</span>");
+    expect(html.indexOf('id="av-students-title"')).toBeLessThan(html.indexOf("av-perm-section"));
+    for (const role of ["faculty_board", "advisor"] as const) expect(render("/quantri/quan-ly-sinh-vien", { ...user, role })).toContain(">Quản lý sinh viên</h1>");
   });
 });

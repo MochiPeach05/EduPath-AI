@@ -60,7 +60,7 @@ export const HOW_TEXT: Record<CourseHow, { label: string; color: string; tone: s
   improve: { label: "Học cải thiện", color: SERIES_COLORS.violet, tone: "rp-chip-violet" },
 };
 export const AUDIT_TEXT: Record<AuditKind, string> = {
-  account: "Tài khoản", training: "Đào tạo", career: "Nghề nghiệp", competency: "Năng lực", notify: "Thông báo", report: "Xuất báo cáo", access: "Xem dữ liệu sinh viên", advisor: "Cố vấn học tập", other: "Khác",
+  account: "Tài khoản", training: "Đào tạo", career: "Nghề nghiệp", competency: "Năng lực", notify: "Thông báo", report: "Xuất báo cáo", access: "Xem dữ liệu sinh viên", advisor: "Làm thay sinh viên", other: "Khác",
 };
 const BAND_ORDER: readonly GpaBandLabel[] = ["Xuất sắc", "Giỏi", "Khá", "Trung bình", "Yếu"];
 const FIT_ORDER = ["Rất phù hợp", "Phù hợp", "Trung bình", "Ít phù hợp", "Không phù hợp"] as const;

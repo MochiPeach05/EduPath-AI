@@ -6,10 +6,12 @@
 // assessment and its AI comment, the AI roadmap, the graduation advice, Trợ lý AI), even without the student's consent
 // (user: "Cho làm, báo sinh viên"); no consent is recorded in the student's name. Each such action is logged (kind
 // 'advisor') and told to the student by a notification. Reads pass, except the student's own notifications. The role
-// 'advisor' only reads the admin portal (advisorReadOnly).
+// 'advisor' only reads the admin portal (advisorReadOnly). Since the user's "Quản lý sinh viên" (2026-11-03: AD-AST-01…09
+// are "QTV & CVHT"), admins and Ban chủ nhiệm khoa (canManageAdvisors) work the same way in the page of ANY student, not
+// only of the classes they advise; the student is told who did it (actorKind).
 import type { Request, RequestHandler } from "express";
 import type { DatabasePool } from "../db/pool.js";
-import type { AuthenticatedUser } from "../auth/types.js";
+import { canManageAdvisors, type AuthenticatedUser } from "../auth/types.js";
 import { canUseStudentPortal } from "../auth/security.js";
 import { auditActorOf, recordAudit } from "../admin/audit/record.js";
 import { advisorAction, notifySafely } from "../notifications/notify.js";
@@ -18,14 +20,23 @@ export const ADVISOR_STUDENT_HEADER = "x-advisor-student";
 
 type Db = Pick<DatabasePool, "query">;
 
-/** A student of a class the advisor advises, as the student routers see them. */
+/**
+ * A student an admin-portal account works for, as the student routers see them: a student of a class the account advises
+ * (actorKind "advisor"), or, for admins and Ban chủ nhiệm khoa, any student (actorKind "admin").
+ */
 export type AdvisedStudent = {
   user: AuthenticatedUser;
   studentCode: string | null;
   /** student_profiles.full_name, else the account's display name. */
   name: string;
+  /** The student's class (upper case, no spaces); empty when the profile has none. */
   className: string;
-  /** ad_advisors.full_name of the advisor (the name the student is told). */
+  /** advisor: the cố vấn học tập of the student's class; admin: a quản trị viên of the Khoa working for any student. */
+  actorKind: "advisor" | "admin";
+  /** The name the student is told: ad_advisors.full_name of the advisor, the account's display name of an admin (both
+   *  never blank in the database; empty otherwise, and the notification names only the role). */
+  actorName: string;
+  /** The same as actorName (the name used before admins could act). */
   advisorName: string;
 };
 export type AdvisorActing = { advisor: AuthenticatedUser; student: AdvisedStudent };
@@ -61,27 +72,21 @@ export async function advisorClassesOf(db: Db, userId: string): Promise<string[]
   return result.rows.map((row) => row.class_name);
 }
 
-/**
- * The student behind studentId, when the advisor advises the student's class and the student account is an active
- * student account; null otherwise (another class, a staff account, a locked account).
- */
-export async function advisedStudent(db: Db, advisor: Pick<AuthenticatedUser, "userId">, studentId: string): Promise<AdvisedStudent | null> {
-  if (!isUuid(studentId)) return null;
-  const result = await db.query<{
-    id: string; tenant: string; object_id: string | null; display_name: string; email: string | null; username: string | null;
-    auth_version: number | null; student_code: string | null; full_name: string | null; class_name: string; advisor_name: string;
-  }>(
-    `SELECT u.id, u.entra_tenant_id AS tenant, u.entra_object_id AS object_id, u.display_name, u.email, u.username, u.auth_version,
-        p.student_code, p.full_name, c.class_name, a.full_name AS advisor_name
-       FROM users u
-       JOIN student_profiles p ON p.user_id=u.id
-       JOIN ad_advisor_classes c ON c.class_name=upper(regexp_replace(p.class_name, '\\s', '', 'g'))
-       JOIN ad_advisors a ON a.user_id=c.advisor_user_id
-      WHERE u.id=$1 AND c.advisor_user_id=$2 AND u.is_active AND COALESCE(u.role_override, u.role)='student'`,
-    [studentId, advisor.userId]);
-  const row = result.rows[0];
-  if (!row) return null;
+type StudentRow = {
+  id: string; tenant: string; object_id: string | null; display_name: string; email: string | null; username: string | null;
+  auth_version: number | null; student_code: string | null; full_name: string | null; class_name: string | null; actor_name: string | null;
+};
+/** The student account's columns (u = users, p = student_profiles). */
+const STUDENT_COLUMNS = `u.id, u.entra_tenant_id AS tenant, u.entra_object_id AS object_id, u.display_name, u.email, u.username, u.auth_version,
+  p.student_code, p.full_name`;
+/** An active student account (u = users). */
+const ACTIVE_STUDENT = "u.is_active AND COALESCE(u.role_override, u.role)='student'";
+/** The student's class as ad_advisor_classes stores it (p = student_profiles). */
+const STUDENT_CLASS = "upper(regexp_replace(p.class_name, '\\s', '', 'g'))";
+
+function toAdvised(row: StudentRow, actorKind: AdvisedStudent["actorKind"]): AdvisedStudent {
   const objectId = row.object_id ?? "";
+  const actorName = row.actor_name?.trim() ?? "";
   return {
     user: {
       authVersion: row.auth_version ?? 0, userId: row.id, identityKey: `${row.tenant}:${objectId}`, tenantId: row.tenant, objectId,
@@ -89,9 +94,35 @@ export async function advisedStudent(db: Db, advisor: Pick<AuthenticatedUser, "u
     },
     studentCode: row.student_code,
     name: row.full_name?.trim() || row.display_name,
-    className: row.class_name,
-    advisorName: row.advisor_name,
+    className: row.class_name ?? "",
+    actorKind, actorName, advisorName: actorName,
   };
+}
+
+/**
+ * The student behind studentId, for an admin-portal account: a student of a class the account advises (actorKind
+ * "advisor"), else, for admins and Ban chủ nhiệm khoa (canManageAdvisors), any active student account (actorKind
+ * "admin"); null otherwise (another class, a staff account, a locked account).
+ */
+export async function advisedStudent(db: Db, account: Pick<AuthenticatedUser, "userId" | "role">, studentId: string): Promise<AdvisedStudent | null> {
+  if (!isUuid(studentId)) return null;
+  const advised = (await db.query<StudentRow>(
+    `SELECT ${STUDENT_COLUMNS}, c.class_name, a.full_name AS actor_name
+       FROM users u
+       JOIN student_profiles p ON p.user_id=u.id
+       JOIN ad_advisor_classes c ON c.class_name=${STUDENT_CLASS}
+       JOIN ad_advisors a ON a.user_id=c.advisor_user_id
+      WHERE u.id=$1 AND c.advisor_user_id=$2 AND ${ACTIVE_STUDENT}`,
+    [studentId, account.userId])).rows[0];
+  if (advised) return toAdvised(advised, "advisor");
+  if (!canManageAdvisors(account.role)) return null;
+  const any = (await db.query<StudentRow>(
+    `SELECT ${STUDENT_COLUMNS}, ${STUDENT_CLASS} AS class_name, (SELECT display_name FROM users WHERE id=$2) AS actor_name
+       FROM users u
+       LEFT JOIN student_profiles p ON p.user_id=u.id
+      WHERE u.id=$1 AND ${ACTIVE_STUDENT}`,
+    [studentId, account.userId])).rows[0];
+  return any ? toAdvised(any, "admin") : null;
 }
 
 /**
@@ -126,12 +157,12 @@ const vietnamDay = (date = new Date()) => new Intl.DateTimeFormat("en-CA", { tim
 
 /** "2374802010994 – Nguyễn Văn A (lớp 71K29CNTT01)": the log names the student, never the data. */
 export const studentLabel = (student: Pick<AdvisedStudent, "studentCode" | "name" | "className">) =>
-  `${[student.studentCode, student.name].filter(Boolean).join(" – ")} (lớp ${student.className})`;
+  `${[student.studentCode, student.name].filter(Boolean).join(" – ")}${student.className ? ` (lớp ${student.className})` : ""}`;
 
 /**
  * Mounted on /api/student before the student routers (app.ts). A student passes untouched; an admin-portal account or a
- * staff mailbox passes only as the advisor of the student named by X-Advisor-Student, and only for reads and
- * ACTING_ACTIONS.
+ * staff mailbox passes only for the student named by X-Advisor-Student that advisedStudent gives it (its own classes; any
+ * student for admins and Ban chủ nhiệm khoa), and only for reads and ACTING_ACTIONS.
  */
 export function advisorActing(db: Db | undefined, staffEmailDomains: ReadonlySet<string>): RequestHandler {
   return async (request, response, next) => {
@@ -159,7 +190,7 @@ export function advisorActing(db: Db | undefined, staffEmailDomains: ReadonlySet
           });
           if (action.did && action.link && action.key) {
             void notifySafely(db, student.user.userId,
-              advisorAction(student.advisorName, action.did, action.link, vietnamDay(), `${action.key}:${user.userId}`));
+              advisorAction(student.actorName, action.did, action.link, vietnamDay(), `${action.key}:${user.userId}`, student.actorKind));
           }
         });
       }

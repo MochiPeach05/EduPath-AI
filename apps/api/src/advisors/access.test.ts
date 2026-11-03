@@ -3,12 +3,14 @@ import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "../auth/types.js";
 import { requireAuthentication } from "../middleware/authorization.js";
+import { advisorAction } from "../notifications/notify.js";
 import {
-  ACTING_ACTIONS, actingAction, actingAdvisor, advisorActing, advisorReadOnly, normalizeClassName, studentLabel, studentUser,
+  ACTING_ACTIONS, actingAction, actingAdvisor, advisorActing, advisorReadOnly, advisedStudent, normalizeClassName, studentLabel, studentUser,
 } from "./access.js";
 
 const STUDENT_ID = "0b8c2f1e-4d3a-4f6b-8a1e-2c3d4e5f6a70";
 const ADVISOR_ID = "9a1b2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d";
+const ADMIN_ID = "3c4d5e6f-7a8b-4c9d-8e0f-1a2b3c4d5e6f";
 const staffDomains = new Set(["vlu.edu.vn"]);
 
 const student = {
@@ -19,19 +21,30 @@ const advisor = {
   userId: ADVISOR_ID, identityKey: "t:a", tenantId: "tenant", objectId: "a", name: "Nguyễn Văn Cố Vấn", email: "co.van@vlu.edu.vn",
   username: "co.van@vlu.edu.vn", role: "advisor", signedInAt: "2026-11-03T00:00:00.000Z",
 } as AuthenticatedUser;
+/** A quản trị viên of the Khoa (canManageAdvisors), who works for any student (user 2026-11-03: AD-AST "QTV & CVHT"). */
+const qtv = {
+  ...advisor, userId: ADMIN_ID, identityKey: "t:q", objectId: "q", name: "Trần Thị Quản Trị", email: "quan.tri@vlu.edu.vn",
+  username: "quan.tri@vlu.edu.vn", role: "admin",
+} as AuthenticatedUser;
 /** The row advisedStudent reads for a student of the advisor's class. */
 const advisedRow = {
   id: STUDENT_ID, tenant: "tenant", object_id: "o", display_name: student.name, email: student.email, username: student.username,
-  auth_version: 2, student_code: "2374802010994", full_name: "Sinh viên Thử nghiệm", class_name: "71K29CNTT99", advisor_name: "ThS. Nguyễn Văn Cố Vấn",
+  auth_version: 2, student_code: "2374802010994", full_name: "Sinh viên Thử nghiệm", class_name: "71K29CNTT99", actor_name: "ThS. Nguyễn Văn Cố Vấn",
 };
+/** The row advisedStudent reads for any student when the account is an admin and advises none of the student's class. */
+const anyRow = { ...advisedRow, class_name: "71K29CNTT05", actor_name: "Trần Thị Quản Trị" };
 
-/** An app: fake session, the acting middleware on /api/student and a few student routes that answer who they act for. */
-function setup(user: AuthenticatedUser | null, row: Record<string, unknown> | null = advisedRow, status = 200) {
+/**
+ * An app: fake session, the acting middleware on /api/student and a few student routes that answer who they act for.
+ * row: what the class query (own classes) finds; any: what the second query (any student, admins only) finds.
+ */
+function setup(user: AuthenticatedUser | null, row: Record<string, unknown> | null = advisedRow, status = 200, any: Record<string, unknown> | null = null) {
   const writes: { table: "audit" | "notification"; values: unknown[] }[] = [];
   const query = vi.fn(async (sql: string, values: unknown[] = []) => {
     if (sql.includes("INSERT INTO ad_audit_log")) { writes.push({ table: "audit", values }); return { rowCount: 1, rows: [] }; }
     if (sql.includes("INSERT INTO stu_notifications")) { writes.push({ table: "notification", values }); return { rowCount: 1, rows: [] }; }
     if (sql.includes("ad_advisor_classes")) return { rowCount: row ? 1 : 0, rows: row ? [row] : [] };
+    if (sql.includes("LEFT JOIN student_profiles")) return { rowCount: any ? 1 : 0, rows: any ? [any] : [] };
     return { rowCount: 0, rows: [] };
   });
   const app = express();
@@ -164,6 +177,98 @@ describe("a cố vấn học tập in a student's page (advisorActing)", () => {
 
   it("stores class names in upper case without spaces", () => {
     expect(normalizeClassName(" 71k29 cntt01 ")).toBe("71K29CNTT01");
+  });
+
+  it("names a student without a class by code and name only", () => {
+    expect(studentLabel({ studentCode: "2374802010994", name: "Sinh viên Thử nghiệm", className: "" })).toBe("2374802010994 – Sinh viên Thử nghiệm");
+    expect(studentLabel({ studentCode: null, name: "Sinh viên Thử nghiệm", className: "71K29CNTT99" })).toBe("Sinh viên Thử nghiệm (lớp 71K29CNTT99)");
+  });
+});
+
+describe("a quản trị viên or Ban chủ nhiệm khoa in a student's page (QTV & CVHT)", () => {
+  it.each(["admin", "faculty_board"] as const)("lets a %s work in the page of any student", async (role) => {
+    const { app, query } = setup({ ...qtv, role }, null, 200, anyRow);
+    const answer = await request(app).get("/api/student/overview").set("X-Advisor-Student", STUDENT_ID).expect(200);
+    expect(answer.body).toEqual({ student: STUDENT_ID, advisor: ADMIN_ID, label: "2374802010994 – Sinh viên Thử nghiệm (lớp 71K29CNTT05)" });
+    // The own classes first, then any active student account.
+    expect(query.mock.calls.map((call) => call[1])).toEqual([[STUDENT_ID, ADMIN_ID], [STUDENT_ID, ADMIN_ID]]);
+    expect(String(query.mock.calls[1]?.[0])).toMatch(/u\.is_active AND COALESCE\(u\.role_override, u\.role\)='student'/);
+  });
+
+  it("keeps the other admin-portal roles to their own classes", async () => {
+    for (const role of ["lecturer", "department_head", "advisor"] as const) {
+      const { app, query } = setup({ ...qtv, role }, null, 200, anyRow);
+      expect((await request(app).get("/api/student/overview").set("X-Advisor-Student", STUDENT_ID).expect(403)).body).toEqual({ error: "advisor_student_forbidden" });
+      expect(query).toHaveBeenCalledOnce();
+    }
+  });
+
+  it("refuses an id that is no active student account, even for an admin", async () => {
+    const { app, query } = setup(qtv, null, 200, null);
+    expect((await request(app).get("/api/student/overview").set("X-Advisor-Student", STUDENT_ID).expect(403)).body).toEqual({ error: "advisor_student_forbidden" });
+    expect(query).toHaveBeenCalledTimes(2);
+  });
+
+  it("holds an admin to the same actions as an advisor", async () => {
+    const { app, writes } = setup(qtv, null, 200, anyRow);
+    expect((await request(app).get("/api/student/notifications").set("X-Advisor-Student", STUDENT_ID).expect(403)).body).toEqual({ error: "advisor_action_not_allowed" });
+    expect((await request(app).patch("/api/student/profile").set("X-Advisor-Student", STUDENT_ID).expect(403)).body).toEqual({ error: "advisor_action_not_allowed" });
+    expect((await request(app).delete("/api/student/transcript").set("X-Advisor-Student", STUDENT_ID).expect(403)).body).toEqual({ error: "advisor_action_not_allowed" });
+    await settle();
+    expect(writes).toEqual([]);
+  });
+
+  it("logs an admin's import as kind advisor and tells the student a quản trị viên of the Khoa did it", async () => {
+    const { app, writes } = setup(qtv, null, 200, anyRow);
+    await request(app).post("/api/student/transcript").set("X-Advisor-Student", STUDENT_ID).expect(200);
+    await vi.waitFor(() => expect(writes).toHaveLength(2));
+    const audit = writes.find((write) => write.table === "audit")!.values;
+    expect(audit.slice(1, 11)).toEqual([ADMIN_ID, "Trần Thị Quản Trị", "admin", "advisor", "Import bảng điểm thay sinh viên",
+      "2374802010994 – Sinh viên Thử nghiệm (lớp 71K29CNTT05)", "student", STUDENT_ID, "POST", "/api/student/transcript"]);
+    const notification = writes.find((write) => write.table === "notification")!.values;
+    expect(notification[4]).toBe("Quản trị viên của Khoa đã import bảng điểm thay bạn");
+    expect(String(notification[5])).toContain("Trần Thị Quản Trị (quản trị viên của Khoa) đã import bảng điểm thay bạn trên EduPath AI.");
+    expect(notification[8]).toMatch(new RegExp(`^advisor:transcript:${ADMIN_ID}:\\d{4}-\\d{2}-\\d{2}$`));
+  });
+
+  it("names an admin who advises the student's class as the class's cố vấn học tập", async () => {
+    const { app, query, writes } = setup(qtv, advisedRow, 200, anyRow);
+    await request(app).post("/api/student/transcript").set("X-Advisor-Student", STUDENT_ID).expect(200);
+    await vi.waitFor(() => expect(writes).toHaveLength(2));
+    expect(writes.find((write) => write.table === "notification")!.values[4]).toBe("Cố vấn học tập đã import bảng điểm thay bạn");
+    expect(query.mock.calls.filter((call) => String(call[0]).includes("LEFT JOIN student_profiles"))).toEqual([]);
+  });
+
+  it("gives the kind and the name the student is told", async () => {
+    const db = (classRow: unknown, any: unknown) => ({ query: vi.fn(async (sql: string) =>
+      ({ rows: sql.includes("ad_advisor_classes") ? (classRow ? [classRow] : []) : any ? [any] : [] })) });
+    expect(await advisedStudent(db(advisedRow, null) as never, advisor, STUDENT_ID))
+      .toMatchObject({ actorKind: "advisor", actorName: "ThS. Nguyễn Văn Cố Vấn", advisorName: "ThS. Nguyễn Văn Cố Vấn", className: "71K29CNTT99" });
+    expect(await advisedStudent(db(null, { ...anyRow, class_name: null }) as never, qtv, STUDENT_ID))
+      .toMatchObject({ actorKind: "admin", actorName: "Trần Thị Quản Trị", className: "", user: { userId: STUDENT_ID, role: "student" } });
+    expect(await advisedStudent(db(null, anyRow) as never, advisor, STUDENT_ID)).toBeNull();
+    expect(await advisedStudent(db(null, anyRow) as never, qtv, "not-a-uuid")).toBeNull();
+  });
+});
+
+describe("the student's notification of an action done for them (advisorAction)", () => {
+  it("says who did it: the class's cố vấn học tập or a quản trị viên of the Khoa", () => {
+    expect(advisorAction("ThS. Nguyễn Văn Cố Vấn", "đã tạo Lộ trình AI", "#roadmap", "2026-11-03", `roadmap:${ADVISOR_ID}`)).toEqual({
+      type: "khoa", kind: "advisor_action", title: "Cố vấn học tập đã tạo Lộ trình AI thay bạn",
+      body: "ThS. Nguyễn Văn Cố Vấn (cố vấn học tập của lớp bạn) đã tạo Lộ trình AI thay bạn trên EduPath AI. Bạn xem lại kết quả; nếu không muốn giữ, bạn vẫn xóa được như thường.",
+      link: "#roadmap", sourceKey: `advisor:roadmap:${ADVISOR_ID}:2026-11-03`,
+    });
+    const byAdmin = advisorAction("Trần Thị Quản Trị", "đã hỏi Trợ lý AI", "#assistant", "2026-11-03", `assistant:${ADMIN_ID}`, "admin");
+    expect(byAdmin.title).toBe("Quản trị viên của Khoa đã hỏi Trợ lý AI thay bạn");
+    expect(byAdmin.body).toMatch(/^Trần Thị Quản Trị \(quản trị viên của Khoa\) đã hỏi Trợ lý AI thay bạn trên EduPath AI\./);
+    expect(byAdmin.sourceKey).toBe(`advisor:assistant:${ADMIN_ID}:2026-11-03`);
+  });
+
+  it("names only the role when there is no name", () => {
+    expect(advisorAction(" ", "đã chạy Đánh giá năng lực", "#competency", "2026-11-03", "k", "admin").body)
+      .toMatch(/^Quản trị viên của Khoa đã chạy Đánh giá năng lực thay bạn/);
+    expect(advisorAction("", "đã chạy Đánh giá năng lực", "#competency", "2026-11-03", "k").body)
+      .toMatch(/^Cố vấn học tập của lớp bạn đã chạy Đánh giá năng lực thay bạn/);
   });
 });
 

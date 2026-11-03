@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  ADVISOR_BLOCKED_EVENT, ADVISOR_STUDENT_KEY, actingStudentId, advisorBlockedMessage, installAdvisorFetch, isAdvisorView, isStudentApiRequest,
-  stopActing, takeAdvisorStudentFromUrl, withAdvisorHeader,
+  ADVISOR_BLOCKED_EVENT, ADVISOR_HOME, ADVISOR_STUDENT_KEY, actingAsText, actingStudentId, advisorBlockedMessage, installAdvisorFetch, isAdvisorView,
+  isStudentApiRequest, stopActing, takeAdvisorStudentFromUrl, withAdvisorHeader,
 } from "./advisor-view";
 import { ADVISOR_ERRORS, ADVISOR_STUDENT_HEADER } from "./advisor-types";
 
@@ -125,5 +125,19 @@ describe("requests of an advisor's tab", () => {
   it("names the refusals in the advisor's words", () => {
     expect(advisorBlockedMessage("advisor_student_forbidden")).toBe(ADVISOR_ERRORS.advisor_student_forbidden);
     expect(advisorBlockedMessage("something_else")).toBe(ADVISOR_ERRORS.advisor_action_not_allowed);
+  });
+});
+
+describe("who works in the student's tab (Quản lý sinh viên, 2026-11-03)", () => {
+  it("names the role the page was opened with", () => {
+    expect(actingAsText("advisor")).toBe("cố vấn học tập");
+    expect(actingAsText("admin")).toBe("quản trị viên");
+    expect(actingAsText("faculty_board")).toBe("Ban chủ nhiệm khoa");
+    // Another admin-portal account opens a student's page only for the classes it advises.
+    expect(actingAsText("lecturer")).toBe("cố vấn học tập");
+  });
+
+  it("goes back to Quản lý sinh viên when the tab is closed", () => {
+    expect(ADVISOR_HOME).toBe("/quantri/quan-ly-sinh-vien");
   });
 });

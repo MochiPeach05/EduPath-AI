@@ -35,6 +35,8 @@ export type AssistantThread = {
    * it. An advisor's list holds only the conversations that advisor started.
    */
   byAdvisor?: boolean;
+  /** The role of the staff account that started it ("advisor", "admin"…), when the API says; absent for older answers. */
+  createdByRole?: string | null;
 };
 
 /**

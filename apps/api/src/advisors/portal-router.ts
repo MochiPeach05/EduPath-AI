@@ -1,8 +1,9 @@
-// Lớp phụ trách of a cố vấn học tập (AD-AST-01…05, 09; user 2026-11-03, migration 058; contract:
-// apps/web/src/advisor-types.ts). The signed-in account sees only its own classes and their students (any admin-portal
-// account the Khoa gave classes; the others get empty lists): GET /me, /classes, /students, /permissions. Opening a
-// student's page (POST /students/:id/open) checks the class again, is logged (kind 'advisor') and answers the link of the
-// student portal tab, where advisors/access.ts checks every request once more.
+// Quản lý sinh viên of a cố vấn học tập (AD-AST-01…05, 09; user 2026-11-03, migration 058; contract:
+// apps/web/src/advisor-types.ts). The signed-in account sees its own classes and their students (any admin-portal account
+// the Khoa gave classes; the others get empty lists), and admins and Ban chủ nhiệm khoa every class and every student
+// (AD-AST "QTV & CVHT"): GET /me, /classes, /students, /permissions. Opening a student's page (POST /students/:id/open)
+// checks the student again, is logged (kind 'advisor') and answers the link of the student portal tab, where
+// advisors/access.ts checks every request once more.
 import { Router, type ErrorRequestHandler } from "express";
 import { z } from "zod";
 import type { DatabasePool } from "../db/pool.js";

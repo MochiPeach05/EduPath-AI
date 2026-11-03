@@ -271,13 +271,13 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
         <div className="ps-answers-wide"><dt>Thành tích</dt><dd>{survey.hasAchievements && survey.achievements
           ? <ul>{survey.achievements.split("\n").map((line, index) => <li key={index}>{line}</li>)}</ul> : "Không có"}</dd></div>
       </dl>
-      {isAdvisorView() ? <p className="sw-advisor-note">Cố vấn học tập chỉ xem câu trả lời; sinh viên tự sửa hoặc xóa khảo sát.</p> : <div className="sr-actions">
+      {isAdvisorView() ? <p className="sw-advisor-note">Bạn chỉ xem câu trả lời; sinh viên tự sửa hoặc xóa khảo sát.</p> : <div className="sr-actions">
         <button ref={editButton} type="button" className="sr-secondary" onClick={edit}><Icon name="edit" /> Chỉnh sửa khảo sát</button>
         <button type="button" className="sw-text-link ps-delete" onClick={askDelete}><Icon name="trash" /> Xóa câu trả lời</button>
       </div>}
       <p className="sw-muted ps-updated">Cập nhật lúc {formatUpdatedAt(survey.updatedAt)}.</p>
     </>}
-    {!editing && !survey && isAdvisorView() && <p className="sw-advisor-note">Sinh viên chưa làm Khảo sát định hướng. Cố vấn học tập không làm khảo sát thay sinh viên.</p>}
+    {!editing && !survey && isAdvisorView() && <p className="sw-advisor-note">Sinh viên chưa làm Khảo sát định hướng. Chỉ sinh viên tự làm được khảo sát.</p>}
     {deleting && <DeleteSurveyDialog busy={busy} error={deleteError} onClose={() => setDeleting(false)} onConfirm={() => void remove()} />}
   </section>;
 }

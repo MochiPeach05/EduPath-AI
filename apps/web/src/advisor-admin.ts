@@ -1,5 +1,5 @@
 // Cố vấn học tập in the admin portal (AD-ADV-01…05, AD-AST-01…09; 2026-11-03): the requests and the words the pages
-// Cố vấn, Lớp phụ trách and Quyền cố vấn share (AdvisorsManagement.tsx, AdvisorPortal.tsx). Shapes: advisor-types.ts.
+// Cố vấn and Quản lý sinh viên share (AdvisorsManagement.tsx, AdvisorPortal.tsx). Shapes: advisor-types.ts.
 import { ADVISOR_ERRORS, type AdvisedStudentStatus, type AdvisorAccountStatus, type AdvisorImportItem, type AdvisorImportPreview } from "./advisor-types";
 import { searchTerm } from "./student-curriculum-types";
 

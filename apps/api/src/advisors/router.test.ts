@@ -5,7 +5,7 @@ import type { AppRole, AuthenticatedUser } from "../auth/types.js";
 import { advisorTemplate } from "./import.js";
 import { AdvisorError } from "./model.js";
 import { createAdvisorPortalRouter } from "./portal-router.js";
-import type { AdvisorRepository } from "./repository.js";
+import { PostgresAdvisorRepository, type AdvisorRepository } from "./repository.js";
 import { createAdvisorsRouter } from "./router.js";
 
 const origin = "http://localhost:5173";
@@ -23,7 +23,7 @@ function setup(role: AppRole | null = "admin") {
     create: vi.fn().mockResolvedValue(advisor), update: vi.fn().mockResolvedValue(advisor), remove: vi.fn().mockResolvedValue({ name: "A", email: null }),
     preview: vi.fn().mockResolvedValue({ fileName: "f.xlsx", rows: 1, items: [], fileProblems: [], summary: {} }),
     apply: vi.fn().mockResolvedValue({ added: 1, updated: 0, unchanged: 0, skipped: 0 }),
-    me: vi.fn().mockResolvedValue({ classes: 2, canManageAdvisors: false }), classes: vi.fn().mockResolvedValue([]),
+    me: vi.fn().mockResolvedValue({ classes: 2, canManageAdvisors: false, scope: "own" }), classes: vi.fn().mockResolvedValue([]),
     students: vi.fn().mockResolvedValue({ items: [], total: 0 }), open: vi.fn().mockResolvedValue({ url: `/dashboard?sv=${id}#overview` }),
   } satisfies Record<keyof AdvisorRepository, unknown>;
   const app = express(); app.use(express.json());
@@ -135,7 +135,7 @@ describe("advisors router: import", () => {
 describe("advisor portal router", () => {
   it("answers the account's own classes, students and the permission list", async () => {
     const { app, repository } = setup("advisor");
-    expect((await request(app).get("/portal/me").expect(200)).body).toEqual({ classes: 2, canManageAdvisors: false });
+    expect((await request(app).get("/portal/me").expect(200)).body).toEqual({ classes: 2, canManageAdvisors: false, scope: "own" });
     await request(app).get("/portal/classes").expect(200, { items: [] });
     await request(app).get("/portal/students").query({ class: "71k29cntt01", q: " 2374 ", status: "no_transcript", sort: "name", dir: "desc", page: 2 })
       .expect(200, { items: [], total: 0, page: 2, pageSize: 10 });
@@ -167,5 +167,80 @@ describe("advisor portal router", () => {
     repository.open.mockRejectedValue(new AdvisorError("student_not_advised", 403));
     await request(app).post(`/portal/students/${id}/open`).set("Origin", origin).expect(403, { error: "student_not_advised" });
     await request(app).post("/portal/students/nope/open").set("Origin", origin).expect(403, { error: "student_not_advised" });
+  });
+
+  it.each(["admin", "faculty_board"] as const)("serves %s the same routes, for every student", async (role) => {
+    const { app, repository } = setup(role);
+    repository.me.mockResolvedValue({ classes: 0, canManageAdvisors: true, scope: "all" });
+    expect((await request(app).get("/portal/me").expect(200)).body).toEqual({ classes: 0, canManageAdvisors: true, scope: "all" });
+    await request(app).get("/portal/students?status=all").expect(200);
+    expect(repository.students).toHaveBeenCalledWith(expect.objectContaining({ role }), expect.objectContaining({ status: "all" }));
+    await request(app).post(`/portal/students/${id}/open`).set("Origin", origin).expect(200);
+    expect(repository.open).toHaveBeenCalledWith(expect.objectContaining({ role }), id, `/portal/students/${id}/open`);
+  });
+});
+
+describe("advisor portal repository: whose students an account sees (QTV & CVHT)", () => {
+  /** Any active student account, as advisedStudent's second query reads it for an admin. */
+  const anyStudent = {
+    id, tenant: "tenant", object_id: "o", display_name: "SV", email: null, username: null, auth_version: 1,
+    student_code: "2374802010994", full_name: "Sinh viên Thử nghiệm", class_name: "71K29CNTT05", actor_name: "Admin",
+  };
+  function repository(rows: { advised?: unknown[]; any?: unknown[] } = {}) {
+    const query = vi.fn(async (sql: string, _values?: unknown[]) => {
+      if (sql.includes("INSERT INTO ad_audit_log")) return { rowCount: 1, rows: [] };
+      if (sql.includes("count(*)::int AS classes")) return { rows: [{ classes: 3 }] };
+      if (sql.includes("WITH students AS")) return { rows: [{ items: [], total: 0 }] };
+      if (sql.includes("WITH k AS")) return { rows: [] };
+      if (sql.includes("JOIN ad_advisor_classes c ON")) return { rows: rows.advised ?? [] };
+      if (sql.includes("LEFT JOIN student_profiles p ON p.user_id=u.id")) return { rows: rows.any ?? [] };
+      return { rows: [] };
+    });
+    return { repo: new PostgresAdvisorRepository({ query } as never, new Set(["vlu.edu.vn"])), query };
+  }
+  const as = (role: AppRole) => ({ ...actor, role });
+  const list = { q: "", status: "all" as const, page: 1, pageSize: 10 };
+
+  it("tells the web app the scope of the account", async () => {
+    for (const role of ["admin", "faculty_board"] as const) {
+      expect(await repository().repo.me(as(role))).toEqual({ classes: 3, canManageAdvisors: true, scope: "all" });
+    }
+    for (const role of ["advisor", "lecturer", "department_head"] as const) {
+      expect(await repository().repo.me(as(role))).toEqual({ classes: 3, canManageAdvisors: false, scope: "own" });
+    }
+  });
+
+  it("lists every class for an admin and the own classes for an advisor", async () => {
+    const all = repository();
+    await all.repo.classes(as("admin"));
+    expect(String(all.query.mock.calls[0]?.[0])).toContain("UNION SELECT class_name FROM ad_advisor_classes");
+    expect(String(all.query.mock.calls[0]?.[0])).toContain('AS "advisorName"');
+    expect(all.query.mock.calls[0]?.[1]).toBeUndefined();
+    const own = repository();
+    await own.repo.classes(as("advisor"));
+    expect(String(own.query.mock.calls[0]?.[0])).toContain("WITH k AS (SELECT class_name FROM ad_advisor_classes WHERE advisor_user_id = $1)");
+    expect(own.query.mock.calls[0]?.[1]).toEqual([actor.userId]);
+  });
+
+  it("lists every student for an admin and the own classes' students for anyone else", async () => {
+    const all = repository();
+    await all.repo.students(as("faculty_board"), list);
+    expect(String(all.query.mock.calls[0]?.[0])).toContain("$1::uuid IS NULL OR");
+    expect(all.query.mock.calls[0]?.[1]?.[0]).toBeNull();
+    const own = repository();
+    await own.repo.students(as("lecturer"), { ...list, className: "71K29CNTT01" });
+    expect(own.query.mock.calls[0]?.[1]?.slice(0, 2)).toEqual([actor.userId, "71K29CNTT01"]);
+  });
+
+  it("opens any student's page for an admin, logged, and only the own classes for an advisor", async () => {
+    const admin = repository({ any: [anyStudent] });
+    expect(await admin.repo.open(as("admin"), id, "/api/admin/advisor-portal/students/x/open")).toEqual({ url: `/dashboard?sv=${id}#overview` });
+    const audit = admin.query.mock.calls.find(([sql]) => sql.includes("INSERT INTO ad_audit_log"))?.[1];
+    expect(audit?.slice(3, 9)).toEqual(["admin", "advisor", "Mở trang sinh viên", "2374802010994 – Sinh viên Thử nghiệm (lớp 71K29CNTT05)", "student", id]);
+    const advisorRepo = repository({ any: [anyStudent] });
+    await expect(advisorRepo.repo.open(as("advisor"), id, "/x")).rejects.toMatchObject({ code: "student_not_advised", status: 403 });
+    expect(advisorRepo.query.mock.calls.some(([sql]) => sql.includes("INSERT INTO ad_audit_log"))).toBe(false);
+    const none = repository();
+    await expect(none.repo.open(as("admin"), id, "/x")).rejects.toMatchObject({ code: "student_not_advised" });
   });
 });

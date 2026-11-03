@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { AdvisorTable, ClassChips, ImportPreview } from "./AdvisorsManagement";
-import { ClassTable, PermissionsView, StudentTable } from "./AdvisorPortal";
+import AdvisorPortal, { ClassTable, PermissionsView, SCOPE_TEXT, StudentTable } from "./AdvisorPortal";
 import { useTableSort } from "./table-sort";
 import type { AdvisedStudentRow, AdvisorClass, AdvisorImportPreview, AdvisorPermissions, AdvisorRow } from "./advisor-types";
 
@@ -14,9 +14,9 @@ function Advisors({ rows, canManage }: { rows: AdvisorRow[]; canManage: boolean 
   const { sort, sortHeader } = useTableSort();
   return <AdvisorTable rows={rows} canManage={canManage} sort={sort} sortHeader={sortHeader} page={1} onPick={() => undefined} />;
 }
-function Classes({ classes }: { classes: AdvisorClass[] }) {
+function Classes({ classes, showAdvisor }: { classes: AdvisorClass[]; showAdvisor?: boolean }) {
   const { sort, sortHeader } = useTableSort();
-  return <ClassTable classes={classes} sort={sort} sortHeader={sortHeader} selected="71K29CNTT02" onPick={() => undefined} />;
+  return <ClassTable classes={classes} sort={sort} sortHeader={sortHeader} selected="71K29CNTT02" onPick={() => undefined} showAdvisor={showAdvisor} />;
 }
 function Students({ students }: { students: AdvisedStudentRow[] }) {
   const { sortHeader } = useTableSort();
@@ -72,19 +72,34 @@ describe("Cố vấn page", () => {
   });
 });
 
-describe("Lớp phụ trách and Quyền cố vấn pages", () => {
+describe("Quản lý sinh viên page (2026-11-03)", () => {
+  // advisorName: the class's cố vấn học tập, null when the Khoa has assigned none.
+  const classes: AdvisorClass[] = [
+    { className: "71K29CNTT01", cohort: "K29", students: 45, withTranscript: 38, assessed: 30, surveyDone: 20, roadmap: 12, advisorName: "Nguyễn Văn An" },
+    { className: "71K29CNTT02", cohort: "K29", students: 0, withTranscript: 0, assessed: 0, surveyDone: 0, roadmap: 0, advisorName: null },
+  ];
+
   it("shows each class with its students and how many did each step, the chosen class marked", () => {
-    const html = renderToStaticMarkup(<Classes classes={[
-      { className: "71K29CNTT01", cohort: "K29", students: 45, withTranscript: 38, assessed: 30, surveyDone: 20, roadmap: 12 },
-      { className: "71K29CNTT02", cohort: "K29", students: 0, withTranscript: 0, assessed: 0, surveyDone: 0, roadmap: 0 },
-    ]} />);
+    const html = renderToStaticMarkup(<Classes classes={classes} />);
     expect(html).toContain("<td class=\"av-num\">38/45</td>");
     expect(html).toContain('<tr class="av-row-current"><td><strong>71K29CNTT02</strong>');
     expect(html).toContain('aria-pressed="true"');
     expect(html).toContain("Xem sinh viên");
+    // An advisor's own classes: no advisor column.
+    expect(html).not.toContain("<span>Cố vấn học tập</span>");
+    expect(html).not.toContain("Nguyễn Văn An");
   });
 
-  it("lists the students with their steps in words and the button that opens their page", () => {
+  it("names the cố vấn học tập of each class when every class is listed, Chưa phân công when none", () => {
+    const html = renderToStaticMarkup(<Classes classes={classes} showAdvisor />);
+    expect(html).toContain('<table class="cm-table av-classes-table av-classes-table-all">');
+    expect(html.indexOf("<span>Khóa</span>")).toBeLessThan(html.indexOf("<span>Cố vấn học tập</span>"));
+    expect(html.indexOf("<span>Cố vấn học tập</span>")).toBeLessThan(html.indexOf("<span>Sinh viên</span>"));
+    expect(html).toContain("<td>K29</td><td>Nguyễn Văn An</td>");
+    expect(html).toContain('<td>K29</td><td><span class="career-empty">Chưa phân công</span></td>');
+  });
+
+  it("lists the students with their steps in words and Xem chi tiết, which opens their page", () => {
     const html = renderToStaticMarkup(<Students students={[{
       stt: 7, userId: "s1", studentCode: "2374802010994", name: "Sinh viên Thử nghiệm", className: "71K29CNTT01", cohort: "K29", specialty: "Công nghệ phần mềm",
       targetCareer: null, hasTranscript: true, assessed: false, surveyDone: true, roadmap: false, lastLoginAt: null,
@@ -95,11 +110,12 @@ describe("Lớp phụ trách and Quyền cố vấn pages", () => {
     expect(html).toContain('<span class="career-empty">Chưa chọn</span>');
     expect(html).toContain('title="Bảng điểm: đã có"');
     expect(html).toContain('title="Đánh giá năng lực: chưa có"');
-    expect(html).toContain("Mở trang sinh viên");
+    expect(html).toContain("Xem chi tiết</button>");
+    expect(html).not.toContain("Mở trang sinh viên");
     for (const header of ["Bảng điểm", "Đánh giá năng lực", "Khảo sát", "Lộ trình AI", "Vị trí mục tiêu"]) expect(html).toContain(`<span>${header}</span>`);
   });
 
-  it("shows what an advisor sees, does for a student and never does, with the notes", () => {
+  it("shows what may be seen, done for a student and never done in a student's page, with the notes", () => {
     const permissions: AdvisorPermissions = {
       view: [{ label: "Lớp phụ trách", detail: "Các lớp được Khoa phân công." }],
       act: [{ label: "Import bảng điểm", detail: "Tải bảng điểm PDF lên thay sinh viên." }],
@@ -110,5 +126,24 @@ describe("Lớp phụ trách and Quyền cố vấn pages", () => {
     for (const title of ["Xem được", "Làm thay sinh viên được", "Không làm thay được", "Ghi nhận và thông báo"]) expect(html).toContain(title);
     expect(html).toContain("<strong>Import bảng điểm</strong><span>Tải bảng điểm PDF lên thay sinh viên.</span>");
     expect(html).toContain("<li>Mỗi việc cố vấn làm thay được ghi vào Nhật ký thao tác.</li>");
+    expect(html).toContain("quản trị viên và Ban chủ nhiệm khoa với mọi sinh viên");
+  });
+
+  it("says whose students the page lists: every student for the admins, the classes of an advisor", () => {
+    const all = renderToStaticMarkup(<AdvisorPortal scope="all" />);
+    const own = renderToStaticMarkup(<AdvisorPortal scope="own" />);
+    expect(all).toContain(SCOPE_TEXT.all.lead);
+    expect(all).toContain('<h2 id="av-classes-title">Lớp</h2>');
+    expect(all).toContain('<h2 id="av-students-title">Sinh viên</h2>');
+    expect(own).toContain(SCOPE_TEXT.own.lead);
+    expect(own).toContain('<h2 id="av-classes-title">Lớp phụ trách</h2>');
+    expect(own).toContain('<h2 id="av-students-title">Sinh viên lớp phụ trách</h2>');
+    for (const html of [all, own]) {
+      expect(html).toContain("Bấm Xem chi tiết để mở trang của một sinh viên ở thẻ mới");
+      // The permissions come last, folded.
+      expect(html).toContain('<details class="av-perm-section"><summary>');
+      expect(html).not.toContain("<details class=\"av-perm-section\" open");
+      expect(html.indexOf("av-students-title")).toBeLessThan(html.indexOf("Quyền khi làm việc với trang sinh viên"));
+    }
   });
 });

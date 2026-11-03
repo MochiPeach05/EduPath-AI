@@ -195,11 +195,18 @@ export function portalGuides(): PortalGuide[] {
     ["quyen-rieng-tu", "Tóm tắt quyền riêng tư", "#profile", [
       "Tóm tắt Chính sách bảo mật của EduPath AI (bản đầy đủ ở liên kết Chính sách & Điều khoản cuối trang):",
       "- Bạn đăng nhập bằng tài khoản Microsoft của trường; EduPath AI không biết và không lưu mật khẩu của bạn.",
-      "- Bạn xem được toàn bộ thông tin của mình; sinh viên khác không xem được hồ sơ, bảng điểm, kết quả đánh giá năng lực, khảo sát hay lộ trình của bạn. Quản trị viên của Khoa Công nghệ Thông tin xem được điểm và kết quả từng môn trong bảng điểm (không gồm tệp PDF), và từ 31/10/2026 xem được tiến độ, kết quả đánh giá năng lực và các môn Lộ trình AI đề xuất của bạn trong báo cáo của Khoa; câu trả lời khảo sát và thành tích chỉ bạn xem được.",
+      "- Bạn xem được toàn bộ thông tin của mình; sinh viên khác không xem được hồ sơ, bảng điểm, kết quả đánh giá năng lực, khảo sát hay lộ trình của bạn. Quản trị viên của Khoa Công nghệ Thông tin xem được điểm và kết quả từng môn trong bảng điểm ở trang quản trị (không gồm tệp PDF), và từ 31/10/2026 xem được tiến độ, kết quả đánh giá năng lực và các môn Lộ trình AI đề xuất của bạn trong báo cáo của Khoa; các báo cáo này không có câu trả lời khảo sát và thành tích của bạn.",
+      "- Cố vấn học tập của lớp bạn, quản trị viên và Ban chủ nhiệm khoa mở được trang của bạn; mỗi lần đều được ghi nhật ký và báo cho bạn.",
       "- Chuyên ngành, vị trí nghề nghiệp mục tiêu, khảo sát định hướng, thành tích và bảng điểm do bạn tự cung cấp và có thể sửa hoặc xóa bất cứ lúc nào. Đánh giá năng lực và khảo sát định hướng cần sự đồng ý riêng.",
       "- Mô hình AI chạy cục bộ, không nhận họ tên, mã số sinh viên, email, lớp hay tệp PDF bảng điểm, và dữ liệu không được gửi tới dịch vụ AI đám mây.",
       "- EduPath AI không bán dữ liệu, không hiển thị quảng cáo và không theo dõi bạn trên các trang web khác. Dữ liệu được lưu trên dịch vụ lưu trữ đám mây, máy chủ có thể đặt ngoài Việt Nam.",
       `- Muốn sửa thông tin định danh, nhận bản sao dữ liệu hoặc xóa tài khoản, hãy gửi email từ email trường đến ${SUPPORT_EMAIL}.`,
+    ]],
+    ["co-van-va-can-bo-khoa", "Cố vấn học tập và cán bộ Khoa xem và làm thay được gì", "#profile", [
+      "Cố vấn học tập được Khoa phân công cho lớp của bạn, quản trị viên của Khoa và Ban chủ nhiệm khoa mở được trang EduPath AI của bạn: hồ sơ, bảng điểm (kể cả tệp PDF), khảo sát định hướng và thành tích, đánh giá năng lực, khoảng trống kỹ năng, định hướng nghề nghiệp, lộ trình, kế hoạch học kỳ và xét tốt nghiệp.",
+      "- Họ có thể làm thay bạn: import bảng điểm, chạy đánh giá năng lực và tạo lại nhận xét AI, tạo Lộ trình AI, tạo lại lời khuyên xét tốt nghiệp và hỏi Trợ lý AI; cuộc trò chuyện đó được ghi là do cố vấn học tập hay cán bộ Khoa tạo và bạn xem được.",
+      "- Họ không làm hay sửa khảo sát, không đồng ý hay rút đồng ý thay bạn, không xóa dữ liệu, không chọn chuyên ngành hay vị trí nghề nghiệp mục tiêu, không sửa kế hoạch học kỳ, và không xem thông báo trong chuông cũng như các cuộc trò chuyện Trợ lý AI do bạn tạo.",
+      "- Mỗi lần mở trang của bạn và mỗi việc làm thay đều được ghi vào nhật ký thao tác, và bạn nhận một thông báo trong chuông khi có người làm thay bạn. Khi Khoa đổi phân công lớp, cố vấn cũ không còn xem được trang của bạn.",
     ]],
     ["luu-va-xoa-du-lieu", "Lưu giữ và xóa dữ liệu", "#profile", [
       "- Bảng điểm: mỗi tài khoản một bảng điểm, giữ đến khi bạn thay bằng bản mới, bấm Xóa bảng điểm hoặc tài khoản bị xóa. Xóa bảng điểm xóa tệp PDF, dữ liệu môn học đã import và các kết quả đánh giá năng lực; thông tin cá nhân vẫn được giữ. Bảng điểm đã xóa không khôi phục được, hãy tự giữ bản PDF gốc.",

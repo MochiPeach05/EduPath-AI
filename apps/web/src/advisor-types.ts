@@ -77,8 +77,11 @@ export type AdvisorImportPreview = {
 /** POST /api/admin/advisors/import (applies the rows without errors) → the result and the preview it applied. */
 export type AdvisorImportResult = { added: number; updated: number; unchanged: number; skipped: number; preview: AdvisorImportPreview };
 
-/** One class of the signed-in advisor (GET /api/admin/advisor-portal/classes, AD-AST-01). */
-export type AdvisorClass = AdvisorClassDetail & { surveyDone: number; roadmap: number };
+/**
+ * One class of the signed-in advisor, or of the Khoa for admins and Ban chủ nhiệm khoa (scope "all")
+ * (GET /api/admin/advisor-portal/classes, AD-AST-01). advisorName: the cố vấn học tập the Khoa assigned, null when none.
+ */
+export type AdvisorClass = AdvisorClassDetail & { surveyDone: number; roadmap: number; advisorName: string | null };
 
 /** One student of the advisor's classes (GET /api/admin/advisor-portal/students, AD-AST-02…04). */
 export type AdvisedStudentRow = {
@@ -104,8 +107,11 @@ export type AdvisedStudentStatus = "all" | "no_transcript" | "no_assessment" | "
 export type AdvisorPermissionItem = { label: string; detail: string };
 export type AdvisorPermissions = { view: AdvisorPermissionItem[]; act: AdvisorPermissionItem[]; never: AdvisorPermissionItem[]; notes: string[] };
 
-/** GET /api/admin/advisor-portal/me: whether the signed-in account advises classes (the Lớp phụ trách menu item). */
-export type AdvisorMe = { classes: number; canManageAdvisors: boolean };
+/**
+ * GET /api/admin/advisor-portal/me: how many classes the signed-in account advises itself, and its scope: "all" for admins
+ * and Ban chủ nhiệm khoa, who see every class and every student (user 2026-11-03: AD-AST "QTV & CVHT"), "own" otherwise.
+ */
+export type AdvisorMe = { classes: number; canManageAdvisors: boolean; scope: "all" | "own" };
 
 /** Error codes of the advisor endpoints and of the student portal opened by an advisor. */
 export const ADVISOR_ERRORS: Record<string, string> = {
@@ -134,7 +140,7 @@ export const ADVISOR_ERRORS: Record<string, string> = {
   database_required: "Hệ thống chưa kết nối cơ sở dữ liệu. Vui lòng thử lại sau.",
   // Student portal of an advisor (advisors/access.ts).
   advisor_student_forbidden: "Bạn không còn phụ trách lớp của sinh viên này.",
-  advisor_action_not_allowed: "Cố vấn học tập không làm thay được thao tác này.",
+  advisor_action_not_allowed: "Bạn không làm thay sinh viên được thao tác này.",
   // The student withdrew the competency consent ("Xóa kết quả đánh giá"): an advisor does not run it again for them.
   assessment_withdrawn: "Sinh viên đã xóa kết quả đánh giá năng lực nên cố vấn học tập không chạy lại thay được.",
 };

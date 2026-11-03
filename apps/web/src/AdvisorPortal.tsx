@@ -5,21 +5,46 @@ import { CheckedForm } from "./CheckedForm";
 import { useLiveFilters } from "./use-live-filters";
 import { sortParams, sortRows, useTableSort, type SortRule, type TableSort } from "./table-sort";
 import {
-  ADVISOR_PORTAL_API, type AdvisedStudentRow, type AdvisorClass, type AdvisorPermissionItem, type AdvisorPermissions,
+  ADVISOR_PORTAL_API, type AdvisedStudentRow, type AdvisorClass, type AdvisorMe, type AdvisorPermissionItem, type AdvisorPermissions,
 } from "./advisor-types";
 import { STUDENT_STATUS_TEXT, advisorRequest, isStudentStatus, openStudentPage } from "./advisor-admin";
 import "./curricula.css";
 import "./careers.css";
 import "./advisors.css";
 
-// The cố vấn học tập's own pages (AD-AST-01…05, 09; user 2026-11-03). Lớp phụ trách: the classes the Khoa assigned to the
-// signed-in account, then their students (search, class and status filters, sorted and paged on the server), each with
-// "Mở trang sinh viên", which opens the student portal of that student in a tab of its own (the advisor's view,
-// advisor-view.ts). Quyền cố vấn: what an advisor may see and do, as the API lists it (permissions.ts). Contract:
-// advisor-types.ts.
+// Quản lý sinh viên (AD-AST-01…09; user 2026-11-03: "Cái mục quyền cố vấn sửa lại thành quản lý sinh viên … ấn xem chi tiết
+// từng sinh viên … là quản trị viên có giao diện của sinh viên bên trang sinh viên luôn"). The admins and Ban chủ nhiệm khoa
+// see every class and student (scope "all"), a cố vấn học tập the classes the Khoa assigned (scope "own"): the classes,
+// then their students (search, class and status filters, sorted and paged on the server), each with "Xem chi tiết", which
+// opens the student portal of that student in a tab of its own (advisor-view.ts), then what may be done there, as the API
+// lists it (permissions.ts). Contract: advisor-types.ts.
 
-export default function AdvisorPortal({ section }: { section: "classes" | "permissions" }) {
-  return section === "classes" ? <AdvisorClasses /> : <AdvisorPermissionsPage />;
+/** all: every student (admins, Ban chủ nhiệm khoa); own: the classes the signed-in account advises (GET /me). */
+export type StudentScope = AdvisorMe["scope"];
+
+/** What the page says it shows, for each scope. */
+export const SCOPE_TEXT: Record<StudentScope, { lead: string; classes: string; students: string; noClass: string; noStudent: string }> = {
+  all: {
+    lead: "Bạn xem được mọi sinh viên của Khoa; cố vấn học tập chỉ xem sinh viên các lớp mình phụ trách.",
+    classes: "Lớp", students: "Sinh viên",
+    noClass: "Chưa có lớp nào có sinh viên trong EduPath AI.",
+    noStudent: "Chưa có sinh viên nào đăng nhập EduPath AI.",
+  },
+  own: {
+    lead: "Bạn xem được sinh viên của các lớp Khoa phân công cho bạn.",
+    classes: "Lớp phụ trách", students: "Sinh viên lớp phụ trách",
+    noClass: "Bạn chưa được phân công lớp nào. Khoa thêm lớp phụ trách cho cố vấn ở trang Cố vấn.",
+    noStudent: "Chưa có sinh viên nào của lớp bạn phụ trách đăng nhập EduPath AI.",
+  },
+};
+
+export default function AdvisorPortal({ scope }: { scope: StudentScope }) {
+  const text = SCOPE_TEXT[scope];
+  return <section className="cm-workspace career-workspace av-workspace">
+    <p className="av-lead">{text.lead} Bấm Xem chi tiết để mở trang của một sinh viên ở thẻ mới, như chính sinh viên đó thấy.</p>
+    <StudentManagement scope={scope} />
+    <PermissionsSection />
+  </section>;
 }
 
 /** "38/45": the students of the class that did a step, out of its students. */
@@ -28,6 +53,7 @@ const share = (count: number, total: number) => `${count.toLocaleString("vi-VN")
 const classSort: Record<string, SortRule<AdvisorClass>> = {
   className: { value: (row) => row.className },
   cohort: { value: (row) => row.cohort },
+  advisorName: { value: (row) => row.advisorName, by: "name" },
   students: { value: (row) => row.students, by: "number" },
   withTranscript: { value: (row) => (row.students ? row.withTranscript / row.students : null), by: "number" },
   assessed: { value: (row) => (row.students ? row.assessed / row.students : null), by: "number" },
@@ -35,17 +61,19 @@ const classSort: Record<string, SortRule<AdvisorClass>> = {
   roadmap: { value: (row) => (row.students ? row.roadmap / row.students : null), by: "number" },
 };
 
-/** The advisor's classes (AD-AST-01; exported for its test). */
-export function ClassTable({ classes, sort, sortHeader, selected, onPick }: {
+/** The classes (AD-AST-01; exported for its test). showAdvisor: the column of each class's cố vấn học tập (scope "all"). */
+export function ClassTable({ classes, sort, sortHeader, selected, onPick, showAdvisor = false }: {
   classes: readonly AdvisorClass[]; sort: TableSort; sortHeader: ReturnType<typeof useTableSort>["sortHeader"]; selected: string;
-  onPick: (className: string) => void;
+  onPick: (className: string) => void; showAdvisor?: boolean;
 }) {
-  return <div className="cm-table-scroll"><table className="cm-table av-classes-table">
-    <thead><tr>{sortHeader("Lớp", "className")}{sortHeader("Khóa", "cohort")}{sortHeader("Sinh viên", "students")}{sortHeader("Có bảng điểm", "withTranscript")}
-      {sortHeader("Đã đánh giá năng lực", "assessed")}{sortHeader("Đã làm khảo sát", "surveyDone")}{sortHeader("Có Lộ trình AI", "roadmap")}<th scope="col">Thao tác</th></tr></thead>
+  return <div className="cm-table-scroll"><table className={`cm-table av-classes-table${showAdvisor ? " av-classes-table-all" : ""}`}>
+    <thead><tr>{sortHeader("Lớp", "className")}{sortHeader("Khóa", "cohort")}{showAdvisor && sortHeader("Cố vấn học tập", "advisorName")}{sortHeader("Sinh viên", "students")}
+      {sortHeader("Có bảng điểm", "withTranscript")}{sortHeader("Đã đánh giá năng lực", "assessed")}{sortHeader("Đã làm khảo sát", "surveyDone")}{sortHeader("Có Lộ trình AI", "roadmap")}
+      <th scope="col">Thao tác</th></tr></thead>
     <tbody>{sortRows(classes, classSort, sort).map(({ row }) => <tr key={row.className} className={row.className === selected ? "av-row-current" : undefined}>
       <td><strong>{row.className}</strong></td>
       <td>{row.cohort ?? "—"}</td>
+      {showAdvisor && <td>{row.advisorName?.trim() ? row.advisorName : <span className="career-empty">Chưa phân công</span>}</td>}
       <td className="av-num">{row.students.toLocaleString("vi-VN")}</td>
       <td className="av-num">{share(row.withTranscript, row.students)}</td>
       <td className="av-num">{share(row.assessed, row.students)}</td>
@@ -63,7 +91,7 @@ function Step({ done, label }: { done: boolean; label: string }) {
   </span>;
 }
 
-/** One page of the students of the advisor's classes (AD-AST-02…05; exported for its test). */
+/** One page of the students (AD-AST-02…06; exported for its test): "Xem chi tiết" opens the student's own page. */
 export function StudentTable({ students, page, sortHeader, opening, onOpen }: {
   students: readonly AdvisedStudentRow[]; page: number; sortHeader: ReturnType<typeof useTableSort>["sortHeader"]; opening: string | null;
   onOpen: (student: AdvisedStudentRow) => void;
@@ -83,14 +111,15 @@ export function StudentTable({ students, page, sortHeader, opening, onOpen }: {
       <td><Step done={student.surveyDone} label="Khảo sát định hướng" /></td>
       <td><Step done={student.roadmap} label="Lộ trình AI" /></td>
       <td><button type="button" className="am-primary av-open" disabled={opening !== null} onClick={() => onOpen(student)}>
-        <Icon name="arrowUpRight" /> {opening === student.userId ? "Đang mở…" : "Mở trang sinh viên"}</button></td>
+        <Icon name="eye" /> {opening === student.userId ? "Đang mở…" : "Xem chi tiết"}</button></td>
     </tr>)}</tbody>
   </table></div>;
 }
 
 const emptyFilters = { q: "", class: "", status: "all" };
 
-function AdvisorClasses() {
+function StudentManagement({ scope }: { scope: StudentScope }) {
+  const text = SCOPE_TEXT[scope];
   const classes = useData<{ items: AdvisorClass[] }>(`${ADVISOR_PORTAL_API}/classes`);
   const classTable = useTableSort();
   const { draft, setDraft, filters, page, setPage, flush, reset } = useLiveFilters(emptyFilters);
@@ -120,24 +149,24 @@ function AdvisorClasses() {
     finally { setOpening(null); }
   };
   const filtered = Boolean(filters.q || filters.class || filters.status !== "all");
-  return <section className="cm-workspace career-workspace av-workspace">
+  return <>
     <section className="cm-panel" aria-labelledby="av-classes-title">
       <div className="career-list-heading">
         <div>
-          <h2 id="av-classes-title">Lớp phụ trách{classes.data && <span className="am-count">{items.length}</span>}</h2>
-          <p>Các lớp Khoa phân công cho bạn. Chọn Xem sinh viên để xem sinh viên của một lớp.</p>
+          <h2 id="av-classes-title">{text.classes}{classes.data && <span className="am-count">{items.length}</span>}</h2>
+          <p>Chọn Xem sinh viên để xem sinh viên của một lớp.</p>
         </div>
       </div>
       <Status {...classes} />
       {classes.data && (items.length
-        ? <ClassTable classes={items} sort={classTable.sort} sortHeader={classTable.sortHeader} selected={filters.class} onPick={pickClass} />
-        : <p className="am-empty">Bạn chưa được phân công lớp nào. Khoa thêm lớp phụ trách cho cố vấn ở trang Cố vấn.</p>)}
+        ? <ClassTable classes={items} sort={classTable.sort} sortHeader={classTable.sortHeader} selected={filters.class} onPick={pickClass} showAdvisor={scope === "all"} />
+        : <p className="am-empty">{text.noClass}</p>)}
     </section>
     <section ref={studentsPanel} className="cm-panel av-students" aria-labelledby="av-students-title">
       <div className="career-list-heading">
         <div>
-          <h2 id="av-students-title">Sinh viên lớp phụ trách{students.data && <span className="am-count">{students.data.total}</span>}</h2>
-          <p>Mở trang sinh viên mở cổng sinh viên ở thẻ mới, xem như chính sinh viên đó. Những việc bạn làm thay được nằm ở trang Quyền cố vấn; mỗi việc được ghi vào Nhật ký thao tác và báo cho sinh viên.</p>
+          <h2 id="av-students-title">{text.students}{students.data && <span className="am-count">{students.data.total}</span>}</h2>
+          <p>Ở trang sinh viên, bạn xem được các mục sinh viên đã cung cấp, có thể import bảng điểm, chạy Đánh giá năng lực, Lộ trình AI và hỏi Trợ lý AI thay sinh viên. Mỗi việc làm thay được ghi vào Nhật ký thao tác và báo cho sinh viên.</p>
         </div>
       </div>
       <CheckedForm className="cm-filters av-student-filters" onSubmit={(event) => { event.preventDefault(); flush(); }}>
@@ -153,11 +182,11 @@ function AdvisorClasses() {
       <Status {...students} />
       {students.data && <>
         <StudentTable students={students.data.items} page={page} sortHeader={studentTable.sortHeader} opening={opening} onOpen={(student) => void open(student)} />
-        {!students.data.items.length && <p className="am-empty">{filtered ? "Không có sinh viên phù hợp. Thử từ khóa khác hoặc xóa bộ lọc." : "Chưa có sinh viên nào của lớp bạn phụ trách đăng nhập EduPath AI."}</p>}
+        {!students.data.items.length && <p className="am-empty">{filtered ? "Không có sinh viên phù hợp. Thử từ khóa khác hoặc xóa bộ lọc." : text.noStudent}</p>}
         <Pagination total={students.data.total} page={page} setPage={setPage} />
       </>}
     </section>
-  </section>;
+  </>;
 }
 
 function PermissionCard({ tone, title, items }: { tone: "view" | "act" | "never"; title: string; items: readonly AdvisorPermissionItem[] }) {
@@ -167,10 +196,10 @@ function PermissionCard({ tone, title, items }: { tone: "view" | "act" | "never"
   </section>;
 }
 
-/** What a cố vấn học tập may see and do (AD-AST-09; exported for its test). */
+/** What may be seen and done in a student's page (AD-AST-09; exported for its test). */
 export function PermissionsView({ permissions }: { permissions: AdvisorPermissions }) {
   return <>
-    <p className="av-lead">Cố vấn học tập chỉ làm việc với sinh viên thuộc lớp mình phụ trách, theo Chính sách bảo mật của EduPath AI. Ở trang quản trị, cố vấn chỉ có quyền xem.</p>
+    <p className="av-lead">Cố vấn học tập làm việc với sinh viên thuộc lớp mình phụ trách; quản trị viên và Ban chủ nhiệm khoa với mọi sinh viên, theo Chính sách bảo mật của EduPath AI. Ở trang quản trị, cố vấn học tập chỉ có quyền xem.</p>
     <div className="av-perm-grid">
       <PermissionCard tone="view" title="Xem được" items={permissions.view} />
       <PermissionCard tone="act" title="Làm thay sinh viên được" items={permissions.act} />
@@ -183,10 +212,14 @@ export function PermissionsView({ permissions }: { permissions: AdvisorPermissio
   </>;
 }
 
-function AdvisorPermissionsPage() {
+/** The last section of Quản lý sinh viên, folded: the list of AD-AST-09 (GET /permissions). */
+function PermissionsSection() {
   const state = useData<AdvisorPermissions>(`${ADVISOR_PORTAL_API}/permissions`);
-  return <section className="cm-workspace av-workspace">
-    <Status {...state} />
-    {state.data && <PermissionsView permissions={state.data} />}
-  </section>;
+  return <details className="av-perm-section">
+    <summary><Icon name="shield" /><span>Quyền khi làm việc với trang sinh viên</span></summary>
+    <div className="av-perm-body">
+      <Status {...state} />
+      {state.data && <PermissionsView permissions={state.data} />}
+    </div>
+  </details>;
 }

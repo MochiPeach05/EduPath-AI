@@ -36,7 +36,7 @@ const message = (extra: Partial<import("./chat.js").MessageRow> = {}): import(".
 const advisorId = "88888888-8888-4888-8888-888888888888";
 const acting = {
   advisor: { ...student, userId: advisorId, identityKey: `t:${advisorId}`, objectId: advisorId, name: "Cố vấn", role: "advisor" } satisfies AuthenticatedUser,
-  student: { user: student, studentCode: "2374802010994", name: "Student", className: "71K29CNTT99", advisorName: "Cố vấn" },
+  student: { user: student, studentCode: "2374802010994", name: "Student", className: "71K29CNTT99", actorKind: "advisor" as const, actorName: "Cố vấn", advisorName: "Cố vấn" },
 };
 
 function setup(options: { enabled?: boolean; worker?: { online: boolean; kinds: string[] } | null; user?: AuthenticatedUser | null; acting?: boolean } = {}) {
@@ -71,7 +71,7 @@ describe("assistant student API", () => {
     const online = await request(setup().app).get("/assistant/threads").expect(200);
     // A student with nothing done yet is offered the setup questions first.
     expect(online.body).toEqual({
-      threads: [{ id: threadId, title: thread.title, createdAt: "2026-10-28T01:00:00.000Z", updatedAt: "2026-10-28T01:00:00.000Z", byAdvisor: false }], workerOnline: true,
+      threads: [{ id: threadId, title: thread.title, createdAt: "2026-10-28T01:00:00.000Z", updatedAt: "2026-10-28T01:00:00.000Z", byAdvisor: false, createdByRole: null }], workerOnline: true,
       suggestions: [
         "Làm sao để import bảng điểm PDF?", "Làm sao để chọn chuyên ngành và vị trí nghề nghiệp mục tiêu?", "Khảo sát định hướng dùng để làm gì?",
         "Làm sao để chạy Đánh giá năng lực?", "Điều kiện xét tốt nghiệp của khóa mình là gì?", "EduPath AI dùng dữ liệu của mình như thế nào?",
@@ -128,7 +128,7 @@ describe("assistant student API", () => {
     vi.mocked(chat.listThreads).mockResolvedValue([{ ...thread, createdBy: advisorId }]);
     const listed = await request(setup({ acting: true }).app).get("/assistant/threads").expect(200);
     expect(vi.mocked(chat.listThreads).mock.calls[0]?.slice(1)).toEqual([studentId, advisorId]);
-    expect(listed.body.threads[0]).toMatchObject({ id: threadId, byAdvisor: true });
+    expect(listed.body.threads[0]).toMatchObject({ id: threadId, byAdvisor: true, createdByRole: "advisor" });
     vi.mocked(chat.askQuestion).mockResolvedValue({ thread: { ...thread, createdBy: advisorId }, messages: [message()] });
     await request(setup({ acting: true }).app).post("/assistant/threads").set("origin", origin).send({ content: "Hỏi" }).expect(201);
     expect(vi.mocked(chat.askQuestion).mock.calls[0]?.slice(1)).toEqual([studentId, { threadId: null, content: "Hỏi", createdBy: advisorId }]);
@@ -141,6 +141,13 @@ describe("assistant student API", () => {
     vi.mocked(chat.retryAnswer).mockResolvedValue(message());
     await request(setup({ acting: true }).app).post(`/assistant/messages/${answerId}/retry`).set("origin", origin).send({}).expect(200);
     expect(vi.mocked(chat.retryAnswer).mock.calls[0]?.slice(1)).toEqual([studentId, answerId, advisorId]);
+  });
+
+  it("tells the student which conversations a quản trị viên of the Khoa started (QTV & CVHT)", async () => {
+    vi.mocked(chat.listThreads).mockResolvedValue([{ ...thread, createdBy: advisorId, createdByRole: "admin" }, { ...thread, id: answerId, createdBy: null, createdByRole: null }]);
+    const listed = await request(setup().app).get("/assistant/threads").expect(200);
+    expect(listed.body.threads.map((item: { byAdvisor: boolean; createdByRole: string | null }) => [item.byAdvisor, item.createdByRole]))
+      .toEqual([[true, "admin"], [false, null]]);
   });
 
   it("deletes a conversation and retries a failed answer", async () => {

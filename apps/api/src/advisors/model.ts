@@ -42,7 +42,8 @@ export type AdvisorImportPreview = {
 };
 export type AdvisorImportResult = { added: number; updated: number; unchanged: number; skipped: number; preview: AdvisorImportPreview };
 
-export type AdvisorClass = AdvisorClassDetail & { surveyDone: number; roadmap: number };
+/** advisorName: the cố vấn học tập the Khoa assigned to the class, null when none. */
+export type AdvisorClass = AdvisorClassDetail & { surveyDone: number; roadmap: number; advisorName: string | null };
 export type AdvisedStudentRow = {
   stt: number;
   userId: string;
@@ -60,7 +61,11 @@ export type AdvisedStudentRow = {
 };
 export const ADVISED_STUDENT_STATUSES = ["all", "no_transcript", "no_assessment", "no_survey", "no_roadmap", "complete"] as const;
 export type AdvisedStudentStatus = (typeof ADVISED_STUDENT_STATUSES)[number];
-export type AdvisorMe = { classes: number; canManageAdvisors: boolean };
+/**
+ * classes: the classes the account advises itself; scope: "all" for admins and Ban chủ nhiệm khoa, who work with every
+ * student (user 2026-11-03: AD-AST "QTV & CVHT"), "own" for anyone else (their own classes only).
+ */
+export type AdvisorMe = { classes: number; canManageAdvisors: boolean; scope: "all" | "own" };
 
 /** An error the advisor endpoints answer with (codes: apps/web/src/advisor-types.ts ADVISOR_ERRORS). */
 export class AdvisorError extends Error {

@@ -73,7 +73,7 @@ describe("Kế hoạch học kỳ", () => {
   it("shows a cố vấn học tập the plan with nothing to move, add or hide", () => {
     const html = planner({ schemaVersion: 1, aiAdded: { completedAt: "2026-10-24T10:00:00.000Z", term: "HK262", codes: ["C"], addedAt: "2026-10-24T10:05:00.000Z" },
       terms: [{ code: "HK261", courses: [] }, { code: "HK262", courses: [{ code: "C" }] }] }, true);
-    expect(html).toContain("Cố vấn học tập chỉ xem; sinh viên tự sắp xếp và điều chỉnh kế hoạch này.");
+    expect(html).toContain("Bạn chỉ xem; sinh viên tự sắp xếp và điều chỉnh kế hoạch này.");
     expect(html).toContain("Môn C");
     for (const control of ["Danh sách chờ", "Thêm học kỳ", "+ Thêm vào học kỳ này", "Bỏ khỏi kế hoạch", "Ẩn thông báo", "draggable"]) {
       expect(html).not.toContain(control);

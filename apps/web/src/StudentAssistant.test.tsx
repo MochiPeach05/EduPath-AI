@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import StudentAssistant, {
   ANSWER_POLL_MS, AssistantView, DeleteConfirm, FALLBACK_SUGGESTIONS, OFFLINE_NOTICE, STARTER_QUESTIONS, assistantApi, assistantErrorMessage, newestFirst,
-  offeredQuestions, readSuggestions, threadTimeLabel, watchAnswer,
+  offeredQuestions, readSuggestions, threadAuthorTag, threadTimeLabel, watchAnswer,
   type AssistantViewProps,
 } from "./StudentAssistant";
 import type { AssistantMessage, AssistantThread } from "./assistant-types";
@@ -173,6 +173,14 @@ describe("Trợ lý AI page", () => {
 });
 
 describe("words", () => {
+  it("tags a conversation a staff account started: the advisor's own words, Cán bộ Khoa for anyone else (2026-11-03)", () => {
+    expect(threadAuthorTag({ createdByRole: "advisor" })).toBe("Cố vấn học tập tạo");
+    expect(threadAuthorTag({ createdByRole: "admin" })).toBe("Cán bộ Khoa tạo");
+    expect(threadAuthorTag({ createdByRole: "faculty_board" })).toBe("Cán bộ Khoa tạo");
+    expect(threadAuthorTag({ createdByRole: null })).toBe("Cán bộ Khoa tạo");
+    expect(threadAuthorTag({})).toBe("Cán bộ Khoa tạo");
+  });
+
   it("names every error of the contract in plain Vietnamese", () => {
     for (const code of ["empty_message", "message_too_long", "answer_pending", "too_frequent", "queue_full", "network", "thread_not_found", "message_not_found", "database_required"]) {
       expect(assistantErrorMessage(code)).not.toBe(assistantErrorMessage("unknown"));

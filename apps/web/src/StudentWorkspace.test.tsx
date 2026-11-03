@@ -20,7 +20,7 @@ const user: AuthenticatedUser = {
   role: "student", signedInAt: "2026-10-25T00:00:00Z",
 };
 
-function render(hash: string, advisor: { name: string } | null = null) {
+function render(hash: string, advisor: { name: string; role?: string } | null = null) {
   vi.stubGlobal("window", { location: { hash } });
   return renderToStaticMarkup(createElement(StudentWorkspace, { user, advisor }));
 }
@@ -133,7 +133,14 @@ describe("a cố vấn học tập's tab (AD-AST-05…08)", () => {
     expect(html).toContain("với tư cách cố vấn học tập (Cố vấn Thử nghiệm).");
     expect(html).toContain("Bạn làm thay được: import bảng điểm, Đánh giá năng lực, Lộ trình AI, lời khuyên xét tốt nghiệp và Trợ lý AI.");
     expect(html).toContain("Đóng trang sinh viên");
-    expect(html).toContain('aria-label="Chế độ cố vấn học tập"');
+    expect(html).toContain('aria-label="Chế độ làm việc với trang sinh viên"');
+  });
+
+  it("names the role of a Khoa admin who opened the page from Quản lý sinh viên (2026-11-03)", () => {
+    expect(render("#overview", { name: "Quản trị Thử nghiệm", role: "admin" })).toContain("với tư cách quản trị viên (Quản trị Thử nghiệm).");
+    expect(render("#overview", { name: "Ban chủ nhiệm Thử nghiệm", role: "faculty_board" })).toContain("với tư cách Ban chủ nhiệm khoa (Ban chủ nhiệm Thử nghiệm).");
+    expect(render("#overview", { name: "Cố vấn Thử nghiệm", role: "advisor" })).toContain("với tư cách cố vấn học tập (Cố vấn Thử nghiệm).");
+    expect(render("#overview", { name: "Quản trị Thử nghiệm", role: "admin" })).not.toContain("sw-bell");
   });
 
   it("hides the student's bell and never shows the advisor's own account as the student", () => {
@@ -146,7 +153,7 @@ describe("a cố vấn học tập's tab (AD-AST-05…08)", () => {
 
   it("keeps the student's own tab as it was", () => {
     const html = render("#overview");
-    expect(html).not.toContain("Chế độ cố vấn học tập");
+    expect(html).not.toContain("Chế độ làm việc với trang sinh viên");
     expect(html).toContain("sw-bell");
   });
 });

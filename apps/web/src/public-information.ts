@@ -177,17 +177,17 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
     answer: [
       "Bạn xem được tệp bảng điểm, điểm, kết quả từng môn và kết quả đánh giá năng lực khi đăng nhập bằng tài khoản của mình. Sinh viên khác không xem được hồ sơ hay bảng điểm của bạn.",
       "Trong nhà trường, chỉ cán bộ, giảng viên có nhiệm vụ liên quan mới được xem những thông tin hồ sơ cần thiết để hỗ trợ học tập và quản lý đào tạo. Từ ngày 26/10/2026, quản trị viên của Khoa Công nghệ Thông tin xem được thêm điểm và kết quả từng môn trong bảng điểm bạn đã tải lên (không gồm tệp PDF) để hỗ trợ học tập. Từ ngày 31/10/2026, quản trị viên của Khoa còn xem được tiến độ học tập, kết quả đánh giá năng lực (điểm kỹ năng, kỹ năng còn thiếu, vị trí nghề nghiệp mục tiêu và mức phù hợp) và các môn Lộ trình AI đề xuất cho bạn trong các báo cáo của Khoa, để hỗ trợ học tập. Câu trả lời khảo sát và thành tích của bạn không có trong các báo cáo này.",
-      "Từ ngày 03/11/2026, cố vấn học tập được Khoa phân công cho lớp của bạn xem được toàn bộ trang EduPath AI của bạn, trừ thông báo trong chuông và các cuộc trò chuyện Trợ lý AI do bạn tạo. Mỗi lần cố vấn mở trang của bạn đều được ghi vào nhật ký thao tác."
+      "Từ ngày 03/11/2026, cố vấn học tập được Khoa phân công cho lớp của bạn xem được toàn bộ trang EduPath AI của bạn, trừ thông báo trong chuông và các cuộc trò chuyện Trợ lý AI do bạn tạo. Quản trị viên của Khoa và Ban chủ nhiệm khoa cũng mở được trang của mọi sinh viên theo cách này. Mỗi lần cố vấn hay cán bộ Khoa mở trang của bạn đều được ghi vào nhật ký thao tác."
     ],
     note: "EduPath AI không bán dữ liệu, không dùng thông tin của bạn để quảng cáo và không cung cấp cho bên ngoài nhà trường vì mục đích thương mại. Chi tiết xem mục Chia sẻ thông tin trong Chính sách bảo mật."
   },
   {
-    question: "Cố vấn học tập có thể làm thay tôi những gì?",
+    question: "Cố vấn học tập và cán bộ Khoa có thể làm thay tôi những gì?",
     answer: [
-      "Cố vấn học tập của lớp bạn có thể mở trang EduPath AI của bạn để tư vấn và làm thay bạn: import bảng điểm, chạy đánh giá năng lực (kể cả tạo lại nhận xét AI), tạo Lộ trình AI khi bạn đã làm Khảo sát định hướng, tạo lại lời khuyên xét tốt nghiệp và hỏi Trợ lý AI. Cố vấn làm được các việc này kể cả khi bạn chưa đồng ý cho chúng, nhưng việc đó không được ghi là bạn đã đồng ý.",
-      "Cố vấn không làm hay sửa Khảo sát định hướng, không đồng ý hay rút đồng ý thay bạn, không xóa dữ liệu của bạn và không chọn chuyên ngành, vị trí nghề nghiệp mục tiêu hay sửa Kế hoạch học kỳ thay bạn."
+      "Cố vấn học tập của lớp bạn có thể mở trang EduPath AI của bạn để tư vấn và làm thay bạn: import bảng điểm, chạy đánh giá năng lực (kể cả tạo lại nhận xét AI), tạo Lộ trình AI khi bạn đã làm Khảo sát định hướng, tạo lại lời khuyên xét tốt nghiệp và hỏi Trợ lý AI. Quản trị viên của Khoa và Ban chủ nhiệm khoa làm thay được đúng những việc này, cho mọi sinh viên. Các việc này làm được kể cả khi bạn chưa đồng ý cho chúng, nhưng việc đó không được ghi là bạn đã đồng ý.",
+      "Cố vấn và cán bộ Khoa không làm hay sửa Khảo sát định hướng, không đồng ý hay rút đồng ý thay bạn, không xóa dữ liệu của bạn và không chọn chuyên ngành, vị trí nghề nghiệp mục tiêu hay sửa Kế hoạch học kỳ thay bạn."
     ],
-    note: "Mỗi việc cố vấn làm thay được ghi vào nhật ký thao tác và bạn nhận thông báo trong chuông. Nếu không muốn giữ kết quả cố vấn tạo, bạn xóa được như kết quả của chính mình."
+    note: "Mỗi việc cố vấn hay cán bộ Khoa làm thay được ghi vào nhật ký thao tác và bạn nhận thông báo trong chuông. Nếu không muốn giữ kết quả họ tạo, bạn xóa được như kết quả của chính mình."
   },
   {
     question: "Bảng điểm PDF của tôi được lưu và xử lý như thế nào?",
@@ -230,7 +230,8 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
 // 2026-10-31: admin reports show progress, competency results and Lộ trình AI courses by name (user: "hiện đầy đủ",
 // "Triển khai đi"; no one is asked again, as on 2026-10-26).
 // 2026-11-03: the student's cố vấn học tập sees the student's pages and may do some things for them (user: "Cập nhật luôn,
-// không hỏi lại"; no one is asked again).
+// không hỏi lại"; no one is asked again); the same day, the Khoa's admins and Ban chủ nhiệm khoa got the same for every
+// student (Quản lý sinh viên, AD-AST "QTV & CVHT"; same version).
 export const policyVersion = "2026-11-03";
 export const policyUpdatedAt = policyVersion.split("-").reverse().join("/");
 // Consents given under this version or later still count, so policies 2026-10-26, 2026-10-28, 2026-10-29, 2026-10-31 and
@@ -272,7 +273,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
             paragraphs: [[
               "Bạn đăng nhập bằng tài khoản Microsoft của trường. EduPath AI không biết và không lưu mật khẩu của bạn.",
               "Bạn xem được bảng điểm, điểm từng môn và kết quả đánh giá năng lực của mình. Quản trị viên của Khoa Công nghệ Thông tin xem được điểm và kết quả từng môn trong bảng điểm (không gồm tệp PDF) và, từ ngày 31/10/2026, kết quả đánh giá năng lực của bạn (điểm kỹ năng, kỹ năng còn thiếu, nghề mục tiêu và mức phù hợp) trong các báo cáo của Khoa.",
-              "Cố vấn học tập được Khoa phân công cho lớp của bạn xem được toàn bộ trang EduPath AI của bạn, trừ thông báo trong chuông và các cuộc trò chuyện Trợ lý AI do bạn tạo, và có thể làm thay bạn một số việc: import bảng điểm, đánh giá năng lực, tạo Lộ trình AI, lời khuyên xét tốt nghiệp và hỏi Trợ lý AI. Mỗi việc làm thay đều được ghi lại và bạn nhận thông báo.",
+              "Cố vấn học tập được Khoa phân công cho lớp của bạn xem được toàn bộ trang EduPath AI của bạn, trừ thông báo trong chuông và các cuộc trò chuyện Trợ lý AI do bạn tạo, và có thể làm thay bạn một số việc: import bảng điểm, đánh giá năng lực, tạo Lộ trình AI, lời khuyên xét tốt nghiệp và hỏi Trợ lý AI. Quản trị viên của Khoa và Ban chủ nhiệm khoa cũng xem và làm thay được như vậy, với mọi sinh viên. Mỗi việc làm thay đều được ghi lại và bạn nhận thông báo.",
               "Chuyên ngành, mục tiêu nghề nghiệp, khảo sát định hướng (gồm thế mạnh, mô tả công nghệ bạn thành thạo và sở trường), thành tích và bảng điểm do bạn tự cung cấp, và bạn có thể sửa hoặc xóa bất cứ lúc nào.",
               "Đánh giá năng lực chỉ chạy khi bạn yêu cầu và đồng ý. Điểm và mức năng lực do hệ thống tính; AI chỉ viết nhận xét để bạn tham khảo.",
               "Lộ trình học tập cho học kỳ tới do AI soạn dùng kết quả đánh giá năng lực, câu trả lời khảo sát định hướng (kể cả thế mạnh, phần mô tả công nghệ bạn thành thạo và sở trường) và thành tích bạn liệt kê, khi bạn yêu cầu và đã đồng ý.",
@@ -329,7 +330,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
             paragraphs: [[
               "Thời điểm và kết quả các lần đăng nhập, để bảo vệ tài khoản và hỗ trợ bạn khi gặp sự cố đăng nhập.",
               "Thời điểm bạn đồng ý hoặc rút lại sự đồng ý cho việc xử lý bảng điểm, cho việc đánh giá năng lực và cho việc dùng khảo sát định hướng, cùng phiên bản chính sách bạn đã đồng ý.",
-              "Những lần cố vấn học tập của lớp bạn mở trang của bạn và những việc cố vấn làm thay bạn (tên cố vấn, việc đã làm và thời điểm)."
+              "Những lần cố vấn học tập của lớp bạn, quản trị viên của Khoa hay Ban chủ nhiệm khoa mở trang của bạn và những việc họ làm thay bạn (tên người làm, việc đã làm và thời điểm)."
             ]]
           },
           {
@@ -362,7 +363,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
               "Soạn lộ trình học tập cho học kỳ tới bằng AI và đề xuất học phần cho Kế hoạch học kỳ, dựa trên kết quả đánh giá năng lực, khảo sát định hướng và thành tích của bạn, khi bạn yêu cầu.",
               "Trả lời câu hỏi của bạn trong Trợ lý AI, kể cả tra cứu điểm trong bảng điểm, khi bạn gửi câu hỏi.",
               "Giúp Khoa hỗ trợ, tư vấn học tập và quản lý đào tạo.",
-              "Giúp cố vấn học tập của lớp bạn theo dõi và tư vấn học tập cho bạn, kể cả làm thay bạn các việc nêu ở mục Chia sẻ thông tin.",
+              "Giúp cố vấn học tập của lớp bạn, quản trị viên của Khoa và Ban chủ nhiệm khoa theo dõi và tư vấn học tập cho bạn, kể cả làm thay bạn các việc nêu ở mục Chia sẻ thông tin.",
               "Bảo vệ tài khoản và xử lý khi có sự cố."
             ]]
           },
@@ -373,7 +374,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
               "Trước khi tải bảng điểm lên, bạn cần tích ô xác nhận đây là bảng điểm của mình và đồng ý để EduPath AI xử lý bảng điểm theo chính sách này. Ô này không được chọn sẵn; nếu bạn không tích, bảng điểm sẽ không được tải lên.",
               "Đánh giá năng lực cần một sự đồng ý riêng. Lần đầu bạn bấm Đánh giá năng lực, EduPath AI sẽ hỏi bạn có đồng ý cho việc đánh giá năng lực và tạo nhận xét bằng AI theo chính sách này hay không; nếu bạn không đồng ý, việc đánh giá sẽ không được thực hiện. Chi tiết xem mục Đánh giá năng lực và AI.",
               "Khảo sát định hướng cũng cần một sự đồng ý riêng: khi lưu khảo sát, bạn tích ô đồng ý để EduPath AI dùng câu trả lời và thành tích của bạn cho việc tư vấn lộ trình học tập bằng AI. Ô này không được chọn sẵn; nếu bạn không tích, khảo sát sẽ không được lưu. Chi tiết xem mục Khảo sát và lộ trình AI.",
-              "Cố vấn học tập của lớp bạn có thể import bảng điểm, chạy đánh giá năng lực và tạo Lộ trình AI thay bạn để hỗ trợ tư vấn học tập, kể cả khi bạn chưa đồng ý cho các việc này. Việc làm thay không được ghi là bạn đã đồng ý: lần đầu tự tải bảng điểm, tự đánh giá năng lực hay lưu khảo sát, bạn vẫn được hỏi ý kiến như trên. Lộ trình AI chỉ được tạo khi bạn đã tự làm Khảo sát định hướng và đồng ý cho khảo sát. Nếu bạn đã bấm Xóa kết quả đánh giá để rút lại sự đồng ý cho đánh giá năng lực, cố vấn không chạy lại đánh giá thay bạn. Bạn vẫn xóa được mọi kết quả cố vấn tạo, như với kết quả của chính bạn.",
+              "Cố vấn học tập của lớp bạn, quản trị viên của Khoa và Ban chủ nhiệm khoa có thể import bảng điểm, chạy đánh giá năng lực và tạo Lộ trình AI thay bạn để hỗ trợ tư vấn học tập, kể cả khi bạn chưa đồng ý cho các việc này. Việc làm thay không được ghi là bạn đã đồng ý: lần đầu tự tải bảng điểm, tự đánh giá năng lực hay lưu khảo sát, bạn vẫn được hỏi ý kiến như trên. Lộ trình AI chỉ được tạo khi bạn đã tự làm Khảo sát định hướng và đồng ý cho khảo sát. Nếu bạn đã bấm Xóa kết quả đánh giá để rút lại sự đồng ý cho đánh giá năng lực, họ không chạy lại đánh giá thay bạn. Bạn vẫn xóa được mọi kết quả họ tạo, như với kết quả của chính bạn.",
               "EduPath AI lưu lại thời điểm bạn đồng ý và phiên bản chính sách bạn đã đồng ý, để làm bằng chứng theo quy định của pháp luật. Khi chính sách được cập nhật, bạn sẽ được đề nghị đồng ý lại ở lần tải bảng điểm, lần đánh giá năng lực hoặc lần lưu khảo sát tiếp theo.",
               "Bạn có thể rút lại sự đồng ý bất cứ lúc nào bằng cách xóa bảng điểm hoặc xóa thông tin đã nhập. Với đánh giá năng lực, bạn bấm Xóa kết quả đánh giá trên trang Đánh giá năng lực, và toàn bộ kết quả đánh giá sẽ bị xóa. Với khảo sát định hướng, bạn bấm Xóa câu trả lời trong Hồ sơ và bảng điểm; câu trả lời, thành tích và các lộ trình AI đã tạo sẽ bị xóa. Thời điểm rút lại cũng được ghi nhận. Việc rút lại không ảnh hưởng đến tính hợp pháp của việc xử lý đã diễn ra trước đó."
             ]
@@ -403,7 +404,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
           },
           {
             title: "Ai xem được bảng điểm của bạn?",
-            paragraphs: ["Bạn xem được tệp bảng điểm, điểm và kết quả từng môn khi đăng nhập bằng tài khoản của mình. Sinh viên khác không xem được bảng điểm của bạn.", "Quản trị viên của Khoa Công nghệ Thông tin (cán bộ được cấp quyền quản trị EduPath AI) xem được điểm và kết quả từng môn trong bảng điểm của bạn để hỗ trợ học tập và tư vấn. Quản trị viên không tải được tệp PDF và không sửa được bảng điểm của bạn.", "Từ ngày 31/10/2026, tiến độ học tập và điểm trung bình của bạn có trong các báo cáo thống kê của Khoa (kèm họ tên và mã số sinh viên); quản trị viên có thể xuất các báo cáo này ra tệp Excel. Mỗi lần quản trị viên xem bảng điểm của bạn hoặc xuất báo cáo có tên sinh viên đều được ghi vào nhật ký thao tác.", "Cố vấn học tập được Khoa phân công cho lớp của bạn xem được bảng điểm của bạn, kể cả tệp PDF, và có thể tải bảng điểm lên thay bạn. Cố vấn không xóa được bảng điểm của bạn."]
+            paragraphs: ["Bạn xem được tệp bảng điểm, điểm và kết quả từng môn khi đăng nhập bằng tài khoản của mình. Sinh viên khác không xem được bảng điểm của bạn.", "Quản trị viên của Khoa Công nghệ Thông tin (cán bộ được cấp quyền quản trị EduPath AI) xem được điểm và kết quả từng môn trong bảng điểm của bạn để hỗ trợ học tập và tư vấn. Quản trị viên không sửa được bảng điểm của bạn và chỉ xem được tệp PDF khi mở trang của bạn như cố vấn học tập (xem bên dưới).", "Từ ngày 31/10/2026, tiến độ học tập và điểm trung bình của bạn có trong các báo cáo thống kê của Khoa (kèm họ tên và mã số sinh viên); quản trị viên có thể xuất các báo cáo này ra tệp Excel. Mỗi lần quản trị viên xem bảng điểm của bạn hoặc xuất báo cáo có tên sinh viên đều được ghi vào nhật ký thao tác.", "Cố vấn học tập được Khoa phân công cho lớp của bạn xem được bảng điểm của bạn, kể cả tệp PDF, và có thể tải bảng điểm lên thay bạn; quản trị viên của Khoa và Ban chủ nhiệm khoa cũng làm được như vậy khi mở trang của bạn. Họ không xóa được bảng điểm của bạn."]
           },
           {
             title: "Lưu, thay thế và xóa bảng điểm",
@@ -475,7 +476,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
             title: "Lưu và xóa kết quả đánh giá",
             paragraphs: [
               [
-                "Bạn và cố vấn học tập của lớp bạn xem được kết quả đánh giá và nhận xét AI của bạn; quản trị viên của Khoa xem được kết quả đánh giá trong các báo cáo, xem mục Chia sẻ thông tin.",
+                "Bạn và cố vấn học tập của lớp bạn xem được kết quả đánh giá và nhận xét AI của bạn; quản trị viên của Khoa xem được kết quả đánh giá trong các báo cáo, và cùng Ban chủ nhiệm khoa xem được cả nhận xét AI khi mở trang của bạn, xem mục Chia sẻ thông tin.",
                 "Kết quả được lưu đến khi bạn xóa bảng điểm, thay bằng bảng điểm mới, rút lại sự đồng ý cho đánh giá năng lực hoặc khi tài khoản được xóa.",
                 "Mỗi tài khoản giữ tối đa 20 lần đánh giá gần nhất; khi có lần đánh giá mới, lần cũ nhất vượt quá giới hạn này bị xóa.",
                 "Dữ liệu gửi cho mô hình AI được xóa sau khi xử lý xong, kể cả khi việc tạo nhận xét bị lỗi hoặc bị hủy; nhận xét được lưu cùng kết quả đánh giá."
@@ -511,7 +512,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
           {
             title: "Lưu và xóa",
             paragraphs: [[
-              "Bạn và cố vấn học tập của lớp bạn xem được câu trả lời khảo sát, thành tích, kế hoạch học kỳ và lộ trình của bạn; cố vấn không sửa hay xóa được khảo sát và kế hoạch học kỳ của bạn. Các cán bộ quản lý khác chỉ thấy hồ sơ của bạn đã đầy đủ hay chưa.",
+              "Bạn và cố vấn học tập của lớp bạn xem được câu trả lời khảo sát, thành tích, kế hoạch học kỳ và lộ trình của bạn; quản trị viên của Khoa và Ban chủ nhiệm khoa cũng xem được khi mở trang của bạn. Họ không sửa hay xóa được khảo sát và kế hoạch học kỳ của bạn. Các cán bộ quản lý khác chỉ thấy hồ sơ của bạn đã đầy đủ hay chưa.",
               "Câu trả lời khảo sát và thành tích được giữ đến khi bạn xóa hoặc khi tài khoản được xóa. Bấm Xóa câu trả lời trong Hồ sơ và bảng điểm để xóa chúng; các lộ trình AI đã tạo cũng bị xóa.",
               "Mỗi tài khoản giữ tối đa 5 lộ trình AI gần nhất. Lộ trình đi cùng kết quả đánh giá năng lực tạo ra nó và bị xóa khi kết quả đó bị xóa.",
               "Dữ liệu gửi cho mô hình AI được xóa sau khi soạn xong, kể cả khi việc soạn bị lỗi hoặc bị hủy.",
@@ -542,7 +543,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
           {
             title: "Lưu và xóa",
             paragraphs: [[
-              "Chỉ bạn xem được các cuộc trò chuyện do bạn tạo. Cố vấn học tập của lớp bạn có thể hỏi Trợ lý AI trong tài khoản của bạn; các cuộc trò chuyện đó được ghi là do cố vấn tạo và bạn xem được, còn cố vấn chỉ xem được các cuộc trò chuyện mình tạo.",
+              "Chỉ bạn xem được các cuộc trò chuyện do bạn tạo. Cố vấn học tập của lớp bạn, quản trị viên của Khoa và Ban chủ nhiệm khoa có thể hỏi Trợ lý AI trong tài khoản của bạn; các cuộc trò chuyện đó được ghi là do cố vấn học tập hay cán bộ Khoa tạo và bạn xem được, còn mỗi người chỉ xem được các cuộc trò chuyện mình tạo.",
               "Bạn có thể xóa từng cuộc trò chuyện bất cứ lúc nào; cuộc trò chuyện không có tin nhắn mới trong 90 ngày được tự động xóa, và mọi cuộc trò chuyện bị xóa khi tài khoản được xóa.",
               "Dữ liệu gửi cho mô hình AI được xóa sau khi trả lời xong, kể cả khi việc trả lời bị lỗi; chỉ câu trả lời và các nguồn được dẫn được lưu lại."
             ]]
@@ -557,8 +558,9 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
             title: "Ai có thể xem thông tin của bạn?",
             paragraphs: [
               "Bạn xem được toàn bộ thông tin của mình. Sinh viên khác không xem được hồ sơ, bảng điểm, kết quả đánh giá năng lực, khảo sát định hướng hay lộ trình của bạn.",
-              "Trong nhà trường, chỉ cán bộ, giảng viên có nhiệm vụ liên quan mới được xem những thông tin hồ sơ cần thiết để hỗ trợ học tập và quản lý đào tạo. Quản trị viên của Khoa Công nghệ Thông tin còn xem được điểm và kết quả từng môn trong bảng điểm của bạn (không gồm tệp PDF). Từ ngày 31/10/2026, quản trị viên của Khoa còn xem được tiến độ học tập, kết quả đánh giá năng lực (điểm kỹ năng, kỹ năng còn thiếu, nghề mục tiêu và mức phù hợp) và các môn Lộ trình AI đề xuất cho bạn trong các báo cáo của Khoa, để hỗ trợ học tập. Quản trị viên không xem câu trả lời khảo sát và thành tích của bạn, và không cán bộ nào được chia sẻ thông tin của bạn ra ngoài. Mỗi lần quản trị viên xem bảng điểm của bạn hoặc xuất báo cáo có tên sinh viên đều được ghi vào nhật ký thao tác.",
-              "Cố vấn học tập được Khoa phân công cho lớp của bạn xem được toàn bộ trang EduPath AI của bạn: hồ sơ, bảng điểm (kể cả tệp PDF), khảo sát định hướng và thành tích, kết quả đánh giá năng lực, khoảng trống kỹ năng, định hướng nghề nghiệp, lộ trình, kế hoạch học kỳ và xét tốt nghiệp; cố vấn không xem thông báo trong chuông và các cuộc trò chuyện Trợ lý AI do bạn tạo. Cố vấn có thể làm thay bạn: import bảng điểm, chạy đánh giá năng lực và tạo lại nhận xét AI, tạo Lộ trình AI, tạo lại lời khuyên xét tốt nghiệp và hỏi Trợ lý AI. Cố vấn không làm hay sửa khảo sát, không đồng ý hay rút đồng ý, không xóa dữ liệu và không chọn chuyên ngành, vị trí nghề nghiệp mục tiêu hay sửa kế hoạch học kỳ thay bạn. Mỗi lần cố vấn mở trang của bạn và mỗi việc làm thay đều được ghi vào nhật ký thao tác, và bạn nhận một thông báo trong chuông khi cố vấn làm thay bạn. Khi Khoa đổi phân công lớp, cố vấn cũ không còn xem được trang của bạn."
+              "Trong nhà trường, chỉ cán bộ, giảng viên có nhiệm vụ liên quan mới được xem những thông tin hồ sơ cần thiết để hỗ trợ học tập và quản lý đào tạo. Quản trị viên của Khoa Công nghệ Thông tin còn xem được điểm và kết quả từng môn trong bảng điểm của bạn ở trang quản trị (không gồm tệp PDF). Từ ngày 31/10/2026, quản trị viên của Khoa còn xem được tiến độ học tập, kết quả đánh giá năng lực (điểm kỹ năng, kỹ năng còn thiếu, nghề mục tiêu và mức phù hợp) và các môn Lộ trình AI đề xuất cho bạn trong các báo cáo của Khoa, để hỗ trợ học tập. Các báo cáo này không có câu trả lời khảo sát và thành tích của bạn, và không cán bộ nào được chia sẻ thông tin của bạn ra ngoài. Mỗi lần quản trị viên xem bảng điểm của bạn hoặc xuất báo cáo có tên sinh viên đều được ghi vào nhật ký thao tác.",
+              "Cố vấn học tập được Khoa phân công cho lớp của bạn xem được toàn bộ trang EduPath AI của bạn: hồ sơ, bảng điểm (kể cả tệp PDF), khảo sát định hướng và thành tích, kết quả đánh giá năng lực, khoảng trống kỹ năng, định hướng nghề nghiệp, lộ trình, kế hoạch học kỳ và xét tốt nghiệp; cố vấn không xem thông báo trong chuông và các cuộc trò chuyện Trợ lý AI do bạn tạo. Cố vấn có thể làm thay bạn: import bảng điểm, chạy đánh giá năng lực và tạo lại nhận xét AI, tạo Lộ trình AI, tạo lại lời khuyên xét tốt nghiệp và hỏi Trợ lý AI. Cố vấn không làm hay sửa khảo sát, không đồng ý hay rút đồng ý, không xóa dữ liệu và không chọn chuyên ngành, vị trí nghề nghiệp mục tiêu hay sửa kế hoạch học kỳ thay bạn. Mỗi lần cố vấn mở trang của bạn và mỗi việc làm thay đều được ghi vào nhật ký thao tác, và bạn nhận một thông báo trong chuông khi cố vấn làm thay bạn. Khi Khoa đổi phân công lớp, cố vấn cũ không còn xem được trang của bạn.",
+              "Quản trị viên của Khoa và Ban chủ nhiệm khoa mở được trang EduPath AI của mọi sinh viên theo cách này: xem và làm thay được đúng những việc như cố vấn học tập, với cùng giới hạn. Mỗi lần họ mở trang của bạn và mỗi việc làm thay cũng được ghi vào nhật ký thao tác, và bạn nhận thông báo trong chuông như khi cố vấn làm thay bạn."
             ]
           },
           {
@@ -605,7 +607,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
                 "Cuộc trò chuyện với Trợ lý AI: đến khi bạn xóa, 90 ngày sau tin nhắn cuối cùng hoặc khi tài khoản được xóa.",
                 "Dữ liệu gửi cho mô hình AI: được xóa sau khi xử lý xong.",
                 "Lịch sử đăng nhập và lịch sử đồng ý: trong thời gian tài khoản còn tồn tại.",
-                "Nhật ký thao tác của cán bộ (xem bảng điểm, xuất báo cáo, việc cố vấn học tập làm thay): một năm."
+                "Nhật ký thao tác của cán bộ (xem bảng điểm, xuất báo cáo, mở trang của bạn và việc làm thay bạn): một năm."
               ],
               `Khi không còn sử dụng EduPath AI, chẳng hạn sau khi tốt nghiệp, bạn có thể tự xóa bảng điểm và gửi email đến ${supportEmail} để đề nghị xóa tài khoản.`
             ]
@@ -701,7 +703,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
               "Bản cập nhật ngày 28/10/2026 bổ sung Trợ lý AI: trợ lý trả lời câu hỏi của bạn từ kết quả đánh giá năng lực, lộ trình, khảo sát định hướng (khi bạn đã đồng ý cho khảo sát) và dữ liệu chung của Khoa, và EduPath AI lưu cuộc trò chuyện cho đến khi bạn xóa hoặc 90 ngày sau tin nhắn cuối cùng. Trợ lý chỉ xử lý dữ liệu của bạn khi bạn gửi câu hỏi; sự đồng ý bạn đã đưa ra theo bản ngày 25/10/2026 vẫn còn hiệu lực.",
               "Bản cập nhật ngày 29/10/2026 cho Trợ lý AI dùng điểm trong bảng điểm bạn đã tải lên (không gồm tệp PDF), để bạn tra cứu điểm ngay trong cuộc trò chuyện: với mọi câu hỏi, trợ lý dùng điểm trung bình và số tín chỉ tích lũy, học phần đang học và học phần chưa đạt; khi câu hỏi nói về điểm, trợ lý dùng thêm điểm của các học phần liên quan hoặc cả bảng điểm. Điểm được chép đúng như in trên bảng điểm, không tính lại. Sự đồng ý bạn đã đưa ra theo bản ngày 25/10/2026 vẫn còn hiệu lực.",
               "Bản cập nhật ngày 31/10/2026 cho phép quản trị viên của Khoa Công nghệ Thông tin xem tiến độ học tập, điểm trung bình, kết quả đánh giá năng lực (điểm kỹ năng, kỹ năng còn thiếu, nghề mục tiêu và mức phù hợp) và các môn Lộ trình AI đề xuất cho sinh viên trong các báo cáo thống kê của Khoa (kèm họ tên và mã số sinh viên, xuất được ra tệp Excel), để hỗ trợ học tập. Câu trả lời khảo sát và thành tích không có trong báo cáo. Mỗi lần quản trị viên xem bảng điểm hoặc xuất báo cáo có tên sinh viên đều được ghi vào nhật ký thao tác. Bản này cũng bỏ phần tự mô tả thế mạnh khỏi Khảo sát định hướng: mô tả đã lưu không còn được hiển thị hay dùng cho AI, và được xóa khi bạn lưu lại khảo sát. Sự đồng ý bạn đã đưa ra theo bản ngày 25/10/2026 vẫn còn hiệu lực.",
-              "Bản cập nhật ngày 03/11/2026 bổ sung cố vấn học tập: cố vấn được Khoa phân công cho lớp của bạn xem được trang EduPath AI của bạn (trừ thông báo trong chuông và các cuộc trò chuyện Trợ lý AI do bạn tạo) và có thể làm thay bạn việc import bảng điểm, đánh giá năng lực, tạo Lộ trình AI, lời khuyên xét tốt nghiệp và hỏi Trợ lý AI, kể cả khi bạn chưa đồng ý cho các việc này. Mỗi việc làm thay được ghi vào nhật ký thao tác và báo cho bạn qua chuông thông báo; bạn vẫn xóa được kết quả. Sự đồng ý bạn đã đưa ra theo bản ngày 25/10/2026 vẫn còn hiệu lực."
+              "Bản cập nhật ngày 03/11/2026 bổ sung cố vấn học tập: cố vấn được Khoa phân công cho lớp của bạn xem được trang EduPath AI của bạn (trừ thông báo trong chuông và các cuộc trò chuyện Trợ lý AI do bạn tạo) và có thể làm thay bạn việc import bảng điểm, đánh giá năng lực, tạo Lộ trình AI, lời khuyên xét tốt nghiệp và hỏi Trợ lý AI, kể cả khi bạn chưa đồng ý cho các việc này. Quản trị viên của Khoa và Ban chủ nhiệm khoa cũng làm được như vậy với trang của mọi sinh viên. Mỗi việc làm thay được ghi vào nhật ký thao tác và báo cho bạn qua chuông thông báo; bạn vẫn xóa được kết quả. Sự đồng ý bạn đã đưa ra theo bản ngày 25/10/2026 vẫn còn hiệu lực."
             ]
           }
         ]
