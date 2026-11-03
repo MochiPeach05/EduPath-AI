@@ -2,6 +2,7 @@ import { Router, type ErrorRequestHandler } from "express";
 import { z } from "zod";
 import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
+import { studentUser } from "../advisors/access.js";
 import { majorIdentity, majorKey } from "../curricula/majors.js";
 import { identity, type PlanData } from "./model.js";
 
@@ -67,7 +68,7 @@ export function createStudentPlansRouter(pool: DatabasePool | undefined) {
       res.status(503).json({ error: "database_required" });
       return;
     }
-    const user = req.session.user!;
+    const user = studentUser(req);
     const active = await pool.query(
       "SELECT id FROM users WHERE id=$1 AND entra_tenant_id=$2 AND is_active",
       [user.userId, user.tenantId],
@@ -93,7 +94,7 @@ export function createStudentPlansRouter(pool: DatabasePool | undefined) {
         FROM training_plans c JOIN training_plan_revisions r ON r.id=c.current_revision
         WHERE c.is_active ORDER BY c.cohort_code DESC,r.data->>'major',c.id`),
       pool!.query("SELECT cohort_code,major_code FROM student_profiles WHERE user_id=$1", [
-        req.session.user!.userId,
+        studentUser(req).userId,
       ]),
     ]);
     const profileCohort = profile.rows[0]?.cohort_code ?? null;

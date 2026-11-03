@@ -6,6 +6,7 @@ import {
   type AssistantMessage, type AssistantMessageStatus, type AssistantSource, type AssistantThread, type AssistantThreadResponse, type AssistantThreadsResponse,
 } from "./assistant-types";
 import { Icon } from "./student-icons";
+import { isAdvisorView } from "./advisor-view";
 import "./student-assistant.css";
 
 // "Trợ lý AI" (STU-CHAT-01..05, 2026-10-28): a chat with EduPath AI about the student's skill gaps, roadmap, recommended
@@ -505,7 +506,9 @@ type ListProps = {
 };
 
 function ListState({ threads, listError, onReloadList }: Pick<ListProps, "threads" | "listError" | "onReloadList">) {
-  if (threads) return threads.length ? null : <p className="as-list-note">Chưa có cuộc trò chuyện nào. Câu hỏi đầu tiên của bạn sẽ mở một cuộc trò chuyện mới.</p>;
+  if (threads) return threads.length ? null : <p className="as-list-note">{isAdvisorView()
+    ? "Bạn chưa hỏi Trợ lý AI trong trang của sinh viên này. Cố vấn học tập chỉ thấy các cuộc trò chuyện mình tạo."
+    : "Chưa có cuộc trò chuyện nào. Câu hỏi đầu tiên của bạn sẽ mở một cuộc trò chuyện mới."}</p>;
   return listError
     ? <div className="as-list-note as-list-problem" role="alert"><p>Chưa tải được các cuộc trò chuyện. {listError}</p>
       <button type="button" className="sw-outline as-small" onClick={onReloadList}><Icon name="refresh" />Thử lại</button></div>
@@ -515,6 +518,8 @@ function ListState({ threads, listError, onReloadList }: Pick<ListProps, "thread
 /** Wide screens: the conversations, newest first. */
 function ThreadList(props: ListProps) {
   const { threads, selectedId, confirming, now } = props;
+  // A cố vấn học tập deletes nothing of the student's (policy 2026-11-03).
+  const advisorView = isAdvisorView();
   return <section className="sw-panel as-threads" aria-labelledby="as-threads-title">
     <h2 id="as-threads-title">Cuộc trò chuyện</h2>
     <button type="button" className="sw-primary as-new" onClick={props.onNew}><Icon name="plus" />Cuộc trò chuyện mới</button>
@@ -527,10 +532,11 @@ function ThreadList(props: ListProps) {
           <div className="as-thread-row">
             <button type="button" className="as-thread-open" aria-current={current ? "true" : undefined} onClick={() => props.onSelect(thread.id)}>
               <span className="as-thread-title">{thread.title}</span>
+              {thread.byAdvisor && !advisorView && <span className="as-thread-tag">Cố vấn học tập tạo</span>}
               <time className="as-thread-time" dateTime={thread.updatedAt}>{threadTimeLabel(thread.updatedAt, now)}</time>
             </button>
-            <button type="button" className="as-thread-delete" aria-label={`Xóa cuộc trò chuyện: ${thread.title}`} title="Xóa cuộc trò chuyện"
-              aria-expanded={confirming === thread.id} onClick={(event) => props.onAskDelete(thread.id, event.currentTarget)}><Icon name="trash" /></button>
+            {!advisorView && <button type="button" className="as-thread-delete" aria-label={`Xóa cuộc trò chuyện: ${thread.title}`} title="Xóa cuộc trò chuyện"
+              aria-expanded={confirming === thread.id} onClick={(event) => props.onAskDelete(thread.id, event.currentTarget)}><Icon name="trash" /></button>}
           </div>
           {confirming === thread.id && <DeleteConfirm onConfirm={() => props.onDelete(thread.id)} onCancel={props.onCancelDelete} />}
         </li>;
@@ -542,6 +548,7 @@ function ThreadList(props: ListProps) {
 /** Below 900px: the conversations as a selector above the chat. */
 function ThreadPicker(props: ListProps) {
   const { threads, selectedId, confirming, now } = props;
+  const advisorView = isAdvisorView();
   const selected = threads?.find((thread) => thread.id === selectedId) ?? null;
   return <div className="as-picker">
     <div className="as-picker-row">
@@ -550,10 +557,10 @@ function ThreadPicker(props: ListProps) {
         <select value={selectedId ?? ""} onChange={(event) => props.onSelect(event.target.value || null)}>
           <option value="">Cuộc trò chuyện mới</option>
           {selectedId && !selected && <option value={selectedId}>Cuộc trò chuyện đang mở</option>}
-          {threads?.map((thread) => <option key={thread.id} value={thread.id}>{thread.title} · {threadTimeLabel(thread.updatedAt, now)}</option>)}
+          {threads?.map((thread) => <option key={thread.id} value={thread.id}>{thread.title} · {threadTimeLabel(thread.updatedAt, now)}{thread.byAdvisor && !advisorView ? " · Cố vấn học tập tạo" : ""}</option>)}
         </select>
       </label>
-      {selected && <button type="button" className="sw-outline as-picker-delete" aria-label={`Xóa cuộc trò chuyện: ${selected.title}`} title="Xóa cuộc trò chuyện"
+      {selected && !advisorView && <button type="button" className="sw-outline as-picker-delete" aria-label={`Xóa cuộc trò chuyện: ${selected.title}`} title="Xóa cuộc trò chuyện"
         aria-expanded={confirming === selected.id} onClick={(event) => props.onAskDelete(selected.id, event.currentTarget)}><Icon name="trash" /></button>}
       <button type="button" className="sw-primary as-picker-new" onClick={props.onNew}><Icon name="plus" /><span>Cuộc trò chuyện mới</span></button>
     </div>

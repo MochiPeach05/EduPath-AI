@@ -256,7 +256,7 @@ describe("career requirements API", () => {
       .send(requirementInput)
       .expect(201);
     expect(allowed.clientQuery.mock.calls.find(([sql]) => String(sql).includes("SELECT id FROM users"))?.[1]?.[2])
-      .toEqual(["admin", "faculty_board", "department_head", "lecturer"]);
+      .toEqual(["admin", "faculty_board", "department_head", "lecturer", "advisor"]);
     expect(allowed.clientQuery).toHaveBeenCalledWith("COMMIT");
   });
 

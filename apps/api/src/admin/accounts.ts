@@ -2,7 +2,7 @@ import { Router } from "express";
 import { randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { DatabasePool } from "../db/pool.js";
-import { adminRoles, type AuthenticatedUser, type AppRole } from "../auth/types.js";
+import { adminRoles, appRoles, type AuthenticatedUser, type AppRole } from "../auth/types.js";
 import { requireRole, requireAdminAccess } from "../middleware/authorization.js";
 import { byGivenName, byOrder, orderBy, sortSchema, type OwnOrder, type SortDirection } from "./table-sort.js";
 
@@ -42,7 +42,7 @@ const columns = `id, display_name AS name, email, username,
 // The columns the lists sort by (web AccountsManagement.tsx). Vai trò goes from Quản trị viên down to Sinh viên, Trạng
 // thái from active to locked; Cổng and Thông tin follow their Vietnamese labels, Kết quả puts Thành công first.
 const accountSort = {
-  name: byGivenName("name"), role: byOrder("role", ["admin", "faculty_board", "department_head", "lecturer", "student"]),
+  name: byGivenName("name"), role: byOrder("role", [...appRoles]),
   isActive: byOrder('"isActive"', ["true", "false"]), lastLoginAt: ['"lastLoginAt"']
 };
 const accountOrder: OwnOrder = [["name", "ASC"], ["id", "ASC"]];
@@ -59,8 +59,8 @@ export class PostgresAdminAccountRepository implements AdminAccountRepository {
   async canAccessAdmin(actor: AuthenticatedUser): Promise<boolean> {
     const result = await this.pool.query(
       `SELECT id FROM users WHERE id = $1 AND entra_tenant_id = $2
-       AND is_active AND COALESCE(role_override, role) IN ('admin', 'faculty_board', 'department_head', 'lecturer')`,
-      [actor.userId, actor.tenantId]
+       AND is_active AND COALESCE(role_override, role) = ANY($3::text[])`,
+      [actor.userId, actor.tenantId, adminRoles]
     );
     return result.rows.length === 1;
   }
@@ -207,7 +207,7 @@ export function createAdminAccountsRouter(repository: AdminAccountRepository | u
       q: z.string().trim().max(120).default(""),
       page: z.coerce.number().int().min(1).max(100000).default(1),
       pageSize: z.coerce.number().int().min(1).max(50).default(10),
-      role: z.enum(["admin", "student", "faculty_board", "department_head", "lecturer"]).optional(), active: z.enum(["true", "false"]).optional(),
+      role: z.enum(appRoles).optional(), active: z.enum(["true", "false"]).optional(),
       ...sortSchema(accountSort)
     }).strict().safeParse(request.query);
     if (!input.success) { response.status(400).json({ error: "invalid_query" }); return; }
@@ -233,7 +233,7 @@ export function createAdminAccountsRouter(repository: AdminAccountRepository | u
     }
     if (request.get("origin") !== webOrigin) { response.status(403).json({ error: "invalid_origin" }); return; }
     const id = z.guid().safeParse(request.params.id);
-    const change = z.object({ role: z.enum(["admin", "student", "faculty_board", "department_head", "lecturer"]).optional(), isActive: z.boolean().optional(), confirmed: z.literal(true) })
+    const change = z.object({ role: z.enum(appRoles).optional(), isActive: z.boolean().optional(), confirmed: z.literal(true) })
       .strict().refine((value) => (value.role !== undefined) !== (value.isActive !== undefined)).safeParse(request.body);
     if (!id.success) { response.status(400).json({ error: "invalid_account_id" }); return; }
     if (!change.success) { response.status(400).json({ error: "invalid_input" }); return; }

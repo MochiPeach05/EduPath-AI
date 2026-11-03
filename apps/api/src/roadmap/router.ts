@@ -9,6 +9,7 @@ import { WORKER_ONLINE_SECONDS } from "../competency-assessment/ai/queue.js";
 import { STUDY_ROADMAP_KIND } from "../competency-assessment/ai/worker-protocol.js";
 import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
+import { studentUser } from "../advisors/access.js";
 import { activeConsentVersion, isValidConsent } from "../student/consent.js";
 import { readSurvey, surveyFacts } from "../student/survey.js";
 import { roadmapBasis } from "./basis.js";
@@ -78,7 +79,7 @@ export function createRoadmapRouter(pool: DatabasePool | undefined, webOrigin: s
     res.setHeader("Cache-Control", "no-store");
     if (!pool) { res.status(503).json({ error: "database_required" }); return; }
     if (!["GET", "HEAD"].includes(req.method) && req.get("origin") !== webOrigin) { res.status(403).json({ error: "invalid_origin" }); return; }
-    const user = req.session.user!;
+    const user = studentUser(req);
     const active = await pool.query("SELECT id FROM users WHERE id=$1 AND entra_tenant_id=$2 AND is_active", [user.userId, user.tenantId]);
     if (!active.rowCount) { res.status(403).json({ error: "account_unavailable" }); return; }
     next();
@@ -86,7 +87,7 @@ export function createRoadmapRouter(pool: DatabasePool | undefined, webOrigin: s
 
   router.get("/", async (req, res) => {
     emptyObject.parse(req.query);
-    const userId = req.session.user!.userId;
+    const userId = studentUser(req).userId;
     await expireQuietly();
     const client = await pool!.connect();
     let row: Awaited<ReturnType<typeof readNewestRoadmap>>;
@@ -125,7 +126,7 @@ export function createRoadmapRouter(pool: DatabasePool | undefined, webOrigin: s
     await expireQuietly();
     const found = await pool!.query<{ id: string; status: RoadmapStatus; errorCode: string | null }>(
       `SELECT id,status,error_code AS "errorCode" FROM stu_roadmaps WHERE user_id=$1 ORDER BY created_at DESC,id DESC LIMIT 1`,
-      [req.session.user!.userId]);
+      [studentUser(req).userId]);
     const row = found.rows[0];
     res.json({ id: row?.id ?? null, status: row?.status ?? null, errorCode: row?.errorCode ?? null, worker: await workerStatus() });
   });
@@ -133,7 +134,7 @@ export function createRoadmapRouter(pool: DatabasePool | undefined, webOrigin: s
   router.post("/", async (req, res) => {
     if (!emptyObject.safeParse(req.body ?? {}).success) { res.status(400).json({ error: "invalid_input" }); return; }
     if (!enabled) { res.status(409).json({ error: "ai_disabled" }); return; }
-    const outcome = await inTransaction(pool!, (client) => createRoadmap(client, req.session.user!.userId, { expire }));
+    const outcome = await inTransaction(pool!, (client) => createRoadmap(client, studentUser(req).userId, { expire }));
     res.status(outcome.created ? 201 : 200).json({ roadmap: presentRoadmap(outcome.row, today()) });
   });
 

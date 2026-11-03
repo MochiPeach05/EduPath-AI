@@ -26,11 +26,13 @@ const result = { meta: { calcVersion: "comp-calc-v1", transcriptVersion }, overa
 const inputs = { transcript: { version: transcriptVersion } } as unknown as AssessmentInputs;
 
 type Row = { id: string; user_id: string; ai_status: string; created_at: string };
-type State = { active: boolean; transcript: string | null; recentPrecheck: boolean; recentInTx: boolean; rows: Row[]; consent: string | null };
+type State = { active: boolean; transcript: string | null; recentPrecheck: boolean; recentInTx: boolean; rows: Row[]; consent: string | null; withdrawn: boolean };
+/** The student's cố vấn học tập working in the student's page (advisors/access.ts sets it on the request). */
+const advisor = { ...student, userId: "88888888-8888-4888-8888-888888888888", name: "Cố vấn", email: "co.van@vlu.edu.vn", role: "advisor" } satisfies AuthenticatedUser;
 
-function setup(options: { state?: Partial<State>; aiQueue?: CompetencyAiQueueHook; session?: boolean; noPool?: boolean; loadError?: Error } = {}) {
+function setup(options: { state?: Partial<State>; aiQueue?: CompetencyAiQueueHook; session?: boolean; noPool?: boolean; loadError?: Error; advisor?: boolean } = {}) {
   const state: State = {
-    active: true, transcript: transcriptVersion, recentPrecheck: false, recentInTx: false, consent: null,
+    active: true, transcript: transcriptVersion, recentPrecheck: false, recentInTx: false, consent: null, withdrawn: false,
     rows: [
       { id: latestId, user_id: studentId, ai_status: "failed", created_at: "2026-10-11T02:00:00.000Z" },
       { id: olderId, user_id: studentId, ai_status: "completed", created_at: "2026-10-10T02:00:00.000Z" },
@@ -49,6 +51,7 @@ function setup(options: { state?: Partial<State>; aiQueue?: CompetencyAiQueueHoo
     if (sql.startsWith("SELECT id FROM users")) return state.active ? { rowCount: 1, rows: [{ id: studentId }] } : { rowCount: 0, rows: [] };
     if (sql === "tx" || sql.includes("AS recent")) return { rowCount: 1, rows: [{ recent: sql === "tx" ? state.recentInTx : state.recentPrecheck }] };
     if (sql.startsWith("SELECT policy_version FROM data_consents")) return state.consent ? { rowCount: 1, rows: [{ policy_version: state.consent }] } : { rowCount: 0, rows: [] };
+    if (sql.includes("AS withdrawn")) return { rowCount: 1, rows: [{ withdrawn: state.withdrawn }] };
     if (sql.startsWith("SELECT version FROM student_transcripts")) return state.transcript ? { rowCount: 1, rows: [{ version: state.transcript }] } : { rowCount: 0, rows: [] };
     if (sql.startsWith("INSERT INTO stu_comp_assessments")) {
       inserted = String(params[0]);
@@ -82,7 +85,11 @@ function setup(options: { state?: Partial<State>; aiQueue?: CompetencyAiQueueHoo
   const calculate = vi.fn(() => result);
   const app = express();
   app.use(express.json());
-  app.use((req, _res, next) => { req.session = (options.session === false ? {} : { user: student }) as typeof req.session; next(); });
+  app.use((req, _res, next) => {
+    req.session = (options.session === false ? {} : { user: options.advisor ? advisor : student }) as typeof req.session;
+    if (options.advisor) req.advisorActing = { advisor, student: { user: student, studentCode: null, name: "Student", className: "71K29CNTT99", advisorName: "Cố vấn" } };
+    next();
+  });
   app.use("/assessments", createCompetencyAssessmentRouter(options.noPool ? undefined : pool, origin, options.aiQueue, { loadInputs, calculate }));
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     res.status(500).json({ error: error instanceof Error ? error.message : "unexpected_error" });
@@ -148,6 +155,23 @@ describe("POST /", () => {
 
   it("rejects unexpected body fields", async () => {
     await create(setup().app).send({ userId: "someone" }).expect(400, { error: "invalid_input" });
+  });
+
+  it("lets the student's cố vấn học tập run it without the student's consent, and records none (policy 2026-11-03)", async () => {
+    for (const header of ["", TRANSCRIPT_POLICY_VERSION, "2000-01-01"]) {
+      const t = setup({ advisor: true });
+      await create(t.app, header).expect(201);
+      expect(t.loadInputs).toHaveBeenCalledWith(expect.anything(), studentId, {});
+      expect(t.sql().some((sql) => sql.includes("data_consents") && !sql.includes("AS withdrawn"))).toBe(false);
+      expect(t.clientQuery.mock.calls.find(([sql]) => String(sql).startsWith("INSERT INTO stu_comp_assessments"))?.[1]?.[1]).toBe(studentId);
+    }
+  });
+
+  it("keeps a student's withdrawal: their advisor cannot run it again for them", async () => {
+    const t = setup({ advisor: true, state: { withdrawn: true } });
+    await create(t.app, "").expect(409, { error: "assessment_withdrawn" });
+    expect(t.loadInputs).not.toHaveBeenCalled();
+    expect(t.connect).not.toHaveBeenCalled();
   });
 
   it("computes from the snapshot, then locks, records consent, stores and prunes in one transaction", async () => {

@@ -90,7 +90,7 @@ describe("student profile SQL safety", () => {
     expect(sql).toContain("LEFT JOIN student_profiles"); expect(sql).not.toContain("u.entra_tenant_id =");
     expect(sql).toContain("COALESCE(u.role_override, u.role) = 'student'");
     expect(sql).not.toContain("' OR 1=1 --"); expect(sql).not.toContain("SELECT * FROM users");
-    expect(values).toEqual(["' OR 1=1 --", 2023, "K29", "false", "incomplete", 10, 10]);
+    expect(values).toEqual(["' OR 1=1 --", 2023, "K29", "false", "incomplete", 10, 10, null]);
   });
   it("numbers the rows in the list's own order and sorts the whole list by a known column before paging", async () => {
     const query = vi.fn().mockResolvedValue({ rows: [{ items: [], total: 0, cohortYears: [], cohortCodes: [] }] });
@@ -100,12 +100,29 @@ describe("student profile SQL safety", () => {
     expect(sql).toContain("row_number() OVER (ORDER BY name ASC, id ASC)::int AS stt FROM filtered");
     expect(sql).toContain('FROM numbered ORDER BY "cohortYear" DESC NULLS LAST, name ASC, id ASC LIMIT $6 OFFSET $7');
     expect(sql).toContain('json_agg(paged ORDER BY "cohortYear" DESC NULLS LAST, name ASC, id ASC)');
-    expect(values).toEqual(["", null, null, null, null, 10, 20]);
+    expect(values).toEqual(["", null, null, null, null, 10, 20, null]);
   });
   it("does not return absent or non-student details", async () => {
     const query = vi.fn().mockResolvedValue({ rows: [] }); const repo = new PostgresStudentProfileRepository({ query } as unknown as DatabasePool);
     await expect(repo.detail(actor, id)).rejects.toMatchObject({ code: "student_not_found", status: 404 });
-    expect(query).toHaveBeenCalledWith(expect.stringContaining("COALESCE(u.role_override, u.role) = 'student'"), [id, null]);
+    expect(query).toHaveBeenCalledWith(expect.stringContaining("COALESCE(u.role_override, u.role) = 'student'"), [id, null, null]);
+  });
+  // Cố vấn học tập (2026-11-03): only the students of the classes the Khoa gave the advisor; every other role sees all.
+  it("limits a cố vấn học tập to the students of their classes", async () => {
+    const advisor = { userId: "4f2b8c1e-5d4a-4b6f-9a1e-2c3d4e5f6a7b", tenantId: "tenant", name: "Cố vấn", role: "advisor" } as AuthenticatedUser;
+    const query = vi.fn().mockResolvedValue({ rows: [{ items: [], total: 0, cohortYears: [], cohortCodes: [] }] });
+    const repo = new PostgresStudentProfileRepository({ query } as unknown as DatabasePool);
+    await repo.list(advisor, { q: "", page: 1, pageSize: 10 });
+    const [sql, values] = query.mock.calls[0]!;
+    expect(sql).toContain("upper(regexp_replace(p.class_name, '\\s', '', 'g'))");
+    expect(sql).toContain("IN (SELECT class_name FROM ad_advisor_classes WHERE advisor_user_id = $8::uuid)");
+    expect(values?.[7]).toBe(advisor.userId);
+    const detail = vi.fn().mockResolvedValue({ rows: [] });
+    await expect(new PostgresStudentProfileRepository({ query: detail } as unknown as DatabasePool).detail(advisor, id)).rejects.toMatchObject({ code: "student_not_found" });
+    expect(detail).toHaveBeenCalledWith(expect.stringContaining("advisor_user_id = $3::uuid"), [id, null, advisor.userId]);
+    const transcript = vi.fn().mockResolvedValue({ rows: [] });
+    await expect(new PostgresStudentProfileRepository({ query: transcript } as unknown as DatabasePool).transcript(advisor, id)).rejects.toMatchObject({ code: "student_not_found" });
+    expect(transcript).toHaveBeenCalledWith(expect.stringContaining("advisor_user_id = $2::uuid"), [id, advisor.userId]);
   });
   it("returns the stored specialty with the detail (also used by /api/student/profile)", async () => {
     const query = vi.fn().mockResolvedValue({ rows: [{ id, profileStatus: "incomplete", specialty: "CNDL" }] });

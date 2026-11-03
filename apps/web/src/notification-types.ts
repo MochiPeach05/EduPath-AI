@@ -49,11 +49,12 @@ export type NotificationType = "ai" | "warn" | "khoa" | "sys";
  * - graduation_advice: the graduation advice was written;
  * - warning: a "Cần chú ý" warning of the overview appeared (one per warning key);
  * - catalog_updated: the faculty changed the student's CTĐT, training plan or graduation standard (Đánh giá lại);
- * - announcement: sent by the faculty (AD-NOTI-01).
+ * - announcement: sent by the faculty (AD-NOTI-01);
+ * - advisor_action: the student's cố vấn học tập did something for them (AD-AST-07, 08; 2026-11-03).
  */
 export type NotificationKind =
   | "transcript_ready" | "transcript_failed" | "assessment_comment" | "roadmap_ready" | "roadmap_failed" | "graduation_advice"
-  | "warning" | "catalog_updated" | "announcement";
+  | "warning" | "catalog_updated" | "announcement" | "advisor_action";
 
 export type StudentNotification = {
   id: string;

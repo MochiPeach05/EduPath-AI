@@ -183,7 +183,7 @@ export type CourseStudents = { code: string; name: string; items: CourseStudent[
 
 // ------------------------------------------------------------- AD-REPORT-11 Nhật ký thao tác
 
-export type AuditKind = "account" | "training" | "career" | "competency" | "notify" | "report" | "access" | "other";
+export type AuditKind = "account" | "training" | "career" | "competency" | "notify" | "report" | "access" | "advisor" | "other";
 export type AuditEntry = { id: string; at: string; actorName: string; actorRole: string | null; kind: AuditKind; action: string; summary: string };
 /** GET /api/admin/audit-log?q&kind&actor&page&pageSize (newest first, kept 1 year). */
 export type AuditPage = ReportPage<AuditEntry> & { actors: string[] };

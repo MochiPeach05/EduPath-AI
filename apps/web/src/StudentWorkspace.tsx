@@ -16,9 +16,12 @@ import { Icon } from "./student-icons";
 import { NotificationsDrawer, NotificationsPanel, NOTIFICATION_RECOUNT_MS, badgeText, bellLabel, useUnreadNotifications, type NotificationFilter } from "./StudentNotifications";
 import type { StudentNotification } from "./notification-types";
 import type { AuthenticatedUser } from "./types";
+import { ADVISOR_BLOCKED_EVENT, ADVISOR_HOME, advisorBlockedMessage, stopActing } from "./advisor-view";
+import { ADVISOR_ERRORS } from "./advisor-types";
 import "./student-workspace.css";
 import "./student-header.css";
 import "./student-layout.css";
+import "./advisor-view.css";
 
 // The competency module is large and only needed on #competency and #skill-gap, so it loads on demand.
 const StudentCompetency = lazy(() => import("./StudentCompetency"));
@@ -52,6 +55,7 @@ type Panel = "notifications" | "help" | "account";
 type ShellError = { kind: "session" | "profile" | "logout"; message: string };
 const sessionExpired: ShellError = { kind: "session", message: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại." };
 const profileFailed: ShellError = { kind: "profile", message: "Chưa tải được hồ sơ của bạn." };
+const advisorForbidden: ShellError = { kind: "profile", message: ADVISOR_ERRORS.advisor_student_forbidden! };
 
 /** The page a URL hash opens: the overview for an empty hash, null for a hash that names no page. */
 export function pageFromHash(hash: string): Page | null {
@@ -93,7 +97,32 @@ const helpSteps: [string, string][] = [
   ["Chương trình đào tạo và Kế hoạch đào tạo", "tra cứu học phần và kế hoạch từng học kỳ (trong menu tài khoản)."]
 ];
 
-export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) {
+/**
+ * The strip a cố vấn học tập sees under the header in a student's page (AD-AST-05…08, policy 2026-11-03): whose page it is,
+ * what the advisor may do there, the way out, and why the API refused something.
+ */
+export function AdvisorViewBanner({ advisorName, studentName, studentCode, className, blocked, onClose }: {
+  advisorName: string; studentName: string; studentCode?: string | null; className?: string | null; blocked: string; onClose: () => void;
+}) {
+  const who = [studentName, studentCode, className ? `lớp ${className}` : null].filter(Boolean).join(" · ");
+  return <div className="sw-advisor-banner" role="region" aria-label="Chế độ cố vấn học tập">
+    <div className="sw-advisor-banner-inner">
+      <span className="sw-advisor-icon" aria-hidden="true"><Icon name="shield" /></span>
+      <p className="sw-advisor-text">
+        <strong>Bạn đang xem trang của {who} với tư cách cố vấn học tập{advisorName ? ` (${advisorName})` : ""}.</strong>{" "}
+        Bạn làm thay được: import bảng điểm, Đánh giá năng lực, Lộ trình AI, lời khuyên xét tốt nghiệp và Trợ lý AI. Mỗi việc làm thay được ghi lại và báo cho sinh viên.
+      </p>
+      <button type="button" className="sw-outline sw-advisor-close" onClick={onClose}><Icon name="close" />Đóng trang sinh viên</button>
+    </div>
+    {blocked && <p className="sw-advisor-blocked" role="alert">{blocked}</p>}
+  </div>;
+}
+
+/**
+ * advisor: set when a cố vấn học tập opened this student's page from Lớp phụ trách (App.tsx, advisor-view.ts); user is then
+ * the advisor's own account and the page shows the student of GET /api/student/profile.
+ */
+export default function StudentWorkspace({ user, advisor = null }: { user: AuthenticatedUser; advisor?: { name: string } | null }) {
   const [page, setPage] = useState<Page>(() => pageFromHash(window.location.hash) ?? "overview");
   // The page on screen, for the hashchange listener (which outlives renders).
   const pageRef = useRef(page);
@@ -122,7 +151,8 @@ export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) 
   const openPanel = (next: Panel, opener: HTMLElement | null) => { panelOpener.current = opener; setPanel(next); };
   const closePanel = (restoreFocus: boolean) => { setPanel(null); if (restoreFocus) panelOpener.current?.focus(); };
   // Thông báo (2026-10-30): the bell's unread count, and the drawer of every notification (opened from the popover).
-  const notifications = useUnreadNotifications();
+  // The bell belongs to the student: an advisor's tab does not read it.
+  const notifications = useUnreadNotifications(!advisor);
   const bellRef = useRef<HTMLButtonElement>(null);
   const [notificationDrawer, setNotificationDrawer] = useState<{ initial: StudentNotification | null; filter?: NotificationFilter } | null>(null);
   const openNotifications = (initial: StudentNotification | null, filter?: NotificationFilter) => { setPanel(null); setNotificationDrawer({ initial, filter }); };
@@ -163,6 +193,16 @@ export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) 
   const [error, setError] = useState<ShellError | null>(null);
   const [reload, setReload] = useState(0);
   const [loggingOut, setLoggingOut] = useState(false);
+  // The last refusal of the API in an advisor's tab (advisor-view.ts), shown in the banner.
+  const [advisorBlocked, setAdvisorBlocked] = useState("");
+  useEffect(() => {
+    if (!advisor) return;
+    const refused = (event: Event) => setAdvisorBlocked(advisorBlockedMessage(String((event as CustomEvent<string>).detail ?? "")));
+    window.addEventListener(ADVISOR_BLOCKED_EVENT, refused);
+    return () => window.removeEventListener(ADVISOR_BLOCKED_EVENT, refused);
+  }, [advisor]);
+  // A refusal is about the page it happened on.
+  useEffect(() => setAdvisorBlocked(""), [page]);
   // Every page change starts at the top of the new page. The scroll happens right away, inside the click or the
   // hashchange, so a page that scrolls somewhere on purpose afterwards (e.g. to the transcript) wins.
   const showNewPage = (id: Page) => {
@@ -204,7 +244,7 @@ export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) 
     setLoading(true); setError(null);
     fetch("/api/student/profile", { credentials: "include", signal: controller.signal })
       .then(async response => {
-        if (!response.ok) { if (!controller.signal.aborted) setError(response.status === 401 ? sessionExpired : profileFailed); return; }
+        if (!response.ok) { if (!controller.signal.aborted) setError(response.status === 401 ? sessionExpired : response.status === 403 && advisor ? advisorForbidden : profileFailed); return; }
         const data = await response.json() as { student: Profile };
         if (!controller.signal.aborted) setProfile(data.student);
       })
@@ -235,12 +275,13 @@ export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) 
     return () => window.removeEventListener("edupath-session-expired", expired);
   }, []);
   const selected = pages.find(p => p.id === page)!;
-  useEffect(() => { document.title = `${selected.label} · EduPath AI`; }, [selected.label]);
-  const name = studentDisplayName(profile?.name ?? user.name);
+  // In an advisor's tab the account is the advisor's: the student's name comes from the profile only.
+  const name = studentDisplayName(profile?.name ?? (advisor ? "" : user.name)) || "Sinh viên";
+  useEffect(() => { document.title = advisor ? `${selected.label} · ${name} · EduPath AI` : `${selected.label} · EduPath AI`; }, [selected.label, advisor, name]);
   // A neutral avatar until the profile answers, then initials (from the account name if the profile cannot be read).
   const initials = loading && !profile ? "" : nameInitials(name);
   const avatar = initials || <Icon name="user" />;
-  const email = profile?.email ?? user.email;
+  const email = profile?.email ?? (advisor ? null : user.email);
   const navigate = (id: Page) => {
     // The hashchange that follows finds the page already shown and leaves it alone.
     window.location.hash = id;
@@ -251,6 +292,12 @@ export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) 
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
     event.preventDefault();
     navigate(id);
+  };
+  // "Đóng trang sinh viên": the tab Lớp phụ trách opened closes; one opened by hand goes back to Lớp phụ trách.
+  const closeAdvisorView = () => {
+    stopActing();
+    window.close();
+    window.setTimeout(() => window.location.assign(ADVISOR_HOME), 300);
   };
   const exit = async () => {
     setLoggingOut(true);
@@ -286,7 +333,7 @@ export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) 
         <nav id="student-navigation" className="sw-header-nav" aria-label="Điều hướng sinh viên">{navPages.map(p => <a key={p.id} href={`#${p.id}`} aria-current={page === p.id ? "page" : undefined} onClick={followLink(p.id)}><span>{p.label}</span></a>)}</nav>
         <div className="sw-tools">
           <button type="button" className="sw-icon-button" aria-label="Hướng dẫn" aria-haspopup="dialog" aria-expanded={panel === "help"} aria-controls={panel === "help" ? "student-help-panel" : undefined} onClick={event => panel === "help" ? closePanel(true) : openPanel("help", event.currentTarget)}><Icon name="help" /></button>
-          <button ref={bellRef} type="button" className="sw-icon-button sw-bell" aria-label={bellLabel(notifications.unread)} aria-haspopup="dialog" aria-expanded={panel === "notifications"} aria-controls={panel === "notifications" ? "student-notifications-panel" : undefined} onClick={event => panel === "notifications" ? closePanel(true) : openPanel("notifications", event.currentTarget)}><Icon name="bell" />{notifications.unread > 0 && <span className="sw-bell-badge" aria-hidden="true">{badgeText(notifications.unread)}</span>}</button>
+          {!advisor && <button ref={bellRef} type="button" className="sw-icon-button sw-bell" aria-label={bellLabel(notifications.unread)} aria-haspopup="dialog" aria-expanded={panel === "notifications"} aria-controls={panel === "notifications" ? "student-notifications-panel" : undefined} onClick={event => panel === "notifications" ? closePanel(true) : openPanel("notifications", event.currentTarget)}><Icon name="bell" />{notifications.unread > 0 && <span className="sw-bell-badge" aria-hidden="true">{badgeText(notifications.unread)}</span>}</button>}
           <div className="sw-account" ref={accountRef} onBlur={e => { if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setPanel(p => p === "account" ? null : p); }}>
             {/* The ring marks the avatar while the page on screen is one of its menu items. */}
             <button ref={accountButton} type="button" className={`sw-avatar${accountPages.some(p => p.id === page) ? " sw-avatar-here" : ""}`} aria-label={`Tài khoản ${name}`} aria-expanded={panel === "account"} aria-controls={panel === "account" ? "student-account-menu" : undefined} onClick={event => panel === "account" ? setPanel(null) : openPanel("account", event.currentTarget)}>{avatar}</button>
@@ -295,7 +342,9 @@ export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) 
               {accountPages.map(p => <a key={p.id} href={`#${p.id}`} aria-current={page === p.id ? "page" : undefined} onClick={followLink(p.id)}><Icon name={p.icon} />{p.label}</a>)}
               {/* Phones hide the "?" button in the header, so the help is offered here instead. */}
               <button type="button" className="sw-account-help" onClick={() => openPanel("help", accountButton.current)}><Icon name="help" />Hướng dẫn</button>
-              <button type="button" disabled={loggingOut} onClick={() => void exit()}><Icon name="logout" />{loggingOut ? "Đang đăng xuất…" : "Đăng xuất"}</button>
+              {advisor
+                ? <button type="button" onClick={closeAdvisorView}><Icon name="close" />Đóng trang sinh viên</button>
+                : <button type="button" disabled={loggingOut} onClick={() => void exit()}><Icon name="logout" />{loggingOut ? "Đang đăng xuất…" : "Đăng xuất"}</button>}
             </div>}
           </div>
         </div>
@@ -307,6 +356,8 @@ export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) 
           </> : <NotificationsPanel onOpen={openNotifications} onOpenAll={filter => openNotifications(null, filter)} onUnread={notifications.setUnread} />}
         </section>}
       </header>
+      {advisor && <AdvisorViewBanner advisorName={advisor.name} studentName={name} studentCode={profile?.studentCode} className={profile?.className}
+        blocked={advisorBlocked} onClose={closeAdvisorView} />}
       <div className={`sw-body ${menu ? "sw-body-menu-open" : ""}`}>
         {menu && <button className="sw-drawer-backdrop" aria-label="Đóng menu bên trái" tabIndex={-1} onClick={() => { setMenu(false); navigationButton.current?.focus(); }} />}
         {menu && <aside ref={drawerRef} id="student-sidebar" className="sw-drawer" aria-label="Menu bên trái"><div className="sw-drawer-heading"><strong>Danh mục học tập</strong></div><nav aria-label="Danh mục bên trái">{pages.map(p => <a key={p.id} href={`#${p.id}`} aria-current={page === p.id ? "page" : undefined} onClick={followLink(p.id)}>{p.label}</a>)}<a href="/">Về trang giới thiệu</a></nav><p>Hiểu năng lực.<br /><strong>Chủ động tương lai.</strong></p></aside>}
@@ -314,7 +365,7 @@ export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) 
           {error && <div className="sw-error" role="alert">
             <span>{error.message}</span>
             {error.kind === "session"
-              ? <a href={`/login?returnTo=/dashboard%23${page}`}>Đăng nhập lại</a>
+              ? advisor ? <a href="/quantri">Mở trang quản trị</a> : <a href={`/login?returnTo=/dashboard%23${page}`}>Đăng nhập lại</a>
               : <button type="button" onClick={error.kind === "logout" ? () => void exit() : () => setReload(n => n + 1)}>Thử lại</button>}
           </div>}
           <div className="sw-page-heading">
@@ -339,7 +390,7 @@ export default function StudentWorkspace({ user }: { user: AuthenticatedUser }) 
         </main></div>
       </div>
     </div>
-    {notificationDrawer && <NotificationsDrawer initial={notificationDrawer.initial} initialFilter={notificationDrawer.filter} onClose={closeNotifications} onUnread={notifications.setUnread}
+    {!advisor && notificationDrawer && <NotificationsDrawer initial={notificationDrawer.initial} initialFilter={notificationDrawer.filter} onClose={closeNotifications} onUnread={notifications.setUnread}
       onNavigate={link => { setNotificationDrawer(null); const target = pageFromHash(link); if (target) navigate(target); }} />}
   </div>;
 }

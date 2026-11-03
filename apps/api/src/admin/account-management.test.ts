@@ -109,7 +109,7 @@ describe("transactional role and lock changes", () => {
     const statusChange = setupRepository(true, true, "lecturer");
     await statusChange.repository.update(staffActor, id, { isActive: false });
     const statusActorCheck = statusChange.query.mock.calls.find(([sql]) => String(sql).includes("FOR SHARE"));
-    expect(statusActorCheck?.[1]?.[2]).toEqual(["admin", "faculty_board", "department_head", "lecturer"]);
+    expect(statusActorCheck?.[1]?.[2]).toEqual(["admin", "faculty_board", "department_head", "lecturer", "advisor"]);
     expect(statusChange.query).toHaveBeenCalledWith("COMMIT");
 
     const roleChange = setupRepository(true, true, "lecturer");

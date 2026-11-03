@@ -9,6 +9,7 @@ import { CONSENT_VALID_SINCE } from "../student/consent.js";
 import { withoutSettledReviews, type TranscriptData } from "../student/transcript-parser.js";
 import { byGivenName, byOrder, byText, orderBy, sortSchema, type OwnOrder, type SortDirection } from "./table-sort.js";
 import { auditActorOf, recordAudit } from "./audit/record.js";
+import { CLASS_OF } from "../advisors/model.js";
 
 export interface StudentProfileQuery {
   q: string; page: number; pageSize: number;
@@ -59,10 +60,11 @@ export interface StudentProfileRepository {
 }
 // The survey counts when it holds the interest lists (survey-v3 or later; v4 dropped the written strengths, 050, 051) and the student's consent for it
 // still counts (consent.ts isValidConsent; the constant is code, not input).
-const surveyComplete = `EXISTS (SELECT 1 FROM stu_profile_surveys s WHERE s.user_id = u.id
+export const SURVEY_COMPLETE_SQL = `EXISTS (SELECT 1 FROM stu_profile_surveys s WHERE s.user_id = u.id
     AND s.survey_version NOT IN ('survey-v1', 'survey-v2') AND cardinality(s.interest_tech) > 0 AND cardinality(s.interest_hobbies) > 0
     AND EXISTS (SELECT 1 FROM data_consents c WHERE c.user_id = s.user_id AND c.purpose = 'profile_survey' AND c.ended_at IS NULL
       AND c.policy_version >= '${CONSENT_VALID_SINCE}'))`;
+const surveyComplete = SURVEY_COMPLETE_SQL;
 // Derive completion from saved data so profile edits and transcript deletion stay in sync. Since 2026-10-24 the
 // specialty and the profile survey count too (the student portal asks for both before its AI features); the interests
 // (technologies and free-time interests) are part of the survey.
@@ -77,6 +79,13 @@ const summaryColumns = `u.id, COALESCE(p.full_name, u.display_name) AS name, u.e
   p.student_code AS "studentCode", p.cohort_year AS "cohortYear",
   ${profileStatus} AS "profileStatus"`;
 const studentScope = `(COALESCE(u.role_override, u.role) = 'student' OR u.is_student)`;
+/**
+ * A cố vấn học tập (role advisor, 2026-11-03) sees only the students of the classes the Khoa gave them; the parameter is
+ * the advisor's id, NULL for every other role. Classes compare upper case without spaces, as ad_advisor_classes stores them.
+ */
+const advisedScope = (parameter: string) => `(${parameter}::uuid IS NULL OR ${CLASS_OF}
+  IN (SELECT class_name FROM ad_advisor_classes WHERE advisor_user_id = ${parameter}::uuid))`;
+const advisorOf = (actor: AuthenticatedUser) => (actor.role === "advisor" ? actor.userId : null);
 // The columns the list sorts by (web StudentProfiles.tsx); Hồ sơ goes from complete to missing, Tài khoản from active to locked.
 const studentSort = {
   name: byGivenName("name"), studentCode: byText('"studentCode"'), cohortCode: byText('"cohortCode"'), className: byText('"className"'),
@@ -86,11 +95,11 @@ const studentOrder: OwnOrder = [["name", "ASC"], ["id", "ASC"]];
 
 export class PostgresStudentProfileRepository implements StudentProfileRepository {
   constructor(private readonly pool: DatabasePool) {}
-  async list(_actor: AuthenticatedUser, query: StudentProfileQuery): Promise<StudentProfilePage> {
+  async list(actor: AuthenticatedUser, query: StudentProfileQuery): Promise<StudentProfilePage> {
     const order = orderBy(studentSort, studentOrder, query.sort, query.dir);
     const result = await this.pool.query<StudentProfilePage>(`WITH students AS (
       SELECT ${summaryColumns}, concat_ws(' ', u.display_name, p.full_name, u.email, u.username, p.student_code, p.cohort_code, p.class_name, p.career_goal) AS search_text
-      FROM users u LEFT JOIN student_profiles p ON p.user_id = u.id WHERE ${studentScope}
+      FROM users u LEFT JOIN student_profiles p ON p.user_id = u.id WHERE ${studentScope} AND ${advisedScope("$8")}
     ), filtered AS (
       SELECT id, name, email, "isActive", "studentCode", "cohortCode", "className", "cohortYear", "profileStatus" FROM students
       WHERE ($1 = '' OR strpos(lower(search_text), lower($1)) > 0)
@@ -104,7 +113,8 @@ export class PostgresStudentProfileRepository implements StudentProfileRepositor
       (SELECT count(*)::int FROM filtered) AS total,
       COALESCE((SELECT json_agg(year ORDER BY year DESC) FROM (SELECT DISTINCT "cohortYear" AS year FROM students WHERE "cohortYear" IS NOT NULL) years), '[]'::json) AS "cohortYears",
       COALESCE((SELECT json_agg(code ORDER BY code DESC) FROM (SELECT DISTINCT "cohortCode" AS code FROM students WHERE "cohortCode" IS NOT NULL) codes), '[]'::json) AS "cohortCodes"`,
-    [query.q, query.cohortYear ?? null, query.cohortCode ?? null, query.active ?? null, query.profileStatus ?? null, query.pageSize, (query.page - 1) * query.pageSize]);
+    [query.q, query.cohortYear ?? null, query.cohortCode ?? null, query.active ?? null, query.profileStatus ?? null, query.pageSize, (query.page - 1) * query.pageSize,
+      advisorOf(actor)]);
     return result.rows[0] ?? { items: [], total: 0, cohortYears: [], cohortCodes: [] };
   }
   async detail(_actor: AuthenticatedUser, id: string): Promise<StudentProfileDetail> {
@@ -115,7 +125,7 @@ export class PostgresStudentProfileRepository implements StudentProfileRepositor
       EXISTS (SELECT 1 FROM student_transcripts t WHERE t.user_id = u.id) AS "hasTranscript", u.created_at AS "accountCreatedAt", u.first_login_at AS "firstLoginAt",
       u.last_login_at AS "lastLoginAt", p.created_at AS "profileCreatedAt", p.updated_at AS "profileUpdatedAt"
       FROM users u LEFT JOIN student_profiles p ON p.user_id = u.id
-      WHERE (${studentScope} OR u.id = $2::uuid) AND u.id = $1`, [id, _actor.userId === id ? id : null]);
+      WHERE (${studentScope} OR u.id = $2::uuid) AND u.id = $1 AND ${advisedScope("$3")}`, [id, _actor.userId === id ? id : null, advisorOf(_actor)]);
     if (!result.rows[0]) throw new AccountError("student_not_found", 404);
     return result.rows[0];
   }
@@ -123,7 +133,7 @@ export class PostgresStudentProfileRepository implements StudentProfileRepositor
     const result = await this.pool.query<{ updatedAt: string | null; data: TranscriptData | null; studentCode: string | null; name: string | null }>(`SELECT
       t.updated_at AS "updatedAt", t.parsed_data AS data, p.student_code AS "studentCode", COALESCE(p.full_name, u.display_name) AS name
       FROM users u LEFT JOIN student_transcripts t ON t.user_id = u.id LEFT JOIN student_profiles p ON p.user_id = u.id
-      WHERE u.id = $1 AND ${studentScope}`, [id]);
+      WHERE u.id = $1 AND ${studentScope} AND ${advisedScope("$2")}`, [id, advisorOf(actor)]);
     const row = result.rows[0];
     if (!row) throw new AccountError("student_not_found", 404);
     if (!row.updatedAt || !row.data) return { transcript: null };

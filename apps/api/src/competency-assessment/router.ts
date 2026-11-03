@@ -4,7 +4,8 @@ import { z } from "zod";
 import type { AuthenticatedUser } from "../auth/types.js";
 import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
-import { activeConsentVersion, isValidConsent, recordConsent, TRANSCRIPT_POLICY_VERSION, withdrawConsent } from "../student/consent.js";
+import { actingAdvisor, studentUser } from "../advisors/access.js";
+import { activeConsentVersion, consentWithdrawn, isValidConsent, recordConsent, TRANSCRIPT_POLICY_VERSION, withdrawConsent } from "../student/consent.js";
 import { calculateAssessment } from "./calculate.js";
 import { AssessmentError, loadAssessmentInputs } from "./inputs.js";
 import {
@@ -74,7 +75,7 @@ export function createCompetencyAssessmentRouter(
     res.setHeader("Cache-Control", "no-store");
     if (!pool) { res.status(503).json({ error: "database_required" }); return; }
     if (!["GET", "HEAD"].includes(req.method) && req.get("origin") !== webOrigin) { res.status(403).json({ error: "invalid_origin" }); return; }
-    const user = req.session.user!;
+    const user = studentUser(req);
     const active = await pool.query("SELECT id FROM users WHERE id=$1 AND entra_tenant_id=$2 AND is_active", [user.userId, user.tenantId]);
     if (!active.rowCount) { res.status(403).json({ error: "account_unavailable" }); return; }
     next();
@@ -82,12 +83,17 @@ export function createCompetencyAssessmentRouter(
 
   router.post("/", async (req, res) => {
     // Consent given with this request (the dialog sends X-Consent-Policy-Version), or an active one that still counts
-    // (isValidConsent: policy 2026-10-26 asks no one again).
-    const consentVersion = req.get("x-consent-policy-version");
+    // (isValidConsent: policy 2026-10-26 asks no one again). A cố vấn học tập running it for a student of their class
+    // needs neither and records none in the student's name (policy 2026-11-03).
+    const advisor = actingAdvisor(req);
+    const consentVersion = advisor ? undefined : req.get("x-consent-policy-version");
     if (consentVersion && consentVersion !== TRANSCRIPT_POLICY_VERSION) { res.status(409).json({ error: "policy_outdated" }); return; }
     if (!z.object({}).strict().safeParse(req.body ?? {}).success) { res.status(400).json({ error: "invalid_input" }); return; }
-    const user = req.session.user!;
-    if (!consentVersion && !isValidConsent(await activeConsentVersion(pool!, user.userId, "competency_assessment"))) { res.status(400).json({ error: "consent_required" }); return; }
+    const user = studentUser(req);
+    if (!advisor && !consentVersion && !isValidConsent(await activeConsentVersion(pool!, user.userId, "competency_assessment"))) { res.status(400).json({ error: "consent_required" }); return; }
+    // A student who deleted the results ("Xóa kết quả đánh giá" withdraws the consent) keeps that choice: Tổng quan and
+    // Định hướng nghề nghiệp ignore results after a withdrawal, so an advisor's run would only be hidden.
+    if (advisor && await consentWithdrawn(pool!, user.userId, "competency_assessment")) { res.status(409).json({ error: "assessment_withdrawn" }); return; }
     // Cheap pre-check so a repeated click does not compute a snapshot; the write transaction re-checks.
     if (await withinCooldown(pool!, user.userId)) { res.status(429).json({ error: "assessment_too_frequent" }); return; }
     const inputs = await loadInputs(pool!, user.userId, options.promptVersion ? { promptVersion: options.promptVersion } : {});
@@ -99,7 +105,8 @@ export function createCompetencyAssessmentRouter(
       if (await withinCooldown(client, user.userId)) throw new AssessmentError("assessment_too_frequent", 429);
       // A consent withdrawn since the check above stops here.
       if (consentVersion) await recordConsent(client, user.userId, "competency_assessment");
-      else if (!isValidConsent(await activeConsentVersion(client, user.userId, "competency_assessment"))) throw new AssessmentError("consent_required", 400);
+      else if (!advisor && !isValidConsent(await activeConsentVersion(client, user.userId, "competency_assessment"))) throw new AssessmentError("consent_required", 400);
+      else if (advisor && await consentWithdrawn(client, user.userId, "competency_assessment")) throw new AssessmentError("assessment_withdrawn", 409);
       const id = await insertAssessment(client, { userId: user.userId, transcriptVersion: inputs.transcript.version, result });
       if (aiEnabled) await aiQueue!.enqueue(client, { assessmentId: id, userId: user.userId, result });
       await pruneAssessments(client, user.userId);
@@ -111,14 +118,14 @@ export function createCompetencyAssessmentRouter(
   // consentVersion: the active 'competency_assessment' consent of THIS student, so the page
   // asks again on a shared browser, after a withdrawal elsewhere, or after a policy change.
   router.get("/latest", async (req, res) => {
-    const userId = req.session.user!.userId;
+    const userId = studentUser(req).userId;
     const consentVersion = await activeConsentVersion(pool!, userId, "competency_assessment");
     const assessment = await latestAssessment(pool!, userId);
     res.json({ assessment, aiEnabled, workerOnline: await workerOnline(), consentVersion });
   });
 
   router.get("/latest/status", async (req, res) => {
-    const status = await latestAssessmentStatus(pool!, req.session.user!.userId);
+    const status = await latestAssessmentStatus(pool!, studentUser(req).userId);
     res.json({ ...status, workerOnline: await workerOnline() });
   });
 
@@ -126,7 +133,7 @@ export function createCompetencyAssessmentRouter(
     if (!aiEnabled) { res.status(409).json({ error: "ai_disabled" }); return; }
     const id = assessmentId.safeParse(req.params.id);
     if (!id.success) { res.status(404).json({ error: "assessment_not_found" }); return; }
-    const user = req.session.user!;
+    const user = studentUser(req);
     const outcome = await inTransaction(pool!, async (client) => {
       await lockStudent(client, user);
       const found = await client.query<{ id: string; ai_status: AiStatus; computed: AssessmentResult; latest: boolean }>(
@@ -146,7 +153,7 @@ export function createCompetencyAssessmentRouter(
   router.delete("/:id/ai", async (req, res) => {
     const id = assessmentId.safeParse(req.params.id);
     if (!id.success) { res.status(404).json({ error: "assessment_not_found" }); return; }
-    const user = req.session.user!;
+    const user = studentUser(req);
     const cancelled = await inTransaction(pool!, async (client) => {
       await lockStudent(client, user);
       const found = await client.query("SELECT id FROM stu_comp_assessments WHERE id=$1 AND user_id=$2", [id.data, user.userId]);
@@ -159,7 +166,7 @@ export function createCompetencyAssessmentRouter(
   // Withdraw consent: removes every result and AI job of the student (spec §3).
   router.delete("/", async (req, res) => {
     if (!z.object({ confirmed: z.literal(true) }).strict().safeParse(req.body).success) { res.status(400).json({ error: "invalid_input" }); return; }
-    const user = req.session.user!;
+    const user = studentUser(req);
     await inTransaction(pool!, async (client) => {
       await lockStudent(client, user);
       await deleteCompetencyData(client, user.userId);

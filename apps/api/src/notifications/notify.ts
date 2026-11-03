@@ -150,6 +150,19 @@ export const catalogUpdated = (what: string): NotificationInput => ({
   link: "#competency",
 });
 
+/**
+ * What a cố vấn học tập did in the student's page (AD-AST-07, 08; policy 2026-11-03): one notification per advisor, action
+ * and day (source key), so a busy afternoon of the advisor does not fill the bell.
+ */
+export function advisorAction(advisorName: string, did: string, link: string, day: string, key: string): NotificationInput {
+  const name = advisorName.trim() || "Cố vấn học tập của lớp bạn";
+  return {
+    type: "khoa", kind: "advisor_action", title: `Cố vấn học tập ${did} thay bạn`,
+    body: `${name} (cố vấn học tập của lớp bạn) ${did} thay bạn trên EduPath AI. Bạn xem lại kết quả; nếu không muốn giữ, bạn vẫn xóa được như thường.`,
+    link, sourceKey: `advisor:${key}:${day}`,
+  };
+}
+
 /* ------------------------------------------------------------------------ */
 /* Warnings of the overview (STU-PROG-03) */
 

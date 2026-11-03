@@ -12,6 +12,7 @@ import { AssessmentError, readAssessmentInputs } from "../competency-assessment/
 import type { AssessmentInputs, AssessmentResult, CareerInput, CareerRequirementResult, CareerResult, FitCode, GapStatus } from "../competency-assessment/types.js";
 import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
+import { studentUser } from "../advisors/access.js";
 import { activeConsentVersion, consentWithdrawn, isValidConsent } from "../student/consent.js";
 import { readSurvey, type StudentSurvey } from "../student/survey.js";
 import { interestMatch, type InterestMatch } from "./interests.js";
@@ -138,7 +139,7 @@ export function createCareerGuidanceRouter(pool: DatabasePool | undefined) {
   router.use(async (req, res, next) => {
     res.setHeader("Cache-Control", "no-store");
     if (!pool) { res.status(503).json({ error: "database_required" }); return; }
-    const user = req.session.user!;
+    const user = studentUser(req);
     const active = await pool.query("SELECT id FROM users WHERE id=$1 AND entra_tenant_id=$2 AND is_active", [user.userId, user.tenantId]);
     if (!active.rowCount) { res.status(403).json({ error: "account_unavailable" }); return; }
     next();
@@ -146,7 +147,7 @@ export function createCareerGuidanceRouter(pool: DatabasePool | undefined) {
 
   router.get("/", async (req, res) => {
     z.object({}).strict().parse(req.query);
-    const userId = req.session.user!.userId;
+    const userId = studentUser(req).userId;
     const client = await pool!.connect();
     try {
       await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");

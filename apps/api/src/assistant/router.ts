@@ -1,13 +1,14 @@
 // Student API of Trợ lý AI, mounted at /api/student/assistant (contract: apps/web/src/assistant-types.ts). No consent
 // header: an answer reads results the student already agreed to (assessment, roadmap; the survey only under its consent)
 // and the conversation is the student's own, deleted with "Xóa cuộc trò chuyện" or after 90 days without a message.
-import { Router, type ErrorRequestHandler } from "express";
+import { Router, type ErrorRequestHandler, type Request } from "express";
 import type { PoolClient } from "pg";
 import { z } from "zod";
 import { WORKER_ONLINE_SECONDS } from "../competency-assessment/ai/queue.js";
 import { ASSISTANT_CHAT_KIND } from "../competency-assessment/ai/worker-protocol.js";
 import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
+import { actingAdvisor, studentUser } from "../advisors/access.js";
 import {
   AssistantError, askQuestion, createAssistantExpiry, deleteThread, listThreads, presentMessage, presentThread, readMessage, readThread,
   retryAnswer, setFeedback,
@@ -22,6 +23,8 @@ type AssistantRouterOptions = {
 };
 
 const id = z.guid();
+/** The cố vấn học tập asking in the student's account (advisors/access.ts): they see only the conversations they started. */
+const advisorOf = (req: Request) => actingAdvisor(req)?.userId ?? null;
 const emptyObject = z.object({}).strict();
 /** The page checks the length too; the server counts characters again after trimming (askQuestion). */
 const questionBody = z.object({ content: z.string().max(MAX_QUESTION_CHARS * 4) }).strict();
@@ -60,7 +63,7 @@ export function createAssistantRouter(pool: DatabasePool | undefined, webOrigin:
     res.setHeader("Cache-Control", "no-store");
     if (!pool) { res.status(503).json({ error: "database_required" }); return; }
     if (!["GET", "HEAD"].includes(req.method) && req.get("origin") !== webOrigin) { res.status(403).json({ error: "invalid_origin" }); return; }
-    const user = req.session.user!;
+    const user = studentUser(req);
     const active = await pool.query("SELECT id FROM users WHERE id=$1 AND entra_tenant_id=$2 AND is_active", [user.userId, user.tenantId]);
     if (!active.rowCount) { res.status(403).json({ error: "account_unavailable" }); return; }
     next();
@@ -69,8 +72,8 @@ export function createAssistantRouter(pool: DatabasePool | undefined, webOrigin:
   router.get("/threads", async (req, res) => {
     emptyObject.parse(req.query);
     await expireQuietly();
-    const userId = req.session.user!.userId;
-    const threads = await listThreads(pool!, userId);
+    const userId = studentUser(req).userId;
+    const threads = await listThreads(pool!, userId, advisorOf(req));
     // The questions shown above the input: setting up first (import the transcript…), then the student's own results.
     const suggestions = suggestedQuestions(await readReadiness(pool!, userId));
     res.json({ threads: threads.map(presentThread), workerOnline: await workerOnline(), suggestions });
@@ -82,13 +85,13 @@ export function createAssistantRouter(pool: DatabasePool | undefined, webOrigin:
   router.post("/threads", async (req, res) => {
     const body = questionBody.parse(req.body ?? {});
     if (!enabled) { res.status(409).json({ error: "ai_disabled" }); return; }
-    const asked = await inTransaction(pool!, (client) => askQuestion(client, req.session.user!.userId, { threadId: null, content: body.content }));
+    const asked = await inTransaction(pool!, (client) => askQuestion(client, studentUser(req).userId, { threadId: null, content: body.content, createdBy: advisorOf(req) }));
     wakeWorker(asked.messages);
     res.status(201).json({ thread: presentThread(asked.thread), messages: asked.messages.map(presentMessage) });
   });
 
   router.get("/threads/:id", async (req, res) => {
-    const found = await readThread(pool!, req.session.user!.userId, id.parse(req.params.id));
+    const found = await readThread(pool!, studentUser(req).userId, id.parse(req.params.id), advisorOf(req));
     res.json({ thread: presentThread(found.thread), messages: found.messages.map(presentMessage) });
   });
 
@@ -96,31 +99,31 @@ export function createAssistantRouter(pool: DatabasePool | undefined, webOrigin:
     const threadId = id.parse(req.params.id);
     const body = questionBody.parse(req.body ?? {});
     if (!enabled) { res.status(409).json({ error: "ai_disabled" }); return; }
-    const asked = await inTransaction(pool!, (client) => askQuestion(client, req.session.user!.userId, { threadId, content: body.content }));
+    const asked = await inTransaction(pool!, (client) => askQuestion(client, studentUser(req).userId, { threadId, content: body.content, createdBy: advisorOf(req) }));
     wakeWorker(asked.messages);
     res.status(201).json({ thread: presentThread(asked.thread), messages: asked.messages.map(presentMessage) });
   });
 
   router.delete("/threads/:id", async (req, res) => {
-    await deleteThread(pool!, req.session.user!.userId, id.parse(req.params.id));
+    await deleteThread(pool!, studentUser(req).userId, id.parse(req.params.id));
     res.status(204).end();
   });
 
   // Polled about once a second while an answer is queued or being written.
   router.get("/messages/:id", async (req, res) => {
     await expireQuietly();
-    res.json({ message: presentMessage(await readMessage(pool!, req.session.user!.userId, id.parse(req.params.id))) });
+    res.json({ message: presentMessage(await readMessage(pool!, studentUser(req).userId, id.parse(req.params.id), advisorOf(req))) });
   });
 
   router.post("/messages/:id/feedback", async (req, res) => {
     const body = feedbackBody.parse(req.body ?? {});
-    res.json({ message: presentMessage(await setFeedback(pool!, req.session.user!.userId, id.parse(req.params.id), body.value)) });
+    res.json({ message: presentMessage(await setFeedback(pool!, studentUser(req).userId, id.parse(req.params.id), body.value, advisorOf(req))) });
   });
 
   router.post("/messages/:id/retry", async (req, res) => {
     emptyObject.parse(req.body ?? {});
     if (!enabled) { res.status(409).json({ error: "ai_disabled" }); return; }
-    const message = await inTransaction(pool!, (client) => retryAnswer(client, req.session.user!.userId, id.parse(req.params.id)));
+    const message = await inTransaction(pool!, (client) => retryAnswer(client, studentUser(req).userId, id.parse(req.params.id), advisorOf(req)));
     notifyAssistantWork();
     res.json({ message: presentMessage(message) });
   });

@@ -4,6 +4,7 @@ import { Router, type ErrorRequestHandler } from "express";
 import { z } from "zod";
 import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
+import { studentUser } from "../advisors/access.js";
 import { notifyWarnings } from "../notifications/notify.js";
 import { readOverview } from "./overview.js";
 import type { OverviewResponse } from "./types.js";
@@ -42,7 +43,7 @@ export function createOverviewRouter(pool: DatabasePool | undefined, options: { 
   router.use(async (req, res, next) => {
     res.setHeader("Cache-Control", "no-store");
     if (!pool) { res.status(503).json({ error: "database_required" }); return; }
-    const user = req.session.user!;
+    const user = studentUser(req);
     const active = await pool.query("SELECT id FROM users WHERE id=$1 AND entra_tenant_id=$2 AND is_active", [user.userId, user.tenantId]);
     if (!active.rowCount) { res.status(403).json({ error: "account_unavailable" }); return; }
     next();
@@ -53,10 +54,10 @@ export function createOverviewRouter(pool: DatabasePool | undefined, options: { 
     const client = await pool!.connect();
     try {
       await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
-      const overview = await readOverview(client, req.session.user!.userId, now());
+      const overview = await readOverview(client, studentUser(req).userId, now());
       await client.query("COMMIT");
       res.json(overview);
-      void refreshWarningNotifications(pool!, req.session.user!.userId, now(), overview);
+      void refreshWarningNotifications(pool!, studentUser(req).userId, now(), overview);
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       throw error;

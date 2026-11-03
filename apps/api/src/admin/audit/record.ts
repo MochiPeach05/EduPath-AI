@@ -24,7 +24,7 @@ export type AuditEntryInput = {
 /** Minimal query surface, so a pool or a transaction client both fit. */
 export type AuditDb = { query: (text: string, values?: unknown[]) => Promise<unknown> };
 
-export const AUDIT_KINDS = ["account", "training", "career", "competency", "notify", "report", "access", "other"] as const satisfies readonly AuditKind[];
+export const AUDIT_KINDS = ["account", "training", "career", "competency", "notify", "report", "access", "advisor", "other"] as const satisfies readonly AuditKind[];
 
 /** The actor of a session user; the name falls back to the email or username, so a row always names someone. */
 export function auditActorOf(user: Pick<AuthenticatedUser, "userId" | "name" | "role"> & Partial<Pick<AuthenticatedUser, "email" | "username">>): AuditActor {

@@ -18,6 +18,7 @@ import type { GraduationEvaluation } from "./student-graduation-types";
 import "./student-curriculum.css";
 import "./student-graduation.css";
 import "./student-records.css";
+import { isAdvisorView } from "./advisor-view";
 import "./student-competency.css";
 
 // Two student pages share this module and one stored assessment:
@@ -816,7 +817,7 @@ function AiPanel({ assessment, aiEnabled, workerOnline, busy, onRegenerate, onCa
     </div>}
     {(canRegenerate(ai.status, aiEnabled) || pending) && <div className="scomp-actions">
       {canRegenerate(ai.status, aiEnabled) && <button type="button" className="sw-outline" disabled={busy} onClick={onRegenerate}><Icon name="refresh" />{ai.status === "disabled" ? "Tạo nhận xét" : "Tạo lại nhận xét"}</button>}
-      {pending && <button type="button" className="sr-secondary" disabled={busy} onClick={onCancel}>Hủy tạo nhận xét</button>}
+      {pending && !isAdvisorView() && <button type="button" className="sr-secondary" disabled={busy} onClick={onCancel}>Hủy tạo nhận xét</button>}
     </div>}
     <p className="scomp-ai-footer">{ai.status === "completed" ? `${modelLabel(ai.model)}${aiReasoned(result.meta.promptVersion) ? " có suy luận" : ""}, chạy cục bộ · tạo lúc ${formatDateTime(ai.completedAt)}. ` : "Mô hình Gemma 4 E4B chạy cục bộ trên máy của nhóm phát triển, suy luận trước khi viết. "}Nhận xét do AI viết dựa trên kết quả đã tính, có thể chưa chính xác — hãy đối chiếu số liệu và trao đổi với cố vấn học tập.</p>
   </section>;
@@ -953,7 +954,10 @@ export default function StudentCompetency({ profile, view = "competency", notice
     } catch (e) {
       const failure = e as ApiError;
       if (isPreconditionError(failure.code)) { setBlocked(failure.code); setAnnouncement(PRECONDITION_COPY[failure.code].title); }
-      else if (failure.code === "consent_required") {
+      else if (failure.code === "consent_required" && isAdvisorView()) {
+        // A cố vấn học tập never consents for the student; the API runs it without consent (policy 2026-11-03).
+        setError("Chưa chạy được Đánh giá năng lực thay sinh viên. Vui lòng thử lại sau."); setAnnouncement("");
+      } else if (failure.code === "consent_required") {
         // The server holds no consent for this student: ask instead of failing.
         setCurrent((value) => value ? { ...value, consentVersion: null } : value);
         setAnnouncement(""); setConsentOpen(true);
@@ -970,7 +974,8 @@ export default function StudentCompetency({ profile, view = "competency", notice
   // (from 2026-10-25) is not asked again.
   const start = () => {
     if (missing.length) { setAnnouncement(""); setError(missingRequirementsMessage(missing)); return; }
-    if (isValidConsent(data?.consentVersion)) void run(false); else setConsentOpen(true);
+    // A cố vấn học tập runs it for the student without the consent dialog (advisor-view.ts; the API records no consent).
+    if (isAdvisorView() || isValidConsent(data?.consentVersion)) void run(false); else setConsentOpen(true);
   };
   const confirmConsent = () => { void run(true); };
   const regenerate = async () => {
@@ -1021,7 +1026,7 @@ export default function StudentCompetency({ profile, view = "competency", notice
         </div>
         <div className="scomp-header-actions">
           <button type="button" className="sw-primary" disabled={busy !== null || live.loading} onClick={start}><Icon name={assessment ? "refresh" : "chart"} />{busy === "run" ? "Đang đánh giá…" : assessment ? "Đánh giá lại" : "Đánh giá năng lực"}</button>
-          {assessment && view === "competency" && <button type="button" className="sr-secondary sr-danger" disabled={busy !== null} onClick={() => { setDeleteError(""); setDeleteOpen(true); }}><Icon name="trash" />Xóa kết quả đánh giá</button>}
+          {assessment && view === "competency" && !isAdvisorView() && <button type="button" className="sr-secondary sr-danger" disabled={busy !== null} onClick={() => { setDeleteError(""); setDeleteOpen(true); }}><Icon name="trash" />Xóa kết quả đánh giá</button>}
         </div>
       </div>
       <Checklist hasTranscript={hasTranscript} transcriptFailed={!transcript.loading && Boolean(transcript.error)} profile={profile} suggestion={result?.specialtySuggestion?.text ?? null} />

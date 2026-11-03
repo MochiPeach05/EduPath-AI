@@ -1,6 +1,15 @@
-export type AppRole = "admin" | "student" | "faculty_board" | "department_head" | "lecturer";
-export const adminRoles: readonly AppRole[] = ["admin", "faculty_board", "department_head", "lecturer"];
+export type AppRole = "admin" | "student" | "faculty_board" | "department_head" | "lecturer" | "advisor";
+/** Every role, in the order lists show them (Quản trị viên first, Sinh viên last). */
+export const appRoles = ["admin", "faculty_board", "department_head", "lecturer", "advisor", "student"] as const satisfies readonly AppRole[];
+export const adminRoles: readonly AppRole[] = ["admin", "faculty_board", "department_head", "lecturer", "advisor"];
 export const canAccessAdmin = (role: AppRole) => adminRoles.includes(role);
+/**
+ * Roles that may change data in the admin portal. Cố vấn học tập (advisor, migration 058) only reads it: the function list
+ * gives the CVHT the "QTV & CVHT" rows (views) and leaves every change to the Quản trị viên rows.
+ */
+export const canManageAdmin = (role: AppRole) => canAccessAdmin(role) && role !== "advisor";
+/** Who manages the advisors and their classes (AD-ADV-01…03): the admins and Ban chủ nhiệm khoa. */
+export const canManageAdvisors = (role: AppRole) => role === "admin" || role === "faculty_board";
 
 export interface AuthTransaction {
   state: string;

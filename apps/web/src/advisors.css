@@ -1,0 +1,108 @@
+/* Cố vấn học tập in the admin portal (AdvisorsManagement.tsx, AdvisorPortal.tsx; 2026-11-03): built on the admin catalog
+   styles (curricula.css, careers.css); only what those lack is here. Text stays at 12px or more. */
+
+.av-workspace { gap: 20px; }
+.av-notice { margin: 0; }
+.av-heading-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.av-heading-actions :is(.am-primary, .am-outline) { display: inline-flex; align-items: center; gap: 8px; }
+.av-heading-actions svg { width: 20px; height: 20px; }
+.av-num { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* The advisors' list: phones scroll the table sideways (.cm-table-scroll) instead of squeezing the columns. */
+.av-table { min-width: 860px; }
+.av-table td { vertical-align: top; }
+.av-table td:nth-child(2) { min-width: 200px; }
+.av-state { font-size: 12px; }
+.av-state-pending { color: #77510b; }
+
+/* Classes as small chips, the rest as "+n". */
+.av-classes { display: inline-flex; flex-wrap: wrap; gap: 4px; max-width: 280px; }
+.av-class,
+.av-more {
+  display: inline-block; padding: 2px 8px; border-radius: 999px; background: #eef0f4; color: #3f4a5a;
+  font-size: 12px; font-weight: 650; font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.av-more { background: #fbf0f3; color: var(--cm-accent); }
+
+/* Detail dialog */
+.av-detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 20px; margin: 0 0 20px; }
+.av-detail-grid dt { color: var(--cm-muted); font-size: 12.5px; }
+.av-detail-grid dd { margin: 4px 0 0; font-weight: 600; overflow-wrap: anywhere; }
+.av-detail-grid dd small { display: block; margin-top: 4px; color: var(--cm-muted); font-size: 12px; font-weight: 400; }
+.av-detail h3 { margin: 8px 0 10px; font-size: 15px; }
+.av-class-table { min-width: 520px; }
+.av-class-table td { padding-block: 12px; }
+
+/* Add / edit */
+.av-form-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.av-split { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0; color: var(--cm-muted); font-size: 13px; }
+.av-split .av-classes { max-width: none; }
+
+/* Import */
+.av-import .cm-help { margin: 8px 0 16px; }
+.av-template { display: inline-flex; align-items: center; gap: 4px; color: var(--cm-accent); font-weight: 650; white-space: nowrap; }
+.av-template svg { width: 16px; height: 16px; }
+.av-preview { display: grid; gap: 12px; margin-top: 16px; }
+.av-preview h3 { margin: 0; font-size: 15px; overflow-wrap: anywhere; }
+.av-summary { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--cm-soft); font-size: 13px; font-weight: 600; }
+.av-preview-table { min-width: 720px; }
+.av-preview-table td { vertical-align: top; padding-block: 14px; }
+.av-preview-table .av-classes { max-width: 260px; }
+.av-row-error td { background: #fdf3f4; }
+.av-status { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.av-status-add { background: #e6f2ec; color: #1f5f49; }
+.av-status-update { background: #e8effa; color: #24518f; }
+.av-status-unchanged { background: #eef0f4; color: var(--cm-muted); }
+.av-status-error { background: #fbe9eb; color: #a3243a; }
+.av-notes { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 12.5px; line-height: 1.5; }
+.av-note-error { color: #a3243a; font-weight: 600; }
+.av-note-change { color: var(--cm-ink); }
+.av-note-warn { color: var(--cm-warn); }
+
+/* Lớp phụ trách */
+.av-classes-table { min-width: 860px; }
+.av-classes-table td { padding-block: 14px; }
+.av-classes-table :is(.am-outline) { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.av-classes-table svg { width: 18px; height: 18px; }
+.av-row-current td { background: #fbf0f3; }
+.av-students { scroll-margin-top: calc(var(--am-header-height, 80px) + 16px); }
+.av-students-table { min-width: 1080px; }
+.av-students-table td { vertical-align: top; padding-block: 14px; }
+.av-students-table td:nth-child(2) { min-width: 180px; }
+.av-open { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.av-open svg { width: 18px; height: 18px; }
+.av-open-error,
+.av-open-blocked { margin: 16px 24px 0; }
+.av-open-blocked a { color: var(--cm-accent); font-weight: 700; }
+.av-step { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 650; white-space: nowrap; }
+.av-step svg { width: 14px; height: 14px; }
+.av-step-done { background: #e6f2ec; color: #1f5f49; }
+.av-step-todo { background: #eef0f4; color: var(--cm-muted); }
+
+/* Quyền cố vấn */
+.av-lead { margin: 0; color: var(--cm-muted); font-size: 14px; }
+.av-perm-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; align-items: start; }
+.av-perm,
+.av-perm-notes { padding: 20px 22px; }
+.av-perm h2,
+.av-perm-notes h2 { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; font-size: 16px; }
+.av-perm h2 svg,
+.av-perm-notes h2 svg { width: 20px; height: 20px; flex: none; }
+.av-perm ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 12px; }
+.av-perm li { display: grid; gap: 2px; font-size: 13px; line-height: 1.55; }
+.av-perm li strong { font-size: 13.5px; }
+.av-perm li span { color: var(--cm-muted); }
+.av-perm-view h2 { color: #24518f; }
+.av-perm-act h2 { color: #1f5f49; }
+.av-perm-never h2 { color: #a3243a; }
+.av-perm-notes ul { margin: 0; padding-left: 20px; display: grid; gap: 6px; font-size: 13px; line-height: 1.55; }
+
+@media (max-width: 1100px) {
+  .av-perm-grid { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 640px) {
+  .av-detail-grid,
+  .av-form-row { grid-template-columns: minmax(0, 1fr); }
+  .av-open-error,
+  .av-open-blocked { margin-inline: 16px; }
+}

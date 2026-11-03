@@ -123,6 +123,7 @@ describe("audit route map coverage", () => {
     ["../../careers/requirements.ts", "/careers/requirements"], ["../../careers/skills.ts", "/careers/skills"],
     ["../../competencies/router.ts", "/competencies"], ["../../competencies/ai/router.ts", "/competencies/ai"],
     ["../../notifications/admin-router.ts", "/announcements"],
+    ["../../advisors/router.ts", "/advisors"], ["../../advisors/portal-router.ts", "/advisor-portal"],
   ];
   const found = routers.flatMap(([file, prefix]) => {
     const source = readFileSync(new URL(file, import.meta.url), "utf8");

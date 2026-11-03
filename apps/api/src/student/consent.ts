@@ -13,10 +13,12 @@ import type { DatabasePool } from "../db/pool.js";
 // AI also reads the transcript's scores (the printed GPA, credits and courses not passed; every row for a grade question).
 // 2026-10-31 (user: "hiện đầy đủ", "Triển khai đi"): the Khoa's admin reports show each student's progress, competency
 // results and Lộ trình AI courses by name, exportable to Excel; transcript views and exports are logged.
+// 2026-11-03 (user: "Cập nhật luôn, không hỏi lại"): the cố vấn học tập of the student's class sees the student's pages and
+// may import the transcript, run the competency assessment and the AI roadmap, ask Trợ lý AI for them (advisors/access.ts).
 // Must equal `policyVersion` in apps/web/src/public-information.ts (checked by consent.test.ts).
-export const TRANSCRIPT_POLICY_VERSION = "2026-10-31";
+export const TRANSCRIPT_POLICY_VERSION = "2026-11-03";
 /**
- * The oldest policy version whose consents still count, so 2026-10-26, 2026-10-28, 2026-10-29 and 2026-10-31 ask no one again (user,
+ * The oldest policy version whose consents still count, so 2026-10-26, 2026-10-28, 2026-10-29, 2026-10-31 and 2026-11-03 ask no one again (user,
  * 2026-10-26: "không để lại ghi chú gì hết"); new consents are recorded under TRANSCRIPT_POLICY_VERSION. Must equal
  * `consentValidSince` in apps/web/src/public-information.ts (checked by consent.test.ts).
  */

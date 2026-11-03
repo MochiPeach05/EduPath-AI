@@ -4,6 +4,7 @@ import type { PoolClient } from "pg";
 import { z } from "zod";
 import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
+import { studentUser } from "../advisors/access.js";
 import { readStudyPlanFacts, type StudyPlanFacts } from "./context.js";
 import { studyPlanSchema, type StudyPlanData } from "./model.js";
 import { prefillPlan, readAiProposal } from "./prefill.js";
@@ -66,7 +67,7 @@ export function createStudyPlanRouter(pool: DatabasePool | undefined, webOrigin:
     res.setHeader("Cache-Control", "no-store");
     if (!pool) { res.status(503).json({ error: "database_required" }); return; }
     if (!["GET", "HEAD"].includes(req.method) && req.get("origin") !== webOrigin) { res.status(403).json({ error: "invalid_origin" }); return; }
-    const user = req.session.user!;
+    const user = studentUser(req);
     const active = await pool.query("SELECT id FROM users WHERE id=$1 AND entra_tenant_id=$2 AND is_active", [user.userId, user.tenantId]);
     if (!active.rowCount) { res.status(403).json({ error: "account_unavailable" }); return; }
     next();
@@ -74,7 +75,7 @@ export function createStudyPlanRouter(pool: DatabasePool | undefined, webOrigin:
   router.use(express.json({ limit: "256kb" }));
 
   router.get("/", async (req, res) => {
-    const userId = req.session.user!.userId;
+    const userId = studentUser(req).userId;
     res.json(await inTransaction(pool!, true, async (client) => view(client, userId, await readStudyPlanFacts(client, userId, now()), await readSaved(client, userId))));
   });
 
@@ -82,7 +83,7 @@ export function createStudyPlanRouter(pool: DatabasePool | undefined, webOrigin:
   router.put("/", async (req, res) => {
     const input = z.object({ version: z.uuid().nullable(), data: studyPlanSchema }).strict().safeParse(req.body);
     if (!input.success) { res.status(400).json({ error: "invalid_plan" }); return; }
-    const userId = req.session.user!.userId;
+    const userId = studentUser(req).userId;
     res.json(await inTransaction(pool!, false, async (client) => {
       await client.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [userId]);
       const current = await readSaved(client, userId, true);
@@ -99,7 +100,7 @@ export function createStudyPlanRouter(pool: DatabasePool | undefined, webOrigin:
   router.delete("/", async (req, res) => {
     const input = z.object({ version: z.uuid() }).strict().safeParse(req.body);
     if (!input.success) { res.status(400).json({ error: "invalid_input" }); return; }
-    const userId = req.session.user!.userId;
+    const userId = studentUser(req).userId;
     await inTransaction(pool!, false, async (client) => {
       const deleted = await client.query("DELETE FROM stu_study_plans WHERE user_id=$1 AND version=$2", [userId, input.data.version]);
       if (!deleted.rowCount) throw new StudyPlanError("plan_changed", 409);

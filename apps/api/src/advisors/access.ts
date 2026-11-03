@@ -1,0 +1,185 @@
+// Cố vấn học tập in the student portal (AD-AST-05…08; user 2026-11-03, policy 2026-11-03, migration 058). An advisor opens
+// the page of a student of a class they advise in a tab of its own: that tab's web code sends X-Advisor-Student with every
+// /api/student request (apps/web/src/advisor-view.ts), and advisorActing checks on each request that the signed-in
+// admin-portal account still advises the student's class. The student routers read the student through studentUser().
+// Only what the policy lets an advisor do for the student passes (ACTING_ACTIONS: import the transcript, the competency
+// assessment and its AI comment, the AI roadmap, the graduation advice, Trợ lý AI), even without the student's consent
+// (user: "Cho làm, báo sinh viên"); no consent is recorded in the student's name. Each such action is logged (kind
+// 'advisor') and told to the student by a notification. Reads pass, except the student's own notifications. The role
+// 'advisor' only reads the admin portal (advisorReadOnly).
+import type { Request, RequestHandler } from "express";
+import type { DatabasePool } from "../db/pool.js";
+import type { AuthenticatedUser } from "../auth/types.js";
+import { canUseStudentPortal } from "../auth/security.js";
+import { auditActorOf, recordAudit } from "../admin/audit/record.js";
+import { advisorAction, notifySafely } from "../notifications/notify.js";
+
+export const ADVISOR_STUDENT_HEADER = "x-advisor-student";
+
+type Db = Pick<DatabasePool, "query">;
+
+/** A student of a class the advisor advises, as the student routers see them. */
+export type AdvisedStudent = {
+  user: AuthenticatedUser;
+  studentCode: string | null;
+  /** student_profiles.full_name, else the account's display name. */
+  name: string;
+  className: string;
+  /** ad_advisors.full_name of the advisor (the name the student is told). */
+  advisorName: string;
+};
+export type AdvisorActing = { advisor: AuthenticatedUser; student: AdvisedStudent };
+
+declare global {
+  namespace Express {
+    interface Request {
+      /** Set by advisorActing when a cố vấn học tập works in a student's page (X-Advisor-Student). */
+      advisorActing?: AdvisorActing;
+    }
+  }
+}
+
+
+/** The student a /api/student request is about: the signed-in student, or the student an advisor works for in this tab. */
+export function studentUser(request: Request): AuthenticatedUser {
+  return request.advisorActing?.student.user ?? request.session.user!;
+}
+
+/** The advisor doing this /api/student request for a student, or null when the student does it themself. */
+export const actingAdvisor = (request: Request): AuthenticatedUser | null => request.advisorActing?.advisor ?? null;
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export const isUuid = (value: unknown): value is string => typeof value === "string" && UUID.test(value);
+
+/** "71k29cntt01 " → "71K29CNTT01": the form classes are stored and compared in (ad_advisor_classes, migration 058). */
+export const normalizeClassName = (value: string) => value.replace(/\s+/g, "").toUpperCase();
+
+/** The classes an account advises, in order (empty for an account that advises none). */
+export async function advisorClassesOf(db: Db, userId: string): Promise<string[]> {
+  const result = await db.query<{ class_name: string }>(
+    "SELECT class_name FROM ad_advisor_classes WHERE advisor_user_id=$1 ORDER BY class_name", [userId]);
+  return result.rows.map((row) => row.class_name);
+}
+
+/**
+ * The student behind studentId, when the advisor advises the student's class and the student account is an active
+ * student account; null otherwise (another class, a staff account, a locked account).
+ */
+export async function advisedStudent(db: Db, advisor: Pick<AuthenticatedUser, "userId">, studentId: string): Promise<AdvisedStudent | null> {
+  if (!isUuid(studentId)) return null;
+  const result = await db.query<{
+    id: string; tenant: string; object_id: string | null; display_name: string; email: string | null; username: string | null;
+    auth_version: number | null; student_code: string | null; full_name: string | null; class_name: string; advisor_name: string;
+  }>(
+    `SELECT u.id, u.entra_tenant_id AS tenant, u.entra_object_id AS object_id, u.display_name, u.email, u.username, u.auth_version,
+        p.student_code, p.full_name, c.class_name, a.full_name AS advisor_name
+       FROM users u
+       JOIN student_profiles p ON p.user_id=u.id
+       JOIN ad_advisor_classes c ON c.class_name=upper(regexp_replace(p.class_name, '\\s', '', 'g'))
+       JOIN ad_advisors a ON a.user_id=c.advisor_user_id
+      WHERE u.id=$1 AND c.advisor_user_id=$2 AND u.is_active AND COALESCE(u.role_override, u.role)='student'`,
+    [studentId, advisor.userId]);
+  const row = result.rows[0];
+  if (!row) return null;
+  const objectId = row.object_id ?? "";
+  return {
+    user: {
+      authVersion: row.auth_version ?? 0, userId: row.id, identityKey: `${row.tenant}:${objectId}`, tenantId: row.tenant, objectId,
+      name: row.display_name, email: row.email, username: row.username, role: "student", signedInAt: new Date().toISOString(),
+    },
+    studentCode: row.student_code,
+    name: row.full_name?.trim() || row.display_name,
+    className: row.class_name,
+    advisorName: row.advisor_name,
+  };
+}
+
+/**
+ * What an advisor may do in a student's page (user, 2026-11-03: import bảng điểm, đánh giá năng lực, Lộ trình AI, Trợ lý
+ * AI). action names the row of the log; did, link and key make the student's notification ("Cố vấn học tập đã import bảng
+ * điểm thay bạn"), at most one per advisor, key and day. Paths are under /api/student.
+ */
+export type ActingAction = { method: "POST" | "PUT" | "PATCH" | "DELETE"; path: RegExp; action: string; did?: string; link?: string; key?: string; log?: false };
+export const ACTING_ACTIONS: readonly ActingAction[] = [
+  { method: "POST", path: /^\/transcript$/, action: "Import bảng điểm thay sinh viên", did: "đã import bảng điểm", link: "#profile", key: "transcript" },
+  { method: "DELETE", path: /^\/transcript\/job$/, action: "Hủy lần import bảng điểm đang chạy" },
+  { method: "POST", path: /^\/competency-assessments$/, action: "Đánh giá năng lực thay sinh viên", did: "đã chạy Đánh giá năng lực", link: "#competency", key: "assessment" },
+  { method: "POST", path: /^\/competency-assessments\/[^/]+\/ai$/, action: "Tạo lại nhận xét năng lực thay sinh viên" },
+  { method: "POST", path: /^\/roadmap$/, action: "Tạo Lộ trình AI thay sinh viên", did: "đã tạo Lộ trình AI", link: "#roadmap", key: "roadmap" },
+  // The graduation page asks for its advice by itself when it opens: allowed, not logged.
+  { method: "POST", path: /^\/graduation\/advice\/ensure$/, action: "Lời khuyên xét tốt nghiệp", log: false },
+  { method: "POST", path: /^\/graduation\/advice\/retry$/, action: "Tạo lại lời khuyên xét tốt nghiệp thay sinh viên" },
+  { method: "POST", path: /^\/assistant\/threads$/, action: "Hỏi Trợ lý AI thay sinh viên", did: "đã hỏi Trợ lý AI", link: "#assistant", key: "assistant" },
+  { method: "POST", path: /^\/assistant\/threads\/[^/]+\/messages$/, action: "Hỏi Trợ lý AI thay sinh viên", did: "đã hỏi Trợ lý AI", link: "#assistant", key: "assistant" },
+  { method: "POST", path: /^\/assistant\/messages\/[^/]+\/retry$/, action: "Hỏi lại Trợ lý AI thay sinh viên" },
+  { method: "POST", path: /^\/assistant\/messages\/[^/]+\/feedback$/, action: "Đánh giá câu trả lời của Trợ lý AI", log: false },
+];
+/** Reads an advisor does not get: the student's own notifications (the bell). */
+export const ACTING_CLOSED_READS: readonly RegExp[] = [/^\/notifications(\/|$)/];
+
+export function actingAction(method: string, path: string): ActingAction | null {
+  return ACTING_ACTIONS.find((rule) => rule.method === method && rule.path.test(path)) ?? null;
+}
+
+/** The day in Vietnam ("2026-11-03"), for the one-notification-a-day key. */
+const vietnamDay = (date = new Date()) => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Ho_Chi_Minh" }).format(date);
+
+/** "2374802010994 – Nguyễn Văn A (lớp 71K29CNTT01)": the log names the student, never the data. */
+export const studentLabel = (student: Pick<AdvisedStudent, "studentCode" | "name" | "className">) =>
+  `${[student.studentCode, student.name].filter(Boolean).join(" – ")} (lớp ${student.className})`;
+
+/**
+ * Mounted on /api/student before the student routers (app.ts). A student passes untouched; an admin-portal account or a
+ * staff mailbox passes only as the advisor of the student named by X-Advisor-Student, and only for reads and
+ * ACTING_ACTIONS.
+ */
+export function advisorActing(db: Db | undefined, staffEmailDomains: ReadonlySet<string>): RequestHandler {
+  return async (request, response, next) => {
+    const user = request.session.user;
+    if (!user || canUseStudentPortal(user, staffEmailDomains)) { next(); return; }
+    const target = request.get(ADVISOR_STUDENT_HEADER);
+    if (!target) { response.status(403).json({ error: "student_portal_blocked" }); return; }
+    if (!db || !isUuid(target)) { response.status(403).json({ error: "advisor_student_forbidden" }); return; }
+    try {
+      const student = await advisedStudent(db, user, target);
+      if (!student) { response.status(403).json({ error: "advisor_student_forbidden" }); return; }
+      const read = request.method === "GET" || request.method === "HEAD";
+      const action = read ? null : actingAction(request.method, request.path);
+      if (read ? ACTING_CLOSED_READS.some((rule) => rule.test(request.path)) : !action) {
+        response.status(403).json({ error: "advisor_action_not_allowed" }); return;
+      }
+      request.advisorActing = { advisor: user, student };
+      if (action && action.log !== false) {
+        const path = request.originalUrl.split("?")[0] ?? "";
+        response.once("finish", () => {
+          if (response.statusCode >= 400) return;
+          void recordAudit(db, auditActorOf(user), {
+            kind: "advisor", action: action.action, summary: studentLabel(student), targetType: "student", targetId: student.user.userId,
+            method: request.method, path,
+          });
+          if (action.did && action.link && action.key) {
+            void notifySafely(db, student.user.userId,
+              advisorAction(student.advisorName, action.did, action.link, vietnamDay(), `${action.key}:${user.userId}`));
+          }
+        });
+      }
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+}
+
+/** Admin paths (under /api/admin) a cố vấn học tập may not even read: reports, the log, accounts, announcements. */
+export const ADVISOR_CLOSED_ADMIN: readonly RegExp[] = [/^\/reports(\/|$)/, /^\/audit-log(\/|$)/, /^\/accounts(\/|$)/, /^\/announcements(\/|$)/];
+/** The only admin writes of the role 'advisor': opening a student's page, which is logged. */
+export const ADVISOR_ADMIN_WRITES: readonly RegExp[] = [/^\/advisor-portal\/students\/[^/]+\/open$/];
+
+/** Mounted on /api/admin before the admin routers: the role 'advisor' reads the admin portal and changes nothing. */
+export const advisorReadOnly: RequestHandler = (request, response, next) => {
+  if (request.session.user?.role !== "advisor") { next(); return; }
+  if (ADVISOR_CLOSED_ADMIN.some((rule) => rule.test(request.path))) { response.status(403).json({ error: "insufficient_role" }); return; }
+  const read = request.method === "GET" || request.method === "HEAD";
+  if (!read && !ADVISOR_ADMIN_WRITES.some((rule) => rule.test(request.path))) { response.status(403).json({ error: "read_only_role" }); return; }
+  next();
+};

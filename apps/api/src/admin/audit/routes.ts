@@ -53,7 +53,8 @@ const cohortWords = (code: unknown) => { const text = str(code); const match = /
 /** The cohort filter of a bulk action: "khóa 29", or every cohort when it is empty. */
 const cohortScope = (code: unknown) => (str(code) ? cohortWords(code) : "mọi khóa");
 const ROLE_LABELS: Record<string, string> = {
-  admin: "Quản trị viên", faculty_board: "Ban chủ nhiệm khoa", department_head: "Trưởng/phó bộ môn", lecturer: "Giảng viên", student: "Sinh viên",
+  admin: "Quản trị viên", faculty_board: "Ban chủ nhiệm khoa", department_head: "Trưởng/phó bộ môn", lecturer: "Giảng viên",
+  advisor: "Cố vấn học tập", student: "Sinh viên",
 };
 export const roleLabel = (role: unknown) => ROLE_LABELS[str(role)] ?? (str(role) || "Không rõ");
 
@@ -69,6 +70,12 @@ const standardOf = (result: unknown) => {
   const data = obj(obj(result).data);
   const where = [cohortWords(data.cohortCode), sentenceCase(str(data.major))].filter(Boolean).join(", ");
   return `${str(data.name) || "(không tên)"}${where ? ` (${where})` : ""}`;
+};
+/** "Nguyễn Văn A (nva@vlu.edu.vn), lớp 71K29CNTT01, 71K29CNTT02" from an advisor answer, else the form's fields. */
+const advisorOf = (advisor: Json, body: Json) => {
+  const name = str(advisor.name) || str(body.name), email = str(advisor.email) || str(body.email);
+  const classes = list(advisor.classes).map(str).filter(Boolean);
+  return `${join(name, email ? `(${email})` : "") || "(không rõ)"}${classes.length ? `, lớp ${classes.join(", ")}` : ""}`;
 };
 const statusWord = (status: unknown) => (str(status) === "active" ? "áp dụng ngay" : str(status) === "draft" ? "lưu bản nháp" : "");
 const careerName = (row: Json | null) => (row ? join(row.code, row.name) : "");
@@ -87,6 +94,26 @@ export const AUDIT_ROUTES: readonly AuditRoute[] = [
       const locked = body.isActive === false;
       return { action: locked ? "Khóa tài khoản" : "Mở khóa tài khoản", summary: `${locked ? "Khóa" : "Mở khóa"} tài khoản ${who}`, ...target("account", params.id) };
     } },
+
+  // Cố vấn học tập (advisors/router.ts, portal-router.ts; 2026-11-03). Opening a student's page is logged by the portal
+  // router itself, with the student's name and the kind 'advisor'.
+  { method: "POST", path: "/advisors/import/preview", kind: "account", action: "Xem trước danh sách cố vấn học tập", skip: "chỉ đọc tệp để xem trước, chưa lưu gì" },
+  { method: "POST", path: "/advisors/import", kind: "account", action: "Import danh sách cố vấn học tập",
+    describe: ({ result }) => {
+      const done = obj(result), file = str(obj(done.preview).fileName);
+      return { summary: `Import danh sách cố vấn học tập${file ? ` từ tệp ${file}` : ""}: thêm ${num(done.added) ?? 0}, cập nhật ${num(done.updated) ?? 0}, `
+        + `không đổi ${num(done.unchanged) ?? 0}, bỏ qua ${num(done.skipped) ?? 0} cố vấn có lỗi` };
+    } },
+  { method: "POST", path: "/advisors", kind: "account", action: "Thêm cố vấn học tập",
+    describe: ({ body, result }) => { const advisor = obj(obj(result).advisor); return { summary: `Thêm cố vấn học tập ${advisorOf(advisor, body)}`, ...target("advisor", advisor.userId) }; } },
+  { method: "PUT", path: "/advisors/:id", kind: "account", action: "Chỉnh sửa cố vấn học tập",
+    describe: ({ params, body, result }) => ({ summary: `Chỉnh sửa cố vấn học tập ${advisorOf(obj(obj(result).advisor), body)}`, ...target("advisor", params.id) }) },
+  { method: "DELETE", path: "/advisors/:id", kind: "account", action: "Xóa cố vấn học tập",
+    describe: async ({ params, lookup }) => {
+      const account = await lookup("SELECT display_name AS name, COALESCE(email, username) AS email FROM users WHERE id = $1", [params.id]);
+      return { summary: `Xóa cố vấn học tập ${join(account?.name, account?.email ? `(${str(account.email)})` : "") || params.id}`, ...target("advisor", params.id) };
+    } },
+  { method: "POST", path: "/advisor-portal/students/:id/open", kind: "advisor", action: "Mở trang sinh viên", skip: "ghi riêng ở advisors/portal-router.ts, loại Cố vấn học tập" },
 
   // Chương trình đào tạo (curricula/router.ts)
   { method: "POST", path: "/curricula/preview", kind: "training", action: "Xem trước CTĐT", skip: "chỉ đọc tệp để xem trước, chưa lưu gì" },

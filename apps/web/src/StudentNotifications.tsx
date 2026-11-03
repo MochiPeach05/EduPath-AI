@@ -112,15 +112,18 @@ export function drawerSummary(items: readonly StudentNotification[]): string {
  * The unread count of the bell: read when the page opens, every NOTIFICATION_POLL_MS while the tab is visible (paused
  * while it is hidden), when the tab comes back and when the window gets focus. setUnread takes a count a list just read.
  */
-export function useUnreadNotifications() {
+/** enabled: false in a cố vấn học tập's tab (advisor-view.ts), where the bell is hidden and the API refuses it. */
+export function useUnreadNotifications(enabled = true) {
   const [unread, setUnread] = useState(0);
   const latest = useRef(0);
   const refresh = useCallback(() => {
+    if (!enabled) return;
     const ticket = ++latest.current;
     notificationsApi.unreadCount().then(({ unread: count }) => { if (ticket === latest.current) setUnread(count); }, () => undefined);
-  }, []);
+  }, [enabled]);
   const take = useCallback((count: number) => { latest.current += 1; setUnread(count); }, []);
   useEffect(() => {
+    if (!enabled) return;
     let timer: ReturnType<typeof setInterval> | undefined;
     const stop = () => { if (timer !== undefined) clearInterval(timer); timer = undefined; };
     const start = () => { stop(); timer = setInterval(refresh, NOTIFICATION_POLL_MS); };
@@ -130,7 +133,7 @@ export function useUnreadNotifications() {
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("focus", refresh);
     return () => { stop(); document.removeEventListener("visibilitychange", onVisibility); window.removeEventListener("focus", refresh); };
-  }, [refresh]);
+  }, [refresh, enabled]);
   return { unread, refresh, setUnread: take };
 }
 

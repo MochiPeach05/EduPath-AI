@@ -7,6 +7,7 @@ import {
   requireAdminAccess,
   requireAuthentication,
 } from "../middleware/authorization.js";
+import { studentUser } from "../advisors/access.js";
 import { access, CareerError, fold, lockSkillCatalog } from "./shared.js";
 import { createCareerRequirementsRouter, syncLegacySkillLinks } from "./requirements.js";
 import { createCareerSkillsRouter } from "./skills.js";
@@ -60,7 +61,7 @@ export function createCareersRouter(
       res.status(403).json({ error: "invalid_origin" });
       return;
     }
-    await access(pool, req.session.user!, write, student);
+    await access(pool, student ? studentUser(req) : req.session.user!, write, student);
     next();
   });
   router.get("/fields", async (req, res) => {

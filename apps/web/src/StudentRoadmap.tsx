@@ -5,6 +5,7 @@ import { RoadmapPlanner, type SaveState } from "./RoadmapPlanner";
 import {
   STUDY_PLAN_API, applyProposal, planErrorMessage, withTerms, type PlanOrigin, type StudyPlanData, type StudyPlanProjection, type StudyPlanResponse,
 } from "./study-plan-data";
+import { isAdvisorView } from "./advisor-view";
 import "./student-roadmap.css";
 
 // #roadmap "Lộ trình học tập" (user 2026-10-24: "Gần như áp dụng theo trang này làm nè cả giao diện luôn", OU's Stellic
@@ -72,7 +73,9 @@ function useStudyPlan() {
       version.current = data.plan?.version ?? null;
       setLoaded({ data, error: null });
       let next = withTerms(data.context, data.plan?.data ?? data.suggested ?? null);
-      if (data.aiProposal) {
+      // A cố vấn học tập's tab shows the plan as the student saved it and never changes it: the student's next visit takes
+      // the proposal in.
+      if (data.aiProposal && !isAdvisorView()) {
         const applied = applyProposal(next, data.aiProposal);
         next = applied.plan;
         setOrigin({ kind: "ai", added: applied.added });
@@ -150,7 +153,7 @@ export default function StudentRoadmap({ notice }: { notice?: ReactNode }) {
               : tab === "track" ? <RoadmapTrack context={study.context} plan={study.plan} projection={study.projection} origin={study.origin}
                 onOpenPlanner={() => choose("manual")} />
                 : <RoadmapPlanner context={study.context} plan={study.plan} onChange={study.change} saveState={study.saveState} saveError={study.saveError}
-                  origin={study.origin} onOpenAi={() => choose("ai")} />}
+                  origin={study.origin} onOpenAi={() => choose("ai")} readOnly={isAdvisorView()} />}
     </div>
   </div>;
 }

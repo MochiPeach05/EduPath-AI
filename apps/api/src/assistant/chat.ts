@@ -54,7 +54,8 @@ export class AssistantError extends Error {
 
 /** ref (server only): the knowledge chunk of a cited source, brought back by the next questions of the conversation. */
 export type AssistantSource = { n: number; kind: AssistantSourceKind; title: string; link: string | null; ref?: { kind: string; key: string } };
-export type ThreadRow = { id: string; title: string; createdAt: Date | string; updatedAt: Date | string };
+/** createdBy: the cố vấn học tập who started it in the student's account (migration 058), null for the student. */
+export type ThreadRow = { id: string; title: string; createdAt: Date | string; updatedAt: Date | string; createdBy?: string | null };
 export type MessageRow = {
   id: string; threadId: string; role: "user" | "assistant"; content: string;
   status: "queued" | "processing" | "completed" | "failed" | "cancelled"; errorCode: string | null;
@@ -72,7 +73,9 @@ type AnswerInput = {
 };
 
 const iso = (value: Date | string | null) => (value === null ? null : new Date(value).toISOString());
-export const presentThread = (row: ThreadRow) => ({ id: row.id, title: row.title, createdAt: iso(row.createdAt)!, updatedAt: iso(row.updatedAt)! });
+export const presentThread = (row: ThreadRow) => ({
+  id: row.id, title: row.title, createdAt: iso(row.createdAt)!, updatedAt: iso(row.updatedAt)!, byAdvisor: Boolean(row.createdBy),
+});
 export const presentMessage = (row: MessageRow) => ({
   id: row.id, threadId: row.threadId, role: row.role, content: row.content, status: row.status, errorCode: row.errorCode,
   sources: row.status === "completed" ? (row.sources ?? []).map(({ n, kind, title, link }) => ({ n, kind, title, link })) : [],
@@ -80,30 +83,39 @@ export const presentMessage = (row: MessageRow) => ({
   createdAt: iso(row.createdAt)!, completedAt: iso(row.completedAt),
 });
 
-const threadColumns = `id,title,created_at AS "createdAt",updated_at AS "updatedAt"`;
+const threadColumns = `id,title,created_at AS "createdAt",updated_at AS "updatedAt",created_by AS "createdBy"`;
 const messageColumns = `id,thread_id AS "threadId",role,content,status,error_code AS "errorCode",sources,feedback,
   created_at AS "createdAt",completed_at AS "completedAt"`;
 /** Messages of a thread in order; a question and its answer are written in one statement each, the question first. */
 const messageOrder = `created_at,CASE role WHEN 'user' THEN 0 ELSE 1 END,id`;
 
 /* ------------------------------------------------------------------------ */
-/* Student side */
+/* Student side. advisorId: a cố vấn học tập working in the student's page (advisors/access.ts) sees and continues only
+   the conversations they started (created_by); null for the student, who sees them all. */
 
-export async function listThreads(db: Db, userId: string): Promise<ThreadRow[]> {
+/** The thread condition of advisorId ($n): none for the student. */
+const ownThread = (n: number) => `($${n}::uuid IS NULL OR created_by=$${n})`;
+/** The message condition of advisorId ($n): its thread was started by that advisor. */
+const ownMessage = (n: number) => `($${n}::uuid IS NULL OR thread_id IN (SELECT id FROM stu_chat_threads WHERE created_by=$${n}))`;
+
+export async function listThreads(db: Db, userId: string, advisorId: string | null = null): Promise<ThreadRow[]> {
   const result = await db.query<ThreadRow>(
-    `SELECT ${threadColumns} FROM stu_chat_threads WHERE user_id=$1 ORDER BY updated_at DESC,id DESC LIMIT $2`, [userId, MAX_THREADS_LISTED]);
+    `SELECT ${threadColumns} FROM stu_chat_threads WHERE user_id=$1 AND ${ownThread(3)} ORDER BY updated_at DESC,id DESC LIMIT $2`,
+    [userId, MAX_THREADS_LISTED, advisorId]);
   return result.rows;
 }
 
-export async function readThread(db: Db, userId: string, threadId: string): Promise<{ thread: ThreadRow; messages: MessageRow[] }> {
-  const thread = (await db.query<ThreadRow>(`SELECT ${threadColumns} FROM stu_chat_threads WHERE id=$1 AND user_id=$2`, [threadId, userId])).rows[0];
+export async function readThread(db: Db, userId: string, threadId: string, advisorId: string | null = null): Promise<{ thread: ThreadRow; messages: MessageRow[] }> {
+  const thread = (await db.query<ThreadRow>(`SELECT ${threadColumns} FROM stu_chat_threads WHERE id=$1 AND user_id=$2 AND ${ownThread(3)}`,
+    [threadId, userId, advisorId])).rows[0];
   if (!thread) throw new AssistantError("thread_not_found", 404);
   const messages = await db.query<MessageRow>(`SELECT ${messageColumns} FROM stu_chat_messages WHERE thread_id=$1 ORDER BY ${messageOrder}`, [threadId]);
   return { thread, messages: messages.rows };
 }
 
-export async function readMessage(db: Db, userId: string, messageId: string): Promise<MessageRow> {
-  const row = (await db.query<MessageRow>(`SELECT ${messageColumns} FROM stu_chat_messages WHERE id=$1 AND user_id=$2`, [messageId, userId])).rows[0];
+export async function readMessage(db: Db, userId: string, messageId: string, advisorId: string | null = null): Promise<MessageRow> {
+  const row = (await db.query<MessageRow>(`SELECT ${messageColumns} FROM stu_chat_messages WHERE id=$1 AND user_id=$2 AND ${ownMessage(3)}`,
+    [messageId, userId, advisorId])).rows[0];
   if (!row) throw new AssistantError("message_not_found", 404);
   return row;
 }
@@ -113,10 +125,10 @@ export async function deleteThread(db: Db, userId: string, threadId: string): Pr
   if (!result.rowCount) throw new AssistantError("thread_not_found", 404);
 }
 
-export async function setFeedback(db: Db, userId: string, messageId: string, value: 1 | -1 | null): Promise<MessageRow> {
+export async function setFeedback(db: Db, userId: string, messageId: string, value: 1 | -1 | null, advisorId: string | null = null): Promise<MessageRow> {
   const result = await db.query<MessageRow>(
     `UPDATE stu_chat_messages SET feedback=$3,updated_at=now() WHERE id=$1 AND user_id=$2 AND role='assistant' AND status='completed'
-      RETURNING ${messageColumns}`, [messageId, userId, value]);
+      AND ${ownMessage(4)} RETURNING ${messageColumns}`, [messageId, userId, value, advisorId]);
   if (!result.rows[0]) throw new AssistantError("message_not_found", 404);
   return result.rows[0];
 }
@@ -151,8 +163,9 @@ function answerInput(questionId: string, question: string, history: readonly His
  * answer still pending for the student (409 answer_pending), questions too close or too many (429 too_frequent), a full
  * queue (429 queue_full). The caller wakes the worker after COMMIT (notifyAssistantWork). A question about the student's
  * own results that their data cannot answer yet (readiness.ts) gets its answer at once, "completed", without a job.
+ * createdBy: the cố vấn học tập asking in the student's account; a new thread records them, an existing one must be theirs.
  */
-export async function askQuestion(client: PoolClient, userId: string, input: { threadId: string | null; content: string }):
+export async function askQuestion(client: PoolClient, userId: string, input: { threadId: string | null; content: string; createdBy?: string | null }):
   Promise<{ thread: ThreadRow; messages: MessageRow[] }> {
   const question = input.content.replace(/\r\n?/g, "\n").trim();
   if (!question) throw new AssistantError("empty_message", 400);
@@ -163,8 +176,8 @@ export async function askQuestion(client: PoolClient, userId: string, input: { t
 
   let thread: ThreadRow | undefined;
   if (input.threadId) {
-    thread = (await client.query<ThreadRow>(`SELECT ${threadColumns} FROM stu_chat_threads WHERE id=$1 AND user_id=$2 FOR UPDATE`,
-      [input.threadId, userId])).rows[0];
+    thread = (await client.query<ThreadRow>(`SELECT ${threadColumns} FROM stu_chat_threads WHERE id=$1 AND user_id=$2 AND ${ownThread(3)} FOR UPDATE`,
+      [input.threadId, userId, input.createdBy ?? null])).rows[0];
     if (!thread) throw new AssistantError("thread_not_found", 404);
   }
   const pending = await client.query("SELECT 1 FROM stu_chat_messages WHERE user_id=$1 AND status IN ('queued','processing') LIMIT 1", [userId]);
@@ -180,8 +193,8 @@ export async function askQuestion(client: PoolClient, userId: string, input: { t
   if (!thread) {
     const title = question.replace(/\s+/g, " ");
     const short = Array.from(title).length > THREAD_TITLE_MAX ? `${Array.from(title).slice(0, THREAD_TITLE_MAX - 1).join("").trimEnd()}…` : title;
-    thread = (await client.query<ThreadRow>(`INSERT INTO stu_chat_threads(id,user_id,title) VALUES($1,$2,$3) RETURNING ${threadColumns}`,
-      [randomUUID(), userId, short])).rows[0]!;
+    thread = (await client.query<ThreadRow>(`INSERT INTO stu_chat_threads(id,user_id,title,created_by) VALUES($1,$2,$3,$4) RETURNING ${threadColumns}`,
+      [randomUUID(), userId, short, input.createdBy ?? null])).rows[0]!;
   } else {
     thread = (await client.query<ThreadRow>(`UPDATE stu_chat_threads SET updated_at=now() WHERE id=$1 RETURNING ${threadColumns}`, [thread.id])).rows[0]!;
   }
@@ -208,11 +221,13 @@ export async function askQuestion(client: PoolClient, userId: string, input: { t
 }
 
 /** "Thử lại" on a failed or cancelled answer that is still the last message of its conversation. */
-export async function retryAnswer(client: PoolClient, userId: string, messageId: string): Promise<MessageRow> {
+export async function retryAnswer(client: PoolClient, userId: string, messageId: string, advisorId: string | null = null): Promise<MessageRow> {
   await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`edupath:assistant:${userId}`]);
   const row = (await client.query<{ threadId: string; status: string; last: boolean }>(
     `SELECT m.thread_id AS "threadId",m.status,NOT EXISTS (SELECT 1 FROM stu_chat_messages n WHERE n.thread_id=m.thread_id AND n.created_at>m.created_at) AS last
-      FROM stu_chat_messages m WHERE m.id=$1 AND m.user_id=$2 AND m.role='assistant' FOR UPDATE`, [messageId, userId])).rows[0];
+      FROM stu_chat_messages m WHERE m.id=$1 AND m.user_id=$2 AND m.role='assistant'
+        AND ($3::uuid IS NULL OR EXISTS (SELECT 1 FROM stu_chat_threads t WHERE t.id=m.thread_id AND t.created_by=$3)) FOR UPDATE`,
+    [messageId, userId, advisorId])).rows[0];
   if (!row) throw new AssistantError("message_not_found", 404);
   if (!["failed", "cancelled"].includes(row.status) || !row.last) throw new AssistantError("not_failed", 409);
   const pending = await client.query("SELECT 1 FROM stu_chat_messages WHERE user_id=$1 AND status IN ('queued','processing') LIMIT 1", [userId]);

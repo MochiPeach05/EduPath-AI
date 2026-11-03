@@ -8,6 +8,7 @@ import {
 import { InterestGroup } from "./InterestChoices";
 import { interestLabels } from "./profile-interests";
 import { PROFILE_SECTIONS, formatUpdatedAt } from "./student-overview-data";
+import { isAdvisorView } from "./advisor-view";
 import "./profile-survey.css";
 
 // "Khảo sát định hướng" on Hồ sơ và bảng điểm (user 2026-10-24): radio answers so nothing is left empty or typed at
@@ -82,8 +83,9 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
       if (!alive) return;
       setData(value);
       setDraft(draftOf(value.survey, value.previous));
-      // Open while incomplete, or while the answers wait for consent to a newer policy.
-      setEditing(!value.survey?.complete || !isValidConsent(value.consentVersion));
+      // Open while incomplete, or while the answers wait for consent to a newer policy; never for a cố vấn học tập, who
+      // only reads the answers (policy 2026-11-03).
+      setEditing(!isAdvisorView() && (!value.survey?.complete || !isValidConsent(value.consentVersion)));
     }, (failure: Error) => alive && setLoadError(failure.message));
     return () => { alive = false; };
   }, [reload]);
@@ -269,12 +271,13 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
         <div className="ps-answers-wide"><dt>Thành tích</dt><dd>{survey.hasAchievements && survey.achievements
           ? <ul>{survey.achievements.split("\n").map((line, index) => <li key={index}>{line}</li>)}</ul> : "Không có"}</dd></div>
       </dl>
-      <div className="sr-actions">
+      {isAdvisorView() ? <p className="sw-advisor-note">Cố vấn học tập chỉ xem câu trả lời; sinh viên tự sửa hoặc xóa khảo sát.</p> : <div className="sr-actions">
         <button ref={editButton} type="button" className="sr-secondary" onClick={edit}><Icon name="edit" /> Chỉnh sửa khảo sát</button>
         <button type="button" className="sw-text-link ps-delete" onClick={askDelete}><Icon name="trash" /> Xóa câu trả lời</button>
-      </div>
+      </div>}
       <p className="sw-muted ps-updated">Cập nhật lúc {formatUpdatedAt(survey.updatedAt)}.</p>
     </>}
+    {!editing && !survey && isAdvisorView() && <p className="sw-advisor-note">Sinh viên chưa làm Khảo sát định hướng. Cố vấn học tập không làm khảo sát thay sinh viên.</p>}
     {deleting && <DeleteSurveyDialog busy={busy} error={deleteError} onClose={() => setDeleting(false)} onConfirm={() => void remove()} />}
   </section>;
 }

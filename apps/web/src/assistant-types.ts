@@ -30,6 +30,11 @@ export type AssistantThread = {
   title: string;
   createdAt: string;
   updatedAt: string;
+  /**
+   * Started by the student's cố vấn học tập in the student's page (migration 058, 2026-11-03); the student's own list tags
+   * it. An advisor's list holds only the conversations that advisor started.
+   */
+  byAdvisor?: boolean;
 };
 
 /**

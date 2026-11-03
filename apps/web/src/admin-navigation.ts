@@ -1,3 +1,5 @@
+import type { AppRole } from "./types";
+
 export const adminNavigation = [
   // AD-REPORT-01…11 (2026-10-31): the reports come first and Tổng quan is the page /quantri opens.
   { path: "/quantri/tong-quan", label: "Tổng quan", eyebrow: "BÁO CÁO", icon: "home" },
@@ -10,6 +12,10 @@ export const adminNavigation = [
   { path: "/quantri/nhat-ky", label: "Nhật ký", eyebrow: "BÁO CÁO", icon: "clock" },
   { path: "/quantri/tai-khoan", label: "Tài khoản", eyebrow: "QUẢN LÝ TÀI KHOẢN", icon: "users" },
   { path: "/quantri/sinh-vien", label: "Sinh viên", eyebrow: "QUẢN LÝ HỒ SƠ SINH VIÊN", icon: "profile" },
+  // AD-ADV-01…05 and AD-AST-01…09 (2026-11-03): the faculty's cố vấn học tập, an advisor's classes and what an advisor may do.
+  { path: "/quantri/co-van-hoc-tap", label: "Cố vấn", eyebrow: "QUẢN LÝ CỐ VẤN HỌC TẬP", icon: "user" },
+  { path: "/quantri/lop-phu-trach", label: "Lớp phụ trách", eyebrow: "QUẢN LÝ SINH VIÊN CỦA CỐ VẤN HỌC TẬP", icon: "cap" },
+  { path: "/quantri/quyen-co-van", label: "Quyền cố vấn", eyebrow: "QUẢN LÝ SINH VIÊN CỦA CỐ VẤN HỌC TẬP", icon: "shield" },
   { path: "/quantri/chuong-trinh", label: "Chương trình", eyebrow: "QUẢN LÝ ĐÀO TẠO", icon: "book" },
   { path: "/quantri/tieu-chuan-tot-nghiep", label: "Tốt nghiệp", eyebrow: "QUẢN LÝ ĐÀO TẠO", icon: "shield" },
   { path: "/quantri/ke-hoach", label: "Kế hoạch", eyebrow: "QUẢN LÝ ĐÀO TẠO", icon: "book" },
@@ -31,6 +37,7 @@ export type AdminPage = (typeof adminNavigation)[number];
  */
 const adminNavigationGroups = [
   { id: "reports", label: "Báo cáo", icon: "chart", paths: ["/quantri/tong-quan", "/quantri/bao-cao-tien-do", "/quantri/bao-cao-nguy-co", "/quantri/bao-cao-ky-nang", "/quantri/bao-cao-nghe-nghiep", "/quantri/bao-cao-mon-hoc", "/quantri/nhat-ky"] },
+  { id: "advisors", label: "Cố vấn học tập", icon: "compass", paths: ["/quantri/co-van-hoc-tap", "/quantri/lop-phu-trach", "/quantri/quyen-co-van"] },
   // In the order they are set up: fields, then the shared skills, then the careers that use both.
   { id: "careers", label: "Quản lý nghề nghiệp", icon: "briefcase", paths: ["/quantri/linh-vuc-nghe-nghiep", "/quantri/ky-nang", "/quantri/vi-tri-nghe-nghiep"] },
   { id: "competencies", label: "Quản lý năng lực", icon: "target", paths: ["/quantri/nhom-nang-luc", "/quantri/cau-hinh-nang-luc", "/quantri/cau-hinh-mon-hoc"] },
@@ -53,7 +60,7 @@ type AdminSidebarEntry =
   | { kind: "page"; page: AdminPage }
   | { kind: "group"; id: string; label: string; icon: string; pages: AdminPage[] };
 
-/** What the sidebar shows, in order: single pages and groups. */
+/** What the sidebar shows, in order: single pages and groups (every page; adminSidebarFor keeps an account's own). */
 export const adminSidebar: AdminSidebarEntry[] = adminNavigation.flatMap((page): AdminSidebarEntry[] => {
   const group = adminNavigationGroups.find((item) => (item.paths as readonly string[]).includes(page.path));
   if (!group) return [{ kind: "page", page }];
@@ -62,15 +69,62 @@ export const adminSidebar: AdminSidebarEntry[] = adminNavigation.flatMap((page):
   return [{ kind: "group", id: group.id, label: group.label, icon: group.icon, pages }];
 });
 
-export function resolveAdminPage(pathname: string) {
-  const path = pathname.replace(/\/+$/, "");
-  const target = adminPathAliases[path] ?? path;
-  return adminNavigation.find((item) => item.path === target) ?? adminNavigation[0];
+export const ADVISORS_PATH = "/quantri/co-van-hoc-tap";
+export const ADVISOR_CLASSES_PATH = "/quantri/lop-phu-trach";
+export const ADVISOR_PERMISSIONS_PATH = "/quantri/quyen-co-van";
+
+/**
+ * Who looks at the admin portal: the role, and whether the account advises classes (GET /api/admin/advisor-portal/me;
+ * null until it answers).
+ */
+export type AdminAccess = { role: AppRole; advisesClasses: boolean | null };
+
+/**
+ * Pages a cố vấn học tập (role advisor) does not get: the reports and Nhật ký, Tài khoản and Quản lý thông báo. In the
+ * function list those rows belong to the Quản trị viên alone; the advisor's own rows say "QTV & CVHT" or "Cố vấn học tập".
+ */
+const ADVISOR_CLOSED_PAGES: ReadonlySet<string> = new Set<string>([
+  ...adminNavigationGroups.filter((group) => group.id === "reports" || group.id === "announcements").flatMap((group) => [...group.paths]),
+  "/quantri/tai-khoan",
+]);
+
+/**
+ * Whether an account may open a page. Lớp phụ trách is the page of the accounts that advise classes (always the role
+ * advisor); while the answer is unknown it counts as open, so a direct link is not sent away before the answer comes.
+ */
+export function canSeeAdminPage(path: string, access: AdminAccess): boolean {
+  if (access.role === "advisor") return !ADVISOR_CLOSED_PAGES.has(path);
+  return path !== ADVISOR_CLASSES_PATH || access.advisesClasses !== false;
 }
 
-/** The group holding a page ("reports", "careers", "competencies" or "announcements"), or null for a page outside the groups. */
-export function adminGroupOf(pathname: string) {
-  const { path } = resolveAdminPage(pathname);
+/** The page /quantri opens, and where a closed page leads: Lớp phụ trách for an advisor, Tổng quan of the reports otherwise. */
+export const homeAdminPath = (access: AdminAccess) => (access.role === "advisor" ? ADVISOR_CLASSES_PATH : adminNavigation[0].path);
+
+/** The sidebar of one account: the groups and pages it may open; Lớp phụ trách only once the account is known to advise classes. */
+export function adminSidebarFor(access: AdminAccess): AdminSidebarEntry[] {
+  const shown = (page: AdminPage) => canSeeAdminPage(page.path, access)
+    && (page.path !== ADVISOR_CLASSES_PATH || access.role === "advisor" || access.advisesClasses === true);
+  return adminSidebar.flatMap((entry): AdminSidebarEntry[] => {
+    if (entry.kind === "page") return shown(entry.page) ? [entry] : [];
+    const pages = entry.pages.filter(shown);
+    return pages.length ? [{ ...entry, pages }] : [];
+  });
+}
+
+/** The page an address shows (an old link opens the page that replaced it); with access, a page the account may not open leads home. */
+export function resolveAdminPage(pathname: string, access?: AdminAccess): AdminPage {
+  const path = pathname.replace(/\/+$/, "");
+  const target = adminPathAliases[path] ?? path;
+  const page = adminNavigation.find((item) => item.path === target);
+  if (!access) return page ?? adminNavigation[0];
+  if (page && canSeeAdminPage(page.path, access)) return page;
+  const home = homeAdminPath(access);
+  return adminNavigation.find((item) => item.path === home)!;
+}
+
+/** The group holding a page ("reports", "advisors", "careers", "competencies" or "announcements"), or null for a page outside the groups. */
+export function adminGroupOf(pathname: string, access?: AdminAccess) {
+  const { path } = resolveAdminPage(pathname, access);
   const group = adminSidebar.find((entry) => entry.kind === "group" && entry.pages.some((page) => page.path === path));
   return group?.kind === "group" ? group.id : null;
 }

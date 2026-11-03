@@ -3,6 +3,7 @@ import { useLiveData } from "./use-live-data";
 import { useLiveFilters } from "./use-live-filters";
 import { careerFailures, type Career, type CareerField, type StudentCareerDetail } from "./career-types";
 import { Icon } from "./ui-icon";
+import { isAdvisorView } from "./advisor-view";
 import "./student-careers.css";
 
 const endpoint = "/api/student/careers";
@@ -98,7 +99,7 @@ export default function StudentCareerExplorer({ selectedId, initialCareerId, onS
         </>}
         {pendingCareer && <p className="sr-career-choice-summary" role="status">Đang chọn: <strong>{pendingCareer.nameVi} — {pendingCareer.nameEn}</strong></p>}
         {saveError && <p className="sr-error" role="alert">{saveError}</p>}
-        <div className="sr-actions sr-form-actions"><button type="button" className="sr-secondary" disabled={saving} onClick={onClose}><Icon name="close" />Hủy</button><button type="button" className="sw-primary" disabled={saving || !pendingCareer || pendingCareer.id === selectedId} onClick={() => { if (pendingCareer) void selectCareer(pendingCareer); }}><Icon name="save" />{saving ? "Đang lưu mục tiêu…" : "Lưu mục tiêu"}</button></div>
+        <div className="sr-actions sr-form-actions"><button type="button" className="sr-secondary" disabled={saving} onClick={onClose}><Icon name="close" />Hủy</button>{!isAdvisorView() && <button type="button" className="sw-primary" disabled={saving || !pendingCareer || pendingCareer.id === selectedId} onClick={() => { if (pendingCareer) void selectCareer(pendingCareer); }}><Icon name="save" />{saving ? "Đang lưu mục tiêu…" : "Lưu mục tiêu"}</button>}</div>
       </>}
     </div>
   </dialog>;
@@ -123,11 +124,11 @@ function CareerDetail({ id, selectedId, saving, saveError, onSelect, onClose }: 
         </table></div> : <p>Chưa có yêu cầu hoặc kỹ năng được cập nhật cho vị trí nghề nghiệp này.</p>}
       </section>
       {saveError && <p className="sr-error" role="alert">{saveError}</p>}
-      <p className="sw-muted">Bấm Chọn vị trí nghề nghiệp mục tiêu để lưu ngay.</p>
+      {!isAdvisorView() && <p className="sw-muted">Bấm Chọn vị trí nghề nghiệp mục tiêu để lưu ngay.</p>}
     </>}
     <div className="sr-actions sr-form-actions">
       <button type="button" className="sr-secondary" disabled={saving} onClick={onClose}><Icon name="close" />Hủy</button>
-      {career && <button type="button" className="sw-primary" disabled={saving || selectedId === career.id} onClick={() => onSelect(career)}><Icon name="check" />{saving ? "Đang lưu mục tiêu…" : selectedId === career.id ? "Đã chọn mục tiêu này" : "Chọn vị trí nghề nghiệp mục tiêu"}</button>}
+      {career && !isAdvisorView() && <button type="button" className="sw-primary" disabled={saving || selectedId === career.id} onClick={() => onSelect(career)}><Icon name="check" />{saving ? "Đang lưu mục tiêu…" : selectedId === career.id ? "Đã chọn mục tiêu này" : "Chọn vị trí nghề nghiệp mục tiêu"}</button>}
     </div>
   </>;
 }

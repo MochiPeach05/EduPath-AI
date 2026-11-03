@@ -24,7 +24,10 @@ const student = {
 } satisfies AuthenticatedUser;
 const pdf = Buffer.from("%PDF-1.7\n%test\n");
 
-function setup() {
+/** The student's cố vấn học tập working in the student's page (advisors/access.ts sets it on the request). */
+const advisor = { ...student, userId: "88888888-8888-4888-8888-888888888888", name: "Cố vấn", email: "co.van@vlu.edu.vn", role: "advisor" } satisfies AuthenticatedUser;
+
+function setup(options: { advisor?: boolean } = {}) {
   const clientQuery = vi.fn(async (sql: string) => {
     if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") return { rowCount: 0, rows: [] };
     if (sql.includes("SELECT id FROM users")) return { rowCount: 1, rows: [{ id: studentId }] };
@@ -39,7 +42,8 @@ function setup() {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
-    req.session = { user: student } as typeof req.session;
+    req.session = { user: options.advisor ? advisor : student } as typeof req.session;
+    if (options.advisor) req.advisorActing = { advisor, student: { user: student, studentCode: null, name: "Student", className: "71K29CNTT99", advisorName: "Cố vấn" } };
     next();
   });
   app.use("/student", createStudentDataRouter(pool, origin, true));
@@ -82,6 +86,17 @@ describe("transcript processing consent", () => {
     expect(granted).toBeGreaterThan(superseded);
     expect(queued).toBeGreaterThan(granted);
     expect(clientQuery.mock.calls[granted]?.[1]).toEqual([expect.any(String), studentId, TRANSCRIPT_POLICY_VERSION, "transcript_processing"]);
+    expect(calls.at(-1)).toBe("COMMIT");
+  });
+
+  it("lets the student's cố vấn học tập import it without the student's confirmation or consent, and records none", async () => {
+    const { app, clientQuery } = setup({ advisor: true });
+    await request(app).post("/student/transcript").set("Origin", origin).set("Content-Type", "application/pdf")
+      .set("X-File-Name", "bang-diem.pdf").send(pdf).expect(202);
+    const calls = sqlCalls(clientQuery);
+    expect(calls.some((sql) => sql.includes("data_consents"))).toBe(false);
+    const queued = clientQuery.mock.calls.find(([sql]) => String(sql).includes("INSERT INTO transcript_jobs"));
+    expect(queued?.[1]?.[1]).toBe(studentId);
     expect(calls.at(-1)).toBe("COMMIT");
   });
 

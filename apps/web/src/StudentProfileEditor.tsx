@@ -4,6 +4,7 @@ import { type CareerSelection } from "./career-types";
 import StudentCareerExplorer from "./StudentCareerExplorer";
 import { specialtiesFor, specialtyLabel } from "./competency-assessment-types";
 import { PROFILE_SECTIONS } from "./student-overview-data";
+import { isAdvisorView } from "./advisor-view";
 import "./student-records.css";
 // "Sở thích" (technologies and free-time interests) moved into Khảo sát định hướng on 2026-10-24 (StudentProfileSurvey).
 // "Mục tiêu học tập" (was "Thông tin cá nhân"): the career and the specialty. A career is chosen in Khám phá vị trí nghề nghiệp
@@ -65,6 +66,8 @@ export default function StudentProfileEditor({
   useEffect(() => setSaved(null), [profile]);
   const shown: EditableStudentProfile = saved ? { ...profile, ...saved } : profile;
   const supportsSpecialty = profile.specialty !== undefined;
+  // A cố vấn học tập sees the goals; the student alone chooses them (policy 2026-11-03).
+  const advisorView = isAdvisorView();
   // Keyboard focus after the next render, since the button that was used is gone by then (Chỉnh sửa, Hủy, Lưu).
   const editButton = useRef<HTMLButtonElement>(null);
   const form = useRef<HTMLFormElement>(null);
@@ -120,7 +123,7 @@ export default function StudentProfileEditor({
     <section className="sw-panel sr-editor" id={PROFILE_SECTIONS.goals} aria-labelledby="sr-goals-title">
       <div className="sw-section-heading">
         <h2 id="sr-goals-title" tabIndex={-1}>Mục tiêu học tập</h2>
-        {!editing && (
+        {!editing && !advisorView && (
           <button ref={editButton} type="button" className="sw-text-link" onClick={startEditing}>
             <Icon name="edit" />
             Chỉnh sửa thông tin
@@ -198,9 +201,9 @@ export default function StudentProfileEditor({
               )}</span>
               {shown.careerPositionId && !shown.careerPosition?.deletedAt && <button type="button" className="sr-career-icon" aria-label="Xem yêu cầu của vị trí nghề nghiệp" title="Xem yêu cầu" onClick={() => setExplorer({ initialCareerId: shown.careerPositionId! })}><Icon name="eye" /></button>}
             </dd>
-            <div className="sr-actions">
+            {!advisorView && <div className="sr-actions">
               <button type="button" className="sr-secondary sr-career-choose" onClick={() => setExplorer({})}>Chọn vị trí nghề nghiệp mục tiêu</button>
-            </div>
+            </div>}
           </div>
           {supportsSpecialty && <div>
             <dt>Chuyên ngành</dt>
@@ -208,6 +211,7 @@ export default function StudentProfileEditor({
           </div>}
         </dl>
       )}
+      {advisorView && <p className="sw-advisor-note">Sinh viên tự chọn chuyên ngành và vị trí nghề nghiệp mục tiêu; cố vấn học tập chỉ xem.</p>}
       {explorer && <StudentCareerExplorer selectedId={shown.careerPositionId ?? ""} initialCareerId={explorer.initialCareerId} onSelect={chooseCareer} onClose={() => setExplorer(null)} />}
     </section>
   );

@@ -5,6 +5,7 @@ import type {
   CourseState, Eligibility, HistoryPoint, LevelCode, PlanProgressResult, SelfStudyItem, SkillPlan, SkillResult, StoredAssessment, SupportCourse,
 } from "./competency-assessment-types";
 import { meaningOf, scoreText, termName, type Meaning } from "./display-format";
+import { ADVISOR_ERRORS } from "./advisor-types";
 
 export const COMPETENCY_API = "/api/student/competency-assessments";
 
@@ -45,6 +46,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   assessment_not_found: "Không tìm thấy kết quả đánh giá này. Hãy tải lại trang.",
   account_unavailable: "Tài khoản của bạn hiện không dùng được tính năng này. Vui lòng liên hệ Khoa nếu cần hỗ trợ.",
   invalid_input: "Yêu cầu chưa hợp lệ. Vui lòng tải lại trang rồi thử lại.",
+  // A cố vấn học tập's run after the student deleted their results (advisors/access.ts, 409).
+  assessment_withdrawn: ADVISOR_ERRORS.assessment_withdrawn!,
   ...Object.fromEntries(PRECONDITION_ERRORS.map((code) => [code, PRECONDITION_COPY[code].title])),
 };
 

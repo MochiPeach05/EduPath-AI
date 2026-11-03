@@ -32,7 +32,14 @@ const message = (extra: Partial<import("./chat.js").MessageRow> = {}): import(".
   createdAt: new Date("2026-10-28T01:00:00Z"), completedAt: null, ...extra,
 });
 
-function setup(options: { enabled?: boolean; worker?: { online: boolean; kinds: string[] } | null; user?: AuthenticatedUser | null } = {}) {
+/** A cố vấn học tập working in the student's page, as advisors/access.ts sets it on the request. */
+const advisorId = "88888888-8888-4888-8888-888888888888";
+const acting = {
+  advisor: { ...student, userId: advisorId, identityKey: `t:${advisorId}`, objectId: advisorId, name: "Cố vấn", role: "advisor" } satisfies AuthenticatedUser,
+  student: { user: student, studentCode: "2374802010994", name: "Student", className: "71K29CNTT99", advisorName: "Cố vấn" },
+};
+
+function setup(options: { enabled?: boolean; worker?: { online: boolean; kinds: string[] } | null; user?: AuthenticatedUser | null; acting?: boolean } = {}) {
   const query = vi.fn(async (sql: string) => {
     if (sql.startsWith("SELECT id FROM users")) return { rowCount: 1, rows: [{ id: studentId }] };
     if (sql.includes("stu_comp_ai_worker_status")) return { rowCount: 1, rows: options.worker === null ? [] : [options.worker ?? { online: true, kinds: ["assistant_chat"] }] };
@@ -42,7 +49,11 @@ function setup(options: { enabled?: boolean; worker?: { online: boolean; kinds: 
   const pool = { query, connect: vi.fn(async () => client) } as unknown as DatabasePool;
   const app = express();
   app.use(express.json());
-  app.use((req, _res, next) => { req.session = { user: options.user === null ? undefined : options.user ?? student } as typeof req.session; next(); });
+  app.use((req, _res, next) => {
+    req.session = { user: options.acting ? acting.advisor : options.user === null ? undefined : options.user ?? student } as typeof req.session;
+    if (options.acting) req.advisorActing = acting;
+    next();
+  });
   app.use("/assistant", createAssistantRouter(pool, origin, { enabled: options.enabled ?? true }));
   return { app, client };
 }
@@ -60,7 +71,7 @@ describe("assistant student API", () => {
     const online = await request(setup().app).get("/assistant/threads").expect(200);
     // A student with nothing done yet is offered the setup questions first.
     expect(online.body).toEqual({
-      threads: [{ id: threadId, title: thread.title, createdAt: "2026-10-28T01:00:00.000Z", updatedAt: "2026-10-28T01:00:00.000Z" }], workerOnline: true,
+      threads: [{ id: threadId, title: thread.title, createdAt: "2026-10-28T01:00:00.000Z", updatedAt: "2026-10-28T01:00:00.000Z", byAdvisor: false }], workerOnline: true,
       suggestions: [
         "Làm sao để import bảng điểm PDF?", "Làm sao để chọn chuyên ngành và vị trí nghề nghiệp mục tiêu?", "Khảo sát định hướng dùng để làm gì?",
         "Làm sao để chạy Đánh giá năng lực?", "Điều kiện xét tốt nghiệp của khóa mình là gì?", "EduPath AI dùng dữ liệu của mình như thế nào?",
@@ -75,7 +86,7 @@ describe("assistant student API", () => {
     const { app, client } = setup();
     const response = await request(app).post("/assistant/threads").set("origin", origin).send({ content: "Hỏi" }).expect(201);
     expect(response.body.messages.map((item: { role: string; status: string }) => `${item.role}:${item.status}`)).toEqual(["user:completed", "assistant:queued"]);
-    expect(vi.mocked(chat.askQuestion).mock.calls[0]?.[2]).toEqual({ threadId: null, content: "Hỏi" });
+    expect(vi.mocked(chat.askQuestion).mock.calls[0]?.[2]).toEqual({ threadId: null, content: "Hỏi", createdBy: null });
     expect(client.query).toHaveBeenCalledWith("COMMIT");
     expect(notifyAssistantWork).toHaveBeenCalledOnce();
   });
@@ -111,6 +122,25 @@ describe("assistant student API", () => {
     const rated = await request(setup().app).post(`/assistant/messages/${answerId}/feedback`).set("origin", origin).send({ value: 1 }).expect(200);
     expect(rated.body.message).toMatchObject({ feedback: 1, sources });
     await request(setup().app).post(`/assistant/messages/${answerId}/feedback`).set("origin", origin).send({ value: 2 }).expect(400);
+  });
+
+  it("lets a cố vấn học tập work only on the conversations they started in the student's account", async () => {
+    vi.mocked(chat.listThreads).mockResolvedValue([{ ...thread, createdBy: advisorId }]);
+    const listed = await request(setup({ acting: true }).app).get("/assistant/threads").expect(200);
+    expect(vi.mocked(chat.listThreads).mock.calls[0]?.slice(1)).toEqual([studentId, advisorId]);
+    expect(listed.body.threads[0]).toMatchObject({ id: threadId, byAdvisor: true });
+    vi.mocked(chat.askQuestion).mockResolvedValue({ thread: { ...thread, createdBy: advisorId }, messages: [message()] });
+    await request(setup({ acting: true }).app).post("/assistant/threads").set("origin", origin).send({ content: "Hỏi" }).expect(201);
+    expect(vi.mocked(chat.askQuestion).mock.calls[0]?.slice(1)).toEqual([studentId, { threadId: null, content: "Hỏi", createdBy: advisorId }]);
+    vi.mocked(chat.readThread).mockResolvedValue({ thread, messages: [] });
+    await request(setup({ acting: true }).app).get(`/assistant/threads/${threadId}`).expect(200);
+    expect(vi.mocked(chat.readThread).mock.calls[0]?.slice(1)).toEqual([studentId, threadId, advisorId]);
+    vi.mocked(chat.readMessage).mockResolvedValue(message());
+    await request(setup({ acting: true }).app).get(`/assistant/messages/${answerId}`).expect(200);
+    expect(vi.mocked(chat.readMessage).mock.calls[0]?.slice(1)).toEqual([studentId, answerId, advisorId]);
+    vi.mocked(chat.retryAnswer).mockResolvedValue(message());
+    await request(setup({ acting: true }).app).post(`/assistant/messages/${answerId}/retry`).set("origin", origin).send({}).expect(200);
+    expect(vi.mocked(chat.retryAnswer).mock.calls[0]?.slice(1)).toEqual([studentId, answerId, advisorId]);
   });
 
   it("deletes a conversation and retries a failed answer", async () => {

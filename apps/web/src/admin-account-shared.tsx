@@ -72,5 +72,5 @@ export function CreateAccount({ onList, onBusy }: { onList: () => void; onBusy?:
 
 export const roleLabels: Record<AppRole, string> = {
   student: "Sinh viên", admin: "Quản trị viên", faculty_board: "Ban chủ nhiệm khoa",
-  department_head: "Trưởng/phó bộ môn", lecturer: "Giảng viên"
+  department_head: "Trưởng/phó bộ môn", lecturer: "Giảng viên", advisor: "Cố vấn học tập"
 };

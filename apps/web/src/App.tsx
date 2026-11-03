@@ -5,8 +5,9 @@ import PublicInformationPage from "./PublicInformationPage";
 import EduPathBrand from "./EduPathBrand";
 import AdminPortal from "./AdminPortal";
 import { resolveAppRoute, safeReturnTo } from "./routing";
-import type { AuthResponse } from "./types";
+import { canAccessAdmin, type AuthResponse } from "./types";
 import StudentWorkspace from "./StudentWorkspace";
+import { installAdvisorFetch, stopActing, takeAdvisorStudentFromUrl } from "./advisor-view";
 
 const errorMessages: Record<string, string> = {
   microsoft_denied: "Bạn đã hủy hoặc Microsoft từ chối yêu cầu đăng nhập.",
@@ -278,6 +279,8 @@ function StaffPortalNotice() {
 function AuthenticatedApp({ isLoginRoute }: { isLoginRoute: boolean }) {
   const [auth, setAuth] = useState<AuthResponse | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Cố vấn học tập (AD-AST-05…08, 2026-11-03): a tab opened from Lớp phụ trách carries ?sv=<student>, kept for this tab.
+  const advisorStudent = useMemo(() => takeAdvisorStudentFromUrl(), []);
 
   const refreshAuth = useCallback(async () => {
     try {
@@ -332,8 +335,18 @@ function AuthenticatedApp({ isLoginRoute }: { isLoginRoute: boolean }) {
     return <LoginPage error={authError?.message ?? loadError} portalRestricted={authError?.portalRestricted ?? false} />;
   }
 
-  if (auth.studentPortal === false) return <StaffPortalNotice />;
+  if (auth.studentPortal === false) {
+    // An admin-portal account in the tab of a student it advises sees that student's portal; the API checks the class
+    // on every request (advisor-view.ts). Anyone else gets the way back to the admin portal.
+    if (advisorStudent && canAccessAdmin(auth.user.role)) {
+      installAdvisorFetch(advisorStudent);
+      return <StudentWorkspace user={auth.user} advisor={{ name: auth.user.name }} />;
+    }
+    return <StaffPortalNotice />;
+  }
 
+  // A student's own session never works for another student.
+  if (advisorStudent) stopActing();
   return <StudentWorkspace user={auth.user} />;
 }
 

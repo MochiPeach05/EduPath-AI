@@ -4,6 +4,7 @@ import { Router, type ErrorRequestHandler } from "express";
 import { z } from "zod";
 import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
+import { studentUser } from "../advisors/access.js";
 import { LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX, NOTIFICATION_ORDERS, presentNotification } from "./model.js";
 import {
   createNotificationHousekeeping, deleteNotification, listNotifications, readAll, restoreNotification, setRead, unreadCount,
@@ -31,7 +32,7 @@ export function createStudentNotificationsRouter(pool: DatabasePool | undefined,
     res.setHeader("Cache-Control", "no-store");
     if (!pool) { res.status(503).json({ error: "database_required" }); return; }
     if (!["GET", "HEAD"].includes(req.method) && req.get("origin") !== webOrigin) { res.status(403).json({ error: "invalid_origin" }); return; }
-    const user = req.session.user!;
+    const user = studentUser(req);
     const active = await pool.query("SELECT id FROM users WHERE id=$1 AND entra_tenant_id=$2 AND is_active", [user.userId, user.tenantId]);
     if (!active.rowCount) { res.status(403).json({ error: "account_unavailable" }); return; }
     next();
@@ -39,7 +40,7 @@ export function createStudentNotificationsRouter(pool: DatabasePool | undefined,
 
   router.get("/", async (req, res) => {
     const query = listQuery.parse(req.query);
-    const userId = req.session.user!.userId;
+    const userId = studentUser(req).userId;
     const items = await listNotifications(pool!, userId, query.filter, query.limit, query.order);
     res.json({ items: items.map(presentNotification), unread: await unreadCount(pool!, userId) });
   });
@@ -47,32 +48,32 @@ export function createStudentNotificationsRouter(pool: DatabasePool | undefined,
   router.get("/unread-count", async (req, res) => {
     z.object({}).strict().parse(req.query);
     await housekeeping(pool!).catch(() => false);
-    res.json({ unread: await unreadCount(pool!, req.session.user!.userId) });
+    res.json({ unread: await unreadCount(pool!, studentUser(req).userId) });
   });
 
   router.post("/read-all", async (req, res) => {
     emptyBody.parse(req.body ?? {});
-    await readAll(pool!, req.session.user!.userId);
+    await readAll(pool!, studentUser(req).userId);
     res.json({ unread: 0 });
   });
 
   for (const [path, read] of [["read", true], ["unread", false]] as const) {
     router.post(`/:id/${path}`, async (req, res) => {
       emptyBody.parse(req.body ?? {});
-      const row = await setRead(pool!, req.session.user!.userId, id.parse(req.params.id), read);
+      const row = await setRead(pool!, studentUser(req).userId, id.parse(req.params.id), read);
       if (!row) throw new NotificationError("not_found", 404);
       res.json({ notification: presentNotification(row) });
     });
   }
 
   router.delete("/:id", async (req, res) => {
-    if (!await deleteNotification(pool!, req.session.user!.userId, id.parse(req.params.id))) throw new NotificationError("not_found", 404);
+    if (!await deleteNotification(pool!, studentUser(req).userId, id.parse(req.params.id))) throw new NotificationError("not_found", 404);
     res.status(204).end();
   });
 
   router.post("/:id/restore", async (req, res) => {
     emptyBody.parse(req.body ?? {});
-    const row = await restoreNotification(pool!, req.session.user!.userId, id.parse(req.params.id));
+    const row = await restoreNotification(pool!, studentUser(req).userId, id.parse(req.params.id));
     if (!row) throw new NotificationError("not_found", 404);
     res.json({ notification: presentNotification(row) });
   });

@@ -33,7 +33,6 @@ import { createStudentCurriculaRouter } from "./curricula/student-router.js";
 import { createTranscriptWorkerRouter } from "./student/transcript-jobs.js";
 import type { AppConfig } from "./config.js";
 import { createAuthRouter } from "./auth/router.js";
-import { canUseStudentPortal } from "./auth/security.js";
 import type { MicrosoftAuthClient } from "./auth/types.js";
 import type { UserRepository } from "./users/user-repository.js";
 import type { AuthActivity } from "./auth/activity.js";
@@ -42,6 +41,9 @@ import { createAdminAccountsRouter, type AdminAccountRepository } from "./admin/
 import { auditAdminMutations } from "./admin/audit/middleware.js";
 import { createAuditLogRouter } from "./admin/audit/router.js";
 import { createReportsRouter } from "./admin/reports/router.js";
+import { advisorActing, advisorReadOnly, studentUser } from "./advisors/access.js";
+import { createAdvisorsRouter } from "./advisors/router.js";
+import { createAdvisorPortalRouter } from "./advisors/portal-router.js";
 import {
   requireAuthentication,
   requireAdminAccess
@@ -142,15 +144,9 @@ export function createApp({
 
   // Admin-portal roles and staff mailboxes live in the admin portal only; their
   // session must not reach any student endpoint, even through a link or a
-  // restored tab.
-  app.use("/api/student", (request, response, next) => {
-    const user = request.session.user;
-    if (user && !canUseStudentPortal(user, config.staffEmailDomains)) {
-      response.status(403).json({ error: "student_portal_blocked" });
-      return;
-    }
-    next();
-  });
+  // restored tab, except as the cố vấn học tập of the student named by the tab
+  // (X-Advisor-Student, advisors/access.ts; AD-AST-05…08, 2026-11-03).
+  app.use("/api/student", advisorActing(databasePool, config.staffEmailDomains));
 
   app.get("/api/health", (_request, response) => {
     response.json({ status: "ok", service: "edupath-api" });
@@ -185,7 +181,7 @@ export function createApp({
       response.status(503).json({ error: "database_required" });
       return;
     }
-    const user = request.session.user!;
+    const user = studentUser(request);
     response.json({ student: await studentProfileRepository.detail(user, user.userId) });
   });
 
@@ -193,6 +189,8 @@ export function createApp({
     response.json({ authenticated: true, user: request.session.user });
   });
 
+  // Cố vấn học tập (role 'advisor') only reads the admin portal; it must run before the log and the admin routers.
+  app.use("/api/admin", advisorReadOnly);
   // Nhật ký thao tác (AD-REPORT-11): every successful admin change is logged; it must run before the admin routers.
   app.use("/api/admin", auditAdminMutations(databasePool));
   app.use("/api/admin/audit-log", createAuditLogRouter(databasePool));
@@ -227,6 +225,9 @@ export function createApp({
     createCompetencyAiQueue({ enabled: Boolean(config.aiWorkerKey) }), { promptVersion: PROMPT_VERSION }));
   app.use("/api/student", createStudentDataRouter(databasePool, config.webOrigin,Boolean(config.ocrWorkerKey), { afterTranscriptImport }));
   app.use("/api/admin/students", createStudentProfilesRouter(studentProfileRepository, adminAccountRepository));
+  // Quản lý cố vấn học tập (AD-ADV-01…05) and an advisor's Lớp phụ trách (AD-AST-01…05, 09), 2026-11-03.
+  app.use("/api/admin/advisors", createAdvisorsRouter(databasePool, config.webOrigin, config.staffEmailDomains));
+  app.use("/api/admin/advisor-portal", createAdvisorPortalRouter(databasePool, config.webOrigin));
 
   if (config.nodeEnv === "production") {
     app.use(

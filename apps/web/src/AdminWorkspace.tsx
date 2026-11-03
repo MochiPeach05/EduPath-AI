@@ -5,7 +5,7 @@ import GraduationManagement from "./GraduationManagement";
 import { useEffect, useRef, useState } from "react";
 import EduPathBrand from "./EduPathBrand";
 import { layoutHeight } from "./page-scale";
-import { canAccessAdmin, type AuthenticatedUser } from "./types";
+import { canManageAdmin, canManageAdvisors, type AuthenticatedUser } from "./types";
 import { Icon, roleLabels } from "./admin-account-shared";
 import AccountsManagement from "./AccountsManagement";
 import StudentProfiles from "./StudentProfiles";
@@ -14,15 +14,31 @@ import PlansManagement from "./PlansManagement";
 import CompetencyManagement from "./CompetencyManagement";
 import AnnouncementsManagement from "./AnnouncementsManagement";
 import AdminReports from "./AdminReports";
-import { adminGroupOf, adminSidebar, isReportPath, resolveAdminPage, toggleAdminGroup, type AdminPage } from "./admin-navigation";
+import AdvisorsManagement from "./AdvisorsManagement";
+import AdvisorPortal from "./AdvisorPortal";
+import { ADVISOR_PORTAL_API, type AdvisorMe } from "./advisor-types";
+import { ADVISOR_CLASSES_PATH, ADVISOR_PERMISSIONS_PATH, ADVISORS_PATH, adminGroupOf, adminSidebarFor, isReportPath, resolveAdminPage, toggleAdminGroup, type AdminAccess, type AdminPage } from "./admin-navigation";
 import "./admin-workspace.css";
 
 export default function AdminWorkspace({ user, busy, error, onLogout }: { user: AuthenticatedUser; busy: boolean; error: string | null; onLogout: () => void }) {
-  const canManage = canAccessAdmin(user.role);
+  // Cố vấn học tập only reads the admin portal (function list 2026-11-03: the "Quản trị viên" rows are the changes).
+  const canManage = canManageAdmin(user.role);
+  /** Whether the account advises classes (Lớp phụ trách): always for the role advisor, else GET advisor-portal/me; null until then. */
+  const [advisesClasses, setAdvisesClasses] = useState<boolean | null>(user.role === "advisor" ? true : null);
+  const access: AdminAccess = { role: user.role, advisesClasses };
   const [menuOpen, setMenuOpen] = useState(false);
   const [path, setPath] = useState(() => window.location.pathname);
   /** The one open group, or null when the admin closed it (user, 2026-10-28: opening one group closes the other). */
-  const [openGroup, setOpenGroup] = useState(() => adminGroupOf(window.location.pathname));
+  const [openGroup, setOpenGroup] = useState(() => adminGroupOf(window.location.pathname, access));
+  useEffect(() => {
+    if (user.role === "advisor") return;
+    const controller = new AbortController();
+    fetch(`${ADVISOR_PORTAL_API}/me`, { credentials: "include", cache: "no-store", signal: controller.signal })
+      .then((response) => (response.ok ? response.json() as Promise<AdvisorMe> : null))
+      .then((me) => { if (!controller.signal.aborted) setAdvisesClasses(Boolean(me && me.classes > 0)); },
+        () => { if (!controller.signal.aborted) setAdvisesClasses(false); });
+    return () => controller.abort();
+  }, [user.role]);
   const heading = useRef<HTMLHeadingElement>(null);
   const header = useRef<HTMLElement>(null);
   const shell = useRef<HTMLDivElement>(null);
@@ -34,7 +50,7 @@ export default function AdminWorkspace({ user, busy, error, onLogout }: { user: 
     syncHeight();
     return () => observer.disconnect();
   }, []);
-  const current = resolveAdminPage(path);
+  const current = resolveAdminPage(path, access);
   const navigate = (nextPath: string) => {
     // The report pages share their filters through the address bar: going from one report to another keeps them.
     const target = isReportPath(nextPath) && isReportPath(window.location.pathname) && !nextPath.includes("?") ? `${nextPath}${window.location.search}` : nextPath;
@@ -61,7 +77,7 @@ export default function AdminWorkspace({ user, busy, error, onLogout }: { user: 
     <aside className={`am-sidebar${menuOpen ? " am-sidebar-open" : ""}`}>
       <div className="am-sidebar-brand"><EduPathBrand /></div>
       <p className="am-nav-label">QUẢN TRỊ HỆ THỐNG</p>
-      <nav id="admin-navigation" aria-label="Danh mục quản trị">{adminSidebar.map((entry) => {
+      <nav id="admin-navigation" aria-label="Danh mục quản trị">{adminSidebarFor(access).map((entry) => {
         if (entry.kind === "page") return pageLink(entry.page);
         const holdsCurrent = entry.pages.some((page) => page.path === current.path);
         const open = openGroup === entry.id;
@@ -76,7 +92,7 @@ export default function AdminWorkspace({ user, busy, error, onLogout }: { user: 
     <div className="am-main"><header ref={header} className="am-topbar"><div><button className="am-menu-toggle am-outline" aria-controls="admin-navigation" aria-expanded={menuOpen} aria-label="Đóng mở danh mục quản trị" onClick={() => setMenuOpen(!menuOpen)}><Icon name="menu" /></button><span>Quản trị / <strong>{current.label}</strong></span></div><div className="am-topbar-user"><span className="am-avatar" aria-hidden="true">{user.name.slice(0, 1)}</span><div><strong>{user.name}</strong><small>{roleLabels[user.role]}</small></div><button className="am-logout" disabled={busy} onClick={onLogout}><Icon name="exit" /><span>{busy ? "Đang đăng xuất…" : "Đăng xuất"}</span></button></div></header>
       <main className="am-content"><div className="am-page-heading"><div><p className="admin-eyebrow">{current.eyebrow}</p><h1 ref={heading} tabIndex={-1}>{current.label}</h1></div></div>
         {error && <p className="admin-error" role="alert">{error}</p>}
-        {isReportPath(current.path) ? <AdminReports path={current.path} navigate={navigate} /> : current.path === "/quantri/gui-thong-bao" ? <AnnouncementsManagement key="compose" canManage={canManage} section="compose" navigate={navigate} /> : current.path === "/quantri/thong-bao-da-gui" ? <AnnouncementsManagement key="sent" canManage={canManage} section="sent" navigate={navigate} /> : current.path === "/quantri/nhom-nang-luc" ? <CompetencyManagement key="groups" canManage={canManage} section="groups" /> : current.path === "/quantri/cau-hinh-nang-luc" ? <CompetencyManagement key="profiles" canManage={canManage} section="profiles" /> : current.path === "/quantri/cau-hinh-mon-hoc" ? <CompetencyManagement key="courses" canManage={canManage} section="courses" /> : current.path === "/quantri/ky-nang" ? <CareerSkillsManagement canManage={canManage} /> : current.path === "/quantri/linh-vuc-nghe-nghiep" ? <CareerFieldsManagement canManage={canManage} /> : current.path === "/quantri/vi-tri-nghe-nghiep" ? <CareersManagement canManage={canManage} /> : current.path === "/quantri/tieu-chuan-tot-nghiep" ? <GraduationManagement canManage={canManage} /> : current.path === "/quantri/ke-hoach" ? <PlansManagement canManage={canManage} /> : current.path === "/quantri/chuong-trinh" ? <CurriculaManagement canManage={canManage} /> : current.path === "/quantri/sinh-vien" ? <StudentProfiles /> : <AccountsManagement actorId={user.userId} canManage={canManage} canAssignRoles={user.role === "admin"} />}
+        {isReportPath(current.path) ? <AdminReports path={current.path} navigate={navigate} /> : current.path === "/quantri/gui-thong-bao" ? <AnnouncementsManagement key="compose" canManage={canManage} section="compose" navigate={navigate} /> : current.path === "/quantri/thong-bao-da-gui" ? <AnnouncementsManagement key="sent" canManage={canManage} section="sent" navigate={navigate} /> : current.path === "/quantri/nhom-nang-luc" ? <CompetencyManagement key="groups" canManage={canManage} section="groups" /> : current.path === "/quantri/cau-hinh-nang-luc" ? <CompetencyManagement key="profiles" canManage={canManage} section="profiles" /> : current.path === "/quantri/cau-hinh-mon-hoc" ? <CompetencyManagement key="courses" canManage={canManage} section="courses" /> : current.path === "/quantri/ky-nang" ? <CareerSkillsManagement canManage={canManage} /> : current.path === "/quantri/linh-vuc-nghe-nghiep" ? <CareerFieldsManagement canManage={canManage} /> : current.path === "/quantri/vi-tri-nghe-nghiep" ? <CareersManagement canManage={canManage} /> : current.path === "/quantri/tieu-chuan-tot-nghiep" ? <GraduationManagement canManage={canManage} /> : current.path === "/quantri/ke-hoach" ? <PlansManagement canManage={canManage} /> : current.path === "/quantri/chuong-trinh" ? <CurriculaManagement canManage={canManage} /> : current.path === "/quantri/sinh-vien" ? <StudentProfiles /> : current.path === ADVISORS_PATH ? <AdvisorsManagement canManage={canManageAdvisors(user.role)} /> : current.path === ADVISOR_CLASSES_PATH ? <AdvisorPortal key="classes" section="classes" /> : current.path === ADVISOR_PERMISSIONS_PATH ? <AdvisorPortal key="permissions" section="permissions" /> : <AccountsManagement actorId={user.userId} canManage={canManage} canAssignRoles={user.role === "admin"} />}
       </main><footer className="am-footer">© 2026 · Bản quyền thuộc Khoa Công nghệ Thông tin · Trường Đại học Văn Lang.</footer>
     </div>
   </div>;

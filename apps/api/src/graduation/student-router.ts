@@ -2,6 +2,7 @@ import { Router, type ErrorRequestHandler } from "express";
 import { z } from "zod";
 import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
+import { studentUser } from "../advisors/access.js";
 import type { GraduationData } from "./model.js";
 import { loadStudentGraduation, type StudentGraduation } from "./student-graduation.js";
 
@@ -71,7 +72,7 @@ export function createStudentGraduationRouter(pool: DatabasePool | undefined) {
       res.status(503).json({ error: "database_required" });
       return;
     }
-    const user = req.session.user!;
+    const user = studentUser(req);
     const active = await pool.query(
       "SELECT id FROM users WHERE id=$1 AND entra_tenant_id=$2 AND is_active",
       [user.userId, user.tenantId],
@@ -89,7 +90,7 @@ export function createStudentGraduationRouter(pool: DatabasePool | undefined) {
   });
   router.get("/", async (req, res) => {
     z.object({}).strict().parse(req.query);
-    res.json(studentGraduationResponse(await loadStudentGraduation(pool!, req.session.user!.userId)));
+    res.json(studentGraduationResponse(await loadStudentGraduation(pool!, studentUser(req).userId)));
   });
   const errors: ErrorRequestHandler = (error, _req, res, next) => {
     if (error instanceof z.ZodError) {

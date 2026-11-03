@@ -1,7 +1,8 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import StudentProfileEditor from "./StudentProfileEditor";
+import { installAdvisorFetch, stopActing } from "./advisor-view";
 
 const render = (profile: Parameters<typeof StudentProfileEditor>[0]["profile"]) =>
   renderToStaticMarkup(createElement(StudentProfileEditor, { profile, onSaved: () => {} }));
@@ -22,5 +23,25 @@ describe("Mục tiêu học tập", () => {
     expect(html).toContain("Kỹ sư dữ liệu — Data Engineer");
     expect(html).toContain("(đã ngừng sử dụng; bạn có thể chọn vị trí nghề nghiệp khác)");
     expect(html).not.toContain("Xem yêu cầu của vị trí nghề nghiệp");
+  });
+});
+
+describe("Mục tiêu học tập in a cố vấn học tập's tab", () => {
+  afterEach(() => stopActing());
+
+  it("shows the goals with no way to change them", () => {
+    installAdvisorFetch("00000000-0000-4000-8000-0000000e2e05");
+    const html = render({ careerPositionId: "c1", careerPosition: { id: "c1", nameVi: "Kỹ sư phần mềm", nameEn: "Software Engineer", deletedAt: null }, specialty: "CNPM", cohortCode: "K29" });
+    expect(html).toContain("Kỹ sư phần mềm — Software Engineer");
+    expect(html).toContain("Sinh viên tự chọn chuyên ngành và vị trí nghề nghiệp mục tiêu; cố vấn học tập chỉ xem.");
+    expect(html).not.toContain("Chỉnh sửa thông tin");
+    expect(html).not.toContain(">Chọn vị trí nghề nghiệp mục tiêu</button>");
+  });
+
+  it("offers the changes again in the student's own tab", () => {
+    const html = render({ careerPositionId: null, careerPosition: null, specialty: null, cohortCode: "K30" });
+    expect(html).toContain("Chỉnh sửa thông tin");
+    expect(html).toContain(">Chọn vị trí nghề nghiệp mục tiêu</button>");
+    expect(html).not.toContain("cố vấn học tập chỉ xem");
   });
 });

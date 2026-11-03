@@ -36,9 +36,10 @@ function CourseFacts({ course, names, byCode }: { course: StudyPlanCourse; names
 /** The width below which student-roadmap.css stacks Danh sách chờ under the terms. */
 const STACKED_QUERY = "(max-width: 1100px)";
 
-export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, origin, onOpenAi }: {
+/** readOnly: a cố vấn học tập's view of the student's plan (advisor-view.ts): the terms as they are, nothing to move or add. */
+export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, origin, onOpenAi, readOnly = false }: {
   context: StudyPlanContext; plan: StudyPlanData; onChange: (plan: StudyPlanData) => void; saveState: SaveState; saveError: string;
-  origin: PlanOrigin; onOpenAi: () => void;
+  origin: PlanOrigin; onOpenAi: () => void; readOnly?: boolean;
 }) {
   const [side, setSide] = useState<"list" | "search">("list");
   const [query, setQuery] = useState("");
@@ -82,7 +83,13 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
     if (over !== id) setOver(id);
   };
 
-  const courseItem = (course: StudyPlanCourse) => <li key={course.code} className="rm-side-course" draggable onDragStart={(event) => dragStart(event, course.code)}>
+  // Drag and drop only where the plan can change.
+  const dragProps = (code: string) => (readOnly ? {} : { draggable: true, onDragStart: (event: DragEvent) => dragStart(event, code) });
+  const dropProps = (id: string, term: string | null) => (readOnly ? {} : {
+    onDragOver: (event: DragEvent) => allowDrop(event, id), onDragLeave: () => setOver(null), onDrop: (event: DragEvent) => drop(event, term),
+  });
+
+  const courseItem = (course: StudyPlanCourse) => <li key={course.code} className="rm-side-course" {...dragProps(course.code)}>
     <div>
       <strong>{course.name}</strong>
       <span className="rm-course-code">{course.code}</span>
@@ -93,25 +100,25 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
     </button>
   </li>;
 
-  return <section className="sw-panel rm-planner-panel" aria-labelledby="rm-planner-title">
+  return <section className={`sw-panel rm-planner-panel${readOnly ? " rm-planner-readonly" : ""}`} aria-labelledby="rm-planner-title">
     <header className="rm-planner-head">
       <div>
         <h2 id="rm-planner-title">Kế hoạch học kỳ</h2>
-        <p>{plannedCount
+        {readOnly ? <p>Kế hoạch các học kỳ tới của sinh viên. Cố vấn học tập chỉ xem; sinh viên tự sắp xếp và điều chỉnh kế hoạch này.</p> : <p>{plannedCount
           ? <>Bạn điều chỉnh kế hoạch bằng cách kéo học phần giữa các học kỳ, kéo từ Danh sách chờ vào, hoặc chọn học kỳ ở "Thêm vào" rồi bấm Thêm.</>
-          : <>Xếp các học phần còn thiếu vào từng học kỳ: kéo từ Danh sách chờ vào một học kỳ, hoặc chọn học kỳ ở "Thêm vào" rồi bấm Thêm.</>} Kế hoạch tự lưu và được tính ở chế độ Theo kế hoạch của mục Theo dõi tiến độ.</p>
+          : <>Xếp các học phần còn thiếu vào từng học kỳ: kéo từ Danh sách chờ vào một học kỳ, hoặc chọn học kỳ ở "Thêm vào" rồi bấm Thêm.</>} Kế hoạch tự lưu và được tính ở chế độ Theo kế hoạch của mục Theo dõi tiến độ.</p>}
       </div>
-      <p className={`rm-save rm-save-${saveState}`} role="status">{saveState === "saving" ? "Đang lưu…" : saveState === "saved" ? "Đã lưu" : saveState === "dirty" ? "Có thay đổi chưa lưu" : saveState === "error" ? saveError || "Chưa lưu được" : ""}</p>
+      {!readOnly && <p className={`rm-save rm-save-${saveState}`} role="status">{saveState === "saving" ? "Đang lưu…" : saveState === "saved" ? "Đã lưu" : saveState === "dirty" ? "Có thay đổi chưa lưu" : saveState === "error" ? saveError || "Chưa lưu được" : ""}</p>}
     </header>
     {!context.curriculum && <p className="rm-note">Chưa có chương trình đào tạo cho khóa của bạn nên chưa có danh sách học phần để lên kế hoạch.</p>}
-    {origin?.kind === "prefill" && plannedCount > 0 && <p className="rm-origin"><Mark kind="planned" /> Kế hoạch được điền sẵn {plannedCount} học phần bắt buộc còn lại theo kế hoạch đào tạo của khóa; kế hoạch sẽ được lưu khi bạn chỉnh sửa.</p>}
+    {!readOnly && origin?.kind === "prefill" && plannedCount > 0 && <p className="rm-origin"><Mark kind="planned" /> Kế hoạch được điền sẵn {plannedCount} học phần bắt buộc còn lại theo kế hoạch đào tạo của khóa; kế hoạch sẽ được lưu khi bạn chỉnh sửa.</p>}
     {plan.aiAdded && <div className="rm-origin rm-origin-ai">
       <Mark kind="planned" />
       <p>{aiAddedText(context, plan.aiAdded)}</p>
-      <button type="button" className="rm-link" onClick={() => onChange({ ...plan, aiAdded: null })}>Ẩn thông báo</button>
+      {!readOnly && <button type="button" className="rm-link" onClick={() => onChange({ ...plan, aiAdded: null })}>Ẩn thông báo</button>}
     </div>}
     {!plannedCount && context.curriculum && <div className="rm-origin rm-origin-empty">
-      <p>Kế hoạch chưa có học phần nào. Học phần bắt buộc chỉ được điền sẵn khi còn ở phía trước theo kế hoạch đào tạo (học phần đã trễ không được điền), và học phần lộ trình AI đề xuất được thêm khi bạn có lộ trình AI. Hãy tạo lộ trình ở mục Lộ trình AI đề xuất, hoặc tự thêm học phần từ Danh sách chờ.</p>
+      <p>Kế hoạch chưa có học phần nào.{readOnly ? "" : <> Học phần bắt buộc chỉ được điền sẵn khi còn ở phía trước theo kế hoạch đào tạo (học phần đã trễ không được điền), và học phần lộ trình AI đề xuất được thêm khi bạn có lộ trình AI. Hãy tạo lộ trình ở mục Lộ trình AI đề xuất, hoặc tự thêm học phần từ Danh sách chờ.</>}</p>
       <button type="button" className="sw-outline" onClick={onOpenAi}>Mở Lộ trình AI đề xuất</button>
     </div>}
     <div className="rm-planner">
@@ -121,7 +128,7 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
           const running = runningIn(context, term.code).filter((course) => !placed.has(course.code));
           const current = term.code === context.currentTerm;
           return <section key={term.code} className={`rm-term${over === term.code ? " is-over" : ""}`} aria-label={termLabel(term.code)}
-            onDragOver={(event) => allowDrop(event, term.code)} onDragLeave={() => setOver(null)} onDrop={(event) => drop(event, term.code)}>
+            {...dropProps(term.code, term.code)}>
             <header className="rm-term-head">
               <h3>{termLabel(term.code)}{current && <span className="rm-tag rm-tag-running">Học kỳ hiện tại</span>}</h3>
               <div className="rm-load-box">
@@ -138,32 +145,32 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
               {term.courses.map((item) => {
                 const course = byCode.get(item.code.toUpperCase());
                 const problems = course ? issueTexts(issues.get(course.code), course, term.code, names) : ["Học phần không còn trong chương trình đào tạo"];
-                return <li key={item.code} className={`rm-term-course${problems.length ? " has-issue" : ""}`} draggable onDragStart={(event) => dragStart(event, item.code)}>
+                return <li key={item.code} className={`rm-term-course${problems.length ? " has-issue" : ""}`} {...dragProps(item.code)}>
                   <Mark kind="planned" />
                   <div>
                     <strong>{course?.name ?? item.code}</strong><span className="rm-course-code">{item.code}</span>
                     {course && <small className="rm-course-facts">{formatNumber(course.credits)} TC{course.state === "failed" ? " · học lại" : ""}{course.conditional ? " · môn điều kiện" : ""}</small>}
                     {problems.map((text) => <small key={text} className="rm-issue"><Mark kind="warning" /> {text}</small>)}
                   </div>
-                  <div className="rm-term-actions">
+                  {!readOnly && <div className="rm-term-actions">
                     <select aria-label={`Chuyển ${course?.name ?? item.code} sang học kỳ khác`} value={term.code} onChange={(event) => move(item.code, event.target.value || null)}>
                       {plan.terms.map((option) => <option key={option.code} value={option.code}>{termLabel(option.code)}</option>)}
                       <option value="">Bỏ khỏi kế hoạch</option>
                     </select>
                     <button type="button" className="rm-remove" onClick={() => move(item.code, null)} aria-label={`Bỏ ${course?.name ?? item.code} khỏi kế hoạch`} title="Bỏ khỏi kế hoạch">×</button>
-                  </div>
+                  </div>}
                 </li>;
               })}
             </ul>
-            {!running.length && !term.courses.length && <p className="rm-drop-hint">Kéo học phần vào đây hoặc bấm Thêm vào học kỳ này.</p>}
-            <button type="button" className="rm-link" onClick={() => addHere(term.code)}>+ Thêm vào học kỳ này</button>
+            {!running.length && !term.courses.length && <p className="rm-drop-hint">{readOnly ? "Chưa có học phần nào." : "Kéo học phần vào đây hoặc bấm Thêm vào học kỳ này."}</p>}
+            {!readOnly && <button type="button" className="rm-link" onClick={() => addHere(term.code)}>+ Thêm vào học kỳ này</button>}
           </section>;
         })}
-        {plan.terms.length < MAX_TERMS && <button type="button" className="rm-add-term" onClick={addTerm}><Icon name="plus" />Thêm học kỳ</button>}
+        {!readOnly && plan.terms.length < MAX_TERMS && <button type="button" className="rm-add-term" onClick={addTerm}><Icon name="plus" />Thêm học kỳ</button>}
       </div>
 
-      <aside ref={sidePanel} tabIndex={-1} className={`rm-side${over === "side" ? " is-over" : ""}`} aria-label="Học phần còn thiếu"
-        onDragOver={(event) => allowDrop(event, "side")} onDragLeave={() => setOver(null)} onDrop={(event) => drop(event, null)}>
+      {!readOnly && <aside ref={sidePanel} tabIndex={-1} className={`rm-side${over === "side" ? " is-over" : ""}`} aria-label="Học phần còn thiếu"
+        {...dropProps("side", null)}>
         <label className="rm-target">Thêm vào
           <select value={targetTerm} onChange={(event) => setTarget(event.target.value)}>
             {plan.terms.map((term) => <option key={term.code} value={term.code}>{termLabel(term.code)}</option>)}
@@ -187,7 +194,7 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
           <ul>{found.map(courseItem)}</ul>
         </div>}
         <p className="rm-side-hint">Thả học phần vào đây để bỏ khỏi kế hoạch.</p>
-      </aside>
+      </aside>}
     </div>
   </section>;
 }

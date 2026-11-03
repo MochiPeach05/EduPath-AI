@@ -6,7 +6,7 @@
 export type NotificationType = "ai" | "warn" | "khoa" | "sys";
 export const NOTIFICATION_KINDS = [
   "transcript_ready", "transcript_failed", "assessment_comment", "roadmap_ready", "roadmap_failed", "graduation_advice",
-  "warning", "catalog_updated", "announcement",
+  "warning", "catalog_updated", "announcement", "advisor_action",
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 
@@ -20,7 +20,7 @@ export const PORTAL_PAGES: Readonly<Record<string, string>> = {
   "#roadmap": "Lộ trình học tập",
   "#curriculum": "Chương trình đào tạo",
   "#plans": "Kế hoạch đào tạo",
-  "#graduation": "Điều kiện xét tốt nghiệp",
+  "#graduation": "Xét tốt nghiệp",
   "#assistant": "Trợ lý AI",
 };
 export const isPortalPage = (link: string | null | undefined): link is string => typeof link === "string" && Object.hasOwn(PORTAL_PAGES, link);

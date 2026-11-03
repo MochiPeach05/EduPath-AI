@@ -8,6 +8,7 @@ import {
 } from "./career-guidance-data";
 import { meaningClass } from "./display-format";
 import { fitMeaning } from "./student-competency-data";
+import { isAdvisorView } from "./advisor-view";
 import "./career-guidance.css";
 
 // "Định hướng nghề nghiệp" (#career, user 2026-10-24: "làm theo ý bạn muốn nhưng vẫn phải phù hợp với đề tài"): the
@@ -121,7 +122,7 @@ function TopPick({ career, scored, saving, onDetail, onChoose }: { career: Guida
       </ul>
       <div className="cg-top-actions">
         {career.isTarget ? <TargetTag action />
-          : <button type="button" className="sw-primary" disabled={saving} onClick={onChoose}><Icon name="check" />{saving ? "Đang lưu…" : "Chọn làm vị trí nghề nghiệp mục tiêu"}</button>}
+          : isAdvisorView() ? null : <button type="button" className="sw-primary" disabled={saving} onClick={onChoose}><Icon name="check" />{saving ? "Đang lưu…" : "Chọn làm vị trí nghề nghiệp mục tiêu"}</button>}
         <button type="button" className="sr-secondary" onClick={onDetail} aria-label={`Xem chi tiết ${career.nameVi}`}><Icon name="eye" />Xem chi tiết</button>
       </div>
     </div>
@@ -209,7 +210,7 @@ function DetailDialog({ career, saving, compared, compareFull, onCompare, onChoo
       <div className="cg-dialog-actions">
         <CompareButton career={career} compared={compared} full={compareFull} long onToggle={onCompare} />
         {career.isTarget ? <TargetTag action />
-          : <button type="button" className="sw-primary" disabled={saving} onClick={onChoose}><Icon name="check" />{saving ? "Đang lưu…" : "Chọn làm vị trí nghề nghiệp mục tiêu"}</button>}
+          : isAdvisorView() ? null : <button type="button" className="sw-primary" disabled={saving} onClick={onChoose}><Icon name="check" />{saving ? "Đang lưu…" : "Chọn làm vị trí nghề nghiệp mục tiêu"}</button>}
       </div>
     </footer>
   </dialog>;

@@ -1,0 +1,90 @@
+/* The student portal opened by a cố vấn học tập (advisor-view.ts, StudentWorkspace AdvisorViewBanner; 2026-11-03): a blue
+   strip under the header says whose page it is and the way out; it stays out of the student's red. */
+.sw-advisor-banner {
+  padding: 10px var(--sw-header-gutter, 20px);
+  border-bottom: 1px solid #c9d8f0;
+  background: #eef4fd;
+  color: #1c3a6e;
+}
+
+.sw-advisor-banner-inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.sw-advisor-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: #dbe7fb;
+  color: #2456a6;
+}
+
+.sw-advisor-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.sw-advisor-text {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.sw-advisor-close {
+  flex: none;
+  white-space: nowrap;
+}
+
+.sw-advisor-blocked {
+  max-width: 1400px;
+  margin: 8px auto 0;
+  color: #8f2a1d;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+@media (max-width: 700px) {
+  .sw-advisor-banner-inner {
+    flex-wrap: wrap;
+  }
+
+  .sw-advisor-close {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+/* What the student decides alone, said where its buttons were (Mục tiêu học tập, Khảo sát định hướng). */
+.sw-advisor-note {
+  margin: 8px 0 0;
+  color: #4a5a72;
+  font-size: 13px;
+}
+
+/* Kế hoạch học kỳ read only: no Danh sách chờ beside the terms. */
+.rm-planner-panel.rm-planner-readonly .rm-planner {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+/* Trợ lý AI: a conversation the student's cố vấn học tập started. */
+.as-thread-tag {
+  display: inline-flex;
+  justify-self: start;
+  margin-top: 2px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  background: #e8effa;
+  color: #2456a6;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.5;
+}

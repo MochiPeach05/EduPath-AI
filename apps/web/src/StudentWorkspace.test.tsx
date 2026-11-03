@@ -20,9 +20,9 @@ const user: AuthenticatedUser = {
   role: "student", signedInAt: "2026-10-25T00:00:00Z",
 };
 
-function render(hash: string) {
+function render(hash: string, advisor: { name: string } | null = null) {
   vi.stubGlobal("window", { location: { hash } });
-  return renderToStaticMarkup(createElement(StudentWorkspace, { user }));
+  return renderToStaticMarkup(createElement(StudentWorkspace, { user, advisor }));
 }
 
 afterEach(() => { vi.unstubAllGlobals(); });
@@ -121,5 +121,32 @@ describe("student shell", () => {
     expect(html).toContain("Đang tải Trợ lý AI…");
     expect(html).not.toContain("Sắp ra mắt");
     expect(html).not.toContain("Chức năng này chưa sẵn sàng sử dụng");
+  });
+});
+
+describe("a cố vấn học tập's tab (AD-AST-05…08)", () => {
+  // The advisor's own synthetic account; the student comes from GET /api/student/profile, not from this account.
+  const advisor = { name: "Cố vấn Thử nghiệm" };
+
+  it("says whose page it is and what the advisor may do, with the way out instead of logging out", () => {
+    const html = render("#overview", advisor);
+    expect(html).toContain("với tư cách cố vấn học tập (Cố vấn Thử nghiệm).");
+    expect(html).toContain("Bạn làm thay được: import bảng điểm, Đánh giá năng lực, Lộ trình AI, lời khuyên xét tốt nghiệp và Trợ lý AI.");
+    expect(html).toContain("Đóng trang sinh viên");
+    expect(html).toContain('aria-label="Chế độ cố vấn học tập"');
+  });
+
+  it("hides the student's bell and never shows the advisor's own account as the student", () => {
+    const html = render("#overview", advisor);
+    expect(html).not.toContain("sw-bell");
+    expect(html).not.toContain("Cố vấn Thử nghiệm.</strong>");
+    expect(html).toContain("Xin chào, Sinh viên.");
+    expect(html).not.toContain("sv.thunghiem@vanlanguni.vn");
+  });
+
+  it("keeps the student's own tab as it was", () => {
+    const html = render("#overview");
+    expect(html).not.toContain("Chế độ cố vấn học tập");
+    expect(html).toContain("sw-bell");
   });
 });
