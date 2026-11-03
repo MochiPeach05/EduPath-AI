@@ -40,9 +40,12 @@ Hợp đồng dữ liệu: `apps/web/src/advisor-types.ts`.
   - `POST /` (AD-ADV-02), `PUT /:id`, `DELETE /:id` (xóa CVHT và lớp, giữ tài khoản);
   - `POST /import/preview` (AD-ADV-03) và `POST /import` (AD-ADV-01), nhận tệp .xlsx thô kèm header `x-filename`;
   - `GET /import/template`.
-- **Import:**
-  - Hàng tiêu đề nhận dạng không phân biệt dấu, hoa thường: Họ và tên, Email, Mã giảng viên, Đơn vị (Bộ môn, Khoa) và Lớp phụ trách.
-  - Ô lớp tách theo `,`, `;`, `/` và xuống dòng. Cùng một email trên nhiều dòng thì gộp thành một CVHT.
+- **Import** (đọc thẳng file phân công của Khoa "CVHT _Phan cong 2026_2027", commit 89c2e35):
+  - Hàng tiêu đề nằm dưới các dòng tên trường, khoa, năm học; nhận dạng không phân biệt dấu, hoa thường: MGV hoặc Mã giảng viên, CVHT hoặc Họ và tên, EMAIL, MÃ LỚP hoặc Lớp phụ trách, Đơn vị (Bộ môn, Khoa). Các cột STT, KHÓA, SLSV, GHI CHÚ, CVHT NỘP KẾ HOẠCH… được bỏ qua.
+  - MGV dạng số được đọc thành chữ. Ô lớp tách theo `,`, `;`, `/`, khoảng trắng và xuống dòng; số đứng một mình nối tiếp lớp đứng trước ("71K27CNTT01, 02, 03" là ba lớp). Cùng một email trên nhiều dòng thì gộp thành một CVHT.
+  - Mọi trang tính đang hiện có dòng tiêu đề đều được đọc và gộp theo email; trang ẩn không bao giờ được đọc. Một lớp có hai CVHT, hoặc một email ghi hai họ tên hay hai MGV, là lỗi ở các dòng đó. Phần xem trước nói rõ đã đọc những trang nào và các trang có khớp nhau không.
+  - Email phải thuộc miền của cán bộ (`STAFF_EMAIL_DOMAINS`, mặc định vlu.edu.vn). Lớp chưa có sinh viên chỉ là cảnh báo.
+  - File năm học 2026–2027: hai trang đang hiện (GUI PDT 30 dòng, theo lớp 120 dòng) ghi cùng một phân công, 30 CVHT và 120 lớp. "Tải file mẫu" theo đúng bố cục này.
   - Tệp là nguồn chuẩn cho những CVHT có trong tệp; lớp ghi cho người khác thì được chuyển sang (có dòng "Lớp … chuyển từ …"). CVHT không có trong tệp giữ nguyên.
   - Thêm hoặc sửa tay thì báo `class_taken` khi lớp đã có người phụ trách.
 - **`/api/admin/advisor-portal`** (`portal-router.ts`):
