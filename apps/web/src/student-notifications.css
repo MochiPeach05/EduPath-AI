@@ -14,8 +14,12 @@
 /* Popover: the heading, then the filters column and the pane (the list, or one notification), then "Đánh dấu tất cả đã
    đọc". The pane has a fixed height, so switching filters never resizes the popover. */
 .sw-popover.sw-popover-notifications { width: min(600px, calc(100 * var(--ep-vw) - 32px)); padding: 18px 18px 14px; }
-.nt-panel { position: relative; display: grid; gap: 10px; }
-.sw-popover .nt-panel h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; }
+/* Not positioned: the popover (absolute) places the "Hoàn tác" toast, and the close button stays clickable above. */
+.nt-panel { display: grid; gap: 10px; }
+.sw-popover .nt-panel h3 { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 36px; margin: 0; padding-right: 44px; }
+/* The close button: a larger target, centred on the heading's line (the popover's padding is 18px). */
+.sw-popover-notifications .sw-popover-close { top: 13px; right: 12px; width: 36px; height: 36px; border-radius: 8px; }
+.sw-popover-notifications .sw-popover-close:hover { background: #f4f6fa; color: var(--sw-ink); }
 .nt-count { padding: 2px 8px; border-radius: 999px; background: var(--sw-soft); color: var(--sw-red); font-size: 12px; font-weight: 800; }
 .nt-panel-body {
   display: grid; grid-template-columns: 150px minmax(0, 1fr);
