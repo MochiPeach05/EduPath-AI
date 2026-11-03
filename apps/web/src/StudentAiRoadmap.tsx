@@ -7,7 +7,24 @@ import {
   monthTitle, normalizeRoadmap, normalizeRoadmapResponse, normalizeRoadmapStatus, pendingCopy, requestErrorMessage, sentence, skillTags, studyTag,
   type Roadmap, type RoadmapBasis, type RoadmapImprove, type RoadmapResponse, type RoadmapSkill, type RoadmapStatus, type RoadmapStudy,
 } from "./student-roadmap-data";
+import { nextTermOffer, type StudyPlanContext } from "./study-plan-data";
 import "./student-roadmap.css";
+
+/**
+ * The plan context of Kế hoạch học kỳ (StudentRoadmap loads it for every tab), when it has loaded: each course gets the
+ * next term's offering (user 2026-11-03: "ghi rõ kì sau mở hay không và thường mở ở học kì nào"), and another specialty's
+ * course of a roadmap made before roadmap-v12 is not shown ("không có đề xuất môn khác chuyên ngành nữa").
+ */
+type PlanContext = StudyPlanContext | null;
+const planCourse = (planContext: PlanContext, code: string) => planContext?.courses.find((course) => course.code === code.toUpperCase()) ?? null;
+const ownProgram = (planContext: PlanContext, code: string) => planCourse(planContext, code)?.applicable !== false;
+
+function OfferLine({ code, planContext }: { code: string; planContext: PlanContext }) {
+  const course = planCourse(planContext, code);
+  if (!course || !planContext) return null;
+  const offer = nextTermOffer(course, planContext);
+  return <p className={`rm-item-meta rm-offer rm-offer-${offer.tone}`}>{offer.text}</p>;
+}
 
 // "Lên kế hoạch (AI)" of #roadmap (user, 2026-10-24): a study roadmap for the next term of the school calendar (user, 2026-10-25;
 // before, 3 months from the day it was made) that EduPath AI writes as an academic advisor — the courses to
@@ -98,7 +115,7 @@ function Elapsed({ since }: { since: string }) {
 
 /* ---------------------------------------------------------------- sections */
 
-function StudyItem({ item }: { item: RoadmapStudy }) {
+function StudyItem({ item, planContext }: { item: RoadmapStudy; planContext: PlanContext }) {
   const tag = studyTag(item);
   return <li className={`rm-item${item.advice ? "" : " rm-item-plain"}`}>
     <div className="rm-item-head">
@@ -106,24 +123,26 @@ function StudyItem({ item }: { item: RoadmapStudy }) {
       <span className={`rm-tag rm-tag-${tag.tone}`}>{tag.text}</span>
     </div>
     <p className="rm-item-meta">{item.code}{item.credits !== null ? ` · ${decimalText(item.credits)} tín chỉ` : ""}</p>
+    {item.source !== "running" && <OfferLine code={item.code} planContext={planContext} />}
     {item.advice && <p className="rm-advice">{item.advice}</p>}
     {!item.advice && item.careerSkills.length > 0 && <p className="rm-item-meta">{helpsText(item.careerSkills)}</p>}
   </li>;
 }
 
-function StudySection({ roadmap }: { roadmap: Roadmap }) {
-  const picked = roadmap.study.filter((item) => item.advice);
-  const others = roadmap.study.filter((item) => !item.advice);
+function StudySection({ roadmap, planContext }: { roadmap: Roadmap; planContext: PlanContext }) {
+  const study = roadmap.study.filter((item) => ownProgram(planContext, item.code));
+  const picked = study.filter((item) => item.advice);
+  const others = study.filter((item) => !item.advice);
   return <section className="sw-panel rm-section" aria-labelledby="rm-study">
     <header className="rm-section-head"><span className="rm-section-icon" aria-hidden="true"><Icon name="book" /></span><div>
       <h2 id="rm-study">Môn bạn cần học</h2>
       <p>Học phần đang học, học phần trễ so với kế hoạch đào tạo (kể cả học phần được kế hoạch đào tạo xếp vào học kỳ đang học mà bạn chưa đăng ký) và học phần theo kế hoạch của học kỳ tới.</p>
     </div></header>
-    {!roadmap.study.length && !roadmap.choices.length && <p className="rm-empty">Không có học phần nào cần học thêm trong kế hoạch đào tạo của bạn.</p>}
-    {picked.length > 0 && <ul className="rm-items">{picked.map((item) => <StudyItem key={item.code} item={item} />)}</ul>}
+    {!study.length && !roadmap.choices.length && <p className="rm-empty">Không có học phần nào cần học thêm trong kế hoạch đào tạo của bạn.</p>}
+    {picked.length > 0 && <ul className="rm-items">{picked.map((item) => <StudyItem key={item.code} item={item} planContext={planContext} />)}</ul>}
     {others.length > 0 && (picked.length > 0
-      ? <details className="rm-more"><summary>Các học phần khác trong kế hoạch ({others.length})</summary><ul className="rm-items rm-items-compact">{others.map((item) => <StudyItem key={item.code} item={item} />)}</ul></details>
-      : <ul className="rm-items rm-items-compact">{others.map((item) => <StudyItem key={item.code} item={item} />)}</ul>)}
+      ? <details className="rm-more"><summary>Các học phần khác trong kế hoạch ({others.length})</summary><ul className="rm-items rm-items-compact">{others.map((item) => <StudyItem key={item.code} item={item} planContext={planContext} />)}</ul></details>
+      : <ul className="rm-items rm-items-compact">{others.map((item) => <StudyItem key={item.code} item={item} planContext={planContext} />)}</ul>)}
     {roadmap.choices.length > 0 && <div className="rm-choices">
       <h3>Nhóm tự chọn còn thiếu</h3>
       <ul>{roadmap.choices.map((choice, index) => <li key={`${choice.label}-${index}`}>{choiceText(choice)}</li>)}</ul>
@@ -131,13 +150,14 @@ function StudySection({ roadmap }: { roadmap: Roadmap }) {
   </section>;
 }
 
-function ImproveItem({ item }: { item: RoadmapImprove }) {
+function ImproveItem({ item, planContext }: { item: RoadmapImprove; planContext: PlanContext }) {
   return <li className={`rm-item${item.advice ? "" : " rm-item-plain"}`}>
     <div className="rm-item-head">
       <strong>{item.name}</strong>
       <span className={`rm-tag ${item.action === "retake" ? "rm-tag-retake" : "rm-tag-improve"}`}>{improveTag(item.action)}</span>
     </div>
     <p className="rm-item-meta">{item.code} · {decimalText(item.credits)} tín chỉ · điểm chữ {item.letter}</p>
+    <OfferLine code={item.code} planContext={planContext} />
     {item.advice && <p className="rm-advice">{item.advice}</p>}
     {!item.advice && item.careerSkills.length > 0 && <p className="rm-item-meta">{helpsText(item.careerSkills)}</p>}
   </li>;
@@ -147,23 +167,24 @@ function ImproveItem({ item }: { item: RoadmapImprove }) {
  * Học lại (not passed) and học cải thiện (passed, to raise the grade) apart, each with what it means (user 2026-10-31: "Hệ thống
  * đang gọi môn bị rớt là 'môn cần cải thiện'"); the title names the kinds shown (improveHeading).
  */
-function ImproveSection({ roadmap }: { roadmap: Roadmap }) {
-  const retake = roadmap.improve.filter((item) => item.action === "retake");
-  const improve = roadmap.improve.filter((item) => item.action !== "retake");
+function ImproveSection({ roadmap, planContext }: { roadmap: Roadmap; planContext: PlanContext }) {
+  const items = roadmap.improve.filter((item) => ownProgram(planContext, item.code));
+  const retake = items.filter((item) => item.action === "retake");
+  const improve = items.filter((item) => item.action !== "retake");
   return <section className="sw-panel rm-section" aria-labelledby="rm-improve">
     <header className="rm-section-head"><span className="rm-section-icon" aria-hidden="true"><Icon name="refresh" /></span><div>
-      <h2 id="rm-improve">{improveHeading(roadmap.improve)}</h2>
+      <h2 id="rm-improve">{improveHeading(items)}</h2>
     </div></header>
-    {!roadmap.improve.length && <p className="rm-empty">Bạn không có học phần nào cần học lại hay học cải thiện.</p>}
+    {!items.length && <p className="rm-empty">Bạn không có học phần nào cần học lại hay học cải thiện.</p>}
     {retake.length > 0 && <div className="rm-improve-group">
       <h3>Học lại</h3>
       <p>Học phần chưa đạt (điểm F, VT hoặc CT), cần học lại.</p>
-      <ul className="rm-items">{retake.map((item) => <ImproveItem key={item.code} item={item} />)}</ul>
+      <ul className="rm-items">{retake.map((item) => <ImproveItem key={item.code} item={item} planContext={planContext} />)}</ul>
     </div>}
     {improve.length > 0 && <div className="rm-improve-group">
       <h3>Học cải thiện</h3>
-      <p>Học phần đã đạt nhưng điểm D hoặc D+; học lại nếu bạn muốn nâng điểm.</p>
-      <ul className="rm-items">{improve.map((item) => <ImproveItem key={item.code} item={item} />)}</ul>
+      <p>Học phần đã đạt nhưng điểm D hoặc D+; học lại nếu bạn muốn nâng điểm. Đây chỉ là gợi ý: Kế hoạch học kỳ không tự thêm các môn này, bạn tự thêm ở Danh sách chờ nếu muốn.</p>
+      <ul className="rm-items">{improve.map((item) => <ImproveItem key={item.code} item={item} planContext={planContext} />)}</ul>
     </div>}
   </section>;
 }
@@ -276,8 +297,8 @@ function AiState({ roadmap, response, create, creating }: { roadmap: Roadmap; re
 const regenerateText = (surveyDone: boolean, purpose: string) =>
   surveyDone ? `Bấm Tạo lại ${purpose}` : `Hoàn thành Khảo sát định hướng rồi bấm Tạo lại ${purpose}`;
 
-function RoadmapView({ roadmap, response, create, creating, createError }: {
-  roadmap: Roadmap; response: RoadmapResponse; create: () => void; creating: boolean; createError: string;
+function RoadmapView({ roadmap, response, create, creating, createError, planContext }: {
+  roadmap: Roadmap; response: RoadmapResponse; create: () => void; creating: boolean; createError: string; planContext: PlanContext;
 }) {
   const completed = roadmap.status === "completed";
   const pending = isPending(roadmap.status);
@@ -308,8 +329,8 @@ function RoadmapView({ roadmap, response, create, creating, createError }: {
       </div>}
       {response.basis && <BasisBox basis={response.basis} />}
     </section>
-    <StudySection roadmap={roadmap} />
-    <ImproveSection roadmap={roadmap} />
+    <StudySection roadmap={roadmap} planContext={planContext} />
+    <ImproveSection roadmap={roadmap} planContext={planContext} />
     <SkillsSection roadmap={roadmap} completed={completed} />
     {completed && <MonthsSection roadmap={roadmap} />}
     <p className="rm-footer">{completed
@@ -318,7 +339,7 @@ function RoadmapView({ roadmap, response, create, creating, createError }: {
   </>;
 }
 
-export default function StudentAiRoadmap() {
+export default function StudentAiRoadmap({ planContext = null }: { planContext?: PlanContext }) {
   const { response, loading, error, create, creating, createError, announcement } = useRoadmap();
   const live = <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcement}</p>;
   if (loading) return <section className="sw-panel" aria-busy="true"><p role="status">Đang tải lộ trình học tập…</p></section>;
@@ -356,5 +377,5 @@ export default function StudentAiRoadmap() {
     <p className="rm-footer">Lộ trình sẽ dùng kết quả Đánh giá năng lực tạo lúc {formatDateTime(assessment?.createdAt)}. Nếu bảng điểm vừa thay đổi, hãy tạo lại kết quả đánh giá trước.</p>
   </section>;
 
-  return <div className="rm-page">{live}<RoadmapView roadmap={roadmap} response={response} create={create} creating={creating} createError={createError} /></div>;
+  return <div className="rm-page">{live}<RoadmapView roadmap={roadmap} response={response} create={create} creating={creating} createError={createError} planContext={planContext} /></div>;
 }

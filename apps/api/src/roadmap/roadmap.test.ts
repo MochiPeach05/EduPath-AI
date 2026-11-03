@@ -87,6 +87,26 @@ describe("buildRoadmapFacts", () => {
     expect(started!.thesis).toMatchObject({ thesis: null, topics: [{ code: "71ITGR40303" }] });
   });
 
+  it("never proposes another specialty's course, not even one the student took (roadmap-v12, user 2026-11-03)", () => {
+    const result = syntheticRoadmapResult();
+    const own = result.student.specialty;
+    const other = own === "CNDL" ? "CNPM" : "CNDL";
+    // A late course, a choice option and a failed course of another specialty (the engine counts the attempted one as applicable).
+    result.courses.push({ ...result.courses[0]!, code: "71ITDS30103", name: "Các nền tảng phát triển phần mềm", specialty: other, state: "not_taken", letter: null, score10: null, applicable: false, conditionOnly: false },
+      { ...result.courses[0]!, code: "71ITDS30203", name: "Môn khác chuyên ngành đã rớt", specialty: other, state: "failed", letter: "F", score10: 2.5, applicable: true, conditionOnly: false },
+      { ...result.courses[0]!, code: "71ITDS30303", name: "Môn tự chọn khác chuyên ngành", specialty: other, state: "not_taken", letter: null, score10: null, applicable: false, conditionOnly: false });
+    result.progress = { ...result.progress!,
+      late: [...result.progress!.late, { kind: "course", code: "71ITDS30103", name: "Các nền tảng phát triển phần mềm", credits: 3, termCode: "HK243", state: "not_taken" }],
+      next: [...result.progress!.next, { kind: "choice", label: "Nhóm tự chọn TC310: chọn 3 tín chỉ", required: 3, unit: "credit", remaining: 3,
+        options: [{ code: "71ITDS30303", name: "Môn tự chọn khác chuyên ngành", credits: 3, state: "not_taken" }, { code: "71ITSE30903", name: "Phát triển ứng dụng đa nền tảng", credits: 3, state: "not_taken" }] }] };
+    const built = buildRoadmapFacts(ROADMAP_ASSESSMENT, result, roadmapWindow(ROADMAP_NOW));
+    const codes = [...built.study.map((item) => item.code), ...built.improve.map((item) => item.code), ...built.choices.flatMap((choice) => choice.options.map((item) => item.code))];
+    expect(codes).not.toContain("71ITDS30103");
+    expect(codes).not.toContain("71ITDS30203");
+    expect(codes).not.toContain("71ITDS30303");
+    expect(built.choices.find((choice) => choice.label.includes("TC310"))!.options.map((item) => item.code)).toEqual(["71ITSE30903"]);
+  });
+
   it("never offers an English course for improvement, but still a failed one for a retake", () => {
     const result = syntheticRoadmapResult();
     result.courses.push({ ...result.courses[0]!, code: "71ENG310033", name: "Anh văn 3 (AV3)", state: "passed", letter: "D", score10: 5.4, applicable: true, conditionOnly: false },

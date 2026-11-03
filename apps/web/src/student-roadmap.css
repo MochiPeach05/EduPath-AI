@@ -239,6 +239,10 @@
 .rm-term-course strong, .rm-side-course strong { display: block; font-size: 13px; line-height: 1.35; }
 .rm-course-code { display: block; color: var(--sw-muted); font-size: 12px; }
 .rm-course-facts { display: block; margin-top: 2px; color: #4a5465; font-size: 12px; line-height: 1.5; }
+/* Next term's offering of a course (nextTermOffer, user 2026-11-03): open in green, not open in amber, unknown in grey. */
+.rm-offer { display: block; margin-top: 2px; font-size: 12px; line-height: 1.5; color: #4a5465; }
+.rm-offer-ok { color: var(--meaning-good); }
+.rm-offer-warn { color: var(--meaning-warn); }
 .rm-issue { display: flex; align-items: flex-start; gap: 4px; margin-top: 4px; color: var(--meaning-warn); font-size: 12px; line-height: 1.4; }
 .rm-issue .rm-mark { width: 15px; height: 15px; font-size: 10px; }
 .rm-term-actions { grid-column: 2; display: flex; align-items: center; justify-content: flex-end; gap: 4px; }

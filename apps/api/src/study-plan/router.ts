@@ -7,7 +7,7 @@ import { requireAuthentication } from "../middleware/authorization.js";
 import { studentUser } from "../advisors/access.js";
 import { readStudyPlanFacts, type StudyPlanFacts } from "./context.js";
 import { studyPlanSchema, type StudyPlanData } from "./model.js";
-import { prefillPlan, readAiProposal } from "./prefill.js";
+import { prefillPlan, readAiPlan } from "./prefill.js";
 import { projectGraduation } from "./projection.js";
 
 class StudyPlanError extends Error {
@@ -41,16 +41,18 @@ async function readSaved(db: Pick<PoolClient, "query">, userId: string, lock = f
 
 /**
  * What the page receives: the context (no transcript, no standard data), the saved plan, the plan a student without one
- * starts from (the training plan's mandatory courses ahead), the AI roadmap's proposal not taken in yet, and the
- * projection of the plan in use.
+ * starts from (the training plan's mandatory courses ahead), the AI roadmap's proposal not taken in yet, its improvement
+ * courses (only suggested, never added), and the projection of the plan in use.
  */
 async function view(db: Pick<PoolClient, "query">, userId: string, facts: StudyPlanFacts, plan: Saved | null) {
   const suggested = plan ? null : prefillPlan(facts.context);
+  const ai = await readAiPlan(db, userId, facts.context, plan?.data.roadmapId ?? null);
   return {
     context: facts.context,
     plan,
     suggested,
-    aiProposal: await readAiProposal(db, userId, facts.context, plan?.data.roadmapId ?? null),
+    aiProposal: ai.proposal,
+    aiSuggestions: ai.suggestions,
     projection: projectGraduation(facts, plan?.data ?? suggested ?? { schemaVersion: 1, terms: [] }),
   };
 }

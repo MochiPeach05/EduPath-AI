@@ -48,11 +48,17 @@ export type StudyPlanProjection = {
   openGroups: { label: string; kind: "mandatory" | "elective"; unit: "môn" | "TC"; required: number | null; now: number | null; withPlan: number | null; status: TriState }[];
 };
 export type Saved = { version: string; data: StudyPlanData; updatedAt: string };
-/** The courses of the newest AI roadmap not yet taken in: term is the one it prepares, each course has its own term. */
+/**
+ * The courses of the newest AI roadmap not yet taken in: term is the one it prepares, each course has its own term. Only
+ * courses still missing of the student's own program (study-plan/prefill.ts, user 2026-11-03).
+ */
 export type AiProposal = { roadmapId: string; completedAt: string; term: string; courses: { code: string; term: string }[] };
+/** A passed course the newest AI roadmap advises to improve, with the term it would go to: suggested, never added. */
+export type AiSuggestion = { code: string; term: string };
 /** suggested: where a student without a plan starts (the training plan's mandatory courses ahead). */
 export type StudyPlanResponse = {
-  context: StudyPlanContext; plan: Saved | null; suggested: StudyPlanData | null; aiProposal: AiProposal | null; projection: StudyPlanProjection | null;
+  context: StudyPlanContext; plan: Saved | null; suggested: StudyPlanData | null; aiProposal: AiProposal | null;
+  aiSuggestions?: AiSuggestion[]; projection: StudyPlanProjection | null;
 };
 /**
  * Where the plan on screen came from during this visit: the training plan's prefill (not saved until the first edit), or
@@ -118,6 +124,24 @@ export function applyProposal(plan: StudyPlanData, proposal: AiProposal, now = n
       terms: terms.sort((a, b) => termIndex(a.code) - termIndex(b.code)),
     },
   };
+}
+
+/**
+ * The plan without what an AI roadmap of before 2026-11-03 added and the plan must not hold (user 2026-11-03: improvements
+ * only suggested, only missing courses, never another specialty's): an added course of another specialty, or one already
+ * passed (an improvement). Only the courses the AI added (aiAdded) are looked at; returns the plan and the codes taken out.
+ */
+export function cleanAiAdded(context: Pick<StudyPlanContext, "courses">, plan: StudyPlanData): { plan: StudyPlanData; removed: string[] } {
+  const codes = plan.aiAdded?.codes ?? [];
+  const byCode = new Map(context.courses.map((course) => [course.code, course]));
+  const placed = plannedTerms(plan);
+  const removed = codes.filter((code) => {
+    const course = byCode.get(code.toUpperCase());
+    return placed.has(code.toUpperCase()) && course !== undefined && (!course.applicable || isDone(course.state));
+  });
+  if (!removed.length) return { plan, removed };
+  const cleaned = removed.reduce((next, code) => moveCourse(next, code, null), plan);
+  return { plan: { ...cleaned, aiAdded: { ...plan.aiAdded!, codes: codes.filter((code) => !removed.includes(code)) } }, removed };
 }
 
 /* ---------------------------------------------------------------- courses */
@@ -216,6 +240,21 @@ export function offering(course: Pick<StudyPlanCourse, "offeredTerms">, term: st
 /** "HK1, HK2": the semesters the training plans open a course in. */
 export const offeredSemesters = (course: Pick<StudyPlanCourse, "offeredTerms">) =>
   [...new Set(course.offeredTerms.map((term) => `HK${term.slice(4)}`))].sort().join(", ");
+
+/**
+ * Whether the training plans open a course in the term after the current one, and in which semester they usually do
+ * (user 2026-11-03: "ghi rõ kì sau mở hay không và thường mở ở học kì nào"): "Kỳ sau (HK2 2026–2027): có mở · thường mở
+ * HK2". Every cohort's plan counts (a course one cohort studies next term is opened then); past the last term the plans
+ * cover, the semester decides ("có thể mở").
+ */
+export function nextTermOffer(course: Pick<StudyPlanCourse, "offeredTerms">, context: Pick<StudyPlanContext, "currentTerm" | "offeringUntil">): { tone: "ok" | "warn" | "unknown"; text: string } {
+  if (!course.offeredTerms.length) return { tone: "unknown", text: "Chưa có kế hoạch đào tạo nào xếp lịch mở môn này" };
+  const next = nextTerm(context.currentTerm);
+  const lead = `Kỳ sau (${termLabel(next)})`, usual = `thường mở ${offeredSemesters(course)}`;
+  if (course.offeredTerms.includes(next)) return { tone: "ok", text: `${lead}: có mở · ${usual}` };
+  if (offering(course, next, context.offeringUntil) === "ok") return { tone: "ok", text: `${lead}: có thể mở · ${usual}` };
+  return { tone: "warn", text: `${lead}: không mở theo kế hoạch đào tạo · ${usual}` };
+}
 
 /** A copy of the plan with a course moved to a term (null: back to the list), creating the term when needed. */
 export function moveCourse(plan: StudyPlanData, code: string, to: string | null): StudyPlanData {
@@ -353,10 +392,12 @@ export type PoolSection = { id: string; title: string; note: string | null; cour
 /**
  * Stellic's "Tentative list" (Danh sách chờ): applicable courses not done, not being studied and not planned. With a
  * graduation standard, its groups (mandatory first, then each elective group that still needs courses or credits), then
- * the CTĐT's other courses; without one, the CTĐT's mandatory courses and elective groups. Other specialties' courses
- * last. An elective group already satisfied is left out: its courses are no longer needed (search still finds them).
+ * the CTĐT's other courses; without one, the CTĐT's mandatory courses and elective groups; then the improvements the AI
+ * roadmap suggests (passed courses, never added for the student). Another specialty's courses are not listed (user
+ * 2026-11-03: "không có đề xuất môn khác chuyên ngành nữa"): search still finds them, marked. An elective group already
+ * satisfied is left out: its courses are no longer needed (search still finds them).
  */
-export function poolSections(context: StudyPlanContext, plan: StudyPlanData): PoolSection[] {
+export function poolSections(context: StudyPlanContext, plan: StudyPlanData, suggestions: readonly AiSuggestion[] = []): PoolSection[] {
   const placed = plannedTerms(plan);
   const open = (course: StudyPlanCourse) => needsPlanning(course) && !placed.has(course.code);
   const own = context.courses.filter((course) => course.applicable && open(course));
@@ -389,8 +430,9 @@ export function poolSections(context: StudyPlanContext, plan: StudyPlanData): Po
   if (rest.length) sections.push(context.graduation
     ? { id: "other-ctdt", title: "Học phần khác trong CTĐT", note: "Tiêu chuẩn xét tốt nghiệp không yêu cầu", courses: rest }
     : { id: "electives", title: "Tự chọn khác", note: null, courses: rest });
-  const other = context.courses.filter((course) => !course.applicable && open(course));
-  if (other.length) sections.push({ id: "other", title: "Chuyên ngành khác", note: "Không tính cho chuyên ngành của bạn", courses: other });
+  const improve = suggestions.map((item) => context.courses.find((course) => course.code === item.code.toUpperCase()))
+    .filter((course): course is StudyPlanCourse => Boolean(course && course.applicable && course.state === "passed" && !placed.has(course.code)));
+  if (improve.length) sections.push({ id: "improve", title: "Gợi ý học cải thiện", note: "Lộ trình AI gợi ý, không bắt buộc", courses: improve });
   return sections.filter((section) => section.courses.length);
 }
 
@@ -442,6 +484,11 @@ export const formatNumber = (value: number) => value.toLocaleString("vi-VN", { m
 export function courseList(context: Pick<StudyPlanContext, "courses">, codes: readonly string[]): string {
   const names = new Map(context.courses.map((course) => [course.code, course.name]));
   return joinVi(codes.map((code) => (names.has(code.toUpperCase()) ? `${names.get(code.toUpperCase())} (${code})` : code)));
+}
+
+/** The note on what cleanAiAdded took out of the plan, naming each course. */
+export function aiCleanedText(context: Pick<StudyPlanContext, "courses">, codes: readonly string[]): string {
+  return `Đã bỏ khỏi kế hoạch ${codes.length} học phần lộ trình AI thêm trước đây vì không phải môn còn thiếu của chuyên ngành bạn (môn khác chuyên ngành, hoặc môn đã đạt chỉ nên gợi ý học cải thiện): ${courseList(context, codes)}.`;
 }
 
 /** The note of "Kế hoạch học kỳ" on what the AI roadmap's proposal added, naming each course. */

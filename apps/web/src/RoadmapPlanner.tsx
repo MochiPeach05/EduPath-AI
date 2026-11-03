@@ -2,14 +2,17 @@ import { useMemo, useRef, useState, type DragEvent } from "react";
 import { Icon } from "./student-icons";
 import { Mark } from "./RoadmapProgress";
 import {
-  MAX_TERMS, aiAddedText, formatNumber, moveCourse, nextTerm, offeredSemesters, ownRelations, planIssues, plannedTerms, poolSections, runningIn,
-  searchCourses, termLabel, termLoad, termLoadText, type PlanIssue, type PlanOrigin, type StudyPlanContext, type StudyPlanCourse, type StudyPlanData,
+  MAX_TERMS, aiAddedText, aiCleanedText, formatNumber, moveCourse, nextTerm, nextTermOffer, offeredSemesters, ownRelations, planIssues, plannedTerms,
+  poolSections, runningIn, searchCourses, termLabel, termLoad, termLoadText, type AiSuggestion, type PlanIssue, type PlanOrigin, type StudyPlanContext,
+  type StudyPlanCourse, type StudyPlanData,
 } from "./study-plan-data";
 
 // "Kế hoạch học kỳ" of #roadmap (user 2026-10-24, after Stellic's planner; it starts from the training plan and the AI
 // roadmap's proposal, study-plan/prefill.ts): the terms ahead,
 // the courses still needed on the right ("Danh sách chờ") or found by search, placed by drag and drop or "Thêm vào";
-// missing prerequisites and courses no training plan opens in that term are flagged. No weekly schedule.
+// missing prerequisites and courses no training plan opens in that term are flagged. No weekly schedule. Every course says
+// whether the training plans open it next term and in which semester they usually do (user 2026-11-03); the AI's
+// improvements are only suggested, and another specialty's course is never listed, only found by search and marked.
 
 const DRAG_TYPE = "application/x-edupath-course";
 export type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
@@ -25,21 +28,33 @@ function issueTexts(issue: PlanIssue | undefined, course: StudyPlanCourse, term:
   ];
 }
 
-function CourseFacts({ course, names, byCode }: { course: StudyPlanCourse; names: ReadonlyMap<string, string>; byCode: ReadonlyMap<string, StudyPlanCourse> }) {
+/** "Kỳ sau (HK2 2026–2027): có mở · thường mở HK2" (nextTermOffer). */
+function OfferLine({ course, context }: { course: StudyPlanCourse; context: StudyPlanContext }) {
+  const offer = nextTermOffer(course, context);
+  return <small className={`rm-offer rm-offer-${offer.tone}`}>{offer.text}</small>;
+}
+
+function CourseFacts({ course, names, byCode, context }: { course: StudyPlanCourse; names: ReadonlyMap<string, string>; byCode: ReadonlyMap<string, StudyPlanCourse>; context: StudyPlanContext }) {
   const prerequisites = ownRelations(course, course.prerequisites, byCode);
-  const facts = [`${formatNumber(course.credits)} TC`, course.offeredTerms.length ? `Thường mở: ${offeredSemesters(course)}` : null,
+  const facts = [`${formatNumber(course.credits)} TC`,
     prerequisites.length ? `Tiên quyết: ${prerequisites.map((code) => names.get(code) ?? code).join(", ")}` : null,
-    course.state === "failed" ? `Chưa đạt${course.grade ? ` (${course.grade})` : ""}: học lại` : null].filter(Boolean);
-  return <small className="rm-course-facts">{facts.join(" · ")}</small>;
+    course.state === "failed" ? `Chưa đạt${course.grade ? ` (${course.grade})` : ""}: học lại` : null,
+    course.state === "passed" ? `Đã đạt${course.grade ? ` (${course.grade})` : ""}: học cải thiện nếu muốn nâng điểm` : null,
+    course.applicable ? null : "Môn khác chuyên ngành: không tính cho chuyên ngành của bạn"].filter(Boolean);
+  return <><small className="rm-course-facts">{facts.join(" · ")}</small><OfferLine course={course} context={context} /></>;
 }
 
 /** The width below which student-roadmap.css stacks Danh sách chờ under the terms. */
 const STACKED_QUERY = "(max-width: 1100px)";
 
-/** readOnly: a cố vấn học tập's view of the student's plan (advisor-view.ts): the terms as they are, nothing to move or add. */
-export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, origin, onOpenAi, readOnly = false }: {
+/**
+ * readOnly: a cố vấn học tập's view of the student's plan (advisor-view.ts): the terms as they are, nothing to move or add.
+ * suggestions: the AI roadmap's improvements (Danh sách chờ, never added); cleaned: what an older AI roadmap had added and
+ * was taken out on this visit (cleanAiAdded).
+ */
+export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, origin, onOpenAi, readOnly = false, suggestions = [], cleaned = [] }: {
   context: StudyPlanContext; plan: StudyPlanData; onChange: (plan: StudyPlanData) => void; saveState: SaveState; saveError: string;
-  origin: PlanOrigin; onOpenAi: () => void; readOnly?: boolean;
+  origin: PlanOrigin; onOpenAi: () => void; readOnly?: boolean; suggestions?: readonly AiSuggestion[]; cleaned?: readonly string[];
 }) {
   const [side, setSide] = useState<"list" | "search">("list");
   const [query, setQuery] = useState("");
@@ -51,7 +66,7 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
   const byCode = useMemo(() => new Map(context.courses.map((course) => [course.code, course])), [context.courses]);
   const issues = planIssues(context, plan);
   const placed = plannedTerms(plan);
-  const sections = poolSections(context, plan);
+  const sections = poolSections(context, plan, suggestions);
   const found = searchCourses(context, query).filter((course) => !placed.has(course.code));
   const targetTerm = plan.terms.some((term) => term.code === target) ? target : firstOpen;
   const plannedCount = plan.terms.reduce((sum, term) => sum + term.courses.length, 0);
@@ -93,7 +108,7 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
     <div>
       <strong>{course.name}</strong>
       <span className="rm-course-code">{course.code}</span>
-      <CourseFacts course={course} names={names} byCode={byCode} />
+      <CourseFacts course={course} names={names} byCode={byCode} context={context} />
     </div>
     <button type="button" className="rm-add" onClick={() => move(course.code, targetTerm)} aria-label={`Thêm ${course.name} vào ${termLabel(targetTerm)}`}>
       <Icon name="plus" />Thêm
@@ -116,6 +131,10 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
       <Mark kind="planned" />
       <p>{aiAddedText(context, plan.aiAdded)}</p>
       {!readOnly && <button type="button" className="rm-link" onClick={() => onChange({ ...plan, aiAdded: null })}>Ẩn thông báo</button>}
+    </div>}
+    {cleaned.length > 0 && <div className="rm-origin rm-origin-ai" role="status">
+      <Mark kind="warning" />
+      <p>{aiCleanedText(context, cleaned)}</p>
     </div>}
     {!plannedCount && context.curriculum && <div className="rm-origin rm-origin-empty">
       <p>Kế hoạch chưa có học phần nào.{readOnly ? "" : <> Học phần bắt buộc chỉ được điền sẵn khi còn ở phía trước theo kế hoạch đào tạo (học phần đã trễ không được điền), và học phần lộ trình AI đề xuất được thêm khi bạn có lộ trình AI. Hãy tạo lộ trình ở mục Lộ trình AI đề xuất, hoặc tự thêm học phần từ Danh sách chờ.</>}</p>
@@ -144,12 +163,14 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
               </li>)}
               {term.courses.map((item) => {
                 const course = byCode.get(item.code.toUpperCase());
-                const problems = course ? issueTexts(issues.get(course.code), course, term.code, names) : ["Học phần không còn trong chương trình đào tạo"];
+                const problems = course ? [...issueTexts(issues.get(course.code), course, term.code, names),
+                  ...(course.applicable ? [] : ["Môn khác chuyên ngành: không tính cho chuyên ngành của bạn"])] : ["Học phần không còn trong chương trình đào tạo"];
                 return <li key={item.code} className={`rm-term-course${problems.length ? " has-issue" : ""}`} {...dragProps(item.code)}>
                   <Mark kind="planned" />
                   <div>
                     <strong>{course?.name ?? item.code}</strong><span className="rm-course-code">{item.code}</span>
-                    {course && <small className="rm-course-facts">{formatNumber(course.credits)} TC{course.state === "failed" ? " · học lại" : ""}{course.conditional ? " · môn điều kiện" : ""}</small>}
+                    {course && <small className="rm-course-facts">{formatNumber(course.credits)} TC{course.state === "failed" ? " · học lại" : ""}{course.state === "passed" ? ` · học cải thiện${course.grade ? ` (đã đạt ${course.grade})` : ""}` : ""}{course.conditional ? " · môn điều kiện" : ""}</small>}
+                    {course && <OfferLine course={course} context={context} />}
                     {problems.map((text) => <small key={text} className="rm-issue"><Mark kind="warning" /> {text}</small>)}
                   </div>
                   {!readOnly && <div className="rm-term-actions">
@@ -182,7 +203,7 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
         </div>
         {side === "list" ? <div role="tabpanel" aria-label="Danh sách chờ">
           {!sections.length && <p className="rm-empty">Mọi học phần còn thiếu đã có trong kế hoạch.</p>}
-          {sections.map((section) => <details key={section.id} className="rm-side-group" open={section.id === "mandatory" || section.id.startsWith("group-")}>
+          {sections.map((section) => <details key={section.id} className="rm-side-group" open={section.id === "mandatory" || section.id.startsWith("group-") || section.id === "improve"}>
             <summary><span>{section.title}</span>{section.note && <em>{section.note}</em>}<small>{section.courses.length}</small></summary>
             <ul>{section.courses.map(courseItem)}</ul>
           </details>)}

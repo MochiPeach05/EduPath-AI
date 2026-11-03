@@ -52,37 +52,61 @@ function opensIn(course: Pick<StudyPlanCourse, "offeredTerms">, term: string, of
 }
 
 /**
- * The newest completed AI roadmap the plan has not taken in yet: the courses it advises to take (not the running ones),
- * to retake or to improve, from the registration term it prepares (the plan's next term, at least the term after the
- * current one); a course the training plans do not open then goes to the next term within a year they open it in (or,
- * failing that, open it in that semester of other years). A
- * chuyên đề of the thesis group brings the other one along (both or the thesis, never a mix).
+ * A passed course the newest AI roadmap advises to improve (D, D+), with the term it would go to: only suggested in Kế
+ * hoạch học kỳ, never put in the plan for the student (user 2026-11-03: "các môn học cải thiện chỉ gợi ý chứ không có
+ * tích vào dùm sinh viên").
  */
-export async function readAiProposal(db: Db, userId: string, context: Pick<StudyPlanContext, "courses" | "currentTerm" | "offeringUntil">, appliedRoadmapId: string | null): Promise<AiProposal | null> {
+export type AiSuggestion = { code: string; term: string };
+
+/**
+ * The newest completed AI roadmap: the courses to add to the plan when the plan has not taken that roadmap in yet
+ * (proposal), and its improvement courses to suggest (suggestions, every time). Only courses still missing (not passed,
+ * not being studied) of the student's own program are added, a retake included (user 2026-11-03: "chỉ thêm vào lịch học
+ * các môn Còn thiếu", "chuyên ngành nào thì đề xuất môn học đó thôi chứ không có đề xuất môn khác chuyên ngành nữa").
+ * They start from the registration term the roadmap prepares (the plan's next term, at least the term after the current
+ * one); a course the training plans do not open then goes to the next term within a year they open it in (or, failing
+ * that, open it in that semester of other years). A chuyên đề of the thesis group brings the other one along (both or the
+ * thesis, never a mix).
+ */
+export async function readAiPlan(db: Db, userId: string, context: Pick<StudyPlanContext, "courses" | "currentTerm" | "offeringUntil">,
+  appliedRoadmapId: string | null): Promise<{ proposal: AiProposal | null; suggestions: AiSuggestion[] }> {
   const row = (await db.query<{ id: string; facts: RoadmapFacts; output: RoadmapOutput | null; completed_at: Date | string }>(
     `SELECT id,facts,ai_output AS output,completed_at FROM stu_roadmaps WHERE user_id=$1 AND status='completed'
      ORDER BY completed_at DESC,id DESC LIMIT 1`, [userId])).rows[0];
-  if (!row?.output || row.id === appliedRoadmapId) return null;
+  if (!row?.output) return { proposal: null, suggestions: [] };
   const facts = row.facts;
   const first = nextTerm(context.currentTerm);
   const term = facts.nextTerm && termIndex(facts.nextTerm) >= termIndex(first) ? facts.nextTerm : first;
+  const byCode = new Map(context.courses.map((course) => [course.code, course]));
+  // The term a plan opens it in, else one of the semester plans open it in, else the term of the roadmap.
+  const placeOf = (course: Pick<StudyPlanCourse, "offeredTerms">) => {
+    const candidates = [term, nextTerm(term), nextTerm(nextTerm(term))];
+    return candidates.find((candidate) => opensIn(course, candidate, context.offeringUntil))
+      ?? candidates.find((candidate) => sameSemester(course, candidate)) ?? term;
+  };
+  const suggestions: AiSuggestion[] = [];
+  for (const item of row.output.improve ?? []) {
+    const course = byCode.get(item.code);
+    if (course?.applicable && course.state === "passed" && !suggestions.some((entry) => entry.code === course.code)) suggestions.push({ code: course.code, term: placeOf(course) });
+  }
+  if (row.id === appliedRoadmapId) return { proposal: null, suggestions };
   const running = new Set((facts.study ?? []).filter((item) => item.source === "running").map((item) => item.code));
   const picked = [...(row.output.study ?? []).map((item) => item.code).filter((code) => !running.has(code)), ...(row.output.improve ?? []).map((item) => item.code)];
   for (const choice of facts.choices ?? []) {
     const topics = choice.thesis?.topics.map((item) => item.code) ?? [];
     if (topics.some((code) => picked.includes(code))) picked.push(...topics);
   }
-  const byCode = new Map(context.courses.map((course) => [course.code, course]));
   const courses: AiProposal["courses"] = [];
   for (const code of new Set(picked)) {
     const course = byCode.get(code);
-    // A passed course is only added back when the AI advises to improve it.
-    if (!course || !(needsPlanning(course) || (row.output.improve ?? []).some((item) => item.code === code))) continue;
-    // The term a plan opens it in, else one of the semester plans open it in, else the term of the roadmap.
-    const candidates = [term, nextTerm(term), nextTerm(nextTerm(term))];
-    const target = candidates.find((candidate) => opensIn(course, candidate, context.offeringUntil))
-      ?? candidates.find((candidate) => sameSemester(course, candidate)) ?? term;
-    courses.push({ code, term: target });
+    // Another specialty's course, a passed one (an improvement) or one being studied never goes into the plan.
+    if (!course || !course.applicable || !needsPlanning(course)) continue;
+    courses.push({ code, term: placeOf(course) });
   }
-  return { roadmapId: row.id, completedAt: new Date(row.completed_at).toISOString(), term, courses };
+  return { proposal: { roadmapId: row.id, completedAt: new Date(row.completed_at).toISOString(), term, courses }, suggestions };
+}
+
+/** The proposal alone (readAiPlan): what the plan has not taken in yet, or null. */
+export async function readAiProposal(db: Db, userId: string, context: Pick<StudyPlanContext, "courses" | "currentTerm" | "offeringUntil">, appliedRoadmapId: string | null): Promise<AiProposal | null> {
+  return (await readAiPlan(db, userId, context, appliedRoadmapId)).proposal;
 }

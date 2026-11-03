@@ -128,7 +128,7 @@ describe("Lộ trình AI đề xuất", () => {
     liveData.mockReturnValue({ data: { ...base, roadmap: { ...base.roadmap!, improve } }, error: null, loading: false });
     const html = renderToStaticMarkup(createElement(StudentAiRoadmap));
     expect(html).toContain("Môn học bạn cần học lại và cải thiện");
-    expect(html).toMatch(/<h3>Học lại<\/h3><p>Học phần chưa đạt \(điểm F, VT hoặc CT\), cần học lại\.<\/p>.*Cơ sở lập trình.*<h3>Học cải thiện<\/h3><p>Học phần đã đạt nhưng điểm D hoặc D\+; học lại nếu bạn muốn nâng điểm\.<\/p>.*Kiểm thử phần mềm/);
+    expect(html).toMatch(/<h3>Học lại<\/h3><p>Học phần chưa đạt \(điểm F, VT hoặc CT\), cần học lại\.<\/p>.*Cơ sở lập trình.*<h3>Học cải thiện<\/h3><p>Học phần đã đạt nhưng điểm D hoặc D\+; học lại nếu bạn muốn nâng điểm\. Đây chỉ là gợi ý: Kế hoạch học kỳ không tự thêm các môn này, bạn tự thêm ở Danh sách chờ nếu muốn\.<\/p>.*Kiểm thử phần mềm/);
     expect(html).not.toContain("Môn bạn cần cải thiện");
   });
 

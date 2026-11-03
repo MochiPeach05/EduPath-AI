@@ -3,7 +3,8 @@ import StudentAiRoadmap from "./StudentAiRoadmap";
 import { RoadmapTrack } from "./RoadmapProgress";
 import { RoadmapPlanner, type SaveState } from "./RoadmapPlanner";
 import {
-  STUDY_PLAN_API, applyProposal, planErrorMessage, withTerms, type PlanOrigin, type StudyPlanData, type StudyPlanProjection, type StudyPlanResponse,
+  STUDY_PLAN_API, applyProposal, cleanAiAdded, planErrorMessage, withTerms, type PlanOrigin, type StudyPlanData, type StudyPlanProjection,
+  type StudyPlanResponse,
 } from "./study-plan-data";
 import { isAdvisorView } from "./advisor-view";
 import "./student-roadmap.css";
@@ -47,7 +48,9 @@ async function call<T>(init: RequestInit = {}): Promise<T> {
  * The plan the page edits: loaded when the page opens and again when a planning tab opens (an AI roadmap may have been
  * written meanwhile), saved 0.7 s after the last change with the version it was loaded at. A student without a plan starts
  * from the training plan's mandatory courses; the newest AI roadmap's proposal is taken in and saved at once, with what
- * it added (aiAdded), which Kế hoạch học kỳ names on later visits and Theo dõi tiến độ mentions during this one.
+ * it added (aiAdded), which Kế hoạch học kỳ names on later visits and Theo dõi tiến độ mentions during this one. What an
+ * AI roadmap of before 2026-11-03 added and the plan must not hold (another specialty's course, an improvement) is taken
+ * out and saved at once too (cleaned, named on this visit).
  */
 function useStudyPlan() {
   const [loaded, setLoaded] = useState<{ data: StudyPlanResponse | null; error: string | null }>({ data: null, error: null });
@@ -60,6 +63,7 @@ function useStudyPlan() {
   const latest = useRef<StudyPlanData | null>(null);
   const saving = useRef(false);
   const [origin, setOrigin] = useState<PlanOrigin>(null);
+  const [cleaned, setCleaned] = useState<string[]>([]);
   const [revision, setRevision] = useState(0);
   const reload = useCallback(() => {
     // Never over unsaved edits.
@@ -75,6 +79,13 @@ function useStudyPlan() {
       let next = withTerms(data.context, data.plan?.data ?? data.suggested ?? null);
       // A cố vấn học tập's tab shows the plan as the student saved it and never changes it: the student's next visit takes
       // the proposal in.
+      const clean = isAdvisorView() ? { plan: next, removed: [] } : cleanAiAdded(data.context, next);
+      if (clean.removed.length) {
+        next = clean.plan;
+        setCleaned(clean.removed);
+        latest.current = next;
+        timer.current = setTimeout(() => void save(), 0);
+      }
       if (data.aiProposal && !isAdvisorView()) {
         const applied = applyProposal(next, data.aiProposal);
         next = applied.plan;
@@ -126,7 +137,8 @@ function useStudyPlan() {
     timer.current = setTimeout(() => void save(), SAVE_DELAY_MS);
   }, [save]);
 
-  return { context: loaded.data?.context ?? null, error: loaded.error, plan, projection, change, saveState, saveError, origin, reload };
+  return { context: loaded.data?.context ?? null, suggestions: loaded.data?.aiSuggestions ?? [], cleaned, error: loaded.error, plan, projection, change,
+    saveState, saveError, origin, reload };
 }
 
 /** notice: shown under the tabs (the workspace's "Hồ sơ của bạn chưa đầy đủ"). */
@@ -147,13 +159,13 @@ export default function StudentRoadmap({ notice }: { notice?: ReactNode }) {
     </nav>
     {notice}
     <div id="rm-tab-panel" role="tabpanel" aria-labelledby={`rm-tab-${tab}`} className="rm-tab-panel">
-      {tab === "ai" ? <StudentAiRoadmap />
+      {tab === "ai" ? <StudentAiRoadmap planContext={study.context} />
           : needsPlan && study.error ? <section className="sw-panel rm-problem" role="alert"><strong>Chưa tải được dữ liệu lộ trình</strong><p>{study.error}</p></section>
             : !study.context || !study.plan ? <section className="sw-panel" aria-busy="true"><p role="status">Đang tải lộ trình học tập…</p></section>
               : tab === "track" ? <RoadmapTrack context={study.context} plan={study.plan} projection={study.projection} origin={study.origin}
                 onOpenPlanner={() => choose("manual")} />
                 : <RoadmapPlanner context={study.context} plan={study.plan} onChange={study.change} saveState={study.saveState} saveError={study.saveError}
-                  origin={study.origin} onOpenAi={() => choose("ai")} readOnly={isAdvisorView()} />}
+                  origin={study.origin} onOpenAi={() => choose("ai")} readOnly={isAdvisorView()} suggestions={study.suggestions} cleaned={study.cleaned} />}
     </div>
   </div>;
 }

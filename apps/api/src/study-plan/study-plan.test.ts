@@ -6,7 +6,7 @@ import { syntheticCurriculum, syntheticPlan, syntheticStandards, syntheticStuden
 import type { DatabasePool } from "../db/pool.js";
 import { planChoices, readStudyPlanFacts, type StudyPlanCourse } from "./context.js";
 import { calendarTermCode, creditLimits, nextTerm, studyPlanSchema, termIndex, termLabel, type StudyPlanData } from "./model.js";
-import { prefillPlan, readAiProposal } from "./prefill.js";
+import { prefillPlan, readAiPlan, readAiProposal } from "./prefill.js";
 import { plannedTranscript, projectGraduation } from "./projection.js";
 import { createStudyPlanRouter } from "./router.js";
 
@@ -209,12 +209,30 @@ describe("where the plan starts", () => {
       facts: { nextTerm: "HK262", study: [], choices: [] }, output: { study: [{ code: "SUMMER" }, { code: "ANY" }, { code: "RARE" }], improve: [] },
     };
     const db = { query: vi.fn(async () => ({ rowCount: 1, rows: [roadmap] })) };
-    const course = (code: string, offeredTerms: string[]) => ({ code, state: "not_taken", offeredTerms });
+    const course = (code: string, offeredTerms: string[]) => ({ code, state: "not_taken", offeredTerms, applicable: true });
     const context = { currentTerm: "HK261", offeringUntil: "HK263", courses: [course("SUMMER", ["HK253"]), course("ANY", []), course("RARE", ["HK252"])] };
     // Plans open SUMMER in HK3 only (of an earlier year); nothing says when ANY is opened; RARE is an HK2 course whose
     // term no plan opens within a year, so it stays in the HK2 the roadmap prepares.
     expect((await readAiProposal(db as never, studentId, context as never, null))!.courses)
       .toEqual([{ code: "SUMMER", term: "HK263" }, { code: "ANY", term: "HK262" }, { code: "RARE", term: "HK262" }]);
+  });
+
+  it("adds only courses still missing of the student's program; improvements are suggested, never added (user 2026-11-03)", async () => {
+    const roadmap: Roadmap = {
+      id: "99999999-9999-4999-8999-999999999999", completed_at: new Date("2026-11-03T07:24:00Z"),
+      facts: { nextTerm: "HK262", study: [], choices: [] },
+      output: { study: [{ code: "NEW" }, { code: "OTHER" }], improve: [{ code: "RETAKE" }, { code: "LOWD" }, { code: "OTHERD" }] },
+    };
+    const db = { query: vi.fn(async () => ({ rowCount: 1, rows: [roadmap] })) };
+    const course = (code: string, state: string, applicable = true) => ({ code, state, offeredTerms: ["HK262"], applicable });
+    const context = { currentTerm: "HK261", offeringUntil: "HK263", courses: [course("NEW", "not_taken"), course("OTHER", "not_taken", false),
+      course("RETAKE", "failed"), course("LOWD", "passed"), course("OTHERD", "passed", false)] };
+    const ai = await readAiPlan(db as never, studentId, context as never, null);
+    // Another specialty's course never goes in; a failed course is still missing (học lại); a passed D is only suggested.
+    expect(ai.proposal!.courses.map((item) => item.code)).toEqual(["NEW", "RETAKE"]);
+    expect(ai.suggestions).toEqual([{ code: "LOWD", term: "HK262" }]);
+    // Once the plan took the roadmap in, the improvement stays suggested.
+    expect(await readAiPlan(db as never, studentId, context as never, roadmap.id)).toEqual({ proposal: null, suggestions: [{ code: "LOWD", term: "HK262" }] });
   });
 });
 

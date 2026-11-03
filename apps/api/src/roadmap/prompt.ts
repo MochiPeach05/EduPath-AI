@@ -34,8 +34,11 @@ import { dateText } from "./window.js";
  * v11 (user 2026-10-31: "Hệ thống đang gọi môn bị rớt là 'môn cần cải thiện'. Phải phân biệt học lại (chưa đạt) với học cải
  * thiện (đã đạt nhưng muốn nâng điểm)"): part [5] and the rules name học lại and học cải thiện apart, and the validator drops
  * a sentence that calls a course not passed "cải thiện" (keys.retakes, validate.ts retakeCalledImprove).
+ * v12 (user 2026-11-03: "chuyên ngành nào thì đề xuất môn học đó thôi chứ không có đề xuất môn khác chuyên ngành nữa"): the
+ * prompt is the same, but its course lists ([4], [5] and the choices) hold only common courses and the student's own
+ * specialty, never another specialty's, even one the student once took (facts.ts ownProgram).
  */
-export const ROADMAP_PROMPT_VERSION = "roadmap-v11";
+export const ROADMAP_PROMPT_VERSION = "roadmap-v12";
 /** Lines and characters per line of the achievements list in the data block. */
 const ACHIEVEMENT_LINES = 10;
 const ACHIEVEMENT_LINE_MAX = 160;

@@ -91,6 +91,14 @@ const STATUS_ORDER: Record<string, number> = { below: 0, not_studied: 1, no_data
 export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult, window: RoadmapWindow): RoadmapFacts {
   // Stored results of older calc versions may lack a list: read every list defensively.
   const course = new Map((result.courses ?? []).map((item) => [item.code, item]));
+  // Only the student's own program is proposed (user 2026-11-03: "chuyên ngành nào thì đề xuất môn học đó thôi chứ không có
+  // đề xuất môn khác chuyên ngành nữa"): a common course or one of the student's specialty, never another specialty's,
+  // not even one the student once took (the engine counts those as applicable). A code the CTĐT does not list stays.
+  const specialty = result.student?.specialty ?? null;
+  const ownProgram = (code: string) => {
+    const fact = course.get(code);
+    return !fact || fact.specialty === null || !specialty || fact.specialty === specialty;
+  };
   const careerKeys = new Set((result.career?.requirements ?? []).map((item) => item.skillKey).filter((key): key is string => Boolean(key)));
   // Course → the target career's skills it builds (the skill evidence of the assessment).
   const careerSkillsOf = new Map<string, string[]>();
@@ -101,7 +109,7 @@ export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult
   const skillsOf = (code: string) => careerSkillsOf.get(code) ?? [];
 
   const improve: RoadmapImprove[] = (result.courses ?? [])
-    .filter((item) => item.applicable && !item.conditionOnly && item.letter && (
+    .filter((item) => item.applicable && ownProgram(item.code) && !item.conditionOnly && item.letter && (
       (item.state === "failed" && RETAKE_LETTERS.has(item.letter)) || (item.state === "passed" && IMPROVE_LETTERS.has(item.letter) && !isEnglish(item))))
     .map((item) => ({ code: item.code, name: item.name, credits: item.credits, letter: item.letter!, score10: item.score10,
       action: item.state === "failed" ? "retake" as const : "improve" as const, careerSkills: skillsOf(item.code) }))
@@ -112,7 +120,7 @@ export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult
 
   const study: RoadmapCourse[] = [];
   const add = (fact: Pick<CourseFact, "code" | "name" | "credits">, source: RoadmapCourse["source"], termCode: string | null) => {
-    if (improving.has(fact.code) || study.some((item) => item.code === fact.code)) return;
+    if (improving.has(fact.code) || study.some((item) => item.code === fact.code) || !ownProgram(fact.code)) return;
     study.push({ code: fact.code, name: fact.name, credits: fact.credits, source, termCode, careerSkills: skillsOf(fact.code) });
   };
   // The term being studied, when courses are registered without grades: the transcript's own (studyTermCode, stored since
@@ -125,7 +133,8 @@ export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult
   const choices: RoadmapChoice[] = [];
   const progress = result.progress;
   // The options of a choice still to take; the thesis group keeps only the thesis or its chuyên đề courses.
-  const offered = (options: readonly PlanCourseRef[]): Pick<RoadmapChoice, "options" | "thesis"> => {
+  const offered = (all: readonly PlanCourseRef[]): Pick<RoadmapChoice, "options" | "thesis"> => {
+    const options = all.filter((option) => ownProgram(option.code));
     const open = (option: PlanCourseRef) => option.state !== "passed" && option.state !== "exempt";
     const plain = ({ code, name, credits }: PlanCourseRef): RoadmapOption => ({ code, name, credits });
     const thesis = options.find((option) => THESIS_NAME_PATTERN.test(fold(option.name)));

@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  aiAddedText, applyProposal, auditGroups, auditNote, creditProgress, groupCountText, moveCourse, neededTone, offering, ownRelations, planChoiceText, planIssues,
-  poolSections, searchCourses, termLabel, termLoad, termLoadText, withTerms, type StudyPlanContext, type StudyPlanCourse, type StudyPlanData,
+  aiAddedText, aiCleanedText, applyProposal, auditGroups, auditNote, cleanAiAdded, creditProgress, groupCountText, moveCourse, neededTone, nextTermOffer,
+  offering, ownRelations, planChoiceText, planIssues, poolSections, searchCourses, termLabel, termLoad, termLoadText, withTerms,
+  type StudyPlanContext, type StudyPlanCourse, type StudyPlanData,
 } from "./study-plan-data";
 
 // Synthetic courses only (no student data).
@@ -188,17 +189,55 @@ describe("planning", () => {
       .toEqual(["8 TC · vượt mức tối đa 7 TC", "3 TC · dưới mức tối thiểu 4 TC", "6 TC"]);
   });
 
+  it("lists the AI roadmap's improvements as a suggestion, never another specialty's or a planned one (user 2026-11-03)", () => {
+    const withLow = context({ courses: [...context().courses, course("L", { state: "passed", grade: "D+" })] });
+    const suggestions = [{ code: "L", term: "HK262" }, { code: "A", term: "HK262" }, { code: "X", term: "HK262" }];
+    const improve = poolSections(withLow, { schemaVersion: 1, terms: [] }, suggestions).find((section) => section.id === "improve")!;
+    expect([improve.title, improve.note, improve.courses.map((item) => item.code)]).toEqual(["Gợi ý học cải thiện", "Lộ trình AI gợi ý, không bắt buộc", ["L", "A"]]);
+    expect(poolSections(withLow, { schemaVersion: 1, terms: [{ code: "HK262", courses: [{ code: "L" }] }] }, suggestions).find((section) => section.id === "improve")!.courses
+      .map((item) => item.code)).toEqual(["A"]);
+  });
+
+  it("says whether next term opens a course and in which semester plans usually do (user 2026-11-03)", () => {
+    // Current term HK261: next term is HK262; the plans cover up to HK262.
+    expect(nextTermOffer(course("O", { offeredTerms: ["HK252", "HK262"] }), context())).toEqual({ tone: "ok", text: "Kỳ sau (HK2 2026–2027): có mở · thường mở HK2" });
+    expect(nextTermOffer(course("N", { offeredTerms: ["HK251", "HK261"] }), context())).toEqual({ tone: "warn", text: "Kỳ sau (HK2 2026–2027): không mở theo kế hoạch đào tạo · thường mở HK1" });
+    expect(nextTermOffer(course("U", { offeredTerms: [] }), context()).tone).toBe("unknown");
+    // Past the plans' last term, the semester decides.
+    expect(nextTermOffer(course("P", { offeredTerms: ["HK252"] }), context({ currentTerm: "HK262", offeringUntil: "HK262" })).text)
+      .toBe("Kỳ sau (HK3 2026–2027): không mở theo kế hoạch đào tạo · thường mở HK2");
+    expect(nextTermOffer(course("Q", { offeredTerms: ["HK253"] }), context({ currentTerm: "HK262", offeringUntil: "HK262" })).text)
+      .toBe("Kỳ sau (HK3 2026–2027): có thể mở · thường mở HK3");
+  });
+
+  it("takes out what an older AI roadmap added and the plan must not hold, nothing the student placed (user 2026-11-03)", () => {
+    const ctx = context({ courses: [...context().courses, course("L", { state: "passed", grade: "D" })] });
+    const added: StudyPlanData = {
+      schemaVersion: 1, roadmapId: "r1", aiAdded: { completedAt: "2026-11-03T07:24:00.000Z", term: "HK262", codes: ["C", "X", "L"], addedAt: "2026-11-03T07:30:00.000Z" },
+      terms: [{ code: "HK262", courses: [{ code: "C" }, { code: "X" }, { code: "L" }, { code: "E" }] }],
+    };
+    const { plan: cleaned, removed } = cleanAiAdded(ctx, added);
+    expect(removed).toEqual(["X", "L"]);
+    expect(cleaned.terms[0]!.courses.map((item) => item.code)).toEqual(["C", "E"]);
+    expect(cleaned.aiAdded!.codes).toEqual(["C"]);
+    expect(aiCleanedText(ctx, removed)).toBe("Đã bỏ khỏi kế hoạch 2 học phần lộ trình AI thêm trước đây vì không phải môn còn thiếu của chuyên ngành bạn (môn khác chuyên ngành, hoặc môn đã đạt chỉ nên gợi ý học cải thiện): Môn X (X) và Môn L (L).");
+    // Nothing to take out: the same plan comes back.
+    expect(cleanAiAdded(ctx, cleaned)).toEqual({ plan: cleaned, removed: [] });
+    expect(cleanAiAdded(ctx, plan)).toEqual({ plan, removed: [] });
+  });
+
   it("names a term with the school year's en dash", () => {
     expect(termLabel("HK262")).toBe("HK2 2026–2027");
   });
 
   it("lists the courses still needed by requirement, finds courses by name and sums the credits", () => {
+    // Another specialty's course (X) is never listed (user 2026-11-03: "không có đề xuất môn khác chuyên ngành nữa"); search finds it.
     expect(poolSections(context(), { schemaVersion: 1, terms: [] }).map((section) => [section.title, section.note, section.courses.map((item) => item.code)])).toEqual([
-      ["Bắt buộc", "Còn 2 môn", ["C", "D"]], ["Nhóm tự chọn TC306", "Cần thêm 3 TC", ["E"]], ["Chuyên ngành khác", "Không tính cho chuyên ngành của bạn", ["X"]],
+      ["Bắt buộc", "Còn 2 môn", ["C", "D"]], ["Nhóm tự chọn TC306", "Cần thêm 3 TC", ["E"]],
     ]);
-    expect(poolSections(context(), plan).map((section) => section.title)).toEqual(["Nhóm tự chọn TC306", "Chuyên ngành khác"]);
+    expect(poolSections(context(), plan).map((section) => section.title)).toEqual(["Nhóm tự chọn TC306"]);
     // E planned: TC306 has its 6 credits (F passed + E planned) and leaves the list.
-    expect(poolSections(context(), moveCourse(plan, "E", "HK263")).map((section) => section.title)).toEqual(["Chuyên ngành khác"]);
+    expect(poolSections(context(), moveCourse(plan, "E", "HK263")).map((section) => section.title)).toEqual([]);
     expect(searchCourses(context(), "mon c").map((item) => item.code)).toEqual(["C"]);
     expect(searchCourses(context(), "Môn").map((item) => item.code)).toEqual(["C", "D", "E", "X"]);
     expect(creditProgress(context(), plan)).toEqual({ done: 6, running: 3, planned: 6, plannedOther: 0, total: 30 });
