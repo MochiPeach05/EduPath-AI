@@ -3,7 +3,7 @@ import StudentAiRoadmap from "./StudentAiRoadmap";
 import { RoadmapTrack } from "./RoadmapProgress";
 import { RoadmapPlanner, type SaveState } from "./RoadmapPlanner";
 import {
-  STUDY_PLAN_API, applyProposal, cleanAiAdded, planErrorMessage, withTerms, type PlanOrigin, type StudyPlanData, type StudyPlanProjection,
+  STUDY_PLAN_API, applyProposal, cleanAiAdded, cleanThesisWay, planErrorMessage, withTerms, type PlanOrigin, type StudyPlanData, type StudyPlanProjection,
   type StudyPlanResponse,
 } from "./study-plan-data";
 import { isAdvisorView } from "./advisor-view";
@@ -50,7 +50,8 @@ async function call<T>(init: RequestInit = {}): Promise<T> {
  * from the training plan's mandatory courses; the newest AI roadmap's proposal is taken in and saved at once, with what
  * it added (aiAdded), which Kế hoạch học kỳ names on later visits and Theo dõi tiến độ mentions during this one. What an
  * AI roadmap of before 2026-11-03 added and the plan must not hold (another specialty's course, an improvement) is taken
- * out and saved at once too (cleaned, named on this visit).
+ * out and saved at once too (cleaned, named on this visit), and so is the thesis group's way the system does not advise
+ * when the AI added it or the advised way is there too (thesisCleaned, user 2026-11-03: never both ways in one plan).
  */
 function useStudyPlan() {
   const [loaded, setLoaded] = useState<{ data: StudyPlanResponse | null; error: string | null }>({ data: null, error: null });
@@ -64,6 +65,7 @@ function useStudyPlan() {
   const saving = useRef(false);
   const [origin, setOrigin] = useState<PlanOrigin>(null);
   const [cleaned, setCleaned] = useState<string[]>([]);
+  const [thesisCleaned, setThesisCleaned] = useState<string[]>([]);
   const [revision, setRevision] = useState(0);
   const reload = useCallback(() => {
     // Never over unsaved edits.
@@ -86,6 +88,18 @@ function useStudyPlan() {
         latest.current = next;
         timer.current = setTimeout(() => void save(), 0);
       }
+      // The thesis group's other way, before the proposal (what an older roadmap added) and after it (both ways planned).
+      const thesisRemoved: string[] = [];
+      const cleanThesis = () => {
+        if (isAdvisorView()) return;
+        const result = cleanThesisWay(data.context, next);
+        if (!result.removed.length) return;
+        next = result.plan;
+        thesisRemoved.push(...result.removed);
+        latest.current = next;
+        timer.current = setTimeout(() => void save(), 0);
+      };
+      cleanThesis();
       if (data.aiProposal && !isAdvisorView()) {
         const applied = applyProposal(next, data.aiProposal);
         next = applied.plan;
@@ -97,6 +111,8 @@ function useStudyPlan() {
         // The note of a proposal taken in earlier on this page stays.
         setOrigin((previous) => data.plan ? (previous?.kind === "ai" ? previous : null) : data.suggested?.terms.length ? { kind: "prefill" } : null);
       }
+      cleanThesis();
+      if (thesisRemoved.length) setThesisCleaned(thesisRemoved);
       setPlan(next);
       setProjection(data.projection);
     }, (error: Error) => alive && setLoaded({ data: null, error: error.message }));
@@ -137,7 +153,7 @@ function useStudyPlan() {
     timer.current = setTimeout(() => void save(), SAVE_DELAY_MS);
   }, [save]);
 
-  return { context: loaded.data?.context ?? null, suggestions: loaded.data?.aiSuggestions ?? [], cleaned, error: loaded.error, plan, projection, change,
+  return { context: loaded.data?.context ?? null, suggestions: loaded.data?.aiSuggestions ?? [], cleaned, thesisCleaned, error: loaded.error, plan, projection, change,
     saveState, saveError, origin, reload };
 }
 
@@ -165,7 +181,7 @@ export default function StudentRoadmap({ notice }: { notice?: ReactNode }) {
               : tab === "track" ? <RoadmapTrack context={study.context} plan={study.plan} projection={study.projection} origin={study.origin}
                 onOpenPlanner={() => choose("manual")} />
                 : <RoadmapPlanner context={study.context} plan={study.plan} onChange={study.change} saveState={study.saveState} saveError={study.saveError}
-                  origin={study.origin} onOpenAi={() => choose("ai")} readOnly={isAdvisorView()} suggestions={study.suggestions} cleaned={study.cleaned} />}
+                  origin={study.origin} onOpenAi={() => choose("ai")} readOnly={isAdvisorView()} suggestions={study.suggestions} cleaned={study.cleaned} thesisCleaned={study.thesisCleaned} />}
     </div>
   </div>;
 }

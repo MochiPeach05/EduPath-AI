@@ -28,6 +28,17 @@ export type StudyPlanGraduationGroup = {
   label: string; kind: "mandatory" | "elective"; unit: "môn" | "TC"; required: number | null; passed: number | null; status: TriState; courseCodes: string[];
 };
 export type StudyPlanUnmatched = { code: string; name: string; credits: number; state: CourseState; grade: string | null; term: string | null };
+/**
+ * The elective group a thesis course completes alone and the way the system advises for it (apps/api/src/study-plan/
+ * context.ts planThesis; user 2026-11-03: "điểm của sinh viên mà ổn thì đề xuất làm đồ án tốt nghiệp còn thấp thì làm 2 môn
+ * thay thế đó", "TB tích lũy từ 2,80"): the thesis from a cumulative GPA of 2,80, Chuyên đề tốt nghiệp 1 and 2 below it, a
+ * path already taken stays; way null without a GPA. replacements: the replacement path; others: the group's other courses.
+ * reason: "điểm TB tích lũy 3,10, từ 2,80 trở lên" when the GPA decided.
+ */
+export type StudyPlanThesis = {
+  group: string; thesis: string; replacements: string[]; others: string[];
+  path: "not_started" | "thesis_in_progress" | "replacement"; way: "thesis" | "replacement" | null; reason: string | null;
+};
 export type StudyPlanContext = {
   cohortCode: string | null; specialty: string | null; specialtyLabel: string | null;
   curriculum: { name: string; totalCredits: number | null } | null; hasTranscript: boolean;
@@ -42,6 +53,8 @@ export type StudyPlanContext = {
   } | null;
   gpa: { actual: number | null; required: number | null; scale: 4 | 10 };
   unmatched: StudyPlanUnmatched[];
+  /** The thesis group still open (null: none, or the thesis passed). */
+  thesis?: StudyPlanThesis | null;
 };
 export type StudyPlanProjection = {
   standardName: string; now: TriState; withPlan: TriState; groupCount: number;
@@ -142,6 +155,69 @@ export function cleanAiAdded(context: Pick<StudyPlanContext, "courses">, plan: S
   if (!removed.length) return { plan, removed };
   const cleaned = removed.reduce((next, code) => moveCourse(next, code, null), plan);
   return { plan: { ...cleaned, aiAdded: { ...plan.aiAdded!, codes: codes.filter((code) => !removed.includes(code)) } }, removed };
+}
+
+/** The courses of the thesis group's way the system advises (upper-case codes; none without a way). */
+const thesisAdvised = (thesis: StudyPlanThesis) =>
+  (thesis.way === "thesis" ? [thesis.thesis] : thesis.way === "replacement" ? thesis.replacements : []).map((code) => code.toUpperCase());
+
+/**
+ * The courses of the thesis group the advised way leaves out (upper-case codes; none without a way): with the thesis, the
+ * replacement courses and the group's other courses; with the replacement courses, the thesis and the other courses.
+ */
+export function thesisLeftOut(context: Pick<StudyPlanContext, "thesis">): Set<string> {
+  const thesis = context.thesis;
+  if (!thesis?.way) return new Set();
+  return new Set((thesis.way === "thesis" ? [...thesis.replacements, ...thesis.others] : [thesis.thesis, ...thesis.others]).map((code) => code.toUpperCase()));
+}
+
+/**
+ * The plan without the thesis group's way the system does not advise (user 2026-11-03: never both ways in one plan): such
+ * a course the AI roadmap added (aiAdded), or any such course while the advised way is planned, being studied or passed. A
+ * course of the other way the student planned alone stays, marked (thesisHint). Returns the plan and the codes taken out.
+ */
+export function cleanThesisWay(context: Pick<StudyPlanContext, "thesis" | "courses">, plan: StudyPlanData): { plan: StudyPlanData; removed: string[] } {
+  const leftOut = thesisLeftOut(context);
+  if (!context.thesis || !leftOut.size) return { plan, removed: [] };
+  const placed = plannedTerms(plan);
+  const byCode = new Map(context.courses.map((course) => [course.code, course]));
+  const taken = (code: string) => { const state = byCode.get(code)?.state; return state !== undefined && (isDone(state) || state === "in_progress"); };
+  const mixed = thesisAdvised(context.thesis).some((code) => placed.has(code) || taken(code));
+  const added = new Set((plan.aiAdded?.codes ?? []).map((code) => code.toUpperCase()));
+  const removed = [...placed.keys()].filter((code) => leftOut.has(code) && (mixed || added.has(code)));
+  if (!removed.length) return { plan, removed };
+  const cleaned = removed.reduce((next, code) => moveCourse(next, code, null), plan);
+  return { plan: plan.aiAdded ? { ...cleaned, aiAdded: { ...plan.aiAdded, codes: plan.aiAdded.codes.filter((code) => !removed.includes(code.toUpperCase())) } } : cleaned, removed };
+}
+
+/**
+ * The way the thesis group takes, as a clause: "hệ thống đề xuất làm Đồ án Tốt nghiệp (điểm TB tích lũy 3,10, từ 2,80 trở
+ * lên)", "hệ thống đề xuất học Chuyên đề Tốt nghiệp 1 và Chuyên đề Tốt nghiệp 2 thay cho Đồ án Tốt nghiệp (…)", or the path
+ * already taken. Null without a way.
+ */
+export function thesisAdvice(context: Pick<StudyPlanContext, "thesis" | "courses">): string | null {
+  const thesis = context.thesis;
+  if (!thesis?.way) return null;
+  const name = (code: string) => context.courses.find((course) => course.code === code.toUpperCase())?.name ?? code;
+  const reason = thesis.reason ? ` (${thesis.reason})` : "";
+  if (thesis.way === "thesis") return thesis.path === "thesis_in_progress" ? `bạn đang làm ${name(thesis.thesis)}` : `hệ thống đề xuất làm ${name(thesis.thesis)}${reason}`;
+  const replacements = joinVi(thesis.replacements.map(name));
+  return thesis.path === "replacement"
+    ? `bạn đã học theo phương án học phần thay thế ${name(thesis.thesis)} (${replacements})`
+    : `hệ thống đề xuất học ${replacements} thay cho ${name(thesis.thesis)}${reason}`;
+}
+
+/** The line on a course of the thesis group's other way (planned by the student, or found by search), else null. */
+export function thesisHint(context: Pick<StudyPlanContext, "thesis" | "courses">, code: string): string | null {
+  const advice = thesisLeftOut(context).has(code.toUpperCase()) ? thesisAdvice(context) : null;
+  return advice ? `Không cần học phần này: ${advice}.` : null;
+}
+
+/** The note on what cleanThesisWay took out of the plan, naming each course. */
+export function thesisCleanedText(context: Pick<StudyPlanContext, "thesis" | "courses">, codes: readonly string[]): string {
+  const advice = thesisAdvice(context);
+  const group = context.thesis?.group.replace(/^Nhóm/, "nhóm");
+  return `Đã bỏ khỏi kế hoạch ${courseList(context, codes)}${advice ? ` vì ${advice}` : ""}; kế hoạch chỉ giữ một phương án${group ? ` cho ${group}` : ""}.`;
 }
 
 /* ---------------------------------------------------------------- courses */
@@ -400,7 +476,9 @@ export type PoolSection = { id: string; title: string; note: string | null; cour
 export function poolSections(context: StudyPlanContext, plan: StudyPlanData, suggestions: readonly AiSuggestion[] = []): PoolSection[] {
   const placed = plannedTerms(plan);
   const open = (course: StudyPlanCourse) => needsPlanning(course) && !placed.has(course.code);
-  const own = context.courses.filter((course) => course.applicable && open(course));
+  // The thesis group's way the system does not advise is not offered (user 2026-11-03): search still finds it, marked.
+  const leftOut = thesisLeftOut(context);
+  const own = context.courses.filter((course) => course.applicable && open(course) && !leftOut.has(course.code));
   const used = new Set<string>();
   const sections: PoolSection[] = [];
   const credits = (codes: Iterable<string>, filter: (course: StudyPlanCourse) => boolean) => [...codes]

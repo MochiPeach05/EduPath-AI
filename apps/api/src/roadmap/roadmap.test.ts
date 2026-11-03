@@ -75,12 +75,23 @@ describe("buildRoadmapFacts", () => {
     ] });
     result.progress = { ...result.progress!, next: [group("not_taken")] };
     const thesisChoice = (facts: ReturnType<typeof buildRoadmapFacts>) => facts.choices.find((item) => item.label.includes("TC406"));
-    const choice = thesisChoice(buildRoadmapFacts(ROADMAP_ASSESSMENT, result, roadmapWindow(ROADMAP_NOW)));
+    const built = () => buildRoadmapFacts(ROADMAP_ASSESSMENT, result, roadmapWindow(ROADMAP_NOW));
+    const gpa = (actual: number | null) => { result.graduation = { ...result.graduation!, gpa: { ...result.graduation!.gpa!, actual, scale: 4 } }; };
+    // Without a GPA the model chooses one way of two.
+    gpa(null);
+    const choice = thesisChoice(built());
     expect(choice!.options.map((item) => item.code)).toEqual(["71ITGR40206", "71ITGR40203", "71ITGR40303"]);
-    expect(choice!.thesis).toMatchObject({ thesis: { code: "71ITGR40206" }, topics: [{ code: "71ITGR40203" }, { code: "71ITGR40303" }] });
-    const input = buildRoadmapInput(buildRoadmapFacts(ROADMAP_ASSESSMENT, result, roadmapWindow(ROADMAP_NOW)));
-    expect(input.user).toContain("chỉ chọn MỘT cách: (1) 71ITGR40206 Đồ án Tốt nghiệp (6 TC); (2) cả 71ITGR40203 Chuyên đề Tốt nghiệp 1 (3 TC) và 71ITGR40303 Chuyên đề Tốt nghiệp 2 (3 TC)");
-    // With Chuyên đề 1 passed, only Chuyên đề 2 is left.
+    expect(choice!.thesis).toMatchObject({ thesis: { code: "71ITGR40206" }, topics: [{ code: "71ITGR40203" }, { code: "71ITGR40303" }], way: null });
+    expect(buildRoadmapInput(built()).user).toContain("chỉ chọn MỘT cách: (1) 71ITGR40206 Đồ án Tốt nghiệp (6 TC); (2) cả 71ITGR40203 Chuyên đề Tốt nghiệp 1 (3 TC) và 71ITGR40303 Chuyên đề Tốt nghiệp 2 (3 TC)");
+    // roadmap-v13 (user 2026-11-03, "TB tích lũy từ 2,80"): from 2,80 the thesis alone, below it the two chuyên đề.
+    gpa(2.8);
+    expect(thesisChoice(built())).toMatchObject({ options: [{ code: "71ITGR40206" }], thesis: { thesis: { code: "71ITGR40206" }, topics: [], way: "thesis", reason: "điểm TB tích lũy 2,80, từ 2,80 trở lên" } });
+    expect(buildRoadmapInput(built()).user).toContain("hệ thống đề xuất làm 71ITGR40206 Đồ án Tốt nghiệp (6 TC) vì điểm TB tích lũy 2,80, từ 2,80 trở lên; không đề xuất Chuyên đề tốt nghiệp");
+    gpa(2.45);
+    expect(thesisChoice(built())).toMatchObject({ options: [{ code: "71ITGR40203" }, { code: "71ITGR40303" }], thesis: { thesis: null, way: "replacement" } });
+    expect(buildRoadmapInput(built()).user).toContain("hệ thống đề xuất học cả 71ITGR40203 Chuyên đề Tốt nghiệp 1 (3 TC) và 71ITGR40303 Chuyên đề Tốt nghiệp 2 (3 TC) thay cho Đồ án tốt nghiệp vì điểm TB tích lũy 2,45, dưới 2,80");
+    gpa(3.4);
+    // With Chuyên đề 1 passed, only Chuyên đề 2 is left, whatever the GPA.
     result.progress = { ...result.progress!, next: [group("passed")] };
     const started = thesisChoice(buildRoadmapFacts(ROADMAP_ASSESSMENT, result, roadmapWindow(ROADMAP_NOW)));
     expect(started!.options.map((item) => item.code)).toEqual(["71ITGR40303"]);

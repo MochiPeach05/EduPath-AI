@@ -192,12 +192,18 @@ describe("where the plan starts", () => {
     };
     const db = fakeDb({ roadmap });
     const loaded = await readStudyPlanFacts(db as never, studentId, today);
-    const proposal = await readAiProposal(db as never, studentId, loaded.context, null);
-    // The running course stays out; Chuyên đề 1 brings Chuyên đề 2 only when the CTĐT has it (the synthetic one has not).
+    // Below a cumulative GPA of 2,80 the chuyên đề way is advised (user 2026-11-03): the running course stays out; Chuyên đề 1
+    // brings Chuyên đề 2 only when the CTĐT has it (the synthetic one has not).
+    const low = { ...loaded.context, thesis: loaded.context.thesis && { ...loaded.context.thesis, way: "replacement" as const } };
+    const proposal = await readAiProposal(db as never, studentId, low, null);
     expect(proposal).toMatchObject({ roadmapId: roadmap.id, term: "HK262" });
     const codes = proposal!.courses.map((course) => course.code);
     expect(codes).toEqual(expect.arrayContaining(["71ITIN40304", "71ITGR40203"]));
     expect(codes).not.toContain("71ITSE41203");
+    // From 2,80 the thesis is advised: a chuyên đề the model picked never goes into the plan.
+    const high = { ...loaded.context, thesis: loaded.context.thesis && { ...loaded.context.thesis, way: "thesis" as const } };
+    expect(loaded.context.thesis).toMatchObject({ thesis: "71ITGR40206" });
+    expect((await readAiProposal(db as never, studentId, high, null))!.courses.map((course) => course.code)).not.toContain("71ITGR40203");
     // The K30 plan opens the internship in HK262 itself.
     expect(proposal!.courses.find((course) => course.code === "71ITIN40304")?.term).toBe("HK262");
     expect(await readAiProposal(db as never, studentId, loaded.context, roadmap.id)).toBeNull();

@@ -236,12 +236,18 @@ describe("StudentGraduation result", () => {
     ];
     const base = evaluation("pass");
     const thesisGroup: GraduationGroupEvaluation = { ...base.groups[1]!, required: 6, lower: 0, upper: 0, remaining: 6, status: "fail", passedCount: 0, courses: thesisCourses };
+    // Cumulative GPA 3,12, from 2,80: the thesis alone (user 2026-11-03, "TB tích lũy từ 2,80").
     const html = render(ready(graduation({ evaluation: { ...base, status: "fail", groupStatus: "fail", groups: [base.groups[0]!, thesisGroup, base.groups[2]!] } })));
-    const visible = text(html);
-    expect(html).toContain("Đăng ký Đồ án Tốt nghiệp (6 TC) để hoàn thành nhóm tự chọn TC306. Đây là phương án chính của chương trình: một học phần đủ 6 tín chỉ của nhóm.");
-    expect(html).toContain("Chỉ chọn học phần thay thế khi bạn không làm đồ án tốt nghiệp theo quy định của Khoa");
-    expect(visible).toContain("Phương án thay thế: chọn đủ 6 tín chỉ trong các học phần sau:71ITGR40203Chuyên đề Tốt nghiệp 13 TC○ Chưa học71ITGR40303Chuyên đề Tốt nghiệp 23 TC○ Chưa học");
+    expect(html).toContain("Đăng ký Đồ án Tốt nghiệp (6 TC) để hoàn thành nhóm tự chọn TC306: điểm TB tích lũy của bạn 3,12, từ 2,80 trở lên, nên hệ thống đề xuất làm đồ án tốt nghiệp; một học phần đủ 6 tín chỉ của nhóm.");
+    expect(html).not.toContain("Phương án thay thế");
     expect(html).not.toContain("Chọn học thêm ít nhất 6 tín chỉ trong nhóm tự chọn TC306");
+    // Without a cumulative GPA: the thesis first and the replacement courses as a fallback.
+    const unknown = { ...base.gpa, actual: null, status: "unknown" as const, source: null };
+    const fallback = render(ready(graduation({ evaluation: { ...base, gpa: unknown, status: "fail", groupStatus: "fail", groups: [base.groups[0]!, thesisGroup, base.groups[2]!] } })));
+    const visible = text(fallback);
+    expect(fallback).toContain("Đăng ký Đồ án Tốt nghiệp (6 TC) để hoàn thành nhóm tự chọn TC306. Đây là phương án chính của chương trình: một học phần đủ 6 tín chỉ của nhóm.");
+    expect(fallback).toContain("Chỉ chọn học phần thay thế khi bạn không làm đồ án tốt nghiệp theo quy định của Khoa");
+    expect(visible).toContain("Phương án thay thế: chọn đủ 6 tín chỉ trong các học phần sau:71ITGR40203Chuyên đề Tốt nghiệp 13 TC○ Chưa học71ITGR40303Chuyên đề Tốt nghiệp 23 TC○ Chưa học");
   });
   it("shows a green verdict when every condition passes", () => {
     const html = render(ready(graduation({ evaluation: evaluation("pass") })));

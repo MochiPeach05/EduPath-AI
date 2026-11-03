@@ -5,7 +5,7 @@ import {
   groupFacts, groupInSentence, groupShortfall, groupTitle, groupViews, joinVi, loadErrorMessage, lowerFirst, methodNotes, modelLabel,
   normalizeAdviceOutput, normalizeAdviceResponse, normalizeAdviceStatus, normalizeAdviceWrite, normalizeStoredAdvice, outsideStandardViews,
   profileLine, readableGroupName, requestErrorMessage, scoreParts, shouldPollAdvice, shownGpa, standardDocumentName, standardElectiveQuotas,
-  standardGroupLabels, standardMeta, standardNameParts, standardNotesText, standardThresholds, suggestionItems, termText, thesisOption, toneClass,
+  standardGroupLabels, standardMeta, standardNameParts, standardNotesText, standardThresholds, suggestionItems, termText, thesisOption, thesisWay, toneClass,
   unresolvedCopy, verdictHeadline, warningNotes,
 } from "./student-graduation-data";
 import type {
@@ -291,12 +291,30 @@ describe("suggestions", () => {
     const thesisGroup = group({ id: "TC306", kind: "elective", required: 6, lower: 0, upper: 0, remaining: 6, status: "fail", passedCount: 0, courses });
     expect(thesisOption(thesisGroup)).toMatchObject({ thesis: { code: "71ITGR40206" }, path: "not_started" });
     expect(thesisOption(thesisGroup)!.replacements.map((item) => item.code)).toEqual(["71ITGR40203", "71ITGR40303"]);
+    // Not started, the cumulative GPA chooses the way (user 2026-11-03, "TB tích lũy từ 2,80"): 3,10 → the thesis alone.
     const [item] = suggestionItems(evaluation({ status: "fail", groupStatus: "fail", groups: [thesisGroup] }));
-    expect(item!.text).toBe("Đăng ký Đồ án Tốt nghiệp (6 TC) để hoàn thành nhóm tự chọn TC306. Đây là phương án chính của chương trình: một học phần đủ 6 tín chỉ của nhóm.");
+    expect(item!.text).toBe("Đăng ký Đồ án Tốt nghiệp (6 TC) để hoàn thành nhóm tự chọn TC306: điểm TB tích lũy của bạn 3,10, từ 2,80 trở lên, nên hệ thống đề xuất làm đồ án tốt nghiệp; một học phần đủ 6 tín chỉ của nhóm.");
     expect(item!.courses.map((entry) => `${entry.code} ${entry.state}`)).toEqual(["71ITGR40206 Chưa học"]);
-    expect(item!.note).toBe("Chỉ chọn học phần thay thế khi bạn không làm đồ án tốt nghiệp theo quy định của Khoa; hãy xác nhận điều kiện đăng ký với cố vấn học tập.");
-    expect(item!.alternative?.label).toBe("Phương án thay thế: chọn đủ 6 tín chỉ trong các học phần sau");
-    expect(item!.alternative?.courses.map((entry) => entry.code)).toEqual(["71ITGR40203", "71ITGR40303"]);
+    expect(item!.note).toBe("Hãy xác nhận điều kiện đăng ký với cố vấn học tập.");
+    expect(item!.alternative).toBeUndefined();
+    expect(thesisWay("not_started", { actual: 2.8, scale: 4 })).toBe("thesis");
+    expect(thesisWay("not_started", { actual: 2.79, scale: 4 })).toBe("replacement");
+    expect(thesisWay("not_started", { actual: 8.1, scale: 10 })).toBeNull();
+    expect(thesisWay("replacement", { actual: 3.5, scale: 4 })).toBeNull();
+    // Below 2,80: Chuyên đề tốt nghiệp 1 and 2 only, never the thesis.
+    const low: GraduationEvaluation["gpa"] = { actual: 2.45, required: 2, scale: 4, status: "pass", source: "printed", reason: "", remaining: null };
+    const [weak] = suggestionItems(evaluation({ status: "fail", groupStatus: "fail", gpa: low, groups: [thesisGroup] }));
+    expect(weak!.text).toBe("Học Chuyên đề Tốt nghiệp 1 và Chuyên đề Tốt nghiệp 2 để hoàn thành nhóm tự chọn TC306: điểm TB tích lũy của bạn 2,45, dưới 2,80, nên hệ thống đề xuất học các học phần thay thế đồ án tốt nghiệp.");
+    expect(weak!.courses.map((entry) => entry.code)).toEqual(["71ITGR40203", "71ITGR40303"]);
+    expect(weak!.note).toBe("Hãy xác nhận điều kiện đăng ký với cố vấn học tập.");
+    expect(weak!.alternative).toBeUndefined();
+    // Without a cumulative GPA: the thesis first, the replacement courses as a fallback with a reason.
+    const unknown: GraduationEvaluation["gpa"] = { actual: null, required: 2, scale: 4, status: "unknown", source: null, reason: "Chưa có điểm các môn tính điểm trung bình hệ 4.", remaining: null };
+    const [plain] = suggestionItems(evaluation({ status: "fail", groupStatus: "fail", gpa: unknown, groups: [thesisGroup] }));
+    expect(plain!.text).toBe("Đăng ký Đồ án Tốt nghiệp (6 TC) để hoàn thành nhóm tự chọn TC306. Đây là phương án chính của chương trình: một học phần đủ 6 tín chỉ của nhóm.");
+    expect(plain!.note).toBe("Chỉ chọn học phần thay thế khi bạn không làm đồ án tốt nghiệp theo quy định của Khoa; hãy xác nhận điều kiện đăng ký với cố vấn học tập.");
+    expect(plain!.alternative?.label).toBe("Phương án thay thế: chọn đủ 6 tín chỉ trong các học phần sau");
+    expect(plain!.alternative?.courses.map((entry) => entry.code)).toEqual(["71ITGR40203", "71ITGR40303"]);
 
     // A replacement course already taken: keep going on that path, do not push the thesis.
     const started = { ...thesisGroup, lower: 3, upper: 3, remaining: 3, courses: [{ ...courses[0]!, state: "passed" as const }, courses[1]!, courses[2]!] };

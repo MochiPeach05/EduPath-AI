@@ -3,7 +3,7 @@ import { Icon } from "./student-icons";
 import { Mark } from "./RoadmapProgress";
 import {
   MAX_TERMS, aiAddedText, aiCleanedText, formatNumber, moveCourse, nextTerm, nextTermOffer, offeredSemesters, ownRelations, planIssues, plannedTerms,
-  poolSections, runningIn, searchCourses, termLabel, termLoad, termLoadText, type AiSuggestion, type PlanIssue, type PlanOrigin, type StudyPlanContext,
+  poolSections, runningIn, searchCourses, termLabel, termLoad, termLoadText, thesisCleanedText, thesisHint, type AiSuggestion, type PlanIssue, type PlanOrigin, type StudyPlanContext,
   type StudyPlanCourse, type StudyPlanData,
 } from "./study-plan-data";
 
@@ -41,7 +41,9 @@ function CourseFacts({ course, names, byCode, context }: { course: StudyPlanCour
     course.state === "failed" ? `Chưa đạt${course.grade ? ` (${course.grade})` : ""}: học lại` : null,
     course.state === "passed" ? `Đã đạt${course.grade ? ` (${course.grade})` : ""}: học cải thiện nếu muốn nâng điểm` : null,
     course.applicable ? null : "Môn khác chuyên ngành: không tính cho chuyên ngành của bạn"].filter(Boolean);
-  return <><small className="rm-course-facts">{facts.join(" · ")}</small><OfferLine course={course} context={context} /></>;
+  const hint = thesisHint(context, course.code);
+  return <><small className="rm-course-facts">{facts.join(" · ")}</small><OfferLine course={course} context={context} />
+    {hint && <small className="rm-issue"><Mark kind="warning" /> {hint}</small>}</>;
 }
 
 /** The width below which student-roadmap.css stacks Danh sách chờ under the terms. */
@@ -50,11 +52,12 @@ const STACKED_QUERY = "(max-width: 1100px)";
 /**
  * readOnly: a cố vấn học tập's view of the student's plan (advisor-view.ts): the terms as they are, nothing to move or add.
  * suggestions: the AI roadmap's improvements (Danh sách chờ, never added); cleaned: what an older AI roadmap had added and
- * was taken out on this visit (cleanAiAdded).
+ * was taken out on this visit (cleanAiAdded); thesisCleaned: the thesis group's other way taken out on this visit
+ * (cleanThesisWay, user 2026-11-03).
  */
-export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, origin, onOpenAi, readOnly = false, suggestions = [], cleaned = [] }: {
+export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, origin, onOpenAi, readOnly = false, suggestions = [], cleaned = [], thesisCleaned = [] }: {
   context: StudyPlanContext; plan: StudyPlanData; onChange: (plan: StudyPlanData) => void; saveState: SaveState; saveError: string;
-  origin: PlanOrigin; onOpenAi: () => void; readOnly?: boolean; suggestions?: readonly AiSuggestion[]; cleaned?: readonly string[];
+  origin: PlanOrigin; onOpenAi: () => void; readOnly?: boolean; suggestions?: readonly AiSuggestion[]; cleaned?: readonly string[]; thesisCleaned?: readonly string[];
 }) {
   const [side, setSide] = useState<"list" | "search">("list");
   const [query, setQuery] = useState("");
@@ -136,6 +139,10 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
       <Mark kind="warning" />
       <p>{aiCleanedText(context, cleaned)}</p>
     </div>}
+    {thesisCleaned.length > 0 && <div className="rm-origin rm-origin-ai" role="status">
+      <Mark kind="warning" />
+      <p>{thesisCleanedText(context, thesisCleaned)}</p>
+    </div>}
     {!plannedCount && context.curriculum && <div className="rm-origin rm-origin-empty">
       <p>Kế hoạch chưa có học phần nào.{readOnly ? "" : <> Học phần bắt buộc chỉ được điền sẵn khi còn ở phía trước theo kế hoạch đào tạo (học phần đã trễ không được điền), và học phần lộ trình AI đề xuất được thêm khi bạn có lộ trình AI. Hãy tạo lộ trình ở mục Lộ trình AI đề xuất, hoặc tự thêm học phần từ Danh sách chờ.</>}</p>
       <button type="button" className="sw-outline" onClick={onOpenAi}>Mở Lộ trình AI đề xuất</button>
@@ -164,7 +171,8 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
               {term.courses.map((item) => {
                 const course = byCode.get(item.code.toUpperCase());
                 const problems = course ? [...issueTexts(issues.get(course.code), course, term.code, names),
-                  ...(course.applicable ? [] : ["Môn khác chuyên ngành: không tính cho chuyên ngành của bạn"])] : ["Học phần không còn trong chương trình đào tạo"];
+                  ...(course.applicable ? [] : ["Môn khác chuyên ngành: không tính cho chuyên ngành của bạn"]),
+                  ...[thesisHint(context, course.code)].filter((text): text is string => Boolean(text))] : ["Học phần không còn trong chương trình đào tạo"];
                 return <li key={item.code} className={`rm-term-course${problems.length ? " has-issue" : ""}`} {...dragProps(item.code)}>
                   <Mark kind="planned" />
                   <div>

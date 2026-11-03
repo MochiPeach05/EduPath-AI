@@ -8,6 +8,7 @@ import type { CourseState, CurriculumCourseInput, GraduationStandardInput, Speci
 import type { CurriculumData } from "../curricula/model.js";
 import { majorCondition, majorIdentity } from "../curricula/majors.js";
 import { normalizeCohortCode, profileSpecialty, resolveStudentStandard } from "../graduation/resolve.js";
+import { replacementPath, startsReplacementPath, THESIS_NAME_PATTERN, thesisWay, thesisWayReason, type ThesisPath, type ThesisWay } from "../graduation/thesis.js";
 import type { TranscriptData } from "../student/transcript-parser.js";
 import { calendarTermCode, creditLimits, termIndex } from "./model.js";
 
@@ -119,7 +120,42 @@ export type StudyPlanContext = {
   gpa: { actual: number | null; required: number | null; scale: 4 | 10 };
   /** Courses of the transcript no requirement counts (another specialty's course, a course outside the program). */
   unmatched: StudyPlanUnmatched[];
+  /** The thesis group still open and the way the system advises for it (planThesis), or null. */
+  thesis: StudyPlanThesis | null;
 };
+
+/**
+ * The elective group a thesis course completes alone (graduation/thesis.ts) and the way to advise (user 2026-11-03: the
+ * thesis from a cumulative GPA of 2,80, the replacement courses, Chuyên đề tốt nghiệp 1 and 2, below it; a path already
+ * taken stays). replacements: the replacement path; others: the group's other courses, offered by neither way.
+ */
+export type StudyPlanThesis = {
+  group: string; thesis: string; replacements: string[]; others: string[];
+  path: ThesisPath; way: ThesisWay | null; reason: string | null;
+};
+
+/** The first elective group (in order) whose quota one thesis course completes, unless that thesis is passed. */
+export function planThesis(courses: readonly Pick<StudyPlanCourse, "code" | "name" | "credits" | "state">[],
+  groups: readonly { label: string; required: number | null; courseCodes: readonly string[]; passed?: boolean }[],
+  gpa: { actual: number | null; scale: number }): StudyPlanThesis | null {
+  const byCode = new Map(courses.map((course) => [course.code, course]));
+  for (const group of groups) {
+    if (group.required === null || group.passed) continue;
+    const members = group.courseCodes.map((code) => byCode.get(code)).filter((course): course is NonNullable<typeof course> => Boolean(course));
+    const thesis = members.find((course) => course.credits >= group.required! && THESIS_NAME_PATTERN.test(fold(course.name)));
+    if (!thesis || thesis.state === "passed" || thesis.state === "exempt") continue;
+    const rest = members.filter((course) => course !== thesis);
+    const replacements = replacementPath(rest);
+    const path: ThesisPath = thesis.state === "in_progress" ? "thesis_in_progress"
+      : replacements.some((course) => startsReplacementPath(course.state as never)) ? "replacement" : "not_started";
+    return {
+      group: group.label, thesis: thesis.code, replacements: replacements.map((course) => course.code),
+      others: rest.filter((course) => !replacements.includes(course)).map((course) => course.code),
+      path, way: thesisWay(path, gpa), reason: thesisWayReason(path, gpa),
+    };
+  }
+  return null;
+}
 
 /** What the server keeps for the graduation projection; never sent to the browser as is. */
 export type StudyPlanFacts = {
@@ -330,6 +366,10 @@ export async function readStudyPlanFacts(db: Db, userId: string, now = new Date(
       })),
       offeringUntil: termsOf(offerings).at(-1) ?? null,
       graduation, gpa, unmatched,
+      thesis: planThesis(courses, graduation
+        ? graduation.groups.filter((group) => group.kind === "elective" && group.unit === "TC")
+          .map((group) => ({ label: group.label, required: group.required, courseCodes: group.courseCodes, passed: group.status === "pass" }))
+        : inputs.electives.map((group) => ({ label: `Nhóm tự chọn ${group.code}`, required: group.requiredCredits, courseCodes: group.courseCodes })), gpa),
     },
     standard, transcript, curriculumCourses,
   };

@@ -68,7 +68,7 @@ export type AiSuggestion = { code: string; term: string };
  * that, open it in that semester of other years). A chuyên đề of the thesis group brings the other one along (both or the
  * thesis, never a mix).
  */
-export async function readAiPlan(db: Db, userId: string, context: Pick<StudyPlanContext, "courses" | "currentTerm" | "offeringUntil">,
+export async function readAiPlan(db: Db, userId: string, context: Pick<StudyPlanContext, "courses" | "currentTerm" | "offeringUntil"> & Partial<Pick<StudyPlanContext, "thesis">>,
   appliedRoadmapId: string | null): Promise<{ proposal: AiProposal | null; suggestions: AiSuggestion[] }> {
   const row = (await db.query<{ id: string; facts: RoadmapFacts; output: RoadmapOutput | null; completed_at: Date | string }>(
     `SELECT id,facts,ai_output AS output,completed_at FROM stu_roadmaps WHERE user_id=$1 AND status='completed'
@@ -92,15 +92,21 @@ export async function readAiPlan(db: Db, userId: string, context: Pick<StudyPlan
   if (row.id === appliedRoadmapId) return { proposal: null, suggestions };
   const running = new Set((facts.study ?? []).filter((item) => item.source === "running").map((item) => item.code));
   const picked = [...(row.output.study ?? []).map((item) => item.code).filter((code) => !running.has(code)), ...(row.output.improve ?? []).map((item) => item.code)];
-  for (const choice of facts.choices ?? []) {
+  // The thesis group goes one way, the one the system advises by the GPA (user 2026-11-03, "TB tích lũy từ 2,80"): a roadmap
+  // made before roadmap-v13 may have picked the other.
+  const thesis = context.thesis ?? null;
+  const advised = thesis?.way === "thesis" ? [thesis.thesis] : thesis?.way === "replacement" ? thesis.replacements : null;
+  const excluded = new Set(thesis && advised ? [thesis.thesis, ...thesis.replacements, ...thesis.others].filter((code) => !advised.includes(code)) : []);
+  if (thesis?.way !== "thesis") for (const choice of facts.choices ?? []) {
     const topics = choice.thesis?.topics.map((item) => item.code) ?? [];
     if (topics.some((code) => picked.includes(code))) picked.push(...topics);
   }
   const courses: AiProposal["courses"] = [];
   for (const code of new Set(picked)) {
     const course = byCode.get(code);
-    // Another specialty's course, a passed one (an improvement) or one being studied never goes into the plan.
-    if (!course || !course.applicable || !needsPlanning(course)) continue;
+    // Another specialty's course, a passed one (an improvement), one being studied or the thesis group's other way never
+    // goes into the plan.
+    if (!course || !course.applicable || !needsPlanning(course) || excluded.has(code)) continue;
     courses.push({ code, term: placeOf(course) });
   }
   return { proposal: { roadmapId: row.id, completedAt: new Date(row.completed_at).toISOString(), term, courses }, suggestions };

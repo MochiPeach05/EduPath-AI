@@ -569,10 +569,28 @@ export function thesisOption(group: GraduationGroupEvaluation): ThesisOption | n
 /** A replacement course in this state puts the student on the replacement path; a failed attempt does not. */
 const startsReplacementPath = (state: GradCourseState) => isPassedState(state) || state === "in_progress" || state === "graded_unknown";
 
+/**
+ * The server's thesisWay (apps/api/src/graduation/thesis.ts; user 2026-11-03: "điểm của sinh viên mà ổn thì đề xuất làm đồ án
+ * tốt nghiệp còn thấp thì làm 2 môn thay thế đó", "TB tích lũy từ 2,80"): not started, the cumulative GPA on the 4-point
+ * scale chooses the thesis from 2,80 and the replacement courses below it; null without such a GPA.
+ */
+export const THESIS_MIN_GPA = 2.8;
+export function thesisWay(path: ThesisOption["path"], gpa: Pick<GraduationEvaluation["gpa"], "actual" | "scale">): "thesis" | "replacement" | null {
+  if (path !== "not_started" || gpa.actual === null || gpa.scale !== 4) return null;
+  return gpa.actual >= THESIS_MIN_GPA - 1e-9 ? "thesis" : "replacement";
+}
+/** Only Chuyên đề tốt nghiệp 1 and 2 replace the thesis when the group has them (user: "là môn học thay thế đồ án tốt nghiệp thôi"). */
+const TOPIC_NAME = /\bchuyen de tot nghiep\b/;
+const replacementPath = (replacements: GraduationCourseRow[]) => {
+  const topics = replacements.filter((course) => TOPIC_NAME.test(foldName(course.name)));
+  return topics.length ? topics : replacements;
+};
+const gpaText = (value: number) => value.toFixed(2).replace(".", ",");
+
 /** "đồ án tốt nghiệp" or "khóa luận tốt nghiệp", as the course is named. */
 const thesisKind = (thesis: Pick<GraduationCourseRow, "name">) => /khoa luan/.test(foldName(thesis.name)) ? "khóa luận tốt nghiệp" : "đồ án tốt nghiệp";
 
-function thesisSuggestion(group: GraduationGroupEvaluation, option: ThesisOption): SuggestionItem {
+function thesisSuggestion(group: GraduationGroupEvaluation, option: ThesisOption, gpa: Pick<GraduationEvaluation["gpa"], "actual" | "scale">): SuggestionItem {
   const title = groupInSentence(groupTitle(group));
   const { thesis, replacements, path } = option;
   const credits = thesis.credits === null ? "" : ` (${formatNumber(thesis.credits)} TC)`;
@@ -597,6 +615,26 @@ function thesisSuggestion(group: GraduationGroupEvaluation, option: ThesisOption
       coursesLabel: rest.length ? "Học phần thay thế còn lại:" : null,
       courses: rest.map(suggestionCourse),
       note: `Bạn đã học theo phương án này: ${joinVi(started.map((course) => `${course.name} (${courseStateText(course).toLowerCase()})`))}.`,
+    };
+  }
+  const way = thesisWay(path, gpa);
+  if (way === "thesis") {
+    return {
+      key,
+      text: `Đăng ký ${thesis.name}${credits} để hoàn thành ${title}: điểm TB tích lũy của bạn ${gpaText(gpa.actual!)}, từ ${gpaText(THESIS_MIN_GPA)} trở lên, nên hệ thống đề xuất làm ${thesisKind(thesis)}; một học phần đủ ${formatNumber(group.required)} tín chỉ của nhóm.`,
+      coursesLabel: null,
+      courses: [suggestionCourse(thesis, 0)],
+      note: "Hãy xác nhận điều kiện đăng ký với cố vấn học tập.",
+    };
+  }
+  if (way === "replacement") {
+    const path = replacementPath(replacements).filter((course) => !isPassedState(course.state));
+    return {
+      key,
+      text: `Học ${joinVi(path.map((course) => course.name))} để hoàn thành ${title}: điểm TB tích lũy của bạn ${gpaText(gpa.actual!)}, dưới ${gpaText(THESIS_MIN_GPA)}, nên hệ thống đề xuất học các học phần thay thế ${thesisKind(thesis)}.`,
+      coursesLabel: null,
+      courses: path.map(suggestionCourse),
+      note: "Hãy xác nhận điều kiện đăng ký với cố vấn học tập.",
     };
   }
   const open = replacements.filter((course) => !isPassedState(course.state));
@@ -642,7 +680,7 @@ export function suggestionItems(evaluation: GraduationEvaluation): SuggestionIte
       const count = group.remaining ?? open.length;
       items.push({ key: `group:${group.id}`, text: `Hoàn thành ${formatNumber(count)} môn còn thiếu trong ${title}:`, coursesLabel: null, courses: open, note: null });
     } else if (thesis) {
-      items.push(thesisSuggestion(group, thesis));
+      items.push(thesisSuggestion(group, thesis, evaluation.gpa));
     } else {
       items.push({
         key: `group:${group.id}`,

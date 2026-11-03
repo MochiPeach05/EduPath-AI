@@ -119,7 +119,7 @@ describe("ensureGraduationAdvice", () => {
     const { client, calls, sql } = fakeClient({ rows: [stored] });
     expect(await ensureGraduationAdvice(client, USER, { read: reader() })).toMatchObject({ kind: "stored", created: true, row: { fingerprint: FINGERPRINT } });
     const insert = calls().find(([text]) => text.startsWith("INSERT INTO stu_grad_advice"))!;
-    expect((insert[1] as unknown[])[9]).toBe("grad-advice-v3");
+    expect((insert[1] as unknown[])[9]).toBe("grad-advice-v4");
     expect(writes(sql())).toHaveLength(3);
   });
 

@@ -36,9 +36,9 @@ describe("buildGraduationAdviceInput", () => {
   const graduation = syntheticGraduation();
   const input = buildGraduationAdviceInput(graduation);
 
-  it("uses the grad-advice-v3 prompt and the fixed Ollama options (num_ctx 16384)", () => {
-    expect(input.promptVersion).toBe("grad-advice-v3");
-    expect(GRADUATION_ADVICE_PROMPT_VERSION).toBe("grad-advice-v3");
+  it("uses the grad-advice-v4 prompt and the fixed Ollama options (num_ctx 16384)", () => {
+    expect(input.promptVersion).toBe("grad-advice-v4");
+    expect(GRADUATION_ADVICE_PROMPT_VERSION).toBe("grad-advice-v4");
     expect(input.options).toEqual({ num_ctx: 16384, num_predict: 2048, temperature: 0.3, top_p: 0.95, top_k: 64 });
     expect(input.options).not.toBe(GRADUATION_ADVICE_OPTIONS);
     expect(input.system).toBe(GRADUATION_ADVICE_SYSTEM_PROMPT);
@@ -104,11 +104,9 @@ describe("buildGraduationAdviceInput", () => {
       "[G1] Học phần bắt buộc: các học phần bắt buộc chưa đạt",
       "- 71ITSE41203 Kiểm thử phần mềm (3 TC): đang học",
       "- 71ITIN40304 Đồ án thực tập (4 TC): chưa học",
-      "[G5] Nhóm tự chọn TC306: đồ án tốt nghiệp hoặc học phần thay thế",
-      "- phương án chính: 71ITGR40206 Đồ án Tốt nghiệp (6 TC): chưa học — một học phần đủ số tín chỉ của nhóm",
-      "- phương án thay thế (chỉ khi bạn không làm đồ án tốt nghiệp theo quy định của Khoa): chọn các học phần sau cho đủ 6 TC:",
-      "  - 71ITGR40203 Chuyên đề Tốt nghiệp 1 (3 TC): chưa học",
-      "  - 71ITIS30403 Quản lý và phát triển các hệ thống thông tin (3 TC): chưa học",
+      // The cumulative GPA 2,85 is from 2,80 (grad-advice-v4): the thesis alone.
+      "[G5] Nhóm tự chọn TC306: hệ thống đề xuất làm đồ án tốt nghiệp (điểm TB tích lũy 2,85, từ 2,80 trở lên)",
+      "- 71ITGR40206 Đồ án Tốt nghiệp (6 TC): chưa học — một học phần đủ số tín chỉ của nhóm",
     ]);
     expect(section(input.user, "5. HỌC PHẦN ĐANG HỌC").slice(1)).toEqual([
       "- 71ITSE41203 Kiểm thử phần mềm (3 TC), thuộc [G1], học kỳ 1 năm học 2025–2026",
@@ -129,7 +127,9 @@ describe("buildGraduationAdviceInput", () => {
     const terms = syntheticStudentTerms().map((term) => term.year === "2024-2025" && term.semester === "HK01"
       ? { ...term, rows: [...term.rows, ["71ITIS30403", 3, 3, 0, "F"] as (typeof term.rows)[number]] } : term);
     const transcript = { version: ADVICE_TRANSCRIPT_VERSION, updatedAt: "2026-10-01T08:00:00.000Z", data: syntheticTranscript(terms) };
-    const evaluation = evaluateGraduation({ standard, transcript, curriculumCourses: syntheticCurriculum().courses });
+    // Without a GPA the thesis stays the main option and every replacement course is listed.
+    const graded = evaluateGraduation({ standard, transcript, curriculumCourses: syntheticCurriculum().courses });
+    const evaluation = { ...graded, gpa: { ...graded.gpa, actual: null } };
     const profile = { cohortCode: "K29", specialty: "CNPM" as const };
     const user = buildGraduationAdviceInput({
       profile, resolution: "specialty", standard, transcript, evaluation, specialtySuggestion: null,
@@ -237,8 +237,28 @@ describe("the thesis option of Nhóm tự chọn TC306 in section [4]", () => {
   const g5 = (terms: Parameters<typeof termsWithRows>[0], standard = k29) =>
     groupBlock(buildGraduationAdviceInput(syntheticGraduation({ standard, terms: termsWithRows(terms) })).user, "G5");
 
-  it("offers Đồ án Tốt nghiệp first and the replacement courses only for a student who does not do it (not started)", () => {
-    expect(g5({})).toEqual([
+  /** The G5 block with the cumulative GPA set (null: unknown). */
+  const g5Gpa = (actual: number | null, terms: Parameters<typeof termsWithRows>[0] = {}, standard = k29) => {
+    const facts = syntheticGraduation({ standard, terms: termsWithRows(terms) });
+    return groupBlock(buildGraduationAdviceInput({ ...facts, evaluation: { ...facts.evaluation, gpa: { ...facts.evaluation.gpa, actual } } }).user, "G5");
+  };
+
+  it("advises the thesis from a cumulative GPA of 2,80 and the two chuyên đề below it (grad-advice-v4, user 2026-11-03)", () => {
+    expect(g5Gpa(2.8)).toEqual([
+      "[G5] Nhóm tự chọn TC306: hệ thống đề xuất làm đồ án tốt nghiệp (điểm TB tích lũy 2,80, từ 2,80 trở lên)",
+      "- 71ITGR40206 Đồ án Tốt nghiệp (6 TC): chưa học — một học phần đủ số tín chỉ của nhóm",
+    ]);
+    // Only Chuyên đề tốt nghiệp 1 and 2 replace the thesis (user: "Chuyển đề tốt nghiệp 1, 2 là môn học thay thế đồ án tốt nghiệp thôi").
+    expect(g5Gpa(2.79)).toEqual([
+      "[G5] Nhóm tự chọn TC306: hệ thống đề xuất học các học phần thay thế đồ án tốt nghiệp (điểm TB tích lũy 2,79, dưới 2,80)",
+      "- học các học phần sau cho đủ 6 TC:",
+      "  - 71ITGR40203 Chuyên đề Tốt nghiệp 1 (3 TC): chưa học",
+      "  - 71ITGR40303 Chuyên đề Tốt nghiệp 2 (3 TC): chưa học",
+    ]);
+  });
+
+  it("offers Đồ án Tốt nghiệp first and the replacement courses only for a student who does not do it (not started, GPA unknown)", () => {
+    expect(g5Gpa(null)).toEqual([
       "[G5] Nhóm tự chọn TC306: đồ án tốt nghiệp hoặc học phần thay thế",
       "- phương án chính: 71ITGR40206 Đồ án Tốt nghiệp (6 TC): chưa học — một học phần đủ số tín chỉ của nhóm",
       "- phương án thay thế (chỉ khi bạn không làm đồ án tốt nghiệp theo quy định của Khoa): chọn các học phần sau cho đủ 6 TC:",
@@ -248,7 +268,7 @@ describe("the thesis option of Nhóm tự chọn TC306 in section [4]", () => {
       "  - 71ITIS30603 Chuyên đề Tối ưu hóa máy tìm kiếm (3 TC): chưa học",
     ]);
     // A failed replacement course does not start the replacement path: it is listed first.
-    expect(g5({ "2024-2025 HK03": [["71ITGR40303", 3, 3, 0, "F"]] }).slice(1, 4)).toEqual([
+    expect(g5Gpa(null, { "2024-2025 HK03": [["71ITGR40303", 3, 3, 0, "F"]] }).slice(1, 4)).toEqual([
       "- phương án chính: 71ITGR40206 Đồ án Tốt nghiệp (6 TC): chưa học — một học phần đủ số tín chỉ của nhóm",
       "- phương án thay thế (chỉ khi bạn không làm đồ án tốt nghiệp theo quy định của Khoa): chọn các học phần sau cho đủ 6 TC:",
       "  - 71ITGR40303 Chuyên đề Tốt nghiệp 2 (3 TC): chưa đạt (đã học 1 lần)",
@@ -260,7 +280,11 @@ describe("the thesis option of Nhóm tự chọn TC306 in section [4]", () => {
       ["71ITGR40106", "Khóa luận tốt nghiệp", 6], ["71ITGR40203", "Chuyên đề Tốt nghiệp 1", 3], ["71ITGR40303", "Chuyên đề Tốt nghiệp 2", 3],
       ["71ITIS30403", "Quản lý và phát triển các hệ thống thông tin", 3],
     ], "Nhóm tự chọn TC306_Tự chọn tốt nghiệp");
-    expect(g5({}, k28).slice(0, 3)).toEqual([
+    expect(g5({}, k28)).toEqual([
+      "[G5] Nhóm tự chọn TC306 – Tự chọn tốt nghiệp: hệ thống đề xuất làm khóa luận tốt nghiệp (điểm TB tích lũy 2,85, từ 2,80 trở lên)",
+      "- 71ITGR40106 Khóa luận tốt nghiệp (6 TC): chưa học — một học phần đủ số tín chỉ của nhóm",
+    ]);
+    expect(g5Gpa(null, {}, k28).slice(0, 3)).toEqual([
       "[G5] Nhóm tự chọn TC306 – Tự chọn tốt nghiệp: khóa luận tốt nghiệp hoặc học phần thay thế",
       "- phương án chính: 71ITGR40106 Khóa luận tốt nghiệp (6 TC): chưa học — một học phần đủ số tín chỉ của nhóm",
       "- phương án thay thế (chỉ khi bạn không làm khóa luận tốt nghiệp theo quy định của Khoa): chọn các học phần sau cho đủ 6 TC:",

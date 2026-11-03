@@ -42,6 +42,45 @@ export function thesisOption(group: GraduationGroupEvaluation): ThesisOption | n
   return { thesis, replacements, path };
 }
 
+/** "Chuyên đề tốt nghiệp 1", "Chuyên đề Tốt nghiệp 2": the courses that replace the thesis. */
+export const TOPIC_NAME_PATTERN = /\bchuyen de tot nghiep\b/;
+
+/**
+ * Cumulative GPA (4-point scale, as the transcript prints it) from which the thesis is advised; below it, the replacement
+ * courses (user 2026-11-03: "Chuyển đề tốt nghiệp 1, 2 là môn học thay thế đồ án tốt nghiệp thôi … điểm của sinh viên mà
+ * ổn thì đề xuất làm đồ án tốt nghiệp còn thấp thì làm 2 môn thay thế đó", "TB tích lũy từ 2,80").
+ */
+export const THESIS_MIN_GPA = 2.8;
+/** thesis: the thesis course alone; replacement: the replacement courses (the chuyên đề courses when the group has them). */
+export type ThesisWay = "thesis" | "replacement";
+export type ThesisGpa = { actual: number | null; scale: number } | null | undefined;
+
+/**
+ * The way to advise for a thesis group: a path already taken stays (the thesis in progress; a replacement passed, exempt,
+ * in progress or graded); otherwise the cumulative GPA decides, the thesis from THESIS_MIN_GPA and the replacement
+ * courses below it. Null when the GPA is unknown or not on the 4-point scale (the thesis stays the main option then).
+ */
+export function thesisWay(path: ThesisPath, gpa: ThesisGpa): ThesisWay | null {
+  if (path === "thesis_in_progress") return "thesis";
+  if (path === "replacement") return "replacement";
+  if (!gpa || gpa.actual === null || gpa.scale !== 4) return null;
+  return gpa.actual >= THESIS_MIN_GPA - 1e-9 ? "thesis" : "replacement";
+}
+
+const gpaText = (value: number) => value.toFixed(2).replace(".", ",");
+/** "điểm TB tích lũy 3,10, từ 2,80 trở lên" or "điểm TB tích lũy 2,45, dưới 2,80": why the GPA chose the way (null otherwise). */
+export function thesisWayReason(path: ThesisPath, gpa: ThesisGpa): string | null {
+  const way = path === "not_started" ? thesisWay(path, gpa) : null;
+  if (!way || !gpa || gpa.actual === null) return null;
+  return `điểm TB tích lũy ${gpaText(gpa.actual)}, ${way === "thesis" ? `từ ${gpaText(THESIS_MIN_GPA)} trở lên` : `dưới ${gpaText(THESIS_MIN_GPA)}`}`;
+}
+
+/** The replacement path's courses: the chuyên đề courses when the group has them, else every other course of the group. */
+export function replacementPath<T extends { name: string }>(replacements: readonly T[]): T[] {
+  const topics = replacements.filter((course) => TOPIC_NAME_PATTERN.test(fold(course.name)));
+  return topics.length ? topics : [...replacements];
+}
+
 /** "khóa luận tốt nghiệp" or "đồ án tốt nghiệp", as the thesis course names itself. */
 export const thesisNoun = (thesis: Pick<GraduationCourseRow, "name">): string =>
   THESIS_NAME_PATTERN.exec(fold(thesis.name))?.[1] === "khoa luan" ? "khóa luận tốt nghiệp" : "đồ án tốt nghiệp";

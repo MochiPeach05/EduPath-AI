@@ -5,7 +5,7 @@
 import { FAIL_LETTERS } from "../competency-assessment/constants.js";
 import { fold } from "../competency-assessment/specialty.js";
 import type { AssessmentResult, CourseFact, CourseState, GapStatus, PlanCourseRef } from "../competency-assessment/types.js";
-import { THESIS_NAME_PATTERN } from "../graduation/thesis.js";
+import { THESIS_NAME_PATTERN, TOPIC_NAME_PATTERN, thesisWay, thesisWayReason, type ThesisPath, type ThesisWay } from "../graduation/thesis.js";
 import type { RoadmapWindow } from "./window.js";
 
 /**
@@ -18,11 +18,13 @@ export type RoadmapOption = { code: string; name: string; credits: number | null
 /**
  * A choice of the training plan ("chọn n TC trong …") still open. The thesis group (TC406, user 2026-10-24: "chuyên đề 1
  * + chuyên đề 2 hoặc đồ án tốt nghiệp chớ ta") is done one way only: the thesis alone, or both "Chuyên đề tốt nghiệp"
- * courses; its other courses are never offered, and once a chuyên đề is under way only the other one is.
+ * courses; its other courses are never offered, and once a chuyên đề is under way only the other one is. Since roadmap-v13
+ * the system picks the way (graduation/thesis.ts thesisWay, user 2026-11-03: the thesis from a cumulative GPA of 2,80, the
+ * two chuyên đề below it) and offers only that one; way and reason are null while the GPA is unknown (both ways then).
  */
 export type RoadmapChoice = {
   label: string; source: "next" | "late"; termCode: string | null; need: string; options: RoadmapOption[];
-  thesis: { thesis: RoadmapOption | null; topics: RoadmapOption[] } | null;
+  thesis: { thesis: RoadmapOption | null; topics: RoadmapOption[]; way?: ThesisWay | null; reason?: string | null } | null;
 };
 /** F/VT/CT: must be taken again; D, D+: worth improving (user, 2026-10-24), never an English course (Anh văn, user 2026-10-24). */
 export type RoadmapImprove = { code: string; name: string; credits: number; letter: string; score10: number | null; action: "retake" | "improve"; careerSkills: string[] };
@@ -79,7 +81,6 @@ const MAX_SKILL_COURSES = 4;
 const IMPROVE_LETTERS = new Set(["D", "D+"]);
 /** English courses are never offered for improvement (user, 2026-10-24); a failed one is still a retake. */
 const isEnglish = (item: Pick<CourseFact, "code" | "name">) => /^71ENG/i.test(item.code) || /^(?:anh van|tieng anh)\b/.test(fold(item.name));
-const TOPIC_NAME_PATTERN = /\bchuyen de tot nghiep\b/;
 /** "Đồ án thực tập", "Thực tập tốt nghiệp": the program's internship, what "kinh nghiệm thực tập" can be checked against. */
 const INTERNSHIP_NAME_PATTERN = /\bthuc tap\b/;
 /** The levels in order, to name the next one a met skill can reach. */
@@ -132,7 +133,8 @@ export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult
   for (const item of result.courses ?? []) if (item.state === "in_progress" && item.applicable) add(item, "running", item.term);
   const choices: RoadmapChoice[] = [];
   const progress = result.progress;
-  // The options of a choice still to take; the thesis group keeps only the thesis or its chuyên đề courses.
+  // The options of a choice still to take; the thesis group keeps only the way to take, the thesis or its chuyên đề courses.
+  const gpa = { actual: result.graduation?.gpa?.actual ?? null, scale: result.graduation?.gpa?.scale ?? 4 };
   const offered = (all: readonly PlanCourseRef[]): Pick<RoadmapChoice, "options" | "thesis"> => {
     const options = all.filter((option) => ownProgram(option.code));
     const open = (option: PlanCourseRef) => option.state !== "passed" && option.state !== "exempt";
@@ -142,8 +144,17 @@ export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult
     const topics = options.filter((option) => TOPIC_NAME_PATTERN.test(fold(option.name)));
     // A chuyên đề under way (or passed) is the chuyên đề path: only the other one is left.
     const started = topics.some((option) => option.state !== "not_taken" && option.state !== "failed" && option.state !== "not_in_curriculum");
+    const path: ThesisPath = thesis.state === "in_progress" ? "thesis_in_progress" : started ? "replacement" : "not_started";
+    // The way the system advises (user 2026-11-03): the thesis from a cumulative GPA of 2,80, the two chuyên đề below it.
+    const way = thesisWay(path, gpa);
+    const reason = thesisWayReason(path, gpa);
+    if (way === "thesis" && open(thesis)) return { options: [plain(thesis)], thesis: { thesis: plain(thesis), topics: [], way, reason } };
+    if (way === "replacement" && topics.length) {
+      const left = topics.filter(open).map(plain);
+      return { options: left, thesis: { thesis: null, topics: left, way, reason } };
+    }
     const left = started ? topics.filter(open) : [...(open(thesis) ? [thesis] : []), ...topics.filter(open)];
-    return { options: left.map(plain), thesis: { thesis: started || !open(thesis) ? null : plain(thesis), topics: topics.filter(open).map(plain) } };
+    return { options: left.map(plain), thesis: { thesis: started || !open(thesis) ? null : plain(thesis), topics: topics.filter(open).map(plain), way: null, reason: null } };
   };
   // Before comp-calc-v13 the plan counted from the latest graded term, so its "next term" was the term being studied:
   // the courses it plans there and the student did not register are late, and the term after it is the next one.

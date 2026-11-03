@@ -12,11 +12,15 @@ import type {
   GradCourseState, GradStatus, GraduationCourseRow, GraduationEvaluation, GraduationGroupEvaluation, GraduationWarning,
 } from "../evaluation.js";
 import type { StudentGraduation, StudentGraduationProfile } from "../student-graduation.js";
-import { startsReplacementPath, thesisNoun, thesisOption, type ThesisOption } from "../thesis.js";
+import { replacementPath, startsReplacementPath, thesisNoun, thesisOption, thesisWay, thesisWayReason, type ThesisGpa, type ThesisOption } from "../thesis.js";
 import { buildGraduationAdviceSchema, GRADUATION_ADVICE_LIMITS as L } from "./schema.js";
 
-/** Part of the advice fingerprint (student-graduation.ts): a new version re-queues every student's advice. */
-export const GRADUATION_ADVICE_PROMPT_VERSION = "grad-advice-v3";
+/**
+ * Part of the advice fingerprint (student-graduation.ts): a new version re-queues every student's advice. v4 (user
+ * 2026-11-03: "điểm của sinh viên mà ổn thì đề xuất làm đồ án tốt nghiệp còn thấp thì làm 2 môn thay thế đó", "TB tích lũy từ
+ * 2,80"): the thesis group names the way the system advises by the cumulative GPA, and the rules ask for that way only.
+ */
+export const GRADUATION_ADVICE_PROMPT_VERSION = "grad-advice-v4";
 
 /** Ollama options sent with every job (worker adds think/stream/truncate/keep_alive/model). num_ctx must stay 16384. */
 export const GRADUATION_ADVICE_OPTIONS = { num_ctx: 16384, num_predict: 2048, temperature: 0.3, top_p: 0.95, top_k: 64 } as const;
@@ -60,7 +64,8 @@ Nội dung lời khuyên:
 - Thứ tự ưu tiên: các điều kiện chưa đạt, rồi học phần đang học, rồi điểm trung bình tích lũy, cuối cùng là cảnh báo dữ liệu.
 - Nhóm bắt buộc chưa đạt: nêu các học phần còn phải học hoặc học lại trong mục [4].
 - Nhóm tự chọn chưa đạt: nói rõ còn thiếu bao nhiêu tín chỉ, gợi ý chọn học trong các học phần được liệt kê của đúng nhóm đó, và nhắc bạn xem lịch mở lớp, điều kiện tiên quyết, trao đổi với cố vấn học tập trước khi đăng ký.
-- Nhóm tự chọn có đồ án hoặc khóa luận tốt nghiệp (dữ liệu ghi "phương án chính" và "phương án thay thế"): khuyên bạn làm đồ án hoặc khóa luận tốt nghiệp (gọi đúng tên học phần trong dữ liệu) là phương án chính, vì một học phần này đã đủ số tín chỉ của nhóm. Chỉ nhắc các học phần thay thế như phương án dự phòng khi bạn không làm đồ án hoặc khóa luận tốt nghiệp theo quy định của Khoa, và phải nói rõ đó là lý do. Không tự khẳng định bạn không đủ điều kiện làm đồ án hoặc khóa luận tốt nghiệp. Nhắc bạn xác nhận điều kiện đăng ký với cố vấn học tập hoặc Khoa.
+- Nhóm tự chọn có đồ án hoặc khóa luận tốt nghiệp mà dữ liệu ghi "hệ thống đề xuất" một phương án theo điểm trung bình tích lũy (từ 2,80 trở lên làm đồ án hoặc khóa luận tốt nghiệp; dưới 2,80 học các học phần thay thế như Chuyên đề tốt nghiệp 1 và 2): chỉ khuyên đúng phương án đó, gọi đúng tên học phần trong dữ liệu, nêu lý do như dữ liệu ghi; không khuyên phương án còn lại. Nhắc bạn xác nhận điều kiện đăng ký với cố vấn học tập hoặc Khoa.
+- Nhóm tự chọn có đồ án hoặc khóa luận tốt nghiệp mà dữ liệu ghi "phương án chính" và "phương án thay thế" (chưa có điểm trung bình tích lũy): khuyên bạn làm đồ án hoặc khóa luận tốt nghiệp (gọi đúng tên học phần trong dữ liệu) là phương án chính, vì một học phần này đã đủ số tín chỉ của nhóm. Chỉ nhắc các học phần thay thế như phương án dự phòng khi bạn không làm đồ án hoặc khóa luận tốt nghiệp theo quy định của Khoa, và phải nói rõ đó là lý do. Không tự khẳng định bạn không đủ điều kiện làm đồ án hoặc khóa luận tốt nghiệp. Nhắc bạn xác nhận điều kiện đăng ký với cố vấn học tập hoặc Khoa.
 - Dữ liệu ghi bạn đã bắt đầu phương án học phần thay thế: khuyên học tiếp các học phần thay thế được liệt kê cho đủ tín chỉ của nhóm; không khuyên chuyển sang làm đồ án hoặc khóa luận tốt nghiệp.
 - Dữ liệu ghi bạn đang làm đồ án hoặc khóa luận tốt nghiệp: khuyên hoàn thành tốt học phần đó, vì như vậy là đủ tín chỉ của nhóm.
 - Tổng số tín chỉ tích lũy chưa đạt: nêu số tín chỉ còn thiếu đúng như trong dữ liệu. Nếu dữ liệu ghi hoàn thành các nhóm chưa đạt sẽ đủ tổng số tín chỉ tích lũy, hãy nói rõ điều đó; nếu dữ liệu ghi còn cần thêm tín chỉ ngoài các nhóm chưa đạt, nêu đúng số tín chỉ đó.
@@ -275,15 +280,28 @@ const creditsToReach = (value: number | null, suffix = "") =>
   value !== null && value > CREDIT_EPSILON ? `cho đủ ${formatNumber(value)} TC${suffix}` : "cho đủ tín chỉ của nhóm";
 
 /**
- * A group with a thesis option (thesis.ts). Not started: the thesis is the main option and the
- * replacement courses the fallback for a student who does not do it under the Khoa's rules.
+ * A group with a thesis option (thesis.ts). Not started: the way the cumulative GPA advises (thesisWay, grad-advice-v4),
+ * else (no GPA) the thesis is the main option and the replacement courses the fallback for a student who does not do it
+ * under the Khoa's rules.
  * Replacement path taken: its courses so far, what the pending ones would leave, and the
  * replacement courses left (the thesis is not offered again). Thesis in progress: it completes the group.
  */
-function thesisLines(group: GraduationGroupEvaluation, head: string, option: ThesisOption): string[] {
+function thesisLines(group: GraduationGroupEvaluation, head: string, option: ThesisOption, gpa: ThesisGpa): string[] {
   const noun = thesisNoun(option.thesis);
   if (option.path === "thesis_in_progress") {
     return [`${head}: bạn đang làm ${noun}`, `- ${courseLine(option.thesis)} — hoàn thành học phần này là đủ số tín chỉ của nhóm`];
+  }
+  const way = option.path === "not_started" ? thesisWay(option.path, gpa) : null;
+  const reason = thesisWayReason(option.path, gpa);
+  if (way === "thesis") {
+    return [`${head}: hệ thống đề xuất làm ${noun} (${reason})`, `- ${courseLine(option.thesis)} — một học phần đủ số tín chỉ của nhóm`];
+  }
+  if (way === "replacement") {
+    return [
+      `${head}: hệ thống đề xuất học các học phần thay thế ${noun} (${reason})`,
+      `- học các học phần sau ${creditsToReach(group.remaining ?? group.required)}:`,
+      ...courseLines(notPassed(replacementPath(option.replacements)), SUB),
+    ];
   }
   if (option.path === "not_started") {
     return [
@@ -314,11 +332,11 @@ function thesisLines(group: GraduationGroupEvaluation, head: string, option: The
 }
 
 /** Section [4] for one group that is not passed: its not-passed courses, or its thesis option. */
-function groupLines(group: GraduationGroupEvaluation, key: string): string[] {
+function groupLines(group: GraduationGroupEvaluation, key: string, gpa: ThesisGpa): string[] {
   const head = `[${key}] ${sanitizeText(group.label)}`;
   const option = thesisOption(group);
   // A thesis already passed (in a group that other courses leave undecided) reads as a plain group.
-  if (option && !isPassedState(option.thesis.state)) return thesisLines(group, head, option);
+  if (option && !isPassedState(option.thesis.state)) return thesisLines(group, head, option, gpa);
   const missing = notPassed(group.courses);
   return [
     group.kind === "mandatory" ? `${head}: các học phần bắt buộc chưa đạt` : `${head}: các học phần có thể chọn để đủ tín chỉ`,
@@ -354,7 +372,7 @@ function renderGraduationDataBlock(facts: AdviceFacts, list: readonly Condition[
   push("", "[4. HỌC PHẦN CÒN THIẾU THEO NHÓM] (chỉ các nhóm chưa đạt hoặc chưa xác định)");
   const open = evaluation.groups.filter((group) => group.status !== "pass");
   if (!open.length) push("Không có: mọi nhóm học phần đều đạt.");
-  for (const group of open) push(...groupLines(group, keyOfGroup.get(group.id)!));
+  for (const group of open) push(...groupLines(group, keyOfGroup.get(group.id)!, evaluation.gpa));
 
   push("", "[5. HỌC PHẦN ĐANG HỌC] (chưa có kết quả, chưa tính là đạt)");
   if (!evaluation.inProgress.length) push("Không có.");
