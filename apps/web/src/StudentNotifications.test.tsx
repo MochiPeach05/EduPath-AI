@@ -1,8 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  NotificationDetail, NotificationItem, NotificationsDrawer, NotificationsPanel, NOTIFICATION_FILTERS, badgeText, bellLabel, drawerSummary,
-  moreUnreadText, notificationErrorText, notificationExcerpt, notificationTime, notificationsApi, portalLink,
+  NotificationDetail, NotificationItem, NotificationsPanel, NOTIFICATION_FILTERS, badgeText, bellLabel, emptyNotificationsText,
+  notificationErrorText, notificationExcerpt, notificationTime, notificationsApi, portalLink,
 } from "./StudentNotifications";
 import type { StudentNotification } from "./notification-types";
 
@@ -34,26 +34,19 @@ describe("bell texts", () => {
     expect(notificationTime("không phải ngày", now)).toBe("");
   });
 
-  it("follows only portal pages and sums up the drawer", () => {
+  it("follows only portal pages and lists the filters in the user's order", () => {
     expect(portalLink("#roadmap")).toBe("#roadmap");
     expect(portalLink("https://example.com")).toBeNull();
     expect(portalLink(null)).toBeNull();
-    // The summary counts the list the filter shows, so "Cảnh báo" never reads "1 thông báo · 3 chưa đọc".
-    expect(drawerSummary([notification(), notification({ id: "n2", read: true }), notification({ id: "n3" })])).toBe("3 thông báo · 2 chưa đọc");
-    expect(drawerSummary([notification({ read: true })])).toBe("1 thông báo · đã đọc hết");
-    expect(drawerSummary([])).toBe("0 thông báo");
-    expect(drawerSummary(Array.from({ length: 50 }, (_, index) => notification({ id: `n${index}`, read: index > 0 })))).toBe("50 thông báo mới nhất · 1 chưa đọc");
     expect(NOTIFICATION_FILTERS.map((item) => item.label)).toEqual(["Tất cả", "Chưa đọc", "Cảnh báo", "Kết quả AI", "Từ Khoa", "Hệ thống"]);
   });
 
-  it("shows the first line of the text and says when the popover has no room for every unread one", () => {
+  it("shows the first line of the text and says why a filter is empty", () => {
     expect(notificationExcerpt("\n  Môn bắt buộc chưa đạt: Môn A (F).  \nDòng hai")).toBe("Môn bắt buộc chưa đạt: Môn A (F).");
     expect(notificationExcerpt("")).toBe("");
-    // The badge says 5: the popover shows 3 of them, so it says the other 2 are a click away.
-    const shown = [notification(), notification({ id: "n2" }), notification({ id: "n3" }), notification({ id: "n4", read: true }), notification({ id: "n5", read: true })];
-    expect(moreUnreadText(5, shown)).toBe("Còn 2 thông báo chưa đọc khác");
-    expect(moreUnreadText(3, shown)).toBeNull();
-    expect(moreUnreadText(0, [])).toBeNull();
+    expect(emptyNotificationsText("all")).toContain("Chưa có thông báo nào.");
+    expect(emptyNotificationsText("unread")).toBe("Bạn đã đọc hết thông báo.");
+    expect(emptyNotificationsText("khoa")).toBe("Không có thông báo nào thuộc loại này.");
   });
 });
 
@@ -73,9 +66,9 @@ describe("requests", () => {
     await notificationsApi.list("warn", 50);
     expect(fetchMock.mock.calls[0][0]).toBe("/api/student/notifications?filter=warn&limit=50");
     expect(fetchMock.mock.calls[0][1]).toMatchObject({ credentials: "include", cache: "no-store" });
-    // The popover asks for the unread ones first.
-    await notificationsApi.list("all", 5, undefined, "unread");
-    expect(fetchMock.mock.calls.pop()![0]).toBe("/api/student/notifications?filter=all&limit=5&order=unread");
+    // "Tất cả" in the popover asks for the unread ones first.
+    await notificationsApi.list("all", 50, undefined, "unread");
+    expect(fetchMock.mock.calls.pop()![0]).toBe("/api/student/notifications?filter=all&limit=50&order=unread");
     await expect(notificationsApi.unreadCount()).resolves.toEqual({ unread: 2 });
     await notificationsApi.read("n1");
     expect(fetchMock.mock.calls[2]).toEqual(["/api/student/notifications/n1/read", expect.objectContaining({ method: "POST", body: "{}", headers: { "Content-Type": "application/json" } })]);
@@ -134,27 +127,13 @@ describe("views", () => {
     expect(plain).toContain('role="alert"');
   });
 
-  it("labels the popover by its heading while the list loads", () => {
-    const html = renderToStaticMarkup(<NotificationsPanel onOpen={() => undefined} onOpenAll={() => undefined} onUnread={() => undefined} />);
+  it("is the whole view: the filters on the left, Tất cả first, and no link to another list (user 2026-11-03)", () => {
+    const html = renderToStaticMarkup(<NotificationsPanel onNavigate={() => undefined} onUnread={() => undefined} />);
     expect(html).toContain('id="student-notifications-title"');
+    expect(html).toContain('class="nt-side" role="group" aria-label="Lọc thông báo"');
+    expect(html).toContain('aria-pressed="true"><span>Tất cả</span></button>');
+    for (const label of ["Chưa đọc", "Cảnh báo", "Kết quả AI", "Từ Khoa", "Hệ thống"]) expect(html).toContain(`aria-pressed="false"><span>${label}</span></button>`);
     expect(html).toContain("Đang tải thông báo…");
-    expect(html).toContain("Xem tất cả thông báo");
-  });
-
-  it("opens the drawer on the notification picked in the popover, with every filter", () => {
-    const html = renderToStaticMarkup(<NotificationsDrawer initial={notification()} onClose={() => undefined} onNavigate={() => undefined} onUnread={() => undefined} />);
-    expect(html).toContain('class="nt-drawer"');
-    expect(html).toContain('aria-labelledby="nt-drawer-title"');
-    expect(html).toContain("Tất cả thông báo");
-    expect(html).toContain('aria-pressed="true">Tất cả</button>');
-    for (const label of ["Chưa đọc", "Cảnh báo", "Kết quả AI", "Từ Khoa", "Hệ thống"]) expect(html).toContain(`aria-pressed="false">${label}</button>`);
-    expect(html).toContain("nt-drawer-body nt-has-detail");
-    expect(html).toContain("Nhận xét năng lực đã sẵn sàng");
-    const empty = renderToStaticMarkup(<NotificationsDrawer initial={null} onClose={() => undefined} onNavigate={() => undefined} onUnread={() => undefined} />);
-    expect(empty).toContain("Chọn một thông báo để xem chi tiết.");
-    // From the popover's "Còn … chưa đọc khác": the drawer opens on "Chưa đọc".
-    const unread = renderToStaticMarkup(<NotificationsDrawer initial={null} initialFilter="unread" onClose={() => undefined} onNavigate={() => undefined} onUnread={() => undefined} />);
-    expect(unread).toContain('aria-pressed="true">Chưa đọc</button>');
-    expect(unread).toContain('aria-pressed="false">Tất cả</button>');
+    expect(html).not.toContain("Xem tất cả thông báo");
   });
 });

@@ -1,17 +1,19 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Icon } from "./student-icons";
 import { NOTIFICATIONS_API, NOTIFICATION_POLL_MS, type NotificationType, type StudentNotification } from "./notification-types";
 import "./student-notifications.css";
 
 // Thông báo (STU-PROG-04…09, 2026-10-30): the bell of the student header. The badge shows the unread count, read again
-// every minute while the tab is visible and whenever the window gets focus; the bell's popover lists the latest
-// notifications; "Xem tất cả thông báo" opens the drawer with every notification, filters, the detail of one and its
-// actions (open the page it points to, read / unread, delete with "Hoàn tác"). Notifications live only here (user,
+// every minute while the tab is visible and whenever the window gets focus. Since 2026-11-03 the bell's popover is the
+// whole notification view (user: "cái thông báo giờ chỉ lớn từng này thôi xóa nút xem tất cả thông báo và bên trái thông
+// báo sẽ thêm 1 hàng sidebar bao gồm Tất cả, Chưa đọc, Cảnh báo, Kết quả AI, Từ Khoa, Hệ thống"): the filters in a column
+// on the left, the list on the right, the detail of one in place of the list with its actions (open the page it points
+// to, read / unread, delete with "Hoàn tác"); the drawer it replaced is gone. Notifications live only here (user,
 // 2026-10-30: "thông báo xóa đi vì mình có cái icon chuông cái đó là thông báo rồi mà"). Contract: notification-types.ts.
 
 export type NotificationFilter = "all" | "unread" | NotificationType;
 
-/** The drawer's filter chips, in the order of the approved preview. */
+/** The filters of the popover's left column, in the order the user listed them. */
 export const NOTIFICATION_FILTERS: readonly { id: NotificationFilter; label: string }[] = [
   { id: "all", label: "Tất cả" }, { id: "unread", label: "Chưa đọc" }, { id: "warn", label: "Cảnh báo" },
   { id: "ai", label: "Kết quả AI" }, { id: "khoa", label: "Từ Khoa" }, { id: "sys", label: "Hệ thống" },
@@ -20,8 +22,7 @@ export const NOTIFICATION_FILTERS: readonly { id: NotificationFilter; label: str
 export const NOTIFICATION_TYPES: Record<NotificationType, { glyph: string; label: string }> = {
   ai: { glyph: "AI", label: "Kết quả AI" }, warn: { glyph: "!", label: "Cảnh báo" }, khoa: { glyph: "K", label: "Từ Khoa" }, sys: { glyph: "i", label: "Hệ thống" },
 };
-/** Notifications in the bell's popover, and in the drawer. */
-export const POPOVER_LIMIT = 5;
+/** Notifications the popover lists for a filter (the latest ones). */
 export const LIST_LIMIT = 50;
 /** How long "Hoàn tác" is offered after a delete. */
 export const UNDO_MS = 10_000;
@@ -78,11 +79,6 @@ export const bellLabel = (unread: number) => (unread > 0 ? `Thông báo, ${unrea
 export const badgeText = (unread: number) => (unread > 99 ? "99+" : String(unread));
 /** The first line of a notification's text, shown under its title so two notifications of one kind never look alike. */
 export const notificationExcerpt = (body: string) => body.split("\n").map((line) => line.trim()).find(Boolean) ?? "";
-/** Under the popover's list when it cannot show every unread notification: "Còn 2 thông báo chưa đọc khác". */
-export function moreUnreadText(unread: number, items: readonly StudentNotification[]): string | null {
-  const more = unread - items.filter((item) => !item.read).length;
-  return more > 0 ? `Còn ${more} thông báo chưa đọc khác` : null;
-}
 /** A page of the portal ("#roadmap") a notification may open; anything else is not followed. */
 export const portalLink = (link: string | null) => (link && /^#[a-z][a-z-]*$/.test(link) ? link : null);
 
@@ -99,11 +95,10 @@ export function notificationTime(iso: string, now: Date = new Date()): string {
   if (dayKey(at) === dayKey(new Date(now.getTime() - 86_400_000))) return "Hôm qua";
   return new Intl.DateTimeFormat("vi-VN", { timeZone: VIETNAM, day: "2-digit", month: "2-digit", year: "numeric" }).format(at);
 }
-/** "7 thông báo · 3 chưa đọc" under the drawer's title, about the list the filter shows (the latest LIST_LIMIT at most). */
-export function drawerSummary(items: readonly StudentNotification[]): string {
-  const unread = items.filter((item) => !item.read).length;
-  const total = items.length >= LIST_LIMIT ? `${LIST_LIMIT} thông báo mới nhất` : `${items.length} thông báo`;
-  return `${total}${unread > 0 ? ` · ${unread} chưa đọc` : items.length > 0 ? " · đã đọc hết" : ""}`;
+/** What the popover says when a filter has nothing to list. */
+export function emptyNotificationsText(filter: NotificationFilter): string {
+  if (filter === "all") return "Chưa có thông báo nào. Khi AI làm xong một việc cho bạn hoặc Khoa gửi thông báo, bạn sẽ thấy ở đây.";
+  return filter === "unread" ? "Bạn đã đọc hết thông báo." : "Không có thông báo nào thuộc loại này.";
 }
 
 /* ------------------------------------------------------------------ unread count */
@@ -179,75 +174,19 @@ export function NotificationDetail({ notification, now, busy, error, onBack, onO
 }
 
 /**
- * The bell's popover: the latest notifications, the unread ones first so it shows what the badge counts (user review
- * 2026-10-30: "huy hiệu báo 5 chưa đọc … chỉ 1 mục được đánh dấu chưa đọc"); when more are unread than it can show, a
- * link opens the drawer on "Chưa đọc". Then "Xem tất cả thông báo" and "Đánh dấu tất cả đã đọc". Its heading keeps the id
- * the header's popover is labelled by. onUnread receives every unread count it learns.
+ * The bell's popover, the whole notification view (user 2026-11-03): the filters in a column on the left, the list of the
+ * filter on the right (the latest LIST_LIMIT; "Tất cả" lists the unread ones first so the list shows what the badge
+ * counts), and the notification opened in place of the list with its actions. Opening one marks it read. Its heading keeps
+ * the id the header's popover is labelled by. onUnread receives every unread count it learns; onNavigate opens a page of
+ * the portal (the header closes the popover).
  */
-export function NotificationsPanel({ onOpen, onOpenAll, onUnread }: {
-  onOpen: (notification: StudentNotification) => void; onOpenAll: (filter?: NotificationFilter) => void; onUnread: (count: number) => void;
-}) {
-  const [items, setItems] = useState<StudentNotification[] | null>(null);
-  const [unread, setUnread] = useState(0);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [revision, setRevision] = useState(0);
-  const report = useRef(onUnread);
-  report.current = onUnread;
-  useEffect(() => {
-    const controller = new AbortController();
-    setError("");
-    notificationsApi.list("all", POPOVER_LIMIT, controller.signal, "unread").then((data) => {
-      if (controller.signal.aborted) return;
-      setItems(data.items); setUnread(data.unread); report.current(data.unread);
-    }, (failure: unknown) => { if (!controller.signal.aborted) setError(notificationErrorText(failure)); });
-    return () => controller.abort();
-  }, [revision]);
-  const readAll = async () => {
-    setBusy(true); setError("");
-    try {
-      await notificationsApi.readAll();
-      setItems((current) => current?.map((item) => ({ ...item, read: true })) ?? null);
-      setUnread(0); report.current(0);
-    } catch (failure) { setError(notificationErrorText(failure)); }
-    finally { setBusy(false); }
-  };
-  const now = new Date();
-  const more = items ? moreUnreadText(unread, items) : null;
-  return <div className="nt-panel">
-    <h3 id="student-notifications-title">Thông báo{unread > 0 && <span className="nt-count">{unread} chưa đọc</span>}</h3>
-    {error ? <div className="nt-state" role="alert"><p>{error}</p><button type="button" className="sw-outline" onClick={() => setRevision((n) => n + 1)}><Icon name="refresh" />Thử lại</button></div>
-      : items === null ? <p className="nt-state" role="status">Đang tải thông báo…</p>
-        : items.length === 0 ? <p className="nt-state">Chưa có thông báo nào. Khi AI làm xong một việc cho bạn hoặc Khoa gửi thông báo, bạn sẽ thấy ở đây.</p>
-          : <ul className="nt-list">{items.map((item) => <li key={item.id}><NotificationItem notification={item} now={now} onSelect={() => onOpen(item)} /></li>)}</ul>}
-    {more && <button type="button" className="sw-text-link nt-more" onClick={() => onOpenAll("unread")}>{more} <Icon name="arrow" /></button>}
-    <div className="nt-panel-actions">
-      <button type="button" className="sw-text-link" onClick={() => onOpenAll()}>Xem tất cả thông báo <Icon name="arrow" /></button>
-      {unread > 0 && <button type="button" className="sw-text-link nt-quiet" disabled={busy} onClick={() => void readAll()}>Đánh dấu tất cả đã đọc</button>}
-    </div>
-  </div>;
-}
-
-/**
- * Every notification (a modal dialog: focus stays inside, Escape closes): filters, the list, and the detail of the one
- * opened (initial: the one picked in the popover; initialFilter: "unread" from the popover's "Còn … chưa đọc khác"). Opening
- * a notification marks it read. Phones show the list, then the detail with "‹ Quay lại danh sách".
- */
-export function NotificationsDrawer({ initial, initialFilter = "all", onClose, onNavigate, onUnread }: {
-  initial: StudentNotification | null; initialFilter?: NotificationFilter; onClose: () => void; onNavigate: (link: string) => void; onUnread: (count: number) => void;
-}) {
-  const dialog = useRef<HTMLDialogElement>(null);
-  useLayoutEffect(() => {
-    const element = dialog.current;
-    if (element && !element.open && typeof element.showModal === "function") element.showModal();
-    return () => { if (element?.open) element.close(); };
-  }, []);
-  const [filter, setFilter] = useState<NotificationFilter>(initialFilter);
+export function NotificationsPanel({ onNavigate, onUnread }: { onNavigate: (link: string) => void; onUnread: (count: number) => void }) {
+  const [filter, setFilter] = useState<NotificationFilter>("all");
   const [items, setItems] = useState<StudentNotification[] | null>(null);
   const [unread, setUnread] = useState<number | null>(null);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
-  const [open, setOpen] = useState<StudentNotification | null>(initial);
+  const [open, setOpen] = useState<StudentNotification | null>(null);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState("");
   const [undo, setUndo] = useState<{ notification: StudentNotification; index: number } | null>(null);
@@ -261,7 +200,7 @@ export function NotificationsDrawer({ initial, initialFilter = "all", onClose, o
     const controller = new AbortController();
     setError("");
     setItems(null);
-    notificationsApi.list(filter, LIST_LIMIT, controller.signal).then((data) => {
+    notificationsApi.list(filter, LIST_LIMIT, controller.signal, filter === "all" ? "unread" : "newest").then((data) => {
       if (controller.signal.aborted) return;
       setItems(data.items); count(data.unread);
     }, (failure: unknown) => { if (!controller.signal.aborted) setError(notificationErrorText(failure)); });
@@ -287,9 +226,7 @@ export function NotificationsDrawer({ initial, initialFilter = "all", onClose, o
       sync();
     } catch (failure) { setActionError(notificationErrorText(failure)); }
   };
-  // The notification picked in the popover is read as soon as the drawer shows it.
-  useEffect(() => { if (initial) void markRead(initial); }, []);
-
+  const choose = (next: NotificationFilter) => { setActionError(""); setOpen(null); setFilter(next); };
   const select = (notification: StudentNotification) => { setActionError(""); setOpen(notification); void markRead(notification); };
   const toggleRead = async () => {
     if (!open) return;
@@ -344,33 +281,28 @@ export function NotificationsDrawer({ initial, initialFilter = "all", onClose, o
 
   const now = new Date();
   const shown = items ?? [];
-  // A click on the backdrop (the dialog itself, outside its content) closes it like Escape.
-  return <dialog ref={dialog} className="nt-drawer" aria-labelledby="nt-drawer-title" onCancel={(event) => { event.preventDefault(); onClose(); }}
-    onClick={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-    <header className="nt-drawer-head">
-      <div className="nt-head-text">
-        <h2 id="nt-drawer-title">Tất cả thông báo</h2>
-        <p className="nt-sub">{items === null ? "Đang tải…" : drawerSummary(shown)}</p>
+  const unreadCount = unread ?? 0;
+  return <div className="nt-panel">
+    <h3 id="student-notifications-title">Thông báo{unreadCount > 0 && <span className="nt-count">{unreadCount} chưa đọc</span>}</h3>
+    <div className="nt-panel-body">
+      <div className="nt-side" role="group" aria-label="Lọc thông báo">
+        {NOTIFICATION_FILTERS.map((item) => <button key={item.id} type="button" aria-pressed={filter === item.id} onClick={() => choose(item.id)}>
+          <span>{item.label}</span>{item.id === "unread" && unreadCount > 0 && <span className="nt-side-count">{badgeText(unreadCount)}</span>}
+        </button>)}
       </div>
-      {(unread ?? 0) > 0 && <button type="button" className="sw-outline nt-read-all" disabled={busy} onClick={() => void readAll()}><Icon name="check" />Đánh dấu tất cả đã đọc</button>}
-      <button type="button" className="sw-icon-button nt-close" onClick={onClose} aria-label="Đóng thông báo" title="Đóng"><Icon name="close" /></button>
-    </header>
-    <div className="nt-filters" role="group" aria-label="Lọc thông báo">
-      {NOTIFICATION_FILTERS.map((item) => <button key={item.id} type="button" aria-pressed={filter === item.id} onClick={() => { setFilter(item.id); }}>{item.label}</button>)}
-    </div>
-    <div className={`nt-drawer-body${open ? " nt-has-detail" : ""}`}>
-      <div className="nt-list-pane">
-        {error ? <div className="nt-state" role="alert"><p>{error}</p><button type="button" className="sw-outline" onClick={() => setRevision((n) => n + 1)}><Icon name="refresh" />Thử lại</button></div>
-          : items === null ? <p className="nt-state" role="status">Đang tải thông báo…</p>
-            : shown.length === 0 ? <p className="nt-state">{filter === "all" ? "Chưa có thông báo nào." : filter === "unread" ? "Bạn đã đọc hết thông báo." : "Không có thông báo nào thuộc loại này."}</p>
-              : <ul className="nt-list">{shown.map((item) => <li key={item.id}><NotificationItem notification={item} now={now} current={open?.id === item.id} onSelect={() => select(item)} /></li>)}</ul>}
-      </div>
-      <div className="nt-detail-pane">
+      <div className="nt-pane">
         {open ? <NotificationDetail notification={open} now={now} busy={busy} error={actionError} onBack={() => setOpen(null)}
           onOpenLink={onNavigate} onToggleRead={() => void toggleRead()} onDelete={() => void remove()} />
-          : <p className="nt-state">Chọn một thông báo để xem chi tiết.</p>}
+          : error ? <div className="nt-state" role="alert"><p>{error}</p><button type="button" className="sw-outline" onClick={() => setRevision((n) => n + 1)}><Icon name="refresh" />Thử lại</button></div>
+            : items === null ? <p className="nt-state" role="status">Đang tải thông báo…</p>
+              : shown.length === 0 ? <p className="nt-state">{emptyNotificationsText(filter)}</p>
+                : <ul className="nt-list">{shown.map((item) => <li key={item.id}><NotificationItem notification={item} now={now} onSelect={() => select(item)} /></li>)}</ul>}
       </div>
     </div>
+    {!open && (unreadCount > 0 || actionError) && <div className="nt-panel-actions">
+      {actionError && <p className="nt-error" role="alert">{actionError}</p>}
+      {unreadCount > 0 && <button type="button" className="sw-text-link nt-quiet" disabled={busy} onClick={() => void readAll()}>Đánh dấu tất cả đã đọc</button>}
+    </div>}
     {undo && <div className="nt-toast" role="status"><span>Đã xóa thông báo.</span><button type="button" onClick={() => void restore()}>Hoàn tác</button></div>}
-  </dialog>;
+  </div>;
 }

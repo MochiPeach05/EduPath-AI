@@ -13,7 +13,7 @@ import { majorLabel } from "./majors";
 import { logout } from "./auth-api";
 import { publicInformationLinks, supportEmail } from "./public-information";
 import { Icon } from "./student-icons";
-import { NotificationsDrawer, NotificationsPanel, NOTIFICATION_RECOUNT_MS, badgeText, bellLabel, useUnreadNotifications, type NotificationFilter } from "./StudentNotifications";
+import { NotificationsPanel, NOTIFICATION_RECOUNT_MS, badgeText, bellLabel, useUnreadNotifications } from "./StudentNotifications";
 import type { StudentNotification } from "./notification-types";
 import type { AuthenticatedUser } from "./types";
 import { ADVISOR_BLOCKED_EVENT, ADVISOR_HOME, actingAsText, advisorBlockedMessage, stopActing } from "./advisor-view";
@@ -151,13 +151,10 @@ export default function StudentWorkspace({ user, advisor = null }: { user: Authe
   const headingRef = useRef<HTMLHeadingElement>(null);
   const openPanel = (next: Panel, opener: HTMLElement | null) => { panelOpener.current = opener; setPanel(next); };
   const closePanel = (restoreFocus: boolean) => { setPanel(null); if (restoreFocus) panelOpener.current?.focus(); };
-  // Thông báo (2026-10-30): the bell's unread count, and the drawer of every notification (opened from the popover).
+  // Thông báo (2026-10-30): the bell's unread count; its popover is the whole notification view since 2026-11-03.
   // The bell belongs to the student: an advisor's tab does not read it.
   const notifications = useUnreadNotifications(!advisor);
   const bellRef = useRef<HTMLButtonElement>(null);
-  const [notificationDrawer, setNotificationDrawer] = useState<{ initial: StudentNotification | null; filter?: NotificationFilter } | null>(null);
-  const openNotifications = (initial: StudentNotification | null, filter?: NotificationFilter) => { setPanel(null); setNotificationDrawer({ initial, filter }); };
-  const closeNotifications = () => { setNotificationDrawer(null); bellRef.current?.focus(); };
   // Opening a page can write notifications (Tổng quan notifies its new warnings once read): count again shortly after.
   const refreshNotifications = notifications.refresh;
   useEffect(() => {
@@ -349,12 +346,12 @@ export default function StudentWorkspace({ user, advisor = null }: { user: Authe
             </div>}
           </div>
         </div>
-        {popoverOpen && <section ref={popoverRef} id={panel === "help" ? "student-help-panel" : "student-notifications-panel"} className="sw-popover" role="dialog" aria-labelledby={panel === "help" ? "student-help-title" : "student-notifications-title"} tabIndex={-1}>
+        {popoverOpen && <section ref={popoverRef} id={panel === "help" ? "student-help-panel" : "student-notifications-panel"} className={`sw-popover${panel === "notifications" ? " sw-popover-notifications" : ""}`} role="dialog" aria-labelledby={panel === "help" ? "student-help-title" : "student-notifications-title"} tabIndex={-1}>
           <button type="button" className="sw-icon-button sw-popover-close" onClick={() => closePanel(true)} aria-label="Đóng" title="Đóng"><Icon name="close" /></button>
           {panel === "help" ? <>
             <h3 id="student-help-title">Bắt đầu với EduPath AI</h3>
             <ol className="sw-help-steps">{helpSteps.map(([where, what]) => <li key={where}><strong>{where}</strong>: {what}</li>)}</ol>
-          </> : <NotificationsPanel onOpen={openNotifications} onOpenAll={filter => openNotifications(null, filter)} onUnread={notifications.setUnread} />}
+          </> : <NotificationsPanel onUnread={notifications.setUnread} onNavigate={link => { closePanel(false); const target = pageFromHash(link); if (target) navigate(target); }} />}
         </section>}
       </header>
       {advisor && <AdvisorViewBanner advisorName={advisor.name} role={advisor.role ?? "advisor"} studentName={name} studentCode={profile?.studentCode} className={profile?.className}
@@ -391,7 +388,5 @@ export default function StudentWorkspace({ user, advisor = null }: { user: Authe
         </main></div>
       </div>
     </div>
-    {!advisor && notificationDrawer && <NotificationsDrawer initial={notificationDrawer.initial} initialFilter={notificationDrawer.filter} onClose={closeNotifications} onUnread={notifications.setUnread}
-      onNavigate={link => { setNotificationDrawer(null); const target = pageFromHash(link); if (target) navigate(target); }} />}
   </div>;
 }
