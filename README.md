@@ -1,254 +1,187 @@
 # EduPath AI
 
-Nền tảng đánh giá năng lực và tư vấn lộ trình học tập cho sinh viên Công nghệ
-Thông tin.
+**AI đồng hành · Học tập bứt phá.** Nền tảng đánh giá năng lực và tư vấn lộ trình học tập cá nhân hóa cho sinh viên
+ngành Công nghệ Thông tin, Trường Đại học Văn Lang.
 
-**Kiến trúc và cách chia module:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Tài liệu này tổng
-quan các module API và web, worker AI/OCR, migration, kiểm thử, triển khai và quy ước khi thêm chức
-năng. Các mục bên dưới là ghi chú triển khai từ Sprint 2. Phiên bản hiện tại gồm đăng nhập Microsoft Entra ID, quản lý tài khoản
-quản trị và quản lý hồ sơ sinh viên trên PostgreSQL (Sprint 2).
+Đồ án tốt nghiệp của Nhóm 1, Khoa Công nghệ Thông tin, Trường Đại học Văn Lang (2026).
 
-## Bản đầy đủ trên Render — Sprint 2
+- Bản đang chạy: <https://edupath-ai-q28n.onrender.com>, đăng nhập bằng tài khoản Microsoft của trường.
+- Kiến trúc chi tiết: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-- Giữ `DATABASE_URL` của PostgreSQL đã kết nối trong Render Environment; không xóa
-  biến này để chạy bản đầy đủ. Blueprint khai báo biến bí mật với `sync: false`.
-- `DATABASE_AUTO_MIGRATE=true`: API áp dụng migration còn thiếu khi khởi động,
-  bao gồm `003_user_role_override.sql` và `004_account_activity.sql`.
-- Quản trị viên có thể thêm email đăng nhập Microsoft trước lần đăng nhập đầu tiên.
-  Migration `017_precreated_accounts.sql` lưu tài khoản chờ, chưa có danh tính
-  Microsoft hay ngày đăng nhập; lần đăng nhập đầu liên kết trong cùng tenant và giữ quyền đã cấp.
-- `/quantri`: đăng nhập quản trị; `/quantri/tai-khoan`: quản lý tài khoản,
-  phân quyền, khóa/mở và lịch sử đăng nhập; `/quantri/sinh-vien`: danh sách,
-  chi tiết, tìm kiếm và lọc hồ sơ sinh viên.
-- GitHub chứa mã nguồn và migration, không chứa `.env`, mật khẩu hay dữ liệu
-  database. Đẩy mã nguồn không tự sao chép dữ liệu PostgreSQL local lên Render.
-- Chi tiết: [Quản trị](docs/SPRINT_2_ADMIN_AUTH.md) và
-  [Hồ sơ sinh viên](docs/SPRINT_2_STUDENT_PROFILES.md).
+## Bài toán
 
-Chế độ không database bên dưới chỉ dành cho xem thử giao diện/đăng nhập;
-các chức năng quản lý tài khoản và hồ sơ cần PostgreSQL.
+Sinh viên khó tự trả lời ba câu hỏi:
 
-## Trang tổng quan công khai
+- Mình đang mạnh, yếu ở kỹ năng nào?
+- Mình còn thiếu gì cho vị trí nghề nghiệp mình muốn?
+- Mình cần học gì, vào học kỳ nào để kịp tốt nghiệp?
 
-- `/`: giới thiệu EduPath AI, mục tiêu đồ án, tính năng dự kiến, hành trình sử dụng
-  và câu hỏi thường gặp. Giao diện sử dụng màu đỏ, trắng và hình ảnh Văn Lang;
-  có menu mobile và phần xem trước tính năng tương tác.
-- `/login`: trang đăng nhập bằng tài khoản Microsoft Văn Lang.
-- `/dashboard`: không gian người dùng sau khi xác thực.
+Câu trả lời nằm rải rác trong bảng điểm, chương trình đào tạo (CTĐT), kế hoạch đào tạo (KHĐT) và tiêu chuẩn xét tốt
+nghiệp của từng khóa. Mỗi cố vấn học tập lại phụ trách nhiều lớp cùng lúc.
 
-Trang tổng quan không gọi API xác thực, nên có thể xem riêng giao diện ngay cả
-khi backend chưa chạy:
+EduPath AI giải quyết bằng các bước:
 
-```powershell
-npm run dev --workspace @edupath/web
-```
+1. Đọc bảng điểm PDF của sinh viên.
+2. Đối chiếu với dữ liệu đào tạo của Khoa để tính năng lực theo từng kỹ năng.
+3. So năng lực đó với yêu cầu của các vị trí nghề nghiệp trong danh mục của Khoa.
+4. Kiểm tra điều kiện xét tốt nghiệp.
+5. Đề xuất lộ trình học tập cho học kỳ tới.
 
-Mở `http://localhost:5173/`. Nút **Đăng nhập** chuyển sang `/login`; luồng đăng nhập
-Microsoft vẫn cần backend và cấu hình môi trường đầy đủ. Các màn hình năng lực,
-lộ trình và nghề nghiệp trên trang tổng quan là minh họa mục tiêu phát triển,
-không phải kết quả AI hoặc dữ liệu sinh viên thực tế.
+Mọi con số do mã nguồn tính. AI chạy cục bộ (Gemma 4 qua Ollama) để giải thích kết quả bằng lời dễ hiểu, soạn lộ
+trình và trả lời câu hỏi.
 
-## Chạy giao diện và đăng nhập trước, chưa cần database
+## Người dùng
 
-Để `DATABASE_URL` trống hoặc không khai báo. Server bỏ qua kết nối/migration
-PostgreSQL, lưu tạm người dùng và session trong bộ nhớ. Trang tổng quan và đăng
-nhập Microsoft vẫn hoạt động với cấu hình Entra hiện có; giới hạn tenant và phân
-quyền vẫn được kiểm tra. Chế độ này chỉ dành cho bản demo một instance: dữ liệu
-và phiên đăng nhập mất khi server khởi động lại, không đồng bộ sang PostgreSQL.
+| Vai trò | Dùng EduPath AI để |
+|---|---|
+| Sinh viên | Import bảng điểm; xem năng lực, khoảng trống kỹ năng, vị trí nghề nghiệp phù hợp và điều kiện xét tốt nghiệp; nhận Lộ trình AI; hỏi Trợ lý AI |
+| Cố vấn học tập | Xem các lớp mình phụ trách, mở trang của từng sinh viên và làm thay một số việc (import bảng điểm, đánh giá năng lực, Lộ trình AI, hỏi Trợ lý AI). Mỗi việc được ghi nhật ký và báo cho sinh viên |
+| Quản trị viên, Ban chủ nhiệm khoa | Quản lý dữ liệu đào tạo, nghề nghiệp, năng lực, tài khoản và cố vấn; xem báo cáo; gửi thông báo; mở trang của mọi sinh viên như cố vấn |
+| Trưởng/phó bộ môn, Giảng viên | Dùng cổng quản trị theo quyền được cấp |
 
-Trên Render đã có Web Service, deploy commit mới; nếu trước đó đã điền URL mẫu
-hoặc URL local vào `DATABASE_URL`, xóa biến đó để chạy demo. `render.yaml` không
-yêu cầu tạo PostgreSQL. Các biến Entra và `SESSION_SECRET` vẫn cần thiết.
+## Chức năng
 
-Khi sẵn sàng dùng database, thêm `DATABASE_URL` hợp lệ rồi khởi động/deploy lại.
-Server sẽ chạy migration và chuyển sang lưu PostgreSQL. Nếu đã khai báo URL mà
-kết nối thất bại, server báo lỗi, không tự chuyển sang bộ nhớ tạm.
+### Cổng sinh viên (`/dashboard`)
 
-## Kiến trúc đăng nhập (khi bật PostgreSQL)
+| Trang | Nội dung |
+|---|---|
+| Tổng quan | GPA, tín chỉ, năng lực chung, mức phù hợp với vị trí nghề nghiệp mục tiêu, tình trạng xét tốt nghiệp, tiến độ theo kế hoạch đào tạo, các mục cần chú ý |
+| Hồ sơ và bảng điểm | Thông tin học tập; Mục tiêu học tập (vị trí nghề nghiệp mục tiêu, chuyên ngành); Khảo sát định hướng (thế mạnh, sở trường, thành tích); import bảng điểm PDF, đọc bằng OCR |
+| Đánh giá năng lực | Điểm từng kỹ năng và nhóm năng lực, tính từ điểm học phần và trọng số kỹ năng của học phần; diễn biến theo học kỳ; nhận xét của AI |
+| Khoảng trống kỹ năng | Kỹ năng của sinh viên so với yêu cầu của vị trí nghề nghiệp mục tiêu; học phần nên học, nên cải thiện; kỹ năng cần tự học |
+| Định hướng nghề nghiệp | Điểm phù hợp với mọi vị trí nghề nghiệp của danh mục, bảng xếp hạng, gợi ý theo Khảo sát định hướng, so sánh các vị trí |
+| Lộ trình học tập | Theo dõi tiến độ theo tiêu chuẩn xét tốt nghiệp. Lộ trình AI cho học kỳ tới: môn cần học, học lại, học cải thiện, kỹ năng nên bổ sung, kế hoạch theo tháng. Kế hoạch học kỳ kéo thả, có kiểm tra học phần tiên quyết và số tín chỉ |
+| Xét tốt nghiệp | Bảng điểm đối chiếu với tiêu chuẩn xét tốt nghiệp của khóa và chuyên ngành; lời khuyên của AI |
+| Trợ lý AI | Hỏi đáp về kết quả học tập của chính mình và quy định của Khoa; câu trả lời có dẫn nguồn |
+| Thông báo | Chuông thông báo: kết quả AI, cảnh báo tiến độ, thông báo của Khoa; lọc theo loại |
+
+### Cổng quản trị (`/quantri`)
+
+| Nhóm | Nội dung |
+|---|---|
+| Báo cáo | Tổng quan, Tiến độ, Nguy cơ, Kỹ năng thiếu, Vị trí mục tiêu, Môn đề xuất, Nhật ký thao tác; xem toàn khóa hoặc từng khóa; xuất Excel |
+| Tài khoản, Sinh viên | Phân quyền, khóa/mở tài khoản, tạo trước tài khoản; hồ sơ và bảng điểm của sinh viên |
+| Cố vấn học tập | Danh sách cố vấn và lớp phụ trách, import từ file phân công của Khoa. Quản lý sinh viên: mở trang của sinh viên và làm thay |
+| Quản lý đào tạo | Chương trình đào tạo, kế hoạch đào tạo, tiêu chuẩn xét tốt nghiệp theo khóa và chuyên ngành, nhập từ file Excel của Khoa |
+| Quản lý nghề nghiệp | Lĩnh vực, danh mục kỹ năng, vị trí nghề nghiệp và yêu cầu kỹ năng; AI gợi ý kỹ năng cho vị trí nghề nghiệp |
+| Quản lý năng lực | Nhóm năng lực, cấu hình năng lực. Cấu hình môn học: liên kết học phần với kỹ năng kèm trọng số, làm thủ công hoặc để AI đề xuất bản nháp rồi người quản trị duyệt áp dụng |
+| Quản lý thông báo | Gửi thông báo của Khoa tới sinh viên, xem các thông báo đã gửi |
+
+## Cách EduPath AI dùng AI
+
+- **Mã nguồn tính, AI giải thích.** Các chỉ số dưới đây do mã nguồn tính, trong `apps/api/src/competency-assessment`,
+  `graduation` và `study-plan`:
+  - điểm năng lực, khoảng trống kỹ năng, điểm phù hợp;
+  - tiến độ học tập và điều kiện xét tốt nghiệp.
+
+  AI chỉ viết nhận xét, lời khuyên, lộ trình và câu trả lời dựa trên các số liệu đó. Đầu ra được kiểm tra trước khi
+  hiển thị.
+- **Chạy cục bộ.** Model `gemma4:e4b` và `embeddinggemma` chạy bằng Ollama trên máy của nhóm. Worker AI tự lấy việc từ
+  hàng đợi trong PostgreSQL qua HTTPS. Dữ liệu không được gửi tới dịch vụ AI đám mây nào. Model không nhận họ tên, MSSV,
+  email hay tệp PDF bảng điểm.
+- **Có phiên bản.** Mỗi prompt và cách tính có mã phiên bản lưu cùng kết quả, để biết kết quả nào cần tạo lại khi quy
+  tắc thay đổi.
+
+| Việc của AI | Hiện ở |
+|---|---|
+| Nhận xét năng lực cho sinh viên | Đánh giá năng lực |
+| Lộ trình học tập cho học kỳ tới | Lộ trình học tập |
+| Lời khuyên xét tốt nghiệp | Xét tốt nghiệp |
+| Trả lời câu hỏi bằng RAG: dữ liệu SQL của sinh viên và kho tri thức tìm bằng BM25 kết hợp EmbeddingGemma | Trợ lý AI |
+| Gợi ý kỹ năng cho vị trí nghề nghiệp | Quản trị, Vị trí nghề nghiệp |
+| Gợi ý liên kết học phần với kỹ năng, kèm trọng số | Quản trị, Cấu hình môn học |
+
+## Kiến trúc
 
 ```text
-React → Node.js BFF → Microsoft Entra ID
-  ↑          ↕
-  └── HttpOnly cookie   PostgreSQL
-                       ├─ users / student_profiles
-                       └─ user_sessions
+Trình duyệt (React + Vite)
+        │ HTTPS, cookie HttpOnly
+        ▼
+Render Web Service: API Express 5, phục vụ luôn bản build React
+        │                                    ▲
+        ▼                                    │ lấy việc qua HTTPS, xác thực bằng khóa worker
+PostgreSQL: dữ liệu, session,          Máy của nhóm
+hàng đợi việc AI và OCR                 ├─ Worker AI: Ollama (gemma4:e4b, embeddinggemma)
+                                        └─ Worker OCR: PaddleOCR + PyMuPDF đọc PDF bảng điểm
+
+Microsoft Entra ID: đăng nhập bằng tài khoản trường (MSAL, Authorization Code + PKCE)
 ```
 
-- React không nhận access token, ID token hoặc Client Secret.
-- Node.js dùng Authorization Code Flow với PKCE S256, `state` và `nonce`.
-- Session ID được đổi sau khi đăng nhập để chống session fixation.
-- Người dùng được định danh bằng cặp `(tid, oid)`, không phải email.
-- Sau khi Microsoft xác thực thành công, backend tự động tạo hoặc cập nhật người
-  dùng trong PostgreSQL trước khi tạo phiên đăng nhập.
-- Session được lưu trong PostgreSQL để không bị mất khi tiến trình Node.js khởi
-  động lại.
-- Role được ưu tiên từ `users.role_override`, sau đó App Role của Entra. Trong demo, tài khoản không có role
-  được mặc định là `Student`; cấu hình này bị chặn khi chạy production mở cho mọi
-  tenant.
+| Thành phần | Công nghệ |
+|---|---|
+| Giao diện | React 19, Vite 8, TypeScript |
+| API | Node.js 22, Express 5, pg, zod, MSAL Node, exceljs và xlsx, pdfjs-dist |
+| Cơ sở dữ liệu | PostgreSQL, migration SQL đánh số trong `apps/api/migrations` |
+| AI | Ollama, Gemma 4 E4B (`gemma4:e4b`), EmbeddingGemma |
+| OCR | Python, PaddleOCR 3.7, PyMuPDF |
+| Kiểm thử | Vitest |
+| Triển khai | Render, một Web Service cho cả web và API |
 
-## Cấu trúc
+## Cấu trúc thư mục
 
 ```text
 EduPath_AI/
 ├─ apps/
-│  ├─ api/   Node.js, Express, MSAL Node
-│  └─ web/   React, Vite
-├─ apps/api/migrations/   PostgreSQL migrations
-├─ package.json
-└─ README.md
+│  ├─ api/        API Express: src/ chia theo module, migrations/, data/ (file CTĐT, KHĐT mẫu)
+│  └─ web/        Giao diện React: src/, public/
+├─ services/
+│  ├─ ai/         Cấu hình và script chạy worker AI (mã worker ở apps/api/src/ai-worker)
+│  └─ ocr/        Worker OCR viết bằng Python
+├─ scripts/       Thiết lập worker, seed tài khoản demo, kiểm tra tích hợp verify-*.mjs
+├─ docs/          Tài liệu từng chức năng
+└─ render.yaml    Cấu hình triển khai Render
 ```
 
-## Cấu hình Microsoft Entra
+## Chạy trên máy
 
-App Registration phát triển cần có:
+Cần Node.js 22. PostgreSQL cần cho mọi chức năng lưu dữ liệu. Ollama và Python chỉ cần khi chạy worker AI và worker
+OCR.
 
-- Supported account types: `Multiple Entra ID tenants`.
-- Platform: `Web`.
-- Redirect URI: `http://localhost:4000/api/auth/microsoft/callback`.
-- App Roles tùy chọn: `Admin` và `Student`.
-- `Assignment required = No` nếu muốn mọi tài khoản tổ chức có thể thử đăng nhập.
-- Optional claim `login_hint` cho ID token, khai báo trong **Token configuration**.
-  Thiếu claim này thì Microsoft vẫn hiện màn "Chọn một tài khoản" mỗi lần đăng
-  xuất; ứng dụng chạy bình thường, chỉ là mất thêm một bước bấm.
-
-Không đặt mật khẩu tài khoản demo hoặc Client Secret vào Git.
-
-## Chạy local
-
-Yêu cầu Node.js 22 trở lên.
-
-1. Cài dependency:
+1. Cài thư viện:
 
    ```powershell
    npm install
    ```
 
-2. Sao chép file cấu hình mẫu:
+2. Tạo file cấu hình của API:
 
    ```powershell
    Copy-Item .\apps\api\.env.example .\apps\api\.env
    ```
 
-   Nếu thông tin Entra đang nằm trong file `../tk_demo`, có thể nhập tự động mà
-   không sao chép các mật khẩu tài khoản demo:
+   Rồi điền các biến:
+   - `DATABASE_URL`: chuỗi kết nối PostgreSQL.
+   - `SESSION_SECRET`: chuỗi ngẫu nhiên dài ít nhất 32 ký tự.
+   - `ENTRA_CLIENT_ID`, `ENTRA_TENANT_ID`, `ENTRA_CLIENT_SECRET`: lấy từ App Registration trên Microsoft Entra, với
+     redirect URI `http://localhost:4000/api/auth/microsoft/callback`.
+   - `AI_WORKER_KEY`, `OCR_WORKER_KEY`: do các script thiết lập worker tạo (bước 5 và 6).
 
-   ```powershell
-   npm run setup:demo-env
-   ```
-
-3. Khi cần lưu dữ liệu lâu dài, mở `apps/api/.env` và điền chuỗi kết nối PostgreSQL
-   (bỏ qua bước này, để `DATABASE_URL` trống nếu chỉ demo giao diện/đăng nhập):
-
-   ```dotenv
-   DATABASE_URL=postgresql://edupath_codex:<MAT_KHAU>@localhost:5432/edupath_ai
-   ```
-
-   Nếu mật khẩu chứa ký tự đặc biệt như `@`, `:`, `/` hoặc `#`, cần URL-encode
-   phần mật khẩu trước khi đặt vào chuỗi kết nối.
-
-4. Điền ba giá trị đã lưu từ Entra:
-
-   - `ENTRA_CLIENT_ID`
-   - `ENTRA_TENANT_ID`
-   - `ENTRA_CLIENT_SECRET` — dùng trường **Value**, không phải Secret ID
-
-   Đồng thời thay `SESSION_SECRET` bằng chuỗi ngẫu nhiên dài tối thiểu 32 ký tự.
-
-5. Khi đã cấu hình `DATABASE_URL`, migration được chạy tự động khi API khởi động.
-   Có thể chạy riêng để kiểm tra (không dùng lệnh này trong chế độ demo bộ nhớ):
+3. Tạo bảng:
 
    ```powershell
    npm run db:migrate --workspace @edupath/api
    ```
 
-6. Chạy cả API và Web:
+   Khi `DATABASE_AUTO_MIGRATE=true`, API cũng tự chạy migration còn thiếu lúc khởi động.
+
+4. Chạy API và giao diện, rồi mở <http://localhost:5173>:
 
    ```powershell
    npm run dev
    ```
 
-7. Mở `http://localhost:5173` và chọn **Đăng nhập bằng Microsoft**.
+5. Worker AI: làm theo [services/ai/README.md](services/ai/README.md). Các bước chính: `ollama pull gemma4:e4b`,
+   `ollama pull embeddinggemma`, `node scripts/setup-ai-worker.mjs`, rồi `npm run ai-worker --workspace @edupath/api`.
+6. Worker OCR: làm theo [docs/ocr-demo.md](docs/ocr-demo.md). Các bước chính: cài
+   `services/ocr/requirements.txt`, chạy `node scripts/setup-ocr-worker.mjs`, rồi `services/ocr/start-worker.ps1`.
 
-## Các bảng PostgreSQL ban đầu
+Khi để trống `DATABASE_URL`, API chạy ở chế độ xem thử: chỉ có trang công khai và đăng nhập, dữ liệu nằm trong bộ nhớ
+và mất khi khởi động lại.
 
-| Bảng | Mục đích |
-|---|---|
-| `schema_migrations` | Theo dõi migration đã áp dụng và phát hiện file bị sửa |
-| `users` | Danh tính Microsoft, vai trò, trạng thái và lần đăng nhập |
-| `student_profiles` | Hồ sơ học tập mở rộng của sinh viên |
-| `user_sessions` | Phiên đăng nhập của `express-session` |
-| `login_events` | Lịch sử đăng nhập EduPath từ khi bật tính năng |
+Dữ liệu đào tạo (CTĐT, KHĐT, tiêu chuẩn xét tốt nghiệp, danh sách cố vấn học tập) do quản trị viên import từ file Excel
+của Khoa trong cổng quản trị.
 
-`users` có ràng buộc duy nhất trên `(entra_tenant_id, entra_object_id)`. Email
-không phải khóa định danh vì claim email có thể thiếu hoặc thay đổi.
-
-## Triển khai lên Render
-
-Dự án dùng một Render Web Service để Express phục vụ cả API và bản React đã
-build. Frontend và backend cùng origin nên không cần cấu hình CORS và cookie đăng
-nhập vẫn là HttpOnly, SameSite=Lax.
-
-### Cách khuyến nghị: Render Blueprint
-
-> `render.yaml` cấu hình Web Service kết nối PostgreSQL qua `DATABASE_URL`.
-> Nếu đã có database và Web Service trên Render, giữ cấu hình hiện tại và deploy
-> commit mới; không cần tạo lại dịch vụ hoặc database. Các bước dưới dành cho cài mới.
-
-1. Trong Render Dashboard, chọn **New > PostgreSQL**, chọn region phù hợp rồi
-   tạo database. Nên đặt PostgreSQL và Web Service trong cùng region để dùng kết
-   nối nội bộ.
-2. Chờ database ở trạng thái sẵn sàng, mở trang thông tin kết nối và sao chép
-   **Internal Database URL**. Đây là thông tin bí mật, không đưa vào Git hoặc ảnh
-   chụp công khai.
-3. Quay lại Render Dashboard, chọn **New > Blueprint**.
-4. Kết nối repository GitHub `MochiKawaiii/EduPath-AI`.
-5. Chọn branch `main`; Render sẽ đọc file `render.yaml` ở thư mục gốc.
-6. Khi Render yêu cầu các biến có `sync: false`, nhập:
-
-   | Biến | Giá trị cần nhập |
-   |---|---|
-   | `ENTRA_CLIENT_ID` | **Application (client) ID** trong App Registration |
-   | `ENTRA_CLIENT_SECRET` | Cột **Value** của Client Secret, không phải Secret ID |
-   | `ENTRA_TENANT_ID` | **Directory (tenant) ID** của tenant đang sở hữu App Registration |
-   | `DATABASE_URL` | **Internal Database URL** từ bước 2 |
-
-   `SESSION_SECRET` được Render tự tạo. Tenant chính thức của
-   `vlu.edu.vn` đã được khai báo trong allowlist bằng tenant ID công khai
-   `3011a54b-0a5d-4929-bf02-a00787877c6a`.
-
-   Không dùng URL local dạng `postgresql://...@localhost:5432/...` cho
-   `DATABASE_URL` trên Render. Trong Web Service, `localhost` là chính container
-   chạy ứng dụng, không phải PostgreSQL trên máy tính cá nhân hay dịch vụ
-   PostgreSQL của Render.
-
-7. Sau lần deploy đầu tiên, sao chép URL dạng
-   `https://<ten-service>.onrender.com`.
-8. Trong Microsoft Entra > **App registrations > Authentication > Web**, thêm:
-
-   - Redirect URI:
-     `https://<ten-service>.onrender.com/api/auth/microsoft/callback`
-   - Front-channel logout URL (nếu dùng):
-     `https://<ten-service>.onrender.com/`
-
-Ứng dụng tự đọc hostname do Render cấp để tạo `WEB_ORIGIN`,
-`ENTRA_REDIRECT_URI` và `ENTRA_POST_LOGOUT_REDIRECT_URI`. Không cần nhập lại
-ba biến này trên Render trừ khi dùng custom domain hoặc tách frontend/backend.
-
-### Nếu tạo Web Service thủ công
-
-| Trường Render | Giá trị |
-|---|---|
-| Language | `Node` |
-| Branch | `main` |
-| Root Directory | để trống |
-| Build Command | `npm ci --include=dev && npm run build` |
-| Start Command | `npm start` |
-| Health Check Path | `/api/health` |
-
-Sau đó thêm các biến môi trường giống `render.yaml`. Tuyệt đối không upload file
-`.env`, URL kết nối database hoặc file tài khoản demo lên GitHub.
-
-## Lệnh kiểm tra
+## Kiểm thử
 
 ```powershell
 npm run typecheck
@@ -256,22 +189,52 @@ npm test
 npm run build
 ```
 
-## API hiện có
+Kết quả ngày 03/11/2026: API 105 tệp, 1 666 test; web 54 tệp, 622 test; tất cả đều qua. Các script
+`scripts/verify-*.mjs` kiểm tra tích hợp trên PostgreSQL thật, dùng một schema tạm.
 
-| Method | Endpoint | Chức năng |
-|---|---|---|
-| `GET` | `/api/health` | Kiểm tra API |
-| `GET` | `/api/auth/microsoft/start` | Bắt đầu đăng nhập Microsoft |
-| `GET` | `/api/auth/microsoft/callback` | Nhận authorization code |
-| `GET` | `/api/auth/me` | Lấy phiên người dùng hiện tại |
-| `POST` | `/api/auth/logout` | Hủy phiên và đăng xuất Microsoft |
-| `GET` | `/api/student/summary` | Endpoint yêu cầu đăng nhập |
-| `GET` | `/api/admin/summary` | Endpoint chỉ dành cho role Admin |
+## Triển khai
 
-## Trước khi triển khai thật
+`render.yaml` mô tả một Render Web Service:
 
-- Đổi `ENTRA_ALLOW_ANY_TENANT=false` và allowlist tenant VLU.
-- Đổi `AUTH_DEFAULT_ROLE=none`, yêu cầu App Role hoặc đối soát danh sách sinh viên.
-- Dùng HTTPS, credential trong secret manager và cấu hình `TRUST_PROXY=true` khi
-  chạy sau reverse proxy.
-- Không chuyển dữ liệu tài khoản thử nghiệm sang production bằng cách ghép email.
+| Mục | Giá trị |
+|---|---|
+| Lệnh build | `npm ci --include=dev && npm run build` |
+| Lệnh chạy | `npm start` |
+| Kiểm tra sức khỏe | `/api/health` |
+
+- API phục vụ luôn bản build React, nên web và API cùng origin, cookie đăng nhập giữ HttpOnly.
+- Khi `DATABASE_AUTO_MIGRATE=true`, API áp dụng migration còn thiếu lúc khởi động.
+- Các biến bí mật (`DATABASE_URL`, `ENTRA_*`, `AI_WORKER_KEY`, `OCR_WORKER_KEY`) khai báo trên Render với `sync: false`
+  và không đưa vào Git.
+- Trên Microsoft Entra, thêm redirect URI `https://<ten-service>.onrender.com/api/auth/microsoft/callback`.
+- Worker AI và worker OCR chạy trên máy của nhóm, trỏ tới API trên Render bằng khóa worker tương ứng.
+
+## Dữ liệu và quyền riêng tư
+
+- Người dùng đăng nhập bằng tài khoản Microsoft của trường. Vai trò quyết định người dùng vào cổng sinh viên hay cổng
+  quản trị.
+- Đánh giá năng lực và Khảo sát định hướng cần sinh viên đồng ý theo Chính sách bảo mật (trang
+  `/chinh-sach-va-dieu-khoan`).
+- Mỗi lần cố vấn học tập hoặc quản trị viên mở trang của sinh viên hay làm thay sinh viên đều được ghi vào Nhật ký thao
+  tác, và sinh viên được báo trong chuông thông báo.
+- AI chạy cục bộ và không nhận thông tin định danh.
+- Repository không chứa `.env`, mật khẩu, dữ liệu sinh viên thật hay file nguồn có thông tin cá nhân của Khoa.
+
+## Tài liệu
+
+| Chủ đề | Tài liệu |
+|---|---|
+| Kiến trúc tổng thể | [ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Đăng nhập, tài khoản quản trị | [SPRINT_2_ADMIN_AUTH.md](docs/SPRINT_2_ADMIN_AUTH.md) |
+| Bảng điểm và OCR | [student-transcripts.md](docs/student-transcripts.md), [ocr-demo.md](docs/ocr-demo.md) |
+| Năng lực | [competency-assessment.md](docs/competency-assessment.md), [competency-management.md](docs/competency-management.md) |
+| Nghề nghiệp | [career-positions.md](docs/career-positions.md), [career-guidance.md](docs/career-guidance.md), [career-ai-suggestions.md](docs/career-ai-suggestions.md) |
+| Lộ trình học tập | [study-roadmap.md](docs/study-roadmap.md) |
+| Xét tốt nghiệp | [graduation-standards.md](docs/graduation-standards.md), [graduation-advice.md](docs/graduation-advice.md) |
+| Trợ lý AI | [assistant.md](docs/assistant.md), [assistant-evaluation.md](docs/assistant-evaluation.md) |
+| Tổng quan và thông báo | [student-overview.md](docs/student-overview.md), [notifications.md](docs/notifications.md) |
+| Báo cáo quản trị | [admin-reports.md](docs/admin-reports.md) |
+| Cố vấn học tập | [advisors.md](docs/advisors.md) |
+| Chương trình và kế hoạch đào tạo | [curriculum-guide.md](docs/curriculum-guide.md), [training-plan-guide.md](docs/training-plan-guide.md) |
+| Khảo sát định hướng | [profile-survey.md](docs/profile-survey.md) |
+| Worker AI | [services/ai/README.md](services/ai/README.md) |
