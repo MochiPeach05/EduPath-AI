@@ -1971,3 +1971,76 @@
   --ep-brand-w: var(--ep-header-brand-w);
   flex-shrink: 0;
 }
+
+/* Navy header (user 2026-11-03, the colour of the image they sent): landing, policy and FAQ pages. Links are light, the
+   current or hovered one white with a red underline (red text reads too dark on navy), the logo sits on a white card like
+   the footer's, and the narrow-screen menu panel is navy too. */
+.lp-page {
+  --lp-header-bg: #010433;
+  --lp-header-link: #dfe3f5;
+}
+
+.lp-header {
+  background: var(--lp-header-bg);
+  border-bottom-color: #ffffff1a;
+}
+
+.lp-header .ep-brand {
+  background: #fff;
+  border-radius: 10px;
+  padding: 6px 12px;
+}
+
+/* The logo image leaves about 15% of its height empty above and below the mark: the card shows it at 3.6:1, so the
+   white card stays a compact band instead of filling the header. */
+.lp-header .ep-brand>img {
+  height: auto;
+  aspect-ratio: 3.6;
+  object-fit: cover;
+}
+
+.lp-header .lp-navigation a,
+.lp-header .pi-navigation a {
+  color: var(--lp-header-link);
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 8px;
+  transition: color 0.18s, text-decoration-color 0.18s;
+}
+
+.lp-header .lp-navigation a:hover,
+.lp-header .lp-navigation a[aria-current="page"],
+.lp-header .pi-navigation a:hover,
+.lp-header .pi-navigation a[aria-current="page"] {
+  color: #fff;
+  text-decoration-color: var(--lp-red);
+}
+
+.lp-header .lp-navigation a:focus-visible,
+.lp-header .pi-navigation a:focus-visible,
+.lp-header .lp-menu-toggle:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.lp-header .lp-menu-toggle {
+  color: #fff;
+}
+
+@media (max-width: 900px) {
+  .lp-header .lp-navigation {
+    background: var(--lp-header-bg);
+    border-bottom-color: #ffffff1a;
+    box-shadow: 0 12px 18px #0104334d;
+  }
+}
+
+/* On phones the header logo was kept at its desktop width (the rule above), which pushed "Đăng nhập" onto two lines. */
+@media (max-width: 480px) {
+  .lp-header .ep-brand {
+    --ep-brand-w: 150px;
+    padding: 5px 9px;
+  }
+}
