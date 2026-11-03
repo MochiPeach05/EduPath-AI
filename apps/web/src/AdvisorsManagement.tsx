@@ -40,8 +40,27 @@ const classSort: Record<string, SortRule<AdvisorClassDetail>> = {
   withTranscript: { value: (row) => row.withTranscript, by: "number" },
   assessed: { value: (row) => row.assessed, by: "number" },
 };
+// What the preview adds since the Khoa's own workbook is read (apps/api/src/advisors/import.ts, 2026-11-03; not yet in
+// advisor-types.ts): notes on the sheets read and how they compare, and per advisor the sheet its rows are in when that
+// is not the first sheet read.
+type ImportNote = { text: string; tone: "info" | "warn" };
+type PreviewItem = AdvisorImportItem & { sheet?: string };
+type SheetPreview = AdvisorImportPreview & { items: PreviewItem[]; sheets?: string[]; notes?: ImportNote[] };
+
+/** "6–9, 12" for the rows 6, 7, 8, 9 and 12: three rows or more in a row are written as a range. */
+export function rowsText(rows: readonly number[]): string {
+  const parts: string[] = [];
+  for (let start = 0; start < rows.length;) {
+    let end = start;
+    while (end + 1 < rows.length && rows[end + 1] === rows[end]! + 1) end++;
+    parts.push(end - start >= 2 ? `${rows[start]}–${rows[end]}` : rows.slice(start, end + 1).join(", "));
+    start = end + 1;
+  }
+  return parts.join(", ");
+}
+
 // A preview is read for its errors first: Lỗi, then what changes, then what stays.
-const importSort: Record<string, SortRule<AdvisorImportItem>> = {
+const importSort: Record<string, SortRule<PreviewItem>> = {
   rows: { value: (row) => row.rows[0], by: "number" },
   name: { value: (row) => row.name, by: "name" },
   classes: { value: (row) => row.classes.length, by: "number" },
@@ -258,16 +277,19 @@ function ImportNotes({ item }: { item: AdvisorImportItem }) {
 }
 
 /** What the workbook holds, before anything is saved (AD-ADV-03; exported for its test). */
-export function ImportPreview({ preview }: { preview: AdvisorImportPreview }) {
+export function ImportPreview({ preview }: { preview: SheetPreview }) {
   const { sort, sortHeader } = useTableSort();
+  const notes = preview.notes ?? [];
   return <section className="av-preview" aria-label="Xem trước danh sách cố vấn học tập">
     <h3>{preview.fileName}</h3>
     <p className="av-summary">Đọc {preview.rows.toLocaleString("vi-VN")} dòng · {importSummaryText(preview.summary)}</p>
+    {notes.length > 0 && <ul className="av-notes" aria-label="Trang tính đã đọc">{notes.map((note) =>
+      <li key={note.text} className={note.tone === "warn" ? "av-note-warn" : "av-note-change"}>{note.text}</li>)}</ul>}
     {preview.fileProblems.length > 0 && <div className="cm-warning" role="alert"><strong>Tệp chưa đọc được hết</strong><ul>{preview.fileProblems.map((problem) => <li key={problem}>{problem}</li>)}</ul></div>}
     {preview.items.length > 0 && <div className="cm-table-scroll"><table className="cm-table av-preview-table">
       <thead><tr>{sortHeader("Dòng", "rows", "cm-stt")}{sortHeader("Cố vấn học tập", "name")}{sortHeader("Lớp sau khi tách", "classes")}{sortHeader("Trạng thái", "status")}<th scope="col">Ghi chú</th></tr></thead>
-      <tbody>{sortRows(preview.items, importSort, sort).map(({ row }) => <tr key={`${row.email}-${row.rows.join(",")}`} className={row.status === "error" ? "av-row-error" : undefined}>
-        <td className="cm-stt">{row.rows.join(", ")}</td>
+      <tbody>{sortRows(preview.items, importSort, sort).map(({ row }) => <tr key={`${row.email}-${row.sheet ?? ""}-${row.rows.join(",")}`} className={row.status === "error" ? "av-row-error" : undefined}>
+        <td className="cm-stt">{rowsText(row.rows)}{row.sheet && <small style={{ whiteSpace: "normal" }}>trang {row.sheet}</small>}</td>
         <td><strong>{row.name || "(chưa có tên)"}</strong><small>{row.email || "(chưa có email)"}</small>
           {(row.staffCode || row.unit) && <small>{[row.staffCode, row.unit].filter(Boolean).join(" · ")}</small>}</td>
         <td><ClassChips classes={row.classes} shown={row.classes.length} /></td>
@@ -282,7 +304,7 @@ export function ImportPreview({ preview }: { preview: AdvisorImportPreview }) {
 
 function AdvisorImport({ close, imported }: { close: () => void; imported: (result: AdvisorImportResult) => void }) {
   const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<AdvisorImportPreview | null>(null);
+  const [preview, setPreview] = useState<SheetPreview | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   // A file chosen while the previous one is still read wins: the late answer of the older file is dropped.
@@ -297,7 +319,7 @@ function AdvisorImport({ close, imported }: { close: () => void; imported: (resu
     if (!/\.xlsx$/i.test(chosen.name) || chosen.size > 5 * 1024 * 1024) { setError("Chọn tệp .xlsx không quá 5 MB."); return; }
     setBusy(true);
     try {
-      const result = await upload(`${ADVISORS_API}/import/preview`, chosen) as AdvisorImportPreview;
+      const result = await upload(`${ADVISORS_API}/import/preview`, chosen) as SheetPreview;
       if (own === generation.current) setPreview(result);
     } catch (failure) { if (own === generation.current) setError((failure as Error).message); }
     finally { if (own === generation.current) setBusy(false); }
@@ -314,7 +336,7 @@ function AdvisorImport({ close, imported }: { close: () => void; imported: (resu
       <p>1. Chọn tệp Excel → 2. Xem trước và rà soát → 3. Xác nhận import</p>
       <label className="cm-upload">Danh sách cố vấn học tập (.xlsx · tối đa 5 MB)
         <input type="file" accept=".xlsx" disabled={busy} onChange={(event) => void inspect(event.target.files?.[0] ?? null)} /></label>
-      <p className="cm-help">Mỗi dòng gồm Họ và tên, Email (@vlu.edu.vn), Mã giảng viên, Đơn vị và Lớp phụ trách; nhiều lớp ghi chung một ô, ngăn cách bằng dấu phẩy.{" "}
+      <p className="cm-help">Dùng file phân công của Khoa: cột CVHT, EMAIL (@vlu.edu.vn), MÃ LỚP và MGV nếu có; mỗi dòng là một cố vấn hoặc một lớp, nhiều lớp trong một ô cách nhau bằng dấu phẩy. Trang tính ẩn không được đọc.{" "}
         <a className="av-template" href={`${ADVISORS_API}/import/template`} download><Icon name="download" /> Tải file mẫu</a></p>
       {busy && <p role="status">{preview ? "Đang import danh sách…" : "Đang đọc tệp Excel…"}</p>}
       {error && <p className="admin-error" role="alert">{error}</p>}

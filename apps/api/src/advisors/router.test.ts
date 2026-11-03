@@ -2,7 +2,7 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import type { AppRole, AuthenticatedUser } from "../auth/types.js";
-import { advisorTemplate } from "./import.js";
+import { advisorTemplate, planImport, type ImportLookups } from "./import.js";
 import { AdvisorError } from "./model.js";
 import { createAdvisorPortalRouter } from "./portal-router.js";
 import { PostgresAdvisorRepository, type AdvisorRepository } from "./repository.js";
@@ -114,6 +114,46 @@ describe("advisors router: import", () => {
     expect(sheet).toMatchObject({ rows: 1, items: [{ email: "nguyenvana@vlu.edu.vn", classes: ["71K29CNTT01", "71K29CNTT02"] }] });
     await request(app).post("/advisors/import").set("Origin", origin).set("Content-Type", XLSX).send(file).expect(200, { added: 1, updated: 0, unchanged: 0, skipped: 0 });
     expect(repository.apply).toHaveBeenCalledWith(actor, "co-van-hoc-tap.xlsx", expect.objectContaining({ rows: 1 }));
+  });
+
+  it("previews the Khoa's own layout end to end: both visible sheets merged, the hidden one never read", { timeout: WORKBOOK_TIMEOUT }, async () => {
+    // Made up, in the Khoa's layout (CVHT _Phan cong 2026_2027): title rows, the header on row 5, MGV typed as numbers.
+    const { default: ExcelJS } = await import("exceljs");
+    const book = new ExcelJS.Workbook();
+    const hidden = book.addWorksheet("SV", { state: "hidden" });
+    hidden.addRow(["Họ và tên", "Email", "Lớp"]);
+    hidden.addRow(["Không được đọc", "an.nv@vlu.edu.vn", "71K99CNTT99"]);
+    const titles = [["TRƯỜNG ĐẠI HỌC VĂN LANG"], ["KHOA CÔNG NGHỆ THÔNG TIN"], ["DANH SÁCH CỐ VẤN HỌC TẬP"], ["NĂM HỌC 2026 - 2027"]];
+    const pdt = book.addWorksheet("CVHT 2026-2027 (GUI PDT)");
+    for (const row of [...titles, ["STT", "MGV", "CVHT", "EMAIL", "MÃ LỚP", "SLSV Hiện tại", "GHI CHÚ"],
+      [1, 1000000001, "Nguyễn Văn An", "an.nv@vlu.edu.vn", "71K27CNTT01, 02", 120, ""],
+      [2, 1000000002, "Trần Thị Bình", "binh.tt@vlu.edu.vn", "71K32CNTT01", 0, ""]]) pdt.addRow(row);
+    const byClass = book.addWorksheet("CVHT 2026-2027");
+    for (const row of [...titles, ["STT", "MGV", "CVHT", "EMAIL", "MÃ LỚP", "KHÓA", "SLSV Hiện tại", "SLSV ban đầu", "GHI CHÚ"],
+      [1, 1000000001, "Nguyễn Văn An", "an.nv@vlu.edu.vn", "71K27CNTT01", "K27", 60, 62, ""],
+      [2, 1000000001, "Nguyễn Văn An", "an.nv@vlu.edu.vn", "71K27CNTT02", "K27", 60, 61, ""],
+      [3, 1000000002, "Trần Thị Bình", "binh.tt@vlu.edu.vn", "71K32CNTT01", "K32", 0, 0, ""]]) byClass.addRow(row);
+    const { app, repository } = setup();
+    const known: ImportLookups = { accounts: new Map(), advisors: new Map(), classOwners: new Map(),
+      classesWithStudents: new Set(["71K27CNTT01", "71K27CNTT02"]), staffDomains: new Set(["vlu.edu.vn"]) };
+    repository.preview.mockImplementation(async (_actor, name, sheet) => planImport(name, sheet, known).preview);
+    const answer = await request(app).post("/advisors/import/preview").set("Origin", origin).set("Content-Type", XLSX)
+      .set("x-filename", encodeURIComponent("CVHT _Phan cong 2026_2027.xlsx")).send(Buffer.from(await book.xlsx.writeBuffer())).expect(200);
+    expect(answer.body).toMatchObject({
+      fileName: "CVHT _Phan cong 2026_2027.xlsx", rows: 5, fileProblems: [], sheets: ["CVHT 2026-2027 (GUI PDT)", "CVHT 2026-2027"],
+      summary: { add: 2, update: 0, unchanged: 0, error: 0, classes: 3, moved: 0 },
+      items: [
+        { rows: [6], email: "an.nv@vlu.edu.vn", staffCode: "1000000001", classes: ["71K27CNTT01", "71K27CNTT02"], status: "add", emptyClasses: [] },
+        // A new cohort's class without students yet is a warning only.
+        { rows: [7], email: "binh.tt@vlu.edu.vn", staffCode: "1000000002", classes: ["71K32CNTT01"], status: "add", emptyClasses: ["71K32CNTT01"] },
+      ],
+    });
+    expect(answer.body.notes.map((note: { text: string }) => note.text)).toEqual([
+      'Đọc 2 trang tính, gộp theo email: "CVHT 2026-2027 (GUI PDT)" (2 dòng), "CVHT 2026-2027" (3 dòng). Cột Dòng theo trang "CVHT 2026-2027 (GUI PDT)".',
+      'Trang "CVHT 2026-2027" ghi cùng phân công với trang "CVHT 2026-2027 (GUI PDT)" (2 cố vấn, 3 lớp).',
+      "Không đọc 1 trang tính đang ẩn.",
+    ]);
+    expect(JSON.stringify(answer.body)).not.toContain("71K99CNTT99");
   });
 
   it("refuses what is not a workbook and a bad file name", { timeout: WORKBOOK_TIMEOUT }, async () => {
