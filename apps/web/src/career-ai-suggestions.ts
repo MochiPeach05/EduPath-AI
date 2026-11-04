@@ -2,6 +2,8 @@
 // the local AI suggests skills for a career position, the admin keeps, edits or
 // drops each row, and only the kept rows are saved. No DOM here — unit tested.
 import { careerFailures, type CareerSkill } from "./career-types";
+import { SESSION_EXPIRED_EVENT, adminErrorText } from "./admin-errors";
+import { formatVnDateTime } from "./display-format";
 
 export const CAREER_AI_API = "/api/admin/careers/requirements/ai-suggestions";
 
@@ -83,9 +85,10 @@ const REQUEST_ERRORS: Record<string, string> = {
   invalid_origin: "Phiên thao tác không hợp lệ. Vui lòng tải lại trang.",
   database_required: "Chưa kết nối được cơ sở dữ liệu. Vui lòng thử lại sau.",
 };
-export function requestErrorMessage(code: string | null | undefined, skills: string[] = []): string {
+/** The text of a failed request (admin-errors.ts): these pages' texts first, else by the HTTP status (0: no answer; 500 when unknown). */
+export function requestErrorMessage(code: string | null | undefined, skills: string[] = [], status = 500): string {
   if (code === "requirement_exists" && skills.length) return `Các kỹ năng sau đã được liên kết với vị trí nghề nghiệp này: ${skills.join(", ")}.`;
-  return REQUEST_ERRORS[code ?? ""] ?? "Không thể thực hiện thao tác. Vui lòng thử lại.";
+  return adminErrorText(status, { error: code ?? undefined }, REQUEST_ERRORS);
 }
 
 /** Why a suggestion job failed, in the admin's words. */
@@ -102,15 +105,20 @@ export function failureMessage(code: string | null | undefined): string {
 }
 
 export class CareerAiError extends Error {
-  constructor(readonly code: string | null, readonly skills: string[] = []) { super(requestErrorMessage(code, skills)); }
+  constructor(readonly code: string | null, readonly skills: string[] = [], readonly status = 500) { super(requestErrorMessage(code, skills, status)); }
 }
-/** fetch + JSON with the admin session; failures become a CareerAiError carrying the API code. */
+/** fetch + JSON with the admin session; failures become a CareerAiError carrying the API code (status 0: no answer). */
 export async function careerAiRequest<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, { credentials: "include", cache: "no-store", ...init });
+  let response: Response;
+  try { response = await fetch(url, { credentials: "include", cache: "no-store", ...init }); }
+  catch (error) {
+    if ((error as { name?: unknown } | null)?.name === "AbortError") throw error;
+    throw new CareerAiError(null, [], 0);
+  }
   const body = await response.json().catch(() => ({})) as { error?: string; skills?: unknown };
   if (!response.ok) {
-    if (response.status === 401) window.dispatchEvent(new Event("edupath-session-expired"));
-    throw new CareerAiError(body.error ?? null, Array.isArray(body.skills) ? body.skills.filter((name): name is string => typeof name === "string") : []);
+    if (response.status === 401) window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+    throw new CareerAiError(body.error ?? null, Array.isArray(body.skills) ? body.skills.filter((name): name is string => typeof name === "string") : [], response.status);
   }
   return body as T;
 }
@@ -136,10 +144,9 @@ export function formatElapsed(since: string, now: number): string {
   return `${String(minutes).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
+/** "14:05 03/11/2026" in Vietnam time (display-format.ts). */
 export function formatDateTime(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const date = new Date(iso);
-  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric" });
+  return formatVnDateTime(iso);
 }
 
 /** Same folding as the API (fold() in careers/shared.ts), so duplicates are judged alike. */

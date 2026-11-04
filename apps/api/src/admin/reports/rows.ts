@@ -1,8 +1,9 @@
 // Báo cáo của cổng quản trị (AD-REPORT, 2026-10-31): one row per student, read once and cached (cache.ts). A row holds
 // what the student's own Tổng quan shows, read by the same readOverview (printed transcript figures, progress against
 // the KHĐT, "Cần chú ý", the latest stored assessment with the consent respected), so admins and students always see the
-// same story. The reports add, from the same stored results: every group and skill score and every career gap of the
-// latest assessment (only when Tổng quan shows that assessment), and the courses of the newest completed Lộ trình AI.
+// same story; one exception, a transcript without data (hasTranscriptData), which the reports leave out of every figure.
+// The reports add, from the same stored results: every group and skill score and every career gap of the latest
+// assessment (only when Tổng quan shows that assessment), and the courses of the newest completed Lộ trình AI.
 import type { PoolClient } from "pg";
 import type { AssessmentResult, CareerRequirementResult, SpecialtyCode } from "../../competency-assessment/types.js";
 import { MAJORS } from "../../curricula/majors.js";
@@ -56,9 +57,19 @@ export type ReportRow = ReportIdentity & {
 const RISK_KINDS: ReadonlySet<string> = new Set<RiskKind>(["failed_course", "pace", "gpa_below", "late_course", "elective_short"]);
 
 /**
+ * "Bảng điểm có dữ liệu", one rule for every report (QA 2026-11-04: 14 transcripts uploaded but 13 in Xếp loại học lực, and
+ * one row averaging the GPA over 5 students and the credits over 6): a stored transcript whose printed cumulative GPA
+ * (hệ 4) was read, so at least one graded term was. A transcript without it still counts as uploaded ("đã tải bảng
+ * điểm"), and is left out of every average and distribution the same way: no GPA, credits, học lực or GPA by term from
+ * it, and no progress judgement or risk (rowFromParts: "Chưa đủ dữ liệu", like a progress that cannot be compared).
+ */
+export const hasTranscriptData = (row: Pick<ReportRow, "hasTranscript" | "gpa">): boolean => row.hasTranscript && row.gpa !== null;
+
+/**
  * Tiến độ as Tổng quan judges it, defined once for every report: no_transcript without a stored transcript; unknown when
  * the progress cannot be compared with the KHĐT (blocked: no plan, no specialty, …); late when "Cần chú ý" has a late
- * course or a pace warning, or courses of a past term of the plan are not passed (late credits); else on_track.
+ * course or a pace warning, or courses of a past term of the plan are not passed (late credits); else on_track. A
+ * transcript without data (hasTranscriptData) is unknown too: rowFromParts never asks for its status.
  */
 export function progressStatus(overview: Pick<OverviewResponse, "transcript" | "progress" | "warnings">): ProgressStatus {
   if (!overview.transcript) return "no_transcript";
@@ -133,7 +144,11 @@ export function roadmapCoursesOf(row: RoadmapRow, today: string): NonNullable<Re
   return [...courses.values()];
 }
 
-/** The row from what was read; pure. */
+/**
+ * The row from what was read; pure. A transcript without data (hasTranscriptData) keeps only that it was uploaded: no
+ * figure is taken from it (GPA lines, credits) and its progress is "Chưa đủ dữ liệu" without risk, so every report
+ * leaves it out of its averages and distributions the same way.
+ */
 export function rowFromParts(
   identity: ReportIdentity,
   overview: OverviewResponse,
@@ -142,21 +157,24 @@ export function rowFromParts(
   computedAt: Date,
 ): ReportRow {
   const transcript = overview.transcript;
-  const series = (transcript?.series ?? []).map((point) => ({ term: point.term.code, termGpa: point.termGpa4, cumulativeGpa: point.cumulativeGpa4 }));
+  const hasTranscript = Boolean(transcript);
+  const gpa = transcript?.gpa4 ?? null;
+  const usable = hasTranscriptData({ hasTranscript, gpa });
+  const series = usable ? (transcript?.series ?? []).map((point) => ({ term: point.term.code, termGpa: point.termGpa4, cumulativeGpa: point.cumulativeGpa4 })) : [];
   const lastTerm = [...series].reverse().find((point) => point.termGpa !== null);
   return {
     ...identity,
     majorName: MAJORS.find((major) => major.code === identity.majorCode)?.label ?? null,
     specialtyName: specialtyLabel(identity.specialtyCode),
-    hasTranscript: Boolean(transcript),
-    status: progressStatus(overview),
-    gpa: transcript?.gpa4 ?? null,
+    hasTranscript,
+    status: hasTranscript && !usable ? "unknown" : progressStatus(overview),
+    gpa,
     lastTermGpa: lastTerm?.termGpa ?? null,
     series,
-    passedCredits: overview.progress?.passedCredits ?? transcript?.credits ?? null,
+    passedCredits: usable ? overview.progress?.passedCredits ?? transcript?.credits ?? null : null,
     totalCredits: overview.progress?.totalCredits ?? null,
     expectedCredits: expectedCreditsOf(overview.progress),
-    risk: transcript ? riskOf(overview.warnings.items) : { level: null, items: [] },
+    risk: usable ? riskOf(overview.warnings.items) : { level: null, items: [] },
     competency: overview.competency && assessment ? competencyOf(assessment.computed, overview.competency.career) : null,
     roadmapCourses,
     computedAt: computedAt.toISOString(),

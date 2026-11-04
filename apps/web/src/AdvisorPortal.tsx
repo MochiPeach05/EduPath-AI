@@ -79,7 +79,7 @@ export function ClassTable({ classes, sort, sortHeader, selected, onPick, showAd
       <td className="av-num">{share(row.assessed, row.students)}</td>
       <td className="av-num">{share(row.surveyDone, row.students)}</td>
       <td className="av-num">{share(row.roadmap, row.students)}</td>
-      <td><button type="button" className="am-outline" aria-pressed={row.className === selected} onClick={() => onPick(row.className)}><Icon name="users" /> Xem sinh viên</button></td>
+      <td><button type="button" className="am-outline" aria-current={row.className === selected ? "true" : undefined} onClick={() => onPick(row.className)}><Icon name="users" /> Xem sinh viên</button></td>
     </tr>)}</tbody>
   </table></div>;
 }
@@ -118,6 +118,13 @@ export function StudentTable({ students, page, sortHeader, opening, onOpen }: {
 
 const emptyFilters = { q: "", class: "", status: "all" };
 
+/**
+ * The filters after Xem sinh viên on a class: that class, the other filters kept (exported for its test). A second click
+ * on the same class keeps it (QA 2026-11-04: it cleared the filter and listed every class); Xóa bộ lọc or "Tất cả lớp"
+ * clears it.
+ */
+export const withClass = <T extends { class: string }>(filters: T, className: string): T => ({ ...filters, class: className });
+
 function StudentManagement({ scope }: { scope: StudentScope }) {
   const text = SCOPE_TEXT[scope];
   const classes = useData<{ items: AdvisorClass[] }>(`${ADVISOR_PORTAL_API}/classes`);
@@ -136,7 +143,7 @@ function StudentManagement({ scope }: { scope: StudentScope }) {
   const studentsPanel = useRef<HTMLElement>(null);
   const items = classes.data?.items ?? [];
   const pickClass = (className: string) => {
-    setDraft({ ...draft, class: draft.class === className ? "" : className });
+    setDraft(withClass(draft, className));
     studentsPanel.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
   const open = async (student: AdvisedStudentRow) => {

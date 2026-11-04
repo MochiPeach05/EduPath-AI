@@ -1,4 +1,5 @@
 import type { Transcript } from "./StudentTranscript";
+import { formatVnDateTime } from "./display-format";
 
 type Semester = Transcript["data"]["sections"][number];
 
@@ -25,15 +26,9 @@ export function printedSemesterGpa(section: Semester | undefined): string | null
   })?.value ?? null;
 }
 
-/** "HH:mm dd/MM/yyyy" in Vietnam time: the one format of the "Cập nhật lúc" lines on Hồ sơ và bảng điểm. */
+/** "HH:mm dd/MM/yyyy" in Vietnam time: the one format of the "Cập nhật lúc" lines on Hồ sơ và bảng điểm (display-format.ts). */
 export function formatUpdatedAt(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  const parts = new Intl.DateTimeFormat("vi-VN", {
-    timeZone: "Asia/Ho_Chi_Minh", hourCycle: "h23", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric",
-  }).formatToParts(date);
-  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find(item => item.type === type)?.value ?? "";
-  return `${part("hour")}:${part("minute")} ${part("day")}/${part("month")}/${part("year")}`;
+  return formatVnDateTime(value);
 }
 
 /** The sections of Hồ sơ và bảng điểm that other pages open (each section carries its id). */

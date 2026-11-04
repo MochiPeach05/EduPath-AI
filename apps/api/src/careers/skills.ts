@@ -6,8 +6,14 @@ import { access, CareerError, fold, lockSkillCatalog } from "./shared.js";
 import { refreshCareerSkills } from "./requirements.js";
 import { DESCRIPTION_MAX_WORDS, limitedText } from "../word-limits.js";
 
+/**
+ * A skill name as it is saved: one Unicode form (NFC), runs of spaces made one, no spaces at the ends. The duplicate
+ * check is the unique index career_skills_names on lower(name) of the live skills (migration 019, answered 409
+ * skill_exists), so " api " and "API  Gateway" meet "API" and "API Gateway" (2026-11-04 QA).
+ */
+export const skillNameInput = z.string().normalize("NFC").overwrite((value) => value.replace(/\s+/gu, " ")).trim().min(1).max(100);
 const input = z.object({
-  name: z.string().trim().min(1).max(100),
+  name: skillNameInput,
   description: limitedText(2000, DESCRIPTION_MAX_WORDS),
 }).strict();
 const columns = `id,name,description,version`;

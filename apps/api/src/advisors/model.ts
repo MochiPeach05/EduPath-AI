@@ -77,5 +77,5 @@ export class AdvisorError extends Error {
 
 /** A class as stored and compared (ad_advisor_classes, migration 058): upper case, no spaces, 2–40 characters. */
 export const CLASS_PATTERN = /^[0-9A-Z][0-9A-Z._-]{1,39}$/;
-/** A student's class (p = student_profiles) in that form, for SQL. */
-export const CLASS_OF = "upper(regexp_replace(p.class_name, '\\s', '', 'g'))";
+/** A student's class (p = student_profiles, u = users) as a canonical code (71K29CNTT08), for SQL: class-code.ts. */
+export { CLASS_OF } from "./class-code.js";

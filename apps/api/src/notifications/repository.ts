@@ -111,12 +111,20 @@ export async function announcementOptions(db: Db, staffDomains: readonly string[
     `SELECT DISTINCT p.cohort_code AS cohort,p.major_code::text AS major ${recipientsFrom} WHERE ${recipientsWhere(1)}`, [[], [], staffDomains]);
   const cohorts = [...new Set(result.rows.map((row) => row.cohort).filter((value): value is string => Boolean(value)))]
     .sort((a, b) => Number(a.replace(/\D/g, "")) - Number(b.replace(/\D/g, "")) || a.localeCompare(b));
-  const majors = [...new Set(result.rows.map((row) => row.major?.trim()).filter((value): value is string => Boolean(value)))].sort()
+  const majors = [...new Set(result.rows.map((row) => row.major?.trim()).filter((value): value is string => Boolean(value)))]
+    .sort(facultyMajorsFirst)
     .map((code) => ({ code, name: majorName(code) }));
   return { cohorts, majors };
 }
 
-export const majorName = (code: string) => MAJORS.find((major) => major.code === code)?.label ?? `Ngành ${code}`;
+/**
+ * The name of a major on the announcement pages: a faculty major by its name (curricula/majors.ts), any other programme
+ * code as "Ngành khác (mã 7340201)" rather than the bare code (2026-11-04 QA).
+ */
+export const majorName = (code: string) => MAJORS.find((major) => major.code === code)?.label ?? `Ngành khác (mã ${code})`;
+/** The faculty's majors first, then any other programme an MSSV names (a student of another faculty), each by code. */
+const otherMajor = (code: string) => Number(!MAJORS.some((major) => major.code === code));
+const facultyMajorsFirst = (a: string, b: string) => otherMajor(a) - otherMajor(b) || a.localeCompare(b);
 
 export async function reachCount(db: Db, target: AnnouncementTarget, staffDomains: readonly string[]): Promise<number> {
   const result = await db.query<{ count: number }>(
@@ -126,7 +134,7 @@ export async function reachCount(db: Db, target: AnnouncementTarget, staffDomain
 
 export function targetLabel(target: AnnouncementTarget): string {
   if (!target.cohorts.length && !target.majors.length) return "Tất cả sinh viên";
-  return [target.cohorts.join(", "), target.majors.map(majorName).join(", ")].filter(Boolean).join(" · ");
+  return [target.cohorts.join(", "), [...target.majors].sort(facultyMajorsFirst).map(majorName).join(", ")].filter(Boolean).join(" · ");
 }
 
 const announcementColumns = `a.id,a.title,a.body,a.link,a.target,a.recipients,a.created_at AS "createdAt",a.withdrawn_at AS "withdrawnAt",

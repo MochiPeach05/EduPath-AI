@@ -21,6 +21,7 @@ import { resourceKey } from "./knowledge.js";
 import { READINESS_ANSWER_VERSION, readinessAnswer, readReadiness } from "./readiness.js";
 import { loadKnowledgeIndex } from "./search.js";
 import { addressesIn, checkAnswer, codesIn, type AnswerContext } from "./validate.js";
+import { classCodeSql } from "../advisors/class-code.js";
 
 type Db = Pick<DatabasePool, "query">;
 
@@ -93,8 +94,8 @@ export const presentMessage = (row: MessageRow) => ({
 // every statement that uses these columns: SELECT … FROM, INSERT/UPDATE … RETURNING).
 const threadColumns = `id,title,created_at AS "createdAt",updated_at AS "updatedAt",created_by AS "createdBy",
   CASE WHEN stu_chat_threads.created_by IS NULL THEN NULL
-    WHEN EXISTS (SELECT 1 FROM ad_advisor_classes ac JOIN student_profiles sp ON sp.user_id=stu_chat_threads.user_id
-      WHERE ac.advisor_user_id=stu_chat_threads.created_by AND ac.class_name=upper(regexp_replace(sp.class_name, '\\s', '', 'g'))) THEN 'advisor'
+    WHEN EXISTS (SELECT 1 FROM ad_advisor_classes ac JOIN student_profiles sp ON sp.user_id=stu_chat_threads.user_id JOIN users su ON su.id=sp.user_id
+      WHERE ac.advisor_user_id=stu_chat_threads.created_by AND ac.class_name=${classCodeSql("sp", "su")}) THEN 'advisor'
     ELSE 'admin' END AS "createdByRole"`;
 const messageColumns = `id,thread_id AS "threadId",role,content,status,error_code AS "errorCode",sources,feedback,
   created_at AS "createdAt",completed_at AS "completedAt"`;

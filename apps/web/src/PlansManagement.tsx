@@ -7,6 +7,9 @@ import "./curricula.css";
 import "./plans.css";
 import { CheckedForm } from "./CheckedForm";
 import { sortParams, sortRows, useTableSort, type SortRule } from "./table-sort";
+import { SourceDownloadLink } from "./source-download";
+import { adminRequest } from "./admin-errors";
+import { formatVnDateTime } from "./display-format";
 
 const endpoint = "/api/admin/plans";
 const mime =
@@ -18,7 +21,7 @@ const fold = (s: string) =>
     .replace(/đ/gi, "d")
     .toLowerCase()
     .trim();
-const date = (s: string) => new Date(s).toLocaleString("vi-VN");
+const date = (s: string) => formatVnDateTime(s);
 // The columns the plan table sorts by (table-sort.tsx); Tiên quyết / Học trước by its two texts in that order.
 const itemSort: Record<string, SortRule<PlanItem>> = {
   code: { value: (i) => i.code },
@@ -56,16 +59,9 @@ const messages: Record<string, string> = {
   invalid_filename: "Tên tệp không hợp lệ.",
   not_found: "Không tìm thấy kế hoạch hoặc dòng môn học.",
 };
-async function request<T>(url: string, init: RequestInit): Promise<T> {
-  const res = await fetch(url, { ...init, credentials: "include" });
-  const body = await res.json();
-  if (!res.ok)
-    throw new Error(
-      (messages[body.error] ??
-        "Chưa thực hiện được thao tác. Vui lòng thử lại.") +
-      (body.details?.length ? "\n" + body.details.join("\n") : ""),
-    );
-  return body;
+// A failure is worded by admin-errors.ts: this page's texts first, the server's detail lines under them.
+function request<T>(url: string, init: RequestInit): Promise<T> {
+  return adminRequest<T>(url, init, messages, { details: true });
 }
 function Warnings({ data }: { data: PlanData }) {
   return data.warnings.length ? (
@@ -402,12 +398,10 @@ function PlanView({
             <Summary data={p.data} />
             {p.data.notes && <p className="cm-prewrap">{p.data.notes}</p>}
             <div className="cm-actions">
-              <a
-                className="am-outline"
+              <SourceDownloadLink
                 href={`${endpoint}/${id}/source/${p.revisionId}`}
-              >
-                <Icon name="download" /> Tải xuống Excel nguồn
-              </a>
+                fallbackName="ke-hoach-goc.xlsx"
+              />
               {editable && (
                 <>
                   <button

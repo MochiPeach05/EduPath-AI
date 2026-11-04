@@ -19,6 +19,7 @@ import type { StudentNotification } from "./notification-types";
 import type { AuthenticatedUser } from "./types";
 import { ADVISOR_BLOCKED_EVENT, ADVISOR_HOME, actingAsText, advisorBlockedMessage, stopActing } from "./advisor-view";
 import { ADVISOR_ERRORS } from "./advisor-types";
+import { nameInitials, personName as studentDisplayName } from "./person-name";
 import "./student-workspace.css";
 import "./student-header.css";
 import "./student-layout.css";
@@ -69,25 +70,10 @@ export function pageFromHash(hash: string): Page | null {
 
 /**
  * The name to show. Microsoft gives students the display name "MSSV - Họ tên - Lớp"
- * (e.g. "2174802010992 - Nguyễn Văn An - 71K27CNTT01"); only the name part is shown.
+ * (e.g. "2174802010992 - Nguyễn Văn An - 71K27CNTT01"); only the name part is shown. The initials of the avatar come
+ * from that name. Both live in person-name.ts, which the admin portal's header uses too.
  */
-export function studentDisplayName(raw: string): string {
-  const name = raw.trim();
-  const parts = name.split(/\s+[-–]\s+/).filter(Boolean);
-  if (parts.length >= 3) return parts.slice(1, -1).join(" - ");
-  if (parts.length === 2) return /^\d+$/.test(parts[0]) ? parts[1] : /^\d{2}K\d{2}/i.test(parts[1]) ? parts[0] : name;
-  return name;
-}
-
-/**
- * Up to two initials, from the last two words that start with a capital letter (any letter when none does), so a
- * student code, a class code or a stray "-" never shows up: "Sinh viên Thử nghiệm K27" gives "TK".
- */
-export function nameInitials(name: string): string {
-  const words = name.normalize("NFC").split(/\s+/).filter(word => /^\p{L}/u.test(word));
-  const capitalised = words.filter(word => /^\p{Lu}/u.test(word));
-  return (capitalised.length > 0 ? capitalised : words).slice(-2).map(word => word[0]).join("").toLocaleUpperCase("vi");
-}
+export { studentDisplayName, nameInitials };
 
 // "?" help: one short step per page, in the order a new student needs them.
 const helpSteps: [string, string][] = [

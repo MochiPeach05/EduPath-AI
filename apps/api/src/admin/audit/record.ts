@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import type { AuthenticatedUser } from "../../auth/types.js";
 import type { AuditKind } from "../reports/types.js";
+import { personName } from "../../users/person-name.js";
 
 /** Who did it: the signed-in admin of the request. */
 export type AuditActor = { userId: string; name: string; role: string | null };
@@ -48,12 +49,13 @@ const optional = (text: string | null | undefined, max: number) => { const line 
 
 /**
  * Writes one log row. Never throws: a failed log write must not fail the admin's action (it is reported to the console).
- * Texts are cut to the column limits; an unknown kind is stored as "other".
+ * Texts are cut to the column limits; an unknown kind is stored as "other". The actor is named as the admin header names
+ * them: only the name of "MSSV - Họ tên - Lớp" (users/person-name.ts, QA 2026-11-04).
  */
 export async function recordAudit(db: AuditDb | undefined, actor: AuditActor, entry: AuditEntryInput): Promise<void> {
   if (!db) return;
   try {
-    const name = clip(actor.name, 200) || "Không rõ";
+    const name = clip(personName(actor.name ?? ""), 200) || "Không rõ";
     const action = clip(entry.action, 120) || "Thao tác";
     const summary = clip(entry.summary, 500) || action;
     const kind = AUDIT_KINDS.includes(entry.kind) ? entry.kind : "other";

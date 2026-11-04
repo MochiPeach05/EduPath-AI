@@ -12,7 +12,13 @@ import "./curricula.css";
 import "./graduation.css";
 import { CheckedForm } from "./CheckedForm";
 import { sortRows, useTableSort, type SortRule } from "./table-sort";
+import { importFileProblem } from "./import-file";
+import { SourceDownloadLink } from "./source-download";
+import { adminRequest } from "./admin-errors";
+import { formatVnDateTime } from "./display-format";
 const endpoint = "/api/admin/graduation";
+/** The files POST /preview, /import and /:id/replace read (graduation/router.ts: .xls, .xlsx or .zip, at most 5 MB). */
+const importTypes = [".xls", ".xlsx", ".zip"] as const;
 const errors: Record<string, string> = {
   invalid_workbook:
     "Tệp không đúng biểu mẫu tiêu chuẩn xét tốt nghiệp. Chọn tệp Excel (.xls, .xlsx) hoặc ZIP chứa các biểu mẫu.",
@@ -45,14 +51,9 @@ const errors: Record<string, string> = {
   invalid_filename: "Tên hoặc phần mở rộng tệp không hợp lệ.",
   not_found: "Không tìm thấy tiêu chuẩn.",
 };
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, { credentials: "include", ...init });
-  const body = await res.json();
-  if (!res.ok)
-    throw new Error(
-      errors[body.error] ?? "Không thể thực hiện thao tác. Vui lòng thử lại.",
-    );
-  return body;
+// A failure is worded by admin-errors.ts, with this page's texts first.
+function request<T>(path: string, init?: RequestInit): Promise<T> {
+  return adminRequest<T>(path, init, errors);
 }
 const fmt = (n: number | null) => (n === null ? "Chưa xác định" : String(n));
 const thresholdFields = [
@@ -260,6 +261,11 @@ function ImportDialog({
   });
   async function read() {
     if (!file) return;
+    const problem = importFileProblem(file, importTypes);
+    if (problem) {
+      setError(problem);
+      return;
+    }
     setBusy(true);
     setError("");
     setPreview(null);
@@ -326,10 +332,14 @@ function ImportDialog({
             accept=".xls,.xlsx,.zip"
             disabled={busy}
             onChange={(e) => {
-              setFile(e.target.files?.[0] ?? null);
+              // A file the server would refuse (another type, empty, over 5 MB) is not kept, so nothing is sent.
+              const picked = e.target.files?.[0] ?? null;
+              const problem = picked ? importFileProblem(picked, importTypes) : "";
+              if (problem) e.target.value = "";
+              setFile(problem ? null : picked);
               setPreview(null);
               setSelected([]);
-              setError("");
+              setError(problem);
             }}
           />
         </label>
@@ -631,12 +641,10 @@ function Standard({
             )}
             <DataSummary data={data.data} />
             <div className="cm-actions">
-              <a
-                className="am-outline"
+              <SourceDownloadLink
                 href={`${endpoint}/${id}/source/${data.revisionId}`}
-              >
-                <Icon name="download" /> Tải xuống Excel nguồn
-              </a>
+                fallbackName="tieu-chuan-goc.xlsx"
+              />
               {editable && (
                 <>
                   <button
@@ -710,7 +718,7 @@ function Standard({
                         <strong>Phiên bản {h.version}</strong>
                         <p>
                           {h.note} ·{" "}
-                          {new Date(h.createdAt).toLocaleString("vi-VN")}
+                          {formatVnDateTime(h.createdAt)}
                         </p>
                       </div>
                       <button
@@ -727,7 +735,7 @@ function Standard({
                   {data.events.map((e, i) => (
                     <p key={i}>
                       {e.action} ·{" "}
-                      {new Date(e.createdAt).toLocaleString("vi-VN")}
+                      {formatVnDateTime(e.createdAt)}
                     </p>
                   ))}
                 </>

@@ -10,7 +10,10 @@ import { layoutZoom } from "./page-scale";
 //   lightest step 2,06:1 on white);
 // - cohorts use a fixed categorical order keyed by the cohort number, so a filter never repaints a cohort;
 // - counts in the cohort matrices use the sequential blue scale.
-// Every mark has a tooltip (data-tip, shown by TooltipLayer) and every chart a legend or direct labels.
+// Every mark has a tooltip (data-tip, shown by TooltipLayer) and every chart a legend or direct labels. A count is
+// printed inside a bar segment only when it fits the segment's measured width (QA 2026-11-04: a share threshold hid a
+// "2" in a segment wide enough for it); a value that does not fit stays in the segment's tooltip, the row's accessible
+// name and the chart's table view ("Xem số liệu dạng bảng"), so no value needs a hover.
 
 export const STATUS_COLORS = { good: "#2f8a63", warn: "#d4901f", bad: "#c4352b", unknown: "#7d8697", none: "#b8bfcb" } as const;
 /** Best to worst: Xuất sắc / Rất phù hợp first, Yếu / Không phù hợp last. */
@@ -107,8 +110,10 @@ export function TooltipLayer({ root }: { root: string }) {
 
 /* ------------------------------------------------------------------ small pieces */
 
-export function Legend({ items, label }: { items: readonly (readonly [string, string])[]; label?: string }) {
-  return <ul className="rp-legend" aria-label={label ?? "Chú giải"}>{items.map(([name, color]) => <li key={name}><i style={{ background: color }} aria-hidden="true" />{name}</li>)}</ul>;
+/** The legend: a swatch and a name per part; with a count when one bar is shown (the whole scope), so every value reads without a hover. */
+export function Legend({ items, label }: { items: readonly (readonly [string, string] | readonly [string, string, number])[]; label?: string }) {
+  return <ul className="rp-legend" aria-label={label ?? "Chú giải"}>{items.map(([name, color, count]) => <li key={name}><i style={{ background: color }} aria-hidden="true" />{name}
+    {count !== undefined && <b>{countText(count)}</b>}</li>)}</ul>;
 }
 
 /** Toàn khóa | Từng khóa: every section of the reports can be read for all cohorts together and for each one (user, 2026-10-31). */
@@ -131,48 +136,116 @@ export function Segmented<T extends string>({ value, options, onChange, label }:
 export type BarPart = { value: number; color: string; label: string };
 export type BarRow = { key: string; label: string; sub?: string; parts: BarPart[]; tip?: string };
 
+const sumOf = (parts: readonly BarPart[]) => parts.reduce((sum, part) => sum + part.value, 0);
+/** The gap between two segments (CSS: gap 2px). */
+const SEGMENT_GAP = 2;
+/**
+ * Whether a count printed in 12 px bold figures (font-size-adjust included) fits a segment of `width` px with room on both
+ * sides: about 8 px a character and 5 px of padding each side ("2" needs 18 px, "12" 26 px).
+ */
+export const labelFits = (text: string, width: number) => width >= text.length * 8 + 10;
+/**
+ * The width of each part's segment in a track `track` px wide, `scale` being the value of the full track (the row total
+ * of a 100% bar, the axis maximum of a bar list), the gaps taken off.
+ */
+export function segmentWidths(parts: readonly BarPart[], track: number, scale: number): number[] {
+  const shown = parts.filter((part) => part.value > 0);
+  const total = sumOf(shown);
+  if (!total || scale <= 0) return parts.map(() => 0);
+  const filled = (track * total) / scale - SEGMENT_GAP * Math.max(0, shown.length - 1);
+  return parts.map((part) => (part.value > 0 ? Math.max(0, (filled * part.value) / total) : 0));
+}
+/** The track width assumed before the first measurement (static render), so the first paint is close to the measured one. */
+const ASSUMED_TRACK = 520;
+
+/** "Đúng tiến độ 9 (35%), Trễ kế hoạch 2 (8%)": every part in one line, for the accessible name of a bar. */
+const partsText = (parts: readonly BarPart[], total: number, shares: boolean) =>
+  parts.map((part) => `${part.label} ${countText(part.value)}${shares ? ` (${percent(part.value, total)}%)` : ""}`).join(", ");
+
+/**
+ * The table twin of a bar chart (QA 2026-11-04 "plus the table view"): one row per bar, one column per part, the total
+ * last; with each part's share of its row for 100% bars. Folded under "Xem số liệu dạng bảng" below the chart.
+ */
+export function ChartTable({ rows, rowHeader, label, shares = false }: { rows: readonly BarRow[]; rowHeader: string; label: string; shares?: boolean }) {
+  const names = [...new Set(rows.flatMap((row) => row.parts.map((part) => part.label)))];
+  return <details className="rp-table-view">
+    <summary>Xem số liệu dạng bảng</summary>
+    <div className="rp-table-wrap" tabIndex={0} role="region" aria-label={`${label}: bảng số liệu`}><table className="rp-table">
+      <thead><tr><th scope="col">{rowHeader}</th>{names.map((name) => <th key={name} scope="col" className="rp-num">{name}</th>)}<th scope="col" className="rp-num">Tổng</th></tr></thead>
+      <tbody>{rows.map((row) => {
+        const total = sumOf(row.parts);
+        return <tr key={row.key}><th scope="row">{row.label}{row.sub && <small className="rp-sub">{row.sub}</small>}</th>
+          {names.map((name) => { const value = row.parts.find((part) => part.label === name)?.value ?? 0; return <td key={name} className="rp-num">{countText(value)}{shares && <small> ({percent(value, total)}%)</small>}</td>; })}
+          <td className="rp-num rp-total">{countText(total)}</td></tr>;
+      })}</tbody>
+    </table></div>
+  </details>;
+}
+
 /**
  * Horizontal bars on one axis from 0: one row per item, segments stacked in order with a 2 px gap, the total at the
- * end. Rows become buttons when `onSelect` is given (the selected one is marked).
+ * end. A segment prints its count when the count fits (labelFits on the measured track) and always has its own
+ * tooltip; bars of several parts get the table view. Rows become buttons when `onSelect` is given (the selected one
+ * is marked).
  */
-export function HBarList({ rows, onSelect, selected, unit = "sinh viên", label, labelWidth = 220 }: {
-  rows: readonly BarRow[]; onSelect?: (key: string) => void; selected?: string | null; unit?: string; label: string; labelWidth?: number;
+export function HBarList({ rows, onSelect, selected, unit = "sinh viên", label, labelWidth = 220, rowHeader = "Mục" }: {
+  rows: readonly BarRow[]; onSelect?: (key: string) => void; selected?: string | null; unit?: string; label: string; labelWidth?: number; rowHeader?: string;
 }) {
-  const max = Math.max(1, ...rows.map((row) => row.parts.reduce((sum, part) => sum + part.value, 0)));
+  const [trackRef, measured] = useFrameWidth();
+  const track = measured ?? ASSUMED_TRACK;
+  const max = Math.max(1, ...rows.map((row) => sumOf(row.parts)));
   const step = axisStep(max);
   const axisMax = Math.ceil(max / step) * step;
   const ticks = Array.from({ length: Math.floor(axisMax / step) + 1 }, (_, index) => index * step);
-  return <div className="rp-hbars" role="group" aria-label={label} style={{ ["--rp-label" as string]: `${labelWidth}px` }}>
-    <div className="rp-hbar-axis" aria-hidden="true"><span /><span className="rp-hbar-ticks">{ticks.map((tick) => <span key={tick} style={{ left: `${(tick / axisMax) * 100}%` }}>{countText(tick)}</span>)}</span><span /></div>
-    {rows.map((row) => {
-      const total = row.parts.reduce((sum, part) => sum + part.value, 0);
-      const tip = row.tip ?? `${row.label}: ${countText(total)} ${unit}${row.parts.length > 1 ? `\n${row.parts.map((part) => `${part.label}: ${countText(part.value)}`).join("\n")}` : ""}`;
-      const content = <>
-        <span className="rp-hbar-label"><span>{row.label}</span>{row.sub && <small>{row.sub}</small>}</span>
-        <span className="rp-hbar-track">{ticks.slice(1).map((tick) => <i key={tick} className="rp-hbar-grid" style={{ left: `${(tick / axisMax) * 100}%` }} />)}
-          <span className="rp-hbar-fill" style={{ width: `${(total / axisMax) * 100}%` }}>{row.parts.filter((part) => part.value > 0).map((part) =>
-            <span key={part.label} className="rp-hbar-seg" style={{ flexGrow: part.value, background: part.color }}>{row.parts.length > 1 && part.value / axisMax >= 0.06 ? countText(part.value) : ""}</span>)}</span></span>
-        <b className="rp-hbar-total">{countText(total)}</b>
-      </>;
-      return onSelect
-        ? <button key={row.key} type="button" className={`rp-hbar-row rp-hbar-button${selected === row.key ? " rp-selected" : ""}`} aria-pressed={selected === row.key} data-tip={tip} onClick={() => onSelect(row.key)}>{content}</button>
-        : <div key={row.key} className="rp-hbar-row" data-tip={tip} tabIndex={0}>{content}</div>;
-    })}
-  </div>;
+  const split = rows.some((row) => row.parts.length > 1);
+  return <>
+    <div className="rp-hbars" role="group" aria-label={label} style={{ ["--rp-label" as string]: `${labelWidth}px` }}>
+      <div className="rp-hbar-axis" aria-hidden="true"><span /><span className="rp-hbar-ticks">{ticks.map((tick) => <span key={tick} style={{ left: `${(tick / axisMax) * 100}%` }}>{countText(tick)}</span>)}</span><span /></div>
+      {rows.map((row, index) => {
+        const total = sumOf(row.parts);
+        const tip = row.tip ?? `${row.label}: ${countText(total)} ${unit}${row.parts.length > 1 ? `\n${row.parts.map((part) => `${part.label}: ${countText(part.value)}`).join("\n")}` : ""}`;
+        const widths = segmentWidths(row.parts, track, axisMax);
+        const content = <>
+          <span className="rp-hbar-label"><span>{row.label}</span>{row.sub && <small>{row.sub}</small>}</span>
+          <span ref={index === 0 ? trackRef : undefined} className="rp-hbar-track">{ticks.slice(1).map((tick) => <i key={tick} className="rp-hbar-grid" style={{ left: `${(tick / axisMax) * 100}%` }} />)}
+            <span className="rp-hbar-fill" style={{ width: `${(total / axisMax) * 100}%` }}>{row.parts.map((part, partIndex) => part.value > 0 &&
+              <span key={part.label} className="rp-hbar-seg" style={{ flexGrow: part.value, background: part.color }}
+                data-tip={row.parts.length > 1 ? `${row.label}\n${part.label}: ${countText(part.value)} ${unit}` : undefined}>
+                {row.parts.length > 1 && labelFits(countText(part.value), widths[partIndex]!) ? countText(part.value) : ""}</span>)}</span></span>
+          <b className="rp-hbar-total">{countText(total)}</b>
+        </>;
+        const name = `${row.label}: ${countText(total)} ${unit}${row.parts.length > 1 ? ` (${partsText(row.parts, total, false)})` : ""}`;
+        return onSelect
+          ? <button key={row.key} type="button" className={`rp-hbar-row rp-hbar-button${selected === row.key ? " rp-selected" : ""}`} aria-pressed={selected === row.key} aria-label={name} data-tip={tip} onClick={() => onSelect(row.key)}>{content}</button>
+          : <div key={row.key} className="rp-hbar-row" role="img" aria-label={name} data-tip={tip} tabIndex={0}>{content}</div>;
+      })}
+    </div>
+    {split && <ChartTable rows={rows} rowHeader={rowHeader} label={label} />}
+  </>;
 }
 
-/** One 100% bar per row (a cohort): the share of each part, counts inside the wide segments, the row total at the end. */
-export function ShareBars({ rows, label, unit = "sinh viên" }: { rows: readonly BarRow[]; label: string; unit?: string }) {
-  return <div className="rp-share" role="group" aria-label={label}>{rows.map((row) => {
-    const total = row.parts.reduce((sum, part) => sum + part.value, 0);
-    const tip = row.tip ?? `${row.label}: ${countText(total)} ${unit}\n${row.parts.map((part) => `${part.label}: ${countText(part.value)} (${percent(part.value, total)}%)`).join("\n")}`;
-    return <div key={row.key} className="rp-share-row" data-tip={tip} tabIndex={0}>
-      <span className="rp-share-label"><span>{row.label}</span>{row.sub && <small>{row.sub}</small>}</span>
-      <span className="rp-share-track">{total === 0 ? <span className="rp-share-empty">Chưa có dữ liệu</span> : row.parts.filter((part) => part.value > 0).map((part) =>
-        <span key={part.label} className="rp-share-seg" style={{ flexGrow: part.value, background: part.color }}>{part.value / total >= 0.09 ? countText(part.value) : ""}</span>)}</span>
-      <b>{countText(total)}</b>
-    </div>;
-  })}</div>;
+/**
+ * One 100% bar per row (a cohort): the share of each part, the count inside each segment it fits (labelFits on the
+ * measured track), every segment with its own tooltip, the row total at the end, and the table view below.
+ */
+export function ShareBars({ rows, label, unit = "sinh viên", rowHeader = "Khóa" }: { rows: readonly BarRow[]; label: string; unit?: string; rowHeader?: string }) {
+  const [trackRef, measured] = useFrameWidth();
+  const track = measured ?? ASSUMED_TRACK;
+  return <>
+    <div className="rp-share" role="group" aria-label={label}>{rows.map((row, index) => {
+      const total = sumOf(row.parts);
+      const tip = row.tip ?? `${row.label}: ${countText(total)} ${unit}\n${row.parts.map((part) => `${part.label}: ${countText(part.value)} (${percent(part.value, total)}%)`).join("\n")}`;
+      const widths = segmentWidths(row.parts, track, total);
+      return <div key={row.key} className="rp-share-row" role="img" aria-label={`${row.label}: ${countText(total)} ${unit}${total ? ` (${partsText(row.parts, total, true)})` : ""}`} data-tip={tip} tabIndex={0}>
+        <span className="rp-share-label"><span>{row.label}</span>{row.sub && <small>{row.sub}</small>}</span>
+        <span ref={index === 0 ? trackRef : undefined} className="rp-share-track">{total === 0 ? <span className="rp-share-empty">Chưa có dữ liệu</span> : row.parts.map((part, partIndex) => part.value > 0 &&
+          <span key={part.label} className="rp-share-seg" style={{ flexGrow: part.value, background: part.color }} data-tip={`${row.label}\n${part.label}: ${countText(part.value)} ${unit} (${percent(part.value, total)}%)`}>
+            {labelFits(countText(part.value), widths[partIndex]!) ? countText(part.value) : ""}</span>)}</span>
+        <b>{countText(total)}</b>
+      </div>;
+    })}</div>
+    <ChartTable rows={rows} rowHeader={rowHeader} label={label} shares />
+  </>;
 }
 
 export type MatrixRow = { key: string; label: string; values: Record<string, number>; total: number; tip?: string };
@@ -259,9 +332,12 @@ export function Donut({ parts, center, sub, label }: { parts: readonly DonutPart
 
 /* ------------------------------------------------------------------ line chart (SVG) */
 
-/** The width a chart frame has on screen, so the SVG is drawn at that width and keeps 12 px text; null before measuring. */
-export function useFrameWidth(): [(element: HTMLDivElement | null) => void, number | null] {
-  const [frame, setFrame] = useState<HTMLDivElement | null>(null);
+/**
+ * The width a chart frame (or bar track) has in CSS px, so the SVG is drawn at that width and keeps 12 px text, and a bar
+ * knows which counts fit its segments; null before measuring.
+ */
+export function useFrameWidth(): [(element: HTMLElement | null) => void, number | null] {
+  const [frame, setFrame] = useState<HTMLElement | null>(null);
   const [width, setWidth] = useState<number | null>(null);
   useEffect(() => {
     if (!frame || typeof ResizeObserver === "undefined") return;

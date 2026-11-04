@@ -9,6 +9,7 @@ import { isAdminArea, resolveAppRoute, safeReturnTo } from "./routing";
 import { canAccessAdmin, type AuthResponse } from "./types";
 import StudentWorkspace from "./StudentWorkspace";
 import { installAdvisorFetch, stopActing, takeAdvisorStudentFromUrl } from "./advisor-view";
+import { personName } from "./person-name";
 
 const errorMessages: Record<string, string> = {
   microsoft_denied: "Bạn đã hủy hoặc Microsoft từ chối yêu cầu đăng nhập.",
@@ -342,7 +343,8 @@ function AuthenticatedApp({ isLoginRoute }: { isLoginRoute: boolean }) {
     // on every request (advisor-view.ts). Anyone else gets the way back to the admin portal.
     if (advisorStudent && canAccessAdmin(auth.user.role)) {
       installAdvisorFetch(advisorStudent);
-      return <StudentWorkspace user={auth.user} advisor={{ name: auth.user.name, role: auth.user.role }} />;
+      // The banner names the account as the admin header does: only the name of "MSSV - Họ tên - Lớp".
+      return <StudentWorkspace user={auth.user} advisor={{ name: personName(auth.user.name), role: auth.user.role }} />;
     }
     return <StaffPortalNotice />;
   }

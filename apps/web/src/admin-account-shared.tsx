@@ -2,6 +2,7 @@ import type { AppRole } from "./types";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Icon } from "./ui-icon";
 import { CheckedForm } from "./CheckedForm";
+import { adminFailureText, readAdminResponse } from "./admin-errors";
 export { Icon } from "./ui-icon";
 const failures: Record<string, string> = {
   student_not_found: "Không tìm thấy sinh viên hoặc tài khoản không còn mang vai trò Sinh viên.",
@@ -30,13 +31,9 @@ export function RequiredLabel({ children }: { children: ReactNode }) {
   return <span>{children}<span className="am-required" aria-hidden="true">*</span></span>;
 }
 
-export async function readResponse<T>(response: Response): Promise<T> {
-  if (!response.ok) {
-    if (response.status === 401) window.dispatchEvent(new Event("edupath-session-expired"));
-    const data = await response.json().catch(() => ({}));
-    throw new Error(failures[data.error] ?? "Không thể kết nối hệ thống. Vui lòng thử lại.");
-  }
-  return response.json();
+/** The JSON of a Tài khoản or Sinh viên response; a failure is worded by admin-errors.ts, with this page's texts first. */
+export function readResponse<T>(response: Response): Promise<T> {
+  return readAdminResponse<T>(response, failures);
 }
 
 export function CreateAccount({ onList, onBusy }: { onList: () => void; onBusy?: (busy: boolean) => void }) {
@@ -55,7 +52,7 @@ export function CreateAccount({ onList, onBusy }: { onList: () => void; onBusy?:
     try {
       const result = await fetch("/api/admin/accounts", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: email.trim().toLowerCase(), confirmAdmin: confirmed }) }).then(readResponse<{ user: Account }>);
       setCreated(result.user);
-    } catch (err) { setError(err instanceof Error ? err.message : "Không thể tạo tài khoản."); }
+    } catch (err) { setError(adminFailureText(err)); }
     finally { setBusy(false); }
   }
   return <div className="am-create-layout"><section className="am-card am-create-card"><p className="admin-eyebrow">TÀI KHOẢN MICROSOFT · EDUPATH AI</p><h2>Thêm quản trị viên</h2><p>Cấp quyền quản trị theo email Microsoft, kể cả khi người dùng chưa đăng nhập EduPath AI.</p>

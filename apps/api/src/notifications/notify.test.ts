@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { notify, notifyInTransaction, notifyWarnings, transcriptFailed, transcriptReady } from "./notify.js";
+import { advisorAction, notify, notifyInTransaction, notifyWarnings, transcriptFailed, transcriptReady } from "./notify.js";
 
 // Writing notifications (migration 056): idempotent by source_key, never breaking the job that reports. Synthetic ids only.
 const USER = "11111111-1111-4111-8111-111111111111";
@@ -92,5 +92,13 @@ describe("notifyWarnings", () => {
   it("counts only the rows actually written", async () => {
     const db = fakeDb(0);
     expect(await notifyWarnings(db, USER, [{ kind: "pace", key: "HK262", level: "risk", text: "Cần 19 TC mỗi kỳ." }])).toBe(0);
+  });
+});
+
+describe("the student's notification of an action done for them", () => {
+  it("names an admin by the name only, never by 'MSSV - Họ tên - Lớp' (QA 2026-11-04)", () => {
+    const notice = advisorAction("2374802010145 - Đào Văn Hòa - 71K29CNTT08", "đã import bảng điểm", "#profile", "2026-11-04", "transcript:a1", "admin");
+    expect(notice.body).toMatch(/^Đào Văn Hòa \(quản trị viên của Khoa\) đã import bảng điểm thay bạn/);
+    expect(notice.body).not.toContain("2374802010145");
   });
 });

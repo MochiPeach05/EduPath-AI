@@ -355,6 +355,13 @@
   min-height: 44px;
 }
 
+/* A failed "Tải xuống Excel nguồn" (source-download.tsx) on its own line under the actions. */
+.cm-actions > .cm-download-error {
+  flex-basis: 100%;
+  order: 1;
+  margin: 0;
+}
+
 .cm-dialog-body button,
 .cm-workspace button {
   min-height: 44px;

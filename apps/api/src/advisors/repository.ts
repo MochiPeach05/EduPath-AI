@@ -49,21 +49,28 @@ export const studentSort = {
 };
 const studentOrder: OwnOrder = [['"className"', "ASC"], ["name", "ASC"], ['"userId"', "ASC"]];
 
-/** One advisor as the list shows them (a = ad_advisors, u = their account). */
+/**
+ * The active students with their class as a canonical code (class-code.ts), each computed once: a WITH item of the
+ * statements that count the students of many classes (advisorColumns, classStats). id is the student's account.
+ */
+const CLASS_MEMBERS = `class_members AS MATERIALIZED (SELECT u.id, p.cohort_code, ${CLASS_OF} AS class_name
+    FROM student_profiles p JOIN users u ON u.id = p.user_id WHERE ${ACTIVE_STUDENT})`;
+
+/** One advisor as the list shows them (a = ad_advisors, u = their account); the statement starts WITH CLASS_MEMBERS. */
 const advisorColumns = `a.user_id AS "userId", a.full_name AS name, COALESCE(u.email, u.username) AS email, a.staff_code AS "staffCode", a.unit,
   COALESCE((SELECT array_agg(c.class_name ORDER BY c.class_name) FROM ad_advisor_classes c WHERE c.advisor_user_id = a.user_id), '{}') AS classes,
-  (SELECT count(*)::int FROM student_profiles p JOIN users u ON u.id = p.user_id
-    WHERE ${ACTIVE_STUDENT} AND ${CLASS_OF} IN (SELECT c.class_name FROM ad_advisor_classes c WHERE c.advisor_user_id = a.user_id)) AS students,
+  (SELECT count(*)::int FROM ad_advisor_classes c JOIN class_members m ON m.class_name = c.class_name WHERE c.advisor_user_id = a.user_id) AS students,
   CASE WHEN NOT u.is_active THEN 'locked' WHEN u.entra_object_id IS NULL THEN 'pending' ELSE 'active' END AS account,
   COALESCE(u.role_override, u.role) AS role, u.last_login_at AS "lastLoginAt"`;
 
 /**
- * Per class: its students, how many of them did each step and the advisor the Khoa assigned (p = student_profiles,
- * u = users). classes: a SELECT of class_name (OWN_CLASSES, EVERY_CLASS).
+ * Per class: its students, how many of them did each step and the advisor the Khoa assigned. classes: a SELECT of
+ * class_name (OWN_CLASSES, EVERY_CLASS). u is a student of the class (class_members: u.id is the account, as
+ * SURVEY_COMPLETE_SQL reads it).
  */
-const classStats = (classes: string) => `WITH k AS (${classes})
+const classStats = (classes: string) => `WITH ${CLASS_MEMBERS}, k AS (${classes})
   SELECT k.class_name AS "className",
-    COALESCE(max(p.cohort_code), substring(k.class_name FROM 'K[0-9]{2,3}')) AS cohort,
+    COALESCE(max(u.cohort_code), substring(k.class_name FROM 'K[0-9]{2,3}')) AS cohort,
     count(u.id)::int AS students,
     count(u.id) FILTER (WHERE EXISTS (SELECT 1 FROM student_transcripts t WHERE t.user_id = u.id))::int AS "withTranscript",
     count(u.id) FILTER (WHERE EXISTS (SELECT 1 FROM stu_comp_assessments s WHERE s.user_id = u.id))::int AS assessed,
@@ -71,13 +78,15 @@ const classStats = (classes: string) => `WITH k AS (${classes})
     count(u.id) FILTER (WHERE EXISTS (SELECT 1 FROM stu_roadmaps r WHERE r.user_id = u.id AND r.status = 'completed'))::int AS roadmap,
     (SELECT a.full_name FROM ad_advisor_classes c JOIN ad_advisors a ON a.user_id = c.advisor_user_id WHERE c.class_name = k.class_name) AS "advisorName"
   FROM k
-  LEFT JOIN (student_profiles p JOIN users u ON u.id = p.user_id AND ${ACTIVE_STUDENT}) ON ${CLASS_OF} = k.class_name
+  LEFT JOIN class_members u ON u.class_name = k.class_name
   GROUP BY k.class_name ORDER BY k.class_name`;
 /** The classes an account advises ($1). */
 const OWN_CLASSES = "SELECT class_name FROM ad_advisor_classes WHERE advisor_user_id = $1";
-/** Every class: those of the active students' profiles and those the Khoa assigned before any student signed in. */
-const EVERY_CLASS = `SELECT DISTINCT ${CLASS_OF} AS class_name FROM student_profiles p JOIN users u ON u.id = p.user_id
-    WHERE ${ACTIVE_STUDENT} AND COALESCE(btrim(p.class_name), '') <> ''
+/**
+ * Every class: those of the active students' profiles and those the Khoa assigned before any student signed in, all as
+ * canonical codes (class-code.ts), so CNTT08 of K27 and of K29 are two classes, 71K27CNTT08 and 71K29CNTT08.
+ */
+const EVERY_CLASS = `SELECT DISTINCT class_name FROM class_members WHERE class_name IS NOT NULL
   UNION SELECT class_name FROM ad_advisor_classes`;
 /** Admins and Ban chủ nhiệm khoa work with every student (AD-AST "QTV & CVHT"); anyone else with their own classes. */
 const seesEveryStudent = (actor: Pick<AuthenticatedUser, "role">) => canManageAdvisors(actor.role);
@@ -99,7 +108,7 @@ export class PostgresAdvisorRepository {
 
   async list(query: AdvisorListQuery): Promise<AdvisorRow[]> {
     const order = orderBy(advisorSort, advisorOrder, query.sort, query.dir);
-    const result = await this.pool.query<{ items: AdvisorRow[] }>(`WITH advisors AS (
+    const result = await this.pool.query<{ items: AdvisorRow[] }>(`WITH ${CLASS_MEMBERS}, advisors AS (
         SELECT ${advisorColumns} FROM ad_advisors a JOIN users u ON u.id = a.user_id
       ), filtered AS (
         SELECT * FROM advisors
@@ -110,7 +119,7 @@ export class PostgresAdvisorRepository {
   }
 
   async detail(id: string, db: Db = this.pool): Promise<AdvisorDetail> {
-    const row = await db.query<Omit<AdvisorDetail, "stt" | "classDetails">>(`SELECT ${advisorColumns},
+    const row = await db.query<Omit<AdvisorDetail, "stt" | "classDetails">>(`WITH ${CLASS_MEMBERS} SELECT ${advisorColumns},
         a.created_at AS "createdAt", a.updated_at AS "updatedAt"
       FROM ad_advisors a JOIN users u ON u.id = a.user_id WHERE a.user_id = $1`, [id]);
     if (!row.rows[0]) throw new AdvisorError("advisor_not_found", 404);
@@ -224,8 +233,8 @@ export class PostgresAdvisorRepository {
       FROM ad_advisors a WHERE a.user_id = ANY($1::uuid[])`, [ids]);
     const owners = await db.query<{ className: string; userId: string; name: string }>(`SELECT c.class_name AS "className", c.advisor_user_id AS "userId",
         a.full_name AS name FROM ad_advisor_classes c JOIN ad_advisors a ON a.user_id = c.advisor_user_id WHERE c.class_name = ANY($1::text[])`, [classes]);
-    const filled = await db.query<{ className: string }>(`SELECT DISTINCT ${CLASS_OF} AS "className" FROM student_profiles p JOIN users u ON u.id = p.user_id
-      WHERE ${ACTIVE_STUDENT} AND ${CLASS_OF} = ANY($1::text[])`, [classes]);
+    const filled = await db.query<{ className: string }>(`WITH ${CLASS_MEMBERS}
+      SELECT DISTINCT class_name AS "className" FROM class_members WHERE class_name = ANY($1::text[])`, [classes]);
     return {
       accounts,
       advisors: new Map(advisorRows.rows.map((row) => [row.userId, { name: row.name, staffCode: row.staffCode, unit: row.unit, classes: row.classes }])),

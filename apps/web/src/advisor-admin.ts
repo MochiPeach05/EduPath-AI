@@ -2,6 +2,8 @@
 // Cố vấn and Quản lý sinh viên share (AdvisorsManagement.tsx, AdvisorPortal.tsx). Shapes: advisor-types.ts.
 import { ADVISOR_ERRORS, type AdvisedStudentStatus, type AdvisorAccountStatus, type AdvisorImportItem, type AdvisorImportPreview } from "./advisor-types";
 import { searchTerm } from "./student-curriculum-types";
+import { ADMIN_ERROR_TEXTS, SESSION_EXPIRED_EVENT, adminErrorText } from "./admin-errors";
+import { formatVnDateTime } from "./display-format";
 
 /** A failed advisor request: the code the API answered and its message in Vietnamese. */
 export class AdvisorRequestError extends Error {
@@ -9,37 +11,48 @@ export class AdvisorRequestError extends Error {
 }
 
 type TakenClass = { className?: unknown; advisorName?: unknown };
-/** The message of an error answer; class_taken names the classes and who advises them now. */
-export function advisorErrorText(code: string, body: { classes?: unknown } = {}): string {
+/**
+ * The message of an error answer; class_taken names the classes and who advises them now. A code without a text of these
+ * pages is worded by its HTTP status (admin-errors.ts; 0: no answer, 500 when unknown).
+ */
+export function advisorErrorText(code: string, body: { classes?: unknown } = {}, status = 500): string {
   if (code === "class_taken" && Array.isArray(body.classes)) {
     const taken = (body.classes as TakenClass[])
       .filter((item) => typeof item?.className === "string")
       .map((item) => `${item.className as string}${typeof item.advisorName === "string" && item.advisorName.trim() ? ` (${item.advisorName.trim()})` : ""}`);
     if (taken.length) return `${taken.length > 1 ? "Các lớp" : "Lớp"} ${taken.join(", ")} đang do cố vấn học tập khác phụ trách. Bỏ lớp khỏi cố vấn đó trước, hoặc import danh sách mới để chuyển lớp.`;
   }
-  return ADVISOR_ERRORS[code] ?? "Không thể thực hiện thao tác. Vui lòng thử lại.";
+  return adminErrorText(status, { error: code }, ADVISOR_ERRORS);
 }
 
 /** fetch with the session cookie; JSON bodies get their Content-Type, a file keeps its own. Throws AdvisorRequestError. */
 export async function advisorRequest<T>(url: string, init: RequestInit = {}): Promise<T> {
   const json = typeof init.body === "string";
-  const response = await fetch(url, {
-    credentials: "include", cache: "no-store", ...init,
-    headers: json ? { "Content-Type": "application/json", ...init.headers } : init.headers,
-  });
-  if (response.status === 401) window.dispatchEvent(new Event("edupath-session-expired"));
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      credentials: "include", cache: "no-store", ...init,
+      headers: json ? { "Content-Type": "application/json", ...init.headers } : init.headers,
+    });
+  } catch (error) {
+    // No answer at all (offline, server down): status 0, the shared network text.
+    if ((error as { name?: unknown } | null)?.name === "AbortError") throw error;
+    throw new AdvisorRequestError("network", 0, ADMIN_ERROR_TEXTS.network);
+  }
+  if (response.status === 401) window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
   if (!response.ok) {
     const body = await response.json().catch(() => ({})) as { error?: string; classes?: unknown };
     const code = body.error ?? (response.status === 403 ? "insufficient_role" : "request_failed");
-    throw new AdvisorRequestError(code, response.status, advisorErrorText(code, body));
+    throw new AdvisorRequestError(code, response.status, advisorErrorText(code, body, response.status));
   }
   return await response.json() as T;
 }
 
 /**
  * The classes typed in one field or one workbook cell: split on commas, semicolons, slashes and new lines, spaces
- * removed, upper case, each class once ("71k29cntt01; 71K29CNTT02" → ["71K29CNTT01", "71K29CNTT02"]), as the API
- * stores them (normalizeClassName, migration 058).
+ * removed, upper case, each class once ("71k29cntt01; 71K29CNTT02" → ["71K29CNTT01", "71K29CNTT02"]). The API stores
+ * each as its canonical code (advisors/class-code.ts: K29CNTT01 → 71K29CNTT01) and refuses a class without its cohort
+ * (CNTT01: invalid_class).
  */
 export function splitClasses(text: string): string[] {
   const seen = new Set<string>();
@@ -102,11 +115,7 @@ export const matchesSearch = (query: string, ...fields: readonly (string | null 
 
 /** "08:30 28/10/2026" in Vietnam time, as the other admin pages print a time; "Chưa đăng nhập" without one. */
 export function advisorTime(iso: string | null, empty = "Chưa đăng nhập"): string {
-  if (!iso) return empty;
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return empty;
-  const part = (options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", ...options }).format(date);
-  return `${part({ hour: "2-digit", minute: "2-digit", hour12: false })} ${part({ day: "2-digit", month: "2-digit", year: "numeric" })}`;
+  return formatVnDateTime(iso, empty);
 }
 
 /**

@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { AdvisorTable, ClassChips, ImportPreview } from "./AdvisorsManagement";
-import AdvisorPortal, { ClassTable, PermissionsView, SCOPE_TEXT, StudentTable } from "./AdvisorPortal";
+import AdvisorPortal, { ClassTable, PermissionsView, SCOPE_TEXT, StudentTable, withClass } from "./AdvisorPortal";
 import { useTableSort } from "./table-sort";
 import type { AdvisedStudentRow, AdvisorClass, AdvisorImportPreview, AdvisorPermissions, AdvisorRow } from "./advisor-types";
 
@@ -83,11 +83,22 @@ describe("Quản lý sinh viên page (2026-11-03)", () => {
     const html = renderToStaticMarkup(<Classes classes={classes} />);
     expect(html).toContain("<td class=\"av-num\">38/45</td>");
     expect(html).toContain('<tr class="av-row-current"><td><strong>71K29CNTT02</strong>');
-    expect(html).toContain('aria-pressed="true"');
+    // The chosen class's button is the current one, not a toggle: pressing it again keeps the class (QA 2026-11-04).
+    expect(html.match(/aria-current="true"/g)).toHaveLength(1);
+    expect(html).not.toContain("aria-pressed");
     expect(html).toContain("Xem sinh viên");
     // An advisor's own classes: no advisor column.
     expect(html).not.toContain("<span>Cố vấn học tập</span>");
     expect(html).not.toContain("Nguyễn Văn An");
+  });
+
+  it("keeps the class filter when Xem sinh viên is pressed a second time on the same class", () => {
+    const start = { q: "nguyen", class: "", status: "no_survey" };
+    const first = withClass(start, "71K29CNTT08");
+    expect(first).toEqual({ q: "nguyen", class: "71K29CNTT08", status: "no_survey" });
+    expect(withClass(first, "71K29CNTT08")).toEqual(first);
+    // Another class replaces it; a class of another cohort with the same name is another class.
+    expect(withClass(first, "71K27CNTT08").class).toBe("71K27CNTT08");
   });
 
   it("names the cố vấn học tập of each class when every class is listed, Chưa phân công when none", () => {

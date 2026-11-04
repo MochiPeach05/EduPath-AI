@@ -39,6 +39,10 @@ export interface AdminAccountRepository {
 
 const columns = `id, display_name AS name, email, username,
   COALESCE(role_override, role) AS role, is_active AS "isActive", last_login_at AS "lastLoginAt"`;
+/** An account's name as the lists show it: the name part of "MSSV - Họ tên - Lớp" its profile holds (044–045), else the display name. */
+const accountName = "COALESCE((SELECT NULLIF(btrim(full_name), '') FROM student_profiles WHERE user_id = users.id), display_name)";
+/** The columns of one account's details (Xem chi tiết), named as the list names it. */
+const detailColumns = columns.replace("display_name AS name", `${accountName} AS name`);
 // The columns the lists sort by (web AccountsManagement.tsx). Vai trò goes from Quản trị viên down to Sinh viên, Trạng
 // thái from active to locked; Cổng and Thông tin follow their Vietnamese labels, Kết quả puts Thành công first.
 const accountSort = {
@@ -137,7 +141,7 @@ export class PostgresAdminAccountRepository implements AdminAccountRepository {
   }
 
   async detail(_actor: AuthenticatedUser, id: string): Promise<AccountDetail> {
-    const result = await this.pool.query<AccountDetail>(`SELECT ${columns}, created_at AS "createdAt",
+    const result = await this.pool.query<AccountDetail>(`SELECT ${detailColumns}, created_at AS "createdAt",
       first_login_at AS "firstLoginAt", updated_at AS "updatedAt" FROM users WHERE id = $1`, [id]);
     if (!result.rows[0]) throw new AccountError("account_not_found", 404);
     return result.rows[0];
@@ -176,10 +180,12 @@ export class PostgresAdminAccountRepository implements AdminAccountRepository {
   async history(actor: AuthenticatedUser, query: HistoryQuery) {
     if (query.userId) await this.detail(actor, query.userId);
     const order = orderBy(historySort, historyOrder, query.sort, query.dir);
+    // Người dùng by name, as the Tài khoản list names them: the profile's name part of "MSSV - Họ tên - Lớp" (044–045).
     const result = await this.pool.query<{ items: LoginEvent[]; total: number }>(`WITH filtered AS (
-      SELECT e.id, e.user_id AS "userId", u.display_name AS name, u.email,
+      SELECT e.id, e.user_id AS "userId", COALESCE(NULLIF(btrim(p.full_name), ''), u.display_name) AS name, u.email,
         e.occurred_at AS "occurredAt", e.outcome, e.reason, e.portal
       FROM login_events e JOIN users u ON u.id = e.user_id AND u.entra_tenant_id = e.tenant_id
+      LEFT JOIN student_profiles p ON p.user_id = e.user_id
       WHERE ($1::uuid IS NULL OR e.user_id = $1)
         AND ($2 = '' OR strpos(lower(concat_ws(' ', u.display_name, u.email, u.username, e.reason)), lower($2)) > 0)
         AND ($3::text IS NULL OR e.outcome = $3) AND ($4::text IS NULL OR e.portal = $4)

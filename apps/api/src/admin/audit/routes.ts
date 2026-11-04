@@ -3,6 +3,7 @@
 // logged with a generic line (unknownRoute). Summaries name the object from the route, the request's JSON fields or the
 // JSON answer, or a small lookup by id; never grades or file contents.
 import type { AuditKind } from "../reports/types.js";
+import { personName } from "../../users/person-name.js";
 
 /** One row of a small read by id (null when there is none or the lookup failed). */
 export type Lookup = (text: string, values: unknown[]) => Promise<Record<string, unknown> | null>;
@@ -89,7 +90,8 @@ export const AUDIT_ROUTES: readonly AuditRoute[] = [
     describe: ({ body, result }) => { const user = obj(obj(result).user); return { summary: `Tạo tài khoản quản trị ${str(user.email) || str(body.email)}`, ...target("account", user.id) }; } },
   { method: "PATCH", path: "/accounts/:id", kind: "account", action: "Sửa tài khoản",
     describe: ({ params, body, result }) => {
-      const user = obj(obj(result).user), who = join(user.name, str(user.email) || str(user.username) ? `(${str(user.email) || str(user.username)})` : "") || params.id!;
+      // The account by name only, as the admin portal names people ("MSSV - Họ tên - Lớp" → "Họ tên"), with its email.
+      const user = obj(obj(result).user), who = join(personName(str(user.name)), str(user.email) || str(user.username) ? `(${str(user.email) || str(user.username)})` : "") || params.id!;
       if (body.role !== undefined) return { action: "Đổi vai trò", summary: `Đổi vai trò của ${who} thành ${roleLabel(body.role)}`, ...target("account", params.id) };
       const locked = body.isActive === false;
       return { action: locked ? "Khóa tài khoản" : "Mở khóa tài khoản", summary: `${locked ? "Khóa" : "Mở khóa"} tài khoản ${who}`, ...target("account", params.id) };

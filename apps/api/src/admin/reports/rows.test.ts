@@ -5,7 +5,7 @@ import type { OverviewResponse, OverviewWarning } from "../../overview/types.js"
 import type { RoadmapRow } from "../../roadmap/jobs.js";
 import { ROADMAP_ASSESSMENT, syntheticRoadmapFacts, syntheticRoadmapResult } from "../../roadmap/test-fixture.js";
 import {
-  competencyOf, expectedCreditsOf, fallbackRow, gapStatusOf, progressStatus, readReportRow, riskOf, roadmapCoursesOf, rowFromParts, type ReportIdentity,
+  competencyOf, expectedCreditsOf, fallbackRow, gapStatusOf, hasTranscriptData, progressStatus, readReportRow, riskOf, roadmapCoursesOf, rowFromParts, type ReportIdentity,
 } from "./rows.js";
 
 // One student's report row from what Tổng quan reads, with synthetic data only (the K29 fixture of the engine tests).
@@ -138,6 +138,20 @@ describe("a report row", () => {
     expect(rowFromParts(identity, overview({ competency: null }), { computed }, null, NOW).competency).toBeNull();
     const shown = overview({ competency: { assessedAt: NOW.toISOString(), overallScore: 70, overallLevel: "Khá", strengths: [], career: null, stale: false } });
     expect(rowFromParts(identity, shown, { computed }, null, NOW).competency?.overall).toBe(computed.overall.score);
+  });
+
+  it("with a transcript without data keeps only the upload: no figures, Chưa đủ dữ liệu, no risk", () => {
+    // An uploaded transcript where nothing graded was read: no printed GPA, so the engine sees 0 credits passed and every
+    // past plan term late. The reports leave it out of every average and distribution instead (QA 2026-11-04).
+    const empty = overview({
+      transcript: { updatedAt: NOW.toISOString(), gpa4: null, studyGpa4: null, gpa10: null, rank: null, credits: null, gpaChange: null, series: [] },
+      progress: { ...overview().progress!, passedCredits: 0, lateCredits: 98 },
+      warnings: { level: "risk", items: [warning("pace", "risk", "Còn 150 tín chỉ."), warning("late_course", "warn", "Môn A trễ.")] },
+    });
+    const row = rowFromParts(identity, empty, null, null, NOW);
+    expect(row).toMatchObject({ hasTranscript: true, status: "unknown", gpa: null, lastTermGpa: null, series: [], passedCredits: null, risk: { level: null, items: [] } });
+    expect(hasTranscriptData(row)).toBe(false);
+    expect(hasTranscriptData(rowFromParts(identity, overview(), null, null, NOW))).toBe(true);
   });
 
   it("without a transcript has no risk and status no_transcript", () => {

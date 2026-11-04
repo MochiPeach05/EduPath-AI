@@ -67,7 +67,8 @@ describe("audit log of admin changes", () => {
 
   it("names role changes, locks and bulk competency actions", async () => {
     const { app, entry } = setup((a) => {
-      a.patch("/api/admin/accounts/:id", (_req, res) => { res.json({ user: { id: "u2", name: "Lê Quốc Bảo", email: "giangvien.test@vlu.edu.vn" } }); });
+      // A display name "MSSV - Họ tên - Lớp" is named by its name only (QA 2026-11-04).
+      a.patch("/api/admin/accounts/:id", (_req, res) => { res.json({ user: { id: "u2", name: "2374802010777 - Lê Quốc Bảo - 71K29CNTT01", email: "giangvien.test@vlu.edu.vn" } }); });
       a.post("/api/admin/competencies/courses/activate", (_req, res) => { res.json({ activated: 12, skipped: 1 }); });
       a.post("/api/admin/competencies/ai/batches/:id/apply", (_req, res) => { res.json({ activated: 3, drafted: 40, empty: 2, skipped: [{ courseCode: "X" }] }); });
     });

@@ -16,6 +16,14 @@ describe("audit log writes", () => {
       "pham thu trang xuat excel xuat excel: sinh vien co nguy co (18 dong)"]);
   });
 
+  it("names the actor as the admin header does: only the name of 'MSSV - Họ tên - Lớp' (QA 2026-11-04)", async () => {
+    const query = vi.fn().mockResolvedValue({ rowCount: 1 });
+    await recordAudit({ query }, { ...actor, name: "2374802010145 - Đào Văn Hòa - 71K29CNTT08" }, { kind: "account", action: "Đổi vai trò", summary: "Đổi vai trò" });
+    const values = query.mock.calls[0]![1] as unknown[];
+    expect(values[2]).toBe("Đào Văn Hòa");
+    expect(values[11]).toBe("dao van hoa doi vai tro doi vai tro");
+  });
+
   it("cuts long texts, falls back to other for an unknown kind and stores no actor id that is not a UUID", async () => {
     const query = vi.fn().mockResolvedValue({ rowCount: 1 });
     await recordAudit({ query }, { userId: "admin", name: "  ", role: null }, { kind: "weird" as never, action: "", summary: "x".repeat(900) });

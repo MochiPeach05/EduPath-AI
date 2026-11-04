@@ -10,6 +10,7 @@ import { MemoryUserRepository } from "./users/memory-user-repository.js";
 import { PostgresAdminAccountRepository } from "./admin/accounts.js";
 import { PostgresAuthActivity } from "./auth/activity.js";
 import { PostgresStudentProfileRepository } from "./admin/student-profiles.js";
+import { chooseVietnameseCollation } from "./admin/table-sort.js";
 
 async function startServer(): Promise<void> {
   const config = loadConfig();
@@ -22,6 +23,11 @@ async function startServer(): Promise<void> {
       await databasePool.query("SELECT 1");
     } else {
       console.log("[STORAGE] Preview mode: users and sessions are temporary (no DATABASE_URL)");
+    }
+    if (databasePool) {
+      // How the admin lists put names in Vietnamese order: ICU when the database has it, else a plain-character key.
+      const collation = await chooseVietnameseCollation(databasePool);
+      console.log(`[DATABASE] Vietnamese order: ${collation ? `collation "${collation}"` : "fallback key (no ICU collation for vi)"}`);
     }
 
     const microsoftAuthClient = new MsalMicrosoftAuthClient(config);

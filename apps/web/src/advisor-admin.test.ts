@@ -25,7 +25,9 @@ describe("advisor admin helpers", () => {
     expect(advisorErrorText("class_taken", { classes: [{ className: "A" }, { className: "B", advisorName: " " }] })).toMatch(/^Các lớp A, B đang do/);
     expect(advisorErrorText("class_taken")).toBe("Có lớp đang do cố vấn học tập khác phụ trách.");
     expect(advisorErrorText("read_only_role")).toBe("Cố vấn học tập chỉ có quyền xem ở trang quản trị.");
-    expect(advisorErrorText("something_else")).toBe("Không thể thực hiện thao tác. Vui lòng thử lại.");
+    // Any other code is worded by the status, as on every admin page (admin-errors.ts).
+    expect(advisorErrorText("something_else")).toBe("Hệ thống đang bận hoặc gặp lỗi. Vui lòng thử lại sau.");
+    expect(advisorErrorText("something_else", {}, 400)).toBe("Dữ liệu chưa hợp lệ. Vui lòng kiểm tra lại.");
   });
 
   it("sums up a preview and a result in words, leaving out what is zero", () => {

@@ -5,6 +5,8 @@ import { CheckedForm } from "./CheckedForm";
 import { majorOptions } from "./majors";
 import { sortRows, useTableSort, type SortRule } from "./table-sort";
 import { ANNOUNCEMENTS_API, ANNOUNCEMENT_BODY_MAX, ANNOUNCEMENT_TITLE_MAX, type Announcement, type AnnouncementTarget } from "./notification-types";
+import { SESSION_EXPIRED_EVENT, adminErrorText } from "./admin-errors";
+import { formatVnDateTime } from "./display-format";
 import "./curricula.css";
 import "./careers.css";
 import "./announcements.css";
@@ -48,14 +50,21 @@ const failures: Record<string, string> = {
   invalid_origin: "Yêu cầu không hợp lệ. Vui lòng tải lại trang.",
 };
 export class AnnouncementRequestError extends Error {
-  constructor(readonly code: string, readonly status: number) { super(failures[code] ?? "Không thể thực hiện thao tác. Vui lòng thử lại."); this.name = "AnnouncementRequestError"; }
+  // A code without a text of this page is worded by its status (admin-errors.ts; status 0: no answer).
+  constructor(readonly code: string, readonly status: number) { super(adminErrorText(status, { error: code }, failures)); this.name = "AnnouncementRequestError"; }
 }
 async function announcementRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const response = await fetch(`${ANNOUNCEMENTS_API}${path}`, {
-    credentials: "include", cache: "no-store", ...init,
-    headers: init.body === undefined ? init.headers : { "Content-Type": "application/json", ...init.headers },
-  });
-  if (response.status === 401) window.dispatchEvent(new Event("edupath-session-expired"));
+  let response: Response;
+  try {
+    response = await fetch(`${ANNOUNCEMENTS_API}${path}`, {
+      credentials: "include", cache: "no-store", ...init,
+      headers: init.body === undefined ? init.headers : { "Content-Type": "application/json", ...init.headers },
+    });
+  } catch (error) {
+    if ((error as { name?: unknown } | null)?.name === "AbortError") throw error;
+    throw new AnnouncementRequestError("network", 0);
+  }
+  if (response.status === 401) window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
   if (!response.ok) {
     const body = await response.json().catch(() => ({})) as { error?: string };
     throw new AnnouncementRequestError(body.error ?? (response.status === 403 ? "forbidden" : "request_failed"), response.status);
@@ -74,9 +83,17 @@ export function reachQuery(target: AnnouncementTarget): string {
 }
 /** The list with the value added, or without it when it was there. */
 export const toggleValue = (list: readonly string[], value: string): string[] => (list.includes(value) ? list.filter((item) => item !== value) : [...list, value]);
+/**
+ * A major as "Gửi đến" names it: by the name GET /options gives it, else the faculty's own name for it, else
+ * "Ngành khác (mã 7340201)" as the API names a programme outside the faculty's catalog — never the bare code (2026-11-04 QA).
+ */
+export function majorText(code: string, options: AnnouncementOptions): string {
+  const named = (list: readonly { code: string; name: string }[]) => list.find((major) => major.code === code)?.name.trim();
+  return named(options.majors) || named(majorOptions) || `Ngành khác (mã ${code})`;
+}
 /** Who receives it: "Tất cả sinh viên", "K29, K30", "Công nghệ thông tin" or "K29 · Công nghệ thông tin". */
 export function targetText(target: AnnouncementTarget, options: AnnouncementOptions): string {
-  const majors = target.majors.map((code) => options.majors.find((major) => major.code === code)?.name ?? code);
+  const majors = target.majors.map((code) => majorText(code, options));
   const parts = [target.cohorts.join(", "), majors.join(", ")].filter(Boolean);
   return parts.length ? parts.join(" · ") : "Tất cả sinh viên";
 }
@@ -88,10 +105,7 @@ export const readShare = (announcement: Pick<Announcement, "read" | "recipients"
   (announcement.recipients > 0 ? Math.min(100, Math.round((announcement.read / announcement.recipients) * 100)) : 0);
 /** "08:30 28/10/2026" in Vietnam time, as the other admin pages print a time. */
 export function sentTime(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "";
-  const part = (options: Intl.DateTimeFormatOptions) => new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", ...options }).format(date);
-  return `${part({ hour: "2-digit", minute: "2-digit", hour12: false })} ${part({ day: "2-digit", month: "2-digit", year: "numeric" })}`;
+  return formatVnDateTime(iso, "");
 }
 /** The name of the page a link opens ("Lộ trình học tập"); null for none or an unknown one. */
 export const pageLabel = (link: string | null) => PORTAL_PAGES.find((page) => page.link === link)?.label ?? null;
@@ -118,7 +132,9 @@ function useAnnouncementOptions(): AnnouncementOptions {
     const controller = new AbortController();
     announcementRequest<Partial<AnnouncementOptions>>("/options", { signal: controller.signal }).then((data) => {
       const cohorts = Array.isArray(data.cohorts) ? data.cohorts.filter((item): item is string => typeof item === "string" && Boolean(item.trim())) : [];
-      const majors = Array.isArray(data.majors) ? data.majors.filter((item) => typeof item?.code === "string" && typeof item?.name === "string") : [];
+      const majors = Array.isArray(data.majors) ? data.majors.filter((item) => typeof item?.code === "string" && typeof item?.name === "string")
+        // A name that is empty or only the code is shown as majorText names it.
+        .map((item) => (item.name.trim() && item.name.trim() !== item.code.trim() ? item : { code: item.code, name: majorText(item.code, FALLBACK_OPTIONS) })) : [];
       if (!controller.signal.aborted && (cohorts.length || majors.length)) setOptions({ cohorts: cohorts.length ? cohorts : FALLBACK_OPTIONS.cohorts, majors: majors.length ? majors : FALLBACK_OPTIONS.majors });
     }, () => undefined);
     return () => controller.abort();

@@ -26,6 +26,9 @@ interface StudentProfileSummary {
   id: string; name: string; email: string | null; isActive: boolean;
   studentCode: string | null; cohortYear: number | null;
   cohortCode: string | null; className: string | null;
+  /** The class as a canonical code (CNTT08 of K29 → 71K29CNTT08, advisors/class-code.ts), as the admin portal shows and
+   *  matches it; className stays the profile's own text, which the student page shows. Null without a class. */
+  classCode: string | null;
   profileStatus: "missing" | "incomplete" | "complete";
 }
 export interface StudentProfileDetail extends StudentProfileSummary {
@@ -75,20 +78,21 @@ const profileStatus = `CASE WHEN p.user_id IS NULL THEN 'missing'
     AND ${surveyComplete}
   THEN 'complete' ELSE 'incomplete' END`;
 const summaryColumns = `u.id, COALESCE(p.full_name, u.display_name) AS name, u.email, u.is_active AS "isActive",
-  p.cohort_code AS "cohortCode", p.class_name AS "className",
+  p.cohort_code AS "cohortCode", p.class_name AS "className", ${CLASS_OF} AS "classCode",
   p.student_code AS "studentCode", p.cohort_year AS "cohortYear",
   ${profileStatus} AS "profileStatus"`;
 const studentScope = `(COALESCE(u.role_override, u.role) = 'student' OR u.is_student)`;
 /**
  * A cố vấn học tập (role advisor, 2026-11-03) sees only the students of the classes the Khoa gave them; the parameter is
- * the advisor's id, NULL for every other role. Classes compare upper case without spaces, as ad_advisor_classes stores them.
+ * the advisor's id, NULL for every other role. Classes compare as canonical codes (advisors/class-code.ts: CNTT08 of K29
+ * is 71K29CNTT08), as ad_advisor_classes stores them.
  */
 const advisedScope = (parameter: string) => `(${parameter}::uuid IS NULL OR ${CLASS_OF}
   IN (SELECT class_name FROM ad_advisor_classes WHERE advisor_user_id = ${parameter}::uuid))`;
 const advisorOf = (actor: AuthenticatedUser) => (actor.role === "advisor" ? actor.userId : null);
 // The columns the list sorts by (web StudentProfiles.tsx); Hồ sơ goes from complete to missing, Tài khoản from active to locked.
 const studentSort = {
-  name: byGivenName("name"), studentCode: byText('"studentCode"'), cohortCode: byText('"cohortCode"'), className: byText('"className"'),
+  name: byGivenName("name"), studentCode: byText('"studentCode"'), cohortCode: byText('"cohortCode"'), className: byText('"classCode"'),
   cohortYear: ['"cohortYear"'], profileStatus: byOrder('"profileStatus"', ["complete", "incomplete", "missing"]), isActive: byOrder('"isActive"', ["true", "false"])
 };
 const studentOrder: OwnOrder = [["name", "ASC"], ["id", "ASC"]];
@@ -98,10 +102,10 @@ export class PostgresStudentProfileRepository implements StudentProfileRepositor
   async list(actor: AuthenticatedUser, query: StudentProfileQuery): Promise<StudentProfilePage> {
     const order = orderBy(studentSort, studentOrder, query.sort, query.dir);
     const result = await this.pool.query<StudentProfilePage>(`WITH students AS (
-      SELECT ${summaryColumns}, concat_ws(' ', u.display_name, p.full_name, u.email, u.username, p.student_code, p.cohort_code, p.class_name, p.career_goal) AS search_text
+      SELECT ${summaryColumns}, concat_ws(' ', u.display_name, p.full_name, u.email, u.username, p.student_code, p.cohort_code, p.class_name, ${CLASS_OF}, p.career_goal) AS search_text
       FROM users u LEFT JOIN student_profiles p ON p.user_id = u.id WHERE ${studentScope} AND ${advisedScope("$8")}
     ), filtered AS (
-      SELECT id, name, email, "isActive", "studentCode", "cohortCode", "className", "cohortYear", "profileStatus" FROM students
+      SELECT id, name, email, "isActive", "studentCode", "cohortCode", "className", "classCode", "cohortYear", "profileStatus" FROM students
       WHERE ($1 = '' OR strpos(lower(search_text), lower($1)) > 0)
         AND ($2::int IS NULL OR "cohortYear" = $2)
         AND ($3::text IS NULL OR "cohortCode" = $3)

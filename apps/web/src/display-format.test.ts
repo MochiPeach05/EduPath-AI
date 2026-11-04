@@ -1,7 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { decimalText, meaningClass, meaningOf, planTermCode, programName, scoreText, termName } from "./display-format";
+import { decimalText, formatVnDate, formatVnDateTime, meaningClass, meaningOf, planTermCode, programName, scoreText, termName } from "./display-format";
 
 describe("display format", () => {
+  it("write a day and a moment one way, in Vietnam time", () => {
+    expect(formatVnDateTime("2026-11-03T07:05:09.000Z")).toBe("14:05 03/11/2026");
+    expect(formatVnDateTime("2026-10-23T17:00:05.000Z")).toBe("00:00 24/10/2026");
+    expect(formatVnDateTime(Date.UTC(2026, 0, 2, 3, 4))).toBe("10:04 02/01/2026");
+    expect(formatVnDate("2026-11-03T18:30:00.000Z")).toBe("04/11/2026");
+    expect(formatVnDate("2026-11-03")).toBe("03/11/2026");
+    expect(formatVnDate(new Date("2026-03-09T00:00:00+07:00"))).toBe("09/03/2026");
+    for (const value of [null, undefined, "", "not a date"]) {
+      expect(formatVnDateTime(value)).toBe("—");
+      expect(formatVnDate(value, "Chưa có dữ liệu")).toBe("Chưa có dữ liệu");
+    }
+  });
+
   it("write a term one way", () => {
     expect(termName("HK261")).toBe("HK1 2026–2027");
     expect(termName("HK253")).toBe("HK3 2025–2026");

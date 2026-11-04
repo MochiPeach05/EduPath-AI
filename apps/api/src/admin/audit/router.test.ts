@@ -49,6 +49,10 @@ describe("audit log API", () => {
     const [sql, values] = listCalls()[0]!;
     expect(String(sql)).toContain("ORDER BY at DESC, id DESC");
     expect(values).toEqual(["xuat excel", "report", "Phạm Thu Trang", 50, 100]);
+    // The actor by name only, also on rows written with "MSSV - Họ tên - Lớp": the profile's name part (QA 2026-11-04).
+    expect(String(sql)).toContain("($3::text IS NULL OR COALESCE(NULLIF(btrim(p.full_name), ''), l.actor_name) = $3)");
+    expect(String(sql)).toContain("FROM ad_audit_log l LEFT JOIN student_profiles p ON p.user_id = l.actor_user_id");
+    expect(String(sql)).toContain('json_agg(name ORDER BY name COLLATE "vi-x-icu" ASC)');
     await request(app).get("/audit-log").query({ pageSize: 101 }).expect(400);
     await request(app).get("/audit-log").query({ kind: "grades" }).expect(400);
     await request(app).get("/audit-log").query({ extra: "1" }).expect(400);
@@ -57,7 +61,8 @@ describe("audit log API", () => {
   it("sorts by a whitelisted column, newest first on ties", async () => {
     const { app, listCalls } = setup();
     await request(app).get("/audit-log").query({ sort: "actor", dir: "asc" }).expect(200);
-    expect(String(listCalls()[0]![0])).toContain('ORDER BY "actorName" ASC, at DESC, id DESC');
+    // Người thực hiện in Vietnamese order (Đ after D, QA 2026-11-04).
+    expect(String(listCalls()[0]![0])).toContain('ORDER BY "actorName" COLLATE "vi-x-icu" ASC, at DESC, id DESC');
     await request(app).get("/audit-log").query({ sort: "at", dir: "asc" }).expect(200);
     expect(String(listCalls()[1]![0])).toContain("ORDER BY at ASC, id ASC");
     await request(app).get("/audit-log").query({ sort: "summary" }).expect(400);

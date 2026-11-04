@@ -5,6 +5,7 @@ import { beginMicrosoftLogin, logout } from "./auth-api";
 import type { AuthenticatedUser } from "./types";
 import "./admin.css";
 import AdminWorkspace from "./AdminWorkspace";
+import { AdminRequestError, adminErrorText, adminFailureText } from "./admin-errors";
 
 const messages: Record<string, string> = {
   microsoft_denied: "Bạn đã hủy hoặc Microsoft từ chối đăng nhập. Bạn có thể thử lại.",
@@ -22,7 +23,8 @@ function ShieldIcon() {
 }
 
 type AdminState =
-  | { kind: "loading" | "login" | "forbidden" | "error" }
+  | { kind: "loading" | "login" | "forbidden" }
+  | { kind: "error"; message: string }
   | { kind: "authenticated"; user: AuthenticatedUser };
 
 export default function AdminPortal() {
@@ -45,7 +47,7 @@ export default function AdminPortal() {
     }).then(async (response) => {
       if (response.status === 401) return { kind: "login" } as const;
       if (response.status === 403) return { kind: "forbidden" } as const;
-      if (!response.ok) throw new Error("Admin API unavailable");
+      if (!response.ok) throw new AdminRequestError(adminErrorText(response.status, await response.json().catch(() => ({}))), response.status);
       const data = await response.json();
       if (!data.authenticated || (!data.user || !canAccessAdmin(data.user.role))) return { kind: "forbidden" } as const;
       return { kind: "authenticated", user: data.user as AuthenticatedUser } as const;
@@ -54,8 +56,9 @@ export default function AdminPortal() {
         setState(result);
         if (result.kind === "authenticated" && window.location.search) window.history.replaceState({}, "", window.location.pathname);
       }
-    }).catch(() => {
-      if (!controller.signal.aborted) setState({ kind: "error" });
+    }).catch((error: unknown) => {
+      // No answer, or a server error: worded as on every admin page (admin-errors.ts).
+      if (!controller.signal.aborted) setState({ kind: "error", message: adminFailureText(error) });
     });
     // Recheck a page restored by browser Back; never trust a cached admin view.
     const onPageShow = (event: PageTransitionEvent) => {
@@ -113,7 +116,7 @@ export default function AdminPortal() {
           <p className="admin-login-description">Sử dụng tài khoản Microsoft đã được cấp quyền để truy cập trang quản trị.</p>
           {error && <p className="admin-error" role="alert">{error}</p>}
           {state.kind === "loading" ? <p className="admin-loading" role="status">Đang kiểm tra phiên quản trị…</p>
-            : state.kind === "error" ? <div><p className="admin-error" role="alert">Không thể kết nối máy chủ. Vui lòng thử lại.</p><button className="admin-secondary" onClick={() => setAttempt((value) => value + 1)}>Thử lại kết nối</button></div>
+            : state.kind === "error" ? <div><p className="admin-error" role="alert">{state.message}</p><button className="admin-secondary" onClick={() => setAttempt((value) => value + 1)}>Thử lại kết nối</button></div>
               : state.kind === "forbidden" ? <button className="admin-primary" disabled={busy} onClick={() => void handleLogout()}>{busy ? "Đang đăng xuất…" : "Đăng xuất để đổi tài khoản"}</button>
                 : <button className="admin-primary" disabled={busy} onClick={() => { setBusy(true); beginMicrosoftLogin("/quantri"); }}>
                   <span className="microsoft-icon" aria-hidden="true"><i /><i /><i /><i /></span>

@@ -70,16 +70,32 @@ export default function CareerSkillsManagement({ canManage }: { canManage: boole
   </section>;
 }
 
-function SkillEditor({ current, close, saved }: { current: ManagedCareerSkill | null; close: () => void; saved: () => void }) {
+type SkillForm = { name: string; description: string };
+/** A skill name as the API saves and compares it: one Unicode form, runs of spaces made one, no spaces at the ends. */
+export const skillName = (value: string) => value.normalize("NFC").replace(/\s+/gu, " ").trim();
+/** What Lưu kỹ năng sends (" api " is sent as "api", so it meets the existing "API" as a duplicate). */
+export const skillPayload = (form: SkillForm): SkillForm => ({ name: skillName(form.name), description: form.description.trim() });
+/** Whether saving changes anything: always for a new skill; for an edit, only when the name or the description sent differs. */
+export function skillChanged(current: SkillForm | null, form: SkillForm): boolean {
+  if (!current) return true;
+  const next = skillPayload(form);
+  return next.name !== skillName(current.name) || next.description !== current.description.trim();
+}
+
+export function SkillEditor({ current, close, saved }: { current: ManagedCareerSkill | null; close: () => void; saved: () => void }) {
   const [form, setForm] = useState({ name: current?.name ?? "", description: current?.description ?? "" });
   const [busy, setBusy] = useState(false), [error, setError] = useState("");
+  // Sửa then Lưu without a change sends nothing: Lưu kỹ năng waits for a change (2026-11-04 QA).
+  const changed = skillChanged(current, form);
   return <Modal title={current ? "Chỉnh sửa kỹ năng" : "Thêm kỹ năng"} onClose={close} busy={busy}>
     <CheckedForm className="cm-dialog-body cm-form" onSubmit={async event => {
-      event.preventDefault(); setBusy(true); setError("");
+      event.preventDefault();
+      if (!changed) return;
+      setBusy(true); setError("");
       try {
         await careerRequest(current ? `${endpoint}/${current.id}` : endpoint, {
           method: current ? "PATCH" : "POST", headers: { "Content-Type": "application/json", ...(current ? { "x-version": current.version } : {}) },
-          body: JSON.stringify(form),
+          body: JSON.stringify(skillPayload(form)),
         }); saved();
       } catch (failure) { setError((failure as Error).message); }
       finally { setBusy(false); }
@@ -92,7 +108,7 @@ function SkillEditor({ current, close, saved }: { current: ManagedCareerSkill | 
       {error && <p className="admin-error" role="alert">{error}</p>}
       <div className="cm-actions cm-dialog-actions">
         <button type="button" className="am-outline" disabled={busy} onClick={close}><Icon name="close" /> Hủy</button>
-        <button className="am-primary" disabled={busy}><Icon name="save" /> {busy ? "Đang lưu…" : "Lưu kỹ năng"}</button>
+        <button className="am-primary" disabled={busy || !changed} title={changed ? undefined : "Chưa có thay đổi để lưu"}><Icon name="save" /> {busy ? "Đang lưu…" : "Lưu kỹ năng"}</button>
       </div>
     </CheckedForm>
   </Modal>;

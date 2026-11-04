@@ -84,4 +84,24 @@ describe("career skill catalog", () => {
     expect(clientQuery.mock.calls.some(([sql]) => sql.includes("INSERT INTO ad_comp_events"))).toBe(true);
     expect(clientQuery).toHaveBeenCalledWith("COMMIT");
   });
+  it("saves the name trimmed, with one space between words and one Unicode form, so the case-folded unique name catches look-alikes", async () => {
+    const { app, clientQuery } = setup();
+    await request(app).post("/careers/skills").set("Origin", origin).send({ name: " api ", description: " Giao tiếp giữa các hệ thống. " }).expect(201);
+    await request(app).patch(`/careers/skills/${id}`).set("Origin", origin).set("x-version", version)
+      .send({ name: "API   Gateway\t", description: "" }).expect(200);
+    await request(app).post("/careers/skills").set("Origin", origin).send({ name: "Phân tích", description: "" }).expect(201);
+    const written = (clientQuery.mock.calls as unknown as [string, unknown[]][])
+      .filter(([sql]) => sql.startsWith("INSERT INTO career_skills") || sql.startsWith("UPDATE career_skills SET name"))
+      .map(([, params]) => params.slice(0, 3));
+    expect(written).toEqual([
+      [expect.any(String), "api", "Giao tiếp giữa các hệ thống."],
+      [id, "API Gateway", ""],
+      [expect.any(String), "Phân tích".normalize("NFC"), ""],
+    ]);
+    // A name of spaces only is still missing.
+    await request(app).post("/careers/skills").set("Origin", origin).send({ name: "  \t ", description: "" }).expect(400, { error: "invalid_skill" });
+    // The duplicate itself is the database's unique lower(name) of the live skills, answered as skill_exists.
+    const duplicate = setup({ duplicate: true });
+    await request(duplicate.app).post("/careers/skills").set("Origin", origin).send({ name: " api ", description: "" }).expect(409, { error: "skill_exists" });
+  });
 });

@@ -63,7 +63,7 @@ describe("reports API", () => {
   it("answers the dashboard for all cohorts and each cohort, with the filters", async () => {
     const { app } = setup();
     const body = (await request(app).get("/r/dashboard").expect(200)).body;
-    expect(body.scope).toEqual({ students: 3, withTranscript: 2, assessed: 1 });
+    expect(body.scope).toEqual({ students: 3, withTranscript: 2, withData: 2, assessed: 1 });
     expect(body.studyTerm).toEqual({ code: "HK261", label: "HK1 2026–2027" });
     expect(body.kpis.byCohort.map((entry: { cohort: string }) => entry.cohort)).toEqual(["K29", "K30", "K31"]);
     expect(body.averages.map((table: { by: string }) => table.by)).toEqual(["cohort", "major", "specialty"]);
@@ -113,8 +113,9 @@ describe("reports API", () => {
     expect(data.rowCount).toBe(2);
     const notes = workbook.getWorksheet("Ghi chú")!;
     expect(notes.getRow(3).getCell(2).value).toBe("khóa K29");
-    expect(String(notes.getRow(4).getCell(2).value)).toBe("Dựa trên 1/1 sinh viên đã tải bảng điểm; bảng điểm do sinh viên tự tải, chưa xác minh.");
-    expect(String(notes.getRow(2).getCell(2).value)).toBe("31/10/2026 09:00 (giờ Việt Nam)");
+    expect(String(notes.getRow(4).getCell(2).value)).toBe("Dựa trên 1/1 sinh viên đã tải bảng điểm, 1/1 bảng điểm có dữ liệu; bảng điểm do sinh viên tự tải, chưa xác minh. "
+      + "Bảng điểm chưa đọc được GPA tích lũy không được tính vào điểm, tín chỉ và tiến độ (Chưa đủ dữ liệu).");
+    expect(String(notes.getRow(2).getCell(2).value)).toBe("09:00 31/10/2026 (giờ Việt Nam)");
     expect(record).toHaveBeenCalledWith(expect.anything(), { userId: ADMIN, name: "Giảng Viên Mẫu", role: "lecturer" },
       expect.objectContaining({ kind: "report", action: "Xuất Excel", summary: "Sinh viên theo tiến độ (khóa K29, 1 dòng)" }));
 

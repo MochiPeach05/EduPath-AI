@@ -37,7 +37,10 @@ describe("career AI suggestion helpers", () => {
     // The API answers a bad body under /requirements/ai-suggestions with invalid_ai_suggestion.
     expect(requestErrorMessage("invalid_ai_suggestion")).toBe("Thông tin chưa hợp lệ. Kiểm tra kỹ năng, nội dung yêu cầu và mô tả của các dòng đã chọn.");
     expect(requestErrorMessage("insufficient_role")).toBe("Bạn không còn quyền thực hiện thao tác này.");
-    expect(requestErrorMessage(null)).toBe("Không thể thực hiện thao tác. Vui lòng thử lại.");
+    // Without a code of these pages the shared admin texts word the status (admin-errors.ts, QA 2026-11-04).
+    expect(requestErrorMessage(null)).toBe("Hệ thống đang bận hoặc gặp lỗi. Vui lòng thử lại sau.");
+    expect(requestErrorMessage("something_new", [], 400)).toBe("Dữ liệu chưa hợp lệ. Vui lòng kiểm tra lại.");
+    expect(requestErrorMessage(null, [], 0)).toBe("Không kết nối được máy chủ. Vui lòng kiểm tra mạng và thử lại.");
   });
   it("formats the elapsed time as mm:ss and never below zero", () => {
     const start = "2026-10-11T05:00:00.000Z";

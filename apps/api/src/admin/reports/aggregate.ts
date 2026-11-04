@@ -1,14 +1,16 @@
 // Báo cáo của cổng quản trị: every report as a pure function of the student rows (rows.ts) and the filters. Each
 // aggregate comes for the whole scope and for each cohort ("mọi phần đều có xem trung bình toàn khóa với từng khóa",
-// user 2026-10-31). Means skip missing values and keep full precision (the pages floor 0–100 scores to the tenth); the
-// level and fit words are the student pages' (Xuất sắc/Giỏi/Khá/Trung bình/Yếu at 90/80/62,5/50; Rất phù hợp/Phù hợp/
-// Trung bình/Ít phù hợp/Không phù hợp on the same bounds).
+// user 2026-10-31). Means keep full precision (the pages floor 0–100 scores to the tenth) and take their base
+// explicitly, one base per kind of figure (QA 2026-11-04): GPA, credits and học lực over the transcripts with data
+// (rows.ts hasTranscriptData), competency and fit over the stored assessments. The level and fit words are the student
+// pages' (Xuất sắc/Giỏi/Khá/Trung bình/Yếu at 90/80/62,5/50; Rất phù hợp/Phù hợp/Trung bình/Ít phù hợp/Không phù hợp
+// on the same bounds).
 import { FIT_LABELS, LEVEL_THRESHOLDS, fitCodeOf } from "../../competency-assessment/constants.js";
 import { fold, SPECIALTIES } from "../../competency-assessment/specialty.js";
 import { MAJORS } from "../../curricula/majors.js";
 import { TERM_CALENDAR, vietnamToday } from "../../roadmap/window.js";
 import { termName } from "../../term-name.js";
-import type { ReportRow } from "./rows.js";
+import { hasTranscriptData, type ReportRow } from "./rows.js";
 import type {
   AverageRow, AverageTable, CareerRow, CareersReport, CohortSplit, CompetencyGroups, CourseHow, CourseRow, CoursesReport, CourseStudents,
   DashboardKpis, DashboardReport, FitSummary, GpaBandLabel, GpaBands, GpaPoint, ProgressCounts, ProgressReport, ProgressStatus,
@@ -94,6 +96,7 @@ export function cohortSplit<T extends object>(rows: readonly ReportRow[], build:
 export const scopeOf = (rows: readonly ReportRow[]): ReportScope => ({
   students: rows.length,
   withTranscript: rows.filter((row) => row.hasTranscript).length,
+  withData: rows.filter(hasTranscriptData).length,
   assessed: rows.filter((row) => row.competency !== null).length,
 });
 
@@ -103,10 +106,16 @@ const baseOf = (row: ReportRow): ReportStudentBase => ({
   userId: row.userId, studentCode: row.studentCode, name: row.name, cohort: row.cohort, majorName: row.majorName, specialtyName: row.specialtyName,
 });
 
-/** Vietnamese names sort by the given name (the last word), then the full name, then the MSSV, as the admin lists do. */
+/** Vietnamese order, as the admin lists sort (web table-sort.tsx, SQL "vi-x-icu"): D before Đ, A before Ă before Â. */
+const VI = new Intl.Collator("vi", { numeric: true });
+
+/**
+ * Vietnamese names sort by the given name (the last word), then the full name, then the MSSV, as the admin lists do. In
+ * Vietnamese order with the letters kept: folding the accents first sorted "Đức" before "Dũng" (QA 2026-11-04).
+ */
 export function compareNames(a: Pick<ReportRow, "name" | "studentCode">, b: Pick<ReportRow, "name" | "studentCode">): number {
-  const given = (name: string) => fold(name.trim().split(/\s+/).at(-1) ?? "");
-  return given(a.name).localeCompare(given(b.name), "vi") || fold(a.name).localeCompare(fold(b.name), "vi")
+  const given = (name: string) => name.trim().split(/\s+/).at(-1) ?? "";
+  return VI.compare(given(a.name), given(b.name)) || VI.compare(a.name.trim(), b.name.trim())
     || (a.studentCode ?? "").localeCompare(b.studentCode ?? "");
 }
 
@@ -137,17 +146,17 @@ function cumulativeAt(row: ReportRow, term: string): number | null {
 }
 
 export function gpaPoints(rows: readonly ReportRow[]): GpaPoint[] {
-  const withT = rows.filter((row) => row.hasTranscript);
-  const terms = [...new Set(withT.flatMap((row) => row.series.map((point) => point.term)))].sort();
+  const withData = rows.filter(hasTranscriptData);
+  const terms = [...new Set(withData.flatMap((row) => row.series.map((point) => point.term)))].sort();
   return terms.flatMap((term) => {
-    const termValues = withT.flatMap((row) => row.series.filter((point) => point.term === term && point.termGpa !== null).map((point) => point.termGpa!));
-    const point = { term: termRef(term), termGpa: mean(termValues), termStudents: termValues.length, cumulativeGpa: mean(withT.map((row) => cumulativeAt(row, term))) };
+    const termValues = withData.flatMap((row) => row.series.filter((point) => point.term === term && point.termGpa !== null).map((point) => point.termGpa!));
+    const point = { term: termRef(term), termGpa: mean(termValues), termStudents: termValues.length, cumulativeGpa: mean(withData.map((row) => cumulativeAt(row, term))) };
     return point.termGpa === null && point.cumulativeGpa === null ? [] : [point];
   });
 }
 
 export function kpisOf(rows: readonly ReportRow[]): DashboardKpis {
-  const withT = rows.filter((row) => row.hasTranscript);
+  const withData = rows.filter(hasTranscriptData);
   const assessed = rows.filter((row) => row.competency !== null);
   const points = gpaPoints(rows).filter((point) => point.cumulativeGpa !== null);
   const last = points.at(-1), previous = points.at(-2);
@@ -155,7 +164,7 @@ export function kpisOf(rows: readonly ReportRow[]): DashboardKpis {
   const fit = mean(assessed.map((row) => row.competency!.career?.fitScore ?? null));
   return {
     ...scopeOf(rows),
-    gpa: mean(withT.map((row) => row.gpa)),
+    gpa: mean(withData.map((row) => row.gpa)),
     gpaChange: last && previous ? last.cumulativeGpa! - previous.cumulativeGpa! : null,
     gpaChangeFrom: last && previous ? previous.term : null,
     competency, competencyLevel: levelWord(competency),
@@ -166,27 +175,38 @@ export function kpisOf(rows: readonly ReportRow[]): DashboardKpis {
 }
 
 export function gpaBandsOf(rows: readonly ReportRow[]): GpaBands {
-  const gpas = rows.filter((row) => row.hasTranscript && row.gpa !== null).map((row) => row.gpa!);
-  return { bands: GPA_BANDS.map((band) => ({ label: band.label, range: band.range, students: gpas.filter((gpa) => gpaBandOf(gpa) === band.label).length })) };
-}
-
-function averageRow(key: string, label: string, rows: readonly ReportRow[]): AverageRow {
-  const withT = rows.filter((row) => row.hasTranscript);
-  const assessed = withT.filter((row) => row.competency !== null);
-  const competency = mean(assessed.map((row) => row.competency!.overall));
-  const fit = mean(assessed.map((row) => row.competency!.career?.fitScore ?? null));
+  const gpas = rows.filter(hasTranscriptData).map((row) => row.gpa!);
   return {
-    key, label, students: withT.length,
-    gpa: mean(withT.map((row) => row.gpa)), lastTermGpa: mean(withT.map((row) => row.lastTermGpa)), credits: mean(withT.map((row) => row.passedCredits)),
-    below2: withT.filter((row) => row.gpa !== null && row.gpa < 2).length,
-    competency, competencyLevel: levelWord(competency), fit, fitLabel: fitWord(fit),
+    bands: GPA_BANDS.map((band) => ({ label: band.label, range: band.range, students: gpas.filter((gpa) => gpaBandOf(gpa) === band.label).length })),
+    withTranscript: rows.filter((row) => row.hasTranscript).length, withData: gpas.length,
   };
 }
 
-/** The table "Bảng điểm trung bình" by cohort, major and specialty, each with its total row; groups without a transcript are left out. */
+/**
+ * One row of "Bảng điểm trung bình". Same denominator within a row for each kind of figure: GPA, latest term GPA, credits
+ * and "GPA dưới 2,00" over the transcripts with data (withData), competency and fit over the stored assessments (assessed,
+ * as the KPIs count them). A transcript without data counts in withTranscript only.
+ */
+function averageRow(key: string, label: string, rows: readonly ReportRow[]): AverageRow {
+  const withData = rows.filter(hasTranscriptData);
+  const assessed = rows.filter((row) => row.competency !== null);
+  const competency = mean(assessed.map((row) => row.competency!.overall));
+  const fit = mean(assessed.map((row) => row.competency!.career?.fitScore ?? null));
+  return {
+    key, label, withTranscript: rows.filter((row) => row.hasTranscript).length, withData: withData.length,
+    gpa: mean(withData.map((row) => row.gpa)), lastTermGpa: mean(withData.map((row) => row.lastTermGpa)), credits: mean(withData.map((row) => row.passedCredits)),
+    below2: withData.filter((row) => row.gpa! < 2).length,
+    assessed: assessed.length, competency, competencyLevel: levelWord(competency), fit, fitLabel: fitWord(fit),
+  };
+}
+
+/**
+ * The table "Bảng điểm trung bình" by cohort, major and specialty, each with its total row; a group is listed when one of
+ * its students uploaded a transcript or has an assessment (so the rows add up to the total row).
+ */
 export function averageTables(rows: readonly ReportRow[]): AverageTable[] {
   const table = (by: AverageTable["by"], keyOf: (row: ReportRow) => string, labelOf: (key: string) => string, order: (a: string, b: string) => number): AverageTable => {
-    const keys = [...new Set(rows.filter((row) => row.hasTranscript).map(keyOf))].sort(order);
+    const keys = [...new Set(rows.filter((row) => row.hasTranscript || row.competency !== null).map(keyOf))].sort(order);
     return { by, rows: keys.map((key) => averageRow(key, labelOf(key), rows.filter((row) => keyOf(row) === key))), all: averageRow("all", "Tất cả", rows) };
   };
   const NONE = "none";
@@ -338,7 +358,7 @@ export const SKILL_STATUS_LABELS: Record<SkillGapStatus, string> = {
   below: "Dưới ngưỡng", not_studied: "Chưa học", self_study: "Cần tự học ngoài chương trình", no_data: "Chưa có điểm",
 };
 const SKILL_STATUS_ORDER: readonly SkillGapStatus[] = ["below", "not_studied", "self_study", "no_data"];
-/** How many skills the chart shows. */
+/** The most skills the chart shows (fewer when fewer are missed; the page says how many it shows). */
 export const TOP_SKILLS = 12;
 
 const withCareer = (rows: readonly ReportRow[], career: string | undefined) =>

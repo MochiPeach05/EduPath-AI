@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import type { DatabasePool } from "../db/pool.js";
 import { BODY_MAX, isPortalPage, openLabel, TITLE_MAX, type NotificationKind, type NotificationType } from "./model.js";
+import { personName } from "../users/person-name.js";
 
 type Db = Pick<DatabasePool, "query"> | Pick<PoolClient, "query">;
 
@@ -157,7 +158,8 @@ export const catalogUpdated = (what: string): NotificationInput => ({
  */
 export function advisorAction(actorName: string, did: string, link: string, day: string, key: string, actor: "advisor" | "admin" = "advisor"): NotificationInput {
   const role = actor === "admin" ? "quản trị viên của Khoa" : "cố vấn học tập của lớp bạn";
-  const name = actorName.trim();
+  // An admin's account may be named "MSSV - Họ tên - Lớp": only the name, as the admin portal shows it (QA 2026-11-04).
+  const name = personName(actorName);
   // "ThS. Nguyễn Văn A (cố vấn học tập của lớp bạn) đã …"; without a name only the role: "Quản trị viên của Khoa đã …".
   const who = name ? `${name} (${role})` : `${role.charAt(0).toUpperCase()}${role.slice(1)}`;
   return {

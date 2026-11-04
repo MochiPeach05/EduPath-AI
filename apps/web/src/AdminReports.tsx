@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type Reac
 import { Icon } from "./admin-account-shared";
 import { Pagination } from "./admin-ui";
 import { REPORT_PATHS, reportViewOf, studentProfileLink, type ReportView } from "./admin-navigation";
-import { meaningClass, meaningOf, termName } from "./display-format";
+import { formatVnDateTime, meaningClass, meaningOf, termName } from "./display-format";
 import { sortRows, useTableSort, type SortRule, type TableSort } from "./table-sort";
 import {
   AUDIT_API, EMPTY_FILTERS, REPORTS_API, downloadExcel, filtersFromSearch, filtersToSearch, reportUrl, useDebounced, useReport, type ReportFilterState,
@@ -71,15 +71,8 @@ function Word({ word }: { word: string | null | undefined }) {
 }
 const Chip = ({ tone, children }: { tone: string; children: ReactNode }) => <span className={`rp-chip ${tone}`}>{children}</span>;
 
-/** "09:15 31/10/2026" in Vietnam time. */
-export function updatedText(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return "—";
-  const parts = new Intl.DateTimeFormat("vi-VN", { timeZone: "Asia/Ho_Chi_Minh", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric", hour12: false })
-    .formatToParts(date).reduce<Record<string, string>>((all, part) => ({ ...all, [part.type]: part.value }), {});
-  return `${parts.hour}:${parts.minute} ${parts.day}/${parts.month}/${parts.year}`;
-}
+/** "09:15 31/10/2026" in Vietnam time: the portals' one way to write a moment (display-format.ts formatVnDateTime). */
+export const updatedText = (iso: string | null | undefined): string => formatVnDateTime(iso);
 const termLabel = (term: ReportTerm | null | undefined) => (term ? term.label || termName(term.code) : "—");
 
 /* ------------------------------------------------------------------ pure helpers (tested) */
@@ -192,8 +185,22 @@ function Intro({ view, head, studyTerm, actions }: { view: ReportView; head: Rep
 export function coverageText(head: ReportHead): string {
   return `Dựa trên ${countText(head.scope.withTranscript)}/${countText(head.scope.students)} sinh viên đã tải bảng điểm (chưa xác minh)`;
 }
+/**
+ * "Dựa trên 13/14 bảng điểm có dữ liệu": the base of every GPA, credit and học lực figure (QA 2026-11-04). A transcript
+ * has data when its printed cumulative GPA was read; one without counts as uploaded and is left out of every average and
+ * distribution the same way (server: rows.ts hasTranscriptData).
+ */
+export const dataBaseText = (withData: number, withTranscript: number) => `Dựa trên ${countText(withData)}/${countText(withTranscript)} bảng điểm có dữ liệu`;
+/** The coverage line, which names the transcripts without data when there are any. */
+export function coverageNotes(head: ReportHead): string[] {
+  const { withTranscript, withData, assessed } = head.scope;
+  const notes = [coverageText(head)];
+  if (withData < withTranscript) notes.push(`${countText(withData)}/${countText(withTranscript)} bảng điểm có dữ liệu; ${countText(withTranscript - withData)} bảng điểm chưa đọc được GPA tích lũy nên không tính vào điểm, xếp loại và tiến độ`);
+  if (assessed > 0) notes.push(`${countText(assessed)} sinh viên đã đánh giá năng lực`);
+  return notes;
+}
 function Coverage({ head }: { head: ReportHead }) {
-  return <p className="rp-coverage"><Icon name="info" />{coverageText(head)}{head.scope.assessed > 0 && <> · {countText(head.scope.assessed)} sinh viên đã đánh giá năng lực</>}</p>;
+  return <p className="rp-coverage"><Icon name="info" /><span>{coverageNotes(head).join(" · ")}</span></p>;
 }
 
 function Loading<T>({ state, children }: { state: { data: T | null; error: string | null; loading: boolean; retry: () => void }; children: (data: T) => ReactNode }) {
@@ -242,7 +249,8 @@ function KpiCards({ kpis, sparkline }: { kpis: DashboardKpis; sparkline: number[
       <p className="rp-kpi-foot">{countText(kpis.withTranscript)} đã tải bảng điểm · {countText(kpis.assessed)} đã đánh giá năng lực</p></div>
     <div className="rp-kpi"><div className="rp-kpi-top"><span className="rp-kpi-icon rp-violet"><Icon name="chart" /></span><span>GPA tích lũy trung bình</span></div>
       <div className="rp-kpi-body"><b className="rp-kpi-value">{gpaText(kpis.gpa)}<small>/ 4</small></b><span data-tip={sparkline.length > 1 ? "GPA trung bình tích lũy theo học kỳ (Toàn khóa)" : undefined}><Sparkline values={sparkline} label="GPA trung bình tích lũy theo học kỳ" /></span></div>
-      <p className="rp-kpi-foot">{kpis.gpaChange === null ? "Chưa đủ học kỳ để so sánh" : <><span className={`rp-delta ${kpis.gpaChange >= 0 ? "rp-up" : "rp-down"}`}>{kpis.gpaChange >= 0 ? "▲" : "▼"} {gpaText(Math.abs(kpis.gpaChange))}</span> so với {termLabel(kpis.gpaChangeFrom)}</>}</p></div>
+      <p className="rp-kpi-foot">{kpis.gpaChange === null ? "Chưa đủ học kỳ để so sánh" : <><span className={`rp-delta ${kpis.gpaChange >= 0 ? "rp-up" : "rp-down"}`}>{kpis.gpaChange >= 0 ? "▲" : "▼"} {gpaText(Math.abs(kpis.gpaChange))}</span> so với {termLabel(kpis.gpaChangeFrom)}</>}</p>
+      <p className="rp-kpi-foot">{dataBaseText(kpis.withData, kpis.withTranscript)}</p></div>
     <div className="rp-kpi"><div className="rp-kpi-top"><span className="rp-kpi-icon rp-teal"><Icon name="spark" /></span><span>Độ thành thạo kỹ năng trung bình</span></div>
       <div className="rp-kpi-body"><b className="rp-kpi-value">{scoreOrDash(kpis.competency)}<small>/ 100</small></b><Gauge value={kpis.competency} size="mini" label="Độ thành thạo kỹ năng trung bình" /></div>
       <p className="rp-kpi-foot"><Word word={kpis.competencyLevel} /> Năng lực chung của {countText(kpis.assessed)} sinh viên</p></div>
@@ -256,17 +264,21 @@ function KpiCards({ kpis, sparkline }: { kpis: DashboardKpis; sparkline: number[
   </div>;
 }
 
-/** Từng khóa of the KPI strip: one row per cohort, the whole scope last. */
+/**
+ * Từng khóa of the KPI strip: one row per cohort, the whole scope last. Each base sits just before the figures it
+ * carries: "Bảng điểm có dữ liệu" before the GPA, "Đã đánh giá" before competency and fit.
+ */
 function KpiTable({ kpis }: { kpis: CohortSplit<DashboardKpis> }) {
   const row = (label: string, item: DashboardKpis, footer = false) => <tr key={label} className={footer ? "rp-foot" : undefined}>
     <th scope="row">{label}</th><td className="rp-num">{countText(item.students)}</td>
-    <td className="rp-num">{countText(item.withTranscript)} <small>({percent(item.withTranscript, item.students)}%)</small></td><td className="rp-num">{countText(item.assessed)}</td>
-    <td className="rp-num">{gpaText(item.gpa)}</td><td>{scoreOrDash(item.competency)} <Word word={item.competencyLevel} /></td>
+    <td className="rp-num">{countText(item.withTranscript)} <small>({percent(item.withTranscript, item.students)}%)</small></td>
+    <td className="rp-num">{countText(item.withData)}/{countText(item.withTranscript)}</td><td className="rp-num">{gpaText(item.gpa)}</td>
+    <td className="rp-num">{countText(item.assessed)}</td><td>{scoreOrDash(item.competency)} <Word word={item.competencyLevel} /></td>
     <td>{scoreOrDash(item.fit)} <Word word={item.fitLabel} /></td><td className="rp-num">{countText(item.risk)}</td><td className="rp-num">{countText(item.warn)}</td>
   </tr>;
   return <div className="rp-table-wrap" tabIndex={0} role="region" aria-label="Số liệu chính theo từng khóa"><table className="rp-table">
-    <thead><tr><th scope="col">Khóa</th><th scope="col" className="rp-num">Sinh viên</th><th scope="col" className="rp-num">Đã tải bảng điểm</th><th scope="col" className="rp-num">Đã đánh giá</th>
-      <th scope="col" className="rp-num">GPA TB tích lũy</th><th scope="col">Thành thạo kỹ năng TB</th><th scope="col">Phù hợp vị trí nghề nghiệp TB</th><th scope="col" className="rp-num">Nguy cơ</th><th scope="col" className="rp-num">Cần chú ý</th></tr></thead>
+    <thead><tr><th scope="col">Khóa</th><th scope="col" className="rp-num">Sinh viên</th><th scope="col" className="rp-num">Đã tải bảng điểm</th><th scope="col" className="rp-num">Bảng điểm có dữ liệu</th>
+      <th scope="col" className="rp-num">GPA TB tích lũy</th><th scope="col" className="rp-num">Đã đánh giá</th><th scope="col">Thành thạo kỹ năng TB</th><th scope="col">Phù hợp vị trí nghề nghiệp TB</th><th scope="col" className="rp-num">Nguy cơ</th><th scope="col" className="rp-num">Cần chú ý</th></tr></thead>
     <tbody>{kpis.byCohort.map((item) => row(item.cohort, item))}</tbody>
     <tfoot>{row("Toàn khóa", kpis.all, true)}</tfoot>
   </table></div>;
@@ -286,12 +298,12 @@ export function gpaColumnTip(points: readonly GpaPoint[], index: number): string
   return `${termLabel(point.term)}\nGPA TB học kỳ: ${gpaText(point.termGpa)} (${countText(point.termStudents)} sinh viên có điểm)\nGPA TB tích lũy: ${gpaText(point.cumulativeGpa)}`;
 }
 
-function GpaSection({ split }: { split: CohortSplit<{ points: GpaPoint[] }> }) {
+function GpaSection({ split, scope }: { split: CohortSplit<{ points: GpaPoint[] }>; scope: ReportHead["scope"] }) {
   const [mode, setMode] = useState<CohortMode>("all");
   const points = split.all.points;
   const byCohort = cohortGpaLines(split);
   return <Card id="rp-gpa" title="Điểm trung bình theo học kỳ" className="rp-span-2"
-    sub="Trung bình các dòng tổng kết in trên bảng điểm (hệ 4). Điểm học kỳ tính cả môn chưa đạt, điểm tích lũy chỉ tính môn đã đạt."
+    sub={`Trung bình các dòng tổng kết in trên bảng điểm (hệ 4). Điểm học kỳ tính cả môn chưa đạt, điểm tích lũy chỉ tính môn đã đạt. ${dataBaseText(scope.withData, scope.withTranscript)}.`}
     actions={<ModeSwitch value={mode} onChange={setMode} label="điểm trung bình theo học kỳ" />}>
     {mode === "all" ? <>
       <Legend items={[["GPA TB tích lũy", SERIES_COLORS.cumulative], ["GPA TB học kỳ", SERIES_COLORS.term]]} />
@@ -310,9 +322,10 @@ function GpaSection({ split }: { split: CohortSplit<{ points: GpaPoint[] }> }) {
 function BandSection({ split }: { split: CohortSplit<GpaBands> }) {
   const [mode, setMode] = useState<CohortMode>("all");
   const parts = bandParts(split.all);
+  // The bands add up to the transcripts with data, the same base as every GPA figure of the page.
   const total = parts.reduce((sum, part) => sum + part.value, 0);
   const max = Math.max(1, ...parts.map((part) => part.value));
-  return <Card id="rp-bands" title="Xếp loại học lực" sub={`Theo GPA tích lũy hệ 4 của ${countText(total)} sinh viên.`} actions={<ModeSwitch value={mode} onChange={setMode} label="xếp loại học lực" />}>
+  return <Card id="rp-bands" title="Xếp loại học lực" sub={`Theo GPA tích lũy hệ 4. ${dataBaseText(total, split.all.withTranscript)}.`} actions={<ModeSwitch value={mode} onChange={setMode} label="xếp loại học lực" />}>
     {total === 0 ? <p className="rp-empty">{EMPTY_SCOPE}</p> : mode === "all" ? <>
       <ul className="rp-bandlist">{parts.map((part) => <li key={part.label} data-tip={`${part.label} (GPA ${part.range}): ${countText(part.value)} sinh viên · ${percent(part.value, total)}%`} tabIndex={0}>
         <span className="rp-band-label">{part.label}<small>{part.range}</small></span><span className="rp-band-track"><i style={{ width: `${(part.value / max) * 100}%`, background: part.color }} /></span>
@@ -320,35 +333,42 @@ function BandSection({ split }: { split: CohortSplit<GpaBands> }) {
       <div className="rp-facts"><div><b>{percent(parts.slice(0, 3).reduce((sum, part) => sum + part.value, 0), total)}%</b><span>từ Khá trở lên</span></div><div><b>{percent(parts[4]!.value, total)}%</b><span>GPA dưới 2,00</span></div></div>
     </> : <>
       <Legend items={parts.map((part) => [part.label, part.color] as const)} label="Xếp loại" />
-      <ShareBars label="Xếp loại học lực theo từng khóa" rows={split.byCohort.map((cohort) => ({ key: cohort.cohort, label: cohort.cohort, parts: bandParts(cohort) }))} />
+      <ShareBars label="Xếp loại học lực theo từng khóa" rows={split.byCohort.map((cohort) => ({
+        key: cohort.cohort, label: cohort.cohort, parts: bandParts(cohort),
+        sub: `${countText(cohort.bands.reduce((sum, band) => sum + band.students, 0))}/${countText(cohort.withTranscript)} có dữ liệu`,
+      }))} />
     </>}
   </Card>;
 }
 
 function sortAverages(rows: readonly AverageRow[], sort: TableSort) {
   const rules: Record<string, SortRule<AverageRow>> = {
-    label: { value: (row) => row.label }, students: { value: (row) => row.students, by: "number" }, gpa: { value: (row) => row.gpa, by: "number" },
+    label: { value: (row) => row.label }, withData: { value: (row) => row.withData, by: "number" }, gpa: { value: (row) => row.gpa, by: "number" },
     lastTermGpa: { value: (row) => row.lastTermGpa, by: "number" }, credits: { value: (row) => row.credits, by: "number" }, below2: { value: (row) => row.below2, by: "number" },
-    competency: { value: (row) => row.competency, by: "number" }, fit: { value: (row) => row.fit, by: "number" },
+    assessed: { value: (row) => row.assessed, by: "number" }, competency: { value: (row) => row.competency, by: "number" }, fit: { value: (row) => row.fit, by: "number" },
   };
   return sortRows(rows, rules, sort).map((item) => item.row);
 }
 
-/** Bảng điểm trung bình: rows by cohort, major or specialty, and "Toàn khóa" (the whole scope) as the last row. */
+/**
+ * Bảng điểm trung bình: rows by cohort, major or specialty, and "Toàn khóa" (the whole scope) as the last row. One base per
+ * kind of figure in a row (QA 2026-11-04): GPA, credits and "GPA dưới 2,00" over "Bảng điểm có dữ liệu" (13/14), competency
+ * and fit over "Đã đánh giá"; each base is the column just before its figures.
+ */
 export function AveragesTable({ table }: { table: AverageTable }) {
   const { sort, sortHeader } = useTableSort();
   const head = table.by === "cohort" ? "Khóa" : table.by === "major" ? "Ngành" : "Chuyên ngành";
   const row = (item: AverageRow, footer = false) => <tr key={`${footer ? "all" : item.key}`} className={footer ? "rp-foot" : undefined}>
-    <th scope="row">{footer ? "Toàn khóa" : item.label}</th><td className="rp-num">{countText(item.students)}</td>
+    <th scope="row">{footer ? "Toàn khóa" : item.label}</th><td className="rp-num">{countText(item.withData)}/{countText(item.withTranscript)}</td>
     <td><span className="rp-cell-bar"><span className="rp-meter"><i style={{ width: `${((item.gpa ?? 0) / 4) * 100}%` }} /></span>{gpaText(item.gpa)}</span></td>
     <td className="rp-num">{gpaText(item.lastTermGpa)}</td><td className="rp-num">{item.credits === null ? "—" : countText(Math.round(item.credits))}</td>
-    <td className="rp-num">{countText(item.below2)} <small>({percent(item.below2, item.students)}%)</small></td>
-    <td>{scoreOrDash(item.competency)} <Word word={item.competencyLevel} /></td><td>{scoreOrDash(item.fit)} <Word word={item.fitLabel} /></td>
+    <td className="rp-num">{countText(item.below2)} <small>({percent(item.below2, item.withData)}%)</small></td>
+    <td className="rp-num">{countText(item.assessed)}</td><td>{scoreOrDash(item.competency)} <Word word={item.competencyLevel} /></td><td>{scoreOrDash(item.fit)} <Word word={item.fitLabel} /></td>
   </tr>;
   return <div className="rp-table-wrap" tabIndex={0} role="region" aria-label={`Bảng điểm trung bình theo ${head.toLowerCase()}`}><table className="rp-table">
-    <thead><tr>{sortHeader(head, "label")}{sortHeader("Sinh viên", "students", "rp-num")}{sortHeader("GPA TB tích lũy", "gpa")}{sortHeader("GPA TB học kỳ gần nhất", "lastTermGpa", "rp-num")}
-      {sortHeader("Tín chỉ TB đã đạt", "credits", "rp-num")}{sortHeader("GPA dưới 2,00", "below2", "rp-num")}{sortHeader("Thành thạo kỹ năng TB", "competency")}{sortHeader("Phù hợp vị trí nghề nghiệp TB", "fit")}</tr></thead>
-    <tbody>{table.rows.length ? sortAverages(table.rows, sort).map((item) => row(item)) : <tr><td colSpan={8} className="rp-empty">{EMPTY_SCOPE}</td></tr>}</tbody>
+    <thead><tr>{sortHeader(head, "label")}{sortHeader("Bảng điểm có dữ liệu", "withData", "rp-num")}{sortHeader("GPA TB tích lũy", "gpa")}{sortHeader("GPA TB học kỳ gần nhất", "lastTermGpa", "rp-num")}
+      {sortHeader("Tín chỉ TB đã đạt", "credits", "rp-num")}{sortHeader("GPA dưới 2,00", "below2", "rp-num")}{sortHeader("Đã đánh giá", "assessed", "rp-num")}{sortHeader("Thành thạo kỹ năng TB", "competency")}{sortHeader("Phù hợp vị trí nghề nghiệp TB", "fit")}</tr></thead>
+    <tbody>{table.rows.length ? sortAverages(table.rows, sort).map((item) => row(item)) : <tr><td colSpan={9} className="rp-empty">{EMPTY_SCOPE}</td></tr>}</tbody>
     {table.rows.length > 0 && <tfoot>{row(table.all, true)}</tfoot>}
   </table></div>;
 }
@@ -356,7 +376,8 @@ export function AveragesTable({ table }: { table: AverageTable }) {
 function AveragesSection({ tables }: { tables: AverageTable[] }) {
   const [by, setBy] = useState<AverageTable["by"]>("cohort");
   const table = tables.find((item) => item.by === by) ?? tables[0];
-  return <Card id="rp-averages" title="Bảng điểm trung bình" className="rp-span-3" sub="Mỗi dòng là trung bình của sinh viên đã tải bảng điểm trong nhóm; dòng cuối là Toàn khóa."
+  return <Card id="rp-averages" title="Bảng điểm trung bình" className="rp-span-3"
+    sub="GPA, tín chỉ và GPA dưới 2,00 tính trên các bảng điểm có dữ liệu của nhóm (đọc được GPA tích lũy); thành thạo kỹ năng và độ phù hợp tính trên sinh viên đã đánh giá năng lực. Dòng cuối là Toàn khóa."
     actions={<Segmented label="Nhóm theo" value={by} onChange={setBy} options={[{ value: "cohort", label: "Từng khóa" }, { value: "major", label: "Theo ngành" }, { value: "specialty", label: "Theo chuyên ngành" }]} />}>
     {table ? <AveragesTable key={table.by} table={table} /> : <p className="rp-empty">{EMPTY_SCOPE}</p>}
   </Card>;
@@ -370,7 +391,8 @@ function CompetencySection({ split, kpis }: { split: CohortSplit<CompetencyGroup
   const [mode, setMode] = useState<CohortMode>("all");
   const groups = split.all.groups;
   const assessed = groups.reduce((max, group) => Math.max(max, group.students), 0);
-  return <Card id="rp-competency" title="Độ thành thạo kỹ năng trung bình" sub="Theo nhóm năng lực, từ lần Đánh giá năng lực mới nhất. Vạch: ngưỡng Khá (62,5) và Giỏi (80)."
+  return <Card id="rp-competency" title="Độ thành thạo kỹ năng trung bình"
+    sub={`Theo nhóm năng lực, từ lần Đánh giá năng lực mới nhất của ${countText(kpis.all.assessed)} sinh viên đã đánh giá. Vạch: ngưỡng Khá (62,5) và Giỏi (80).`}
     actions={<ModeSwitch value={mode} onChange={setMode} label="độ thành thạo kỹ năng" />}>
     {assessed === 0 && !split.all.lowest.length ? <p className="rp-empty">{EMPTY_ASSESSED}</p> : <>
       {mode === "all" ? <div className="rp-gauges">{groups.map((group) => <div key={group.name} className="rp-gauge-box" data-tip={`${group.name}: ${scoreOrDash(group.score)} / 100 · ${countText(group.students)} sinh viên`} tabIndex={0}>
@@ -408,12 +430,21 @@ function FitSection({ split, navigate }: { split: CohortSplit<FitSummary>; navig
   </Card>;
 }
 
+/** What "Chưa đủ dữ liệu" means, said wherever the progress statuses are counted. */
+const UNKNOWN_NOTE = "Chưa đủ dữ liệu: chưa so được với kế hoạch đào tạo (thiếu kế hoạch hoặc chuyên ngành, hoặc bảng điểm chưa đọc được GPA tích lũy).";
+
+/**
+ * The legend of a progress bar: with each status's count in Toàn khóa (one bar), so a part too narrow for its count
+ * (QA 2026-11-04: a missing "2") still reads without a hover; Từng khóa keeps the names, its numbers in the table view.
+ */
+export const progressLegend = (counts: ProgressCounts, withCounts: boolean) =>
+  progressParts(counts).map((part) => (withCounts ? [part.label, part.color, part.value] as const : [part.label, part.color] as const));
+
 function ProgressSection({ split, navigate }: { split: CohortSplit<ProgressCounts>; navigate: (path: string) => void }) {
   const [mode, setMode] = useState<CohortMode>("all");
-  const legend = progressParts(split.all).map((part) => [part.label, part.color] as const);
-  return <Card id="rp-progress" title="Tiến độ học tập" className="rp-span-3" sub="Mỗi sinh viên một trạng thái, tính giống trang Tổng quan của sinh viên."
+  return <Card id="rp-progress" title="Tiến độ học tập" className="rp-span-3" sub={`Mỗi sinh viên một trạng thái, tính giống trang Tổng quan của sinh viên. ${UNKNOWN_NOTE}`}
     actions={<><ModeSwitch value={mode} onChange={setMode} label="tiến độ học tập" /><button type="button" className="rp-link" onClick={() => navigate(REPORT_PATHS.progress)}>Xem báo cáo tiến độ</button></>}>
-    <Legend items={legend} label="Tình trạng" />
+    <Legend items={progressLegend(split.all, mode === "all")} label="Tình trạng" />
     <ShareBars label={mode === "all" ? "Tiến độ học tập toàn khóa" : "Tiến độ học tập theo từng khóa"}
       rows={mode === "all" ? [{ key: "all", label: "Toàn khóa", parts: progressParts(split.all) }] : split.byCohort.map((cohort) => ({ key: cohort.cohort, label: cohort.cohort, parts: progressParts(cohort) }))} />
   </Card>;
@@ -424,7 +455,7 @@ export function DashboardView({ data, navigate }: { data: DashboardReport; navig
     <Coverage head={data} />
     <KpiSection data={data} />
     <div className="rp-grid">
-      <GpaSection split={data.gpaByTerm} />
+      <GpaSection split={data.gpaByTerm} scope={data.scope} />
       <BandSection split={data.gpaBands} />
       <AveragesSection tables={data.averages} />
     </div>
@@ -436,7 +467,20 @@ export function DashboardView({ data, navigate }: { data: DashboardReport; navig
   </div>;
 }
 
-/** "Thao tác gần đây": the latest 20 log entries in a side panel, with the way to the whole log. */
+/** How many entries "Thao tác gần đây" asks for. */
+const RECENT_LOG = 20;
+/**
+ * The line under "Thao tác gần đây", with the real counts (QA 2026-11-04: it said "20 thao tác" whatever was shown): the
+ * entries shown out of the whole log, or every entry when the log is shorter.
+ */
+export function recentLogText(page: Pick<AuditPage, "items" | "total"> | null): string {
+  if (!page || !page.items.length) return "Các thao tác mới nhất trong Nhật ký thao tác.";
+  return page.total > page.items.length
+    ? `${countText(page.items.length)} thao tác mới nhất trong ${countText(page.total)} thao tác của Nhật ký thao tác.`
+    : `Cả ${countText(page.items.length)} thao tác trong Nhật ký thao tác.`;
+}
+
+/** "Thao tác gần đây": the latest log entries (up to RECENT_LOG) in a side panel, with the way to the whole log. */
 function AuditDrawer({ onClose, navigate }: { onClose: () => void; navigate: (path: string) => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   useLayoutEffect(() => {
@@ -444,9 +488,9 @@ function AuditDrawer({ onClose, navigate }: { onClose: () => void; navigate: (pa
     if (element && !element.open && typeof element.showModal === "function") element.showModal();
     return () => { if (element?.open) element.close(); };
   }, []);
-  const state = useReport<AuditPage>(`${AUDIT_API}?page=1&pageSize=20`);
+  const state = useReport<AuditPage>(`${AUDIT_API}?page=1&pageSize=${RECENT_LOG}`);
   return <dialog ref={dialog} className="rp-drawer" aria-labelledby="rp-drawer-title" onCancel={(event) => { event.preventDefault(); onClose(); }} onClick={(event) => { if (event.target === dialog.current) onClose(); }}>
-    <header><div><h2 id="rp-drawer-title">Thao tác gần đây</h2><p>20 thao tác mới nhất trong Nhật ký thao tác.</p></div><button type="button" className="rp-icon-btn" aria-label="Đóng" onClick={onClose}><Icon name="close" /></button></header>
+    <header><div><h2 id="rp-drawer-title">Thao tác gần đây</h2><p>{recentLogText(state.data)}</p></div><button type="button" className="rp-icon-btn" aria-label="Đóng" onClick={onClose}><Icon name="close" /></button></header>
     <div className="rp-drawer-body">{state.data ? (state.data.items.length ? <ol className="rp-log">{state.data.items.map((entry) => <li key={entry.id}>
       <span className="rp-log-head"><b>{entry.action}</b><Chip tone={entry.kind === "access" ? meaningClass("warn") : entry.kind === "report" ? "rp-chip-blue" : meaningClass("none")}>{AUDIT_TEXT[entry.kind] ?? entry.kind}</Chip></span>
       <span>{entry.summary}</span><small>{entry.actorName}{entry.actorRole ? ` · ${entry.actorRole}` : ""} · {updatedText(entry.at)}</small></li>)}</ol>
@@ -486,8 +530,8 @@ export function ProgressView({ data, status, setStatus, page, setPage, sortHeade
   const counts = data.counts.all;
   return <div className="rp-stack">
     <Coverage head={data} />
-    <Card id="rp-progress-summary" title="Tình trạng tiến độ" sub="Đúng tiến độ hay trễ so với kế hoạch đào tạo của khóa, như trang Tổng quan của sinh viên." actions={<ModeSwitch value={mode} onChange={setMode} label="tình trạng tiến độ" />}>
-      <Legend items={progressParts(counts).map((part) => [part.label, part.color] as const)} label="Tình trạng" />
+    <Card id="rp-progress-summary" title="Tình trạng tiến độ" sub={`Đúng tiến độ hay trễ so với kế hoạch đào tạo của khóa, như trang Tổng quan của sinh viên. ${UNKNOWN_NOTE}`} actions={<ModeSwitch value={mode} onChange={setMode} label="tình trạng tiến độ" />}>
+      <Legend items={progressLegend(counts, mode === "all")} label="Tình trạng" />
       <ShareBars label={mode === "all" ? "Tình trạng tiến độ toàn khóa" : "Tình trạng tiến độ theo từng khóa"}
         rows={mode === "all" ? [{ key: "all", label: "Toàn khóa", parts: progressParts(counts) }] : data.counts.byCohort.map((cohort) => ({ key: cohort.cohort, label: cohort.cohort, parts: progressParts(cohort) }))} />
     </Card>
@@ -497,12 +541,12 @@ export function ProgressView({ data, status, setStatus, page, setPage, sortHeade
       <Segmented label="Tình trạng" value={status} onChange={setStatus} options={[{ value: "all", label: "Tất cả", count: counts.total }, { value: "on_track", label: "Đúng tiến độ", count: counts.onTrack },
         { value: "late", label: "Trễ kế hoạch", count: counts.late }, { value: "unknown", label: "Chưa đủ dữ liệu", count: counts.unknown }, { value: "no_transcript", label: "Chưa có bảng điểm", count: counts.noTranscript }]} />
       <div className="rp-table-wrap" tabIndex={0} role="region" aria-label="Danh sách sinh viên theo tiến độ"><table className="rp-table">
-        <thead><tr><th scope="col" className="rp-num">STT</th>{sortHeader("Sinh viên", "name")}{sortHeader("Khóa", "cohort")}{sortHeader("Chuyên ngành", "specialty")}{sortHeader("Tín chỉ đã đạt", "credits")}{sortHeader("GPA tích lũy", "gpa", "rp-num")}{sortHeader("Tình trạng", "status")}<th scope="col">Thao tác</th></tr></thead>
+        <thead><tr><th scope="col" className="rp-num">STT</th>{sortHeader("Sinh viên", "name")}{sortHeader("Khóa", "cohort")}{sortHeader("Chuyên ngành", "specialty")}{sortHeader("Tín chỉ đã đạt", "credits")}{sortHeader("GPA tích lũy", "gpa", "rp-num")}{sortHeader("Tình trạng", "status")}<th scope="col" className="rp-action">Thao tác</th></tr></thead>
         <tbody>{data.page.items.length ? data.page.items.map((student, index) => <tr key={student.userId}>
           <td className="rp-num">{countText((data.page.page - 1) * data.page.pageSize + index + 1)}</td><td><Student name={student.name} code={student.studentCode} /></td>
           <td>{student.cohort ?? "—"}</td><td>{student.specialtyName ?? "Chưa xác định"}</td><td><CreditsCell student={student} /></td><td className="rp-num">{gpaText(student.gpa)}</td>
           <td><span className="rp-chips"><Chip tone={STATUS_TEXT[student.status].tone}>{STATUS_TEXT[student.status].label}</Chip>{student.risk && <Chip tone={LEVEL_TEXT[student.risk].tone}>{LEVEL_TEXT[student.risk].label}</Chip>}</span></td>
-          <td><ProfileLink userId={student.userId} name={student.name} navigate={navigate} /></td>
+          <td className="rp-action"><ProfileLink userId={student.userId} name={student.name} navigate={navigate} /></td>
         </tr>) : <tr><td colSpan={8} className="rp-empty">Không có sinh viên phù hợp với bộ lọc.</td></tr>}</tbody>
       </table></div>
       <Pagination total={data.page.total} page={page} setPage={setPage} />
@@ -547,16 +591,18 @@ export function RiskView({ data, level, setLevel, page, setPage, sortHeader, exp
         : <CohortMatrix rows={matrix} cohorts={cohortsOf(data.reasons)} label="Số sinh viên theo lý do và từng khóa" rowHeader="Lý do" />}
     </Card>
     <section className="rp-card" aria-labelledby="rp-risk-list">
-      <div className="rp-card-head"><div><h2 id="rp-risk-list">Danh sách sinh viên cần chú ý</h2><p>Sinh viên chưa tải bảng điểm không có trong danh sách này; xem ở báo cáo Tiến độ.</p></div>
+      <div className="rp-card-head"><div><h2 id="rp-risk-list">Danh sách sinh viên cần chú ý</h2><p>Sinh viên chưa tải bảng điểm, hoặc có bảng điểm chưa đọc được GPA tích lũy, không có trong danh sách này; xem ở báo cáo Tiến độ.</p></div>
         <div className="rp-card-actions"><ExportButton url={exportUrl} fallbackName="sinh-vien-co-nguy-co.xlsx" /></div></div>
       <Segmented label="Mức" value={level} onChange={setLevel} options={[{ value: "all", label: "Tất cả", count: counts.total }, { value: "risk", label: "Nguy cơ", count: counts.risk }, { value: "warn", label: "Cần chú ý", count: counts.warn }]} />
-      <div className="rp-table-wrap" tabIndex={0} role="region" aria-label="Danh sách sinh viên cần chú ý"><table className="rp-table">
-        <thead><tr><th scope="col" className="rp-num">STT</th>{sortHeader("Sinh viên", "name")}{sortHeader("Khóa", "cohort")}{sortHeader("Mức", "level")}<th scope="col">Lý do</th>{sortHeader("GPA", "gpa", "rp-num")}<th scope="col">Thao tác</th></tr></thead>
+      {/* The reasons are whole sentences: they wrap in their column (QA 2026-11-04: one-line chips made the table 1 512 px
+          wide and hid GPA and "Xem hồ sơ" at 1280–1440 px); "Thao tác" stays in view when a phone scrolls the table. */}
+      <div className="rp-table-wrap" tabIndex={0} role="region" aria-label="Danh sách sinh viên cần chú ý"><table className="rp-table rp-risk-table">
+        <thead><tr><th scope="col" className="rp-num">STT</th>{sortHeader("Sinh viên", "name")}{sortHeader("Khóa", "cohort")}{sortHeader("Mức", "level")}<th scope="col">Lý do</th>{sortHeader("GPA", "gpa", "rp-num")}<th scope="col" className="rp-action">Thao tác</th></tr></thead>
         <tbody>{data.page.items.length ? data.page.items.map((student: RiskStudent, index) => <tr key={student.userId}>
           <td className="rp-num">{countText((data.page.page - 1) * data.page.pageSize + index + 1)}</td><td><Student name={student.name} code={student.studentCode} /></td>
           <td>{student.cohort ?? "—"}<small className="rp-sub">{student.specialtyName ?? ""}</small></td><td><Chip tone={LEVEL_TEXT[student.level].tone}>{LEVEL_TEXT[student.level].label}</Chip></td>
-          <td><span className="rp-chips">{student.reasons.map((reason, reasonIndex) => <Chip key={reasonIndex} tone={LEVEL_TEXT[reason.level].tone}>{reason.text}</Chip>)}</span></td><td className="rp-num">{gpaText(student.gpa)}</td>
-          <td><ProfileLink userId={student.userId} name={student.name} navigate={navigate} /></td>
+          <td><ul className="rp-reasons">{student.reasons.map((reason, reasonIndex) => <li key={reasonIndex} className={`rp-chip ${LEVEL_TEXT[reason.level].tone}`}>{reason.text}</li>)}</ul></td><td className="rp-num">{gpaText(student.gpa)}</td>
+          <td className="rp-action"><ProfileLink userId={student.userId} name={student.name} navigate={navigate} /></td>
         </tr>) : <tr><td colSpan={7} className="rp-empty">Không có sinh viên cần chú ý trong phạm vi lọc.</td></tr>}</tbody>
       </table></div>
       <Pagination total={data.page.total} page={page} setPage={setPage} />
@@ -579,6 +625,15 @@ function RiskPage({ filters, studyTerm, bar, navigate }: { filters: ReportFilter
 
 /* ------------------------------------------------------------------ AD-REPORT-06/07 Kỹ năng còn thiếu */
 
+/**
+ * The line under "Kỹ năng thiếu nhiều nhất" with the real count (QA 2026-11-04: the title said "12 kỹ năng" whatever it
+ * showed): how many skills the chart shows (at most 12, server TOP_SKILLS) and how many students were assessed.
+ */
+export function skillsLeadText(shown: number, assessed: number): string {
+  const base = `${countText(assessed)} sinh viên đã đánh giá năng lực trong phạm vi lọc.`;
+  return shown ? `${countText(shown)} kỹ năng, xếp theo số sinh viên còn thiếu (nhiều nhất trước). ${base}` : base;
+}
+
 const gapParts = (row: SkillGapRow): BarPart[] => [
   { label: GAP_TEXT.below.label, value: row.below, color: GAP_TEXT.below.color },
   { label: GAP_TEXT.not_studied.label, value: row.notStudied, color: GAP_TEXT.not_studied.color },
@@ -593,10 +648,10 @@ function SkillStudentsTable({ data, navigate }: { data: SkillStudents; navigate:
     status: { value: (row) => row.status, order: ["below", "not_studied", "self_study", "no_data"] }, fit: { value: (row) => row.fitScore, by: "number" },
   };
   return <div className="rp-table-wrap" tabIndex={0} role="region" aria-label={`Sinh viên còn thiếu ${data.skill}`}><table className="rp-table">
-    <thead><tr>{sortHeader("Sinh viên", "name")}{sortHeader("Khóa", "cohort")}{sortHeader("Vị trí nghề nghiệp mục tiêu", "career")}{sortHeader("Tình trạng kỹ năng", "status")}{sortHeader("Điểm phù hợp", "fit")}<th scope="col">Thao tác</th></tr></thead>
+    <thead><tr>{sortHeader("Sinh viên", "name")}{sortHeader("Khóa", "cohort")}{sortHeader("Vị trí nghề nghiệp mục tiêu", "career")}{sortHeader("Tình trạng kỹ năng", "status")}{sortHeader("Điểm phù hợp", "fit")}<th scope="col" className="rp-action">Thao tác</th></tr></thead>
     <tbody>{data.items.length ? sortRows(data.items, rules, sort).map(({ row }) => <tr key={row.userId}>
       <td><Student name={row.name} code={row.studentCode} /></td><td>{row.cohort ?? "—"}</td><td>{row.careerName ?? "—"}</td>
-      <td><Chip tone={GAP_TEXT[row.status].tone}>{GAP_TEXT[row.status].label}</Chip></td><td>{scoreOrDash(row.fitScore)} <Word word={row.fitLabel} /></td><td><ProfileLink userId={row.userId} name={row.name} navigate={navigate} /></td>
+      <td><Chip tone={GAP_TEXT[row.status].tone}>{GAP_TEXT[row.status].label}</Chip></td><td>{scoreOrDash(row.fitScore)} <Word word={row.fitLabel} /></td><td className="rp-action"><ProfileLink userId={row.userId} name={row.name} navigate={navigate} /></td>
     </tr>) : <tr><td colSpan={6} className="rp-empty">Không có sinh viên nào còn thiếu kỹ năng này trong phạm vi lọc.</td></tr>}</tbody>
   </table></div>;
 }
@@ -612,12 +667,12 @@ export function SkillsView({ data, career, setCareer, selected, setSelected, stu
   return <div className="rp-stack">
     <Coverage head={data} />
     <section className="rp-card" aria-labelledby="rp-skills-title">
-      <div className="rp-card-head"><div><h2 id="rp-skills-title">12 kỹ năng thiếu nhiều nhất</h2><p>{countText(data.scope.assessed)} sinh viên đã đánh giá năng lực trong phạm vi lọc.</p></div>
+      <div className="rp-card-head"><div><h2 id="rp-skills-title">Kỹ năng thiếu nhiều nhất</h2><p>{skillsLeadText(rows.length, data.scope.assessed)}</p></div>
         <div className="rp-card-actions"><label className="rp-field rp-field-inline">Vị trí nghề nghiệp mục tiêu<select id="rp-career" value={career} onChange={(event) => setCareer(event.target.value)}><option value="">Mọi vị trí nghề nghiệp</option>{data.careers.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
           <ModeSwitch value={mode} onChange={setMode} label="kỹ năng còn thiếu" /><ExportButton url={exportUrl} fallbackName="ky-nang-con-thieu.xlsx" /></div></div>
       {!rows.length ? <p className="rp-empty">{data.scope.assessed ? "Không có kỹ năng nào còn thiếu trong phạm vi lọc." : EMPTY_ASSESSED}</p> : mode === "all" ? <>
         <Legend items={(["below", "not_studied", "self_study", "no_data"] as const).map((status) => [GAP_TEXT[status].label, GAP_TEXT[status].color] as const)} label="Tình trạng kỹ năng" />
-        <HBarList rows={rows} label="Số sinh viên còn thiếu mỗi kỹ năng, toàn khóa" onSelect={toggle} selected={selected} />
+        <HBarList rows={rows} label="Số sinh viên còn thiếu mỗi kỹ năng, toàn khóa" onSelect={toggle} selected={selected} rowHeader="Kỹ năng" />
       </> : <CohortMatrix rows={matrix} cohorts={cohortsOf(data.skills)} label="Số sinh viên còn thiếu mỗi kỹ năng theo từng khóa" rowHeader="Kỹ năng" onSelect={toggle} selected={selected} />}
       {selected && <div className="rp-panel">
         <div className="rp-card-head"><div><h3>{selected}: sinh viên còn thiếu</h3></div><button type="button" className="rp-link" onClick={() => setSelected(null)}>Đóng</button></div>
@@ -694,10 +749,10 @@ function CourseStudentsTable({ data, navigate }: { data: CourseStudents; navigat
     how: { value: (row) => row.how, order: ["new", "retake", "improve"] }, gpa: { value: (row) => row.gpa, by: "number" },
   };
   return <div className="rp-table-wrap" tabIndex={0} role="region" aria-label={`Sinh viên được đề xuất ${data.name}`}><table className="rp-table">
-    <thead><tr>{sortHeader("Sinh viên", "name")}{sortHeader("Khóa", "cohort")}{sortHeader("Chuyên ngành", "specialty")}{sortHeader("Cách học", "how")}{sortHeader("GPA tích lũy", "gpa", "rp-num")}<th scope="col">Thao tác</th></tr></thead>
+    <thead><tr>{sortHeader("Sinh viên", "name")}{sortHeader("Khóa", "cohort")}{sortHeader("Chuyên ngành", "specialty")}{sortHeader("Cách học", "how")}{sortHeader("GPA tích lũy", "gpa", "rp-num")}<th scope="col" className="rp-action">Thao tác</th></tr></thead>
     <tbody>{data.items.length ? sortRows(data.items, rules, sort).map(({ row }) => <tr key={`${row.userId}-${row.how}`}>
       <td><Student name={row.name} code={row.studentCode} /></td><td>{row.cohort ?? "—"}</td><td>{row.specialtyName ?? "Chưa xác định"}</td>
-      <td><Chip tone={HOW_TEXT[row.how].tone}>{HOW_TEXT[row.how].label}</Chip></td><td className="rp-num">{gpaText(row.gpa)}</td><td><ProfileLink userId={row.userId} name={row.name} navigate={navigate} /></td>
+      <td><Chip tone={HOW_TEXT[row.how].tone}>{HOW_TEXT[row.how].label}</Chip></td><td className="rp-num">{gpaText(row.gpa)}</td><td className="rp-action"><ProfileLink userId={row.userId} name={row.name} navigate={navigate} /></td>
     </tr>) : <tr><td colSpan={6} className="rp-empty">Không có sinh viên nào được đề xuất môn này trong phạm vi lọc.</td></tr>}</tbody>
   </table></div>;
 }
@@ -718,7 +773,7 @@ export function CoursesView({ data, selected, setSelected, students, navigate }:
         <div className="rp-card-actions"><ModeSwitch value={mode} onChange={setMode} label="môn được đề xuất" /></div></div>
       {!items.length ? <p className="rp-empty">Chưa có môn nào được AI đề xuất trong phạm vi lọc.</p> : mode === "all" ? <>
         <Legend items={(["new", "retake", "improve"] as const).map((how) => [HOW_TEXT[how].label, HOW_TEXT[how].color] as const)} label="Cách học" />
-        <HBarList rows={items.map((row) => ({ key: row.code, label: row.name, sub: row.code, parts: howParts(row) }))} label="Số sinh viên được đề xuất mỗi môn, toàn khóa" onSelect={toggle} selected={selected} labelWidth={240} />
+        <HBarList rows={items.map((row) => ({ key: row.code, label: row.name, sub: row.code, parts: howParts(row) }))} label="Số sinh viên được đề xuất mỗi môn, toàn khóa" onSelect={toggle} selected={selected} labelWidth={240} rowHeader="Môn học" />
       </> : <CohortMatrix rows={matrixRows(data.courses, (row) => row.code, label, (row) => row.total)} cohorts={cohortsOf(data.courses)} label="Số sinh viên được đề xuất mỗi môn theo từng khóa" rowHeader="Môn học" onSelect={toggle} selected={selected} />}
       {selected && <div className="rp-panel">
         <div className="rp-card-head"><div><h3>{chosen ? label(chosen) : selected}: sinh viên được đề xuất</h3></div><button type="button" className="rp-link" onClick={() => setSelected(null)}>Đóng</button></div>

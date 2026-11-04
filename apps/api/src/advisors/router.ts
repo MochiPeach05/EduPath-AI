@@ -8,7 +8,7 @@ import { z } from "zod";
 import type { DatabasePool } from "../db/pool.js";
 import { canManageAdvisors } from "../auth/types.js";
 import { requireAdminAccess } from "../middleware/authorization.js";
-import { normalizeClassName } from "./access.js";
+import { classCode, needsCohort } from "./class-code.js";
 import { advisorTemplate, readAdvisorWorkbook } from "./import.js";
 import { AdvisorError, CLASS_PATTERN } from "./model.js";
 import { PostgresAdvisorRepository, type AdvisorRepository } from "./repository.js";
@@ -16,13 +16,16 @@ import { PostgresAdvisorRepository, type AdvisorRepository } from "./repository.
 const XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 const text = (max: number) => z.string().transform((value) => value.replace(/\s+/g, " ").trim()).pipe(z.string().max(max));
 const optionalText = (max: number) => z.union([text(max), z.null()]).optional().transform((value) => value || null);
-/** Classes typed by hand: normalized like the import ("71k29cntt01" → "71K29CNTT01"), each once. */
+/**
+ * Classes typed by hand: canonical codes like the import ("71k29cntt01" → "71K29CNTT01", class-code.ts), each once. A
+ * class without its cohort (CNTT01) would match no student: refused as invalid_class, whose message shows 71K29CNTT01.
+ */
 const classList = z.array(z.string().max(60)).max(60).transform((values, context) => {
   const classes: string[] = [];
   for (const value of values) {
-    const name = normalizeClassName(value);
+    const name = classCode(value);
     if (!name) continue;
-    if (!CLASS_PATTERN.test(name)) { context.addIssue({ code: "custom", message: "invalid_class" }); return z.NEVER; }
+    if (!CLASS_PATTERN.test(name) || needsCohort(name)) { context.addIssue({ code: "custom", message: "invalid_class" }); return z.NEVER; }
     if (!classes.includes(name)) classes.push(name);
   }
   return classes;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  averageTables, calendarTerm, careersReport, cohortSplit, compareCohorts, competencyGroupsOf, courseStudents, coursesReport, dashboardReport,
-  filterRows, fitSummaryOf, fitWord, gpaBandOf, gpaPoints, kpisOf, levelWord, progressReport, reportOptions, riskReport, skillsReport, skillStudents,
+  averageTables, calendarTerm, careersReport, cohortSplit, compareCohorts, compareNames, competencyGroupsOf, courseStudents, coursesReport, dashboardReport,
+  filterRows, fitSummaryOf, fitWord, gpaBandOf, gpaBandsOf, gpaPoints, kpisOf, levelWord, progressReport, reportOptions, riskReport, skillsReport, skillStudents,
 } from "./aggregate.js";
 import { competency, reportRow } from "./test-rows.js";
 
@@ -79,8 +79,10 @@ describe("Tổng quan (AD-REPORT-01)", () => {
 
   it("averages per cohort, major and specialty with a total row", () => {
     const [byCohort, byMajor, bySpecialty] = averageTables([a, b, none]);
-    expect(byCohort!.rows.map((row) => [row.key, row.students, row.gpa, row.below2])).toEqual([["K29", 1, 3, 0], ["K30", 1, 2, 0]]);
-    expect(byCohort!.all).toMatchObject({ key: "all", label: "Tất cả", students: 2, gpa: 2.5, lastTermGpa: 2.75, credits: 100, competency: 70, competencyLevel: "Khá" });
+    expect(byCohort!.rows.map((row) => [row.key, row.withTranscript, row.withData, row.gpa, row.below2])).toEqual([["K29", 1, 1, 3, 0], ["K30", 1, 1, 2, 0]]);
+    expect(byCohort!.all).toMatchObject({
+      key: "all", label: "Tất cả", withTranscript: 2, withData: 2, gpa: 2.5, lastTermGpa: 2.75, credits: 100, assessed: 2, competency: 70, competencyLevel: "Khá",
+    });
     expect(byMajor!.rows.map((row) => row.label)).toEqual(["Công nghệ thông tin"]);
     expect(bySpecialty!.rows.map((row) => row.label)).toEqual(["Công nghệ phần mềm"]);
   });
@@ -108,13 +110,45 @@ describe("Tổng quan (AD-REPORT-01)", () => {
     const report = dashboardReport([a, b, none], {}, GEN, NOW);
     expect(report.generatedAt).toBe(GEN);
     expect(report.studyTerm?.code).toBe("HK261");
-    expect(report.scope).toEqual({ students: 3, withTranscript: 2, assessed: 2 });
+    expect(report.scope).toEqual({ students: 3, withTranscript: 2, withData: 2, assessed: 2 });
     expect(report.kpis.byCohort.map((entry) => [entry.cohort, entry.students, entry.gpa])).toEqual([["K29", 1, 3], ["K30", 2, 2]]);
     expect(report.progress.all).toEqual({ total: 3, onTrack: 2, late: 0, unknown: 0, noTranscript: 1 });
     expect(report.gpaBands.all.bands.map((band) => band.students)).toEqual([0, 0, 1, 1, 0]);
+    expect(report.gpaBands.all).toMatchObject({ withTranscript: 2, withData: 2 });
     expect(report.competencyGroups.byCohort).toHaveLength(2);
     expect(report.fit.byCohort[1]).toMatchObject({ cohort: "K30", average: 50 });
     expect(dashboardReport([a, b, none], { cohort: "K29" }, GEN, NOW).scope.students).toBe(1);
+  });
+});
+
+describe("a transcript without data (QA 2026-11-04: 14 uploaded, 13 in Xếp loại học lực; GPA over 5 and credits over 6)", () => {
+  // Five K28 students with data and one whose transcript was uploaded but has nothing readable, as rowFromParts builds it,
+  // except for a credit total left in on purpose: every average must leave the transcript out by its own rule.
+  const withData = [3.4, 3.1, 2.9, 2.6, 1.9].map((gpa, index) => reportRow({
+    cohort: "K28", gpa, lastTermGpa: gpa, passedCredits: 110 + index * 2, series: [{ term: "HK252", termGpa: gpa, cumulativeGpa: gpa }],
+  }));
+  const empty = reportRow({ cohort: "K28", gpa: null, lastTermGpa: null, passedCredits: 0, series: [], status: "unknown" });
+  const rows = [...withData, empty, reportRow({ cohort: "K28", hasTranscript: false, status: "no_transcript", gpa: null, passedCredits: null })];
+
+  it("counts it as uploaded but not as a transcript with data", () => {
+    expect(dashboardReport(rows, {}, GEN, NOW).scope).toEqual({ students: 7, withTranscript: 6, withData: 5, assessed: 0 });
+  });
+
+  it("leaves it out of every average and distribution the same way", () => {
+    const bands = gpaBandsOf(rows);
+    expect(bands.bands.reduce((sum, band) => sum + band.students, 0)).toBe(5);
+    expect(bands).toMatchObject({ withTranscript: 6, withData: 5 });
+    const k28 = averageTables(rows)[0]!.rows[0]!;
+    expect(k28).toMatchObject({ key: "K28", withTranscript: 6, withData: 5, below2: 1, assessed: 0 });
+    // GPA and credits over the same five transcripts: (110 + 112 + 114 + 116 + 118) / 5, never over six with a 0.
+    expect(k28.gpa).toBeCloseTo(2.78);
+    expect(k28.credits).toBe(114);
+    expect(kpisOf(rows)).toMatchObject({ withTranscript: 6, withData: 5 });
+    const [point, ...more] = gpaPoints(rows);
+    expect(more).toEqual([]);
+    expect(point).toMatchObject({ term: { code: "HK252" }, termStudents: 5 });
+    expect(point!.termGpa).toBeCloseTo(2.78);
+    expect(point!.cumulativeGpa).toBeCloseTo(2.78);
   });
 });
 
@@ -136,6 +170,15 @@ describe("Tiến độ and Nguy cơ (AD-REPORT-02, 04)", () => {
     expect(progressReport(rows, { pageSize: 2, page: 2 }, GEN, NOW).page.items.map((item) => item.name)).toEqual(["Võ Minh Châu", "Đỗ Gia Huy"]);
     expect(report.counts.all).toEqual({ total: 4, onTrack: 1, late: 1, unknown: 1, noTranscript: 1 });
     expect(report.counts.byCohort.map((entry) => entry.cohort)).toEqual(["K29", "K30", "K31"]);
+  });
+
+  it("sort names in Vietnamese order: D before Đ, A before Ă before Â", () => {
+    const people = ["Mai Văn Đạt", "Trần Văn Dũng", "Đỗ Minh Đức", "Bùi Quốc Duy", "Huỳnh Ngọc Ân", "Lê Hoàng Anh", "Võ Thị Ăn"].map((name, index) => ({ name, studentCode: `990${index}` }));
+    expect([...people].sort(compareNames).map((person) => person.name)).toEqual([
+      "Lê Hoàng Anh", "Võ Thị Ăn", "Huỳnh Ngọc Ân", "Trần Văn Dũng", "Bùi Quốc Duy", "Mai Văn Đạt", "Đỗ Minh Đức",
+    ]);
+    const listed = progressReport(people.map((person) => reportRow(person)), {}, GEN, NOW).page.items.map((item) => item.name);
+    expect(listed.slice(3)).toEqual(["Trần Văn Dũng", "Bùi Quốc Duy", "Mai Văn Đạt", "Đỗ Minh Đức"]);
   });
 
   it("filter and sort the progress list, students without a GPA last", () => {

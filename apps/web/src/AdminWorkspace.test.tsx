@@ -15,6 +15,17 @@ const sidebarNames = (html: string) => [...(html.match(/<nav id="admin-navigatio
 afterEach(() => vi.unstubAllGlobals());
 
 describe("admin workspace", () => {
+  it("names the person in the header, with initials and the MSSV beside the role (QA 2026-11-04)", () => {
+    // A synthetic account named as Microsoft names students: "MSSV - Họ tên - Lớp".
+    const html = render("/quantri/tai-khoan", { ...user, name: "2374802010145 - Đào Văn Hòa - 71K29CNTT08" });
+    expect(html).toContain('<span class="am-avatar" aria-hidden="true">VH</span><div><strong>Đào Văn Hòa</strong><small>Quản trị viên · 2374802010145</small></div>');
+    expect(html).not.toContain("71K29CNTT08");
+    // A staff account keeps its name; without letters the avatar shows a person icon.
+    expect(render("/quantri/tai-khoan", { ...user, name: "Nguyễn Bảo Duy", role: "faculty_board" }))
+      .toContain('<span class="am-avatar" aria-hidden="true">BD</span><div><strong>Nguyễn Bảo Duy</strong><small>Ban chủ nhiệm khoa</small></div>');
+    expect(render("/quantri/tai-khoan", { ...user, name: "2374802010145" })).toMatch(/<span class="am-avatar" aria-hidden="true"><svg class="ep-icon /);
+  });
+
   it("shows the short names in the sidebar, in order, with the groups and their pages", () => {
     // Quản lý sinh viên is always an admin's page (every student, 2026-11-03), before GET advisor-portal/me answers too.
     expect(sidebarNames(render("/quantri/tai-khoan"))).toEqual(

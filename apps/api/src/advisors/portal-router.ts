@@ -8,7 +8,7 @@ import { Router, type ErrorRequestHandler } from "express";
 import { z } from "zod";
 import type { DatabasePool } from "../db/pool.js";
 import { requireAdminAccess } from "../middleware/authorization.js";
-import { normalizeClassName } from "./access.js";
+import { classCode } from "./class-code.js";
 import { ADVISOR_PERMISSIONS } from "./permissions.js";
 import { ADVISED_STUDENT_STATUSES, AdvisorError } from "./model.js";
 import { PostgresAdvisorRepository, type AdvisorRepository } from "./repository.js";
@@ -33,7 +33,8 @@ export function createAdvisorPortalRouter(pool: DatabasePool | undefined, webOri
   });
   router.get("/students", async (req, res) => {
     const query = z.object({
-      class: z.string().trim().max(60).transform(normalizeClassName).optional(),
+      // A class of the list (GET /classes), as a canonical code (class-code.ts).
+      class: z.string().trim().max(60).transform((value) => classCode(value)).optional(),
       q: z.string().trim().max(120).default(""),
       status: z.enum(ADVISED_STUDENT_STATUSES).default("all"),
       page: z.coerce.number().int().min(1).max(100000).default(1),

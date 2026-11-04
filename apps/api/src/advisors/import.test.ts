@@ -41,7 +41,9 @@ describe("advisor workbook headers and classes", () => {
     ["Mã GV", "staffCode"], ["Mã giảng viên", "staffCode"], ["MGV", "staffCode"],
     ["Đơn vị", "unit"], ["Bộ môn", "unit"], ["Lớp phụ trách (cách nhau bằng dấu phẩy)", "classes"], ["Lớp", "classes"], ["Lớp CVHT", "classes"],
     ["MÃ LỚP", "classes"], ["Mã lớp", "classes"],
-    ["STT", null], ["Khóa", null], ["KHÓA", null], ["Khoa", null], ["Ghi chú", null], ["GHI CHÚ", null], ["SLSV Hiện tại", null], ["SLSV ban đầu", null],
+    // KHÓA completes a class written short (QA 2026-11-04); "Khoa" folds the same, a faculty's name is no cohort.
+    ["Khóa", "cohort"], ["KHÓA", "cohort"], ["Khoa", "cohort"], ["Khóa học", "cohort"], ["Khoa bộ môn", "unit"],
+    ["STT", null], ["Ghi chú", null], ["GHI CHÚ", null], ["SLSV Hiện tại", null], ["SLSV ban đầu", null],
     ["CVHT NỘP KẾ HOẠCH HỌC TẬP", null], ["Kế hoạch học tập", null], ["", null],
   ])("reads %j as %s", (text, field) => {
     expect(headerField(text)).toBe(field);
@@ -63,6 +65,13 @@ describe("advisor workbook headers and classes", () => {
     // No class before it, a longer number than the class's own, or after a piece that is not a class: never guessed.
     expect(splitClasses("02, 71K27CNTT01, 123, Lớp A+, 05")).toEqual({ classes: ["71K27CNTT01"], invalid: ["02", "123", "Lớp A+", "05"] });
   });
+
+  it("writes every class as its canonical code: short ones with the row's cohort, full ones as they are", () => {
+    expect(splitClasses("CNTT08, 09", "K29")).toEqual({ classes: ["71K29CNTT08", "71K29CNTT09"], invalid: [] });
+    expect(splitClasses("71K27CNTT01, 72K29CNTT01, k29cntt05", "K29")).toEqual({ classes: ["71K27CNTT01", "72K29CNTT01", "71K29CNTT05"], invalid: [] });
+    // Without a cohort a short class stays short; readAdvisorSheets refuses it.
+    expect(splitClasses("CNTT08")).toEqual({ classes: ["CNTT08"], invalid: [] });
+  });
 });
 
 describe("the Khoa's workbook layouts", () => {
@@ -77,6 +86,28 @@ describe("the Khoa's workbook layouts", () => {
     const sheet = readAdvisorGrid(classGrid);
     expect(sheet.rows).toBe(5);
     expect(sheet.items).toEqual([{ rows: [6, 7, 8, 9], ...anItem }, { rows: [10], ...binhItem }]);
+  });
+
+  it("completes the classes written short with the KHÓA of their row (CNTT08 + K29 → 71K29CNTT08)", () => {
+    const sheet = readAdvisorGrid([...titles(9), BY_CLASS,
+      ["1", ...an, "CNTT01", "K27", "60", "62", ""],
+      ["2", ...an, "CNTT02, 03", "27", "60", "61", ""],
+      ["3", ...an, "71K28CNTT05", "K28", "2", "60", ""],
+      ["4", ...binh, "CNTT01", "K29", "45", "45", ""]]);
+    expect(sheet.items).toEqual([
+      { rows: [6, 7, 8], ...anItem },
+      { rows: [9], ...binhItem },
+    ]);
+    // The same class name in two cohorts is two classes: no conflict between An (K27) and Bình (K29).
+    expect(sheet.items.flatMap((item) => item.problems)).toEqual([]);
+  });
+
+  it("refuses a class written short without a cohort, as it would match no student", () => {
+    const sheet = readAdvisorGrid([...titles(7), PDT, ["1", ...an, "CNTT08, 09", "120", ""], ["2", ...binh, "71K29CNTT01", "45", ""]]);
+    expect(sheet.items.map((item) => [item.classes, item.problems])).toEqual([
+      [["CNTT08", "CNTT09"], ["Lớp CNTT08, CNTT09 chưa ghi khóa: ghi đủ mã lớp (như 71K29CNTT01) hoặc thêm cột KHÓA (như K29)."]],
+      [["71K29CNTT01"], []],
+    ]);
   });
 
   it("names a class under two advisors on both of them, with the rows of that class", () => {

@@ -4,6 +4,7 @@ import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import { AccountError } from "./accounts.js";
 import { createStudentProfilesRouter, PostgresStudentProfileRepository } from "./student-profiles.js";
+import { CLASS_OF } from "../advisors/class-code.js";
 import type { TranscriptData } from "../student/transcript-parser.js";
 import type { AuthenticatedUser, AppRole } from "../auth/types.js";
 import type { DatabasePool } from "../db/pool.js";
@@ -97,9 +98,10 @@ describe("student profile SQL safety", () => {
     const repo = new PostgresStudentProfileRepository({ query } as unknown as DatabasePool);
     await repo.list(actor, { q: "", page: 3, pageSize: 10, sort: "cohortYear", dir: "desc" });
     const [sql, values] = query.mock.calls[0]!;
-    expect(sql).toContain("row_number() OVER (ORDER BY name ASC, id ASC)::int AS stt FROM filtered");
-    expect(sql).toContain('FROM numbered ORDER BY "cohortYear" DESC NULLS LAST, name ASC, id ASC LIMIT $6 OFFSET $7');
-    expect(sql).toContain('json_agg(paged ORDER BY "cohortYear" DESC NULLS LAST, name ASC, id ASC)');
+    // Names in Vietnamese order, also in the list's own order (admin/table-sort.ts; QA 2026-11-04: Đ after D).
+    expect(sql).toContain('row_number() OVER (ORDER BY name COLLATE "vi-x-icu" ASC, id ASC)::int AS stt FROM filtered');
+    expect(sql).toContain('FROM numbered ORDER BY "cohortYear" DESC NULLS LAST, name COLLATE "vi-x-icu" ASC, id ASC LIMIT $6 OFFSET $7');
+    expect(sql).toContain('json_agg(paged ORDER BY "cohortYear" DESC NULLS LAST, name COLLATE "vi-x-icu" ASC, id ASC)');
     expect(values).toEqual(["", null, null, null, null, 10, 20, null]);
   });
   it("does not return absent or non-student details", async () => {
@@ -116,6 +118,8 @@ describe("student profile SQL safety", () => {
     const [sql, values] = query.mock.calls[0]!;
     expect(sql).toContain("upper(regexp_replace(p.class_name, '\\s', '', 'g'))");
     expect(sql).toContain("IN (SELECT class_name FROM ad_advisor_classes WHERE advisor_user_id = $8::uuid)");
+    // The class as a canonical code (CNTT08 of K29 → 71K29CNTT08, QA 2026-11-04), as the Khoa's list writes it.
+    expect(sql).toContain(`$8::uuid IS NULL OR ${CLASS_OF}`);
     expect(values?.[7]).toBe(advisor.userId);
     const detail = vi.fn().mockResolvedValue({ rows: [] });
     await expect(new PostgresStudentProfileRepository({ query: detail } as unknown as DatabasePool).detail(advisor, id)).rejects.toMatchObject({ code: "student_not_found" });
@@ -123,6 +127,19 @@ describe("student profile SQL safety", () => {
     const transcript = vi.fn().mockResolvedValue({ rows: [] });
     await expect(new PostgresStudentProfileRepository({ query: transcript } as unknown as DatabasePool).transcript(advisor, id)).rejects.toMatchObject({ code: "student_not_found" });
     expect(transcript).toHaveBeenCalledWith(expect.stringContaining("advisor_user_id = $2::uuid"), [id, advisor.userId]);
+  });
+  it("lists, finds and sorts the class by its canonical code, and keeps the profile's own class for the student page", async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [{ items: [], total: 0, cohortYears: [], cohortCodes: [] }] });
+    const repo = new PostgresStudentProfileRepository({ query } as unknown as DatabasePool);
+    await repo.list(actor, { q: "71K29CNTT08", page: 1, pageSize: 10, sort: "className", dir: "asc" });
+    const [sql] = query.mock.calls[0]!;
+    expect(sql).toContain(`p.class_name AS "className", ${CLASS_OF} AS "classCode"`);
+    expect(sql).toContain(`p.class_name, ${CLASS_OF}, p.career_goal) AS search_text`);
+    expect(sql).toContain('"className", "classCode", "cohortYear"');
+    // Sorted by Lớp học: the code, whatever form the sort expression takes (table-sort.ts).
+    const order = String(sql).slice(String(sql).indexOf("FROM numbered ORDER BY"), String(sql).indexOf("LIMIT $6"));
+    expect(order).toContain('"classCode"');
+    expect(order).not.toContain('"className"');
   });
   it("returns the stored specialty with the detail (also used by /api/student/profile)", async () => {
     const query = vi.fn().mockResolvedValue({ rows: [{ id, profileStatus: "incomplete", specialty: "CNDL" }] });

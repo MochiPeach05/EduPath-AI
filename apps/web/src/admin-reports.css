@@ -62,8 +62,8 @@
 .rp-search input { width: min(280px, 72vw); padding-left: 34px; }
 .rp-reset { height: 38px; padding: 0 6px; border: 0; background: none; color: var(--rp-brand); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
 .rp-reset:disabled { color: var(--rp-muted); opacity: .55; cursor: default; }
-.rp-coverage { display: flex; align-items: center; gap: 6px; margin: 0; font-size: 13px; color: var(--rp-muted); }
-.rp-coverage .ep-icon { width: 15px; height: 15px; flex: none; }
+.rp-coverage { display: flex; align-items: flex-start; gap: 6px; margin: 0; font-size: 13px; color: var(--rp-muted); }
+.rp-coverage .ep-icon { width: 15px; height: 15px; flex: none; margin-top: 2px; }
 
 /* Cards and sections */
 .rp-card { display: grid; gap: 14px; align-content: start; min-width: 0; padding: 18px; border-radius: 18px; background: var(--rp-surface); box-shadow: var(--rp-shadow); }
@@ -126,19 +126,21 @@
 .rp-split i { display: block; height: 100%; }
 .rp-ring text, .rp-ring-text { font-size: 12px; font-weight: 700; fill: var(--rp-ink); font-variant-numeric: tabular-nums; }
 
-/* Tables */
+/* Tables. Long headers wrap at spaces (never inside a word) so a table fits its card at 1280 px; a table still too wide
+   scrolls in its own box (.rp-table-wrap). */
 .rp-table-wrap { overflow-x: auto; border: 1px solid var(--rp-line); border-radius: 12px; }
 .rp-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .rp-table th, .rp-table td { padding: 10px 12px; border-bottom: 1px solid var(--rp-line); text-align: left; vertical-align: middle; }
-.rp-table thead th { background: #f8f9fc; color: var(--rp-muted); font-size: 12px; font-weight: 700; white-space: nowrap; }
+.rp .rp-table thead th { background: #f8f9fc; color: var(--rp-muted); font-size: 12px; font-weight: 700; white-space: normal; overflow-wrap: normal; word-break: normal; text-wrap: balance; }
 .rp-table tbody th { font-weight: 700; color: var(--rp-ink); }
 .rp-table tbody tr:last-child > * { border-bottom: 0; }
 .rp-table tbody tr:hover > * { background: #fafbfd; }
 .rp-table tfoot > tr > * { border-top: 1px solid var(--rp-line); border-bottom: 0; background: #f8f9fc; font-weight: 700; }
+.rp-table .rp-foot > th { white-space: nowrap; }
 .rp-table small { color: var(--rp-muted); }
 .rp .rp-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
 .rp-table .ts-sort { font-size: 12px; }
-.rp-who { display: grid; }
+.rp-who { display: grid; min-width: 140px; }
 .rp-who b { font-weight: 700; }
 .rp-who small { color: var(--rp-muted); font: 12px "Cascadia Mono", ui-monospace, monospace; }
 .rp-sub { display: block; color: var(--rp-muted); }
@@ -153,6 +155,22 @@
 .rp-credit small { color: var(--rp-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .rp-dist { display: flex; gap: 2px; width: 160px; height: 12px; overflow: hidden; border-radius: 4px; }
 .rp-dist i { display: block; height: 100%; }
+/* Lý do of Nguy cơ: one block per reason, its sentence wrapping inside the column. */
+.rp-reasons { display: grid; justify-items: start; gap: 4px; min-width: 220px; margin: 0; padding: 0; list-style: none; }
+.rp-reasons .rp-chip { display: block; white-space: normal; border-radius: 8px; padding: 3px 9px; line-height: 1.45; }
+.rp-risk-table .rp-action, .rp-table td.rp-action { white-space: nowrap; }
+.rp-risk-table .rp-sub { min-width: 9em; }
+
+/* Table view of a chart ("Xem số liệu dạng bảng"): folded under the chart, every value readable without a hover. A grid
+   item of its card that may shrink, so a wide table scrolls in its box instead of widening the card. */
+.rp-table-view { min-width: 0; }
+.rp-table-view > summary { display: inline-flex; align-items: center; gap: 7px; padding: 2px 0; color: var(--rp-brand); font-size: 13px; font-weight: 700; cursor: pointer; list-style: none; }
+.rp-table-view > summary::-webkit-details-marker { display: none; }
+.rp-table-view > summary::before { content: ""; width: 6px; height: 6px; border-right: 2px solid currentColor; border-bottom: 2px solid currentColor; transform: rotate(-45deg); }
+.rp-table-view[open] > summary::before { transform: rotate(45deg); }
+.rp-table-view > summary:hover { text-decoration: underline; }
+.rp-table-view > .rp-table-wrap { margin-top: 8px; }
+.rp-table-view tbody th { min-width: 9em; }
 
 /* Horizontal bars (HBarList) */
 .rp-hbars { --rp-label: 220px; display: grid; gap: 4px; }
@@ -195,6 +213,7 @@
 .rp-legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 0; padding: 0; list-style: none; font-size: 12px; color: var(--rp-muted); }
 .rp-legend li { display: inline-flex; align-items: center; gap: 6px; }
 .rp-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
+.rp-legend b { color: var(--rp-ink); font-variant-numeric: tabular-nums; }
 
 /* Xếp loại học lực */
 .rp-bandlist { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
@@ -273,6 +292,9 @@
 @container rp (max-width: 1180px) {
   .rp-grid, .rp-grid-halves { grid-template-columns: minmax(0, 1fr); }
   .rp-grid > .rp-span-2, .rp-grid > .rp-span-3 { grid-column: auto; }
+  /* A student list wider than a narrow screen scrolls in its box; "Thao tác" (Xem hồ sơ) stays on its right edge. */
+  .rp-table .rp-action { position: sticky; right: 0; z-index: 1; background: var(--rp-surface); box-shadow: inset 1px 0 0 var(--rp-line); }
+  .rp-table thead .rp-action { background: #f8f9fc; }
 }
 @container rp (max-width: 640px) {
   .rp-hbars { --rp-label: 120px; }

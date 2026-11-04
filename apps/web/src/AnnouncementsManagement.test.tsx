@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import AnnouncementsManagement, {
-  AnnouncementPreview, FALLBACK_OPTIONS, PORTAL_PAGES, SentTable, openLabel, pageLabel, reachQuery, reachText, readShare, readText, sentTime, targetText, toggleValue,
+  AnnouncementPreview, FALLBACK_OPTIONS, PORTAL_PAGES, SentTable, majorText, openLabel, pageLabel, reachQuery, reachText, readShare, readText, sentTime, targetText, toggleValue,
 } from "./AnnouncementsManagement";
 import { useTableSort } from "./table-sort";
 import type { Announcement } from "./notification-types";
@@ -34,6 +34,15 @@ describe("announcement texts", () => {
     expect(pageLabel("#roadmap")).toBe("Lộ trình học tập");
     expect(pageLabel("#khong-co")).toBeNull();
     expect(PORTAL_PAGES).toHaveLength(10);
+  });
+
+  it("names a programme outside the faculty's catalog readably, never by the bare code", () => {
+    const options = { cohorts: ["K29"], majors: [{ code: "7480201", name: "Công nghệ thông tin" }, { code: "7340201", name: "Ngành khác (mã 7340201)" }] };
+    expect(majorText("7340201", options)).toBe("Ngành khác (mã 7340201)");
+    expect(majorText("7340201", FALLBACK_OPTIONS)).toBe("Ngành khác (mã 7340201)");
+    expect(majorText("7480104", options)).toBe("Hệ thống thông tin");
+    expect(majorText("7340201", { cohorts: [], majors: [{ code: "7340201", name: " " }] })).toBe("Ngành khác (mã 7340201)");
+    expect(targetText({ cohorts: ["K29"], majors: ["7480201", "7340201"] }, FALLBACK_OPTIONS)).toBe("K29 · Công nghệ thông tin, Ngành khác (mã 7340201)");
   });
 
   it("says what the count means, refusing a choice that reaches nobody", () => {

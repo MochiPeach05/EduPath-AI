@@ -10,6 +10,33 @@ export function termName(code: string): string {
   return `HK${match[2]} ${start}–${start + 1}`;
 }
 
+/** Days and times are shown in Vietnam time, wherever the browser is. */
+const VIETNAM_TIME = new Intl.DateTimeFormat("vi-VN", {
+  timeZone: "Asia/Ho_Chi_Minh", hourCycle: "h23", hour: "2-digit", minute: "2-digit", day: "2-digit", month: "2-digit", year: "numeric",
+});
+type Moment = string | number | Date | null | undefined;
+function vietnamParts(value: Moment): Record<string, string> | null {
+  if (value === null || value === undefined || value === "") return null;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  return Object.fromEntries(VIETNAM_TIME.formatToParts(date).map(part => [part.type, part.value]));
+}
+
+/**
+ * "03/11/2026": the day of a moment in Vietnam time, the one way both portals write a date (QA 2026-11-04: the admin
+ * pages wrote dates four ways). `empty` stands for no moment or one that cannot be read.
+ */
+export function formatVnDate(value: Moment, empty = "—"): string {
+  const parts = vietnamParts(value);
+  return parts ? `${parts.day}/${parts.month}/${parts.year}` : empty;
+}
+
+/** "14:05 03/11/2026": the time, then the day, in Vietnam time, as the "Cập nhật lúc" lines of the student pages. */
+export function formatVnDateTime(value: Moment, empty = "—"): string {
+  const parts = vietnamParts(value);
+  return parts ? `${parts.hour}:${parts.minute} ${parts.day}/${parts.month}/${parts.year}` : empty;
+}
+
 /** A CTĐT/KHĐT position (study year N, semester S) as the cohort's calendar term: year 1 of a cohort admitted in 2023 is HK1 2023–2024 ("HK231"). */
 export function planTermCode(studyYear: number, semester: number, admissionYear: number): string {
   return `HK${String((admissionYear + studyYear - 1) % 100).padStart(2, "0")}${semester}`;

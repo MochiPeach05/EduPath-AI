@@ -1,3 +1,5 @@
+import { adminRequest } from "./admin-errors";
+
 export type CareerField = {
   id: string;
   code: string;
@@ -68,16 +70,10 @@ export const careerFailures: Record<string, string> = {
   authentication_required:
     "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
 };
-export async function careerRequest<T>(
+/** A request of the career catalog pages; a failure is worded by admin-errors.ts, with these pages' texts first. */
+export function careerRequest<T>(
   url: string,
   init?: RequestInit,
 ): Promise<T> {
-  const res = await fetch(url, { credentials: "include", ...init });
-  const body = await res.json();
-  if (!res.ok)
-    throw new Error(
-      careerFailures[body.error] ??
-        "Không thể thực hiện thao tác. Vui lòng thử lại.",
-    );
-  return body;
+  return adminRequest<T>(url, init, careerFailures);
 }

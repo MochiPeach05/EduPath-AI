@@ -56,6 +56,17 @@ describe("announcements API", () => {
     await request(app).get("/a/reach?cohorts=29").expect(400, { error: "invalid_input" });
   });
 
+  it("names a programme outside the faculty's catalog readably, after the faculty's majors, in the options and the sent list", async () => {
+    const { app } = setup({
+      rows: (text) => (text.startsWith("SELECT DISTINCT p.cohort_code") ? { rowCount: 3, rows: [{ cohort: "K29", major: "7480201" }, { cohort: "K29", major: "7340201" }, { cohort: "K30", major: "7480104" }] }
+        : text.includes("FROM ad_announcements a LEFT JOIN users u") ? { rowCount: 1, rows: [announcement({ target: { cohorts: ["K29"], majors: ["7340201", "7480201"] } })] } : undefined),
+    });
+    expect((await request(app).get("/a/options").expect(200)).body.majors).toEqual([
+      { code: "7480104", name: "Hệ thống thông tin" }, { code: "7480201", name: "Công nghệ thông tin" }, { code: "7340201", name: "Ngành khác (mã 7340201)" },
+    ]);
+    expect((await request(app).get("/a").expect(200)).body.items[0].targetLabel).toBe("K29 · Công nghệ thông tin, Ngành khác (mã 7340201)");
+  });
+
   it("refuses an empty title or body, a link outside the portal and an audience of nobody", async () => {
     const { app } = setup();
     const send = (body: Record<string, unknown>) => request(app).post("/a").set("Origin", origin).send(body);

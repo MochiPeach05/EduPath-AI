@@ -15,6 +15,7 @@ import { canManageAdvisors, type AuthenticatedUser } from "../auth/types.js";
 import { canUseStudentPortal } from "../auth/security.js";
 import { auditActorOf, recordAudit } from "../admin/audit/record.js";
 import { advisorAction, notifySafely } from "../notifications/notify.js";
+import { CLASS_OF } from "./class-code.js";
 
 export const ADVISOR_STUDENT_HEADER = "x-advisor-student";
 
@@ -29,7 +30,7 @@ export type AdvisedStudent = {
   studentCode: string | null;
   /** student_profiles.full_name, else the account's display name. */
   name: string;
-  /** The student's class (upper case, no spaces); empty when the profile has none. */
+  /** The student's class as a canonical code (71K29CNTT08, class-code.ts); empty when the profile has none. */
   className: string;
   /** advisor: the cố vấn học tập of the student's class; admin: a quản trị viên of the Khoa working for any student. */
   actorKind: "advisor" | "admin";
@@ -62,8 +63,8 @@ export const actingAdvisor = (request: Request): AuthenticatedUser | null => req
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const isUuid = (value: unknown): value is string => typeof value === "string" && UUID.test(value);
 
-/** "71k29cntt01 " → "71K29CNTT01": the form classes are stored and compared in (ad_advisor_classes, migration 058). */
-export const normalizeClassName = (value: string) => value.replace(/\s+/g, "").toUpperCase();
+/** "71k29cntt01 " → "71K29CNTT01" (class-code.ts holds the whole rule of a class code). */
+export { normalizeClassName } from "./class-code.js";
 
 /** The classes an account advises, in order (empty for an account that advises none). */
 export async function advisorClassesOf(db: Db, userId: string): Promise<string[]> {
@@ -81,8 +82,8 @@ const STUDENT_COLUMNS = `u.id, u.entra_tenant_id AS tenant, u.entra_object_id AS
   p.student_code, p.full_name`;
 /** An active student account (u = users). */
 const ACTIVE_STUDENT = "u.is_active AND COALESCE(u.role_override, u.role)='student'";
-/** The student's class as ad_advisor_classes stores it (p = student_profiles). */
-const STUDENT_CLASS = "upper(regexp_replace(p.class_name, '\\s', '', 'g'))";
+/** The student's class as ad_advisor_classes stores it, the canonical code (p = student_profiles, u = users). */
+const STUDENT_CLASS = CLASS_OF;
 
 function toAdvised(row: StudentRow, actorKind: AdvisedStudent["actorKind"]): AdvisedStudent {
   const objectId = row.object_id ?? "";

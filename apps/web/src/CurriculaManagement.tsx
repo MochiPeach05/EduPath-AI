@@ -13,11 +13,14 @@ import type {
 import "./curricula.css";
 import { CheckedForm } from "./CheckedForm";
 import { sortParams, sortRows, useTableSort, type SortRule } from "./table-sort";
+import { SourceDownloadLink } from "./source-download";
+import { adminRequest } from "./admin-errors";
+import { formatVnDateTime } from "./display-format";
 
 const endpoint = "/api/admin/curricula";
 const mime =
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-const date = (s: string) => new Date(s).toLocaleString("vi-VN");
+const date = (s: string) => formatVnDateTime(s);
 // The columns the course tables sort by (table-sort.tsx): BB / TC as text (BB, BBKTL, TC, TC1, TC2…), Năm · HK as
 // year then term (Năm 2 · HK 1 → 21); a course without a year comes last.
 const courseSort: Record<string, SortRule<CurriculumCourse>> = {
@@ -74,16 +77,9 @@ const errors: Record<string, string> = {
   not_found: "Không tìm thấy học phần. Hãy tải lại khung.",
   invalid_filename: "Tên tệp không hợp lệ. Hãy chọn tệp .xlsx.",
 };
-async function request<T>(url: string, init: RequestInit): Promise<T> {
-  const res = await fetch(url, { ...init, credentials: "include" });
-  const body = await res.json();
-  if (!res.ok)
-    throw new Error(
-      (errors[body.error] ??
-        "Chưa thực hiện được thao tác. Vui lòng thử lại.") +
-      (body.details?.length ? "\n" + body.details.join("\n") : ""),
-    );
-  return body;
+// A failure is worded by admin-errors.ts: this page's texts first, the server's detail lines under them.
+function request<T>(url: string, init: RequestInit): Promise<T> {
+  return adminRequest<T>(url, init, errors, { details: true });
 }
 function WarningList({ data }: { data: CurriculumData }) {
   return data.warnings.length ? (
@@ -677,13 +673,11 @@ function CurriculumView({
               <p className="cm-prewrap">{current.data.notes}</p>
             )}
             <div className="cm-actions">
-              <a
-                className="am-outline"
+              <SourceDownloadLink
                 href={`${endpoint}/${id}/source/${current.revisionId}`}
+                fallbackName="khung-ctdt-goc.xlsx"
                 title="Tải xuống tệp Excel nguồn; các chỉnh sửa trực tiếp được lưu trong phiên bản trên hệ thống"
-              >
-                <Icon name="download" /> Tải xuống Excel nguồn
-              </a>
+              />
               {mutable && (
                 <>
                   <button

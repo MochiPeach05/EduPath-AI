@@ -23,8 +23,12 @@ export type ReportOptions = {
   studyTerm: ReportTerm | null;
 };
 
-/** Who the numbers cover: students with an account, with a stored transcript, with a stored assessment. */
-export type ReportScope = { students: number; withTranscript: number; assessed: number };
+/**
+ * Who the numbers cover: students with an account; with a stored transcript ("đã tải bảng điểm"); with a transcript that
+ * has data ("bảng điểm có dữ liệu": its printed cumulative GPA was read; rows.ts hasTranscriptData), the base of every
+ * GPA, credit and học lực figure; with a stored assessment, the base of every competency and fit figure.
+ */
+export type ReportScope = { students: number; withTranscript: number; withData: number; assessed: number };
 
 /** Common head of every report response. generatedAt: when the oldest student row used was computed. */
 export type ReportHead = { generatedAt: string; studyTerm: ReportTerm | null; scope: ReportScope };
@@ -32,7 +36,7 @@ export type ReportHead = { generatedAt: string; studyTerm: ReportTerm | null; sc
 // ----------------------------------------------------------------- AD-REPORT-01 Tổng quan
 
 export type DashboardKpis = ReportScope & {
-  /** Mean of the printed cumulative GPA (hệ 4) of students with a transcript. */
+  /** Mean of the printed cumulative GPA (hệ 4) of the transcripts with data (withData). */
   gpa: number | null;
   /** gpa minus the same mean one term earlier (each student's latest cumulative GPA up to that term). */
   gpaChange: number | null;
@@ -48,20 +52,31 @@ export type DashboardKpis = ReportScope & {
   warn: number;
 };
 
+/** Means over the transcripts with data; termStudents: those with a printed GPA for that term. */
 export type GpaPoint = { term: ReportTerm; termGpa: number | null; termStudents: number; cumulativeGpa: number | null };
 
 export type GpaBandLabel = "Xuất sắc" | "Giỏi" | "Khá" | "Trung bình" | "Yếu";
-/** Học lực by the printed cumulative GPA: Xuất sắc ≥ 3,60, Giỏi ≥ 3,20, Khá ≥ 2,50, Trung bình ≥ 2,00, Yếu below. */
-export type GpaBands = { bands: { label: GpaBandLabel; range: string; students: number }[] };
+/**
+ * Học lực by the printed cumulative GPA: Xuất sắc ≥ 3,60, Giỏi ≥ 3,20, Khá ≥ 2,50, Trung bình ≥ 2,00, Yếu below. The bands
+ * add up to withData (every transcript with data, no other); withTranscript is the uploads they are taken from.
+ */
+export type GpaBands = { bands: { label: GpaBandLabel; range: string; students: number }[]; withTranscript: number; withData: number };
 
+/** One row of "Bảng điểm trung bình": every figure says its base, and figures of one kind share it. */
 export type AverageRow = {
   key: string;
   label: string;
-  students: number;
+  /** Students of the group with a stored transcript, and those whose transcript has data. */
+  withTranscript: number;
+  withData: number;
+  /** Means over the withData transcripts only: printed cumulative GPA, latest printed term GPA, passed credits. */
   gpa: number | null;
   lastTermGpa: number | null;
   credits: number | null;
+  /** withData transcripts whose cumulative GPA is under 2,00. */
   below2: number;
+  /** Students of the group with a stored assessment: the base of competency and fit. */
+  assessed: number;
   competency: number | null;
   competencyLevel: string | null;
   fit: number | null;
@@ -145,7 +160,7 @@ export type SkillGapRow = { name: string; below: number; notStudied: number; sel
 export type SkillsReport = ReportHead & {
   /** Target careers of the assessed students in scope, for the career selector. */
   careers: string[];
-  /** The 12 skills missed most in the whole scope; byCohort lists the same skills (same order) for each cohort. */
+  /** Up to 12 skills missed most in the whole scope (fewer when fewer are missed); byCohort lists the same skills (same order) for each cohort. */
   skills: CohortSplit<{ items: SkillGapRow[] }>;
 };
 

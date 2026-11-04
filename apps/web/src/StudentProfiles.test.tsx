@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import StudentProfiles from "./StudentProfiles";
+import StudentProfiles, { classOf } from "./StudentProfiles";
 
 // Synthetic ids only. The page reads its data in effects, which do not run here: these tests check what the first render shows.
 
@@ -21,5 +21,11 @@ describe("Sinh viên page", () => {
     const html = render("");
     expect(html).not.toContain("Chi tiết hồ sơ sinh viên");
     expect(html).toContain("Danh sách sinh viên");
+  });
+
+  it("names a class by its canonical code, as the advisor pages do (QA 2026-11-04)", () => {
+    expect(classOf({ className: "CNTT08", classCode: "71K29CNTT08" })).toBe("71K29CNTT08");
+    expect(classOf({ className: "CNTT08" })).toBe("CNTT08");
+    expect(classOf({ className: null, classCode: null })).toBeNull();
   });
 });

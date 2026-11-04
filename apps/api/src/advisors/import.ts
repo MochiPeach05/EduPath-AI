@@ -6,18 +6,21 @@
 // class cells are split into classes, the rows of one email in every sheet are one advisor with all their classes, and a
 // class under two advisors is an error on both. planImport then says, from what the database holds (looked up by
 // repository.ts), what applying would change: a new advisor, an update, nothing, or why the advisor cannot be imported.
-// The file is authoritative for the advisors it lists; the others are untouched.
+// The file is authoritative for the advisors it lists; the others are untouched. Classes are stored as canonical codes
+// (class-code.ts, QA 2026-11-04): a class written short (CNTT08) takes the cohort of its row's KHÓA cell (71K29CNTT08);
+// one with no cohort at all is refused, as it would match no student.
 import { CurriculumError } from "../curricula/model.js";
 import { checkArchive } from "../curricula/parser.js";
 import { foldText } from "../admin/audit/record.js";
 import { roleLabel } from "../admin/audit/routes.js";
-import { normalizeClassName } from "./access.js";
+import { classCode, cohortCode, needsCohort, normalizeClassName } from "./class-code.js";
 import { AdvisorError, CLASS_PATTERN, type AdvisorImportItem, type AdvisorImportPreview } from "./model.js";
 
-type Field = "name" | "email" | "staffCode" | "unit" | "classes";
+type Field = "name" | "email" | "staffCode" | "unit" | "classes" | "cohort";
 // Header names, folded (lower case, no diacritics). A header matches a name exactly or starts with it and a space
-// ("Lớp phụ trách (cách nhau bằng dấu phẩy)"). Checked in this order, so "Email cố vấn" is the email and "Mã giảng viên"
-// is not a name. "Khoa" is left out: folded, it is also "Khóa", the cohort.
+// ("Lớp phụ trách (cách nhau bằng dấu phẩy)"). Checked in this order, so "Email cố vấn" is the email, "Mã giảng viên"
+// is not a name and "Khoa bộ môn" is the unit. "Khóa" (KHÓA, the cohort) folds as "Khoa" does: a cell that is no cohort
+// ("Công nghệ thông tin") is passed over (cohortCode).
 const HEADERS: readonly [Field, readonly string[]][] = [
   ["email", ["email", "e-mail", "e mail", "mail", "email vlu", "dia chi email", "thu dien tu"]],
   ["staffCode", ["mgv", "msgv", "ma gv", "ma so gv", "ma giang vien", "ma so giang vien", "ma cb", "ma can bo", "ma nhan vien", "ma cvht"]],
@@ -25,9 +28,10 @@ const HEADERS: readonly [Field, readonly string[]][] = [
   ["unit", ["don vi", "don vi cong tac", "bo mon", "khoa bo mon"]],
   ["name", ["ho va ten", "ho ten", "ho va ten co van", "ho ten co van", "ten co van", "co van hoc tap", "co van", "cvht",
     "giang vien", "ten giang vien", "ho ten giang vien", "ho va ten giang vien"]],
+  ["cohort", ["khoa", "khoa hoc"]],
 ];
 // Columns of the Khoa's file that are never read: "CVHT NỘP KẾ HOẠCH…" would otherwise be the name ("cvht …"); STT, SLSV
-// Hiện tại / ban đầu and GHI CHÚ are named so that no alias above ever catches them (KHÓA matches none).
+// Hiện tại / ban đầu and GHI CHÚ are named so that no alias above ever catches them.
 const IGNORED = ["stt", "so tt", "slsv", "si so", "so luong", "so sv", "ghi chu", "cvht nop", "nop ke hoach"];
 const MAX_ROWS = 2000;
 const MAX_COLUMNS = 40;
@@ -52,8 +56,9 @@ export function headerField(text: string): Field | null {
  * "71k29cntt01, 71K29CNTT02; 71K29CNTT02" → two classes. A number alone continues the class before it in the same cell,
  * as the Khoa's list for Phòng Đào tạo writes them: "71K27CNTT01, 02, 03" → 71K27CNTT01, 71K27CNTT02, 71K27CNTT03.
  * Pieces that are not class names (a number with no class before it, or longer than that class's number) come apart.
+ * Each class becomes its canonical code (classCode), short ones with the cohort of the row ("CNTT08" + K29 → 71K29CNTT08).
  */
-export function splitClasses(text: string): { classes: string[]; invalid: string[] } {
+export function splitClasses(text: string, cohort: string | null = null): { classes: string[]; invalid: string[] } {
   const classes: string[] = [];
   const invalid: string[] = [];
   const bad = (raw: string) => { if (!invalid.includes(raw)) invalid.push(raw); };
@@ -75,6 +80,7 @@ export function splitClasses(text: string): { classes: string[]; invalid: string
       const parts = CLASS_PATTERN.test(name) ? /^(.*\D)(\d+)$/.exec(name) : null;
       stem = parts ? { prefix: parts[1]!, width: parts[2]!.length } : null;
     }
+    name = classCode(name, cohort);
     if (!CLASS_PATTERN.test(name)) { bad(raw); continue; }
     if (!classes.includes(name)) classes.push(name);
   }
@@ -126,8 +132,9 @@ function readLines(grid: SheetGrid["grid"], header: Header): Line[] {
     const email = cleanEmail(read(cells, first("email")));
     const staffCode = cleanLine(read(cells, first("staffCode")));
     const unit = cleanLine(read(cells, first("unit")));
-    // Each class cell on its own: "02" only continues a class of its own cell.
-    const split = classColumns.map((column) => splitClasses(read(cells, column)));
+    // Each class cell on its own: "02" only continues a class of its own cell. KHÓA completes the short classes of the row.
+    const cohort = cohortCode(read(cells, first("cohort")));
+    const split = classColumns.map((column) => splitClasses(read(cells, column), cohort));
     const classes = unique(split.flatMap((part) => part.classes));
     const invalid = unique(split.flatMap((part) => part.invalid));
     if (!name && !email && !staffCode && !unit && !classes.length && !invalid.length) continue;
@@ -238,6 +245,8 @@ export function readAdvisorSheets(sheets: readonly SheetGrid[], fileProblems: st
     if (item.codes.size > 1) problems.push(`Mã giảng viên ghi khác nhau: ${variants(item.codes)}.`);
     if (item.unit && item.unit.length > 200) problems.push("Đơn vị dài quá 200 ký tự.");
     if (item.invalid.length) problems.push(`Tên lớp không hợp lệ: ${item.invalid.join(", ")}.`);
+    const noCohort = [...item.classes.keys()].filter(needsCohort);
+    if (noCohort.length) problems.push(`Lớp ${noCohort.join(", ")} chưa ghi khóa: ghi đủ mã lớp (như 71K29CNTT01) hoặc thêm cột KHÓA (như K29).`);
     if (!item.classes.size && !item.invalid.length) problems.push("Chưa có lớp phụ trách.");
     for (const name of item.classes.keys()) {
       const all = owners.get(name)!;
@@ -358,9 +367,10 @@ export async function advisorTemplate(domain = "vlu.edu.vn", today = new Date())
     "Mỗi dòng là một cố vấn học tập, hoặc một lớp của cố vấn: các dòng cùng EMAIL được gộp thành một cố vấn với mọi lớp của những dòng đó.",
     "Cột bắt buộc: CVHT (họ và tên), EMAIL và MÃ LỚP. MGV (mã giảng viên) và GHI CHÚ có thể để trống.",
     `EMAIL là email cán bộ của trường (@${domain}); cố vấn đăng nhập EduPath AI bằng tài khoản Microsoft của email này.`,
-    "MÃ LỚP ghi đúng mã lớp như trong hồ sơ sinh viên (ví dụ 71K29CNTT01). Nhiều lớp trong một ô cách nhau bằng dấu phẩy, chấm phẩy hoặc xuống dòng; viết gọn 71K29CNTT01, 02, 03 cũng được.",
+    "MÃ LỚP ghi đủ mã lớp của trường (ví dụ 71K29CNTT01; lớp của chương trình khác giữ số đầu của lớp, như 72K29CNTT01). Nhiều lớp trong một ô cách nhau bằng dấu phẩy, chấm phẩy hoặc xuống dòng; viết gọn 71K29CNTT01, 02, 03 cũng được.",
+    "Nếu MÃ LỚP chỉ ghi tên lớp (CNTT01), thêm cột KHÓA (K29) trên cùng dòng: lớp được hiểu là 71K29CNTT01.",
     "Mỗi lớp chỉ có một cố vấn. Cố vấn đã có trong danh sách được cập nhật theo tệp; lớp ghi cho cố vấn khác sẽ chuyển sang người đó.",
-    "Mọi trang tính đang hiện có dòng tiêu đề này đều được đọc và gộp lại; trang tính ẩn không được đọc. Các cột khác (KHÓA, SLSV…) được bỏ qua.",
+    "Mọi trang tính đang hiện có dòng tiêu đề này đều được đọc và gộp lại; trang tính ẩn không được đọc. Các cột khác (SLSV, GHI CHÚ…) được bỏ qua.",
     "Tệp theo mẫu cũ (Họ và tên, Email, Mã giảng viên, Đơn vị, Lớp phụ trách) vẫn đọc được.",
     "Xóa dòng ví dụ trước khi import. Trước khi lưu, trang Cố vấn học tập cho xem trước từng cố vấn và lỗi nếu có.",
   ]) help.addRow([line]);

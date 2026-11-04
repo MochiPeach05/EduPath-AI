@@ -3,6 +3,7 @@
 // 2026-10-20, and the run over the courses without a link). The local AI proposes, the admin reviews; only the reviewed rows are saved.
 // No DOM here — unit tested.
 import { COMPETENCY_API, readCompetencyResponse, WEIGHT_TOLERANCE } from "./competency-types";
+import { ADMIN_ERROR_TEXTS } from "./admin-errors";
 
 /** A failed request with the API error code kept (the message is the competency page's own). */
 export class CompetencyAiError extends Error {
@@ -11,7 +12,7 @@ export class CompetencyAiError extends Error {
 export async function aiRequest<T>(url: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try { response = await fetch(url, { ...init, credentials: "include", cache: "no-store" }); }
-  catch { throw new CompetencyAiError("Không thể kết nối hệ thống. Hãy kiểm tra kết nối và thử lại.", null); }
+  catch { throw new CompetencyAiError(ADMIN_ERROR_TEXTS.network, null); }
   const copy = response.clone();
   try { return await readCompetencyResponse<T>(response); }
   catch (failure) {

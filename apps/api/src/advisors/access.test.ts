@@ -7,6 +7,7 @@ import { advisorAction } from "../notifications/notify.js";
 import {
   ACTING_ACTIONS, actingAction, actingAdvisor, advisorActing, advisorReadOnly, advisedStudent, normalizeClassName, studentLabel, studentUser,
 } from "./access.js";
+import { CLASS_OF } from "./class-code.js";
 
 const STUDENT_ID = "0b8c2f1e-4d3a-4f6b-8a1e-2c3d4e5f6a70";
 const ADVISOR_ID = "9a1b2c3d-4e5f-4a6b-9c7d-8e9f0a1b2c3d";
@@ -179,6 +180,17 @@ describe("a cố vấn học tập in a student's page (advisorActing)", () => {
     expect(normalizeClassName(" 71k29 cntt01 ")).toBe("71K29CNTT01");
   });
 
+  it("matches the student's class as a canonical code: CNTT08 of K29 is the advisor's 71K29CNTT08 (QA 2026-11-04)", async () => {
+    const { app, query } = setup(advisor);
+    await request(app).get("/api/student/overview").set("X-Advisor-Student", STUDENT_ID).expect(200);
+    const sql = String(query.mock.calls[0]?.[0]);
+    expect(sql).toContain(`JOIN ad_advisor_classes c ON c.class_name=${CLASS_OF}`);
+    // The class and the cohort of the profile, and the account's display name for the prefix (72K29CNTT01).
+    expect(sql).toContain("p.class_name");
+    expect(sql).toContain("p.cohort_code");
+    expect(sql).toContain("u.display_name");
+  });
+
   it("names a student without a class by code and name only", () => {
     expect(studentLabel({ studentCode: "2374802010994", name: "Sinh viên Thử nghiệm", className: "" })).toBe("2374802010994 – Sinh viên Thử nghiệm");
     expect(studentLabel({ studentCode: null, name: "Sinh viên Thử nghiệm", className: "71K29CNTT99" })).toBe("Sinh viên Thử nghiệm (lớp 71K29CNTT99)");
@@ -193,6 +205,7 @@ describe("a quản trị viên or Ban chủ nhiệm khoa in a student's page (QT
     // The own classes first, then any active student account.
     expect(query.mock.calls.map((call) => call[1])).toEqual([[STUDENT_ID, ADMIN_ID], [STUDENT_ID, ADMIN_ID]]);
     expect(String(query.mock.calls[1]?.[0])).toMatch(/u\.is_active AND COALESCE\(u\.role_override, u\.role\)='student'/);
+    expect(String(query.mock.calls[1]?.[0])).toContain(`${CLASS_OF} AS class_name`);
   });
 
   it("keeps the other admin-portal roles to their own classes", async () => {

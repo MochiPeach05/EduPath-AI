@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 const refreshEvery = 30_000;
 /** Focus and visibility changes usually arrive together; one request answers both. */
 const minimumGap = 5_000;
+/** The message of what a request threw, as the student pages show it. */
+const thrownMessage = (error: unknown) => (error as Error).message;
 
 /**
  * Fetches `url` and keeps it current on its own, so pages need no reload button:
@@ -14,10 +16,12 @@ const minimumGap = 5_000;
  * `revision` clears the page and shows loading; after such a load fails, the
  * next refresh tries it again.
  *
- * `read` turns the response into data or throws the message to show. Pass a
- * function declared outside the component so every render hands over the same one.
+ * `read` turns the response into data or throws the message to show; `failure`
+ * words what was thrown, also when no answer came at all (the admin pages pass
+ * adminFailureText, admin-errors.ts). Pass functions declared outside the
+ * component so every render hands over the same ones.
  */
-export function useLiveData<T>(url: string, revision: number | string, read: (response: Response) => Promise<T>) {
+export function useLiveData<T>(url: string, revision: number | string, read: (response: Response) => Promise<T>, failure: (error: unknown) => string = thrownMessage) {
   const [state, setState] = useState<{ data: T | null; error: string | null; loading: boolean }>({ data: null, error: null, loading: true });
   const [tick, setTick] = useState(0);
   const shown = useRef("");
@@ -50,8 +54,8 @@ export function useLiveData<T>(url: string, revision: number | string, read: (re
         shown.current = request;
         setState((previous) => background && JSON.stringify(previous.data) === JSON.stringify(data) ? previous : { data, error: null, loading: false });
       })
-      .catch((error) => { if (!controller.signal.aborted && !background) setState({ data: null, error: (error as Error).message, loading: false }); });
+      .catch((error) => { if (!controller.signal.aborted && !background) setState({ data: null, error: failure(error), loading: false }); });
     return () => controller.abort();
-  }, [url, revision, read, tick]);
+  }, [url, revision, read, failure, tick]);
   return state;
 }

@@ -12,17 +12,22 @@ export const STATUS_LABELS: Record<ProgressStatus, string> = {
 };
 const LEVEL_LABELS = { risk: "Nguy cơ", warn: "Cần chú ý" } as const;
 
-/** "31/10/2026 09:15" in Vietnam time. */
+/**
+ * "09:15 31/10/2026" in Vietnam time: the time, then the day, the one way the portals write a moment (web display-format.ts
+ * formatVnDateTime; QA 2026-11-04: dates were written several ways).
+ */
 export function vietnamTime(now: Date): string {
   const local = new Date(now.getTime() + 7 * 3600 * 1000);
   const two = (value: number) => String(value).padStart(2, "0");
-  return `${two(local.getUTCDate())}/${two(local.getUTCMonth() + 1)}/${local.getUTCFullYear()} ${two(local.getUTCHours())}:${two(local.getUTCMinutes())}`;
+  return `${two(local.getUTCHours())}:${two(local.getUTCMinutes())} ${two(local.getUTCDate())}/${two(local.getUTCMonth() + 1)}/${local.getUTCFullYear()}`;
 }
 /** "2026-10-31" in Vietnam time, for file names. */
 export const vietnamDate = (now: Date) => new Date(now.getTime() + 7 * 3600 * 1000).toISOString().slice(0, 10);
 
+/** The scope as the pages write it; a transcript without data (no printed cumulative GPA read) is named apart. */
 export const scopeLine = (scope: ReportScope) =>
-  `Dựa trên ${scope.withTranscript}/${scope.students} sinh viên đã tải bảng điểm; bảng điểm do sinh viên tự tải, chưa xác minh.`;
+  `Dựa trên ${scope.withTranscript}/${scope.students} sinh viên đã tải bảng điểm, ${scope.withData}/${scope.withTranscript} bảng điểm có dữ liệu; `
+  + "bảng điểm do sinh viên tự tải, chưa xác minh. Bảng điểm chưa đọc được GPA tích lũy không được tính vào điểm, tín chỉ và tiến độ (Chưa đủ dữ liệu).";
 
 type Column = { header: string; width: number; format?: string };
 
@@ -81,7 +86,7 @@ export async function progressWorkbook(rows: readonly ReportRow[], scoped: reado
     ["Toàn khóa", split.all.total, split.all.onTrack, split.all.late, split.all.unknown, split.all.noTranscript]]);
   notes(workbook, "Thống kê sinh viên theo tiến độ học tập (AD-REPORT-03)", filters, scopeOf(scoped), now, [
     "Tiến độ tính như trang Tổng quan của sinh viên: tín chỉ đã đạt (in trên bảng điểm) so với kế hoạch đào tạo của khóa đến hết học kỳ trước học kỳ đang học.",
-    "Trễ kế hoạch: có môn của học kỳ đã qua chưa đạt hoặc không kịp tín chỉ. Chưa đủ dữ liệu: chưa so được với kế hoạch đào tạo (thiếu kế hoạch hoặc chuyên ngành).",
+    "Trễ kế hoạch: có môn của học kỳ đã qua chưa đạt hoặc không kịp tín chỉ. Chưa đủ dữ liệu: chưa so được với kế hoạch đào tạo (thiếu kế hoạch hoặc chuyên ngành, hoặc bảng điểm chưa có dữ liệu).",
   ]);
   return buffer(workbook);
 }

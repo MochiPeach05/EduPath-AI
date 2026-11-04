@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { useLiveData } from "./use-live-data";
+import { adminFailureText, adminRequest, readAdminResponse } from "./admin-errors";
+import { formatVnDateTime } from "./display-format";
 
 export const COMPETENCY_API = "/api/admin/competencies";
 export const WEIGHT_TOLERANCE = 0.000001;
@@ -40,7 +42,8 @@ export type CompetencySummary = { cohort: string; courseCount: number; activeCou
 
 export const statusLabels: Record<CourseStatus, string> = { missing: "Chưa cấu hình", draft: "Bản nháp", active: "Đang áp dụng", archived: "Đã lưu trữ" };
 export const percentage = (weight: number) => `${Number((weight * 100).toFixed(6)).toLocaleString("vi-VN", { maximumFractionDigits: 6 })}%`;
-export const competencyDate = (date: string) => new Date(date).toLocaleString("vi-VN");
+/** "14:05 03/11/2026" in Vietnam time (display-format.ts). */
+export const competencyDate = (date: string) => formatVnDateTime(date);
 
 /**
  * A course that no skill of the catalog fits (the AI picked none, or no skill is left to pick):
@@ -117,23 +120,15 @@ const failures: Record<string, string> = {
   confirmation_mismatch: "Nội dung nhập để xác nhận chưa đúng.",
 };
 
-export async function readCompetencyResponse<T>(response: Response): Promise<T> {
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    if (response.status === 401) window.dispatchEvent(new Event("edupath-session-expired"));
-    const details = Array.isArray(body.details) ? body.details.filter((detail: unknown) => typeof detail === "string").join("\n") : "";
-    const message = failures[body.error] ?? (typeof body.message === "string" ? body.message : response.status === 409 ? "Dữ liệu đã được thay đổi. Hãy tải lại trước khi tiếp tục." : "Chưa thực hiện được thao tác. Vui lòng thử lại.");
-    throw new Error(message + (details ? `\n${details}` : ""));
-  }
-  return body as T;
+/** The JSON of a competency response; a failure is worded by admin-errors.ts, these pages' texts and the server's detail lines first. */
+export function readCompetencyResponse<T>(response: Response): Promise<T> {
+  return readAdminResponse<T>(response, failures, { details: true });
 }
-export async function competencyRequest<T>(url: string, init?: RequestInit): Promise<T> {
-  try { return await fetch(url, { ...init, credentials: "include", cache: "no-store" }).then(readCompetencyResponse<T>); }
-  catch (failure) { if (failure instanceof TypeError) throw new Error("Không thể kết nối hệ thống. Hãy kiểm tra kết nối và thử lại."); throw failure; }
+export function competencyRequest<T>(url: string, init?: RequestInit): Promise<T> {
+  return adminRequest<T>(url, init, failures, { details: true });
 }
 export function useCompetencyData<T>(url: string, revision = 0) {
   const [retry, setRetry] = useState(0);
-  const remote = useLiveData<T>(url, `${revision}.${retry}`, readCompetencyResponse);
-  const error = remote.error && /^(Failed to fetch|NetworkError|Load failed|fetch failed)/iu.test(remote.error) ? "Không thể kết nối hệ thống. Hãy kiểm tra kết nối và thử lại." : remote.error;
-  return { ...remote, error, retry: () => setRetry(value => value + 1) };
+  const remote = useLiveData<T>(url, `${revision}.${retry}`, readCompetencyResponse, adminFailureText);
+  return { ...remote, retry: () => setRetry(value => value + 1) };
 }

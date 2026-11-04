@@ -1,11 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { Icon, readResponse } from "./admin-account-shared";
+import { adminFailureText } from "./admin-errors";
 import { useLiveData } from "./use-live-data";
 import { layoutZoom } from "./page-scale";
 
+/** An admin list or detail kept current (use-live-data.ts); a failed load is worded by admin-errors.ts. */
 export function useData<T>(url: string, revision = 0) {
   const [retry, setRetry] = useState(0);
-  return { ...useLiveData<T>(url, `${revision}.${retry}`, readResponse), retry: () => setRetry((n) => n + 1) };
+  return { ...useLiveData<T>(url, `${revision}.${retry}`, readResponse, adminFailureText), retry: () => setRetry((n) => n + 1) };
 }
 export function Status({ loading, error, retry }: { loading: boolean; error: string | null; retry: () => void }) {
   return loading ? <p className="am-empty" role="status">Đang tải dữ liệu…</p> : error ? <div className="am-empty"><p className="admin-error" role="alert">{error}</p><button className="am-outline" onClick={retry}><Icon name="refresh" /> Thử lại</button></div> : null;

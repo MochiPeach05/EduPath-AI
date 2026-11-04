@@ -2,6 +2,7 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import type { AppRole, AuthenticatedUser } from "../auth/types.js";
+import { CLASS_OF } from "./class-code.js";
 import { advisorTemplate, planImport, type ImportLookups } from "./import.js";
 import { AdvisorError } from "./model.js";
 import { createAdvisorPortalRouter } from "./portal-router.js";
@@ -78,10 +79,18 @@ describe("advisors router: forms", () => {
     [{ ...body, name: "  " }, "name_required"], [{ ...body, email: " " }, "email_required"], [{ ...body, email: "nva" }, "invalid_input"],
     [{ ...body, classes: [] }, "classes_required"],
     [{ ...body, classes: ["71K29CNTT01", "lớp+"] }, "invalid_class"], [{ ...body, role: "admin" }, "invalid_input"],
+    // A class without its cohort matches no student (QA 2026-11-04): the message shows 71K29CNTT01.
+    [{ ...body, classes: ["71K29CNTT01", "CNTT08"] }, "invalid_class"],
   ])("refuses %j with %s", async (form, code) => {
     const { app, repository } = setup();
     await request(app).post("/advisors").set("Origin", origin).send(form).expect(400, { error: code });
     expect(repository.create).not.toHaveBeenCalled();
+  });
+
+  it("stores typed classes as canonical codes, the prefix added to a class written with its cohort only", async () => {
+    const { app, repository } = setup();
+    await request(app).post("/advisors").set("Origin", origin).send({ ...body, classes: ["k29cntt03", "72K29CNTT01", "71K29CNTT03"] }).expect(201);
+    expect(repository.create).toHaveBeenCalledWith(actor, expect.objectContaining({ classes: ["71K29CNTT03", "72K29CNTT01"] }));
   });
 
   it("edits without changing the email and removes an advisor", async () => {
@@ -186,6 +195,12 @@ describe("advisor portal router", () => {
     expect(Object.keys(permissions)).toEqual(["view", "act", "never", "notes"]);
   });
 
+  it("filters by a class as its canonical code", async () => {
+    const { app, repository } = setup("advisor");
+    await request(app).get("/portal/students").query({ class: " k29cntt08" }).expect(200);
+    expect(repository.students).toHaveBeenCalledWith(expect.objectContaining({ role: "advisor" }), expect.objectContaining({ className: "71K29CNTT08" }));
+  });
+
   it("keeps the list's own order for a sort key it does not know", async () => {
     const { app, repository } = setup("advisor");
     await request(app).get("/portal/students?sort=specialty&dir=asc").expect(200);
@@ -254,11 +269,16 @@ describe("advisor portal repository: whose students an account sees (QTV & CVHT)
     const all = repository();
     await all.repo.classes(as("admin"));
     expect(String(all.query.mock.calls[0]?.[0])).toContain("UNION SELECT class_name FROM ad_advisor_classes");
+    // Students' classes as canonical codes, each computed once, so a class of K27 and one of K29 with the same name are two
+    // rows (QA 2026-11-04).
+    expect(String(all.query.mock.calls[0]?.[0])).toContain(`WITH class_members AS MATERIALIZED (SELECT u.id, p.cohort_code, ${CLASS_OF} AS class_name`);
+    expect(String(all.query.mock.calls[0]?.[0])).toContain("SELECT DISTINCT class_name FROM class_members WHERE class_name IS NOT NULL");
+    expect(String(all.query.mock.calls[0]?.[0])).toContain("LEFT JOIN class_members u ON u.class_name = k.class_name");
     expect(String(all.query.mock.calls[0]?.[0])).toContain('AS "advisorName"');
     expect(all.query.mock.calls[0]?.[1]).toBeUndefined();
     const own = repository();
     await own.repo.classes(as("advisor"));
-    expect(String(own.query.mock.calls[0]?.[0])).toContain("WITH k AS (SELECT class_name FROM ad_advisor_classes WHERE advisor_user_id = $1)");
+    expect(String(own.query.mock.calls[0]?.[0])).toContain(", k AS (SELECT class_name FROM ad_advisor_classes WHERE advisor_user_id = $1)");
     expect(own.query.mock.calls[0]?.[1]).toEqual([actor.userId]);
   });
 

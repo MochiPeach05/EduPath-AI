@@ -241,6 +241,12 @@
   flex-shrink: 0;
 }
 
+/* A name without letters to take initials from shows a person icon. */
+.am-avatar .ep-icon {
+  width: 18px;
+  height: 18px;
+}
+
 .am-shell button {
   font: inherit;
   cursor: pointer;
@@ -357,6 +363,15 @@
   padding: 17px 20px;
   border-top: 1px solid #f1e2e7;
   border-bottom: 1px solid #ebd6de;
+}
+
+/* No table header of the admin portal breaks inside a word (QA 2026-11-04: "Khóa" read "Khó / a" on Tốt nghiệp, whose
+   page lets long text break anywhere). A header wraps only between words, so its column is never narrower than its
+   longest word. */
+.am-shell th {
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: manual;
 }
 
 .am-table td {

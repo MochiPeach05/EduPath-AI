@@ -204,8 +204,11 @@ describe("Postgres admin account repository", () => {
     await repository.list(actor, { q: "' OR 1=1 --", page: 2, pageSize: 10 });
     expect(query.mock.calls[0]?.[1]).toEqual(["' OR 1=1 --", 10, 10, null, null]);
     expect(query.mock.calls[0]?.[0]).not.toContain("' OR 1=1 --");
-    expect(query.mock.calls[0]?.[0]).toContain("FROM numbered ORDER BY name ASC, id ASC LIMIT $2 OFFSET $3");
+    // Names in Vietnamese order, also in the list's own order (QA 2026-11-04: Đ after D).
+    expect(query.mock.calls[0]?.[0]).toContain('FROM numbered ORDER BY name COLLATE "vi-x-icu" ASC, id ASC LIMIT $2 OFFSET $3');
     await repository.history(actor, { q: "", page: 1, pageSize: 10, sort: "stt", dir: "desc" });
     expect(query.mock.calls[1]?.[0]).toContain('ORDER BY "occurredAt" ASC, id ASC LIMIT $7 OFFSET $8');
+    // The login history names a person as the Tài khoản list does: the profile's name, else the display name.
+    expect(query.mock.calls[1]?.[0]).toContain("COALESCE(NULLIF(btrim(p.full_name), ''), u.display_name) AS name");
   });
 });
