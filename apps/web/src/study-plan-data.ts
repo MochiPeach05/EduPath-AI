@@ -25,7 +25,9 @@ export type StudyPlanCourse = {
   code: string; name: string; credits: number; type: string; kind: "mandatory" | "elective"; group: string | null;
   conditional: boolean; applicable: boolean; specialtyName: string | null; standardTerm: string | null;
   prerequisites: string[]; prior: string[]; state: CourseState; inProgressTerm: string | null; onlyInStandard?: boolean;
-  planTerm: string | null; offeredTerms: string[]; grade: string | null; takenTerm: string | null; attempts: number; equivalent: string | null;
+  planTerm: string | null; offeredTerms: string[];
+  /** Opened every term whatever the training plans list: English (API opensEveryTerm); absent before 2026-11-04. */
+  everyTerm?: boolean; grade: string | null; takenTerm: string | null; attempts: number; equivalent: string | null;
 };
 export type StudyPlanGraduationGroup = {
   label: string; kind: "mandatory" | "elective"; unit: "môn" | "TC"; required: number | null; passed: number | null; status: TriState; courseCodes: string[];
@@ -407,15 +409,16 @@ export function planIssues(context: Pick<StudyPlanContext, "courses" | "offering
  * "semester" when none opens it in that semester of any year; "term" when, up to the last term the plans cover, none
  * opens it in that very term. Past that term the semester decides (a course of HK2 is opened in HK2).
  */
-export function offering(course: Pick<StudyPlanCourse, "offeredTerms">, term: string, offeringUntil: string | null): "ok" | "semester" | "term" {
-  if (!course.offeredTerms.length || course.offeredTerms.includes(term)) return "ok";
+export function offering(course: Pick<StudyPlanCourse, "offeredTerms" | "everyTerm">, term: string, offeringUntil: string | null): "ok" | "semester" | "term" {
+  // English opens every term (user 2026-11-04: "môn anh văn kì nào cũng mở nhé"; the API's opensEveryTerm).
+  if (course.everyTerm || !course.offeredTerms.length || course.offeredTerms.includes(term)) return "ok";
   if (!course.offeredTerms.some((offered) => offered.endsWith(term.slice(4)))) return "semester";
   return offeringUntil && termIndex(term) <= termIndex(offeringUntil) ? "term" : "ok";
 }
 
 /** "HK1, HK2": the semesters the training plans open a course in. */
-export const offeredSemesters = (course: Pick<StudyPlanCourse, "offeredTerms">) =>
-  [...new Set(course.offeredTerms.map((term) => `HK${term.slice(4)}`))].sort().join(", ");
+export const offeredSemesters = (course: Pick<StudyPlanCourse, "offeredTerms" | "everyTerm">) =>
+  course.everyTerm ? "mọi học kỳ" : [...new Set(course.offeredTerms.map((term) => `HK${term.slice(4)}`))].sort().join(", ");
 
 /**
  * Whether the training plans open a course in the term after the current one, and in which semester they usually do
@@ -423,9 +426,10 @@ export const offeredSemesters = (course: Pick<StudyPlanCourse, "offeredTerms">) 
  * HK2". Every cohort's plan counts (a course one cohort studies next term is opened then); past the last term the plans
  * cover, the semester decides ("có thể mở").
  */
-export function nextTermOffer(course: Pick<StudyPlanCourse, "offeredTerms">, context: Pick<StudyPlanContext, "currentTerm" | "offeringUntil">): { tone: "ok" | "warn" | "unknown"; text: string } {
-  if (!course.offeredTerms.length) return { tone: "unknown", text: "Chưa có kế hoạch đào tạo nào xếp lịch mở môn này" };
+export function nextTermOffer(course: Pick<StudyPlanCourse, "offeredTerms" | "everyTerm">, context: Pick<StudyPlanContext, "currentTerm" | "offeringUntil">): { tone: "ok" | "warn" | "unknown"; text: string } {
   const next = nextTerm(context.currentTerm);
+  if (course.everyTerm) return { tone: "ok", text: `Kỳ sau (${termLabel(next)}): có mở · mở mọi học kỳ` };
+  if (!course.offeredTerms.length) return { tone: "unknown", text: "Chưa có kế hoạch đào tạo nào xếp lịch mở môn này" };
   const lead = `Kỳ sau (${termLabel(next)})`, usual = `thường mở ${offeredSemesters(course)}`;
   if (course.offeredTerms.includes(next)) return { tone: "ok", text: `${lead}: có mở · ${usual}` };
   if (offering(course, next, context.offeringUntil) === "ok") return { tone: "ok", text: `${lead}: có thể mở · ${usual}` };

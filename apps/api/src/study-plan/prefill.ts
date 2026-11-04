@@ -42,11 +42,11 @@ export function prefillPlan(context: Pick<StudyPlanContext, "courses" | "current
 export type AiProposal = { roadmapId: string; completedAt: string; term: string; courses: { code: string; term: string }[] };
 
 /** A training plan opens the course in that semester (HK1, HK2 or HK3) of some year, or none says. */
-const sameSemester = (course: Pick<StudyPlanCourse, "offeredTerms">, term: string) =>
-  !course.offeredTerms.length || course.offeredTerms.some((offered) => offered.endsWith(term.slice(4)));
+const sameSemester = (course: Pick<StudyPlanCourse, "offeredTerms" | "everyTerm">, term: string) =>
+  course.everyTerm || !course.offeredTerms.length || course.offeredTerms.some((offered) => offered.endsWith(term.slice(4)));
 /** The planner's check (web study-plan-data.ts offering): a training plan opens the course in that term, or none says. */
-function opensIn(course: Pick<StudyPlanCourse, "offeredTerms">, term: string, offeringUntil: string | null): boolean {
-  if (!course.offeredTerms.length || course.offeredTerms.includes(term)) return true;
+function opensIn(course: Pick<StudyPlanCourse, "offeredTerms" | "everyTerm">, term: string, offeringUntil: string | null): boolean {
+  if (course.everyTerm || !course.offeredTerms.length || course.offeredTerms.includes(term)) return true;
   if (!sameSemester(course, term)) return false;
   return !offeringUntil || termIndex(term) > termIndex(offeringUntil);
 }
@@ -81,7 +81,7 @@ export async function readAiPlan(db: Db, userId: string, context: Pick<StudyPlan
   const term = facts.nextTerm && termIndex(facts.nextTerm) >= termIndex(first) ? facts.nextTerm : first;
   const byCode = new Map(context.courses.map((course) => [course.code, course]));
   // The term a plan opens it in, else one of the semester plans open it in, else the term of the roadmap.
-  const placeOf = (course: Pick<StudyPlanCourse, "offeredTerms">) => {
+  const placeOf = (course: Pick<StudyPlanCourse, "offeredTerms" | "everyTerm">) => {
     const candidates = [term, nextTerm(term), nextTerm(nextTerm(term))];
     return candidates.find((candidate) => opensIn(course, candidate, context.offeringUntil))
       ?? candidates.find((candidate) => sameSemester(course, candidate)) ?? term;

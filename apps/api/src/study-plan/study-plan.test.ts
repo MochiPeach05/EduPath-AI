@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "../auth/types.js";
 import { syntheticCurriculum, syntheticPlan, syntheticStandards, syntheticStudentTerms, syntheticTranscript } from "../competency-assessment/fixtures/synthetic-k29.js";
 import type { DatabasePool } from "../db/pool.js";
-import { planChoices, readStudyPlanFacts, type StudyPlanCourse } from "./context.js";
+import { opensEveryTerm, planChoices, readStudyPlanFacts, type StudyPlanCourse } from "./context.js";
 import { calendarTermCode, creditLimits, nextTerm, studyPlanSchema, termIndex, termLabel, type StudyPlanData } from "./model.js";
 import { prefillPlan, readAiPlan, readAiProposal } from "./prefill.js";
 import { plannedTranscript, projectGraduation } from "./projection.js";
@@ -105,6 +105,16 @@ describe("study plan model", () => {
     expect(studyPlanSchema.parse(plan)).toEqual(plan);
     expect(studyPlanSchema.safeParse({ ...plan, kept: [""] }).success).toBe(false);
     expect(studyPlanSchema.safeParse({ ...plan, kept: null }).success).toBe(false);
+  });
+});
+
+describe("courses opened every term (user 2026-11-04: \"môn anh văn kì nào cũng mở nhé\")", () => {
+  it("knows English by its code or its name, and nothing else", () => {
+    expect(opensEveryTerm("71ENG610063", "Anh văn 6 (AV6)")).toBe(true);
+    expect(opensEveryTerm("71ENG010012", "Anh văn dự bị (AV0)")).toBe(true);
+    expect(opensEveryTerm("X1", "Tiếng Anh chuyên ngành")).toBe(true);
+    expect(opensEveryTerm("71ITAI40803", "Nhập môn xử lý ảnh số")).toBe(false);
+    expect(opensEveryTerm("71ITSE30103", "Kiểm thử phần mềm")).toBe(false);
   });
 });
 

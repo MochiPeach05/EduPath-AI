@@ -19,6 +19,14 @@ import { calendarTermCode, creditLimits, termIndex } from "./model.js";
 type Db = Pick<PoolClient, "query">;
 
 /** One CTĐT course (or a course only the graduation standard lists) as the page needs it. */
+/**
+ * The courses the school opens every term, whatever the training plans list (user 2026-11-04: "môn anh văn kì nào cũng mở
+ * nhé"): English, by its code (71ENG…) or its name ("Anh văn 5 (AV5)", "Tiếng Anh …").
+ */
+export function opensEveryTerm(code: string, name: string): boolean {
+  return /^\d*ENG/i.test(code.trim()) || /^(anh van|tieng anh)\b/.test(fold(name));
+}
+
 export type StudyPlanCourse = {
   code: string;
   name: string;
@@ -58,6 +66,8 @@ export type StudyPlanCourse = {
    * opens classes mostly by these plans, and courses outside them rarely (user, 2026-10-24).
    */
   offeredTerms: string[];
+  /** The school opens the course every term whatever the training plans say: English (opensEveryTerm). */
+  everyTerm: boolean;
   /** The letter of the attempt that counts (A … F, VT, MT), the term it was taken and how many times the course was taken. */
   grade: string | null;
   takenTerm: string | null;
@@ -292,7 +302,7 @@ export async function readStudyPlanFacts(db: Db, userId: string, now = new Date(
   /** The term of the cohort's own training plan and every term a training plan opens the course in. */
   const planTerms = (code: string, name: string) => {
     const rows = planRows(code, name);
-    return { planTerm: termsOf(rows.filter(ownPlan))[0] ?? null, offeredTerms: termsOf(rows) };
+    return { planTerm: termsOf(rows.filter(ownPlan))[0] ?? null, offeredTerms: termsOf(rows), everyTerm: opensEveryTerm(code, name) };
   };
 
   // The other code a course is counted through: an older code of the standard (K26 "DIT0091 / 71ITDS30103"), or a

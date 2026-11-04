@@ -222,6 +222,11 @@ describe("planning", () => {
     expect(nextTermOffer(course("O", { offeredTerms: ["HK252", "HK262"] }), context())).toEqual({ tone: "ok", text: "Kỳ sau (HK2 2026–2027): có mở · thường mở HK2" });
     expect(nextTermOffer(course("N", { offeredTerms: ["HK251", "HK261"] }), context())).toEqual({ tone: "warn", text: "Kỳ sau (HK2 2026–2027): không mở theo kế hoạch đào tạo · thường mở HK1" });
     expect(nextTermOffer(course("U", { offeredTerms: [] }), context()).tone).toBe("unknown");
+    // English opens every term whatever the plans list (user 2026-11-04): never "không mở", in no term.
+    const english = course("71ENG610063", { name: "Anh văn 6 (AV6)", offeredTerms: ["HK243"], everyTerm: true });
+    expect(nextTermOffer(english, context())).toEqual({ tone: "ok", text: "Kỳ sau (HK2 2026–2027): có mở · mở mọi học kỳ" });
+    expect(offering(english, "HK262", "HK262")).toBe("ok");
+    expect(offering({ offeredTerms: ["HK243"] }, "HK262", "HK262")).toBe("semester");
     // Past the plans' last term, the semester decides.
     expect(nextTermOffer(course("P", { offeredTerms: ["HK252"] }), context({ currentTerm: "HK262", offeringUntil: "HK262" })).text)
       .toBe("Kỳ sau (HK3 2026–2027): không mở theo kế hoạch đào tạo · thường mở HK2");
