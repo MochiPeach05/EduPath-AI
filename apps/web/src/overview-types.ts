@@ -57,8 +57,10 @@ export type OverviewResponse = {
   };
   /**
    * Progress against the cohort's training plan for the student's specialty (the engine's course states and planned
-   * terms, computed live from the current transcript; no competency score is used). null without a transcript; blocked
-   * when the plan cannot be read (the engine's AssessmentError code: specialty_required, curriculum_unavailable…).
+   * terms, computed live from the current transcript, so always on the current engine rules; no competency score is used).
+   * null without a transcript; blocked when the plan cannot be read (the engine's AssessmentError code: specialty_required,
+   * curriculum_unavailable…). The bar adds up to the programme (user review 2026-11-04): passed + running + late + rest =
+   * totalCredits, and the boxes, the legend and the bar say the same numbers.
    */
   progress: null | {
     blocked: string | null;
@@ -66,12 +68,18 @@ export type OverviewResponse = {
     totalCredits: number | null;
     /** Credits of passed or exempt courses that count (condition-only courses excluded). */
     passedCredits: number;
+    /** Credits of the courses registered this term ("Học kỳ này"), condition-only courses (GDTC/GDQP) excluded. */
     runningCredits: number;
-    /** Credits of planned courses of terms before the studying one that are not passed (the engine's late entries). */
+    /**
+     * "Trễ kế hoạch" (comp-calc-v19): credits of courses and choices of terms before the studying one that are neither passed
+     * nor in progress, condition-only courses excluded; never more than remainingCredits.
+     */
     lateCredits: number;
-    /** totalCredits − passed − running, null without totalCredits. */
+    /** "Còn lại": remainingCredits − lateCredits, what is left after this term and not late; absent from an older API. */
+    restCredits?: number | null;
+    /** totalCredits − passed − running (everything after this term, late included), null without totalCredits. */
     remainingCredits: number | null;
-    /** Terms of the training plan after the studying one, and remainingCredits spread over them (rounded up). */
+    /** Terms of the training plan after the studying one, and remainingCredits spread over them (rounded up; null when none is left). */
     termsLeft: number | null;
     creditsPerTerm: number | null;
     /** The highest credits the plan itself puts in one of the remaining terms (for "nhiều hơn mức kế hoạch thường có"). */
@@ -82,11 +90,16 @@ export type OverviewResponse = {
       /** done: every course passed; late: a term before the studying one with a course not passed; running: the studying term; planned: later. */
       state: "done" | "late" | "running" | "planned";
       passedCredits: number;
+      /** "Tín chỉ học kỳ theo kế hoạch" as Kế hoạch đào tạo prints it, else the student's own courses of the term. */
       plannedCredits: number;
+      /** Credits of the term late or failed ("còn nợ"), 0 from the studying term on; absent from an older API. */
+      lateCredits?: number;
+      /** The studying term: credits of every course registered in it ("đang học"); absent from an older API. */
+      runningCredits?: number;
       courses: {
         code: string; name: string; credits: number;
         state: "passed" | "failed" | "running" | "late" | "planned";
-        /** What the page prints after the course: "B+", "cần học lại", "đang học lại", "dự kiến". */
+        /** What the page prints after the course: "B+", "cần học lại", "đang học lại", "chưa đăng ký", "dự kiến". */
         detail: string;
       }[];
     }[];
@@ -154,9 +167,18 @@ export type OverviewResponse = {
     plan: { credits: number; status: "over" | "under" | "ok" | "empty" } | null;
     /** The planner's credits per term (min, max), null when the CTĐT is unknown. */
     limits: { min: number; max: number } | null;
+    /**
+     * The Lộ trình AI tab's notes, by its rules: made from an assessment other than the newest one (stale); its window is over
+     * (ended). Absent from an older API.
+     */
+    stale?: boolean;
+    ended?: boolean;
   };
-  /** Courses being studied in the studying term, with the skills they train (the faculty's course–skill links). */
-  running: { code: string; name: string; credits: number; retake: boolean; skills: string[] }[];
+  /**
+   * Courses being studied in the studying term, with the skills they train (the faculty's course–skill links). conditionOnly:
+   * a GDTC/GDQP course, listed but counted in no credit total (absent from an older API).
+   */
+  running: { code: string; name: string; credits: number; retake: boolean; conditionOnly?: boolean; skills: string[] }[];
   /**
    * "Cần chú ý" (STU-PROG-03), computed by the system (no AI) from the progress, the transcript and the graduation check.
    * level: the worst item, "ok" when nothing is wrong, "none" without enough data.

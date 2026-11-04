@@ -2,6 +2,7 @@
 // training plan, the transcript and the graduation check. Pure, so the faculty's report of students at risk (AD-REPORT-04)
 // and the notifications can reuse the same rules. The texts are the portal's neutral voice, as the approved preview reads;
 // terms are written "HK2 2024–2025" as on every student page (term-name.ts).
+import { shortfallText } from "../competency-assessment/plan-progress.js";
 import { termName } from "../term-name.js";
 import type { OverviewWarning, OverviewWarnings } from "./types.js";
 
@@ -21,8 +22,11 @@ export type WarningInput = {
   failed: { code: string; name: string; letter: string | null; term: string | null; plannedIn: string | null }[];
   /** Planned courses of a term before the studying one (or that one) not taken yet, failed ones excluded. */
   late: { code: string; name: string; term: string }[];
-  /** Choices and elective groups of the plan that are due and still short. */
-  electives: { label: string; code: string | null; term: string; unit: "course" | "credit"; missing: number; missingCredits: number }[];
+  /**
+   * Choices and elective groups of the plan, of a term before the studying one, still short. missing is in the unit
+   * (comp-calc-v19); shortfall: the engine's wording (shortfallText), written from the other fields when absent.
+   */
+  electives: { label: string; code: string | null; term: string; unit: "course" | "credit"; missing: number; missingCredits: number; shortfall?: string }[];
   /** The credits left after the studying term against the plan's remaining terms. */
   pace: { remaining: number; termsLeft: number; perTerm: number | null; planMax: number | null } | null;
   /** The cumulative GPA and the graduation minimum, when both are known. */
@@ -141,7 +145,8 @@ export function overviewWarnings(input: WarningInput): OverviewWarnings {
 
   for (const group of input.electives) {
     const name = group.code ? `Nhóm tự chọn ${group.code}` : group.label;
-    const missing = group.unit === "credit" ? `${group.missingCredits} TC` : `${group.missing} môn`;
+    // In the unit of the requirement: "6 TC" for a group of credits, "1 học phần (3 TC)" for a "Chọn k" choice.
+    const missing = group.shortfall ?? shortfallText(group);
     items.push({
       level: "warn", kind: "elective_short", key: `elective:${group.code ?? group.label}:${group.term}`,
       text: group.code

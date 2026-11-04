@@ -2,7 +2,8 @@
 // Any problem returns a typed error. Since comp-v13 (user review 2026-10-30) a comment whose schema holds is not failed
 // at once: the worker router asks the model once more with the problems listed (retryNote), and if some remain,
 // repairAiOutput drops the sentences and items at fault (the job metrics count them). A wrong schema still fails the job
-// with invalid_ai_output.
+// with invalid_ai_output. comp-v14 (review 2026-11-04: "69" for 69,9): a number that lost its decimals is one more problem
+// (truncated_number, truncatedNumber below; the roadmap and graduation advice validators use it too).
 import { z } from "zod";
 import { termName, termsNamedIn } from "../../term-name.js";
 import { AI_OUTPUT_LIMITS as L, AI_PRIORITIES, schemaContext, type AiOutput, type OutputSchemaContext } from "./schema.js";
@@ -18,12 +19,16 @@ type AiValidationReason =
   | "conflicting_skill"
   | "forbidden_content"
   | "invented_number"
+  | "truncated_number"
   | "term_not_in_plan"
   | "off_topic_skill";
 
 type AiValidationError = { code: "invalid_ai_output"; reason: AiValidationReason; path: string };
-/** One problem of a comment; `term` is the term a term_not_in_plan text names. */
-export type AiProblem = { reason: AiValidationReason; path: string; term?: string };
+/**
+ * One problem of a comment; `term` is the term a term_not_in_plan text names, `number` the number a truncated_number text
+ * writes and `given` the numbers of the data block it was cut from (comp-v14).
+ */
+export type AiProblem = { reason: AiValidationReason; path: string; term?: string; number?: string; given?: string[] };
 type AiValidationResult =
   | { ok: true; output: AiOutput }
   /** problems and output: every problem of a comment whose schema held, for the retry and repairAiOutput. */
@@ -39,6 +44,8 @@ export type CommentChecks = {
   terms: string[];
   names: Record<string, string>;
   courses: Record<string, string[]>;
+  /** comp-v14: the scores of the data block by skill, group and course name (truncatedNamedScore); absent before. */
+  scores?: NamedScore[];
 };
 
 export type AiValidationContext = OutputSchemaContext & {
@@ -48,6 +55,8 @@ export type AiValidationContext = OutputSchemaContext & {
   courseCodes: ReadonlySet<string>;
   /** comp-v13; absent for a job queued before. */
   checks?: CommentChecks;
+  /** The decimals and scores of the data block, for truncatedNumber (comp-v14); absent: no such check. */
+  numberFacts?: NumberFacts;
 };
 
 const text = (max: number) => z.string().max(max).refine((value) => value.trim().length > 0, "empty");
@@ -114,15 +123,180 @@ export function hasForbiddenContent(value: string): boolean {
   return FORBIDDEN_PATTERNS.some((pattern) => pattern.test(value));
 }
 
+/* ------------------------------------------------------------------------ */
+/* comp-v14: a number copied without its decimals */
+
+/**
+ * What a data block says about its numbers (comp-v14, review 2026-11-04: comments wrote "69" for 69,9 and "64" for 64,8): its
+ * numbers with a decimal part as written ("69,9", "2,85"; score: written as a score), and every value it writes as a score.
+ */
+export type NumberFacts = {
+  decimals: readonly { text: string; value: number; places: number; score: boolean }[];
+  scores: ReadonlySet<number>;
+};
+type NumberToken = { text: string; value: number; places: number; score: boolean };
+
+/** A number on its own, not inside a word or a code (HK1, S01, 71ITSE30103), with its decimal part. */
+const NUMBER_TOKEN = /(?<![\p{L}\p{N}])\d+(?:[.,]\d+)?(?![\p{L}\p{N}])/gu;
+/** Terms ("HK2 2026–2027", "học kỳ 2 năm học 2026-2027") and dates (21/12/2026) hold no amount. */
+const NOT_AN_AMOUNT = /(?<![\p{L}\p{N}])(?:(?:HK|học k[ỳì])\s*[1-3]\s*(?:[·,\-–]\s*)?(?:năm học\s*|năm\s*)?20\d{2}\s*[-–]\s*20\d{2}|\d{1,2}\/\d{1,2}\/\d{4})(?![\p{L}\p{N}])/giu;
+/** After a number, what is counted: "3 TC", "8/10 môn", "9 kỹ năng", "46%". A count is never a score. */
+const COUNT_UNIT = /^\s*(?:%|(?:tín chỉ|tc|môn|học phần|kỹ năng|mục|nhóm|lần|học kỳ|năm|tháng|tuần|ngày|giờ|dòng|bước|việc|dự án|sinh viên|nghề|vị trí)(?![\p{L}]))/iu;
+/** After a number, a score: "69 điểm" (not "3 điểm mạnh"). */
+const SCORE_AFTER = /^\s*điểm(?![\p{L}])(?!\s+(?:mạnh|yếu|cần|chú ý|lưu ý|nổi bật|chung|khác|quan trọng|đáng)(?![\p{L}]))/iu;
+const SCORE_LABEL = String.raw`(?:tổng|phù hợp|kỹ năng|nhóm|năng lực|trung bình|tb|tích lũy|tích luỹ|học tập|hệ\s*\d+|số|hiện tại|hiện có|của bạn|chung|cao nhất|thấp nhất)`;
+const SCORE_JOIN = String.raw`(?:là|đạt|chỉ|mới|còn|khoảng|ở mức|mức|đang|vẫn|được|bằng)`;
+/** Before a number, a score: "điểm 69", "điểm tổng: 69", "điểm trung bình tích lũy là 2", "ngưỡng 80", "đạt 72", "thiếu 15". */
+const SCORE_BEFORE = new RegExp(String.raw`(?<![\p{L}])(?:(?:điểm|ngưỡng)(?:\s+${SCORE_LABEL})*\s*:?(?:\s+${SCORE_JOIN})*|đạt|ở mức|mức|thiếu)\s*$`, "iu");
+/** The scales a score is written over: "69,9/100", "8,5/10", "2,85/4". */
+const SCORE_SCALES = new Set(["100", "10", "4"]);
+
+/** Whether the number at index is written as a score: by a scale or "điểm" after it, or a score word before it; a count never is. */
+function isScoreAt(text: string, index: number, length: number): boolean {
+  const before = text.slice(Math.max(0, index - 80), index);
+  // The scale of a score ("/100") or the total of a count ("/126") is no score itself.
+  if (/\/\s*$/.test(before)) return false;
+  let after = text.slice(index + length, index + length + 40);
+  const scale = /^\s*\/\s*(\d+)(?![\p{N}])/u.exec(after);
+  if (scale) {
+    after = after.slice(scale[0].length);
+    return SCORE_SCALES.has(scale[1]!) && !COUNT_UNIT.test(after);
+  }
+  if (COUNT_UNIT.test(after)) return false;
+  return SCORE_AFTER.test(after) || SCORE_BEFORE.test(before);
+}
+
+/** The numbers of a text with their decimal places and whether each is written as a score; terms and dates left out. */
+function numberTokens(raw: string): NumberToken[] {
+  const text = raw.normalize("NFC").replace(NOT_AN_AMOUNT, (match) => " ".repeat(match.length));
+  return [...text.matchAll(NUMBER_TOKEN)].map((match) => {
+    const digits = match[0];
+    const places = /[.,](\d+)$/.exec(digits)?.[1]?.length ?? 0;
+    return { text: digits.replace(".", ","), value: Number(digits.replace(",", ".")), places, score: isScoreAt(text, match.index ?? 0, digits.length) };
+  });
+}
+
+/** The decimals and the score values of a data block (the prompt's user message), for truncatedNumber. */
+export function numberFactsOf(data: string): NumberFacts {
+  const tokens = numberTokens(data);
+  const decimals = new Map<string, NumberToken>();
+  for (const token of tokens) {
+    if (!token.places || Number.isInteger(token.value)) continue;
+    const seen = decimals.get(token.text);
+    decimals.set(token.text, { ...token, score: token.score || Boolean(seen?.score) });
+  }
+  return { decimals: [...decimals.values()], scores: new Set(tokens.filter((token) => token.score).map((token) => token.value)) };
+}
+
+/** A value cut to fewer decimal places, and rounded to them: 69,94 → 69 and 70 (no places), 2,85 → 2,8 and 2,9 (one). */
+const cutTo = (value: number, places: number) => {
+  const factor = 10 ** places;
+  return [Math.trunc(value * factor + 1e-9) / factor, Math.round(value * factor) / factor];
+};
+
+/**
+ * The first number of a text that is a number of the data block with its decimals dropped or rounded away, with the numbers
+ * it was cut from (at most 3), or null (comp-v14). "69" when the data has 69,9 and no 69; "2,8" for 2,85. Also "69 điểm",
+ * "điểm 69", "69/100" or "đạt 69" when the data has the score 69,9 and 69 only as something else (a count): written as a
+ * score, it must be one of the data's scores. Terms, dates and the numbers inside codes are not amounts.
+ */
+export function truncatedNumber(text: string, numbers: ReadonlySet<number>, facts: NumberFacts): { number: string; given: string[] } | null {
+  for (const token of numberTokens(text)) {
+    const invented = !numbers.has(token.value);
+    if (!invented && !(token.places === 0 && token.score && !facts.scores.has(token.value))) continue;
+    // A number of the data written as a score is checked against the data's scores only.
+    const pool = invented ? facts.decimals : facts.decimals.filter((item) => item.score);
+    const given = pool.filter((item) => item.places > token.places && cutTo(item.value, token.places).some((value) => Math.abs(value - token.value) < 1e-9));
+    if (given.length) return { number: token.text, given: given.slice(0, 3).map((item) => item.text) };
+  }
+  return null;
+}
+
+/**
+ * A score of a data block and what it belongs to: a skill, group or course name, "điểm tổng", "điểm trung bình tích lũy"
+ * (comp-v14). value is written as in the data block ("72,3"). Kept on the server with the job's input.
+ */
+export type NamedScore = { name: string; value: string };
+/** Between a name and a number, words that make the number another quantity: a minimum, threshold, shortfall or change. */
+const OTHER_QUANTITY = /(?<![\p{L}])(?:tối thiểu|yêu cầu|ngưỡng|từ|dưới|trên|hơn|cần|thiếu|còn|tăng|giảm|thêm|so với|mục tiêu|lên)(?![\p{L}])/iu;
+/** Right before a number, a place in a sequence, not an amount: "học kỳ 2", "lần 2", "tháng 3". */
+const POSITION_BEFORE = /(?<![\p{L}])(?:học k[ỳì]|kỳ|hk|năm|lần|tháng|tuần|bước|mục|phần|giai đoạn)\s*$/iu;
+const escapePattern = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const decimalPlaces = (text: string) => /[.,](\d+)$/.exec(text)?.[1]?.length ?? 0;
+
+/** Stored named scores of a job (a list of { name, value } strings); [] for a job without them or a malformed value. */
+export function namedScoresOf(value: unknown): NamedScore[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is NamedScore => typeof item === "object" && item !== null
+    && typeof (item as NamedScore).name === "string" && typeof (item as NamedScore).value === "string");
+}
+
+/**
+ * The first named score whose own number a text writes cut (comp-v14): a name of the list followed in its clause by its
+ * value without the decimals, or rounded away, as the first number that is no count: "Lập trình cơ bản đạt 72" for 72,3
+ * also when another skill scores 72, "Điểm tổng của bạn là 70" for 70,3. Longer names are read first ("Lập trình cơ bản"
+ * is not also "Lập trình"); a minimum, threshold or shortfall between the name and the number ("cần tối thiểu 2") is left
+ * alone. Returns like truncatedNumber.
+ */
+export function truncatedNamedScore(text: string, named: readonly NamedScore[]): { number: string; given: string[] } | null {
+  const plain = text.normalize("NFC").replace(NOT_AN_AMOUNT, (match) => " ".repeat(match.length));
+  const byName = new Map<string, { name: string; values: string[] }>();
+  for (const item of named) {
+    const name = item.name.normalize("NFC").trim().replace(/\s+/g, " ");
+    if (!name) continue;
+    const key = name.toLocaleLowerCase("vi-VN");
+    const entry = byName.get(key) ?? { name, values: [] };
+    if (!entry.values.includes(item.value)) entry.values.push(item.value);
+    byName.set(key, entry);
+  }
+  const taken = new Set<number>();
+  const found: { start: number; end: number; values: string[] }[] = [];
+  for (const entry of [...byName.values()].sort((a, b) => b.name.length - a.name.length)) {
+    const pattern = new RegExp(`(?<![\\p{L}\\p{N}])${entry.name.split(" ").map(escapePattern).join("\\s+")}(?![\\p{L}\\p{N}])`, "giu");
+    for (const match of plain.matchAll(pattern)) {
+      const start = match.index ?? 0, end = start + match[0].length;
+      let free = true;
+      for (let at = start; at < end && free; at++) free = !taken.has(at);
+      if (!free) continue;
+      for (let at = start; at < end; at++) taken.add(at);
+      found.push({ start, end, values: entry.values });
+    }
+  }
+  found.sort((a, b) => a.start - b.start);
+  for (const [index, item] of found.entries()) {
+    const values = item.values.map((value) => ({ text: value, value: Number(value.replace(",", ".")), places: decimalPlaces(value) }))
+      .filter((value) => Number.isFinite(value.value));
+    if (!values.some((value) => value.places && !Number.isInteger(value.value))) continue;
+    // The clause after the name, up to the next name: "." ends it unless a decimal digit follows.
+    let window = plain.slice(item.end, Math.min(found[index + 1]?.start ?? plain.length, item.end + 80));
+    const stop = window.search(/[;!?\n]|\.(?!\d)/);
+    if (stop >= 0) window = window.slice(0, stop);
+    for (const match of window.matchAll(NUMBER_TOKEN)) {
+      const at = match.index ?? 0, digits = match[0];
+      const before = window.slice(0, at);
+      // A scale or total ("/100"), a place ("học kỳ 2") or a count, also of a ratio ("3 TC", "3/4 kỹ năng"), is no score.
+      const counted = COUNT_UNIT.test(window.slice(at + digits.length).replace(/^\s*\/\s*\d+(?![\p{N}])/u, ""));
+      if (/\/\s*$/.test(before) || POSITION_BEFORE.test(before) || counted) continue;
+      if (OTHER_QUANTITY.test(before)) break;
+      const token = { value: Number(digits.replace(",", ".")), places: decimalPlaces(digits) };
+      if (values.some((value) => Math.abs(value.value - token.value) < 1e-9)) break;
+      const given = values.filter((value) => value.places > token.places && cutTo(value.value, token.places).some((cut) => Math.abs(cut - token.value) < 1e-9));
+      if (given.length) return { number: digits.replace(".", ","), given: given.map((value) => value.text) };
+      break;
+    }
+  }
+  return null;
+}
+
 const isStrings = (value: unknown): value is string[] => Array.isArray(value) && value.every((item) => typeof item === "string");
 const isRecordOf = <T>(value: unknown, check: (item: unknown) => item is T): value is Record<string, T> =>
   typeof value === "object" && value !== null && !Array.isArray(value) && Object.values(value).every(check);
 /** The stored checks of a comp-v13 job; undefined for an older job or a malformed value. */
 function checksOf(value: unknown): CommentChecks | undefined {
   if (typeof value !== "object" || value === null) return undefined;
-  const { terms, names, courses } = value as Record<string, unknown>;
-  return isStrings(terms) && isRecordOf(names, (item): item is string => typeof item === "string") && isRecordOf(courses, isStrings)
-    ? { terms, names, courses } : undefined;
+  const { terms, names, courses, scores } = value as Record<string, unknown>;
+  if (!(isStrings(terms) && isRecordOf(names, (item): item is string => typeof item === "string") && isRecordOf(courses, isStrings))) return undefined;
+  return scores === undefined ? { terms, names, courses } : { terms, names, courses, scores: namedScoresOf(scores) };
 }
 
 /** Allowlists for one job, read back from the stored ai_input; null when it is malformed. */
@@ -132,7 +306,7 @@ export function validationContextFromAiInput(input: { schema: unknown; user: unk
   const checks = checksOf(input.checks);
   return {
     ...context, numbers: new Set([...numbersIn(input.user), ...termCodeNumbers(input.user)]), courseCodes: new Set(courseCodesIn(input.user)),
-    ...(checks ? { checks } : {})
+    numberFacts: numberFactsOf(input.user), ...(checks ? { checks } : {})
   };
 }
 
@@ -182,11 +356,17 @@ const firstOf = <T>(items: readonly T[], key: (item: T) => string): T[] => {
   return items.filter((item) => !seen.has(key(item)) && Boolean(seen.add(key(item))));
 };
 
-/** The first problem of one text: forbidden content, a term outside the plan (comp-v13), an invented number or course code. */
+/**
+ * The first problem of one text: forbidden content, a term outside the plan (comp-v13), a number without its decimals
+ * (comp-v14), an invented number or course code.
+ */
 function textProblem(value: string, context: AiValidationContext): Omit<AiProblem, "path"> | null {
   if (hasForbiddenContent(value)) return { reason: "forbidden_content" };
   const term = context.checks ? termsNamedIn(value).find((code) => !context.checks!.terms.includes(code)) : undefined;
   if (term) return { reason: "term_not_in_plan", term };
+  const cut = (context.numberFacts ? truncatedNumber(value, context.numbers, context.numberFacts) : null)
+    ?? (context.checks?.scores ? truncatedNamedScore(value, context.checks.scores) : null);
+  if (cut) return { reason: "truncated_number", ...cut };
   if (numbersIn(value).some((number) => !context.numbers.has(number))) return { reason: "invented_number" };
   if (courseCodesIn(value).some((code) => !context.courseCodes.has(code))) return { reason: "foreign_course" };
   return null;
@@ -356,6 +536,7 @@ const PROBLEM_TEXT: Record<AiValidationReason, (problem: AiProblem) => string> =
   conflicting_skill: () => "kỹ năng vừa là điểm mạnh vừa nằm ở improvements hoặc gaps; mỗi kỹ năng chỉ ở một mục",
   forbidden_content: () => "có đường link, email hoặc thẻ HTML; bỏ đi",
   invented_number: () => "có con số không có trong dữ liệu; chỉ chép số có sẵn",
+  truncated_number: (problem) => `viết ${problem.number ?? "một con số"} trong khi dữ liệu ghi ${problem.given?.length ? problem.given.join(" hoặc ") : "số có phần thập phân"}; chép đúng từng chữ số, giữ nguyên phần thập phân, không làm tròn hay bỏ số lẻ`,
   term_not_in_plan: (problem) => `nhắc ${problem.term ? termName(problem.term) : "một học kỳ"}, học kỳ đã qua hoặc không có trong dữ liệu; chỉ nhắc học kỳ đang học và các học kỳ sau đó có trong dữ liệu`,
   off_topic_skill: () => "nội dung không nói về đúng kỹ năng của mục; nhắc tên kỹ năng hoặc học phần của chính kỹ năng đó và không mô tả kỹ năng khác"
 };

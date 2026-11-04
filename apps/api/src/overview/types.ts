@@ -23,16 +23,23 @@ export type OverviewProgressTerm = {
   term: OverviewTerm;
   state: "done" | "late" | "running" | "planned";
   passedCredits: number;
+  /** "Tín chỉ học kỳ theo kế hoạch" of Kế hoạch đào tạo (planTermCredits), else the student's own courses of the term. */
   plannedCredits: number;
+  /** Credits of the term late or failed ("còn nợ"); 0 from the term being studied on. */
+  lateCredits: number;
+  /** Credits of the term being studied ("đang học"): every course registered in the term being studied. */
+  runningCredits: number;
   courses: OverviewTermCourse[];
 };
 
+/** passed + running + late + rest = total (the bar and its legend); remaining = late + rest, everything after this term. */
 export type OverviewProgress = {
   blocked: string | null;
   totalCredits: number | null;
   passedCredits: number;
   runningCredits: number;
   lateCredits: number;
+  restCredits: number | null;
   remainingCredits: number | null;
   termsLeft: number | null;
   creditsPerTerm: number | null;
@@ -84,12 +91,16 @@ export type OverviewRoadmap = {
   firstMonth: { label: string; text: string } | null;
   plan: OverviewTermLoad | null;
   limits: { min: number; max: number } | null;
+  /** The Lộ trình AI tab's notes: made from an assessment other than the newest one; its window is over. */
+  stale: boolean;
+  ended: boolean;
 };
 
 /** A term of the saved Kế hoạch học kỳ as the planner checks it (credits against the limits per term). */
 export type OverviewTermLoad = { credits: number; status: "over" | "under" | "ok" | "empty" };
 
-export type OverviewRunningCourse = { code: string; name: string; credits: number; retake: boolean; skills: string[] };
+/** conditionOnly: a GDTC/GDQP course, listed but counted in no credit total (comp-calc-v19). */
+export type OverviewRunningCourse = { code: string; name: string; credits: number; retake: boolean; conditionOnly: boolean; skills: string[] };
 
 export type OverviewReadiness = { transcript: boolean; specialty: boolean; career: boolean; survey: boolean; assessment: boolean; roadmap: boolean };
 

@@ -41,8 +41,10 @@ async function readSaved(db: Pick<PoolClient, "query">, userId: string, lock = f
 
 /**
  * What the page receives: the context (no transcript, no standard data), the saved plan, the plan a student without one
- * starts from (the training plan's mandatory courses ahead), the AI roadmap's proposal not taken in yet, its improvement
- * courses (only suggested, never added), and the projection of the plan in use.
+ * starts from (the training plan's mandatory courses ahead), the AI roadmap's proposal neither taken in nor declined yet
+ * (the page asks the student first), its improvement courses (only suggested, never added), the newest completed AI
+ * roadmap (aiRoadmapId: the page reads the plan again only when Lộ trình AI đề xuất shows a newer one), and the
+ * projection of the plan in use.
  */
 async function view(db: Pick<PoolClient, "query">, userId: string, facts: StudyPlanFacts, plan: Saved | null) {
   const suggested = plan ? null : prefillPlan(facts.context);
@@ -53,6 +55,7 @@ async function view(db: Pick<PoolClient, "query">, userId: string, facts: StudyP
     suggested,
     aiProposal: ai.proposal,
     aiSuggestions: ai.suggestions,
+    aiRoadmapId: ai.roadmapId,
     projection: projectGraduation(facts, plan?.data ?? suggested ?? { schemaVersion: 1, terms: [] }),
   };
 }

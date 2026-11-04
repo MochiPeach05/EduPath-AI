@@ -324,13 +324,15 @@ describe("calculateAssessment on the synthetic CNPM student", () => {
     expect(result.transcript.latestTerm).toBe("HK243");
   });
 
-  it("counts a course planned for the term being studied but not registered as late, and never as sắp học", () => {
+  it("keeps a course planned for the term being studied but not registered as that term's plan, never late (v19) nor sắp học", () => {
     const inputs = syntheticInputs();
     const plan = inputs.plan.resolution === "found" ? inputs.plan.revision.data : null;
     const item = plan!.items.find((entry) => entry.code === "71ITSE41203")!;
     plan!.items.push({ ...item, id: "row-extra", position: 999, code: "71ITIN40304", name: "Đồ án thực tập", credits: 4, sectionId: null });
     const progress = calculateAssessment(inputs).progress!;
-    expect(progress.late.map((entry) => (entry.kind === "course" ? [entry.code, entry.termCode] : null))).toEqual([["71ITIN40304", "HK251"]]);
+    // v13–v18 counted it late (user 2026-11-04: "a course of the current term that is not registered is not late").
+    expect(progress).toMatchObject({ late: [], lateCount: 0, lateCredits: 0, currentCount: 1, currentCredits: 4 });
+    expect(progress.current!.map((entry) => (entry.kind === "course" ? [entry.code, entry.termCode] : null))).toEqual([["71ITIN40304", "HK251"]]);
     expect(progress.next).toEqual([]);
   });
 
@@ -470,7 +472,12 @@ describe("career gaps and fit (spec §7.5–§7.7)", () => {
       .toEqual([[true, "HK243"], [false, null], [true, "HK241"]]);
     // Sắp học counts 0 (v15): nothing is scored yet, so the fit is 0 "Không phù hợp" rather than "Chưa đủ dữ liệu".
     expect(early.career).toMatchObject({ fitCode: "not_fit", fitScore: 0, fit: 0, dataShare: 1 });
-    expect(early.progress!.late.map((entry) => ("code" in entry ? entry.code : entry.label))).toEqual(["71NAD110013", "71ITSE30103"]);
+    // HK232 is the latest graded term without registrations after it, so it is the term being studied: Kỹ thuật lập trình,
+    // planned there, is its plan, not late (v19). GDQP1 of HK231 is late but a condition: listed, its 3 TC not counted.
+    expect(early.progress!.late.map((entry) => ("code" in entry ? entry.code : entry.label))).toEqual(["71NAD110013"]);
+    expect(early.progress!.late[0]).toMatchObject({ conditionOnly: true });
+    expect(early.progress).toMatchObject({ lateCount: 1, lateCredits: 0, currentCredits: 3 });
+    expect(early.progress!.current!.map((entry) => ("code" in entry ? entry.code : entry.label))).toEqual(["71ITSE30103"]);
   });
 
   it("never calls a student 'Phù hợp' when every measured career skill is below threshold", () => {

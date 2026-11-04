@@ -4,8 +4,9 @@
 // class, the profile's free-text interests, PDF or file name. Every
 // course, skill, career and achievement string is sanitized because Ollama/llama.cpp parses special-token strings in
 // message content.
-import { formatNumber, sanitizeText } from "../competency-assessment/ai/prompt.js";
+import { formatGpa, formatNumber, formatScore, formatScoreOf100, GPA_NAMES, namedScoreList, sanitizeText, shownGpa } from "../competency-assessment/ai/prompt.js";
 import type { JsonSchema } from "../competency-assessment/ai/schema.js";
+import { numberFactsOf, type NamedScore } from "../competency-assessment/ai/validate.js";
 import type { SurveyFacts } from "../student/survey.js";
 import { termName } from "../term-name.js";
 import { roadmapBasis } from "./basis.js";
@@ -40,8 +41,11 @@ import { dateText } from "./window.js";
  * v13 (user 2026-11-03: "Chuyển đề tốt nghiệp 1, 2 là môn học thay thế đồ án tốt nghiệp thôi … điểm của sinh viên mà ổn thì
  * đề xuất làm đồ án tốt nghiệp còn thấp thì làm 2 môn thay thế đó", "TB tích lũy từ 2,80"): the thesis group offers only
  * the way the system advises by the cumulative GPA, with its reason; rule 6 says to propose that way only.
+ * v14 (review 2026-11-04: AI texts wrote "64" for 64,8): numbers as the pages show them, with their scale: skill scores and
+ * thresholds floored to the tenth ("64,8/100"), course scores "3,2/10", the GPA with two decimals ("2,80/4"); rule 2 asks
+ * to copy decimals, and a sentence whose number lost them is dropped and asked again (validate.ts, truncatedNumber).
  */
-export const ROADMAP_PROMPT_VERSION = "roadmap-v13";
+export const ROADMAP_PROMPT_VERSION = "roadmap-v14";
 /** Lines and characters per line of the achievements list in the data block. */
 const ACHIEVEMENT_LINES = 10;
 const ACHIEVEMENT_LINE_MAX = 160;
@@ -74,6 +78,8 @@ export type RoadmapAiInput = {
     unproven: string[];
     internshipDone: boolean;
     windowTerm: string | null;
+    /** roadmap-v14: the scores with decimals of the data block by skill, course and GPA name (namedScores). */
+    scores: NamedScore[];
   };
   /**
    * Set when the first answer did not hold to the data and the model is asked once more (jobs.ts): what was wrong, said to
@@ -87,7 +93,7 @@ Hệ thống đã tính sẵn mọi dữ liệu: học phần đang học, học
 
 Nguyên tắc dữ liệu (bắt buộc):
 1. Chỉ nhắc học phần có trong dữ liệu và chỉ gợi ý kỹ năng có trong danh sách kỹ năng nghề cần bổ sung; dùng đúng mã học phần (code) và khóa kỹ năng (key) đã cho. Không bịa tên hay mã học phần, lịch mở lớp, giảng viên, tên khóa học, chứng chỉ, trang web hay đường link.
-2. Không tự tính hay đặt thêm con số (điểm, tín chỉ, số giờ, phần trăm); khi nhắc số liệu, chép đúng như trong dữ liệu.
+2. Không tự tính hay đặt thêm con số (điểm, tín chỉ, số giờ, phần trăm); khi nhắc số liệu, chép đúng từng chữ số như trong dữ liệu, giữ nguyên phần thập phân sau dấu phẩy, không làm tròn và không bỏ số lẻ: dữ liệu ghi "điểm 64,8/100" thì viết 64,8 (hoặc 64,8/100), không viết 64 hay 65; điểm trung bình "2,85/4" thì viết 2,85. Điểm kỹ năng và ngưỡng tính trên thang 100, điểm học phần trên thang 10.
 3. Không hứa hẹn kết quả: lộ trình chỉ để tham khảo; nhắc bạn trao đổi với cố vấn học tập và xem lịch đăng ký học phần của trường trước khi đăng ký.
 4. "Học lại" là học phần chưa đạt (F, VT hoặc CT) phải học lại; "học cải thiện" là học phần đã đạt điểm D hoặc D+ có thể học lại nếu bạn muốn nâng điểm. Trong mọi câu, học phần chưa đạt luôn gọi là "học lại", không bao giờ gọi là "cải thiện" hay "cần cải thiện"; chỉ học phần đã đạt mới gọi là "học cải thiện". Không đề xuất học cải thiện các học phần Anh văn.
 5. Gọi học kỳ đúng như trong dữ liệu, dạng "HK2 2026–2027"; không viết mã dạng HK262 hay "học kỳ 2 năm học 2026–2027". Chỉ nhắc các học kỳ có trong danh sách "Học kỳ được nhắc tới" của phần thời gian của lộ trình. Không bao giờ đề nghị học, học lại hay đăng ký ở học kỳ đã qua: học phần trễ, học lại hay học cải thiện thì đăng ký sớm nhất ở học kỳ của lộ trình.
@@ -175,17 +181,23 @@ export function roadmapDataSections(facts: RoadmapFacts, survey: SurveyFacts | n
   for (const item of runningCourses) running.push(`- ${code(item.code)} ${sanitizeText(item.name)} (${credits(item.credits)})${helps(item.careerSkills)}`);
 
   const needed: string[] = [];
-  const late = facts.study.filter((item) => item.source === "late");
+  // The term being studied's unregistered items (thisTerm, comp-calc-v19) are not late (user 2026-11-04): listed apart.
+  const late = facts.study.filter((item) => item.source === "late" && !item.thisTerm);
+  const thisTerm = facts.study.filter((item) => item.source === "late" && item.thisTerm);
   const next = facts.study.filter((item) => item.source === "next");
-  if (!late.length && !next.length && !facts.choices.length) needed.push("Không có.");
+  if (!late.length && !thisTerm.length && !next.length && !facts.choices.length) needed.push("Không có.");
   if (late.length) needed.push(past ? "Trễ so với kế hoạch:" : `Trễ so với kế hoạch (đăng ký sớm nhất ở ${registerFrom}):`);
   for (const item of late) needed.push(`- ${code(item.code)} ${sanitizeText(item.name)} (${credits(item.credits)})${past ? `, theo kế hoạch ở ${term(item.termCode)}` : ""}${helps(item.careerSkills)}`);
+  if (thisTerm.length) needed.push(`Theo kế hoạch ${facts.runningTerm ? term(facts.runningTerm) : "học kỳ đang học"} (học kỳ đang học, bạn chưa đăng ký; không phải trễ kế hoạch; đăng ký sớm nhất ở ${registerFrom}):`);
+  for (const item of thisTerm) needed.push(`- ${code(item.code)} ${sanitizeText(item.name)} (${credits(item.credits)})${helps(item.careerSkills)}`);
   if (next.length) needed.push(`Theo kế hoạch ${facts.nextTerm ? term(facts.nextTerm) : "học kỳ tiếp theo"} (học kỳ tiếp theo, cần chuẩn bị đăng ký):`);
   for (const item of next) needed.push(`- ${code(item.code)} ${sanitizeText(item.name)} (${credits(item.credits)})${helps(item.careerSkills)}`);
   if (facts.choices.length) needed.push("Nhóm lựa chọn còn thiếu:");
   const option = (item: { code: string; name: string; credits: number | null }) => `${code(item.code)} ${sanitizeText(item.name)} (${credits(item.credits)})`;
   for (const choice of facts.choices) {
-    const when = choice.source === "late"
+    const when = choice.source === "late" && choice.thisTerm
+      ? `theo kế hoạch ${term(choice.termCode)} (học kỳ đang học, chưa đăng ký); đăng ký sớm nhất ở ${registerFrom}`
+      : choice.source === "late"
       ? past ? `trễ so với kế hoạch ở ${term(choice.termCode)}` : `trễ so với kế hoạch; đăng ký sớm nhất ở ${registerFrom}`
       : `theo kế hoạch ${choice.termCode ? term(choice.termCode) : "học kỳ tiếp theo"}`;
     const thesis = choice.thesis;
@@ -200,20 +212,22 @@ export function roadmapDataSections(facts: RoadmapFacts, survey: SurveyFacts | n
             ? `; chỉ chọn MỘT cách: (1) ${option(thesis.thesis)}${thesis.topics.length ? `; (2) cả ${thesis.topics.map(option).join(" và ")}` : ""}`
             : `; đang theo cách chuyên đề: học ${thesis.topics.map(option).join(" và ")}`
       : choice.options.length ? `; chọn trong: ${choice.options.slice(0, MAX_CHOICE_OPTIONS).map(option).join("; ")}` : "";
-    needed.push(`- "${sanitizeText(choice.label)}" (${when}): còn thiếu ${sanitizeText(choice.need, 20)}${options}`);
+    // The shortfall in the unit of its requirement, as facts.ts writes it ("3 TC", "1 học phần (3–4 TC)"): never cut short.
+    needed.push(`- "${sanitizeText(choice.label)}" (${when}): còn thiếu ${sanitizeText(choice.need, 60)}${options}`);
   }
 
   const improve: string[] = [];
   if (!facts.improve.length) improve.push("Không có.");
   for (const item of facts.improve) {
-    const score = item.score10 === null ? "" : `điểm ${formatNumber(item.score10)} `;
+    const score = item.score10 === null ? "" : `điểm ${formatNumber(item.score10)}/10 `;
     improve.push(`- ${code(item.code)} ${sanitizeText(item.name)} (${credits(item.credits)}): ${score}(${sanitizeText(item.letter, 4)}) — ${item.action === "retake" ? "học lại" : "học cải thiện"}${helps(item.careerSkills)}`);
   }
 
   const skills: string[] = [];
   if (!facts.skills.length) skills.push("Không có.");
   for (const skill of facts.skills) {
-    const score = skill.score !== null && skill.threshold !== null ? `, điểm ${formatNumber(skill.score)}/ngưỡng ${formatNumber(skill.threshold)}` : "";
+    // roadmap-v14: as the pages show them (floored to the tenth) with their scale; "điểm 72,37/ngưỡng 62,5" before.
+    const score = skill.score !== null && skill.threshold !== null ? `, điểm ${formatScoreOf100(skill.score)}, ngưỡng ${formatScoreOf100(skill.threshold)}` : "";
     const how = skill.kind === "self_study" ? " — cần tự học" : "";
     const courses = skill.courses.length ? `; học phần trong chương trình giúp bổ sung: ${skill.courses.map((item) => `${code(item.code)} ${sanitizeText(item.name)}`).join("; ")}` : "";
     skills.push(`- [${skill.key}] ${sanitizeText(skill.name)} (${skill.isRequired ? "Bắt buộc" : "Ưu tiên"}): ${sanitizeText(skill.statusLabel, 120)}${score}${how}${courses}`);
@@ -223,9 +237,10 @@ export function roadmapDataSections(facts: RoadmapFacts, survey: SurveyFacts | n
   const pace = facts.pace;
   if (pace) {
     if (pace.creditsDone !== null && pace.creditsRequired !== null) {
-      graduation.push(`Tín chỉ tích lũy: ${formatNumber(pace.creditsDone)}/${formatNumber(pace.creditsRequired)} (còn thiếu ${formatNumber(pace.creditsLeft ?? 0)} TC)`);
+      graduation.push(`Tín chỉ tích lũy: ${formatNumber(pace.creditsDone)}/${formatNumber(pace.creditsRequired)} TC (còn thiếu ${formatNumber(pace.creditsLeft ?? 0)} TC)`);
     }
-    if (pace.gpa !== null) graduation.push(`Điểm trung bình tích lũy: ${formatNumber(pace.gpa)} trên thang ${pace.gpaScale}${pace.gpaRequired !== null ? ` (yêu cầu tối thiểu ${formatNumber(pace.gpaRequired)})` : ""}`);
+    // roadmap-v14: two decimals with the scale, as the graduation page and the transcript print it ("2,8 trên thang 4" before).
+    if (pace.gpa !== null) graduation.push(`Điểm trung bình tích lũy: ${formatGpa(shownGpa(pace.gpa, pace.gpaRequired))}/${pace.gpaScale}${pace.gpaRequired !== null ? ` (yêu cầu tối thiểu ${formatGpa(pace.gpaRequired)}/${pace.gpaScale})` : ""}`);
     if (pace.openGroups.length) {
       graduation.push(`Nhóm học phần chưa đủ: ${pace.openGroups.map((group) => `${sanitizeText(group.label)}: ${group.done === null ? "?" : formatNumber(group.done)}/${group.required === null ? "?" : formatNumber(group.required)} ${group.unit === "TC" ? "TC" : "môn"}`).join("; ")}`);
     }
@@ -284,6 +299,21 @@ export function renderRoadmapDataBlock(facts: RoadmapFacts, survey: SurveyFacts 
   return lines.join("\n");
 }
 
+/**
+ * roadmap-v14: the scores with decimals the data block writes, by what they belong to (the career's skills, the skills on
+ * record, the courses to retake or improve, the GPA) and as written there, so "Lập trình cơ bản đạt 72" for 72,3 is caught
+ * even when another skill scores 72 (validate.ts, truncatedNamedScore).
+ */
+function namedScores(facts: RoadmapFacts, user: string): NamedScore[] {
+  return namedScoreList(numberFactsOf(user), (add) => {
+    for (const skill of facts.skills) if (skill.score !== null) add(skill.name, formatScore(skill.score));
+    for (const skill of facts.recorded?.skills ?? []) if (skill.score !== null) add(skill.name, formatScore(skill.score));
+    for (const item of facts.improve) if (item.score10 !== null) add(item.name, formatNumber(item.score10));
+    const gpa = facts.pace?.gpa ?? null;
+    if (gpa !== null) for (const name of GPA_NAMES) add(name, formatGpa(shownGpa(gpa, facts.pace.gpaRequired)));
+  });
+}
+
 export function buildRoadmapInput(facts: RoadmapFacts, survey: SurveyFacts | null = null): RoadmapAiInput {
   const courses = new Map<string, string>();
   for (const item of facts.study) courses.set(item.code, item.name);
@@ -292,6 +322,7 @@ export function buildRoadmapInput(facts: RoadmapFacts, survey: SurveyFacts | nul
   for (const item of facts.improve) names.set(item.code, item.name);
   for (const skill of facts.skills) for (const item of skill.courses) names.set(item.code, item.name);
   const basis = roadmapBasis(facts, survey);
+  const user = renderRoadmapDataBlock(facts, survey);
   const keys = {
     thesis: facts.choices.filter((choice) => choice.thesis)
       .map((choice) => ({ thesis: choice.thesis!.thesis?.code ?? null, topics: choice.thesis!.topics.map((item) => item.code) })),
@@ -306,10 +337,11 @@ export function buildRoadmapInput(facts: RoadmapFacts, survey: SurveyFacts | nul
     unproven: basis.unproven,
     internshipDone: basis.internshipDone,
     windowTerm: facts.window.term ?? null,
+    scores: namedScores(facts, user),
   };
   return {
     system: ROADMAP_SYSTEM_PROMPT,
-    user: renderRoadmapDataBlock(facts, survey),
+    user,
     schema: buildRoadmapSchema({ studyCodes: keys.courses.map((item) => item.code), improveCodes: keys.improve.map((item) => item.code), skillKeys: keys.skills.map((item) => item.key), months: keys.months }),
     options: { ...ROADMAP_OPTIONS },
     think: ROADMAP_THINK,

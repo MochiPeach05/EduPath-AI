@@ -121,6 +121,15 @@ export function adminSidebarFor(access: AdminAccess): AdminSidebarEntry[] {
   });
 }
 
+/**
+ * Whether an address under /quantri is the admin portal: /quantri itself, one of its pages or an old link to one. Any
+ * other address there is Không tìm thấy trang (routing.ts), not Tổng quan under a wrong address.
+ */
+export function isAdminPortalPath(pathname: string): boolean {
+  const path = pathname.replace(/\/+$/, "");
+  return path === "/quantri" || adminNavigation.some((item) => item.path === (adminPathAliases[path] ?? path));
+}
+
 /** The page an address shows (an old link opens the page that replaced it); with access, a page the account may not open leads home. */
 export function resolveAdminPage(pathname: string, access?: AdminAccess): AdminPage {
   const path = pathname.replace(/\/+$/, "");

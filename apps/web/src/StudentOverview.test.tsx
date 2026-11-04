@@ -2,8 +2,8 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import StudentOverview, {
-  OverviewDashboard, defaultTermCode, emphasize, evidenceText, formatDecimal, gpaChangeText, gpaScale, pageOfLink, planLoadText, reasonTone,
-  termChip, termGroups, type StudentProfile,
+  OverviewDashboard, creditText, defaultTermCode, emphasize, evidenceText, formatDecimal, gpaChangeText, gpaScale, pageOfLink, paceText, planLoadText,
+  progressParts, reasonTone, roadmapOutdated, termChip, termFacts, termGroups, type StudentProfile,
 } from "./StudentOverview";
 import type { OverviewResponse } from "./overview-types";
 
@@ -31,11 +31,11 @@ const full: OverviewResponse = {
     ],
   },
   progress: {
-    blocked: null, totalCredits: 126, passedCredits: 79, runningCredits: 9, lateCredits: 6, remainingCredits: 38, termsLeft: 2, creditsPerTerm: 19, planMaxPerTerm: 16,
+    blocked: null, totalCredits: 126, passedCredits: 79, runningCredits: 6, lateCredits: 6, restCredits: 35, remainingCredits: 41, termsLeft: 2, creditsPerTerm: 21, planMaxPerTerm: 16,
     terms: [
-      { term: term("HK231"), state: "done", passedCredits: 15, plannedCredits: 15, courses: [course("71ITBS10103", "Nhập môn Công nghệ thông tin", "passed", "A")] },
-      { term: term("HK241"), state: "late", passedCredits: 12, plannedCredits: 15, courses: [course("71ITSE30603", "Phát triển ứng dụng di động", "failed", "cần học lại"), course("71ITSE30503", "Lập trình ứng dụng Web", "passed", "B+")] },
-      { term: term("HK261"), state: "running", passedCredits: 0, plannedCredits: 9, courses: [course("71ITSE41203", "Kiểm thử phần mềm", "running", "đang học")] },
+      { term: term("HK231"), state: "done", passedCredits: 15, plannedCredits: 15, lateCredits: 0, runningCredits: 0, courses: [course("71ITBS10103", "Nhập môn Công nghệ thông tin", "passed", "A")] },
+      { term: term("HK241"), state: "late", passedCredits: 12, plannedCredits: 15, lateCredits: 3, runningCredits: 0, courses: [course("71ITSE30603", "Phát triển ứng dụng di động", "failed", "cần học lại"), course("71ITSE30503", "Lập trình ứng dụng Web", "passed", "B+")] },
+      { term: term("HK261"), state: "running", passedCredits: 0, plannedCredits: 9, lateCredits: 0, runningCredits: 6, courses: [course("71ITSE41203", "Kiểm thử phần mềm", "running", "đang học")] },
       { term: term("HK262"), state: "planned", passedCredits: 0, plannedCredits: 20, courses: [course("71ITGR40303", "Chuyên đề Tốt nghiệp 2", "planned", "dự kiến")] },
     ],
   },
@@ -104,7 +104,7 @@ describe("Tổng quan helpers", () => {
     expect(defaultTermCode(terms.filter((item) => item.state !== "late"))).toBe("HK261");
     expect(defaultTermCode([])).toBeNull();
     expect(terms.map(termChip)).toEqual([
-      { main: "15/15", sub: "đủ" }, { main: "12/15", sub: "còn nợ" }, { main: "9 TC", sub: "đang học" }, { main: "20 TC", sub: "dự kiến" },
+      { main: "15 TC", sub: "đủ" }, { main: "15 TC", sub: "còn nợ 3 TC" }, { main: "6 TC", sub: "đang học" }, { main: "20 TC", sub: "dự kiến" },
     ]);
   });
 
@@ -149,7 +149,7 @@ describe("Tổng quan dashboard", () => {
   it("shows the six key figures, the cards in the approved order and Cần chú ý last, without a notifications block", () => {
     const html = dashboard(full);
     const plain = text(html);
-    for (const figure of ["GPA tích lũy 2,85 / 4 Khá +0,03 so với học kỳ trước", "Tín chỉ đã đạt 79 / 126 63% chương trình · 9 TC đang học", "Năng lực chung 68,4 / 100 Khá",
+    for (const figure of ["GPA tích lũy 2,85 / 4 Khá +0,03 so với học kỳ trước", "Tín chỉ đã đạt 79 / 126 63% chương trình · 6 TC đang học", "Năng lực chung 68,4 / 100 Khá",
       "Mức phù hợp với vị trí nghề nghiệp 74,6 / 100 Phù hợp 4/6 kỹ năng đạt ngưỡng", "Xét tốt nghiệp Chưa đủ Còn 4 điều kiện", "Lộ trình AI Đã có"]) expect(plain).toContain(figure);
     const order = ["Tiến độ học tập", "Học kỳ này", "Học kỳ tới · theo Lộ trình AI", "Xét tốt nghiệp", "Năng lực và vị trí nghề nghiệp mục tiêu", "Điểm trung bình theo học kỳ", "Hỏi nhanh Trợ lý AI", "Cần chú ý"]
       .map((title) => html.indexOf(`>${title}</h2>`));
@@ -164,7 +164,7 @@ describe("Tổng quan dashboard", () => {
     expect(html).toContain('class="ov-term ov-term-late" aria-pressed="true"');
     expect(text(html)).toContain("Phát triển ứng dụng di động · 3 TC cần học lại");
     expect(html).toContain("ov-term ov-term-running");
-    expect(text(html)).toContain("Còn lại 32 TC");
+    expect(text(html)).toContain("Còn lại 35 TC");
   });
 
   it("draws the GPA chart with a legend, end labels, the 2,00 threshold and a data table", () => {
@@ -254,5 +254,96 @@ describe("Tổng quan page", () => {
     expect(html).toContain('<span class="so-gate-count" aria-hidden="true">2/4</span>');
     // Without the profile yet, no definite answer.
     expect(render(null, true)).not.toContain("so-gate");
+  });
+});
+
+describe("Tổng quan progress after the review of 2026-11-04 (comp-calc-v19)", () => {
+  // The reviewed student, synthetic: 126 TC; 109 passed, 5 being studied (2 courses), 12 late (AV5, AV6, AV7 and Nhập môn xử lý
+  // ảnh số), the thesis group of the term being studied not registered (its plan, not late), GDTC 2 a condition (no credits).
+  const reviewed: OverviewResponse = {
+    ...full,
+    terms: { ...full.terms, studying: term("HK261") },
+    progress: {
+      blocked: null, totalCredits: 126, passedCredits: 109, runningCredits: 5, lateCredits: 12, restCredits: 0, remainingCredits: 12,
+      termsLeft: 0, creditsPerTerm: null, planMaxPerTerm: null,
+      terms: [
+        { term: term("HK242"), state: "done", passedCredits: 14, plannedCredits: 17, lateCredits: 0, runningCredits: 0, courses: [course("71ITSE30503", "Lập trình ứng dụng Web", "passed", "B+")] },
+        { term: term("HK243"), state: "late", passedCredits: 8, plannedCredits: 11, lateCredits: 3, runningCredits: 0, courses: [course("71ITAI40803", "Nhập môn xử lý ảnh số", "late", "chưa học, trễ so với kế hoạch")] },
+        { term: term("HK261"), state: "running", passedCredits: 0, plannedCredits: 6, lateCredits: 0, runningCredits: 5, courses: [
+          { code: "", name: "Nhóm tự chọn TC406: chọn 6 tín chỉ", credits: 6, state: "planned", detail: "chưa đăng ký" },
+          course("71ENG710053", "Anh văn 8", "running", "đang học", 2), course("71ITSE41203", "Kiểm thử phần mềm", "running", "đang học"),
+        ] },
+      ],
+    },
+    running: [
+      { code: "71ENG710053", name: "Anh văn 8", credits: 2, retake: false, conditionOnly: false, skills: [] },
+      { code: "71ITSE41203", name: "Kiểm thử phần mềm", credits: 3, retake: false, conditionOnly: false, skills: [] },
+    ],
+  };
+  const widths = (html: string) => [...html.matchAll(/class="ov-bar-[a-z]+" style="width:([\d.]+)%"/g)].map((match) => Number(match[1]));
+
+  it("adds the bar up to the programme: 109 + 5 + 12 + 0 = 126, the boxes and the legend saying the same numbers", () => {
+    const html = dashboard(reviewed);
+    const plain = text(html);
+    for (const box of ["Đã đạt 109 TC", "Đang học 5 TC", "Trễ kế hoạch 12 TC", "Còn lại 0 TC"]) expect(plain).toContain(box);
+    expect(plain).toContain("Đã đạt 109 TC Đang học 5 TC Trễ kế hoạch 12 TC Còn lại 0 TC");
+    expect(plain).not.toContain("Còn lại sau kỳ này");
+    // The bar never runs past the programme: 109 + 5 + 12 of 126.
+    const bar = widths(html);
+    expect(bar).toHaveLength(3);
+    expect(bar.reduce((sum, width) => sum + width, 0)).toBeCloseTo(100, 6);
+    // No plan term left: said plainly, never "0 kỳ · ~12 TC/kỳ".
+    expect(plain).toContain("Kế hoạch đào tạo không còn học kỳ nào sau học kỳ này, nhưng bạn còn 12 TC cần học.");
+    expect(plain).not.toMatch(/0 kỳ|TC\/kỳ/);
+  });
+
+  it("says the term being studied with what is registered in it, the figure of Học kỳ này, and the plan's own figure", () => {
+    const plain = text(dashboard(reviewed));
+    expect(plain).toContain("2 môn · 5 TC");
+    expect(termChip(reviewed.progress!.terms[2]!)).toEqual({ main: "5 TC", sub: "đang học" });
+    // The plan's term figures, as Kế hoạch đào tạo prints them; a late term says what it still owes.
+    expect(reviewed.progress!.terms.map(termChip)).toEqual([{ main: "17 TC", sub: "đủ" }, { main: "11 TC", sub: "còn nợ 3 TC" }, { main: "5 TC", sub: "đang học" }]);
+    expect(reviewed.progress!.terms.map(termFacts)).toEqual([
+      "Kế hoạch đào tạo: 17 TC", "Kế hoạch đào tạo: 11 TC · còn nợ 3 TC", "Kế hoạch đào tạo: 6 TC · đang học 5 TC",
+    ]);
+    // A late term whose only course left is being studied again owes nothing; an older API without the figure says "còn nợ".
+    expect(termChip({ ...reviewed.progress!.terms[1]!, lateCredits: 0 })).toEqual({ main: "11 TC", sub: "đang học bù" });
+    const { lateCredits: _owed, runningCredits: _running, ...older } = reviewed.progress!.terms[1]!;
+    expect(termChip(older)).toEqual({ main: "11 TC", sub: "còn nợ" });
+    // Between two terms nothing is registered: the term being studied shows its plan, never "0 TC đang học".
+    expect(termChip({ ...reviewed.progress!.terms[2]!, runningCredits: 0 })).toEqual({ main: "6 TC", sub: "học kỳ này" });
+    expect(termFacts({ ...reviewed.progress!.terms[2]!, runningCredits: 0 })).toBe("Kế hoạch đào tạo: 6 TC");
+  });
+
+  it("lists a GDTC/GDQP course being studied as a condition, out of the credits", () => {
+    const withCondition = { ...reviewed, running: [...reviewed.running, { code: "71NAD110013", name: "GDQP1", credits: 3, retake: false, conditionOnly: true, skills: [] }] };
+    const plain = text(dashboard(withCondition));
+    expect(plain).toContain("3 môn · 5 TC");
+    expect(plain).toContain("GDQP1 đang học · môn điều kiện");
+  });
+
+  it("keeps the four parts adding up with an older API and says the pace in plain words", () => {
+    const progress = reviewed.progress!;
+    expect(progressParts(progress)).toEqual({ passed: 109, running: 5, late: 12, rest: 0 });
+    // An older API: no rest, and late above what is left (it drew 134 of 126): late is cut to what is left.
+    const { restCredits: _rest, ...older } = progress;
+    expect(progressParts({ ...older, lateCredits: 20 })).toEqual({ passed: 109, running: 5, late: 12, rest: 0 });
+    expect(progressParts({ ...older, totalCredits: null, remainingCredits: null })).toEqual({ passed: 109, running: 5, late: 12, rest: null });
+    expect(paceText({ ...progress, remainingCredits: 38, termsLeft: 2, creditsPerTerm: 19 })).toBe("Sau học kỳ này còn 38 TC cho 2 học kỳ của kế hoạch, khoảng 19 TC mỗi kỳ.");
+    expect(paceText({ ...progress, remainingCredits: 0 })).toBe("Đạt các môn đang học là bạn đủ số tín chỉ của chương trình.");
+    expect(paceText({ ...progress, remainingCredits: null })).toBeNull();
+    expect(creditText(1.55)).toBe("1,5");
+  });
+
+  it("says on the card that the roadmap is out of date, by the Lộ trình AI tab's rules", () => {
+    const stale = { ...full, roadmap: { ...full.roadmap!, stale: true, ended: false } };
+    const plain = text(dashboard(stale));
+    expect(plain).toContain("Lộ trình AI Cần tạo lại");
+    expect(plain).toContain("Soạn trước lần đánh giá mới nhất");
+    expect(plain).toContain("Kết quả Đánh giá năng lực của bạn đã thay đổi sau khi lộ trình này được soạn. Bấm Tạo lại ở Lộ trình học tập để cập nhật theo kết quả mới.");
+    expect(text(dashboard({ ...full, roadmap: { ...full.roadmap!, stale: false, ended: true } }))).toContain("Lộ trình này đã hết thời gian.");
+    expect(text(dashboard(full))).toContain("Lộ trình AI Đã có");
+    expect(roadmapOutdated({ ...full.roadmap!, status: "pending", stale: true })).toBeNull();
+    expect(roadmapOutdated(null)).toBeNull();
   });
 });

@@ -104,30 +104,40 @@ export function emptyNotificationsText(filter: NotificationFilter): string {
 /* ------------------------------------------------------------------ unread count */
 
 /**
+ * A count asked less than this long ago answers the next trigger too: a tab coming back fires visibilitychange and
+ * focus together, and React's development mode starts the effect twice (2026-11-04: two GET /unread-count at once).
+ */
+export const NOTIFICATION_FRESH_MS = 2_000;
+
+/**
  * The unread count of the bell: read when the page opens, every NOTIFICATION_POLL_MS while the tab is visible (paused
- * while it is hidden), when the tab comes back and when the window gets focus. setUnread takes a count a list just read.
+ * while it is hidden), when the tab comes back and when the window gets focus, unless a count was just asked
+ * (NOTIFICATION_FRESH_MS). refresh() always asks; setUnread takes a count a list just read.
  */
 /** enabled: false in a cố vấn học tập's tab (advisor-view.ts), where the bell is hidden and the API refuses it. */
 export function useUnreadNotifications(enabled = true) {
   const [unread, setUnread] = useState(0);
   const latest = useRef(0);
+  const askedAt = useRef(Number.NEGATIVE_INFINITY);
   const refresh = useCallback(() => {
     if (!enabled) return;
     const ticket = ++latest.current;
+    askedAt.current = Date.now();
     notificationsApi.unreadCount().then(({ unread: count }) => { if (ticket === latest.current) setUnread(count); }, () => undefined);
   }, [enabled]);
   const take = useCallback((count: number) => { latest.current += 1; setUnread(count); }, []);
   useEffect(() => {
     if (!enabled) return;
+    const ask = () => { if (Date.now() - askedAt.current >= NOTIFICATION_FRESH_MS) refresh(); };
     let timer: ReturnType<typeof setInterval> | undefined;
     const stop = () => { if (timer !== undefined) clearInterval(timer); timer = undefined; };
-    const start = () => { stop(); timer = setInterval(refresh, NOTIFICATION_POLL_MS); };
+    const start = () => { stop(); timer = setInterval(ask, NOTIFICATION_POLL_MS); };
     const visible = () => document.visibilityState !== "hidden";
-    const onVisibility = () => { if (visible()) { refresh(); start(); } else stop(); };
-    if (visible()) { refresh(); start(); }
+    const onVisibility = () => { if (visible()) { ask(); start(); } else stop(); };
+    if (visible()) { ask(); start(); }
     document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("focus", refresh);
-    return () => { stop(); document.removeEventListener("visibilitychange", onVisibility); window.removeEventListener("focus", refresh); };
+    window.addEventListener("focus", ask);
+    return () => { stop(); document.removeEventListener("visibilitychange", onVisibility); window.removeEventListener("focus", ask); };
   }, [refresh, enabled]);
   return { unread, refresh, setUnread: take };
 }

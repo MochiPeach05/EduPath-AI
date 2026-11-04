@@ -7,9 +7,13 @@ import {
   buildAiInput,
   buildPromptContext,
   formatDeficit,
+  formatGpa,
+  formatGpaShortfall,
   formatNumber,
   formatScore,
+  formatScoreOf100,
   sanitizeText,
+  shownGpa,
   termAfter,
   termNameOf,
   termText
@@ -71,23 +75,39 @@ describe("formatting helpers", () => {
     expect(termText("Học kỳ hè")).toBe("Học kỳ hè");
     expect(termText(null)).toBe("chưa xếp lịch");
   });
-  it("prints 100-point scores and deficits exactly as the page (floored score, deficit rounded up, at least 1)", () => {
-    expect(formatScore(83.92)).toBe("83");
-    expect(formatScore(84.999)).toBe("84");
+  it("prints 0–100 scores and shortfalls exactly as the pages: floored to the tenth (comp-v14, web scoreText, deficitText)", () => {
+    // Review 2026-11-04: the comment wrote "69" for 69,9 because the prompt sent whole numbers.
+    expect(formatScore(69.94)).toBe("69,9");
+    expect(formatScore(83.92)).toBe("83,9");
+    expect(formatScore(84.999)).toBe("84,9");
     expect(formatScore(85)).toBe("85");
     expect(formatScore(0)).toBe("0");
-    // Khá starts at 62,5 (comp-calc-v10): that band keeps one decimal, so a Khá score never reads 62.
+    // A level bound is never shown as reached before it is.
     expect(formatScore(62.5)).toBe("62,5");
     expect(formatScore(62.97)).toBe("62,9");
-    expect(formatScore(62.49)).toBe("62");
-    expect(formatScore(63)).toBe("63");
-    expect(formatDeficit(9.44)).toBe("10");
+    expect(formatScore(62.49)).toBe("62,4");
+    expect(formatScore(89.96)).toBe("89,9");
+    expect(formatScoreOf100(64.83)).toBe("64,8/100");
+    // Without the score and threshold: rounded up to the tenth, at least 0,1.
+    expect(formatDeficit(9.44)).toBe("9,5");
     expect(formatDeficit(30)).toBe("30");
-    expect(formatDeficit(0.2)).toBe("1");
-    // With the score and threshold the deficit adds up with the score as sent (2026-10-25 audit): 43 + 19,5 = 62,5, not 19.
-    expect(formatDeficit(18.9, 43.6, 62.5)).toBe("19,5");
-    expect(formatDeficit(5.6, 64.4, 70)).toBe("6");
+    expect(formatDeficit(0.02)).toBe("0,1");
+    // With them the shortfall adds up with the score as shown (2026-10-25 audit): 43,6 + 18,9 = 62,5; 62,7 + 17,3 = 80.
+    expect(formatDeficit(18.9, 43.6, 62.5)).toBe("18,9");
+    expect(formatDeficit(5.6, 64.4, 70)).toBe("5,6");
     expect(formatDeficit(17.23, 62.77, 80)).toBe("17,3");
+  });
+  it("prints a GPA with two decimals, never reaching a minimum it is below, and its shortfall rounded up (web formatGpa)", () => {
+    expect(formatGpa(2.8)).toBe("2,80");
+    expect(formatGpa(3.1)).toBe("3,10");
+    expect(formatGpa(2.456)).toBe("2,46");
+    expect(formatGpa(2)).toBe("2,00");
+    expect(shownGpa(2.85, 2)).toBe(2.85);
+    expect(shownGpa(1.996, 2)).toBe(1.99);
+    expect(shownGpa(1.996, 2, false)).toBe(2);
+    expect(shownGpa(2.996, null)).toBe(3);
+    expect(formatGpaShortfall(0.15)).toBe("0,15");
+    expect(formatGpaShortfall(0.101)).toBe("0,11");
   });
 });
 
@@ -102,8 +122,8 @@ describe("buildAiInput", () => {
   };
 
   it("uses the spec system prompt verbatim plus the output description", () => {
-    expect(PROMPT_VERSION).toBe("comp-v13");
-    expect(input.promptVersion).toBe("comp-v13");
+    expect(PROMPT_VERSION).toBe("comp-v14");
+    expect(input.promptVersion).toBe("comp-v14");
     expect(input.think).toBe(true);
     expect(input.system).toBe(SYSTEM_PROMPT);
     expect(input.system.startsWith("Bạn là cố vấn học tập của EduPath AI, đồng hành cùng sinh viên ngành Công nghệ Thông tin, Trường Đại học Văn Lang.\n")).toBe(true);
@@ -116,7 +136,9 @@ describe("buildAiInput", () => {
     expect(input.system).not.toContain("<mô tả");
     expect(input.system).toContain("không viết khóa S…/G… và không viết mã học phần");
     expect(input.system).toContain("không đưa ra chỉ số hay phần trăm phù hợp");
-    expect(input.system).toContain("chép đúng từng chữ số như trong dữ liệu, không thêm chữ số thập phân");
+    // comp-v14 (review 2026-11-04: "69" for 69,9): decimals are copied, never cut or rounded.
+    expect(input.system).toContain('chép đúng từng chữ số như trong dữ liệu, giữ nguyên phần thập phân sau dấu phẩy, không làm tròn và không bỏ số lẻ: dữ liệu ghi "điểm 69,9/100" thì viết 69,9');
+    expect(input.system).toContain("Mọi con số trong văn bản phải có sẵn trong dữ liệu và được chép đủ phần thập phân như dữ liệu ghi");
     expect(input.system).toContain('8. Viết học kỳ đúng như trong dữ liệu, dạng "HK2 2026–2027"; không viết mã học kỳ dạng HK262. Chỉ nhắc học kỳ đang học và các học kỳ sau đó có trong dữ liệu; không bao giờ khuyên học hay đăng ký ở một học kỳ đã qua.');
     expect(input.system).toContain("16. Trang in tên kỹ năng làm tiêu đề của mỗi mục strengths, improvements và gaps, nên mỗi mục chỉ nói về đúng kỹ năng đó");
     expect(input.system).toContain('"high" (cần làm sớm) | "medium" (nên làm) | "low" (có thể để sau)');
@@ -156,16 +178,16 @@ describe("buildAiInput", () => {
       expect(sections.map((section) => user.indexOf(section))).toEqual(sections.map((section) => user.indexOf(section)).sort((a, b) => a - b));
     }
     const user = input.user;
-    expect(user).toContain("S01 | Lập trình hướng đối tượng | nhóm G1 | thuộc nghề mục tiêu | điểm 88 | Giỏi");
+    expect(user).toContain("S01 | Lập trình hướng đối tượng | nhóm G1 | thuộc nghề mục tiêu | điểm 88,5/100 | Giỏi");
     expect(user).toContain("S04 | Làm việc nhóm | nhóm G2 | ngoài nghề mục tiêu | Chưa có minh chứng");
     expect(user).toContain("S05 | Điện toán đám mây | Chưa đủ dữ liệu");
     expect(user).not.toContain("Cần tự học (");
     expect(user).toContain("  - TST202 | Đảm bảo chất lượng phần mềm | 3 TC | chưa học | chưa đủ điều kiện: cần đạt trước Kiểm thử phần mềm cơ bản (TST201) | kế hoạch: HK2 2026–2027\n");
-    expect(user).toContain("thiếu 30 (Thiếu nhiều)");
+    expect(user).toContain("- S03 Kiểm thử phần mềm | Bắt buộc | ngưỡng 85/100 | điểm 55/100 | Thấp hơn ngưỡng | thiếu 30 điểm (Thiếu nhiều)");
     expect(user).toContain("Ảnh hưởng: Điểm kỹ năng có thể thấp hơn thực tế.");
     expect(user).toContain("Có thể nêu là điểm mạnh: S01\n");
     expect(user).toContain("Có thể nêu là cần cải thiện: S02, S03\n");
-    expect(noCareer.user).toContain("S01 | Lập trình hướng đối tượng | nhóm G1 | điểm 88 | Giỏi");
+    expect(noCareer.user).toContain("S01 | Lập trình hướng đối tượng | nhóm G1 | điểm 88,5/100 | Giỏi");
     expect(noCareer.user).toContain("Có thể nêu là điểm mạnh: S01\n");
     expect(noCareer.user).toContain("Có thể nêu là cần cải thiện: S06, S07, S03\n");
   });
@@ -183,7 +205,7 @@ describe("buildAiInput", () => {
       "[6. KỸ NĂNG CỦA NGHỀ MỤC TIÊU CẦN CẢI THIỆN HOẶC NÂNG LÊN VÀ HỌC PHẦN GỢI Ý] (dùng cho improvements; chỉ chọn học phần trong danh sách của đúng kỹ năng)",
       "S02 Cơ sở dữ liệu (kỹ năng của nghề mục tiêu đã đạt ngưỡng, có thể nâng lên mức Giỏi):",
       "  - TST240 | Hệ quản trị cơ sở dữ liệu | 3 TC | chưa học | đủ điều kiện đăng ký | kế hoạch: HK1 2026–2027",
-      "  - TST130 | Nhập môn cơ sở dữ liệu | 3 TC | đã đạt, điểm 6,8 (C+) – có thể học cải thiện",
+      "  - TST130 | Nhập môn cơ sở dữ liệu | 3 TC | đã đạt, điểm 6,8/10 (C+) – có thể học cải thiện",
       "S03 Kiểm thử phần mềm (kỹ năng của nghề mục tiêu dưới ngưỡng):",
       "  - TST201 | Kiểm thử phần mềm cơ bản | 3 TC | chưa học | đủ điều kiện đăng ký | kế hoạch: HK1 2026–2027",
       "  - TST202 | Đảm bảo chất lượng phần mềm | 3 TC | chưa học | chưa đủ điều kiện: cần đạt trước Kiểm thử phần mềm cơ bản (TST201) | kế hoạch: HK2 2026–2027"
@@ -207,7 +229,7 @@ describe("buildAiInput", () => {
       "  - TST310 | Quản trị mạng | 3 TC | chưa học | chưa đủ điều kiện: cần đạt trước Hệ điều hành (TST210) | kế hoạch: HK2 2026–2027",
       // Planned before the term being studied (HK3 2025–2026): its term is not sent, it can be registered from the next one (comp-v13).
       "  - TST150 | Toán rời rạc | 3 TC | chưa đạt – cần học lại | đủ điều kiện đăng ký | đã trễ kế hoạch, đăng ký sớm nhất từ HK1 2026–2027",
-      "  - TST120 | Mạng máy tính căn bản | 3 TC | đã đạt, điểm 6,5 (C+) – có thể học cải thiện",
+      "  - TST120 | Mạng máy tính căn bản | 3 TC | đã đạt, điểm 6,5/10 (C+) – có thể học cải thiện",
       "S07 Sử dụng tiếng Anh (dưới mức Khá):",
       "  (không có học phần phù hợp; gợi ý tự học kèm sản phẩm kiểm chứng)",
       "S03 Kiểm thử phần mềm (dưới mức Khá):",
@@ -246,6 +268,21 @@ describe("buildAiInput", () => {
     expect(user).toContain("  - TST406 | Thị giác máy tính | 3 TC | chưa học | đủ điều kiện đăng ký | kế hoạch: HK2 2025–2026\n");
   });
 
+  it("states a late choice's shortfall in its requirement's unit, like the pages (comp-v14, plan-progress.ts shortfallText)", () => {
+    const result = syntheticResult();
+    const option = (code: string, name: string, credits: number) => ({ code, name, credits, state: "not_taken" as const });
+    result.progress = { ...result.progress!, late: [
+      // A result stored before comp-calc-v19 counted the courses of a credit group in `missing`: 1 for a 6-TC group.
+      { kind: "choice", label: "Nhóm tự chọn TC406: chọn 6 tín chỉ", termCode: "HK252", required: 6, unit: "credit", missing: 1, missingCredits: 6, options: [option("TST405", "Đồ án tốt nghiệp", 6)] },
+      { kind: "choice", label: "Chọn 1 trong 2 môn sau", termCode: "HK252", required: 1, unit: "course", missing: 1, missingCredits: 3,
+        options: [option("TST406", "Phát triển ứng dụng di động", 3), option("TST407", "Hệ quản trị cơ sở dữ liệu nâng cao", 4)] },
+    ] };
+    const user = buildAiInput(result).user;
+    expect(user).toContain("- trễ: Nhóm tự chọn TC406: chọn 6 tín chỉ (đã trễ kế hoạch): còn thiếu 6 TC\n");
+    expect(user).toContain("- trễ: Chọn 1 trong 2 môn sau (đã trễ kế hoạch): còn thiếu 1 học phần (3–4 TC)\n");
+    expect(user).not.toContain("còn thiếu 1 tín chỉ");
+  });
+
   it("names the term the student chose in Kế hoạch học kỳ, and only a coming one (comp-v13)", () => {
     const result = syntheticResult();
     const user = buildAiInput(result, { planned: new Map([["TST201", "HK262"], ["TST150", "HK263"], ["TST240", "HK252"]]) }).user;
@@ -256,11 +293,11 @@ describe("buildAiInput", () => {
   });
 
   it("names the weakest skills of each group below Khá and, with a career, whether each belongs to it", () => {
-    expect(input.user).toContain("G2 | Kỹ năng bổ trợ | điểm 55 | Trung bình | tin cậy Thấp | 1/2 kỹ năng có minh chứng\n" +
-      "  kỹ năng thấp nhất của nhóm: S03 Kiểm thử phần mềm (điểm 55, thuộc nghề mục tiêu); S06 Mạng máy tính (điểm 65, ngoài nghề mục tiêu)\n");
-    expect(noCareer.user).toContain("  kỹ năng thấp nhất của nhóm: S03 Kiểm thử phần mềm (điểm 55); S06 Mạng máy tính (điểm 65)\n");
+    expect(input.user).toContain("G2 | Kỹ năng bổ trợ | điểm 55/100 | Trung bình | tin cậy Thấp | 1/2 kỹ năng có minh chứng\n" +
+      "  kỹ năng thấp nhất của nhóm: S03 Kiểm thử phần mềm (điểm 55/100, thuộc nghề mục tiêu); S06 Mạng máy tính (điểm 65,5/100, ngoài nghề mục tiêu)\n");
+    expect(noCareer.user).toContain("  kỹ năng thấp nhất của nhóm: S03 Kiểm thử phần mềm (điểm 55/100); S06 Mạng máy tính (điểm 65,5/100)\n");
     // G1 is at Giỏi: no line, although Sử dụng tiếng Anh (61) belongs to it.
-    expect(input.user).toContain("G1 | Kỹ thuật phần mềm | điểm 80 | Giỏi | tin cậy Trung bình | 2/2 kỹ năng có minh chứng\nG2 |");
+    expect(input.user).toContain("G1 | Kỹ thuật phần mềm | điểm 80,5/100 | Giỏi | tin cậy Trung bình | 2/2 kỹ năng có minh chứng\nG2 |");
   });
 
   it("does not list thesis replacements off that path as courses to come (comp-calc-v7)", () => {
@@ -336,27 +373,29 @@ describe("buildAiInput", () => {
       { code: "TST202", weight: 1, contribution: 3, share: 0.5, role: "in_progress" }
     ];
     const line = buildAiInput(result).user.split("\n").find((text) => text.startsWith("S01 |"))!;
-    expect(line).toContain("| minh chứng: TST101 Nhập môn lập trình (điểm 8,5, A)");
+    expect(line).toContain("| minh chứng: TST101 Nhập môn lập trình (điểm 8,5/10, A)");
     expect(line).toContain("| đang học: TST202 Đảm bảo chất lượng phần mềm (đang học)");
     expect(line).toContain("| sắp học (chưa phải minh chứng): TST201 Kiểm thử phần mềm cơ bản (sắp học vào HK1 2026–2027)");
     expect(line.indexOf("minh chứng: TST101")).toBeLessThan(line.indexOf("đang học"));
     expect(line.split("minh chứng:")[1]!.split("|")[0]).not.toContain("TST201");
   });
 
-  it("sends the numbers the page shows: whole 100-point scores, whole percentages, no term codes, no passed term", () => {
+  it("sends the numbers the page shows: 0–100 scores floored to the tenth with their scale, whole percentages, no term codes, no passed term (comp-v14)", () => {
     const result = syntheticResult();
     result.overall.score = 83.92;
     result.groups[0] = { ...result.groups[0]!, score: 89.56 };
     result.skills[0] = { ...result.skills[0]!, score: 93.44, coverage: 0.4567 };
     result.career!.requirements[2] = { ...result.career!.requirements[2]!, score: 75.56, deficit: 9.44 };
     const user = buildAiInput(result).user;
-    expect(user).toContain("Điểm tổng: 83 | Khá");
-    expect(user).toContain("G1 | Kỹ thuật phần mềm | điểm 89 | Giỏi");
-    expect(user).toContain("S01 | Lập trình hướng đối tượng | nhóm G1 | thuộc nghề mục tiêu | điểm 93 | Giỏi | tin cậy Trung bình | độ phủ 46%");
-    expect(user).toContain("ngưỡng 85 | điểm 75 | Thấp hơn ngưỡng | thiếu 10 (Thiếu nhiều)");
-    for (const shown of [83.92, 89.56, 93.44, 75.56, 9.44, 45.67]) expect(numbersIn(user)).not.toContain(shown);
+    expect(user).toContain("Điểm tổng: 83,9/100 | Khá");
+    expect(user).toContain("G1 | Kỹ thuật phần mềm | điểm 89,5/100 | Giỏi");
+    expect(user).toContain("S01 | Lập trình hướng đối tượng | nhóm G1 | thuộc nghề mục tiêu | điểm 93,4/100 | Giỏi | tin cậy Trung bình | độ phủ 46%");
+    // The shortfall adds up with the score as shown: 75,5 + 9,5 = 85.
+    expect(user).toContain("ngưỡng 85/100 | điểm 75,5/100 | Thấp hơn ngưỡng | thiếu 9,5 điểm (Thiếu nhiều)");
+    for (const shown of [83.9, 89.5, 93.4, 75.5, 9.5]) expect(numbersIn(user)).toContain(shown);
+    for (const raw of [83.92, 89.56, 93.44, 75.56, 9.44, 45.67]) expect(numbersIn(user)).not.toContain(raw);
     // Course scores stay on the 10-point scale with up to two decimals, like the page.
-    expect(user).toContain("TST101 Nhập môn lập trình (điểm 8,5, A)");
+    expect(user).toContain("TST101 Nhập môn lập trình (điểm 8,5/10, A)");
     expect(user).toContain("Học kỳ đang học: HK3 2025–2026; học kỳ tới: HK1 2026–2027\n");
     expect(user).toContain("Học kỳ đang học: HK3 2025–2026; học kỳ kế tiếp theo kế hoạch đào tạo: HK1 2026–2027\n");
     expect(user).toContain("- trễ: TST150 Toán rời rạc (đã trễ kế hoạch, đăng ký sớm nhất từ HK1 2026–2027)");
@@ -413,7 +452,7 @@ describe("buildPromptContext", () => {
     expect(context.improvementKeys).toEqual(["S02", "S03"]);
     expect(context.strengthKeys).toEqual(["S01"]);
     const user = buildAiInput(result).user;
-    expect(user).toContain("S06 | Mạng máy tính | nhóm G2 | ngoài nghề mục tiêu | điểm 65 | Trung bình");
+    expect(user).toContain("S06 | Mạng máy tính | nhóm G2 | ngoài nghề mục tiêu | điểm 65,5/100 | Trung bình");
     expect(user).not.toContain("TST310");
   });
 
@@ -507,6 +546,13 @@ describe("buildPromptContext", () => {
     expect(checks.names).toMatchObject({ S01: "Lập trình hướng đối tượng", S03: "Kiểm thử phần mềm", S04: "Làm việc nhóm", S05: "Điện toán đám mây" });
     expect(checks.courses.S03).toEqual(expect.arrayContaining(["Kiểm thử phần mềm cơ bản", "Đảm bảo chất lượng phần mềm"]));
     expect(checks.courses.S01).toEqual(["Nhập môn lập trình"]);
+    // comp-v14: the scores with decimals as the data block writes them, by name. A whole score (Kiểm thử phần mềm 55) cannot
+    // be cut, and a score the block does not show (Toán rời rạc 3,5: failed, listed without its score) was never given.
+    expect(checks.scores).toEqual([
+      { name: "điểm tổng", value: "72,2" }, { name: "năng lực chung", value: "72,2" }, { name: "Kỹ thuật phần mềm", value: "80,5" },
+      { name: "Lập trình hướng đối tượng", value: "88,5" }, { name: "Cơ sở dữ liệu", value: "72,5" }, { name: "Mạng máy tính", value: "65,5" },
+      { name: "Nhập môn lập trình", value: "8,5" }, { name: "Nhập môn cơ sở dữ liệu", value: "6,8" },
+    ]);
   });
 
   it("has no gap candidates when no career is selected", () => {

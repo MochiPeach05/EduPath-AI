@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
-  aiAddedText, aiCleanedText, applyProposal, auditGroups, auditNote, cleanAiAdded, cleanThesisWay, creditProgress, groupCountText, moveCourse, neededTone,
-  nextTermOffer, offering, ownRelations, planChoiceText, planIssues, poolSections, searchCourses, termLabel, termLoad, termLoadText, thesisCleanedText,
-  thesisHint, thesisLeftOut, withTerms, type StudyPlanContext, type StudyPlanCourse, type StudyPlanData, type StudyPlanThesis,
+  aiAddedText, aiCleanedText, applyProposal, auditGroups, auditNote, cleanAiAdded, cleanThesisWay, creditProgress, declineProposal, exemptText, groupCountText,
+  limitsText, moveCourse, neededTone, nextTermOffer, offering, ownRelations, planChoiceText, planIssues, planProposal, poolSections, proposalAddedText,
+  proposalSummaryText, searchCourses, termLabel, termLoad, termLoadText, thesisCleanedText, thesisHint, thesisLeftOut, withTerms, type AiProposal,
+  type StudyPlanContext, type StudyPlanCourse, type StudyPlanData, type StudyPlanThesis,
 } from "./study-plan-data";
 
 // Synthetic courses only (no student data).
@@ -189,6 +190,24 @@ describe("planning", () => {
       .toEqual(["8 TC · vượt mức tối đa 7 TC", "3 TC · dưới mức tối thiểu 4 TC", "6 TC"]);
   });
 
+  it("says why a summer term or the last term below the minimum is not flagged (QA 2026-11-04)", () => {
+    const light: StudyPlanData = { schemaVersion: 1, terms: [{ code: "HK262", courses: [{ code: "C" }] }, { code: "HK263", courses: [{ code: "D" }] }, { code: "HK271", courses: [{ code: "E" }] }] };
+    const limits = context().limits;
+    // HK262 (3 TC) is a main term with courses after it: below the minimum. HK263 is a summer term, HK271 the last one.
+    expect(termLoad(context(), light, "HK262")).toEqual({ credits: 3, conditional: 0, status: "under" });
+    expect(termLoad(context(), light, "HK263")).toEqual({ credits: 3, conditional: 0, status: "ok", exempt: "summer" });
+    expect(termLoad(context(), light, "HK271")).toEqual({ credits: 3, conditional: 0, status: "ok", exempt: "last" });
+    expect(exemptText(termLoad(context(), light, "HK263"), limits)).toBe("Học kỳ hè: không yêu cầu tối thiểu 4 TC");
+    expect(exemptText(termLoad(context(), light, "HK271"), limits)).toBe("Học kỳ cuối của kế hoạch: không yêu cầu tối thiểu 4 TC");
+    expect(exemptText(termLoad(context(), light, "HK262"), limits)).toBeNull();
+    // Over the maximum is flagged in a summer term too; enough credits need no note.
+    const heavy: StudyPlanData = { schemaVersion: 1, terms: [{ code: "HK263", courses: [{ code: "C" }, { code: "D" }, { code: "E" }] }] };
+    expect(termLoad(context(), heavy, "HK263")).toEqual({ credits: 9, conditional: 0, status: "over" });
+    expect(termLoad(context(), plan, "HK262").exempt).toBeUndefined();
+    expect(limitsText(limits!)).toBe("Số tín chỉ mỗi học kỳ: tối thiểu 4 TC, tối đa 7 TC, tính cả môn điều kiện. "
+      + "Học kỳ hè (HK3) không yêu cầu số tín chỉ tối thiểu; học kỳ cuối cùng có học phần trong kế hoạch cũng vậy.");
+  });
+
   it("lists the AI roadmap's improvements as a suggestion, never another specialty's or a planned one (user 2026-11-03)", () => {
     const withLow = context({ courses: [...context().courses, course("L", { state: "passed", grade: "D+" })] });
     const suggestions = [{ code: "L", term: "HK262" }, { code: "A", term: "HK262" }, { code: "X", term: "HK262" }];
@@ -283,6 +302,102 @@ describe("planning", () => {
       // No way (no cumulative GPA) or no thesis group: nothing changes.
       expect(cleanThesisWay(withThesis(way({})), mixed)).toEqual({ plan: mixed, removed: [] });
       expect(cleanThesisWay(withThesis(null), mixed)).toEqual({ plan: mixed, removed: [] });
+    });
+  });
+
+  describe("asking before changing the plan (user 2026-11-04: \"Hỏi trước, bấm mới lưu\")", () => {
+    const roadmapId = "99999999-9999-4999-8999-999999999999";
+    const proposal: AiProposal = { roadmapId, completedAt: "2026-10-24T10:00:00.000Z", term: "HK262",
+      courses: [{ code: "C", term: "HK262" }, { code: "E", term: "HK263" }] };
+    const now = new Date("2026-11-04T10:00:00.000Z");
+    const ctx = context({ courses: [...context().courses, course("L", { state: "passed", grade: "D" })] });
+
+    it("proposes the AI roadmap's courses with their terms and leaves the plan as it is", () => {
+      const current = withTerms(ctx, { schemaVersion: 1, terms: [{ code: "HK262", courses: [{ code: "D" }] }] });
+      const before = JSON.stringify(current);
+      const proposed = planProposal(ctx, current, proposal, now)!;
+      expect(JSON.stringify(current)).toBe(before);
+      expect(proposed.added).toEqual([{ code: "C", term: "HK262" }, { code: "E", term: "HK263" }]);
+      expect(proposed.roadmap).toEqual({ id: roadmapId, completedAt: proposal.completedAt, term: "HK262" });
+      expect([proposed.aiRemoved, proposed.thesisRemoved, proposed.keepable]).toEqual([[], [], []]);
+      // Applied, the plan remembers the roadmap and what it added.
+      expect(proposed.plan.roadmapId).toBe(roadmapId);
+      expect(proposed.plan.aiAdded).toEqual({ completedAt: proposal.completedAt, term: "HK262", codes: ["C", "E"], addedAt: now.toISOString() });
+      expect(proposed.plan.terms.map((term) => [term.code, term.courses.map((item) => item.code)])).toEqual([["HK261", []], ["HK262", ["D", "C"]], ["HK263", ["E"]]]);
+      expect(proposalAddedText(proposed)).toBe("Thêm 2 học phần do lộ trình AI đề xuất (lộ trình soạn lúc 17:00 24/10/2026), vào học kỳ mà kế hoạch đào tạo mở môn đó:");
+      expect(proposalSummaryText(proposed)).toBe("thêm 2 học phần do lộ trình AI đề xuất");
+    });
+
+    it("proposes nothing once the roadmap is taken in or declined, or when it adds nothing", () => {
+      const current = withTerms(ctx, { schemaVersion: 1, terms: [] });
+      const applied = planProposal(ctx, current, proposal, now)!.plan;
+      expect(planProposal(ctx, applied, proposal, now)).toBeNull();
+      expect(planProposal(ctx, current, null, now)).toBeNull();
+      const planned = moveCourse(moveCourse(current, "C", "HK262"), "E", "HK263");
+      expect(planProposal(ctx, planned, proposal, now)).toBeNull();
+      // Bỏ qua: the plan stays as it is, with the roadmap remembered.
+      const proposed = planProposal(ctx, current, proposal, now)!;
+      const declined = declineProposal(current, proposed);
+      expect(declined).toEqual({ ...current, roadmapId });
+      expect(planProposal(ctx, declined, proposal, now)).toBeNull();
+    });
+
+    it("proposes taking out what an older AI roadmap added, and never again once the student keeps it", () => {
+      const old: StudyPlanData = withTerms(ctx, {
+        schemaVersion: 1, roadmapId: "r1", aiAdded: { completedAt: "2026-10-20T07:24:00.000Z", term: "HK262", codes: ["C", "X", "L"], addedAt: "2026-10-20T07:30:00.000Z" },
+        terms: [{ code: "HK262", courses: [{ code: "C" }, { code: "X" }, { code: "L" }] }],
+      });
+      const proposed = planProposal(ctx, old, null, now)!;
+      expect([proposed.added, proposed.roadmap, proposed.aiRemoved, proposed.keepable]).toEqual([[], null, ["X", "L"], ["X", "L"]]);
+      expect(proposed.plan.terms.find((term) => term.code === "HK262")!.courses.map((item) => item.code)).toEqual(["C"]);
+      expect(proposalSummaryText(proposed)).toBe("bỏ 2 học phần");
+      expect(aiCleanedText(ctx, proposed.aiRemoved, true)).toMatch(/^Bỏ khỏi kế hoạch 2 học phần lộ trình AI thêm trước đây vì/);
+      // Bỏ qua keeps them: the plan does not change and the same proposal never comes back.
+      const kept = declineProposal(old, proposed);
+      expect(kept.kept).toEqual(["X", "L"]);
+      expect(kept.terms).toEqual(old.terms);
+      expect(kept.roadmapId).toBe("r1");
+      expect(planProposal(ctx, kept, null, now)).toBeNull();
+      expect(cleanAiAdded(ctx, kept).removed).toEqual([]);
+      // Saved and read back, the plan still keeps them; taken out by hand, a course is kept no longer.
+      expect(withTerms(ctx, kept).kept).toEqual(["X", "L"]);
+      expect(moveCourse(kept, "x", null).kept).toEqual(["L"]);
+      expect(moveCourse(kept, "X", "HK263").kept).toEqual(["X", "L"]);
+      expect(withTerms(ctx, old)).not.toHaveProperty("kept");
+    });
+
+    describe("the thesis group", () => {
+      const thesisCourses = [
+        course("G6", { kind: "elective", credits: 6, name: "Đồ án Tốt nghiệp" }),
+        course("T1", { kind: "elective", name: "Chuyên đề Tốt nghiệp 1" }),
+        course("T2", { kind: "elective", name: "Chuyên đề Tốt nghiệp 2" }),
+      ];
+      const high = context({
+        courses: [...context().courses, ...thesisCourses],
+        thesis: { group: "Nhóm tự chọn TC307", thesis: "G6", replacements: ["T1", "T2"], others: [], path: "not_started", way: "thesis", reason: "điểm TB tích lũy 3,10, từ 2,80 trở lên" },
+      });
+
+      it("lists the other way of a plan holding both, and keeps it when the student declines", () => {
+        const both = withTerms(high, { schemaVersion: 1, terms: [{ code: "HK262", courses: [{ code: "G6" }, { code: "T1" }, { code: "T2" }] }] });
+        const proposed = planProposal(high, both, null, now)!;
+        expect([proposed.thesisRemoved, proposed.keepable]).toEqual([["T1", "T2"], ["T1", "T2"]]);
+        expect(thesisCleanedText(high, proposed.thesisRemoved, true)).toBe("Bỏ khỏi kế hoạch Chuyên đề Tốt nghiệp 1 (T1) và Chuyên đề Tốt nghiệp 2 (T2) vì hệ thống đề xuất làm Đồ án Tốt nghiệp (điểm TB tích lũy 3,10, từ 2,80 trở lên); kế hoạch chỉ giữ một phương án cho nhóm tự chọn TC307.");
+        const kept = declineProposal(both, proposed);
+        expect(planProposal(high, kept, null, now)).toBeNull();
+        expect(cleanThesisWay(high, kept).removed).toEqual([]);
+      });
+
+      it("takes the other way out only with the AI's thesis, so declining that proposal keeps nothing", () => {
+        // The student planned the chuyên đề alone; the AI roadmap proposes the thesis the GPA advises.
+        const alone = withTerms(high, { schemaVersion: 1, terms: [{ code: "HK262", courses: [{ code: "T1" }, { code: "T2" }] }] });
+        const thesis: AiProposal = { ...proposal, courses: [{ code: "G6", term: "HK263" }] };
+        const proposed = planProposal(high, alone, thesis, now)!;
+        expect(proposed.added).toEqual([{ code: "G6", term: "HK263" }]);
+        expect([proposed.thesisRemoved, proposed.keepable]).toEqual([["T1", "T2"], []]);
+        const declined = declineProposal(alone, proposed);
+        expect(declined).toEqual({ ...alone, roadmapId });
+        expect(planProposal(high, declined, thesis, now)).toBeNull();
+      });
     });
   });
 

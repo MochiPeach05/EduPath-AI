@@ -36,7 +36,7 @@ function setup(handler: Handler = () => undefined) {
 }
 
 const validOutput = () => ({
-  summary: "Bạn có nền tảng lập trình hướng đối tượng vững với điểm 88.",
+  summary: "Bạn có nền tảng lập trình hướng đối tượng vững với điểm 88,5.",
   groupInsights: [],
   strengths: [{ skillKey: "S01", comment: "Nhập môn lập trình đạt điểm 8,5." }],
   improvements: [],
@@ -93,7 +93,7 @@ describe("heartbeat and claim", () => {
     const { app, run, sql } = setup((s) => (s.includes("FOR UPDATE SKIP LOCKED") ? { rows: [{ id: JOB, leaseToken: LEASE, aiInput }] } : undefined));
     const res = await request(app).post("/w/claim").set("Authorization", AUTH).expect(200);
     // The checks stay on the server (comp-v13).
-    expect(res.body.job).toEqual({ kind: "competency_assessment", id: JOB, leaseToken: LEASE, promptVersion: "comp-v13", system: aiInput.system, user: aiInput.user, schema: aiInput.schema, options: aiInput.options, think: true });
+    expect(res.body.job).toEqual({ kind: "competency_assessment", id: JOB, leaseToken: LEASE, promptVersion: "comp-v14", system: aiInput.system, user: aiInput.user, schema: aiInput.schema, options: aiInput.options, think: true });
     const claim = run.mock.calls.find(([s]) => s.includes("SKIP LOCKED"))!;
     expect(claim[0]).toContain("ORDER BY created_at, id FOR UPDATE SKIP LOCKED LIMIT 1");
     expect(claim[0]).toContain("status='processing' AND lease_until<now() AND attempts<$2");
@@ -176,7 +176,7 @@ describe("complete", () => {
     await request(app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success()).expect(200, { ok: true });
     const calls = run.mock.calls.map(([s, p]) => [s, p] as const);
     const assessment = calls.find(([s]) => s.includes("SET ai_status='completed'"))!;
-    expect(assessment[1]).toEqual([ASSESSMENT, USER, JSON.stringify(validOutput()), "gemma4:e4b", "dc35e8d9c606", "0.40.2", "comp-v13"]);
+    expect(assessment[1]).toEqual([ASSESSMENT, USER, JSON.stringify(validOutput()), "gemma4:e4b", "dc35e8d9c606", "0.40.2", "comp-v14"]);
     const job = calls.find(([s]) => s.startsWith("UPDATE stu_comp_ai_jobs SET status=$2"))!;
     expect(job[0]).toContain("ai_input=NULL");
     expect(job[1]).toEqual([JOB, "completed", null, JSON.stringify({ eval_count: 900, total_ms: 120000 })]);
@@ -263,12 +263,12 @@ describe("complete", () => {
     const kept = setup(withJob(retried));
     const output = {
       ...validOutput(),
-      summary: "Bạn có nền tảng lập trình hướng đối tượng vững với điểm 88. Xem thêm tại https://example.org nhé.",
+      summary: "Bạn có nền tảng lập trình hướng đối tượng vững với điểm 88,5. Xem thêm tại https://example.org nhé.",
       nextSteps: ["Học lại Toán rời rạc ở HK2 2025–2026.", "Làm một sản phẩm nhỏ.", "Ôn lại Toán rời rạc."]
     };
     await request(kept.app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success(output)).expect(200, { ok: true });
     const stored = JSON.parse((kept.run.mock.calls.find(([s]) => s.includes("SET ai_status='completed'"))![1] as unknown[])[2] as string);
-    expect(stored.summary).toBe("Bạn có nền tảng lập trình hướng đối tượng vững với điểm 88.");
+    expect(stored.summary).toBe("Bạn có nền tảng lập trình hướng đối tượng vững với điểm 88,5.");
     expect(stored.nextSteps).toEqual(["Làm một sản phẩm nhỏ.", "Ôn lại Toán rời rạc."]);
     const job = kept.run.mock.calls.find(([s]) => s.startsWith("UPDATE stu_comp_ai_jobs SET status=$2"))!;
     expect(job[1]).toEqual([JOB, "completed", null, JSON.stringify({ eval_count: 900, total_ms: 120000, retried: true, repairedProblems: 2 })]);

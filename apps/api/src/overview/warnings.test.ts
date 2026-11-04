@@ -63,16 +63,21 @@ describe("overviewWarnings", () => {
     expect(result.items[3]).toMatchObject({ text: "Còn 2 môn khác trễ so với kế hoạch: Môn D, Môn E.", strong: ["2 môn khác"] });
   });
 
-  it("names an elective group or choice that is still short", () => {
+  it("names an elective group or choice that is still short, in the unit of its requirement (comp-calc-v19)", () => {
     const result = overviewWarnings({ ...base, electives: [
-      { label: "Nhóm tự chọn TC309: chọn 6 tín chỉ", code: "TC309", term: "HK243", unit: "credit", missing: 1, missingCredits: 3 },
+      { label: "Nhóm tự chọn TC406: chọn 6 tín chỉ", code: "TC406", term: "HK243", unit: "credit", missing: 6, missingCredits: 6 },
       { label: "Chọn 1 trong 3 môn sau", code: null, term: "HK242", unit: "course", missing: 1, missingCredits: 3 },
+      { label: "Chọn 1 trong 2 môn sau", code: null, term: "HK241", unit: "course", missing: 1, missingCredits: 3, shortfall: "1 học phần (3–6 TC)" },
     ] });
     expect(result.items.map((item) => item.text)).toEqual([
-      "Nhóm tự chọn TC309 còn thiếu 3 TC (dự kiến HK3 2024–2025).",
-      "Chọn 1 trong 3 môn sau (HK2 2024–2025): còn thiếu 1 môn.",
+      "Nhóm tự chọn TC406 còn thiếu 6 TC (dự kiến HK3 2024–2025).",
+      "Chọn 1 trong 3 môn sau (HK2 2024–2025): còn thiếu 1 học phần (3 TC).",
+      "Chọn 1 trong 2 môn sau (HK1 2024–2025): còn thiếu 1 học phần (3–6 TC).",
     ]);
-    expect(result.items[0]).toMatchObject({ kind: "elective_short", key: "elective:TC309:HK243", strong: ["Nhóm tự chọn TC309"] });
+    expect(result.items[0]).toMatchObject({ kind: "elective_short", key: "elective:TC406:HK243", strong: ["Nhóm tự chọn TC406"] });
+    // A credit group's course count with the TC unit read "còn thiếu 1 TC" (the review): the credits are what is short.
+    expect(overviewWarnings({ ...base, electives: [{ label: "Nhóm tự chọn TC406: chọn 6 tín chỉ", code: "TC406", term: "HK243", unit: "credit", missing: 1, missingCredits: 6 }] })
+      .items[0]!.text).toBe("Nhóm tự chọn TC406 còn thiếu 6 TC (dự kiến HK3 2024–2025).");
   });
 
   it("says the student is on track when nothing is wrong, notes a missing plan, and puts the worst first", () => {

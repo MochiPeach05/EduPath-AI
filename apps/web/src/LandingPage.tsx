@@ -59,6 +59,9 @@ const features = [
   }
 ];
 
+/** The campus photo by width; the JPEG (1600px) is the fallback and the login page background. */
+const campusWebp = "/vlu-campus-800.webp 800w, /vlu-campus-1200.webp 1200w";
+
 function Brand({ light = false }: { light?: boolean }) {
   return <EduPathBrand href="/" light={light} />;
 }
@@ -252,6 +255,12 @@ export default function LandingPage() {
             <a href="#cau-hoi" onClick={() => setMenuOpen(false)}>
               Câu hỏi thường gặp
             </a>
+            {/* Phones only (landing.css): there the header has no room for the button beside the logo. */}
+            {portal && (
+              <a className="lp-navigation-portal" href={portal}>
+                {portalLabel} <Icon name="arrow" />
+              </a>
+            )}
           </nav>
           <div className="lp-header-actions">
             <a className={`lp-button lp-button-small${portal ? " lp-return-portal" : ""}`} href={portal ?? "/login"}>
@@ -304,14 +313,19 @@ export default function LandingPage() {
             </div>
             <div className="lp-hero-visual">
               <div className="lp-campus-frame">
-                <img
-                  className="lp-campus-image"
-                  src="/vlu-campus.jpg"
-                  alt="Phối cảnh khuôn viên Trường Đại học Văn Lang bên sông"
-                  width="2100"
-                  height="1400"
-                  fetchPriority="high"
-                />
+                {/* The photo covers a frame 355–490px tall, so it is drawn about 530–690px wide (80% of that from
+                    1200px, styles.css): the 800px or the 1200px WebP by screen density (public/ASSETS.md). */}
+                <picture>
+                  <source type="image/webp" srcSet={campusWebp} sizes="(min-width: 1200px) 560px, 690px" />
+                  <img
+                    className="lp-campus-image"
+                    src="/vlu-campus.jpg"
+                    alt="Phối cảnh khuôn viên Trường Đại học Văn Lang bên sông"
+                    width="1200"
+                    height="800"
+                    fetchPriority="high"
+                  />
+                </picture>
                 <div className="lp-campus-caption">
                   <span>VAN LANG UNIVERSITY</span>
                   <strong>Nơi hành trình của bạn bắt đầu.</strong>
@@ -526,13 +540,16 @@ export default function LandingPage() {
 
         <section className="lp-campus-story" aria-labelledby="campus-heading">
           <div className="lp-campus-story-photo">
-            <img
-              src="/vlu-campus.jpg"
-              alt="Không gian học tập tại cơ sở chính Trường Đại học Văn Lang"
-              width="2100"
-              height="1400"
-              loading="lazy"
-            />
+            <picture>
+              <source type="image/webp" srcSet={campusWebp} sizes="(max-width: 640px) 100vw, 50vw" />
+              <img
+                src="/vlu-campus.jpg"
+                alt="Không gian học tập tại cơ sở chính Trường Đại học Văn Lang"
+                width="1200"
+                height="800"
+                loading="lazy"
+              />
+            </picture>
           </div>
           <div className="lp-campus-story-copy">
             <p className="lp-eyebrow">MANG TINH THẦN VĂN LANG</p>

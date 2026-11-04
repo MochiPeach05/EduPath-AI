@@ -237,8 +237,13 @@ export function createApp({
       })
     );
 
-    app.get(/^(?!\/api(?:\/|$)).*/, (_request, response, next) => {
+    // Every other address gets the web app, which shows Không tìm thấy trang for one it does not know
+    // (apps/web/src/routing.ts): an address not listed here answers 404, so link previews and crawlers do not take
+    // it for a page. Under /quantri the app decides (its pages are in apps/web/src/admin-navigation.ts).
+    const webAppPath = /^\/(?:login|dashboard|auth\/callback|chinh-sach-va-dieu-khoan|chinh-sach-bao-mat|dieu-khoan-su-dung|cau-hoi-thuong-gap|quantri(?:\/.*)?)?\/*$/;
+    app.get(/^(?!\/api(?:\/|$)).*/, (request, response, next) => {
       response.setHeader("Cache-Control", "no-cache");
+      if (!webAppPath.test(request.path)) response.status(404);
       response.sendFile("index.html", { root: webDistPath }, (error) => {
         if (error) next(error);
       });

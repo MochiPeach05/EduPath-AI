@@ -3,10 +3,11 @@ import { courseKey, deriveElectiveGroups, electiveCodeOf } from "./course-state.
 import { syntheticCurriculum, syntheticPlan, syntheticStandards } from "./fixtures/synthetic-k29.js";
 import { electiveQuotas } from "./graduation.js";
 import {
-  choiceLabel, choiceRule, physicalEducationCourseSlot, physicalEducationGroupsFor, physicalEducationSlot, planProgress, type PlanCourseInfo,
+  choiceCreditRange, choiceLabel, choiceRule, physicalEducationCourseSlot, physicalEducationGroupsFor, physicalEducationSlot, planProgress, shortfallText,
+  type PlanCourseInfo,
 } from "./plan-progress.js";
 import { classifyCurriculumSpecialty } from "./specialty.js";
-import type { CourseState, SpecialtyCode } from "./types.js";
+import type { CourseState, LateEntry, SpecialtyCode } from "./types.js";
 
 const curriculum = syntheticCurriculum();
 const plan = syntheticPlan();
@@ -113,13 +114,16 @@ describe("training-plan progress (spec §7.8)", () => {
   it("counts a course that appears in two choice sections once, for the earliest section", () => {
     const states = { ...passedThroughHK243 };
     delete states["71ITIS30303"];
-    const result = run("HK243", states);
+    const result = run("HK251", states);
     // The plan writes "Chọn1 trong 3 môn sau"; the student reads it spaced (v17).
     expect(result.late).toEqual([expect.objectContaining({ kind: "choice", label: "Chọn 1 trong 3 môn sau", termCode: "HK243", missing: 1, missingCredits: 3 })]);
     expect(result).toMatchObject({ lateCount: 1, lateCredits: 3 });
+    // While HK243 is the term being studied, the same choice is that term's plan, not late (v19).
+    expect(run("HK243", states)).toMatchObject({ late: [], lateCount: 0, lateCredits: 0, currentCount: 1, currentCredits: 3,
+      current: [expect.objectContaining({ kind: "choice", label: "Chọn 1 trong 3 môn sau", termCode: "HK243", missing: 1 })] });
   });
 
-  it("lists late courses, GDTC slots and choices, but never in-progress courses", () => {
+  it("lists late courses, GDTC slots and choices of the terms before the one being studied, but never in-progress courses", () => {
     const result = run("HK241", {
       "71ITBS10103": "passed", "71ITBS10203": "failed", "71NAD110013": "passed", "71ITSE30103": "in_progress", "71PEKC10062": "passed",
       "71ITIS30103": "graded_unknown",
@@ -127,11 +131,16 @@ describe("training-plan progress (spec §7.8)", () => {
     expect(result.late.map((entry) => [entry.kind, "code" in entry ? entry.code : entry.label, entry.termCode])).toEqual([
       ["course", "71ITBS10203", "HK231"],
       ["physical_education", "GDTC 2", "HK233"],
+    ]);
+    // GDTC is a condition: listed, its 2 credits never counted (v19; lateCredits was 3 + 2 + 3 + 3 with HK241 counted late).
+    expect(result.late.find((entry) => entry.kind === "physical_education")).toMatchObject({ required: 2, passed: 1, missingCredits: 2, conditionOnly: true });
+    expect(result).toMatchObject({ lateCount: 2, lateCredits: 3 });
+    // HK241 is being studied: its course and choice not registered are its plan.
+    expect(result.current!.map((entry) => [entry.kind, "code" in entry ? entry.code : entry.label, entry.termCode])).toEqual([
       ["course", "71ITSE30503", "HK241"],
       ["choice", "Chọn 1 trong 2 môn sau", "HK241"],
     ]);
-    expect(result.late.find((entry) => entry.kind === "physical_education")).toMatchObject({ required: 2, passed: 1, missingCredits: 2 });
-    expect(result).toMatchObject({ lateCount: 4, lateCredits: 3 + 2 + 3 + 3 });
+    expect(result).toMatchObject({ currentCount: 2, currentCredits: 6 });
   });
 
   it("does not count an ongoing PE elective as late", () => {
@@ -143,19 +152,25 @@ describe("training-plan progress (spec §7.8)", () => {
     const states = { ...passedThroughHK243 };
     delete states["71ITSE41003"];
     delete states["71ITAI40103"];
-    const late = (specialty: SpecialtyCode | null) => run("HK243", states, specialty).late.map((entry) => ("code" in entry ? entry.code : entry.label));
+    const late = (specialty: SpecialtyCode | null) => run("HK251", states, specialty).late.map((entry) => ("code" in entry ? entry.code : entry.label));
     // 71ITAI40103 is a common course listed under the "Chuyên ngành Trí tuệ Nhân tạo" section.
     expect(late("CNPM")).toEqual(["71ITSE41003", "71ITAI40103"]);
     expect(late("CNDL")).toEqual(["71ITDS40303", "71ITAI40103"]);
     expect(late(null)).toEqual(["71ITAI40103"]);
   });
 
-  it("treats the TC406 alternatives as one quota choice in credits", () => {
-    const result = run("HK261", { ...passedThroughHK243, "71ITSE41203": "passed", "71ITIN40304": "passed", "71ITGR40206": "failed" });
-    expect(result.late).toEqual([expect.objectContaining({ kind: "choice", unit: "credit", required: 6, missingCredits: 6, missing: 1 })]);
-    const unknown = run("HK261", { ...passedThroughHK243, "71ITSE41203": "passed", "71ITIN40304": "passed", "71ITGR40206": "graded_unknown" });
+  it("treats the TC406 alternatives as one quota choice in credits, its shortfall in credits (v19)", () => {
+    const states: Record<string, CourseState> = { ...passedThroughHK243, "71ITSE41203": "passed", "71ITIN40304": "passed", "71ITGR40206": "failed" };
+    // HK262 comes after the group's term: late, 6 TC short. `missing` is in credits like `remaining` (it read 1, "còn thiếu 1 TC").
+    const result = run("HK262", states);
+    expect(result.late).toEqual([expect.objectContaining({ kind: "choice", unit: "credit", required: 6, missingCredits: 6, missing: 6 })]);
+    // One course of the group's largest (Đồ án Tốt nghiệp, 6 TC) fills it: one course late.
+    expect(result).toMatchObject({ lateCount: 1, lateCredits: 6 });
+    // In HK261, the group's own term, it is that term's plan (v19).
+    expect(run("HK261", states)).toMatchObject({ late: [], current: [expect.objectContaining({ unit: "credit", missing: 6, missingCredits: 6 })], currentCredits: 6 });
+    const unknown = run("HK262", { ...passedThroughHK243, "71ITSE41203": "passed", "71ITIN40304": "passed", "71ITGR40206": "graded_unknown" });
     expect(unknown.late).toEqual([]);
-    const done = run("HK261", { ...passedThroughHK243, "71ITSE41203": "passed", "71ITIN40304": "passed", "71ITGR40203": "passed", "71ITIS30403": "passed" });
+    const done = run("HK262", { ...passedThroughHK243, "71ITSE41203": "passed", "71ITIN40304": "passed", "71ITGR40203": "passed", "71ITIS30403": "passed" });
     expect(done.late).toEqual([]);
   });
 
@@ -167,6 +182,77 @@ describe("training-plan progress (spec §7.8)", () => {
   });
 
   it("has nothing late before the first graded term", () => {
-    expect(run(null, {})).toMatchObject({ currentTerm: null, nextTerm: "HK231", late: [] });
+    expect(run(null, {})).toMatchObject({ currentTerm: null, nextTerm: "HK231", late: [], current: [] });
+  });
+});
+
+describe("comp-calc-v19 (user 2026-11-04): late only before the term being studied, no condition-only credits", () => {
+  // The flags calculate.ts passes from the engine's conditionCodes (the fixture standard's condition-only courses).
+  const conditionCodes = new Set(["71NAD110013", "71PEKC10062", "71PESW10042", "71PEBA10052", "71PETT10012"]);
+  const withConditions = (states: Record<string, CourseState>) => {
+    const map = courses(states);
+    for (const code of conditionCodes) map.set(code, { ...map.get(code)!, conditionOnly: true });
+    return map;
+  };
+  const progress = (currentTerm: string, states: Record<string, CourseState>) =>
+    planProgress({ plan: plan.data, physicalEducationGroups: plan.physicalEducationGroups, currentTerm, courses: withConditions(states), quotas });
+
+  it("reproduces the review: earlier courses late, GDQP and GDTC listed without credits, the thesis group of the term being studied not late", () => {
+    // A synthetic student studying HK261 (the plan's last term): Kiểm thử phần mềm (HK251) and Đồ án thực tập (HK253) not
+    // taken, GDQP1 and the second GDTC not passed, the thesis group TC406 of HK261 not registered. Before v19: 3 + 2 + 3 + 4 + 6.
+    const states: Record<string, CourseState> = { ...passedThroughHK243 };
+    delete states["71NAD110013"];
+    delete states["71PETT10012"];
+    const result = progress("HK261", states);
+    expect(result.late.map((entry) => [entry.kind, "code" in entry ? entry.code : entry.label, entry.termCode, entry.conditionOnly ?? false])).toEqual([
+      ["course", "71NAD110013", "HK231", true],
+      ["physical_education", "GDTC 2", "HK233", true],
+      ["course", "71ITSE41203", "HK251", false],
+      ["course", "71ITIN40304", "HK253", false],
+    ]);
+    // Listed, but only the two courses count: 3 + 4 TC.
+    expect(result).toMatchObject({ lateCount: 4, lateCredits: 7 });
+    // The thesis group is the plan of the term being studied, in credits: 6 TC, the figure of Xét tốt nghiệp.
+    expect(result.current).toEqual([expect.objectContaining({
+      kind: "choice", label: "Nhóm tự chọn TC406: chọn 6 tín chỉ", termCode: "HK261", unit: "credit", missing: 6, missingCredits: 6,
+    })]);
+    expect(result).toMatchObject({ currentCount: 1, currentCredits: 6, nextTerm: null, next: [], nextCount: 0, nextCredits: 0 });
+    expect(shortfallText(result.current![0] as Extract<LateEntry, { kind: "choice" }>)).toBe("6 TC");
+  });
+
+  it("leaves condition-only courses and GDTC slots out of the credits of the term being studied and of the next term", () => {
+    const result = progress("HK231", {});
+    // HK231: two courses of 3 TC and GDQP1 (3 TC, a condition): 3 items, 6 TC.
+    expect(result.current!.map((entry) => ("code" in entry ? entry.code : entry.label))).toEqual(["71ITBS10103", "71ITBS10203", "71NAD110013"]);
+    expect(result).toMatchObject({ currentCount: 3, currentCredits: 6 });
+    // HK232: Kỹ thuật lập trình and the GDTC 1 slot: 2 courses, 3 TC (5 before v19).
+    expect(result.next).toEqual([
+      expect.objectContaining({ kind: "course", code: "71ITSE30103" }),
+      expect.objectContaining({ kind: "physical_education", label: "GDTC 1", conditionOnly: true }),
+    ]);
+    expect(result).toMatchObject({ nextTerm: "HK232", nextCount: 2, nextCredits: 3 });
+  });
+
+  it("writes every shortfall in the unit of its requirement, the same way for results stored before v19", () => {
+    const option = (credits: number | null, state: CourseState = "not_taken") => ({ credits, state });
+    expect(shortfallText({ unit: "credit", missing: 6, missingCredits: 6 })).toBe("6 TC");
+    // A v18 result counted the courses of a credit group in `missing`: its credits still read right.
+    expect(shortfallText({ unit: "credit", missing: 1, missingCredits: 6 })).toBe("6 TC");
+    expect(shortfallText({ unit: "course", missing: 1, missingCredits: 3, options: [option(3), option(3), option(3, "passed")] })).toBe("1 học phần (3 TC)");
+    // Options of different credits still open: the range, never one wrong figure.
+    expect(shortfallText({ unit: "course", missing: 1, missingCredits: 3, options: [option(6), option(3)] })).toBe("1 học phần (3–6 TC)");
+    expect(shortfallText({ unit: "course", missing: 2, missingCredits: 6, options: [option(4), option(3), option(3), option(4, "in_progress")] })).toBe("2 học phần (6–7 TC)");
+    expect(shortfallText({ unit: "course", missing: 1, missingCredits: 0 })).toBe("1 học phần");
+    expect(shortfallText({ unit: "credit", missing: 1.5, missingCredits: 1.5 })).toBe("1,5 TC");
+  });
+
+  it("counts a choice's missing credits from its cheapest options still open", () => {
+    const option = (credits: number | null, state: CourseState = "not_taken") => ({ credits, state });
+    // The 3 TC option is passed (it filled another choice): the open ones are 4 TC (k × the cheapest, 3, before v19).
+    expect(choiceCreditRange([option(3, "passed"), option(4), option(4, "failed")], 1)).toEqual({ low: 4, high: 4 });
+    expect(choiceCreditRange([option(3, "passed"), option(4)], 2)).toEqual({ low: 7, high: 7 });
+    expect(choiceCreditRange([option(3, "passed")], 1)).toEqual({ low: 3, high: 3 });
+    expect(choiceCreditRange([], 1)).toEqual({ low: 0, high: 0 });
+    expect(choiceCreditRange([option(null)], 1)).toEqual({ low: 0, high: 0 });
   });
 });

@@ -599,3 +599,18 @@ describe("StudentCompetency — audit of 2026-10-25", () => {
     expect(html).toContain('aria-label="1 kỹ năng Miễn/công nhận trong nhóm Kỹ năng bổ trợ"');
   });
 });
+
+describe("StudentCompetency — progress rules of comp-calc-v19 (user 2026-11-04)", () => {
+  const html = (calcVersion: string, view?: CompetencyView) => {
+    const assessment = fixtureAssessment("completed");
+    return render({ assessment: { ...assessment, result: { ...assessment.result, meta: { ...assessment.result.meta, calcVersion } } }, aiEnabled: true, workerOnline: true }, { view });
+  };
+  const note = "Kết quả này được tính trước khi hệ thống sửa cách tính tiến độ: môn của học kỳ đang học không còn bị tính là chậm, tín chỉ môn điều kiện (GDTC, GDQP) không được cộng, và nhóm tự chọn ghi đúng số tín chỉ còn thiếu. Bấm “Đánh giá lại” để cập nhật.";
+
+  it("asks a result stored before comp-calc-v19 for Đánh giá lại on Đánh giá năng lực, like the v18 thesis note", () => {
+    expect(html("comp-calc-v18")).toContain(note);
+    expect(html("comp-calc-v19")).not.toContain(note);
+    // Khoảng trống kỹ năng shows no progress, so no note there.
+    expect(html("comp-calc-v18", "gap")).not.toContain(note);
+  });
+});

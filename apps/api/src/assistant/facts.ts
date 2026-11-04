@@ -6,7 +6,7 @@
 // Since assistant-v4 (2026-10-29) the stored transcript is a source too (transcript.ts): its scores and printed
 // summaries are copied as printed, so a student can look up a grade, the GPA or the credits in the chat.
 import { levelOf } from "../competency-assessment/calculate.js";
-import { formatNumber, sanitizeText } from "../competency-assessment/ai/prompt.js";
+import { formatScoreOf100, sanitizeText } from "../competency-assessment/ai/prompt.js";
 import { fold, specialtyLabel } from "../competency-assessment/specialty.js";
 import type { AssessmentResult, LevelCode, SkillResult, SpecialtyCode } from "../competency-assessment/types.js";
 import type { DatabasePool } from "../db/pool.js";
@@ -69,20 +69,22 @@ function skillLevel(skill: Pick<SkillResult, "score" | "status" | "upcoming" | "
     if (skill.status === "exempt_only") return LEVELS.exempt;
     return skill.upcoming ? `Sắp học${skill.upcomingTerm ? ` (${termName(skill.upcomingTerm)})` : ""}` : "Chưa có điểm";
   }
-  return `${LEVELS[levelOf(skill.score)]} (${formatNumber(skill.score)} điểm)`;
+  // assistant-v10: 0–100 scores as the pages show them, floored to the tenth with the scale (2 decimals rounded before:
+  // 72,37 and even 89,996 → "90" next to the level Giỏi).
+  return `${LEVELS[levelOf(skill.score)]} (${formatScoreOf100(skill.score)} điểm)`;
 }
 
 function careerLines(result: AssessmentResult): string[] {
   const career = result.career;
   if (!career) return ["Vị trí nghề nghiệp mục tiêu: chưa chọn (chọn ở trang Định hướng nghề nghiệp để mình so kỹ năng với vị trí nghề nghiệp)."];
-  const fit = typeof career.fitScore === "number" ? `điểm phù hợp ${formatNumber(career.fitScore)}/100 (${career.fitLabel})` : `mức phù hợp: ${career.fitLabel}`;
+  const fit = typeof career.fitScore === "number" ? `điểm phù hợp ${formatScoreOf100(career.fitScore)} (${career.fitLabel})` : `mức phù hợp: ${career.fitLabel}`;
   return [`Vị trí nghề nghiệp mục tiêu: ${career.nameVi}; ${fit}; ${career.summaryText}.`];
 }
 
 function overallLine(result: AssessmentResult): string {
   const overall = result.overall;
   if (overall.score === null) return "Mức năng lực chung: chưa có điểm.";
-  return `Mức năng lực chung: ${LEVELS[levelOf(overall.score)]} (${formatNumber(overall.score)} điểm, dựa trên ${overall.basis.skillsWithEvidence}/${overall.basis.applicableSkills} kỹ năng có điểm).`;
+  return `Mức năng lực chung: ${LEVELS[levelOf(overall.score)]} (${formatScoreOf100(overall.score)} điểm, dựa trên ${overall.basis.skillsWithEvidence}/${overall.basis.applicableSkills} kỹ năng có điểm).`;
 }
 
 /** The question names one of the student's skills ("SQL của mình ở mức nào?"). */

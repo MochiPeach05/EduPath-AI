@@ -264,6 +264,16 @@ export function thesisByGpa(calcVersion: string | null | undefined): boolean {
   return !Number.isFinite(version) || version >= 18;
 }
 
+/**
+ * comp-calc-v19 (user 2026-11-04): "Chậm so với kế hoạch" counts only the terms before the one being studied (its own courses not
+ * registered are its plan), never the credits of GDTC/GDQP, and an elective group's shortfall is in credits ("còn thiếu 6 TC";
+ * a result stored before read its course count as "còn thiếu 1 TC"). Earlier results ask for Đánh giá lại.
+ */
+export function lateBeforeStudyTerm(calcVersion: string | null | undefined): boolean {
+  const version = Number(/^comp-calc-v(\d+)$/.exec(calcVersion ?? "")?.[1]);
+  return !Number.isFinite(version) || version >= 19;
+}
+
 /** comp-calc-v13 (2026-10-24): the plan progress counts from the term being studied; earlier results from the latest graded term. */
 export function countsFromStudyTerm(calcVersion: string | null | undefined): boolean {
   const version = Number(/^comp-calc-v(\d+)$/.exec(calcVersion ?? "")?.[1]);

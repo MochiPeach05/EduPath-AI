@@ -22,7 +22,12 @@
   text-decoration: none;
 }
 
-.ep-brand>img {
+/* The <picture> only chooses the file: the image itself is the flex item. */
+.ep-brand>picture {
+  display: contents;
+}
+
+.ep-brand img {
   display: block;
   flex: 0 0 auto;
   align-self: center;

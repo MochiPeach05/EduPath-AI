@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { programName } from "./display-format";
 import {
-  auditGroups, auditNote, courseList, creditProgress, formatNumber, groupCountText, neededTone, planChoiceText, termLabel, unmatchedNote,
-  type AuditMark, type AuditView, type NeededTone, type PlanOrigin, type StudyPlanContext, type StudyPlanData, type StudyPlanProjection,
+  auditGroups, auditNote, courseList, creditProgress, formatNumber, groupCountText, neededTone, planChoiceText, proposalSummaryText, termLabel, unmatchedNote,
+  type AuditMark, type AuditView, type NeededTone, type PlanOrigin, type PlanProposal, type StudyPlanContext, type StudyPlanData, type StudyPlanProjection,
 } from "./study-plan-data";
 
 // "Theo dõi tiến độ" of #roadmap (user 2026-10-24, after Stellic's "Track your progress" and "Symbols overview", the
@@ -47,11 +47,13 @@ function ProgressBar({ done, running, planned, total }: { done: number; running:
 }
 
 /**
- * origin: where the plan came from during this visit; when the AI roadmap's proposal was just added (the page does it
- * from any tab), a note here says so and opens Kế hoạch học kỳ.
+ * origin: where the plan came from during this visit; when the student just applied the AI roadmap's proposal, a note
+ * here says so and opens Kế hoạch học kỳ. proposal: what Kế hoạch học kỳ proposes and the student has not applied or
+ * declined yet (user 2026-11-04: "Hỏi trước, bấm mới lưu"), named briefly here; the plan counted is the one saved.
  */
-export function RoadmapTrack({ context, plan, projection, origin = null, onOpenPlanner }: {
-  context: StudyPlanContext; plan: StudyPlanData; projection: StudyPlanProjection | null; origin?: PlanOrigin; onOpenPlanner?: () => void;
+export function RoadmapTrack({ context, plan, projection, origin = null, proposal = null, onOpenPlanner }: {
+  context: StudyPlanContext; plan: StudyPlanData; projection: StudyPlanProjection | null; origin?: PlanOrigin; proposal?: PlanProposal | null;
+  onOpenPlanner?: () => void;
 }) {
   const [view, setView] = useState<AuditView>("official");
   const credits = creditProgress(context, plan);
@@ -71,6 +73,10 @@ export function RoadmapTrack({ context, plan, projection, origin = null, onOpenP
           <button type="button" aria-pressed={view === "planned"} onClick={() => setView("planned")}>Theo kế hoạch</button>
         </div>
       </header>
+      {proposal && <div className="rm-origin rm-origin-empty" role="status">
+        <p><Mark kind="warning" /> Có đề xuất cho Kế hoạch học kỳ: {proposalSummaryText(proposal)}. Kế hoạch chưa thay đổi; mở Kế hoạch học kỳ để xem và chọn Áp dụng hoặc Bỏ qua.</p>
+        {onOpenPlanner && <button type="button" className="sw-outline" onClick={onOpenPlanner}>Mở Kế hoạch học kỳ</button>}
+      </div>}
       {aiCodes.length > 0 && <div className="rm-origin rm-origin-empty" role="status">
         <p><Mark kind="planned" /> Kế hoạch học kỳ vừa được thêm {aiCodes.length} học phần do lộ trình AI đề xuất: {courseList(context, aiCodes)}. Chế độ Theo kế hoạch đã tính các học phần này.</p>
         {onOpenPlanner && <button type="button" className="sw-outline" onClick={onOpenPlanner}>Mở Kế hoạch học kỳ</button>}

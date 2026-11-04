@@ -118,6 +118,41 @@ describe("buildRoadmapFacts", () => {
     expect(built.choices.find((choice) => choice.label.includes("TC310"))!.options.map((item) => item.code)).toEqual(["71ITSE30903"]);
   });
 
+  it("states a choice's shortfall in the unit of its requirement and keeps the term being studied's own plan (comp-calc-v19)", () => {
+    const result = syntheticRoadmapResult();
+    const option = (code: string, name: string, credits: number) => ({ code, name, credits, state: "not_taken" as const });
+    // v19: a credit group's `missing` is in credits; the thesis group of the term being studied is progress.current, not late.
+    result.progress = { ...result.progress!,
+      late: [
+        { kind: "choice", label: "Nhóm tự chọn TC309: chọn 6 tín chỉ", termCode: "HK243", required: 6, unit: "credit", missing: 3, missingCredits: 3,
+          options: [option("71ITSE30803", "Lập trình Web nâng cao với framework", 3)] },
+        { kind: "choice", label: "Chọn 1 trong 2 môn sau", termCode: "HK241", required: 1, unit: "course", missing: 1, missingCredits: 3,
+          options: [option("71ITSE30603", "Phát triển ứng dụng di động", 3), option("71ITIS30203", "Hệ quản trị cơ sở dữ liệu", 4)] },
+      ],
+      current: [{ kind: "choice", label: "Nhóm tự chọn TC406: chọn 6 tín chỉ", termCode: "HK251", required: 6, unit: "credit", missing: 6, missingCredits: 6,
+        options: [option("71ITGR40206", "Đồ án Tốt nghiệp", 6)] }],
+      lateCount: 2, lateCredits: 6, currentCount: 1, currentCredits: 6,
+    };
+    const built = buildRoadmapFacts(ROADMAP_ASSESSMENT, result, roadmapWindow(ROADMAP_NOW));
+    expect(built.choices.map((choice) => [choice.label, choice.source, choice.termCode, choice.need])).toEqual([
+      ["Nhóm tự chọn TC309: chọn 6 tín chỉ", "late", "HK243", "3 TC"],
+      ["Chọn 1 trong 2 môn sau", "late", "HK241", "1 học phần (3–4 TC)"],
+      // Not late on the progress pages, but the roadmap prepares the term after it: it keeps its place (roadmap-v2).
+      ["Nhóm tự chọn TC406: chọn 6 tín chỉ", "late", "HK251", "6 TC"],
+    ]);
+    expect(built.pace.lateCount).toBe(3);
+    // The term being studied's group is marked, so neither the prompt nor the page calls it late (user 2026-11-04).
+    expect(built.choices.map((choice) => choice.thisTerm ?? false)).toEqual([false, false, true]);
+    const user = buildRoadmapInput(built).user;
+    expect(user).toContain("Nhóm tự chọn TC406: chọn 6 tín chỉ\" (theo kế hoạch HK1 2025–2026 (học kỳ đang học, chưa đăng ký)");
+    expect(user).not.toContain("Nhóm tự chọn TC406: chọn 6 tín chỉ\" (trễ so với kế hoạch");
+    // A v18 result counted a credit group's courses in `missing` (1 for Đồ án Tốt nghiệp, 6 TC): it read "1 TC".
+    const { current: _current, currentCount: _count, currentCredits: _credits, ...before } = result.progress;
+    result.progress = { ...before, late: [{ kind: "choice", label: "Nhóm tự chọn TC406: chọn 6 tín chỉ", termCode: "HK251",
+      required: 6, unit: "credit", missing: 1, missingCredits: 6, options: [option("71ITGR40206", "Đồ án Tốt nghiệp", 6)] }] };
+    expect(buildRoadmapFacts(ROADMAP_ASSESSMENT, result, roadmapWindow(ROADMAP_NOW)).choices.map((choice) => choice.need)).toEqual(["6 TC"]);
+  });
+
   it("never offers an English course for improvement, but still a failed one for a retake", () => {
     const result = syntheticRoadmapResult();
     result.courses.push({ ...result.courses[0]!, code: "71ENG310033", name: "Anh văn 3 (AV3)", state: "passed", letter: "D", score10: 5.4, applicable: true, conditionOnly: false },
@@ -200,7 +235,7 @@ describe("buildRoadmapInput", () => {
     expect(input.user).toContain("Học kỳ của lộ trình: HK2 2026–2027 (ngày dự kiến theo lịch của trường).");
     expect(input.user).toContain("Từ ngày 21/12/2026 đến ngày 04/04/2027.");
     expect(input.user).toContain("Tháng 2: từ 21/01/2027 đến 20/02/2027");
-    expect(input.user).toContain("- 71ITBS10203 Cơ sở lập trình (3 TC): điểm 3,2 (F) — học lại; giúp kỹ năng nghề: Lập trình cơ bản");
+    expect(input.user).toContain("- 71ITBS10203 Cơ sở lập trình (3 TC): điểm 3,2/10 (F) — học lại; giúp kỹ năng nghề: Lập trình cơ bản");
     expect(input.user).toContain("Theo kế hoạch HK2 2025–2026 (học kỳ tiếp theo, cần chuẩn bị đăng ký):");
     expect(input.user).toContain("[3. HỌC PHẦN ĐANG HỌC] (HK1 2025–2026, chưa có kết quả)");
     expect(input.user).toContain("Học kỳ đang học: HK1 2025–2026; học kỳ tiếp theo theo kế hoạch đào tạo: HK2 2025–2026.");
@@ -214,10 +249,15 @@ describe("buildRoadmapInput", () => {
     expect(input.keys).toMatchObject({ terms: ["HK251", "HK252", "HK253", "HK261", "HK262"], internshipDone: false, windowTerm: "HK262" });
     expect(input.keys.unproven).toEqual(["C#/C++", "Docker", "thực tập"]);
     // The pace to graduate on time, with the numbers the advice may repeat.
-    expect(input.user).toMatch(/Tín chỉ tích lũy: [\d,]+\/126 \(còn thiếu [\d,]+ TC\)/);
+    expect(input.user).toMatch(/Tín chỉ tích lũy: [\d,]+\/126 TC \(còn thiếu [\d,]+ TC\)/);
     expect(input.user).toContain("Học kỳ còn lại theo chương trình sau học kỳ đang học:");
     expect(input.user).toMatch(/Để tốt nghiệp đúng hạn cần trung bình khoảng \d+ TC mỗi học kỳ còn lại\./);
     expect(input.user).toContain("- [S01] C#/C++ (Ưu tiên): CTĐT chưa có học phần đo kỹ năng này — cần tự học");
+    // roadmap-v14 (review 2026-11-04: "64" for 64,8): numbers as the pages show them, with their scale; 72,37 is shown 72,3.
+    expect(input.user).toContain("- [S04] Lập trình cơ bản (Ưu tiên): Đã đạt, mức Khá: có thể nâng cao, điểm 72,3/100, ngưỡng 62,5/100");
+    expect(input.user).toContain("Điểm trung bình tích lũy: 2,85/4 (yêu cầu tối thiểu 2,00/4)");
+    expect(input.user).not.toContain("72,37");
+    expect(input.system).toContain('chép đúng từng chữ số như trong dữ liệu, giữ nguyên phần thập phân sau dấu phẩy, không làm tròn và không bỏ số lẻ: dữ liệu ghi "điểm 64,8/100" thì viết 64,8');
     for (const section of ["[1. HỒ SƠ]", "[2. THỜI GIAN CỦA LỘ TRÌNH]", "[3. HỌC PHẦN ĐANG HỌC]", "[4. HỌC PHẦN CẦN HỌC THEO KẾ HOẠCH ĐÀO TẠO]",
       "[5. HỌC PHẦN CẦN HỌC LẠI VÀ HỌC CẢI THIỆN]", "[6. KỸ NĂNG NGHỀ CẦN BỔ SUNG]", "[7. TIẾN ĐỘ XÉT TỐT NGHIỆP]"]) expect(input.user).toContain(section);
     // No identity, interest or file field ever reaches the model.
@@ -296,7 +336,8 @@ describe("roadmapBasis", () => {
     const basis = roadmapBasis({ ...facts, recorded }, survey);
     expect(basis.recorded.slice(0, 4)).toEqual([
       "Có điểm từ bảng điểm: HTML (mức Giỏi, 81 điểm); CSS (mức Giỏi, 81 điểm); JavaScript (mức Khá, 70 điểm)",
-      "Điểm còn dưới mức Khá: React (mức Trung bình, 55 điểm)",
+      // As the pages show it (roadmap-v14): 55,4, not 55.
+      "Điểm còn dưới mức Khá: React (mức Trung bình, 55,4 điểm)",
       "Chưa có minh chứng (chưa có điểm từ học phần nào): Web front-end, Trí tuệ nhân tạo, học máy",
       "Học phần thực tập trong chương trình: Đồ án thực tập (đã đạt)",
     ]);
@@ -383,6 +424,24 @@ describe("holding the output to the data (roadmap-v9)", () => {
     expect(checked.output.improve).toEqual([{ code: "71ITBS10203", advice: "Ôn lại kiến thức nền." }, { code: "71ITSE30603", advice: "Học cải thiện để nâng điểm." }]);
     expect(checked.issues).toHaveLength(2);
     for (const issue of checked.issues) expect(issue).toMatch(/^Gọi học phần chưa đạt Cơ sở lập trình là "cải thiện"; học phần chưa đạt phải gọi là "học lại"/);
+  });
+
+  it("drops a sentence whose number lost its decimals and reports it, so the model is asked again (roadmap-v14)", () => {
+    const checked = validateRoadmapOutput(output({
+      summary: "Điểm trung bình tích lũy của bạn là 2,8. Học kỳ tới hãy học lại Cơ sở lập trình.",
+      advice: ["Lập trình cơ bản đạt 72,3/100, hãy nâng lên mức Giỏi.", "Cơ sở lập trình mới được 3 điểm, cần học lại sớm.",
+        // Phát triển web scores 72, so "72 điểm" is a score of the data, but not the score of Lập trình cơ bản (72,3).
+        "Phát triển web đạt 72 điểm.", "Lập trình cơ bản đạt 72 điểm, hãy giữ vững."],
+    }), context);
+    if (!checked.ok) throw new Error("expected ok");
+    expect(checked.output.summary).toBe("Học kỳ tới hãy học lại Cơ sở lập trình.");
+    expect(checked.output.advice).toEqual(["Lập trình cơ bản đạt 72,3/100, hãy nâng lên mức Giỏi.", "Phát triển web đạt 72 điểm."]);
+    expect(checked.issues).toHaveLength(3);
+    expect(checked.issues[0]).toBe('Viết 2,8 trong khi dữ liệu ghi 2,85; chép đúng từng chữ số, giữ nguyên phần thập phân, không làm tròn hay bỏ số lẻ. Câu: "Điểm trung bình tích lũy của bạn là 2,8."');
+    // 3 is in the data block as credits (3 TC), but written as a score it must be one: Cơ sở lập trình has 3,2.
+    expect(checked.issues[1]).toMatch(/^Viết 3 trong khi dữ liệu ghi 3,2\b/);
+    expect(checked.issues[2]).toMatch(/^Viết 72 trong khi dữ liệu ghi 72,3;/);
+    expect(context.scores).toEqual(expect.arrayContaining([{ name: "Lập trình cơ bản", value: "72,3" }, { name: "điểm trung bình tích lũy", value: "2,85" }]));
   });
 
   it("writes a plain summary when every sentence of the model's had to go", () => {

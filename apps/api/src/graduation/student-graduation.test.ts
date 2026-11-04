@@ -221,7 +221,7 @@ describe("fingerprint", () => {
     const input = { profile: base.profile, standard: base.standard!, evaluation: base.evaluation! };
     const facts = graduationFingerprintFacts(input);
     expect(facts).toMatchObject({ v: 2, promptVersion: GRADUATION_ADVICE_PROMPT_VERSION });
-    expect(GRADUATION_ADVICE_PROMPT_VERSION).toBe("grad-advice-v4");
+    expect(GRADUATION_ADVICE_PROMPT_VERSION).toBe("grad-advice-v5");
     const hash = (value: unknown) => createHash("sha256").update(canonicalJson(value)).digest("hex");
     expect(hash(facts)).toBe(base.fingerprint);
     expect(hash({ ...facts, promptVersion: "grad-advice-v1" })).not.toBe(base.fingerprint);

@@ -1969,13 +1969,47 @@
   line-height: 1.45;
 }
 
+/* The same way back inside the landing menu, shown only where the header hides its button (below). */
+.lp-navigation .lp-navigation-portal {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  /* Beside the logo and the menu button the label broke into seven lines and the header grew to 160px (2026-11-04):
+     on phones the hero opens with the same button, and the menu holds it wherever the visitor has scrolled. */
+  :root .lp-header-actions .lp-button.lp-return-portal {
+    display: none;
+  }
+
+  .lp-navigation .lp-navigation-portal {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+    padding-top: 16px;
+    border-top: 1px solid #e7e2dc;
+    color: var(--lp-red);
+    font-weight: 800;
+  }
+
+  .lp-navigation-portal .lp-icon {
+    width: 18px;
+    height: 18px;
+  }
+}
+
 @media (max-width: 600px) {
-  .lp-header-actions .lp-return-portal,
   .pi-header-inner .lp-return-portal {
     max-width: 170px;
     padding: 10px 12px;
     font-size: 12px;
   }
+}
+
+/* The campus photos come in a <picture> (WebP by width): the image inside stays the box that is sized and cropped. */
+.lp-campus-frame>picture,
+.lp-campus-story-photo>picture {
+  display: contents;
 }
 
 .lp-header .ep-brand {

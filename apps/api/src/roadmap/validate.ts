@@ -8,10 +8,13 @@
 // roadmap-v9 (user review 2026-10-30) also holds every sentence to the data: terms are written "HK2 2026–2027", a sentence
 // naming a term the roadmap may not name (one already past, or outside the plan) or stating as fact what the student only
 // said in the survey is dropped and reported as an issue; jobs.ts asks the model once more with the issues.
+// roadmap-v14 (review 2026-11-04: "64" for 64,8): so is a sentence with a number of the data whose decimals were dropped.
 import { z } from "zod";
 import { sanitizeText } from "../competency-assessment/ai/prompt.js";
 import { cleanKeyText } from "../competency-assessment/ai/key-cleanup.js";
-import { courseCodesIn, hasForbiddenContent, numbersIn, termCodeNumbers } from "../competency-assessment/ai/validate.js";
+import {
+  courseCodesIn, hasForbiddenContent, namedScoresOf, numberFactsOf, numbersIn, termCodeNumbers, truncatedNamedScore, truncatedNumber, type NamedScore, type NumberFacts,
+} from "../competency-assessment/ai/validate.js";
 import { fold } from "../competency-assessment/specialty.js";
 import { termName, termsNamedIn } from "../term-name.js";
 import { INTERNSHIP_TOPIC, nameParts } from "./basis.js";
@@ -40,6 +43,10 @@ export type RoadmapContext = {
   months: number;
   /** Every number of the data block, plus the HKyyS codes of the terms it writes in words. */
   numbers: ReadonlySet<number>;
+  /** The decimals and scores of the data block: a number without its decimals is dropped and reported (roadmap-v14). */
+  numberFacts: NumberFacts;
+  /** roadmap-v14: the scores with decimals by skill, course and GPA name; empty for an input made before. */
+  scores: readonly NamedScore[];
   /** Every course-code-like token of the data block. */
   courseCodes: ReadonlySet<string>;
   /** roadmap-v9: the terms the text may name; null for an input made before, which is not held to the checks below. */
@@ -109,6 +116,8 @@ export function roadmapContextFromAiInput(input: unknown): RoadmapContext | null
     thesis,
     months,
     numbers: new Set([...numbersIn(input.user), ...termCodeNumbers(input.user)]),
+    numberFacts: numberFactsOf(input.user),
+    scores: namedScoresOf(input.keys.scores),
     courseCodes: new Set(courseCodesIn(input.user)),
     terms: Array.isArray(input.keys.terms) ? new Set(strings(input.keys.terms)) : null,
     unproven: strings(input.keys.unproven),
@@ -228,6 +237,12 @@ function groundedText(text: string, context: RoadmapContext, claims: boolean, is
     const retake = retakeCalledImprove(sentence, context, about);
     if (retake) {
       issues.push(`Gọi học phần chưa đạt ${retake} là "cải thiện"; học phần chưa đạt phải gọi là "học lại", chỉ học phần đã đạt (D, D+) mới là "học cải thiện". Câu: ${quoted(sentence)}`);
+      continue;
+    }
+    // roadmap-v14: "64" where the data has 64,8, or "Lập trình cơ bản đạt 72" for its 72,3 when another skill scores 72.
+    const cut = truncatedNumber(sentence, context.numbers, context.numberFacts) ?? truncatedNamedScore(sentence, context.scores);
+    if (cut) {
+      issues.push(`Viết ${cut.number} trong khi dữ liệu ghi ${cut.given.join(" hoặc ")}; chép đúng từng chữ số, giữ nguyên phần thập phân, không làm tròn hay bỏ số lẻ. Câu: ${quoted(sentence)}`);
       continue;
     }
     kept.push(sentence);

@@ -2,17 +2,19 @@ import { useMemo, useRef, useState, type DragEvent } from "react";
 import { Icon } from "./student-icons";
 import { Mark } from "./RoadmapProgress";
 import {
-  MAX_TERMS, aiAddedText, aiCleanedText, formatNumber, moveCourse, nextTerm, nextTermOffer, offeredSemesters, ownRelations, planIssues, plannedTerms,
-  poolSections, runningIn, searchCourses, termLabel, termLoad, termLoadText, thesisCleanedText, thesisHint, type AiSuggestion, type PlanIssue, type PlanOrigin, type StudyPlanContext,
-  type StudyPlanCourse, type StudyPlanData,
+  MAX_TERMS, aiAddedText, aiCleanedText, exemptText, formatNumber, limitsText, moveCourse, nextTerm, nextTermOffer, offeredSemesters, ownRelations, planIssues,
+  plannedTerms, poolSections, proposalAddedText, runningIn, searchCourses, termLabel, termLoad, termLoadText, thesisCleanedText, thesisHint, type AiSuggestion,
+  type PlanIssue, type PlanOrigin, type PlanProposal, type StudyPlanContext, type StudyPlanCourse, type StudyPlanData,
 } from "./study-plan-data";
 
-// "Kế hoạch học kỳ" of #roadmap (user 2026-10-24, after Stellic's planner; it starts from the training plan and the AI
-// roadmap's proposal, study-plan/prefill.ts): the terms ahead,
+// "Kế hoạch học kỳ" of #roadmap (user 2026-10-24, after Stellic's planner; it starts from the training plan, and the AI
+// roadmap's proposal once the student applies it, study-plan/prefill.ts): the terms ahead,
 // the courses still needed on the right ("Danh sách chờ") or found by search, placed by drag and drop or "Thêm vào";
 // missing prerequisites and courses no training plan opens in that term are flagged. No weekly schedule. Every course says
 // whether the training plans open it next term and in which semester they usually do (user 2026-11-03); the AI's
 // improvements are only suggested, and another specialty's course is never listed, only found by search and marked.
+// Opening the page changes and saves nothing (user 2026-11-04: "Hỏi trước, bấm mới lưu"): what it would change is
+// proposed, with Áp dụng and Bỏ qua.
 
 const DRAG_TYPE = "application/x-edupath-course";
 export type SaveState = "idle" | "dirty" | "saving" | "saved" | "error";
@@ -49,15 +51,40 @@ function CourseFacts({ course, names, byCode, context }: { course: StudyPlanCour
 /** The width below which student-roadmap.css stacks Danh sách chờ under the terms. */
 const STACKED_QUERY = "(max-width: 1100px)";
 
+/** What the page proposes to change (planProposal), with Áp dụng and Bỏ qua; the plan stays as it is until one is pressed. */
+function ProposalBox({ context, proposal, names, onApply, onDecline }: {
+  context: StudyPlanContext; proposal: PlanProposal; names: ReadonlyMap<string, string>; onApply: () => void; onDecline: () => void;
+}) {
+  return <section className="rm-proposal" aria-labelledby="rm-proposal-title">
+    <div>
+      <h3 id="rm-proposal-title">Đề xuất thay đổi kế hoạch</h3>
+      <p className="rm-proposal-lead">Kế hoạch của bạn chưa thay đổi. Bấm Áp dụng để cập nhật kế hoạch theo đề xuất dưới đây, hoặc Bỏ qua để giữ nguyên kế hoạch.</p>
+    </div>
+    {proposal.added.length > 0 && <div>
+      <p>{proposalAddedText(proposal)}</p>
+      <ul>{proposal.added.map((item) => <li key={item.code}><strong>{names.get(item.code) ?? item.code}</strong> ({item.code}): {termLabel(item.term)}</li>)}</ul>
+    </div>}
+    {proposal.aiRemoved.length > 0 && <p>{aiCleanedText(context, proposal.aiRemoved, true)}</p>}
+    {proposal.thesisRemoved.length > 0 && <p>{thesisCleanedText(context, proposal.thesisRemoved, true)}</p>}
+    <div className="rm-actions">
+      <button type="button" className="sw-primary" onClick={onApply}>Áp dụng</button>
+      <button type="button" className="sw-outline" onClick={onDecline}>Bỏ qua</button>
+    </div>
+  </section>;
+}
+
 /**
- * readOnly: a cố vấn học tập's view of the student's plan (advisor-view.ts): the terms as they are, nothing to move or add.
- * suggestions: the AI roadmap's improvements (Danh sách chờ, never added); cleaned: what an older AI roadmap had added and
- * was taken out on this visit (cleanAiAdded); thesisCleaned: the thesis group's other way taken out on this visit
- * (cleanThesisWay, user 2026-11-03).
+ * readOnly: a cố vấn học tập's view of the student's plan (advisor-view.ts): the terms as they are, nothing to move, add
+ * or apply. suggestions: the AI roadmap's improvements (Danh sách chờ, never added); proposal: what the page proposes to
+ * change (onApply: Áp dụng; onDecline: Bỏ qua; declined: the student declined one on this visit); cleaned: what an older AI
+ * roadmap had added and the student took out on this visit (cleanAiAdded); thesisCleaned: the thesis group's other way
+ * taken out on this visit (cleanThesisWay, user 2026-11-03).
  */
-export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, origin, onOpenAi, readOnly = false, suggestions = [], cleaned = [], thesisCleaned = [] }: {
+export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, origin, onOpenAi, readOnly = false, suggestions = [], cleaned = [], thesisCleaned = [],
+  proposal = null, onApply, onDecline, declined = false }: {
   context: StudyPlanContext; plan: StudyPlanData; onChange: (plan: StudyPlanData) => void; saveState: SaveState; saveError: string;
   origin: PlanOrigin; onOpenAi: () => void; readOnly?: boolean; suggestions?: readonly AiSuggestion[]; cleaned?: readonly string[]; thesisCleaned?: readonly string[];
+  proposal?: PlanProposal | null; onApply?: () => void; onDecline?: () => void; declined?: boolean;
 }) {
   const [side, setSide] = useState<"list" | "search">("list");
   const [query, setQuery] = useState("");
@@ -129,6 +156,8 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
       {!readOnly && <p className={`rm-save rm-save-${saveState}`} role="status">{saveState === "saving" ? "Đang lưu…" : saveState === "saved" ? "Đã lưu" : saveState === "dirty" ? "Có thay đổi chưa lưu" : saveState === "error" ? saveError || "Chưa lưu được" : ""}</p>}
     </header>
     {!context.curriculum && <p className="rm-note">Chưa có chương trình đào tạo cho khóa của bạn nên chưa có danh sách học phần để lên kế hoạch.</p>}
+    {!readOnly && proposal && onApply && onDecline && <ProposalBox context={context} proposal={proposal} names={names} onApply={onApply} onDecline={onDecline} />}
+    {!readOnly && declined && !proposal && <p className="rm-origin" role="status"><Mark kind="planned" /> Đã bỏ qua đề xuất: kế hoạch giữ nguyên và đề xuất này sẽ không hiện lại.</p>}
     {!readOnly && origin?.kind === "prefill" && plannedCount > 0 && <p className="rm-origin"><Mark kind="planned" /> Kế hoạch được điền sẵn {plannedCount} học phần bắt buộc còn lại theo kế hoạch đào tạo của khóa; kế hoạch sẽ được lưu khi bạn chỉnh sửa.</p>}
     {plan.aiAdded && <div className="rm-origin rm-origin-ai">
       <Mark kind="planned" />
@@ -144,13 +173,15 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
       <p>{thesisCleanedText(context, thesisCleaned)}</p>
     </div>}
     {!plannedCount && context.curriculum && <div className="rm-origin rm-origin-empty">
-      <p>Kế hoạch chưa có học phần nào.{readOnly ? "" : <> Học phần bắt buộc chỉ được điền sẵn khi còn ở phía trước theo kế hoạch đào tạo (học phần đã trễ không được điền), và học phần lộ trình AI đề xuất được thêm khi bạn có lộ trình AI. Hãy tạo lộ trình ở mục Lộ trình AI đề xuất, hoặc tự thêm học phần từ Danh sách chờ.</>}</p>
+      <p>Kế hoạch chưa có học phần nào.{readOnly ? "" : <> Học phần bắt buộc chỉ được điền sẵn khi còn ở phía trước theo kế hoạch đào tạo (học phần đã trễ không được điền), và học phần lộ trình AI đề xuất được đưa ra để bạn bấm Áp dụng khi bạn có lộ trình AI. Hãy tạo lộ trình ở mục Lộ trình AI đề xuất, hoặc tự thêm học phần từ Danh sách chờ.</>}</p>
       <button type="button" className="sw-outline" onClick={onOpenAi}>Mở Lộ trình AI đề xuất</button>
     </div>}
+    {context.limits && <p className="rm-limits">{limitsText(context.limits)}</p>}
     <div className="rm-planner">
       <div className="rm-terms">
         {plan.terms.map((term) => {
           const load = termLoad(context, plan, term.code);
+          const exempt = exemptText(load, context.limits);
           const running = runningIn(context, term.code).filter((course) => !placed.has(course.code));
           const current = term.code === context.currentTerm;
           return <section key={term.code} className={`rm-term${over === term.code ? " is-over" : ""}`} aria-label={termLabel(term.code)}
@@ -161,6 +192,7 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
                 <span className={`rm-load rm-load-${load.status}`}>{termLoadText(load, context.limits)}</span>
                 {load.conditional > 0 && <small className="rm-load-note" title="Môn điều kiện: Giáo dục thể chất, Giáo dục quốc phòng; không tính vào tín chỉ tích lũy.">
                   gồm {formatNumber(load.conditional)} TC môn điều kiện</small>}
+                {exempt && <small className="rm-load-note">{exempt}</small>}
               </div>
             </header>
             <ul className="rm-term-courses">

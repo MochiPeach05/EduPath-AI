@@ -552,15 +552,28 @@ export type SkillPlan = {
 
 export type PlanCourseRef = { code: string; name: string; credits: number | null; state: CourseState };
 
+/**
+ * An item of the training plan not passed and not in progress (late, or of the term being studied). conditionOnly
+ * (comp-calc-v19): a GDTC/GDQP course, a choice among such courses, or a GDTC slot (always), listed but counted in no credit
+ * total; absent when false and in results stored before v19.
+ * A choice's `missing` is in its unit since v19: courses for a KHĐT "Chọn k trong n" (unit "course"), credits for an elective
+ * group of credits (unit "credit"); before v19 a credit choice's `missing` counted courses (read "còn thiếu 1 TC" for a group
+ * of 6 TC): read a credit choice's `missingCredits`, or write it with plan-progress.ts shortfallText. missingCredits: the
+ * credits counted for it (a "Chọn k" choice: its cheapest open options, choiceCreditRange).
+ */
 export type LateEntry =
-  | { kind: "course"; code: string; name: string; credits: number; termCode: string; state: CourseState }
-  | { kind: "choice"; label: string; termCode: string; required: number; unit: "course" | "credit"; missing: number; missingCredits: number; options: PlanCourseRef[] }
-  | { kind: "physical_education"; label: string; termCode: string; required: number; passed: number; missingCredits: number };
+  | { kind: "course"; code: string; name: string; credits: number; termCode: string; state: CourseState; conditionOnly?: boolean }
+  | {
+    kind: "choice"; label: string; termCode: string; required: number; unit: "course" | "credit"; missing: number; missingCredits: number; options: PlanCourseRef[];
+    conditionOnly?: boolean;
+  }
+  | { kind: "physical_education"; label: string; termCode: string; required: number; passed: number; missingCredits: number; conditionOnly?: boolean };
 
+/** `remaining` is in the choice's unit (courses, or credits for a credit choice); conditionOnly as in LateEntry (v19). */
 export type NextEntry =
-  | { kind: "course"; code: string; name: string; credits: number; state: CourseState }
+  | { kind: "course"; code: string; name: string; credits: number; state: CourseState; conditionOnly?: boolean }
   | { kind: "choice"; label: string; required: number; unit: "course" | "credit"; remaining: number; options: PlanCourseRef[] }
-  | { kind: "physical_education"; label: string; required: number; passed: number };
+  | { kind: "physical_education"; label: string; required: number; passed: number; conditionOnly?: boolean };
 
 export type PlanProgressResult = {
   /**
@@ -570,15 +583,29 @@ export type PlanProgressResult = {
   currentTerm: string | null;
   /** First plan term after currentTerm. */
   nextTerm: string | null;
+  /**
+   * "Trễ kế hoạch": the items planned in a term BEFORE currentTerm that are neither passed nor in progress (comp-calc-v19, user
+   * 2026-11-04); v13–v18 also counted the open items of currentTerm itself, which are `current` since v19.
+   */
   late: LateEntry[];
+  /** Courses of `late` (as nextCount counts them), condition-only ones included. */
   lateCount: number;
+  /** Credits of `late` without the condition-only items (v19; GDTC slots and GDQP courses were counted before). */
   lateCredits: number;
+  /**
+   * The open items of currentTerm, the term being studied: planned there, neither passed nor in progress. Its plan, never late
+   * (v19); counted like late. Absent in results stored before v19 (their `late` holds these items).
+   */
+  current?: LateEntry[];
+  currentCount?: number;
+  currentCredits?: number;
   next: NextEntry[];
   /**
    * Courses of the next term: one per course and GDTC slot, the courses still to choose of a choice, and a credit choice's
    * credits over its largest option (comp-calc-v17; the number of entries before).
    */
   nextCount: number;
+  /** Credits of `next`, condition-only items left out since v19. */
   nextCredits: number;
   /** Sections that are never late (no k, or "Không tính vào tích lũy"). */
   informationalSections: { label: string; termCode: string; options: PlanCourseRef[] }[];

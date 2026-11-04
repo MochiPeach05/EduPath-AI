@@ -119,6 +119,20 @@ describe("assistant student sources", () => {
     expect(context.sources.find((source) => source.title === "Lộ trình AI đề xuất cho bạn")?.text).toContain("Nhận định: Bạn đang đúng tiến độ.");
   });
 
+  it("gives scores as the pages show them, floored to the tenth with their scale, and the GPA with two decimals (assistant-v10)", async () => {
+    // Review 2026-11-04: AI texts wrote "69" for 69,9; the sources gave 0–100 scores with two decimals (72,37) the pages never show.
+    const result = syntheticRoadmapResult();
+    const context = await studentSources(db(), userId, "Kỹ năng Lập trình cơ bản của mình ở mức nào?", ["gaps"], ROADMAP_NOW);
+    const text = context.sources.map((source) => source.text).join("\n");
+    const shown = (value: number) => `${String(Math.floor(value * 10 + 1e-9) / 10).replace(".", ",")}/100`;
+    expect(text).toContain(`(${shown(result.overall.score!)} điểm, dựa trên`);
+    expect(text).toContain(`điểm phù hợp ${shown(result.career!.fitScore!)} (`);
+    const skill = result.skills.find((item) => item.name === "Lập trình cơ bản")!;
+    expect(text).toMatch(new RegExp(`- Lập trình cơ bản[^:\\n]*: \\S+ \\(${shown(skill.score!)} điểm\\)`));
+    expect(text).toContain("Điểm trung bình tích lũy: 2,85/4 (yêu cầu tối thiểu 2,00/4)");
+    expect(text).not.toMatch(/\d,\d{2}\/100/);
+  });
+
   it("leaves the survey out without a valid consent and names a roadmap of an older assessment", async () => {
     const context = await studentSources(db({ consent: "2026-10-11", roadmap: roadmap({ assessmentId: "77777777-7777-4777-8777-777777777777" }) }), userId,
       "Học kỳ tới mình nên học gì?", ["roadmap"], ROADMAP_NOW);

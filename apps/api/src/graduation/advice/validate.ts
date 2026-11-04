@@ -4,10 +4,13 @@
 // (link, email, HTML, special token), a number or a course code that is not in the data block,
 // an unknown condition key or an unknown focus is dropped and the rest are kept. Condition keys
 // written into prose ([G1], G1, CREDITS, GPA) become their names. The job fails only when the
-// summary is unusable or no advice item or no next step remains.
+// summary is unusable or no advice item or no next step remains. grad-advice-v5 (review 2026-11-04): a number of the data
+// written without its decimals ("2,8" or "3" for 2,85) drops its item like an invented one.
 import { z } from "zod";
 import { sanitizeText } from "../../competency-assessment/ai/prompt.js";
-import { courseCodesIn, hasForbiddenContent, numbersIn, termCodeNumbers } from "../../competency-assessment/ai/validate.js";
+import {
+  courseCodesIn, hasForbiddenContent, namedScoresOf, numberFactsOf, numbersIn, termCodeNumbers, truncatedNamedScore, truncatedNumber, type NamedScore, type NumberFacts,
+} from "../../competency-assessment/ai/validate.js";
 import { CREDITS_KEY, CREDITS_LABEL, GENERAL_LABEL, GPA_KEY, GPA_LABEL, type GraduationAdviceKey } from "./prompt.js";
 import { GENERAL_FOCUS, GRADUATION_ADVICE_LIMITS as L } from "./schema.js";
 
@@ -21,6 +24,10 @@ export type GraduationAdviceContext = {
   keys: GraduationAdviceKey[];
   /** Every number of the data block, plus the HKyyS codes of the terms it writes in words. */
   numbers: ReadonlySet<number>;
+  /** The decimals and scores of the data block (grad-advice-v5, truncatedNumber). */
+  numberFacts: NumberFacts;
+  /** grad-advice-v5: the scores with decimals by GPA and course name (truncatedNamedScore); empty for an input made before. */
+  scores: readonly NamedScore[];
   /** Every course-code-like token of the data block. */
   courseCodes: ReadonlySet<string>;
 };
@@ -52,6 +59,8 @@ export function graduationAdviceContextFromAiInput(input: unknown): GraduationAd
   return {
     keys,
     numbers: new Set([...numbersIn(input.user), ...termCodeNumbers(input.user)]),
+    numberFacts: numberFactsOf(input.user),
+    scores: namedScoresOf(input.scores),
     courseCodes: new Set(courseCodesIn(input.user)),
   };
 }
@@ -137,6 +146,8 @@ function cleanText(value: string, max: number, context: GraduationAdviceContext,
   if ((sanitized.match(KEY_TOKEN) ?? []).some((token) => !known.has(token))) return null;
   const text = sanitizeText(replaceConditionKeys(sanitized, context.keys), max * 2);
   if (!text || hasForbiddenContent(text)) return null;
+  // grad-advice-v5: "2,8" or "3" where the data has 2,85, also when 3 is elsewhere in the data.
+  if (truncatedNumber(text, context.numbers, context.numberFacts) || truncatedNamedScore(text, context.scores)) return null;
   if (numbersIn(text).some((number) => !context.numbers.has(number))) return null;
   if (courseCodesIn(text).some((code) => !context.courseCodes.has(code))) return null;
   return text;

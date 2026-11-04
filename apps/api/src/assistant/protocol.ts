@@ -48,8 +48,11 @@ export const documentEmbeddingText = (title: string, text: string) => `title: ${
  * "Điểm TB học tập" and "Tổng số tín chỉ đăng ký" (every registered credit, failed courses included) next to the "tích lũy"
  * lines (passed courses only), with one sentence on the difference. The system prompt is unchanged.
  * v9 (user 2026-10-31, survey-v4): the survey source has no written description of the strengths any more.
+ * v10 (review 2026-11-04: AI texts dropped decimals, "69" for 69,9): the sources give 0–100 scores as the pages show them,
+ * floored to the tenth with the scale ("72,3/100"; "72,37" before), the GPA with two decimals ("2,85/4"), course scores
+ * "/10" (roadmap-v14 sections); rule 2 asks to keep the decimals.
  */
-export const ASSISTANT_PROMPT_VERSION = "assistant-v9";
+export const ASSISTANT_PROMPT_VERSION = "assistant-v10";
 export const KNOWLEDGE_PROMPT_VERSION = "knowledge-v1";
 /** An answer takes well under a minute; a lost worker frees the job after this lease (the worker extends every 3 min). */
 export const ASSISTANT_LEASE_MINUTES = 5;

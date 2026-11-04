@@ -14,11 +14,15 @@ const courseCode = z.string().trim().min(1).max(40);
 
 export const studyPlanSchema = z.object({
   schemaVersion: z.literal(1),
-  /** The AI roadmap whose proposal the plan has taken in (prefill.ts readAiProposal); null or absent before any. */
+  /**
+   * The AI roadmap whose proposal the plan has taken in (Áp dụng) or the student declined (Bỏ qua): prefill.ts readAiPlan
+   * proposes it no more. null or absent before any.
+   */
   roadmapId: z.uuid().nullable().optional(),
   /**
-   * What taking that proposal in added (the page saves it at once, from any tab): kept so "Kế hoạch học kỳ" names the
-   * courses on later visits too. null or absent: nothing to say (a plan saved before, or the student hid the note).
+   * What taking that proposal in added (saved when the student applies it, user 2026-11-04: "Hỏi trước, bấm mới lưu"):
+   * kept so "Kế hoạch học kỳ" names the courses on later visits too. null or absent: nothing to say (a plan saved before,
+   * or the student hid the note).
    */
   aiAdded: z.object({
     completedAt: z.iso.datetime({ offset: true }),
@@ -26,6 +30,8 @@ export const studyPlanSchema = z.object({
     codes: z.array(courseCode).max(MAX_TERMS * MAX_COURSES_PER_TERM),
     addedAt: z.iso.datetime({ offset: true }),
   }).strict().nullable().optional(),
+  /** Courses the page proposed to take out and the student kept (Bỏ qua): never proposed again while planned. */
+  kept: z.array(courseCode).max(MAX_TERMS * MAX_COURSES_PER_TERM).optional(),
   terms: z.array(z.object({
     code: termCode,
     // Unknown keys (the old "sessions") are stripped.

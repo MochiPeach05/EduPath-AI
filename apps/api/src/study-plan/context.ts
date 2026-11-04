@@ -180,15 +180,21 @@ type PlanOffering = { cohort_code: string; major_key?: string; code: string; nam
 
 /**
  * Items of every active training plan (kế hoạch đào tạo): which course each cohort's plan opens in which term, with the
- * label of the item's section ("Chọn 2 trong 6 HP tự chọn Cơ sở ngành"), if any.
+ * label of the item's section ("Chọn 2 trong 6 HP tự chọn Cơ sở ngành"), if any: the first section of the revision with
+ * the item's section id. The sections are read once per revision (a subquery per item expanded the revision's whole data
+ * for every item, 8 times slower).
  */
 async function readPlanOfferings(db: Db) {
   return (await db.query<PlanOffering>(
-    `SELECT tp.cohort_code,split_part(tp.identity_key, ':', 1) AS major_key,i.code,i.name,i.term_code,
-       (SELECT s->>'label' FROM training_plan_revisions r,
-          jsonb_array_elements(CASE WHEN jsonb_typeof(r.data->'sections')='array' THEN r.data->'sections' ELSE '[]'::jsonb END) s
-        WHERE r.id=tp.current_revision AND s->>'id'=i.section_id LIMIT 1) AS section_label
+    `WITH sections AS (
+       SELECT DISTINCT ON (r.id,s.value->>'id') r.id AS revision_id,s.value->>'id' AS id,s.value->>'label' AS label
+       FROM training_plans tp JOIN training_plan_revisions r ON r.id=tp.current_revision
+       CROSS JOIN LATERAL jsonb_array_elements(CASE WHEN jsonb_typeof(r.data->'sections')='array' THEN r.data->'sections' ELSE '[]'::jsonb END)
+         WITH ORDINALITY AS s(value,position)
+       WHERE tp.is_active ORDER BY r.id,s.value->>'id',s.position)
+     SELECT tp.cohort_code,split_part(tp.identity_key, ':', 1) AS major_key,i.code,i.name,i.term_code,sections.label AS section_label
      FROM training_plans tp JOIN training_plan_items i ON i.revision_id=tp.current_revision
+     LEFT JOIN sections ON sections.revision_id=tp.current_revision AND sections.id=i.section_id
      WHERE tp.is_active ORDER BY tp.cohort_code,i.position`)).rows;
 }
 
@@ -234,6 +240,18 @@ export function planChoices(rows: readonly PlanOffering[], courses: readonly Stu
 
 const laterTerm = (a: string, b: string | null) => (b && termIndex(b) > termIndex(a) ? b : a);
 
+/** The items by key, each list in the items' order. */
+function groupBy<T>(items: readonly T[], keyOf: (item: T) => string): Map<string, T[]> {
+  const groups = new Map<string, T[]>();
+  for (const item of items) {
+    const key = keyOf(item);
+    const group = groups.get(key);
+    if (group) group.push(item);
+    else groups.set(key, [item]);
+  }
+  return groups;
+}
+
 /** Reads everything the page needs for one student with plain SELECTs (the caller holds a snapshot). */
 export async function readStudyPlanFacts(db: Db, userId: string, now = new Date()): Promise<StudyPlanFacts> {
   const profileRow = (await db.query<{ cohort_code: string | null; specialty: string | null; major_code: string | null }>(
@@ -258,13 +276,24 @@ export async function readStudyPlanFacts(db: Db, userId: string, now = new Date(
   const readTranscript = transcript ?? EMPTY_TRANSCRIPT;
   const inputs = graduationInputs(standard?.data ?? null, curriculumCourses, readTranscript);
   const standardCodes = new Set((standard?.data.courses ?? []).map((course) => courseKey(course.code)));
-  const relationsOf = (code: string, kind: "prerequisite" | "prior") => [...new Set((curriculum?.relations ?? [])
-    .filter((relation) => relation.kind === kind && courseKey(relation.courseCode) === courseKey(code))
-    .flatMap((relation) => relation.targetCodes.map(courseKey)))];
+  // The relations by kind and course, and the plan rows by course code and by folded name, are looked up, never searched:
+  // matching every course against every plan row folded both names each time (some 200 000 fold calls for one student,
+  // most of the 3 s GET /api/student/study-plan took on the server, 2026-11-04).
+  const relations = groupBy(curriculum?.relations ?? [], (relation) => `${relation.kind}\n${courseKey(relation.courseCode)}`);
+  const relationsOf = (code: string, kind: "prerequisite" | "prior") =>
+    [...new Set((relations.get(`${kind}\n${courseKey(code)}`) ?? []).flatMap((relation) => relation.targetCodes.map(courseKey)))];
   const termsOf = (rows: typeof offerings) => [...new Set(rows.map((row) => row.term_code))].sort((a, b) => termIndex(a) - termIndex(b));
-  // A course matches a plan row by code, or by name when cohorts carry different codes for it.
-  const planRows = (code: string, name: string) => offerings.filter((row) => courseKey(row.code) === code || fold(row.name) === fold(name));
-  const planTermOf = (code: string, name: string) => termsOf(planRows(code, name).filter(ownPlan))[0] ?? null;
+  const positions = offerings.map((row, position) => ({ row, position }));
+  const rowsByCode = groupBy(positions, (entry) => courseKey(entry.row.code));
+  const rowsByName = groupBy(positions, (entry) => fold(entry.row.name));
+  // A course matches a plan row by code, or by name when cohorts carry different codes for it (rows in plan order).
+  const planRows = (code: string, name: string) => [...new Set([...rowsByCode.get(code) ?? [], ...rowsByName.get(fold(name)) ?? []])]
+    .sort((a, b) => a.position - b.position).map((entry) => entry.row);
+  /** The term of the cohort's own training plan and every term a training plan opens the course in. */
+  const planTerms = (code: string, name: string) => {
+    const rows = planRows(code, name);
+    return { planTerm: termsOf(rows.filter(ownPlan))[0] ?? null, offeredTerms: termsOf(rows) };
+  };
 
   // The other code a course is counted through: an older code of the standard (K26 "DIT0091 / 71ITDS30103"), or a
   // same-name course of another cohort ("học trả nợ với khóa sau").
@@ -292,7 +321,7 @@ export async function readStudyPlanFacts(db: Db, userId: string, now = new Date(
       prerequisites: relationsOf(code, "prerequisite"), prior: relationsOf(code, "prior"),
       state: record?.state ?? "not_taken",
       inProgressTerm: record?.state === "in_progress" && running.length ? running.sort((a, b) => termIndex(b) - termIndex(a))[0]! : null,
-      onlyInStandard: false, planTerm: planTermOf(code, course.name), offeredTerms: termsOf(planRows(code, course.name)), ...audit(code),
+      onlyInStandard: false, ...planTerms(code, course.name), ...audit(code),
     };
   });
   // The standard can require a course the CTĐT does not list; a same-name CTĐT course is the same course (9a0e8b1).
@@ -306,7 +335,7 @@ export async function readStudyPlanFacts(db: Db, userId: string, now = new Date(
       code, name: item.name, credits: item.credits ?? 0, type: group.kind === "mandatory" ? "BB" : "", kind: group.kind === "mandatory" ? "mandatory" : "elective",
       group: null, conditional: item.conditionOnly, applicable: true, specialtyName: null, standardTerm: null, prerequisites: [], prior: [],
       state: record?.state ?? "not_taken", inProgressTerm: null, onlyInStandard: true,
-      planTerm: planTermOf(code, item.name), offeredTerms: termsOf(planRows(code, item.name)), ...audit(code),
+      ...planTerms(code, item.name), ...audit(code),
     });
   }
   // A course that applies to the student needs only the prerequisites of the student's own program: the planner would

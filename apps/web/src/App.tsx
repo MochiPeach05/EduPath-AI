@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { beginMicrosoftLogin, getCurrentUser, logout } from "./auth-api";
 import LandingPage from "./LandingPage";
 import PublicInformationPage from "./PublicInformationPage";
+import NotFoundPage from "./NotFoundPage";
 import EduPathBrand from "./EduPathBrand";
 import AdminPortal from "./AdminPortal";
-import { resolveAppRoute, safeReturnTo } from "./routing";
+import { isAdminArea, resolveAppRoute, safeReturnTo } from "./routing";
 import { canAccessAdmin, type AuthResponse } from "./types";
 import StudentWorkspace from "./StudentWorkspace";
 import { installAdvisorFetch, stopActing, takeAdvisorStudentFromUrl } from "./advisor-view";
@@ -365,6 +366,8 @@ export default function App() {
   if (route === "policy" || route === "faq") {
     return <PublicInformationPage page={route} />;
   }
+  // An address the app does not know says so (2026-11-04), instead of opening the student portal under it.
+  if (route === "notFound") return <NotFoundPage admin={isAdminArea(window.location.pathname)} />;
   return route === "landing"
     ? <LandingPage />
     : route === "admin" ? <AdminPortal />

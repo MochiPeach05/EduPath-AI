@@ -14,10 +14,11 @@ import type {
   SkillResult,
   SupportCourse
 } from "../types.js";
-import { FIT_LABELS, fitCodeOf, fitDataShareOf, fitScoreOf, isStrengthConfidence, LEVEL_THRESHOLDS } from "../constants.js";
+import { FIT_LABELS, fitCodeOf, fitDataShareOf, fitScoreOf, isStrengthConfidence } from "../constants.js";
+import { shortfallText } from "../plan-progress.js";
 import { termName, termsNamedIn } from "../../term-name.js";
 import { AI_OUTPUT_LIMITS as L, buildOutputSchema, type JsonSchema, type OutputSchemaContext } from "./schema.js";
-import type { CommentChecks } from "./validate.js";
+import { numberFactsOf, type CommentChecks, type NamedScore, type NumberFacts } from "./validate.js";
 
 /**
  * comp-v2: separate strength/improvement enums, planned courses no longer listed as evidence,
@@ -39,8 +40,11 @@ import type { CommentChecks } from "./validate.js";
  * later ones (a course whose planned term has passed is registered from the next term, or in the student's own Kế hoạch
  * học kỳ); strengths are only the page's "Điểm mạnh" skills and never one to improve; each skill item must talk about
  * its own skill. The server checks all three (validate.ts CommentChecks) and asks once more, then drops what is wrong.
+ * comp-v14 (review 2026-11-04: comments wrote "69" for 69,9 and "64" for 64,8): every number as the pages show it since
+ * 2026-10-30, with its scale: 0–100 scores floored to the tenth ("69,9/100"), course scores "8,5/10", shortfalls "thiếu 19,5
+ * điểm"; rule 1 asks to copy decimals, and a number that lost them is asked again, then dropped (validate.ts truncated_number).
  */
-export const PROMPT_VERSION = "comp-v13";
+export const PROMPT_VERSION = "comp-v14";
 
 /** Gemma reasons before it writes the comment; the worker sends it to Ollama as think:true. */
 const AI_THINK = true;
@@ -109,27 +113,47 @@ export function formatNumber(value: number, digits = 2): string {
   return String(rounded).replace(".", ",");
 }
 /**
- * A 100-point score (skill, group, overall, career threshold) exactly as the page shows it:
- * a whole number rounded down (web formatScore), so 83,92 is sent as 83, and 62,5–63 as 62,5–62,9.
+ * A 0–100 score (skill, group, overall, career threshold, điểm phù hợp) exactly as every page shows it (web display-format.ts
+ * scoreText, 2026-10-30): at most one decimal, rounded DOWN to the tenth so a level bound is never shown as reached before it
+ * is: 69,94 → "69,9", 89,96 → "89,9", 62,5 → "62,5", 85 → "85". comp-v14: a whole number before (69,9 was sent as 69).
  */
 export function formatScore(value: number): string {
-  return String(shownScore(value)).replace(".", ",");
+  return formatNumber(shownScore(value), 1);
 }
 /** The number formatScore writes (web shownScore). */
 function shownScore(value: number): number {
-  const whole = Math.floor(value + 1e-9);
-  // Khá starts at 62,5 (comp-calc-v10): a score from there to 63 keeps one decimal, so it never reads below its level.
-  const reached = Object.values(LEVEL_THRESHOLDS).some((bound) => whole < bound && value + 1e-9 >= bound);
-  return reached ? Math.floor(value * 10 + 1e-9) / 10 : whole;
+  return Math.floor(value * 10 + 1e-9) / 10;
 }
+/** A 0–100 score with its scale, "69,9/100", as the data blocks write it (comp-v14, roadmap-v14, assistant-v10). */
+export const formatScoreOf100 = (value: number) => `${formatScore(value)}/100`;
 /**
- * A career deficit as the page shows it (web deficitText): with the score and threshold, the threshold minus the score as sent,
- * so "ngưỡng 62,5 | điểm 43 | thiếu 19,5" adds up (2026-10-25 audit: it sent "thiếu 19"); else whole points rounded up, at least 1.
+ * A career shortfall as the page shows it (web deficitText): with the score and threshold, the threshold minus the score as
+ * shown, so "ngưỡng 62,5/100 | điểm 43/100 | thiếu 19,5 điểm" adds up (2026-10-25 audit: it sent "thiếu 19"); else the
+ * deficit rounded up to the tenth. At least 0,1: a score below its threshold always lacks something.
  */
 export function formatDeficit(deficit: number, score?: number | null, threshold?: number): string {
-  if (typeof score === "number" && typeof threshold === "number") return formatNumber(Math.max(0.1, Math.round((threshold - shownScore(score)) * 10) / 10), 1);
-  return String(Math.max(1, Math.ceil(deficit - 1e-9)));
+  const shortfall = typeof score === "number" && typeof threshold === "number"
+    ? Math.round((threshold - shownScore(score)) * 10) / 10
+    : Math.ceil(deficit * 10 - 1e-9) / 10;
+  return formatNumber(Math.max(0.1, shortfall), 1);
 }
+/**
+ * A GPA as the graduation page and the transcript print it (web formatGpa): two decimals, rounded half up: 2,8 → "2,80",
+ * 3,1 → "3,10", 2,456 → "2,46". The graduation advice and the roadmap write it with its scale, "2,80/4".
+ */
+export function formatGpa(value: number): string {
+  return (Math.round(value * 100) / 100).toFixed(2).replace(".", ",");
+}
+/**
+ * The GPA to show against a minimum (web shownGpa): rounded like formatGpa, except that a GPA below the minimum whose
+ * rounding would reach it (1,996 against 2,00) is rounded down (1,99), so it never reads as met.
+ */
+export function shownGpa(actual: number, required: number | null, below = required !== null && actual < required): number {
+  const rounded = Math.round(actual * 100) / 100;
+  return below && required !== null && rounded >= required ? Math.floor(actual * 100 + 1e-9) / 100 : rounded;
+}
+/** A GPA shortfall as the graduation page writes it (web formatGpaShortfall): rounded UP to two decimals, "0,15". */
+export const formatGpaShortfall = (value: number) => formatGpa(Math.ceil(value * 100 - 1e-9) / 100);
 /** A share as a whole percentage, like the page (web formatPercent). */
 const percent = (share: number) => `${Math.round(share * 100)}%`;
 
@@ -196,7 +220,7 @@ const SYSTEM_PROMPT_BASE = `Bạn là cố vấn học tập của EduPath AI, �
 Hệ thống đã tính sẵn mọi con số từ bảng điểm, trọng số học phần, chương trình đào tạo, kế hoạch đào tạo, tiêu chuẩn xét tốt nghiệp và yêu cầu của nghề mục tiêu. Việc của bạn là đọc kết quả đó, chọn và xếp ưu tiên trong các danh sách được cung cấp, rồi viết nhận xét, giải thích, lời khuyên dành riêng cho sinh viên này.
 
 Nguyên tắc dữ liệu (bắt buộc):
-1. Không tự tính, ước lượng hay làm tròn lại bất kỳ con số nào. Nếu nhắc đến số liệu, chép đúng từng chữ số như trong dữ liệu, không thêm chữ số thập phân (dữ liệu ghi "điểm 83" thì viết 83, không viết 83,5 hay 83,92).
+1. Không tự tính, ước lượng hay làm tròn lại bất kỳ con số nào. Nếu nhắc đến số liệu, chép đúng từng chữ số như trong dữ liệu, giữ nguyên phần thập phân sau dấu phẩy, không làm tròn và không bỏ số lẻ: dữ liệu ghi "điểm 69,9/100" thì viết 69,9 (hoặc 69,9/100), không viết 69 hay 70; dữ liệu ghi "điểm 83/100" thì viết 83, không thêm chữ số thập phân. Điểm kỹ năng, nhóm năng lực, điểm tổng và ngưỡng của nghề tính trên thang 100 ("/100"); điểm học phần tính trên thang 10 ("/10").
 2. Chỉ nói về kỹ năng, nhóm năng lực, học phần, nghề nghiệp có trong dữ liệu. Khóa kỹ năng (S01…), khóa nhóm (G1…) và mã học phần chỉ dùng trong các trường skillKey, groupKey, courseCode; trong văn bản luôn gọi bằng tên. Chỉ chọn học phần trong danh sách gợi ý của đúng kỹ năng đó. Không bịa tên khóa học, chứng chỉ, đường link hay giảng viên.
 3. Kỹ năng "Chưa đủ dữ liệu" nghĩa là chương trình đào tạo chưa có học phần đo kỹ năng này; khi tính mức phù hợp với nghề, kỹ năng này, kỹ năng "Cần tự học" và kỹ năng "Sắp học" được tính 0 điểm vì chưa có điểm chứng minh. Không kết luận sinh viên yếu; hãy gợi ý cách tự học và tự kiểm chứng bằng sản phẩm cụ thể. Kỹ năng "Cần tự học" nghĩa là kỹ năng chỉ được dạy trong học phần của chuyên ngành khác hoặc trong học phần tự chọn sinh viên không chọn (nhóm tự chọn đã đủ tín chỉ), không nằm trong chương trình của sinh viên; cũng không kết luận sinh viên yếu mà gợi ý tự học như trên.
 4. "Chưa có minh chứng" nghĩa là sinh viên chưa học học phần liên quan; "Sắp học" nghĩa là học phần nằm ở học kỳ sau theo kế hoạch; mức phù hợp sẽ tăng khi sinh viên học các học phần đó. Cả hai đều không phải học kém.
@@ -234,7 +258,7 @@ const OUTPUT_DESCRIPTION = `Cấu trúc JSON (giới hạn tính theo số ký t
 - progress: tối đa ${L.progress} ký tự, chỉ về tiến độ so với kế hoạch đào tạo (mục [8]); không nhận xét về xét tốt nghiệp.
 - nextSteps: từ ${L.nextStepsMin} đến ${L.nextStepsMax} việc nên làm ngay, mỗi việc tối đa ${L.nextStep} ký tự; mỗi việc gắn với một học phần cụ thể ở mục [5] hoặc [6], hoặc một sản phẩm tự học khi kỹ năng không có học phần; khi đã chọn nghề, chỉ về kỹ năng của nghề.
 Mỗi kỹ năng chỉ phân tích chi tiết ở một mục; các mục khác nhắc ngắn gọn nếu cần, tránh mở nhiều câu bằng cùng một cụm từ.
-Trong các đoạn văn, gọi kỹ năng, nhóm và học phần bằng tên; không viết khóa S…/G… và không viết mã học phần. Mọi con số trong văn bản phải có sẵn trong dữ liệu; không tự đặt thêm số (số tuần, số giờ, phần trăm, số lượng).`;
+Trong các đoạn văn, gọi kỹ năng, nhóm và học phần bằng tên; không viết khóa S…/G… và không viết mã học phần. Mọi con số trong văn bản phải có sẵn trong dữ liệu và được chép đủ phần thập phân như dữ liệu ghi; không tự đặt thêm số (số tuần, số giờ, phần trăm, số lượng).`;
 
 export const SYSTEM_PROMPT = `${SYSTEM_PROMPT_BASE}\n${OUTPUT_DESCRIPTION}`;
 
@@ -423,7 +447,7 @@ function evidenceText(row: SkillEvidenceRow, course: CourseFact | undefined, pla
   let state: string;
   switch (row.role) {
     case "score": {
-      const parts = [course?.score10 !== null && course?.score10 !== undefined ? `điểm ${formatNumber(course.score10)}` : null, course?.letter ? sanitizeText(course.letter, 4) : null].filter(Boolean);
+      const parts = [course?.score10 !== null && course?.score10 !== undefined ? `điểm ${formatNumber(course.score10)}/10` : null, course?.letter ? sanitizeText(course.letter, 4) : null].filter(Boolean);
       state = parts.length ? parts.join(", ") : "đã có điểm";
       break;
     }
@@ -448,7 +472,7 @@ function skillLine(skill: SkillResult, courses: Map<string, CourseFact>, careerK
   const head = `${skill.key} | ${sanitizeText(skill.name)} | nhóm ${groupsOfSkill(skill).join(", ")}${mark ? ` | ${mark}` : ""}`;
   let status: string;
   if (skill.status === "scored" && skill.score !== null) {
-    status = `điểm ${formatScore(skill.score)} | ${skill.levelLabel}`;
+    status = `điểm ${formatScoreOf100(skill.score)} | ${skill.levelLabel}`;
   } else if (skill.status === "exempt_only") {
     status = `${skill.levelLabel} (chỉ có học phần miễn MT)`;
   } else if (skill.status === "not_applicable") {
@@ -488,7 +512,7 @@ function missingText(missing: readonly PrerequisiteGap[]): string {
 /** Where the student stands with the course, in plain words. */
 function courseSituation(course: SupportCourse): string {
   if (course.kind === "improve") {
-    const score = course.score10 !== null ? `, điểm ${formatNumber(course.score10)}${course.letter ? ` (${sanitizeText(course.letter, 4)})` : ""}` : "";
+    const score = course.score10 !== null ? `, điểm ${formatNumber(course.score10)}/10${course.letter ? ` (${sanitizeText(course.letter, 4)})` : ""}` : "";
     return `đã đạt${score} – có thể học cải thiện`;
   }
   switch (course.state) {
@@ -523,7 +547,9 @@ function supportLine(course: SupportCourse, plan: TermPlan): string {
 function lateText(entry: LateEntry, plan: TermPlan): string {
   switch (entry.kind) {
     case "course": return `${sanitizeText(entry.code, 20)} ${sanitizeText(entry.name)} (${whenText(entry.code, entry.termCode, plan, true)})`;
-    case "choice": return `${sanitizeText(entry.label)} (đã trễ kế hoạch): còn thiếu ${formatNumber(entry.missing)} ${entry.unit === "course" ? "học phần" : "tín chỉ"}`;
+    // comp-v14: the shortfall in its requirement's unit, worded like the pages (plan-progress.ts shortfallText): "6 TC", "1 học phần
+    // (3–4 TC)". Before comp-calc-v19 a credit choice's `missing` counted courses, so "còn thiếu 1 tín chỉ" was sent for 6 TC.
+    case "choice": return `${sanitizeText(entry.label)} (đã trễ kế hoạch): còn thiếu ${shortfallText(entry)}`;
     default: return `${sanitizeText(entry.label)} (đã trễ kế hoạch): đã đạt ${entry.passed}/${entry.required}`;
   }
 }
@@ -571,13 +597,13 @@ function renderDataBlock(result: AssessmentResult, context: PromptContext = buil
 
   push("", "[2. ĐIỂM TỔNG VÀ NHÓM NĂNG LỰC] (thang 100)");
   const o = result.overall;
-  push(`Điểm tổng: ${o.score !== null ? formatScore(o.score) : "chưa có"} | ${o.levelLabel}${o.confidenceLabel ? ` | tin cậy ${o.confidenceLabel}` : ""}` +
+  push(`Điểm tổng: ${o.score !== null ? formatScoreOf100(o.score) : "chưa có"} | ${o.levelLabel}${o.confidenceLabel ? ` | tin cậy ${o.confidenceLabel}` : ""}` +
     ` | dựa trên ${o.basis.skillsWithEvidence}/${o.basis.applicableSkills} kỹ năng có minh chứng từ ${o.basis.evidenceCourses} học phần`);
   const weakest = weakGroupSkills(result);
   // With a career, whether each weakest skill belongs to it (groupInsights, comp-v5).
-  const lowText = (skill: SkillResult) => [`điểm ${formatScore(skill.score!)}`, careerMark(skill.key, careerKeys)].filter(Boolean).join(", ");
+  const lowText = (skill: SkillResult) => [`điểm ${formatScoreOf100(skill.score!)}`, careerMark(skill.key, careerKeys)].filter(Boolean).join(", ");
   for (const group of result.groups) {
-    push(`${group.key} | ${sanitizeText(group.name)} | ${group.score !== null ? `điểm ${formatScore(group.score)}` : "chưa có điểm"} | ${group.levelLabel}` +
+    push(`${group.key} | ${sanitizeText(group.name)} | ${group.score !== null ? `điểm ${formatScoreOf100(group.score)}` : "chưa có điểm"} | ${group.levelLabel}` +
       `${group.confidenceLabel ? ` | tin cậy ${group.confidenceLabel}` : ""} | ${group.skillsWithEvidence}/${group.skillCount} kỹ năng có minh chứng`);
     const low = weakest.get(group.key);
     if (low) push(`  kỹ năng thấp nhất của nhóm: ${low.map((skill) => `${skill.key} ${sanitizeText(skill.name)} (${lowText(skill)})`).join("; ")}`);
@@ -608,14 +634,14 @@ function renderDataBlock(result: AssessmentResult, context: PromptContext = buil
       const parts = [
         `${name}${title}`,
         req.priorityLabel,
-        `ngưỡng ${formatScore(req.threshold)}`,
-        req.score !== null ? `điểm ${formatScore(req.score)}` : "chưa có điểm",
+        `ngưỡng ${formatScoreOf100(req.threshold)}`,
+        req.score !== null ? `điểm ${formatScoreOf100(req.score)}` : "chưa có điểm",
         req.status === "no_data" && req.noDataReason === "other_specialty"
           ? "Cần tự học (chỉ có trong học phần của chuyên ngành khác)"
           : req.status === "no_data" && req.noDataReason === "elective_not_chosen"
             ? "Cần tự học (chỉ có trong học phần tự chọn bạn không chọn)" : sanitizeText(req.statusLabel, 60)
       ];
-      if (req.status === "below" && req.deficit !== null) parts.push(`thiếu ${formatDeficit(req.deficit, req.score, req.threshold)}${req.deficitBandLabel ? ` (${sanitizeText(req.deficitBandLabel, 40)})` : ""}`);
+      if (req.status === "below" && req.deficit !== null) parts.push(`thiếu ${formatDeficit(req.deficit, req.score, req.threshold)} điểm${req.deficitBandLabel ? ` (${sanitizeText(req.deficitBandLabel, 40)})` : ""}`);
       if (req.status === "upcoming") parts.push(plannedText(req.skillKey ?? "", req.upcomingTerm, plan));
       if (req.exemptOnly) parts.push("chỉ đạt qua học phần miễn MT");
       push(`- ${parts.join(" | ")}`);
@@ -706,7 +732,33 @@ function commentChecks(result: AssessmentResult, context: PromptContext, plan: T
     const offered = [...(suggested.get(key) ?? []), ...(gapCourses.get(key) ?? [])].map((course) => course.name);
     courses[key] = uniq([...evidence, ...offered].map((name) => sanitizeText(name)).filter(Boolean));
   }
-  return { terms: [...terms].sort(), names, courses };
+  const scores = namedScoreList(numberFactsOf(user), (add) => {
+    if (result.overall.score !== null) for (const name of OVERALL_NAMES) add(name, formatScore(result.overall.score));
+    for (const group of result.groups) if (group.score !== null) add(group.name, formatScore(group.score));
+    for (const skill of result.skills) if (skill.status === "scored" && skill.score !== null) add(skill.name, formatScore(skill.score));
+    for (const course of result.courses) if (course.score10 !== null) add(course.name, formatNumber(course.score10));
+  });
+  return { terms: [...terms].sort(), names, courses, scores };
+}
+
+/** The overall score is named either way in a comment. */
+const OVERALL_NAMES = ["điểm tổng", "năng lực chung"];
+/** The names a sentence gives the cumulative GPA (the roadmap and the graduation advice name its score by them). */
+export const GPA_NAMES = ["điểm trung bình tích lũy", "điểm TB tích lũy", "điểm trung bình", "GPA"];
+/**
+ * comp-v14 (also roadmap-v14 and grad-advice-v5): the scores with decimals a data block writes, by what they belong to
+ * (overall, groups, skills, course scores, GPA) and as written there, so "Lập trình cơ bản đạt 72" for 72,3 is caught even
+ * when another skill scores 72 (validate.ts truncatedNamedScore). Only values the block shows with decimals are kept: a
+ * whole score cannot lose them, and a score the block does not show was never given.
+ */
+export function namedScoreList(data: NumberFacts, fill: (add: (name: string, value: string) => void) => void): NamedScore[] {
+  const shown = new Set(data.decimals.map((item) => item.text));
+  const list: NamedScore[] = [];
+  fill((name, value) => {
+    const clean = sanitizeText(name);
+    if (clean && shown.has(value) && !list.some((item) => item.name === clean && item.value === value)) list.push({ name: clean, value });
+  });
+  return list;
 }
 
 /**

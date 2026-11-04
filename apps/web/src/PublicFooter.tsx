@@ -8,17 +8,33 @@ import { Icon } from "./ui-icon";
 /** The way back for a signed-in visitor of the public pages. */
 export const portalLabel = "Quay lại cổng quản lý học tập";
 
+/** A session check this recent answers the next trigger too (a restored page fires pageshow and focus together). */
+const PORTAL_FRESH_MS = 2_000;
+
 /**
  * The portal of the signed-in visitor ("/dashboard" or "/quantri"), or null when nobody is signed in. Checked again
- * when the page is shown or focused, so the public pages follow a sign-in or sign-out made in another tab.
+ * when the page comes back from the back-forward cache or gets focus, so the public pages follow a sign-in or sign-out
+ * made in another tab. One check at a time and none right after another; pageshow also fires on every first load,
+ * where the check has just started (2026-11-04: two GET /api/auth/me per load).
  */
 export function usePortalLink(): string | null {
   const [portal, setPortal] = useState<string | null>(null);
   useEffect(() => {
     let active = true;
-    const refresh = () => { void getCurrentUser().then(auth => { if (active) setPortal(auth.authenticated ? canAccessAdmin(auth.user.role) ? "/quantri" : "/dashboard" : null); }).catch(() => { if (active) setPortal(null); }); };
-    refresh(); window.addEventListener("pageshow", refresh); window.addEventListener("focus", refresh);
-    return () => { active = false; window.removeEventListener("pageshow", refresh); window.removeEventListener("focus", refresh); };
+    let asking = false;
+    let askedAt = Number.NEGATIVE_INFINITY;
+    const refresh = () => {
+      if (asking || Date.now() - askedAt < PORTAL_FRESH_MS) return;
+      asking = true;
+      askedAt = Date.now();
+      void getCurrentUser()
+        .then(auth => { if (active) setPortal(auth.authenticated ? canAccessAdmin(auth.user.role) ? "/quantri" : "/dashboard" : null); })
+        .catch(() => { if (active) setPortal(null); })
+        .finally(() => { asking = false; });
+    };
+    const restored = (event: PageTransitionEvent) => { if (event.persisted) refresh(); };
+    refresh(); window.addEventListener("pageshow", restored); window.addEventListener("focus", refresh);
+    return () => { active = false; window.removeEventListener("pageshow", restored); window.removeEventListener("focus", refresh); };
   }, []);
   return portal;
 }

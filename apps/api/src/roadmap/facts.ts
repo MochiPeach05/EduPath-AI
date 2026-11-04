@@ -3,6 +3,7 @@
 // training-plan progress and the gaps to the target career) and the roadmap window. No names, student codes,
 // emails, classes or interests (the privacy policy of 2026-10-11 keeps interests away from the model).
 import { FAIL_LETTERS } from "../competency-assessment/constants.js";
+import { shortfallText } from "../competency-assessment/plan-progress.js";
 import { fold } from "../competency-assessment/specialty.js";
 import type { AssessmentResult, CourseFact, CourseState, GapStatus, PlanCourseRef } from "../competency-assessment/types.js";
 import { THESIS_NAME_PATTERN, TOPIC_NAME_PATTERN, thesisWay, thesisWayReason, type ThesisPath, type ThesisWay } from "../graduation/thesis.js";
@@ -13,7 +14,12 @@ import type { RoadmapWindow } from "./window.js";
  * course planned for the term being studied but not registered), or planned for the next term, the registration the
  * 3 months lead to.
  */
-export type RoadmapCourse = { code: string; name: string; credits: number; source: "running" | "late" | "next"; termCode: string | null; careerSkills: string[] };
+/**
+ * thisTerm: an item of the term being studied that the student did not register (progress.current, comp-calc-v19). The
+ * roadmap prepares the term after it, so it stays among the courses to catch up ("late"), but it is not called late
+ * anywhere (user 2026-11-04: "Chưa tính trễ"); absent in roadmaps made before.
+ */
+export type RoadmapCourse = { code: string; name: string; credits: number; source: "running" | "late" | "next"; termCode: string | null; careerSkills: string[]; thisTerm?: boolean };
 export type RoadmapOption = { code: string; name: string; credits: number | null };
 /**
  * A choice of the training plan ("chọn n TC trong …") still open. The thesis group (TC406, user 2026-10-24: "chuyên đề 1
@@ -21,9 +27,12 @@ export type RoadmapOption = { code: string; name: string; credits: number | null
  * courses; its other courses are never offered, and once a chuyên đề is under way only the other one is. Since roadmap-v13
  * the system picks the way (graduation/thesis.ts thesisWay, user 2026-11-03: the thesis from a cumulative GPA of 2,80, the
  * two chuyên đề below it) and offers only that one; way and reason are null while the GPA is unknown (both ways then).
+ * need: what is still missing in the unit of the requirement (plan-progress.ts shortfallText): "6 TC" for an elective group
+ * of credits, "1 học phần (3 TC)" for a "Chọn k" choice, "1 học phần" for a GDTC slot; roadmaps made before comp-calc-v19
+ * stored "n môn" or, for a credit group, its course count as "n TC".
  */
 export type RoadmapChoice = {
-  label: string; source: "next" | "late"; termCode: string | null; need: string; options: RoadmapOption[];
+  label: string; source: "next" | "late"; termCode: string | null; need: string; options: RoadmapOption[]; thisTerm?: boolean;
   thesis: { thesis: RoadmapOption | null; topics: RoadmapOption[]; way?: ThesisWay | null; reason?: string | null } | null;
 };
 /** F/VT/CT: must be taken again; D, D+: worth improving (user, 2026-10-24), never an English course (Anh văn, user 2026-10-24). */
@@ -120,9 +129,9 @@ export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult
   const improving = new Set(improve.map((item) => item.code));
 
   const study: RoadmapCourse[] = [];
-  const add = (fact: Pick<CourseFact, "code" | "name" | "credits">, source: RoadmapCourse["source"], termCode: string | null) => {
+  const add = (fact: Pick<CourseFact, "code" | "name" | "credits">, source: RoadmapCourse["source"], termCode: string | null, thisTerm = false) => {
     if (improving.has(fact.code) || study.some((item) => item.code === fact.code) || !ownProgram(fact.code)) return;
-    study.push({ code: fact.code, name: fact.name, credits: fact.credits, source, termCode, careerSkills: skillsOf(fact.code) });
+    study.push({ code: fact.code, name: fact.name, credits: fact.credits, source, termCode, careerSkills: skillsOf(fact.code), ...(thisTerm ? { thisTerm: true } : {}) });
   };
   // The term being studied, when courses are registered without grades: the transcript's own (studyTermCode, stored since
   // comp-calc-v13), else the latest term of those courses. A retake keeps the term of its failed attempt in result.courses,
@@ -160,15 +169,25 @@ export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult
   // the courses it plans there and the student did not register are late, and the term after it is the next one.
   const legacy = Boolean(runningTerm && progress?.nextTerm === runningTerm);
   const upcoming = legacy ? "late" as const : "next" as const;
-  for (const entry of progress?.late ?? []) {
-    if (entry.kind === "course") add(entry, course.get(entry.code)?.state === "in_progress" ? "running" : "late", entry.termCode);
-    else if (entry.kind === "choice") choices.push({ label: entry.label, source: "late", termCode: entry.termCode, need: `${entry.missing} ${entry.unit === "credit" ? "TC" : "môn"}`, ...offered(entry.options) });
-    else choices.push({ label: entry.label, source: "late", termCode: entry.termCode, need: `${Math.max(0, entry.required - entry.passed)} môn`, options: [], thesis: null });
+  // The shortfall in the unit of its requirement (comp-calc-v19 shortfallText: "6 TC" for a group of credits, "1 học phần
+  // (3 TC)" for a "Chọn k" choice); a credit choice read "1 TC" before, its course count with the TC unit.
+  // Since comp-calc-v19 the open items of the term being studied are progress.current, not late on the progress pages; the
+  // roadmap prepares the term after it, by which they are late, so they keep the place they had (roadmap-v2).
+  // They are marked thisTerm so neither the prompt nor the page calls them late (user 2026-11-04: "Chưa tính trễ").
+  const current = new Set<unknown>(progress?.current ?? []);
+  for (const entry of [...(progress?.late ?? []), ...(progress?.current ?? [])]) {
+    const thisTerm = current.has(entry);
+    const mark = thisTerm ? { thisTerm: true } : {};
+    if (entry.kind === "course") add(entry, course.get(entry.code)?.state === "in_progress" ? "running" : "late", entry.termCode, thisTerm);
+    else if (entry.kind === "choice") choices.push({ label: entry.label, source: "late", termCode: entry.termCode, need: shortfallText(entry), ...offered(entry.options), ...mark });
+    else choices.push({ label: entry.label, source: "late", termCode: entry.termCode, need: `${Math.max(0, entry.required - entry.passed)} học phần`, options: [], thesis: null, ...mark });
   }
   for (const entry of progress?.next ?? []) {
     if (entry.kind === "course") add(entry, entry.state === "in_progress" ? "running" : upcoming, progress?.nextTerm ?? null);
-    else if (entry.kind === "choice") choices.push({ label: entry.label, source: upcoming, termCode: progress?.nextTerm ?? null, need: `${entry.remaining} ${entry.unit === "credit" ? "TC" : "môn"}`, ...offered(entry.options) });
-    else choices.push({ label: entry.label, source: upcoming, termCode: progress?.nextTerm ?? null, need: `${Math.max(0, entry.required - entry.passed)} môn`, options: [], thesis: null });
+    else if (entry.kind === "choice") {
+      choices.push({ label: entry.label, source: upcoming, termCode: progress?.nextTerm ?? null,
+        need: shortfallText({ unit: entry.unit, missing: entry.remaining, missingCredits: entry.unit === "credit" ? entry.remaining : 0, options: entry.options }), ...offered(entry.options) });
+    } else choices.push({ label: entry.label, source: upcoming, termCode: progress?.nextTerm ?? null, need: `${Math.max(0, entry.required - entry.passed)} học phần`, options: [], thesis: null });
   }
   let nextTerm = progress?.nextTerm ?? null;
   if (legacy) {
@@ -234,7 +253,8 @@ export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult
       .map((group) => ({ label: group.label, unit: group.unit, done: group.lower, required: group.required })),
     termsLeft, lastTerm,
     creditsPerTerm: creditsLeft !== null && termsLeft.length ? Math.ceil(creditsLeft / termsLeft.length) : null,
-    lateCount: result.progress?.lateCount ?? 0,
+    // The items the roadmap lists as late above: those of terms past and, since comp-calc-v19, of the term being studied.
+    lateCount: (result.progress?.lateCount ?? 0) + (result.progress?.currentCount ?? 0),
   };
 
   const recorded: RoadmapRecorded = {

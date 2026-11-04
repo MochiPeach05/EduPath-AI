@@ -9,8 +9,8 @@ import type { RoadmapRow } from "../roadmap/jobs.js";
 import { ROADMAP_ASSESSMENT, syntheticRoadmapFacts } from "../roadmap/test-fixture.js";
 import type { StudyPlanCourse } from "../study-plan/context.js";
 import {
-  competencyOverview, graduationOverview, nextTermOverview, planTermsView, plannedTermLoad, progressOverview, roadmapOverview, runningOverview, termRef,
-  transcriptOverview, transcriptRunning, type PlannerFacts,
+  competencyOverview, graduationOverview, nextTermOverview, planTermCredits, planTermsView, plannedTermLoad, progressOverview, roadmapOverview, runningOverview,
+  termRef, transcriptOverview, transcriptRunning, type PlannerFacts,
 } from "./overview.js";
 
 // The builders of Tổng quan on the synthetic K29 fixture (synthetic students only).
@@ -49,8 +49,15 @@ describe("transcriptOverview", () => {
         { term: { code: "HK252", label: "HK2 2025–2026" }, termGpa4: 2.5, studyGpa4: 2.95, cumulativeGpa4: 3.1 },
       ],
     });
-    expect(transcriptRunning(data, "HK261")).toEqual([{ code: "71ITSE30103", name: "Học phần tổng hợp", credits: 3, retake: false, skills: [] }]);
+    expect(transcriptRunning(data, "HK261")).toEqual([{ code: "71ITSE30103", name: "Học phần tổng hợp", credits: 3, retake: false, conditionOnly: false, skills: [] }]);
     expect(transcriptRunning(data, null)).toEqual([]);
+    // A course starred in the transcript, or with a GDTC/GDQP code, is a condition: listed, its credits never counted (v19).
+    const starred = structuredClone(data);
+    starred.sections.at(-1)!.courses.push({ ...starred.sections.at(-1)!.courses[0]!, code: "XYZ0001", name: "Giáo dục thể chất 2 (*)", credits: 2 },
+      { ...starred.sections.at(-1)!.courses[0]!, code: "71NAD110013", name: "GDQP1", credits: 3 });
+    expect(transcriptRunning(starred, "HK261").map((course) => [course.code, course.name, course.conditionOnly])).toEqual([
+      ["71ITSE30103", "Học phần tổng hợp", false], ["XYZ0001", "Giáo dục thể chất 2", true], ["71NAD110013", "GDQP1", true],
+    ]);
   });
 });
 
@@ -61,21 +68,93 @@ describe("progressOverview", () => {
     const studyTerm = studyTermCode(inputs.transcript.data);
     expect(studyTerm).toBe("HK251");
     const { progress, late } = progressOverview({ engine, plan: inputs.plan.revision!.data, studyTerm, totalCredits: 126, printedCredits: 27 });
-    const terms = progress.terms.map((term) => [term.term.code, term.state, term.passedCredits, term.plannedCredits, term.courses.map((course) => `${course.code}|${course.state}|${course.detail}`)]);
-    expect(terms.slice(0, 7)).toEqual([
-      ["HK231", "done", 6, 6, ["71ITBS10103|passed|A", "71ITBS10203|passed|C+"]],
-      ["HK232", "late", 0, 3, ["71ITSE30103|late|chưa học, trễ so với kế hoạch"]],
-      ["HK233", "done", 3, 3, ["71ITIS30103|passed|MT (miễn)"]],
-      ["HK241", "late", 3, 6, ["71ITSE30503|failed|cần học lại", "71ITSE30603|passed|C"]],
-      ["HK242", "done", 0, 0, []],
-      ["HK243", "done", 9, 9, ["71ITSE41003|passed|A", "71ITAI40103|passed|D+", "71ITIS30303|passed|B"]],
-      ["HK251", "running", 0, 3, ["71ITSE41203|running|đang học"]],
+    const terms = progress.terms.map((term) => [term.term.code, term.state, term.passedCredits, term.plannedCredits, term.lateCredits, term.runningCredits,
+      term.courses.map((course) => `${course.code}|${course.state}|${course.detail}`)]);
+    expect(terms).toEqual([
+      ["HK231", "done", 6, 6, 0, 0, ["71ITBS10103|passed|A", "71ITBS10203|passed|C+"]],
+      ["HK232", "late", 0, 3, 3, 0, ["71ITSE30103|late|chưa học, trễ so với kế hoạch"]],
+      ["HK233", "done", 3, 3, 0, 0, ["71ITIS30103|passed|MT (miễn)"]],
+      ["HK241", "late", 3, 6, 3, 0, ["71ITSE30503|failed|cần học lại", "71ITSE30603|passed|C"]],
+      ["HK242", "done", 0, 0, 0, 0, []],
+      ["HK243", "done", 9, 9, 0, 0, ["71ITSE41003|passed|A", "71ITAI40103|passed|D+", "71ITIS30303|passed|B"]],
+      ["HK251", "running", 0, 3, 0, 3, ["71ITSE41203|running|đang học"]],
+      ["HK252", "planned", 0, 0, 0, 0, []],
+      // The plan page's figure: HK253 adds its two rows (7), HK261 its two thesis-group rows (9); the courses listed are the
+      // student's, the thesis way advised (GPA 2,85: Đồ án tốt nghiệp, comp-calc-v18) and not its replacements.
+      ["HK253", "planned", 0, 7, 0, 0, ["71ITIN40304|planned|dự kiến"]],
+      ["HK261", "planned", 0, 9, 0, 0, ["71ITGR40206|planned|dự kiến · tự chọn TC406"]],
     ]);
     expect(late).toEqual([{ code: "71ITSE30103", name: "Kỹ thuật lập trình", term: "HK232", credits: 3 }]);
+    // The bar adds up to the program: 27 + 3 + 6 + 90 = 126; the late terms' "còn nợ" (3 + 3) is the engine's late.
     expect(progress).toMatchObject({
-      blocked: null, totalCredits: 126, passedCredits: 27, runningCredits: 3, remainingCredits: 96, termsLeft: 1, creditsPerTerm: 96, planMaxPerTerm: 4,
+      blocked: null, totalCredits: 126, passedCredits: 27, runningCredits: 3, lateCredits: 6, restCredits: 90, remainingCredits: 96, termsLeft: 2,
+      creditsPerTerm: 48, planMaxPerTerm: 9,
     });
     expect(progress.lateCredits).toBe(engine.progress!.lateCredits);
+    expect(progress.terms.reduce((sum, term) => sum + term.lateCredits, 0)).toBe(engine.progress!.lateCredits);
+  });
+
+  it("adds the bar up to the program as the review asked: 109 + 5 + 12 + 0 = 126, not 109 + 5 + 20 = 134 (comp-calc-v19)", () => {
+    // A synthetic student studying HK261 like the reviewed one: four courses of earlier terms not taken (12 TC), the second
+    // GDTC not passed (a condition), the thesis group TC406 of HK261 not registered, and 5 TC registered (plus GDQP1, a condition).
+    const inputs = syntheticInputs({ terms: [
+      { year: "2023-2024", semester: "HK01", rows: [["71ITBS10103", 3, 8.6, 3.7, "A"], ["71ITBS10203", 3, 7.2, 3, "B"]] },
+      { year: "2023-2024", semester: "HK02", rows: [["71PEKC10062", 2, 9, 4, "A"]] },
+      { year: "2024-2025", semester: "HK01", rows: [["71ITSE30603", 3, 5.6, 2, "C"]] },
+      { year: "2024-2025", semester: "HK03", rows: [["71ITSE41003", 3, 8.8, 3.7, "A"], ["71ITAI40103", 3, 7, 3, "B"], ["71ITIS30303", 3, 7, 3, "B"]] },
+      { year: "2025-2026", semester: "HK03", rows: [["71ITIN40304", 4, 7, 3, "B"]], summaries: [["Tổng số tín chỉ tích lũy", "109"]] },
+      { year: "2026-2027", semester: "HK01", rows: [["71ITDS40303", 3], ["71ENG020002", 2], ["71NAD110013", 3]] },
+    ] });
+    // The plan prints its term figures, as the real ones do (Kế hoạch đào tạo: HK2 17, HK3 11 in 2024–2025, HK1 6 in 2026–2027).
+    const plan = structuredClone(inputs.plan.revision!.data);
+    plan.terms = plan.terms.map((term) => ({ ...term, sourceCredits: ({ HK242: 17, HK243: 11, HK261: 6 } as Record<string, number>)[term.code] ?? null }));
+    const engine = assessWithoutHistory(inputs);
+    const studyTerm = studyTermCode(inputs.transcript.data);
+    expect(studyTerm).toBe("HK261");
+    // Before v19: 12 + GDTC 2 (2 TC) + TC406 (6 TC, planned for the term being studied) = 20.
+    expect(engine.progress).toMatchObject({ lateCount: 5, lateCredits: 12, currentCredits: 6 });
+    expect(engine.progress!.late.map((entry) => ("code" in entry ? entry.code : entry.label))).toEqual(["71ITSE30103", "71ITIS30103", "GDTC 2", "71ITSE30503", "71ITSE41203"]);
+    const running = runningOverview(engine, inputs);
+    expect(running.map((course) => [course.code, course.credits, course.conditionOnly])).toEqual([
+      ["71ENG020002", 2, false], ["71NAD110013", 3, true], ["71ITDS40303", 3, false],
+    ]);
+    const { progress } = progressOverview({ engine, plan, studyTerm, totalCredits: 126, printedCredits: 109, running });
+    expect(progress).toMatchObject({
+      totalCredits: 126, passedCredits: 109, runningCredits: 5, lateCredits: 12, restCredits: 0, remainingCredits: 12,
+      // No plan term after HK261: no pace ("0 kỳ · ~12 TC/kỳ" before).
+      termsLeft: 0, creditsPerTerm: null,
+    });
+    expect(progress.passedCredits + progress.runningCredits + progress.lateCredits + progress.restCredits!).toBe(progress.totalCredits);
+    // Per term, Kế hoạch đào tạo's own figures.
+    const byCode = new Map(progress.terms.map((term) => [term.term.code, term]));
+    expect(["HK242", "HK243", "HK261"].map((code) => byCode.get(code)!.plannedCredits)).toEqual([17, 11, 6]);
+    // The term being studied: what is registered (5 TC, the "Học kỳ này" figure; GDQP1 a condition) and the group not registered.
+    expect(byCode.get("HK261")).toMatchObject({ state: "running", runningCredits: 5, lateCredits: 0 });
+    expect(byCode.get("HK261")!.courses.map((course) => `${course.code}|${course.name}|${course.credits}|${course.state}|${course.detail}`)).toEqual([
+      "|Nhóm tự chọn TC406: chọn 6 tín chỉ|6|planned|chưa đăng ký",
+      "71ENG020002|71ENG020002|2|running|đang học",
+      "71ITDS40303|Nhập môn Phân tích Dữ liệu lớn|3|running|đang học · kế hoạch HK3 2024–2025",
+    ]);
+    // The late terms owe what the bar calls late.
+    expect(progress.terms.reduce((sum, term) => sum + term.lateCredits, 0)).toBe(12);
+  });
+
+  it("prints the term figure of Kế hoạch đào tạo: the plan's own, else the rows every student takes, never condition rows", () => {
+    const row = (code: string, credits: number | null, extra: Partial<PlanItem> = {}): PlanItem => ({
+      id: `row-${code}`, position: 1, code, name: `Môn ${code}`, credits, type: "BB", termCode: "HK241", semester: 1, studyYear: 2, sectionId: "",
+      prerequisite: "", prior: "", notes: "", hours: { lecture: null, practice: null, project: null, internship: null }, sourceRow: 1, sourceSheet: "KHĐT", sourceCells: {}, ...extra,
+    });
+    const plan = (items: PlanItem[], sourceCredits: number | null = null) => ({
+      terms: [{ code: "HK241", semester: 1, studyYear: 2, sourceCredits }],
+      sections: [{ id: "s1", termCode: "HK241", label: "Chọn 1 trong 2 môn sau", kind: "choice" as const, sourceRow: 1 }], items,
+    });
+    expect(planTermCredits(plan([row("A", 3)], 17), "HK241")).toBe(17);
+    // GDQP (71NAD), a BBKTL row and a "(*)" row are conditions: not counted, as the plan page writes "không tính môn điều kiện (*)".
+    expect(planTermCredits(plan([row("A", 3), row("B", 4), row("71NAD110013", 3), row("DGT0020", 1, { type: "BBKTL" }), row("C", 1, { name: "Bơi (*)" })]), "HK241")).toBe(7);
+    // Rows to choose from: the plan page says its sum leaves them out, so the overview counts the student's own.
+    expect(planTermCredits(plan([row("A", 3), row("X", 3, { sectionId: "s1" })]), "HK241")).toBeNull();
+    expect(planTermCredits(plan([row("A", null)]), "HK241")).toBeNull();
+    expect(planTermCredits(plan([]), "HK242")).toBeNull();
   });
 
   it("is blocked as plan_unavailable without a training plan", () => {
@@ -213,7 +292,24 @@ describe("roadmapOverview", () => {
         { code: "71ITIN40304", name: "Đồ án thực tập", credits: 4, reason: "Theo kế hoạch" },
       ],
       skills: ["Docker"], firstMonth: { label: "Tháng 1/2027", text: "Tập trung." }, plan: { credits: 6, status: "ok" }, limits: null,
+      stale: false, ended: false,
     });
+  });
+
+  it("says the roadmap is outdated by the Lộ trình AI tab's rule: an older assessment, or its term over", () => {
+    // The tab's rule (roadmap/router.ts): made from an assessment other than the newest one.
+    expect(roadmapOverview(row(), null, credits, now, null, { newestAssessmentId: ROADMAP_ASSESSMENT })).toMatchObject({ stale: false, ended: false });
+    expect(roadmapOverview(row(), null, credits, now, null, { newestAssessmentId: "55555555-5555-4555-8555-555555555555" })).toMatchObject({ stale: true });
+    expect(roadmapOverview(row(), null, credits, now, null, { newestAssessmentId: null })).toMatchObject({ stale: false });
+    // Its window (HK2 2026–2027) ends on 04/04/2027.
+    expect(roadmapOverview(row(), null, credits, new Date("2027-04-05T03:00:00Z"))).toMatchObject({ ended: true });
+  });
+
+  it("calls a course late only before the term being studied, like the progress card (comp-calc-v19)", () => {
+    // The roadmap lists Hệ quản trị cơ sở dữ liệu (planned HK243) as late; while HK243 is still being studied it is its plan.
+    const reason = (studyTerm: string) => roadmapOverview(row(), null, credits, now, null, { studyTerm })!.courses.find((course) => course.code === "71ITIS30203")!.reason;
+    expect(reason("HK251")).toBe("Trễ kế hoạch");
+    expect(reason("HK243")).toBe("Theo kế hoạch");
   });
 
   it("checks the saved term with the planner's limits, as Kế hoạch học kỳ does", () => {
@@ -271,7 +367,7 @@ describe("runningOverview", () => {
   it("lists the courses in progress with the skills the faculty links to them", () => {
     const inputs = syntheticInputs();
     expect(runningOverview(assessWithoutHistory(inputs), inputs)).toEqual([
-      { code: "71ITSE41203", name: "Kiểm thử phần mềm", credits: 3, retake: false, skills: ["Kiểm thử phần mềm"] },
+      { code: "71ITSE41203", name: "Kiểm thử phần mềm", credits: 3, retake: false, conditionOnly: false, skills: ["Kiểm thử phần mềm"] },
     ]);
   });
 });

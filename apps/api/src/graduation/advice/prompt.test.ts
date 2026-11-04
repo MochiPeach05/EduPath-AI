@@ -36,9 +36,11 @@ describe("buildGraduationAdviceInput", () => {
   const graduation = syntheticGraduation();
   const input = buildGraduationAdviceInput(graduation);
 
-  it("uses the grad-advice-v4 prompt and the fixed Ollama options (num_ctx 16384)", () => {
-    expect(input.promptVersion).toBe("grad-advice-v4");
-    expect(GRADUATION_ADVICE_PROMPT_VERSION).toBe("grad-advice-v4");
+  it("uses the grad-advice-v5 prompt and the fixed Ollama options (num_ctx 16384)", () => {
+    expect(input.promptVersion).toBe("grad-advice-v5");
+    expect(GRADUATION_ADVICE_PROMPT_VERSION).toBe("grad-advice-v5");
+    // grad-advice-v5 (review 2026-11-04): decimals are copied, never cut.
+    expect(input.system).toContain('chép đúng từng chữ số như trong dữ liệu, giữ nguyên phần thập phân sau dấu phẩy, không bỏ số lẻ (dữ liệu ghi "2,85/4" thì viết 2,85, không viết 2,8 hay 3)');
     expect(input.options).toEqual({ num_ctx: 16384, num_predict: 2048, temperature: 0.3, top_p: 0.95, top_k: 64 });
     expect(input.options).not.toBe(GRADUATION_ADVICE_OPTIONS);
     expect(input.system).toBe(GRADUATION_ADVICE_SYSTEM_PROMPT);
@@ -95,7 +97,8 @@ describe("buildGraduationAdviceInput", () => {
       "[CREDITS] Tổng số tín chỉ tích lũy (theo bảng điểm): đã đạt 27/126 TC — chưa đạt, còn thiếu 99 TC",
       // 99 − (3 + 4 TC of the two missing mandatory courses + 6 TC of Nhóm tự chọn TC306).
       "- Ngoài các nhóm chưa đạt (G1, G5), còn cần thêm 86 TC",
-      "[GPA] Điểm trung bình tích lũy (thang 4, theo bảng điểm): 2,85, yêu cầu tối thiểu 2 — đạt",
+      // grad-advice-v5: two decimals and the scale, as the graduation page shows them.
+      "[GPA] Điểm trung bình tích lũy (thang 4, theo bảng điểm): 2,85/4, yêu cầu tối thiểu 2,00/4 — đạt",
     ]);
   });
 
@@ -161,19 +164,26 @@ describe("buildGraduationAdviceInput", () => {
 
   it("suggests GPA retakes as học lại or học cải thiện and writes the GPA shortfall rounded up", () => {
     const user = buildGraduationAdviceInput(syntheticGraduation({ terms: gpaFailingTerms() })).user;
-    expect(user).toContain("[GPA] Điểm trung bình tích lũy (thang 4, theo bảng điểm): 1,85, yêu cầu tối thiểu 2 — chưa đạt, còn thiếu 0,15");
+    expect(user).toContain("[GPA] Điểm trung bình tích lũy (thang 4, theo bảng điểm): 1,85/4, yêu cầu tối thiểu 2,00/4 — chưa đạt, còn thiếu 0,15 điểm");
     expect(user).toContain("Điều kiện chưa đạt: G1, G5, CREDITS, GPA");
     expect(section(user, "6. GỢI Ý").slice(1)).toEqual([
-      "- 71ITSE30903 Phát triển ứng dụng đa nền tảng (3 TC): điểm 0 thang 4 (F) — học lại",
-      "- 71ITAI40103 Trí tuệ nhân tạo (3 TC): điểm 1,5 thang 4 (D+) — học cải thiện",
+      "- 71ITSE30903 Phát triển ứng dụng đa nền tảng (3 TC): điểm 0/4 (F) — học lại",
+      "- 71ITAI40103 Trí tuệ nhân tạo (3 TC): điểm 1,5/4 (D+) — học cải thiện",
     ]);
+  });
+
+  it("never shows a GPA below its minimum as reaching it, like the page (shownGpa)", () => {
+    const base = syntheticGraduation({ terms: gpaFailingTerms() });
+    const evaluation = { ...base.evaluation, gpa: { ...base.evaluation.gpa, actual: 1.996, remaining: 0.004 } };
+    const user = buildGraduationAdviceInput({ ...base, evaluation }).user;
+    expect(user).toContain("1,99/4, yêu cầu tối thiểu 2,00/4 — chưa đạt, còn thiếu 0,01 điểm");
   });
 
   it("falls back to estimates, ranges and data warnings when nothing is printed", () => {
     const user = buildGraduationAdviceInput(syntheticGraduation({ terms: termsWithSummaries([["Tổng số tín chỉ tích lũy", "31"]]) })).user;
     expect(user).toContain("[CREDITS] Tổng số tín chỉ tích lũy (theo bảng điểm): đã đạt 31/126 TC — chưa đạt, còn thiếu 95 TC");
     expect(user).toContain("[GPA] Điểm trung bình tích lũy (thang 4, ước tính từ điểm các học phần):");
-    expect(user).toContain("- Tổng số tín chỉ tích lũy in trên bảng điểm (31) khác số tín chỉ tính từ các học phần (27).");
+    expect(user).toContain("- Tổng số tín chỉ tích lũy in trên bảng điểm (31 TC) khác số tín chỉ tính từ các học phần (27 TC).");
     const estimated = buildGraduationAdviceInput(syntheticGraduation({ terms: termsWithSummaries([]) })).user;
     expect(estimated).toContain("[CREDITS] Tổng số tín chỉ tích lũy (ước tính từ các học phần): đã đạt 27/126 TC — chưa đạt, còn thiếu 99 TC");
   });

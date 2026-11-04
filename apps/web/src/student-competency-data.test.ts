@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, confidentStrengths, countAxis, dataUsedLine, displayLevel, FIT_SCALE, fitLabelOf, fitLevelOf, fitDataShareOf, fitScoreOf, fitStep, gapHistory, levelChart, levelSummary, levelText, overallIsPooled, thesisByGpa, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
+  aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, confidentStrengths, countAxis, dataUsedLine, displayLevel, FIT_SCALE, fitLabelOf, fitLevelOf, fitDataShareOf, fitScoreOf, fitStep, gapHistory, levelChart, levelSummary, levelText, overallIsPooled, thesisByGpa, lateBeforeStudyTerm, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
   careerDataText, careerSummaryText, choiceLabel, courseTermText, formatDifference, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isOverdue, isPreconditionError, PRIORITY_LABELS, levelStep, mapAiOutput, missingRequirements, missingRequirementsMessage, modelLabel, needsSelfStudy, nextCourseCount, nextTermOf, plannedCourseNote, plansFor, relatedSkillNames, shownScore, skillGroupKeys,
   scoreDifference, shouldPoll, sortRequirements, studyTermOf, termLabel, upcomingText, CHART_LEVELS, EMPTY_SKILL_FILTERS, LEVEL_COLUMNS,
   careerThresholdsLine, chartLevelLabel, currentImprovements, LEVEL_SCALE, levelOfScore, withCurrentLevels,
@@ -583,5 +583,12 @@ describe("overall method", () => {
     expect(thesisByGpa("comp-calc-v18")).toBe(true);
     expect(thesisByGpa("comp-calc-v17")).toBe(false);
     expect(thesisByGpa(null)).toBe(true);
+  });
+  it("tells a result whose late courses are only those before the term being studied (comp-calc-v19) from older ones", () => {
+    expect(lateBeforeStudyTerm("comp-calc-v19")).toBe(true);
+    expect(lateBeforeStudyTerm("comp-calc-v20")).toBe(true);
+    expect(lateBeforeStudyTerm("comp-calc-v18")).toBe(false);
+    expect(lateBeforeStudyTerm("comp-calc-v9")).toBe(false);
+    expect(lateBeforeStudyTerm(undefined)).toBe(true);
   });
 });

@@ -339,8 +339,18 @@ function RoadmapView({ roadmap, response, create, creating, createError, planCon
   </>;
 }
 
-export default function StudentAiRoadmap({ planContext = null }: { planContext?: PlanContext }) {
+/** The roadmap the tab shows (null: none yet), for the page around it (StudentRoadmap reads the plan again after a new one). */
+export type ShownRoadmap = { id: string; status: RoadmapStatus } | null;
+
+/** onRoadmap: told the roadmap shown, once loaded and whenever it or its status changes (a new one written meanwhile). */
+export default function StudentAiRoadmap({ planContext = null, onRoadmap }: { planContext?: PlanContext; onRoadmap?: (roadmap: ShownRoadmap) => void }) {
   const { response, loading, error, create, creating, createError, announcement } = useRoadmap();
+  const report = useRef(onRoadmap);
+  useEffect(() => { report.current = onRoadmap; });
+  const ready = response !== null, shownId = response?.roadmap?.id ?? null, shownStatus = response?.roadmap?.status ?? null;
+  useEffect(() => {
+    if (ready) report.current?.(shownId && shownStatus ? { id: shownId, status: shownStatus } : null);
+  }, [ready, shownId, shownStatus]);
   const live = <p className="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcement}</p>;
   if (loading) return <section className="sw-panel" aria-busy="true"><p role="status">Đang tải lộ trình học tập…</p></section>;
   if (error || !response) return <section className="sw-panel rm-problem" role="alert"><strong>Chưa tải được lộ trình học tập</strong><p>{error ?? "Vui lòng thử lại sau."}</p></section>;

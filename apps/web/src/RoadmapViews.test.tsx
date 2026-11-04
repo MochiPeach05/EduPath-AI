@@ -4,8 +4,9 @@ import { describe, expect, it, vi } from "vitest";
 import { RoadmapPlanner } from "./RoadmapPlanner";
 import { RoadmapTrack } from "./RoadmapProgress";
 import StudentAiRoadmap from "./StudentAiRoadmap";
+import { tabFromHash, tabHash } from "./StudentRoadmap";
 import type { RoadmapResponse } from "./student-roadmap-data";
-import type { StudyPlanContext, StudyPlanCourse, StudyPlanData } from "./study-plan-data";
+import { planProposal, type StudyPlanContext, type StudyPlanCourse, type StudyPlanData } from "./study-plan-data";
 
 const liveData = vi.hoisted(() => vi.fn());
 vi.mock("./use-live-data", () => ({ useLiveData: liveData }));
@@ -63,6 +64,26 @@ describe("Theo dõi tiến độ", () => {
     expect(html).toContain("Kế hoạch học kỳ vừa được thêm 1 học phần do lộ trình AI đề xuất: Môn C (C).");
     expect(html).toContain("Mở Kế hoạch học kỳ");
   });
+
+  it("names a proposal the student has not applied yet and counts only the plan as saved (user 2026-11-04)", () => {
+    const proposal = planProposal(context, empty, { roadmapId: "99999999-9999-4999-8999-999999999999", completedAt: "2026-10-24T10:00:00.000Z",
+      term: "HK262", courses: [{ code: "C", term: "HK262" }] });
+    const html = renderToStaticMarkup(createElement(RoadmapTrack, { context, plan: empty, projection: null, proposal, onOpenPlanner: () => {} }));
+    expect(html).toContain("Có đề xuất cho Kế hoạch học kỳ: thêm 1 học phần do lộ trình AI đề xuất. Kế hoạch chưa thay đổi; mở Kế hoạch học kỳ để xem và chọn Áp dụng hoặc Bỏ qua.");
+    expect(html).toContain("Mở Kế hoạch học kỳ");
+    expect(html).not.toContain("vừa được thêm");
+    // Theo kế hoạch counts nothing planned: the proposal is not in the plan.
+    expect(renderToStaticMarkup(createElement(RoadmapTrack, { context, plan: empty, projection: null }))).not.toContain("Có đề xuất cho Kế hoạch học kỳ");
+  });
+});
+
+describe("addresses of the tabs", () => {
+  it("opens the tab an address names and writes each tab's address", () => {
+    expect([tabFromHash("#roadmap/tien-do"), tabFromHash("#roadmap/lo-trinh-ai"), tabFromHash("#roadmap/ke-hoach-hoc-ky")]).toEqual(["track", "ai", "manual"]);
+    // A bare address (the header's link) or an unknown tab names none: the page opens the tab used last.
+    expect([tabFromHash("#roadmap"), tabFromHash("#roadmap/khac"), tabFromHash("#plans")]).toEqual([null, null, null]);
+    expect([tabHash("track"), tabHash("ai"), tabHash("manual")]).toEqual(["#roadmap/tien-do", "#roadmap/lo-trinh-ai", "#roadmap/ke-hoach-hoc-ky"]);
+  });
 });
 
 describe("Kế hoạch học kỳ", () => {
@@ -99,6 +120,41 @@ describe("Kế hoạch học kỳ", () => {
     expect(html).toContain("gồm 2 TC môn điều kiện");
     expect(html).toContain("Bạn điều chỉnh kế hoạch bằng cách kéo học phần");
     expect(html).not.toContain("Kế hoạch chưa có học phần nào.");
+  });
+
+  it("says the credit limits and that a summer term needs no minimum (QA 2026-11-04)", () => {
+    const html = planner({ schemaVersion: 1, terms: [{ code: "HK261", courses: [] }, { code: "HK262", courses: [{ code: "C" }, { code: "D" }] },
+      { code: "HK263", courses: [{ code: "PE" }] }, { code: "HK271", courses: [{ code: "C2" }] }] });
+    expect(html).toContain("Số tín chỉ mỗi học kỳ: tối thiểu 4 TC, tối đa 7 TC, tính cả môn điều kiện. Học kỳ hè (HK3) không yêu cầu số tín chỉ tối thiểu");
+    // HK263 holds 2 TC: no warning, and the reason under its credits.
+    expect(html).toMatch(/aria-label="HK3 2026–2027".*?2 TC<\/span>.*?Học kỳ hè: không yêu cầu tối thiểu 4 TC/);
+    expect(html).not.toContain("dưới mức tối thiểu");
+  });
+
+  it("proposes the AI roadmap's courses with Áp dụng and Bỏ qua, the plan unchanged, and nothing to apply for a cố vấn", () => {
+    const proposal = planProposal(context, empty, { roadmapId: "99999999-9999-4999-8999-999999999999", completedAt: "2026-10-24T10:00:00.000Z",
+      term: "HK262", courses: [{ code: "C", term: "HK262" }, { code: "D", term: "HK262" }] });
+    const render = (readOnly: boolean) => renderToStaticMarkup(createElement(RoadmapPlanner, {
+      context, plan: empty, onChange: () => {}, saveState: "idle", saveError: "", origin: null, onOpenAi: () => {}, readOnly, proposal, onApply: () => {}, onDecline: () => {},
+    }));
+    const html = render(false);
+    expect(html).toContain("Đề xuất thay đổi kế hoạch");
+    expect(html).toContain("Kế hoạch của bạn chưa thay đổi. Bấm Áp dụng để cập nhật kế hoạch theo đề xuất dưới đây, hoặc Bỏ qua để giữ nguyên kế hoạch.");
+    expect(html).toContain("Thêm 2 học phần do lộ trình AI đề xuất (lộ trình soạn lúc 17:00 24/10/2026), vào học kỳ mà kế hoạch đào tạo mở môn đó:");
+    expect(html).toContain("<li><strong>Môn C</strong> (C): HK2 2026–2027</li>");
+    expect(html).toMatch(/<button type="button" class="sw-primary">Áp dụng<\/button><button type="button" class="sw-outline">Bỏ qua<\/button>/);
+    // The terms still show the plan as it is: nothing planned yet.
+    expect(html).toContain("Kế hoạch chưa có học phần nào.");
+    expect(html).not.toContain("rm-save-saving");
+    const advisor = render(true);
+    for (const text of ["Đề xuất thay đổi kế hoạch", "Áp dụng", "Bỏ qua"]) expect(advisor).not.toContain(text);
+  });
+
+  it("says a declined proposal will not come back", () => {
+    const html = renderToStaticMarkup(createElement(RoadmapPlanner, {
+      context, plan: empty, onChange: () => {}, saveState: "saved", saveError: "", origin: null, onOpenAi: () => {}, declined: true,
+    }));
+    expect(html).toContain("Đã bỏ qua đề xuất: kế hoạch giữ nguyên và đề xuất này sẽ không hiện lại.");
   });
 });
 

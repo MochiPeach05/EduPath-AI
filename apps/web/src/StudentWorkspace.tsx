@@ -58,9 +58,12 @@ const sessionExpired: ShellError = { kind: "session", message: "Phiên đăng nh
 const profileFailed: ShellError = { kind: "profile", message: "Chưa tải được hồ sơ của bạn." };
 const advisorForbidden: ShellError = { kind: "profile", message: ADVISOR_ERRORS.advisor_student_forbidden! };
 
-/** The page a URL hash opens: the overview for an empty hash, null for a hash that names no page. */
+/**
+ * The page a URL hash opens: the overview for an empty hash, null for a hash that names no page. Lộ trình học tập also
+ * opens with a tab after a slash ("#roadmap/ke-hoach-hoc-ky"), which StudentRoadmap reads (an unknown one: its last tab).
+ */
 export function pageFromHash(hash: string): Page | null {
-  const id = hash.replace(/^#/, "");
+  const id = hash.replace(/^#/, "").replace(/^roadmap\/[a-z0-9-]+$/, "roadmap");
   return id ? pages.find(p => p.id === id)?.id ?? null : "overview";
 }
 
@@ -174,8 +177,13 @@ export default function StudentWorkspace({ user, advisor = null }: { user: Authe
   const notifications = useUnreadNotifications(!advisor);
   const bellRef = useRef<HTMLButtonElement>(null);
   // Opening a page can write notifications (Tổng quan notifies its new warnings once read): count again shortly after.
+  // The page the portal opens on was counted when the bell started: only Tổng quan, whose first read may write its
+  // warnings after that count, is counted again then (2026-11-04: a second GET /unread-count on every other load).
   const refreshNotifications = notifications.refresh;
+  const openingPage = useRef<Page | null>(page);
   useEffect(() => {
+    if (page === openingPage.current && page !== "overview") return;
+    openingPage.current = null;
     const timer = setTimeout(refreshNotifications, NOTIFICATION_RECOUNT_MS);
     return () => clearTimeout(timer);
   }, [page, refreshNotifications]);

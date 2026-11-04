@@ -3,6 +3,7 @@
 // React score and the internship course was not studied yet; "Nên tách riêng phần 'bạn tự đánh giá' với 'hệ thống ghi
 // nhận'"). The prompt gives both halves to the model, the validator holds the output to them and the AI tab shows them.
 // Pure: built from the roadmap facts (recorded) and the survey answers.
+import { formatScore } from "../competency-assessment/ai/prompt.js";
 import { LEVEL_THRESHOLDS } from "../competency-assessment/constants.js";
 import { fold } from "../competency-assessment/specialty.js";
 import type { CourseState } from "../competency-assessment/types.js";
@@ -44,8 +45,9 @@ export function techTopics(labels: readonly string[]): string[] {
   return [...new Map(topics.map((topic) => [fold(topic), topic])).values()];
 }
 
+/** "mức Trung bình, 55,4 điểm": the score as the pages show it, floored to the tenth (roadmap-v14; floored to a whole number before). */
 const levelText = (skill: { score: number | null; levelLabel: string | null }) =>
-  skill.score === null ? "chưa có điểm" : `mức ${skill.levelLabel ?? "chưa xếp"}, ${String(Math.floor(skill.score + 1e-9))} điểm`;
+  skill.score === null ? "chưa có điểm" : `mức ${skill.levelLabel ?? "chưa xếp"}, ${formatScore(skill.score)} điểm`;
 
 /**
  * Both halves for one roadmap. Without the survey only the topics the career's gaps give are unproven; without

@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
-import StudentAiRoadmap from "./StudentAiRoadmap";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import StudentAiRoadmap, { type ShownRoadmap } from "./StudentAiRoadmap";
 import { RoadmapTrack } from "./RoadmapProgress";
 import { RoadmapPlanner, type SaveState } from "./RoadmapPlanner";
 import {
-  STUDY_PLAN_API, applyProposal, cleanAiAdded, cleanThesisWay, planErrorMessage, withTerms, type PlanOrigin, type StudyPlanData, type StudyPlanProjection,
+  STUDY_PLAN_API, declineProposal, planErrorMessage, planProposal, withTerms, type PlanOrigin, type StudyPlanData, type StudyPlanProjection,
   type StudyPlanResponse,
 } from "./study-plan-data";
 import { isAdvisorView } from "./advisor-view";
@@ -14,20 +14,46 @@ import "./student-roadmap.css";
 // training plan and the AI's proposal for the student to adjust. Stellic's "Schedule term" (weekly timetable) and
 // "Request to graduate" are left out at the user's request.
 
+/** The tabs and their addresses ("#roadmap/ke-hoach-hoc-ky"): a reload or a shared link opens the same tab. */
 const TABS = [
-  { id: "track", label: "Theo dõi tiến độ" },
-  { id: "ai", label: "Lộ trình AI đề xuất" },
-  { id: "manual", label: "Kế hoạch học kỳ" },
+  { id: "track", slug: "tien-do", label: "Theo dõi tiến độ" },
+  { id: "ai", slug: "lo-trinh-ai", label: "Lộ trình AI đề xuất" },
+  { id: "manual", slug: "ke-hoach-hoc-ky", label: "Kế hoạch học kỳ" },
 ] as const;
-type Tab = (typeof TABS)[number]["id"];
+export type RoadmapTab = (typeof TABS)[number]["id"];
 const TAB_KEY = "edupath.roadmap.tab";
 const SAVE_DELAY_MS = 700;
+/** An address of this page: "#roadmap" or "#roadmap/<tab>". */
+const PAGE_HASH = /^#roadmap(\/|$)/;
 
-function storedTab(): Tab {
+/** The tab an address names ("#roadmap/lo-trinh-ai"), else null: a bare "#roadmap" or an unknown tab. */
+export function tabFromHash(hash: string): RoadmapTab | null {
+  const slug = /^#?roadmap\/([a-z0-9-]+)$/.exec(hash)?.[1];
+  return TABS.find((tab) => tab.slug === slug)?.id ?? null;
+}
+/** The address of a tab: "#roadmap/tien-do", "#roadmap/lo-trinh-ai" or "#roadmap/ke-hoach-hoc-ky". */
+export const tabHash = (tab: RoadmapTab) => `#roadmap/${TABS.find((item) => item.id === tab)!.slug}`;
+
+function storedTab(): RoadmapTab {
   try {
     const value = window.localStorage.getItem(TAB_KEY);
-    return TABS.some((tab) => tab.id === value) ? value as Tab : "track";
+    return TABS.some((tab) => tab.id === value) ? value as RoadmapTab : "track";
   } catch { return "track"; }
+}
+/**
+ * The tab the page opens with: the one the address names, else (a bare "#roadmap": the header's link, a notification)
+ * the one used last on this device, as before the tabs had addresses.
+ */
+function initialTab(): RoadmapTab {
+  try { return tabFromHash(window.location.hash) ?? storedTab(); } catch { return "track"; }
+}
+/** Keeps the tab for a bare "#roadmap" and writes its address, while the address is still this page's. */
+function rememberTab(tab: RoadmapTab) {
+  try { window.localStorage.setItem(TAB_KEY, tab); } catch { /* the tab is only a convenience */ }
+  try {
+    const { hash } = window.location;
+    if (PAGE_HASH.test(hash) && hash !== tabHash(tab)) window.history.replaceState(window.history.state, "", tabHash(tab));
+  } catch { /* the address is only a convenience */ }
 }
 
 class PlanRequestError extends Error {
@@ -45,13 +71,14 @@ async function call<T>(init: RequestInit = {}): Promise<T> {
 }
 
 /**
- * The plan the page edits: loaded when the page opens and again when a planning tab opens (an AI roadmap may have been
- * written meanwhile), saved 0.7 s after the last change with the version it was loaded at. A student without a plan starts
- * from the training plan's mandatory courses; the newest AI roadmap's proposal is taken in and saved at once, with what
- * it added (aiAdded), which Kế hoạch học kỳ names on later visits and Theo dõi tiến độ mentions during this one. What an
- * AI roadmap of before 2026-11-03 added and the plan must not hold (another specialty's course, an improvement) is taken
- * out and saved at once too (cleaned, named on this visit), and so is the thesis group's way the system does not advise
- * when the AI added it or the advised way is there too (thesisCleaned, user 2026-11-03: never both ways in one plan).
+ * The plan the page edits: loaded once when the page opens, saved 0.7 s after the last change with the version it was
+ * loaded at (a plan changed meanwhile in another tab or device answers plan_changed). Opening the page changes and saves
+ * nothing (user 2026-11-04: "Hỏi trước, bấm mới lưu"): a student without a plan sees the training plan's mandatory courses,
+ * saved at the first edit; what the page would change (the newest AI roadmap's courses, what an AI roadmap of before
+ * 2026-11-03 added and the plan must not hold, the thesis group's way the system does not advise) is proposed
+ * (planProposal), applied and saved by Áp dụng or declined by Bỏ qua, which saves only what keeps the proposal from coming
+ * back (declineProposal). A cố vấn học tập's tab never proposes anything. The plan is read again only when Lộ trình AI đề
+ * xuất shows a completed roadmap the loaded data does not know (roadmapShown).
  */
 function useStudyPlan() {
   const [loaded, setLoaded] = useState<{ data: StudyPlanResponse | null; error: string | null }>({ data: null, error: null });
@@ -64,11 +91,16 @@ function useStudyPlan() {
   const latest = useRef<StudyPlanData | null>(null);
   const saving = useRef(false);
   const [origin, setOrigin] = useState<PlanOrigin>(null);
+  // What the student applied (Áp dụng) or declined (Bỏ qua) on this visit, named in Kế hoạch học kỳ.
   const [cleaned, setCleaned] = useState<string[]>([]);
   const [thesisCleaned, setThesisCleaned] = useState<string[]>([]);
+  const [declined, setDeclined] = useState(false);
   const [revision, setRevision] = useState(0);
+  // The newest completed AI roadmap the loaded data knows (undefined until loaded), and whether a newer one was seen.
+  const known = useRef<string | null | undefined>(undefined);
+  const stale = useRef(false);
   const reload = useCallback(() => {
-    // Never over unsaved edits.
+    // Never over unsaved edits: the next tab change tries again.
     if (!saving.current && !latest.current) setRevision((value) => value + 1);
   }, []);
 
@@ -77,47 +109,15 @@ function useStudyPlan() {
     call<StudyPlanResponse>().then((data) => {
       if (!alive) return;
       version.current = data.plan?.version ?? null;
+      known.current = data.aiRoadmapId !== undefined ? data.aiRoadmapId : data.aiProposal?.roadmapId ?? data.plan?.data.roadmapId ?? null;
+      stale.current = false;
       setLoaded({ data, error: null });
-      let next = withTerms(data.context, data.plan?.data ?? data.suggested ?? null);
-      // A cố vấn học tập's tab shows the plan as the student saved it and never changes it: the student's next visit takes
-      // the proposal in.
-      const clean = isAdvisorView() ? { plan: next, removed: [] } : cleanAiAdded(data.context, next);
-      if (clean.removed.length) {
-        next = clean.plan;
-        setCleaned(clean.removed);
-        latest.current = next;
-        timer.current = setTimeout(() => void save(), 0);
-      }
-      // The thesis group's other way, before the proposal (what an older roadmap added) and after it (both ways planned).
-      const thesisRemoved: string[] = [];
-      const cleanThesis = () => {
-        if (isAdvisorView()) return;
-        const result = cleanThesisWay(data.context, next);
-        if (!result.removed.length) return;
-        next = result.plan;
-        thesisRemoved.push(...result.removed);
-        latest.current = next;
-        timer.current = setTimeout(() => void save(), 0);
-      };
-      cleanThesis();
-      if (data.aiProposal && !isAdvisorView()) {
-        const applied = applyProposal(next, data.aiProposal);
-        next = applied.plan;
-        setOrigin({ kind: "ai", added: applied.added });
-        // Saved at once, so the proposal is taken in only once.
-        latest.current = next;
-        timer.current = setTimeout(() => void save(), 0);
-      } else {
-        // The note of a proposal taken in earlier on this page stays.
-        setOrigin((previous) => data.plan ? (previous?.kind === "ai" ? previous : null) : data.suggested?.terms.length ? { kind: "prefill" } : null);
-      }
-      cleanThesis();
-      if (thesisRemoved.length) setThesisCleaned(thesisRemoved);
-      setPlan(next);
+      setPlan(withTerms(data.context, data.plan?.data ?? data.suggested ?? null));
+      // The note of a proposal applied earlier on this page stays.
+      setOrigin((previous) => data.plan ? (previous?.kind === "ai" ? previous : null) : data.suggested?.terms.length ? { kind: "prefill" } : null);
       setProjection(data.projection);
     }, (error: Error) => alive && setLoaded({ data: null, error: error.message }));
-    return () => { alive = false; clearTimeout(timer.current); };
-    // save is stable (useCallback without dependencies).
+    return () => { alive = false; };
   }, [revision]);
 
   const save = useCallback(async () => {
@@ -144,7 +144,13 @@ function useStudyPlan() {
       if (latest.current) timer.current = setTimeout(() => void save(), SAVE_DELAY_MS);
     }
   }, []);
+  // Leaving the page within 0.7 s of an edit still saves it.
+  useEffect(() => () => {
+    clearTimeout(timer.current);
+    if (latest.current) void save();
+  }, [save]);
 
+  /** An edit of the student: saved 0.7 s after the last one. */
   const change = useCallback((next: StudyPlanData) => {
     setPlan(next);
     latest.current = next;
@@ -152,22 +158,72 @@ function useStudyPlan() {
     clearTimeout(timer.current);
     timer.current = setTimeout(() => void save(), SAVE_DELAY_MS);
   }, [save]);
+  /** A button's decision (Áp dụng, Bỏ qua): saved at once. */
+  const commit = useCallback((next: StudyPlanData) => {
+    setPlan(next);
+    latest.current = next;
+    setSaveState("dirty");
+    clearTimeout(timer.current);
+    void save();
+  }, [save]);
 
-  return { context: loaded.data?.context ?? null, suggestions: loaded.data?.aiSuggestions ?? [], cleaned, thesisCleaned, error: loaded.error, plan, projection, change,
-    saveState, saveError, origin, reload };
+  const context = loaded.data?.context ?? null;
+  const aiProposal = loaded.data?.aiProposal ?? null;
+  const advisor = isAdvisorView();
+  const proposal = useMemo(() => (!advisor && context && plan ? planProposal(context, plan, aiProposal) : null), [advisor, context, plan, aiProposal]);
+  const apply = useCallback(() => {
+    if (!context || !plan) return;
+    // Taken again now, so what the AI added says when (aiAdded.addedAt).
+    const current = planProposal(context, plan, aiProposal, new Date());
+    if (!current) return;
+    if (current.aiRemoved.length) setCleaned(current.aiRemoved);
+    if (current.thesisRemoved.length) setThesisCleaned(current.thesisRemoved);
+    if (current.roadmap) setOrigin({ kind: "ai", added: current.added.length });
+    setDeclined(false);
+    commit(current.plan);
+  }, [context, plan, aiProposal, commit]);
+  const decline = useCallback(() => {
+    if (!plan || !proposal) return;
+    setDeclined(true);
+    commit(declineProposal(plan, proposal));
+  }, [plan, proposal, commit]);
+
+  /** Lộ trình AI đề xuất shows a roadmap: a completed one the loaded data does not know is read now (its proposal). */
+  const roadmapShown = useCallback((roadmap: ShownRoadmap) => {
+    if (known.current === undefined || roadmap?.status !== "completed" || roadmap.id === known.current) return;
+    stale.current = true;
+    reload();
+  }, [reload]);
+  /** On a tab change: read the plan again only when a newer roadmap was seen and could not be read then. */
+  const refreshIfStale = useCallback(() => { if (stale.current) reload(); }, [reload]);
+
+  return { context, suggestions: loaded.data?.aiSuggestions ?? [], cleaned, thesisCleaned, declined, error: loaded.error, plan, projection, change,
+    saveState, saveError, origin, proposal, apply, decline, roadmapShown, refreshIfStale };
 }
 
 /** notice: shown under the tabs (the workspace's "Hồ sơ của bạn chưa đầy đủ"). */
 export default function StudentRoadmap({ notice }: { notice?: ReactNode }) {
-  const [tab, setTab] = useState<Tab>(storedTab);
+  const [tab, setTab] = useState<RoadmapTab>(initialTab);
+  const shown = useRef(tab);
   const study = useStudyPlan();
-  const choose = (next: Tab) => {
-    if (next === tab) return;
+  const { refreshIfStale } = study;
+  const choose = useCallback((next: RoadmapTab) => {
+    shown.current = next;
     setTab(next);
-    if (next !== "ai") study.reload();
-    try { window.localStorage.setItem(TAB_KEY, next); } catch { /* the tab is only a convenience */ }
-  };
+    rememberTab(next);
+    if (next !== "ai") refreshIfStale();
+  }, [refreshIfStale]);
+  // The address names the tab on screen; another address of this page opens its tab (a bare "#roadmap" keeps the tab).
+  useEffect(() => rememberTab(shown.current), []);
+  useEffect(() => {
+    const follow = () => {
+      if (PAGE_HASH.test(window.location.hash)) choose(tabFromHash(window.location.hash) ?? shown.current);
+    };
+    window.addEventListener("hashchange", follow);
+    return () => window.removeEventListener("hashchange", follow);
+  }, [choose]);
   const needsPlan = tab === "track" || tab === "manual";
+  const readOnly = isAdvisorView();
   return <div className="rm-page">
     <nav className="rm-tabs" role="tablist" aria-label="Lộ trình học tập">
       {TABS.map((item) => <button key={item.id} type="button" role="tab" id={`rm-tab-${item.id}`} aria-selected={tab === item.id}
@@ -175,13 +231,14 @@ export default function StudentRoadmap({ notice }: { notice?: ReactNode }) {
     </nav>
     {notice}
     <div id="rm-tab-panel" role="tabpanel" aria-labelledby={`rm-tab-${tab}`} className="rm-tab-panel">
-      {tab === "ai" ? <StudentAiRoadmap planContext={study.context} />
+      {tab === "ai" ? <StudentAiRoadmap planContext={study.context} onRoadmap={study.roadmapShown} />
           : needsPlan && study.error ? <section className="sw-panel rm-problem" role="alert"><strong>Chưa tải được dữ liệu lộ trình</strong><p>{study.error}</p></section>
             : !study.context || !study.plan ? <section className="sw-panel" aria-busy="true"><p role="status">Đang tải lộ trình học tập…</p></section>
               : tab === "track" ? <RoadmapTrack context={study.context} plan={study.plan} projection={study.projection} origin={study.origin}
-                onOpenPlanner={() => choose("manual")} />
+                proposal={study.proposal} onOpenPlanner={() => choose("manual")} />
                 : <RoadmapPlanner context={study.context} plan={study.plan} onChange={study.change} saveState={study.saveState} saveError={study.saveError}
-                  origin={study.origin} onOpenAi={() => choose("ai")} readOnly={isAdvisorView()} suggestions={study.suggestions} cleaned={study.cleaned} thesisCleaned={study.thesisCleaned} />}
+                  origin={study.origin} onOpenAi={() => choose("ai")} readOnly={readOnly} suggestions={study.suggestions} cleaned={study.cleaned}
+                  thesisCleaned={study.thesisCleaned} proposal={study.proposal} onApply={study.apply} onDecline={study.decline} declined={study.declined} />}
     </div>
   </div>;
 }

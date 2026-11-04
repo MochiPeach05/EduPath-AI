@@ -33,6 +33,8 @@ describe("labels", () => {
     expect(studyTag({ source: "running", termCode: null, choiceLabel: null })).toEqual({ text: "Đang học", tone: "running" });
     expect(studyTag({ source: "running", termCode: "HK261", choiceLabel: null }).text).toBe("Đang học · HK1 2026–2027");
     expect(studyTag({ source: "late", termCode: "HK243", choiceLabel: null }).text).toBe("Trễ kế hoạch · HK3 2024–2025");
+    // The term being studied's unregistered course is not late (comp-calc-v19, user 2026-11-04).
+    expect(studyTag({ source: "late", thisTerm: true, termCode: "HK261", choiceLabel: null })).toEqual({ text: "Kế hoạch HK1 2026–2027 · chưa đăng ký", tone: "next" });
     expect(studyTag({ source: "next", termCode: "HK262", choiceLabel: null }).text).toBe("Học kỳ tới · HK2 2026–2027");
     expect(studyTag({ source: "following", termCode: "HK262", choiceLabel: null }).text).toBe("Học kỳ tới · HK2 2026–2027");
     expect(studyTag({ source: "choice", termCode: "HK243", choiceLabel: "Nhóm tự chọn TC309" }).text).toBe("Tự chọn: Nhóm tự chọn TC309");
@@ -45,7 +47,13 @@ describe("labels", () => {
     expect(improveHeading([])).toBe("Môn học bạn cần học lại và cải thiện");
     expect(monthTitle({ month: 1, start: "2026-10-24", end: "2026-11-23" })).toBe("Tháng 1 · 24/10 – 23/11/2026");
     expect(choiceText({ label: "Nhóm tự chọn TC309", source: "late", termCode: "HK243", need: "3 TC", options: [] }))
-      .toBe("Nhóm tự chọn TC309: còn thiếu 3 TC (theo kế hoạch ở HK3 2024–2025)");
+      .toBe("Nhóm tự chọn TC309: còn thiếu 3 TC, theo kế hoạch ở HK3 2024–2025");
+    // The system's shortfall in the unit of the requirement (comp-calc-v19): a "Chọn k" choice in courses with their credits,
+    // never two pairs of brackets; a group of credits in credits (a course count read "còn thiếu 1 TC" before).
+    expect(choiceText({ label: "Chọn 1 trong 2 môn sau", source: "late", termCode: "HK241", need: "1 học phần (3 TC)", options: [] }))
+      .toBe("Chọn 1 trong 2 môn sau: còn thiếu 1 học phần (3 TC), theo kế hoạch ở HK1 2024–2025");
+    expect(choiceText({ label: "Nhóm tự chọn TC406: chọn 6 tín chỉ", source: "next", termCode: "HK262", need: "6 TC", options: [] }))
+      .toBe("Nhóm tự chọn TC406: chọn 6 tín chỉ: còn thiếu 6 TC");
   });
 
   it("explains waiting, failures and refusals", () => {

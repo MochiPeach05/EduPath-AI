@@ -4,8 +4,9 @@
 // file name. Every standard/admin string is sanitized because Ollama/llama.cpp parses
 // special-token strings inside message content.
 import { isPassedState } from "../../competency-assessment/course-state.js";
-import { formatNumber, sanitizeText, termText } from "../../competency-assessment/ai/prompt.js";
+import { formatGpa, formatGpaShortfall, formatNumber, GPA_NAMES, namedScoreList, sanitizeText, shownGpa, termText } from "../../competency-assessment/ai/prompt.js";
 import type { JsonSchema } from "../../competency-assessment/ai/schema.js";
+import { numberFactsOf, type NamedScore } from "../../competency-assessment/ai/validate.js";
 import { specialtyLabel } from "../../competency-assessment/specialty.js";
 import type { GraduationStandardInput } from "../../competency-assessment/types.js";
 import type {
@@ -19,8 +20,11 @@ import { buildGraduationAdviceSchema, GRADUATION_ADVICE_LIMITS as L } from "./sc
  * Part of the advice fingerprint (student-graduation.ts): a new version re-queues every student's advice. v4 (user
  * 2026-11-03: "điểm của sinh viên mà ổn thì đề xuất làm đồ án tốt nghiệp còn thấp thì làm 2 môn thay thế đó", "TB tích lũy từ
  * 2,80"): the thesis group names the way the system advises by the cumulative GPA, and the rules ask for that way only.
+ * v5 (review 2026-11-04: AI texts dropped decimals): the GPA, its minimum and shortfall with two decimals and the scale like
+ * the page ("2,85/4", "yêu cầu tối thiểu 2,00/4", "còn thiếu 0,15 điểm"), course scores "1,5/4"; rule 1 asks to copy decimals,
+ * and an item with a number that lost them is dropped (validate.ts, truncatedNumber).
  */
-export const GRADUATION_ADVICE_PROMPT_VERSION = "grad-advice-v4";
+export const GRADUATION_ADVICE_PROMPT_VERSION = "grad-advice-v5";
 
 /** Ollama options sent with every job (worker adds think/stream/truncate/keep_alive/model). num_ctx must stay 16384. */
 export const GRADUATION_ADVICE_OPTIONS = { num_ctx: 16384, num_predict: 2048, temperature: 0.3, top_p: 0.95, top_k: 64 } as const;
@@ -48,13 +52,15 @@ type GraduationAdviceAiInput = {
   promptVersion: string;
   /** Server-only key map (validation and labels); never sent to the worker. */
   keys: GraduationAdviceKey[];
+  /** Server-only (v5): the scores with decimals of the data block by GPA and course name (validate.ts, truncatedNamedScore). */
+  scores: NamedScore[];
 };
 
 export const GRADUATION_ADVICE_SYSTEM_PROMPT = `Bạn là cố vấn học tập của Khoa Công nghệ Thông tin, Trường Đại học Văn Lang, viết lời khuyên trên EduPath AI cho một sinh viên về điều kiện xét tốt nghiệp.
 Hệ thống đã đối chiếu bảng điểm của sinh viên với tiêu chuẩn xét tốt nghiệp của khóa và tính sẵn mọi con số. Việc của bạn là đọc kết quả đó rồi viết lời khuyên ngắn gọn, cụ thể, làm được ngay, dành riêng cho sinh viên này.
 
 Nguyên tắc dữ liệu (bắt buộc):
-1. Chỉ dùng con số, học phần và điều kiện có trong dữ liệu. Không tự tính, cộng trừ, ước lượng hay làm tròn lại; khi nhắc số liệu, chép đúng như trong dữ liệu. Không tự đặt thêm số (số tuần, số giờ, phần trăm, số học kỳ).
+1. Chỉ dùng con số, học phần và điều kiện có trong dữ liệu. Không tự tính, cộng trừ, ước lượng hay làm tròn lại; khi nhắc số liệu, chép đúng từng chữ số như trong dữ liệu, giữ nguyên phần thập phân sau dấu phẩy, không bỏ số lẻ (dữ liệu ghi "2,85/4" thì viết 2,85, không viết 2,8 hay 3). Không tự đặt thêm số (số tuần, số giờ, phần trăm, số học kỳ).
 2. Chỉ gợi ý học phần có trong mục [4], [5] hoặc [6]. Không bịa tên hay mã học phần, lịch mở lớp, giảng viên, quy định hay đường link.
 3. Không hứa hẹn và không khẳng định bạn chắc chắn được xét tốt nghiệp: đây là kết quả tham khảo, kết quả xét tốt nghiệp chính thức do nhà trường công bố.
 4. "Đang học" nghĩa là học phần chưa có kết quả nên chưa được tính là đạt. "Chưa rõ kết quả" nghĩa là bảng điểm có điểm nhưng chưa xác định được đạt hay chưa đạt.
@@ -110,8 +116,6 @@ const COURSE_STATES: Record<GradCourseState, string> = {
 const STATE_ORDER: Record<GradCourseState, number> = { in_progress: 0, graded_unknown: 1, failed: 2, not_taken: 3, passed: 4, exempt: 5 };
 
 const amount = (value: number | null) => (value === null ? "chưa rõ" : formatNumber(value));
-/** GPA shortfall as the page writes it: rounded UP to 2 decimals (a 1e-9 tolerance absorbs float noise). */
-const gpaShortfall = (value: number) => formatNumber(Math.ceil(value * 100 - 1e-9) / 100);
 const latestTermText = (term: string | null) => (term ? termText(term) : "chưa có học kỳ nào có điểm");
 
 const courseCode = (course: Pick<GraduationCourseRow, "code">) => sanitizeText(course.code, 20);
@@ -217,13 +221,15 @@ function conditions(evaluation: GraduationEvaluation): Condition[] {
   }
   const gpa = evaluation.gpa;
   const source = gpa.source === "printed" ? ", theo bảng điểm" : gpa.source === "calculated" ? ", ước tính từ điểm các học phần" : "";
-  const required = gpa.required === null ? "tiêu chuẩn chưa có yêu cầu" : `yêu cầu tối thiểu ${formatNumber(gpa.required)}`;
+  // v5: as the graduation page shows them (web formatGpa, shownGpa, formatGpaShortfall), with the scale.
+  const required = gpa.required === null ? "tiêu chuẩn chưa có yêu cầu" : `yêu cầu tối thiểu ${formatGpa(gpa.required)}/${gpa.scale}`;
+  const actual = gpa.actual === null ? "chưa rõ" : `${formatGpa(shownGpa(gpa.actual, gpa.required, gpa.status === "fail"))}/${gpa.scale}`;
   const status = gpa.status === "fail"
-    ? gpa.remaining === null ? "chưa đạt" : `chưa đạt, còn thiếu ${gpaShortfall(gpa.remaining)}`
+    ? gpa.remaining === null ? "chưa đạt" : `chưa đạt, còn thiếu ${formatGpaShortfall(gpa.remaining)} điểm`
     : gpa.status === "pass" ? "đạt" : `chưa xác định${gpa.reason ? ` (${sanitizeText(gpa.reason, 200)})` : ""}`;
   list.push({
     key: GPA_KEY, groupId: null, label: GPA_LABEL, status: gpa.status,
-    line: `[${GPA_KEY}] ${GPA_LABEL} (thang ${gpa.scale}${source}): ${amount(gpa.actual)}, ${required} — ${status}`,
+    line: `[${GPA_KEY}] ${GPA_LABEL} (thang ${gpa.scale}${source}): ${actual}, ${required} — ${status}`,
   });
   return list;
 }
@@ -240,7 +246,7 @@ function warningText(warning: GraduationWarning): string {
     case "credits_mismatch": {
       const lower = warning.computedLower ?? null, upper = warning.computedUpper ?? null;
       const computed = lower === null ? "chưa rõ" : upper !== null && upper !== lower ? `${formatNumber(lower)} đến ${formatNumber(upper)}` : formatNumber(lower);
-      return `Tổng số tín chỉ tích lũy in trên bảng điểm (${amount(warning.printed ?? null)}) khác số tín chỉ tính từ các học phần (${computed}).`;
+      return `Tổng số tín chỉ tích lũy in trên bảng điểm (${amount(warning.printed ?? null)} TC) khác số tín chỉ tính từ các học phần (${computed} TC).`;
     }
     case "printed_credits_unreadable":
       return "Không đọc được tổng số tín chỉ tích lũy in trên bảng điểm; hệ thống dùng số tín chỉ ước tính từ các học phần.";
@@ -389,7 +395,7 @@ function renderGraduationDataBlock(facts: AdviceFacts, list: readonly Condition[
   else if (!evaluation.improvementCandidates.length) push("Không có học phần phù hợp để gợi ý.");
   for (const course of gpa.status === "fail" ? evaluation.improvementCandidates : []) {
     const letter = course.letter ? ` (${sanitizeText(course.letter, 4)})` : "";
-    push(`- ${courseCode(course)} ${sanitizeText(course.name)} (${courseCredits(course.credits)}): điểm ${formatNumber(course.score)} thang ${course.scale}` +
+    push(`- ${courseCode(course)} ${sanitizeText(course.name)} (${courseCredits(course.credits)}): điểm ${formatNumber(course.score)}/${course.scale}` +
       `${letter} — ${course.state === "failed" ? "học lại" : "học cải thiện"}`);
   }
 
@@ -406,6 +412,18 @@ function renderGraduationDataBlock(facts: AdviceFacts, list: readonly Condition[
 }
 
 /**
+ * v5: the scores with decimals the data block writes (the GPA, the course scores of section [6]) by what they belong to and
+ * as written there, so a sentence giving one of them cut ("điểm trung bình tích lũy của bạn là 2,8" for 2,85) is caught.
+ */
+function namedScores(evaluation: GraduationEvaluation, user: string): NamedScore[] {
+  return namedScoreList(numberFactsOf(user), (add) => {
+    const gpa = evaluation.gpa;
+    if (gpa.actual !== null) for (const name of GPA_NAMES) add(name, formatGpa(shownGpa(gpa.actual, gpa.required, gpa.status === "fail")));
+    if (gpa.status === "fail") for (const course of evaluation.improvementCandidates) add(course.name, formatNumber(course.score));
+  });
+}
+
+/**
  * The job input for a loaded graduation page (loadStudentGraduation / readStudentGraduation).
  * Throws when there is no evaluation: callers queue advice only for an evaluated standard.
  */
@@ -414,12 +432,14 @@ export function buildGraduationAdviceInput(loaded: StudentGraduation): Graduatio
   if (!standard || !evaluation) throw new Error("graduation_advice_requires_evaluation");
   const list = conditions(evaluation);
   const keys = list.map(({ key, groupId, label }) => ({ key, groupId, label }));
+  const user = renderGraduationDataBlock({ profile: loaded.profile, standard, evaluation }, list);
   return {
     system: GRADUATION_ADVICE_SYSTEM_PROMPT,
-    user: renderGraduationDataBlock({ profile: loaded.profile, standard, evaluation }, list),
+    user,
     schema: buildGraduationAdviceSchema(keys.map((item) => item.key)),
     options: { ...GRADUATION_ADVICE_OPTIONS },
     promptVersion: GRADUATION_ADVICE_PROMPT_VERSION,
     keys,
+    scores: namedScores(evaluation, user),
   };
 }

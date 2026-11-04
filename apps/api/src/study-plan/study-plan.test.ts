@@ -30,7 +30,8 @@ function curriculumData() {
 }
 
 type Roadmap = { id: string; facts: unknown; output: unknown; completed_at: Date };
-type Options = { specialty?: string | null; standards?: boolean; transcript?: boolean; active?: boolean; roadmap?: Roadmap };
+type Offering = { cohort_code: string; code: string; name: string; term_code: string; section_label: string | null };
+type Options = { specialty?: string | null; standards?: boolean; transcript?: boolean; active?: boolean; roadmap?: Roadmap; offerings?: Offering[] };
 function fakeDb(options: Options = {}) {
   const saved: { version: string; data: unknown; updated_at: Date }[] = [];
   const standards = options.standards === false ? [] : syntheticStandards().map((item) => ({ id: item.id, revision_id: item.revisionId, version: item.version, data: item.data }));
@@ -48,7 +49,8 @@ function fakeDb(options: Options = {}) {
       const k29 = plan.items.map((item) => ({ cohort_code: "K29", code: item.code, name: item.name, term_code: item.termCode, section_label: labels.get(item.sectionId) ?? null }));
       // Another cohort's "Chọn" section never sets K29's requirements.
       return rows([...k29, { cohort_code: "K30", code: "71ITIN40304", name: "Đồ án thực tập", term_code: "HK262", section_label: null },
-        { cohort_code: "K30", code: "71ITSE30803", name: "Lập trình Web nâng cao với framework", term_code: "HK262", section_label: "Chọn 2 trong 4 môn sau" }]);
+        { cohort_code: "K30", code: "71ITSE30803", name: "Lập trình Web nâng cao với framework", term_code: "HK262", section_label: "Chọn 2 trong 4 môn sau" },
+        ...options.offerings ?? []]);
     }
     if (sql.startsWith("SELECT version,data,updated_at FROM stu_study_plans")) return rows(saved.slice(-1));
     if (sql.includes("FROM stu_roadmaps WHERE user_id=$1 AND status='completed'")) return rows(options.roadmap ? [options.roadmap] : []);
@@ -97,6 +99,13 @@ describe("study plan model", () => {
     expect(studyPlanSchema.safeParse({ ...plan, aiAdded: { ...aiAdded, term: "2026" } }).success).toBe(false);
     expect(studyPlanSchema.safeParse({ ...plan, aiAdded: { ...aiAdded, extra: true } }).success).toBe(false);
   });
+
+  it("keeps the courses the student kept when the page proposed to take them out (Bỏ qua, 2026-11-04)", () => {
+    const plan = { schemaVersion: 1, roadmapId: "99999999-9999-4999-8999-999999999999", kept: ["71ITGR40203"], terms: [{ code: "HK262", courses: [{ code: "71ITGR40203" }] }] };
+    expect(studyPlanSchema.parse(plan)).toEqual(plan);
+    expect(studyPlanSchema.safeParse({ ...plan, kept: [""] }).success).toBe(false);
+    expect(studyPlanSchema.safeParse({ ...plan, kept: null }).success).toBe(false);
+  });
 });
 
 describe("study plan context", () => {
@@ -112,6 +121,14 @@ describe("study plan context", () => {
     expect(byCode.get("71PEBA10052")).toMatchObject({ conditional: true, kind: "elective", group: "TC102" });
     // Offered by the K29 plan in HK253 and by a K30 plan in HK262.
     expect(byCode.get("71ITIN40304")).toMatchObject({ planTerm: "HK253", offeredTerms: ["HK253", "HK262"], state: "not_taken" });
+  });
+
+  it("matches a plan row by code, or by name whatever its accents, case and spaces (another cohort's code)", async () => {
+    // A K27 plan opens the internship under an older code and a name written differently; an unrelated row does not count.
+    const offerings = [{ cohort_code: "K27", code: "DIT0450", name: "  ĐỒ ÁN  thực tập ", term_code: "HK263", section_label: null },
+      { cohort_code: "K27", code: "DIT0451", name: "Đồ án thực tập nâng cao", term_code: "HK271", section_label: null }];
+    const course = (await facts({ offerings })).context.courses.find((item) => item.code === "71ITIN40304");
+    expect(course).toMatchObject({ planTerm: "HK253", offeredTerms: ["HK253", "HK262", "HK263"] });
   });
 
   it("asks a course of the student's program for the prerequisites of the student's own specialty only", async () => {
@@ -237,8 +254,13 @@ describe("where the plan starts", () => {
     // Another specialty's course never goes in; a failed course is still missing (học lại); a passed D is only suggested.
     expect(ai.proposal!.courses.map((item) => item.code)).toEqual(["NEW", "RETAKE"]);
     expect(ai.suggestions).toEqual([{ code: "LOWD", term: "HK262" }]);
-    // Once the plan took the roadmap in, the improvement stays suggested.
-    expect(await readAiPlan(db as never, studentId, context as never, roadmap.id)).toEqual({ proposal: null, suggestions: [{ code: "LOWD", term: "HK262" }] });
+    // Once the plan took the roadmap in (or the student declined it), the improvement stays suggested.
+    expect(await readAiPlan(db as never, studentId, context as never, roadmap.id))
+      .toEqual({ proposal: null, suggestions: [{ code: "LOWD", term: "HK262" }], roadmapId: roadmap.id });
+    // The page compares the newest completed roadmap with the one Lộ trình AI đề xuất shows.
+    expect(ai.roadmapId).toBe(roadmap.id);
+    expect(await readAiPlan({ query: vi.fn(async () => ({ rowCount: 0, rows: [] })) } as never, studentId, context as never, null))
+      .toEqual({ proposal: null, suggestions: [], roadmapId: null });
   });
 });
 
@@ -288,6 +310,7 @@ describe("study plan API", () => {
     expect(response.body.plan).toBeNull();
     expect(response.body.suggested).toEqual({ schemaVersion: 1, terms: [] });
     expect(response.body.aiProposal).toBeNull();
+    expect(response.body.aiRoadmapId).toBeNull();
     expect(response.body.context.courses.length).toBeGreaterThan(10);
     expect(response.body).not.toHaveProperty("transcript");
     expect(response.body.context).not.toHaveProperty("standard");

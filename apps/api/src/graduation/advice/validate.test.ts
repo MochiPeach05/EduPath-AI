@@ -123,6 +123,38 @@ describe("validateGraduationAdviceOutput", () => {
     expect(result.dropped).toBe(4);
   });
 
+  it("drops an item whose number lost its decimals (grad-advice-v5, review 2026-11-04)", () => {
+    const output = {
+      ...valid(),
+      advice: [...valid().advice,
+        // 2,85 rounded away (2,8 would be the thesis bound 2,80 of the data, which may be written).
+        { focus: "GPA", text: "Điểm trung bình tích lũy của bạn là 2,9, đã đạt yêu cầu." },
+        // 3 is in the data block as credits, but written as a score it must be one: the GPA is 2,85.
+        { focus: "GPA", text: "Điểm trung bình tích lũy của bạn khoảng 3 điểm." }],
+      nextSteps: [...valid().nextSteps, "Giữ điểm trung bình tích lũy 2,85/4."],
+    };
+    const result = check(output);
+    expect(result).toMatchObject({ ok: true, dropped: 2 });
+    if (!result.ok) return;
+    expect(result.output.advice.map((item) => item.focus)).toEqual(["G1", "G5", "CREDITS", "GENERAL"]);
+    expect(result.output.nextSteps).toContain("Giữ điểm trung bình tích lũy 2,85/4.");
+  });
+
+  it("drops the GPA written cut even where the data has that number for something else (grad-advice-v5)", () => {
+    // 2,80 is the thesis bound of the data block, so 2,8 alone is a number of the data; after the GPA's name it is 2,85 cut.
+    expect(context.numbers.has(2.8)).toBe(true);
+    expect(context.scores).toEqual(expect.arrayContaining([{ name: "điểm trung bình tích lũy", value: "2,85" }]));
+    const output = {
+      ...valid(),
+      advice: [...valid().advice.slice(0, 3),
+        { focus: "GPA", text: "Điểm trung bình tích lũy của bạn là 2,8, đã đạt yêu cầu." },
+        { focus: "GENERAL", text: "Điểm trung bình tích lũy của bạn từ 2,8 trở lên nên hệ thống đề xuất làm Đồ án Tốt nghiệp." }],
+    };
+    const result = check(output);
+    expect(result).toMatchObject({ ok: true, dropped: 1 });
+    if (result.ok) expect(result.output.advice.map((item) => item.focus)).toEqual(["G1", "G5", "CREDITS", "GENERAL"]);
+  });
+
   it("drops advice with an unknown focus", () => {
     const output = { ...valid(), advice: [{ focus: "G9", text: "Một lời khuyên." }, { focus: "S01", text: "Một lời khuyên." }, valid().advice[0]!] };
     const result = check(output);

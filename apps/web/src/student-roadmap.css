@@ -214,11 +214,20 @@
 .rm-origin-empty { flex-wrap: wrap; align-items: center; justify-content: space-between; }
 .rm-origin-empty p { margin: 0; flex: 1 1 320px; }
 .rm-origin-empty p .rm-mark { margin-right: 4px; }
-/* What the AI roadmap's proposal added, with "Ẩn thông báo". */
-.rm-origin-ai p { flex: 1 1 auto; margin: 0; }
+/* What the AI roadmap's proposal added, with "Ẩn thông báo" (under the text on a phone). */
+.rm-origin-ai { flex-wrap: wrap; }
+.rm-origin-ai p { flex: 1 1 240px; margin: 0; }
 .rm-origin-ai .rm-link { flex: none; align-self: center; }
 .rm-save-saved { color: #2e7d32; }
 .rm-save-error { color: #b42335; font-weight: 600; }
+/* What the page proposes to change, applied or declined by the student (user 2026-11-04: "Hỏi trước, bấm mới lưu"). */
+.rm-proposal { display: grid; gap: 10px; padding: 14px 16px; border: 1px solid #cfdaeb; border-left: 4px solid #1c4182; border-radius: 8px; background: #f2f6fc; color: #1f2a3d; font-size: 14px; line-height: 1.6; }
+.rm-proposal h3 { margin: 0; color: #1c4182; font-size: 15px; }
+.rm-proposal p { margin: 0; }
+.rm-proposal .rm-proposal-lead { color: #3d4a5c; }
+.rm-proposal ul { display: grid; gap: 2px; margin: 4px 0 0; padding-left: 20px; }
+/* The credit limits of a term and the terms that need no minimum. */
+.rm-limits { margin: 0; color: var(--sw-muted); font-size: 13px; line-height: 1.6; }
 .rm-planner { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
 .rm-terms { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; align-items: start; min-width: 0; }
 .rm-term { display: grid; gap: 8px; min-width: 0; padding: 12px; border: 1px dashed transparent; border-radius: 10px; background: #f5f6f8; }

@@ -7,13 +7,16 @@ import { formatDateTime, joinVi } from "./student-roadmap-data";
 export type CourseState = "passed" | "exempt" | "failed" | "in_progress" | "graded_unknown" | "not_taken" | "not_in_curriculum";
 export type PlanTerm = { code: string; courses: { code: string }[] };
 /**
- * What taking the AI roadmap's proposal in added (the page does it at once, from any tab): the roadmap's time, the term
- * it prepares, the courses added (none when all were planned already) and when. Kept in the plan so "Kế hoạch học kỳ"
- * names them on later visits too.
+ * What taking the AI roadmap's proposal in added (when the student pressed Áp dụng): the roadmap's time, the term it
+ * prepares, the courses added and when. Kept in the plan so "Kế hoạch học kỳ" names them on later visits too.
  */
 export type AiAdded = { completedAt: string; term: string; codes: string[]; addedAt: string };
-/** roadmapId: the AI roadmap whose proposal the plan has taken in; aiAdded: what that added (null: nothing to say). */
-export type StudyPlanData = { schemaVersion: 1; roadmapId?: string | null; aiAdded?: AiAdded | null; terms: PlanTerm[] };
+/**
+ * roadmapId: the AI roadmap whose proposal the plan has taken in (Áp dụng) or the student declined (Bỏ qua); aiAdded:
+ * what taking it in added (null: nothing to say); kept: courses the page proposed to take out and the student kept (Bỏ
+ * qua), never proposed again while they stay planned.
+ */
+export type StudyPlanData = { schemaVersion: 1; roadmapId?: string | null; aiAdded?: AiAdded | null; kept?: string[]; terms: PlanTerm[] };
 export type TriState = "pass" | "fail" | "unknown";
 /** What the cohort's own training plan asks of a CTĐT elective group ("Chọn 2 trong 6 HP…", study-plan/context.ts planChoices). */
 export type StudyPlanChoice = { courses: number; sections: { label: string; termCode: string }[] };
@@ -68,14 +71,17 @@ export type Saved = { version: string; data: StudyPlanData; updatedAt: string };
 export type AiProposal = { roadmapId: string; completedAt: string; term: string; courses: { code: string; term: string }[] };
 /** A passed course the newest AI roadmap advises to improve, with the term it would go to: suggested, never added. */
 export type AiSuggestion = { code: string; term: string };
-/** suggested: where a student without a plan starts (the training plan's mandatory courses ahead). */
+/**
+ * suggested: where a student without a plan starts (the training plan's mandatory courses ahead); aiRoadmapId: the newest
+ * completed AI roadmap the answer knows (the page reads the plan again when Lộ trình AI đề xuất shows a newer one).
+ */
 export type StudyPlanResponse = {
   context: StudyPlanContext; plan: Saved | null; suggested: StudyPlanData | null; aiProposal: AiProposal | null;
-  aiSuggestions?: AiSuggestion[]; projection: StudyPlanProjection | null;
+  aiSuggestions?: AiSuggestion[]; aiRoadmapId?: string | null; projection: StudyPlanProjection | null;
 };
 /**
  * Where the plan on screen came from during this visit: the training plan's prefill (not saved until the first edit), or
- * the AI roadmap's proposal taken in now (added: courses added), which Theo dõi tiến độ mentions too.
+ * the AI roadmap's proposal the student applied now (added: courses added), which Theo dõi tiến độ mentions too.
  */
 export type PlanOrigin = { kind: "prefill" } | { kind: "ai"; added: number } | null;
 
@@ -105,10 +111,13 @@ export function withTerms(context: Pick<StudyPlanContext, "currentTerm" | "stand
   const terms = new Map((data?.terms ?? []).map((term) => [term.code, term]));
   for (const code of defaultTerms(context)) if (!terms.has(code)) terms.set(code, { code, courses: [] });
   return {
-    schemaVersion: 1, roadmapId: data?.roadmapId ?? null, aiAdded: data?.aiAdded ?? null,
+    schemaVersion: 1, roadmapId: data?.roadmapId ?? null, aiAdded: data?.aiAdded ?? null, ...(data?.kept?.length ? { kept: data.kept } : {}),
     terms: [...terms.values()].sort((a, b) => termIndex(a.code) - termIndex(b.code)),
   };
 }
+
+/** The courses the student kept when the page proposed to take them out (upper-case codes). */
+const keptCodes = (plan: StudyPlanData) => new Set((plan.kept ?? []).map((code) => code.toUpperCase()));
 
 /**
  * The plan with the AI roadmap's proposal taken in: each proposed course not planned anywhere yet goes to its term (a
@@ -142,15 +151,17 @@ export function applyProposal(plan: StudyPlanData, proposal: AiProposal, now = n
 /**
  * The plan without what an AI roadmap of before 2026-11-03 added and the plan must not hold (user 2026-11-03: improvements
  * only suggested, only missing courses, never another specialty's): an added course of another specialty, or one already
- * passed (an improvement). Only the courses the AI added (aiAdded) are looked at; returns the plan and the codes taken out.
+ * passed (an improvement). Only the courses the AI added (aiAdded) are looked at, never one the student kept; returns the
+ * plan and the codes taken out.
  */
 export function cleanAiAdded(context: Pick<StudyPlanContext, "courses">, plan: StudyPlanData): { plan: StudyPlanData; removed: string[] } {
   const codes = plan.aiAdded?.codes ?? [];
   const byCode = new Map(context.courses.map((course) => [course.code, course]));
   const placed = plannedTerms(plan);
+  const kept = keptCodes(plan);
   const removed = codes.filter((code) => {
     const course = byCode.get(code.toUpperCase());
-    return placed.has(code.toUpperCase()) && course !== undefined && (!course.applicable || isDone(course.state));
+    return placed.has(code.toUpperCase()) && !kept.has(code.toUpperCase()) && course !== undefined && (!course.applicable || isDone(course.state));
   });
   if (!removed.length) return { plan, removed };
   const cleaned = removed.reduce((next, code) => moveCourse(next, code, null), plan);
@@ -174,7 +185,8 @@ export function thesisLeftOut(context: Pick<StudyPlanContext, "thesis">): Set<st
 /**
  * The plan without the thesis group's way the system does not advise (user 2026-11-03: never both ways in one plan): such
  * a course the AI roadmap added (aiAdded), or any such course while the advised way is planned, being studied or passed. A
- * course of the other way the student planned alone stays, marked (thesisHint). Returns the plan and the codes taken out.
+ * course of the other way the student planned alone stays, marked (thesisHint), and so does one the student kept. Returns
+ * the plan and the codes taken out.
  */
 export function cleanThesisWay(context: Pick<StudyPlanContext, "thesis" | "courses">, plan: StudyPlanData): { plan: StudyPlanData; removed: string[] } {
   const leftOut = thesisLeftOut(context);
@@ -184,7 +196,8 @@ export function cleanThesisWay(context: Pick<StudyPlanContext, "thesis" | "cours
   const taken = (code: string) => { const state = byCode.get(code)?.state; return state !== undefined && (isDone(state) || state === "in_progress"); };
   const mixed = thesisAdvised(context.thesis).some((code) => placed.has(code) || taken(code));
   const added = new Set((plan.aiAdded?.codes ?? []).map((code) => code.toUpperCase()));
-  const removed = [...placed.keys()].filter((code) => leftOut.has(code) && (mixed || added.has(code)));
+  const kept = keptCodes(plan);
+  const removed = [...placed.keys()].filter((code) => leftOut.has(code) && !kept.has(code) && (mixed || added.has(code)));
   if (!removed.length) return { plan, removed };
   const cleaned = removed.reduce((next, code) => moveCourse(next, code, null), plan);
   return { plan: plan.aiAdded ? { ...cleaned, aiAdded: { ...plan.aiAdded, codes: plan.aiAdded.codes.filter((code) => !removed.includes(code.toUpperCase())) } } : cleaned, removed };
@@ -213,11 +226,81 @@ export function thesisHint(context: Pick<StudyPlanContext, "thesis" | "courses">
   return advice ? `Không cần học phần này: ${advice}.` : null;
 }
 
-/** The note on what cleanThesisWay took out of the plan, naming each course. */
-export function thesisCleanedText(context: Pick<StudyPlanContext, "thesis" | "courses">, codes: readonly string[]): string {
+/**
+ * The note on what cleanThesisWay took out of the plan, naming each course; proposed: what it would take out, in the
+ * proposal the student applies or declines ("Bỏ khỏi kế hoạch …").
+ */
+export function thesisCleanedText(context: Pick<StudyPlanContext, "thesis" | "courses">, codes: readonly string[], proposed = false): string {
   const advice = thesisAdvice(context);
   const group = context.thesis?.group.replace(/^Nhóm/, "nhóm");
-  return `Đã bỏ khỏi kế hoạch ${courseList(context, codes)}${advice ? ` vì ${advice}` : ""}; kế hoạch chỉ giữ một phương án${group ? ` cho ${group}` : ""}.`;
+  return `${proposed ? "Bỏ" : "Đã bỏ"} khỏi kế hoạch ${courseList(context, codes)}${advice ? ` vì ${advice}` : ""}; kế hoạch chỉ giữ một phương án${group ? ` cho ${group}` : ""}.`;
+}
+
+/**
+ * What the page proposes to change in the plan; nothing changes and nothing is saved until the student presses Áp dụng
+ * (user 2026-11-04: "Hỏi trước, bấm mới lưu"). plan: the plan once applied; roadmap and added: the newest AI roadmap's
+ * courses to add, each with its term (roadmap null when it adds none); aiRemoved: what an older AI roadmap added and the
+ * plan must not hold (cleanAiAdded); thesisRemoved: the thesis group's way the system does not advise (cleanThesisWay);
+ * keepable: the courses whose removal stands without the AI's courses, which Bỏ qua keeps (declineProposal).
+ */
+export type PlanProposal = {
+  plan: StudyPlanData;
+  roadmap: { id: string; completedAt: string; term: string } | null;
+  added: { code: string; term: string }[];
+  aiRemoved: string[];
+  thesisRemoved: string[];
+  keepable: string[];
+};
+
+/**
+ * The proposal for a plan (null when nothing would change): the clean-ups first (cleanAiAdded, then cleanThesisWay), then
+ * the AI roadmap's proposal unless the plan has taken that roadmap in or the student declined it (roadmapId), and the
+ * thesis group's other way again (the AI's courses can make the plan hold both ways).
+ */
+export function planProposal(context: Pick<StudyPlanContext, "courses" | "thesis">, plan: StudyPlanData, aiProposal: AiProposal | null,
+  now = new Date()): PlanProposal | null {
+  const ai = cleanAiAdded(context, plan);
+  const before = cleanThesisWay(context, ai.plan);
+  let next = before.plan;
+  let roadmap: PlanProposal["roadmap"] = null;
+  let addedCodes: string[] = [];
+  if (aiProposal && aiProposal.roadmapId !== plan.roadmapId) {
+    const applied = applyProposal(next, aiProposal, now);
+    if (applied.added) {
+      next = applied.plan;
+      roadmap = { id: aiProposal.roadmapId, completedAt: aiProposal.completedAt, term: aiProposal.term };
+      addedCodes = applied.plan.aiAdded?.codes ?? [];
+    }
+  }
+  const after = cleanThesisWay(context, next);
+  const placed = plannedTerms(after.plan);
+  const added = addedCodes.filter((code) => placed.has(code)).map((code) => ({ code, term: placed.get(code)! }));
+  const thesisRemoved = [...before.removed, ...after.removed.filter((code) => !addedCodes.includes(code))];
+  if (!added.length && !ai.removed.length && !thesisRemoved.length) return null;
+  return { plan: after.plan, roadmap: added.length ? roadmap : null, added, aiRemoved: ai.removed, thesisRemoved,
+    keepable: [...new Set([...ai.removed, ...before.removed].map((code) => code.toUpperCase()))] };
+}
+
+/**
+ * The plan as it is with the proposal declined (Bỏ qua): its AI roadmap is not proposed again (roadmapId), and the
+ * courses it would have taken out on their own are kept, so the same proposal never comes back.
+ */
+export function declineProposal(plan: StudyPlanData, proposal: PlanProposal): StudyPlanData {
+  const kept = [...new Set([...(plan.kept ?? []), ...proposal.keepable])];
+  return { ...plan, roadmapId: proposal.roadmap?.id ?? plan.roadmapId ?? null, ...(kept.length ? { kept } : {}) };
+}
+
+/** "thêm 3 học phần do lộ trình AI đề xuất và bỏ 2 học phần": what a proposal does, for Theo dõi tiến độ. */
+export function proposalSummaryText(proposal: Pick<PlanProposal, "added" | "aiRemoved" | "thesisRemoved">): string {
+  const removed = proposal.aiRemoved.length + proposal.thesisRemoved.length;
+  return [proposal.added.length ? `thêm ${proposal.added.length} học phần do lộ trình AI đề xuất` : null,
+    removed ? `bỏ ${removed} học phần` : null].filter(Boolean).join(" và ");
+}
+
+/** The heading of the courses a proposal adds: "Thêm 2 học phần do lộ trình AI đề xuất (lộ trình soạn lúc 17:00 24/10/2026), …". */
+export function proposalAddedText(proposal: Pick<PlanProposal, "added" | "roadmap">): string {
+  const when = proposal.roadmap ? ` (lộ trình soạn lúc ${formatDateTime(proposal.roadmap.completedAt)})` : "";
+  return `Thêm ${proposal.added.length} học phần do lộ trình AI đề xuất${when}, vào học kỳ mà kế hoạch đào tạo mở môn đó:`;
 }
 
 /* ---------------------------------------------------------------- courses */
@@ -233,13 +316,16 @@ export const plannedTerms = (plan: StudyPlanData) =>
 export const runningIn = (context: Pick<StudyPlanContext, "courses">, term: string) =>
   context.courses.filter((course) => course.state === "in_progress" && course.inProgressTerm === term);
 
-/** conditional: the part of credits from GDTC/GDQP (môn điều kiện). */
-export type TermLoad = { credits: number; conditional: number; status: "over" | "under" | "ok" | "empty" };
+/**
+ * conditional: the part of credits from GDTC/GDQP (môn điều kiện); exempt: why a term below the minimum is not flagged
+ * (summer: a summer term; last: the last term with courses).
+ */
+export type TermLoad = { credits: number; conditional: number; status: "over" | "under" | "ok" | "empty"; exempt?: "summer" | "last" };
 /**
  * Credits of a term (planned + being studied) against the limits. GDTC/GDQP count too (user 2026-10-24: a Futsal course
  * of TC102 must raise the term's total): they stay out of accumulated credits but are registered and studied that term.
  * Below the minimum only warns in HK1/HK2 and not in the last term with courses (TT 08/2021 sets the minimum for main
- * terms; the last term may be light).
+ * terms; the last term may be light): such a term says why (exempt, exemptText).
  */
 export function termLoad(context: Pick<StudyPlanContext, "courses" | "limits">, plan: StudyPlanData, term: string): TermLoad {
   const byCode = new Map(context.courses.map((course) => [course.code, course]));
@@ -252,8 +338,22 @@ export function termLoad(context: Pick<StudyPlanContext, "courses" | "limits">, 
   if (!courses.length) return { credits, conditional, status: "empty" };
   const limits = context.limits;
   const lastWithCourses = [...plan.terms].reverse().find((item) => item.courses.length)?.code === term;
-  const status = limits && credits > limits.max ? "over" : limits && credits < limits.min && !term.endsWith("3") && !lastWithCourses ? "under" : "ok";
-  return { credits, conditional, status };
+  const summer = term.endsWith("3");
+  const below = Boolean(limits && credits < limits.min && credits <= limits.max);
+  if (limits && credits > limits.max) return { credits, conditional, status: "over" };
+  if (below && (summer || lastWithCourses)) return { credits, conditional, status: "ok", exempt: summer ? "summer" : "last" };
+  return { credits, conditional, status: below ? "under" : "ok" };
+}
+
+/** The credit limits of a term in words, with the terms that need no minimum (shown above the terms of Kế hoạch học kỳ). */
+export const limitsText = (limits: NonNullable<StudyPlanContext["limits"]>) =>
+  `Số tín chỉ mỗi học kỳ: tối thiểu ${formatNumber(limits.min)} TC, tối đa ${formatNumber(limits.max)} TC, tính cả môn điều kiện. `
+  + "Học kỳ hè (HK3) không yêu cầu số tín chỉ tối thiểu; học kỳ cuối cùng có học phần trong kế hoạch cũng vậy.";
+
+/** Under a term below the minimum that is not flagged: "Học kỳ hè: không yêu cầu tối thiểu 9 TC". */
+export function exemptText(load: Pick<TermLoad, "exempt">, limits: StudyPlanContext["limits"]): string | null {
+  if (!load.exempt || !limits) return null;
+  return `${load.exempt === "summer" ? "Học kỳ hè" : "Học kỳ cuối của kế hoạch"}: không yêu cầu tối thiểu ${formatNumber(limits.min)} TC`;
 }
 
 /** "21 TC · vượt mức tối đa 18 TC", "6 TC · dưới mức tối thiểu 9 TC", "12 TC". */
@@ -332,7 +432,10 @@ export function nextTermOffer(course: Pick<StudyPlanCourse, "offeredTerms">, con
   return { tone: "warn", text: `${lead}: không mở theo kế hoạch đào tạo · ${usual}` };
 }
 
-/** A copy of the plan with a course moved to a term (null: back to the list), creating the term when needed. */
+/**
+ * A copy of the plan with a course moved to a term (null: back to the list), creating the term when needed. A course
+ * taken out is no longer kept (kept): planned again later, it is like any other.
+ */
 export function moveCourse(plan: StudyPlanData, code: string, to: string | null): StudyPlanData {
   const key = code.toUpperCase();
   const terms = plan.terms.map((term) => ({ ...term, courses: term.courses.filter((course) => course.code.toUpperCase() !== key) }));
@@ -341,7 +444,8 @@ export function moveCourse(plan: StudyPlanData, code: string, to: string | null)
     if (target) target.courses.push({ code: key });
     else terms.push({ code: to, courses: [{ code: key }] });
   }
-  return { ...plan, terms: terms.sort((a, b) => termIndex(a.code) - termIndex(b.code)) };
+  const kept = !to && plan.kept ? { kept: plan.kept.filter((item) => item.toUpperCase() !== key) } : {};
+  return { ...plan, ...kept, terms: terms.sort((a, b) => termIndex(a.code) - termIndex(b.code)) };
 }
 
 /**
@@ -564,9 +668,9 @@ export function courseList(context: Pick<StudyPlanContext, "courses">, codes: re
   return joinVi(codes.map((code) => (names.has(code.toUpperCase()) ? `${names.get(code.toUpperCase())} (${code})` : code)));
 }
 
-/** The note on what cleanAiAdded took out of the plan, naming each course. */
-export function aiCleanedText(context: Pick<StudyPlanContext, "courses">, codes: readonly string[]): string {
-  return `Đã bỏ khỏi kế hoạch ${codes.length} học phần lộ trình AI thêm trước đây vì không phải môn còn thiếu của chuyên ngành bạn (môn khác chuyên ngành, hoặc môn đã đạt chỉ nên gợi ý học cải thiện): ${courseList(context, codes)}.`;
+/** The note on what cleanAiAdded took out of the plan, naming each course; proposed: what it would take out ("Bỏ khỏi …"). */
+export function aiCleanedText(context: Pick<StudyPlanContext, "courses">, codes: readonly string[], proposed = false): string {
+  return `${proposed ? "Bỏ" : "Đã bỏ"} khỏi kế hoạch ${codes.length} học phần lộ trình AI thêm trước đây vì không phải môn còn thiếu của chuyên ngành bạn (môn khác chuyên ngành, hoặc môn đã đạt chỉ nên gợi ý học cải thiện): ${courseList(context, codes)}.`;
 }
 
 /** The note of "Kế hoạch học kỳ" on what the AI roadmap's proposal added, naming each course. */

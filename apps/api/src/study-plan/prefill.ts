@@ -59,8 +59,10 @@ function opensIn(course: Pick<StudyPlanCourse, "offeredTerms">, term: string, of
 export type AiSuggestion = { code: string; term: string };
 
 /**
- * The newest completed AI roadmap: the courses to add to the plan when the plan has not taken that roadmap in yet
- * (proposal), and its improvement courses to suggest (suggestions, every time). Only courses still missing (not passed,
+ * The newest completed AI roadmap (roadmapId: the page reads the plan again only when Lộ trình AI đề xuất shows a newer
+ * one): the courses to add to the plan when the plan has neither taken that roadmap in nor declined it (proposal, which
+ * the page only proposes, user 2026-11-04: "Hỏi trước, bấm mới lưu"), and its improvement courses to suggest
+ * (suggestions, every time). Only courses still missing (not passed,
  * not being studied) of the student's own program are added, a retake included (user 2026-11-03: "chỉ thêm vào lịch học
  * các môn Còn thiếu", "chuyên ngành nào thì đề xuất môn học đó thôi chứ không có đề xuất môn khác chuyên ngành nữa").
  * They start from the registration term the roadmap prepares (the plan's next term, at least the term after the current
@@ -69,11 +71,11 @@ export type AiSuggestion = { code: string; term: string };
  * thesis, never a mix).
  */
 export async function readAiPlan(db: Db, userId: string, context: Pick<StudyPlanContext, "courses" | "currentTerm" | "offeringUntil"> & Partial<Pick<StudyPlanContext, "thesis">>,
-  appliedRoadmapId: string | null): Promise<{ proposal: AiProposal | null; suggestions: AiSuggestion[] }> {
+  appliedRoadmapId: string | null): Promise<{ proposal: AiProposal | null; suggestions: AiSuggestion[]; roadmapId: string | null }> {
   const row = (await db.query<{ id: string; facts: RoadmapFacts; output: RoadmapOutput | null; completed_at: Date | string }>(
     `SELECT id,facts,ai_output AS output,completed_at FROM stu_roadmaps WHERE user_id=$1 AND status='completed'
      ORDER BY completed_at DESC,id DESC LIMIT 1`, [userId])).rows[0];
-  if (!row?.output) return { proposal: null, suggestions: [] };
+  if (!row?.output) return { proposal: null, suggestions: [], roadmapId: row?.id ?? null };
   const facts = row.facts;
   const first = nextTerm(context.currentTerm);
   const term = facts.nextTerm && termIndex(facts.nextTerm) >= termIndex(first) ? facts.nextTerm : first;
@@ -89,7 +91,7 @@ export async function readAiPlan(db: Db, userId: string, context: Pick<StudyPlan
     const course = byCode.get(item.code);
     if (course?.applicable && course.state === "passed" && !suggestions.some((entry) => entry.code === course.code)) suggestions.push({ code: course.code, term: placeOf(course) });
   }
-  if (row.id === appliedRoadmapId) return { proposal: null, suggestions };
+  if (row.id === appliedRoadmapId) return { proposal: null, suggestions, roadmapId: row.id };
   const running = new Set((facts.study ?? []).filter((item) => item.source === "running").map((item) => item.code));
   const picked = [...(row.output.study ?? []).map((item) => item.code).filter((code) => !running.has(code)), ...(row.output.improve ?? []).map((item) => item.code)];
   // The thesis group goes one way, the one the system advises by the GPA (user 2026-11-03, "TB tích lũy từ 2,80"): a roadmap
@@ -109,7 +111,7 @@ export async function readAiPlan(db: Db, userId: string, context: Pick<StudyPlan
     if (!course || !course.applicable || !needsPlanning(course) || excluded.has(code)) continue;
     courses.push({ code, term: placeOf(course) });
   }
-  return { proposal: { roadmapId: row.id, completedAt: new Date(row.completed_at).toISOString(), term, courses }, suggestions };
+  return { proposal: { roadmapId: row.id, completedAt: new Date(row.completed_at).toISOString(), term, courses }, suggestions, roadmapId: row.id };
 }
 
 /** The proposal alone (readAiPlan): what the plan has not taken in yet, or null. */

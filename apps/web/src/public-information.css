@@ -105,7 +105,7 @@
   .pi-header-inner { min-height: 80px; }
   .pi-login { padding-inline: 16px; font-size: 12px; }
   .pi-navigation { gap: 2px 16px; justify-content: flex-start; }
-  .pi-navigation a { font-size: 11px; padding-block: 7px; }
+  .pi-navigation a { font-size: 12px; padding-block: 7px; }
   .pi-policy-banner { min-height: 220px; }
   .pi-policy-banner h1 { font-size: clamp(27px, 7vw, 38px); letter-spacing: -.6px; }
   .pi-policy-menu { grid-template-columns: 1fr; }
@@ -129,6 +129,20 @@
   .pi-chevron { width: 20px; height: 20px; }
   .pi-faq-detail .pi-faq-answer { padding: 18px 18px 22px; font-size: 15px; }
   .pi-faq-help { font-size: 14px; margin-top: 26px; }
+}
+
+/* Phones: these pages have no hero, so the way back to the portal stays in the header, beside a smaller logo on the
+   first row (2026-11-04: the button took a row of its own and the sticky header 188px of a 390px-wide screen). */
+@media (max-width: 480px) {
+  .pi-header-inner { column-gap: 12px; }
+  .pi-header.lp-header .ep-brand { --ep-brand-w: 160px; flex-shrink: 0; }
+  /* At most what the row leaves beside the logo and the gap (160px + 12px), so the button never wraps to a row of its own. */
+  .pi-page .pi-header-inner .lp-return-portal { flex: 0 1 auto; min-width: 0; max-width: min(176px, calc(100% - 172px)); padding: 8px 12px; gap: 6px; font-size: 12px; }
+}
+
+/* The narrowest phones keep the label on two lines by leaving out the arrow. */
+@media (max-width: 360px) {
+  .pi-page .pi-header-inner .lp-return-portal > svg { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

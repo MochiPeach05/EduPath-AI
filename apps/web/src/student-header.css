@@ -258,11 +258,20 @@
 }
 
 @media (max-width: 480px) {
-  .sw-shell .sw-tools>.sw-icon-button {
+  /* Phones keep the bell beside the avatar (user 2026-11-04: hidden here, no menu offered the notifications); the "?"
+     button gives way, its Hướng dẫn moves into the account menu. */
+  .sw-shell .sw-tools>.sw-icon-button:not(.sw-bell) {
     display: none;
   }
 
   .sw-account-dropdown .sw-account-help {
     display: flex;
+  }
+}
+
+/* The menu button, the logo, the bell and the avatar on a 320px screen. */
+@media (max-width: 360px) {
+  .sw-shell {
+    --sw-brand-width: 140px;
   }
 }

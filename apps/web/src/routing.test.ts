@@ -1,13 +1,31 @@
 import { describe, expect, it } from "vitest";
-import { resolveAppRoute, safeReturnTo } from "./routing";
+import { isAdminArea, resolveAppRoute, safeReturnTo } from "./routing";
 
 describe("public and authenticated routes", () => {
   it("routes the admin portal independently from student login", () => {
     expect(resolveAppRoute("/quantri", "")).toBe("admin");
     expect(resolveAppRoute("/quantri/", "?authError=admin_required")).toBe("admin");
-    expect(resolveAppRoute("/quantri/users", "")).toBe("admin");
-    expect(resolveAppRoute("/quantrifake", "")).toBe("authenticated");
+    expect(resolveAppRoute("/quantri/tai-khoan", "")).toBe("admin");
+    expect(resolveAppRoute("/quantri/sinh-vien/", "?id=abc")).toBe("admin");
+    // An old link opens the page that replaced it (admin-navigation.ts).
+    expect(resolveAppRoute("/quantri/bao-cao", "")).toBe("admin");
+    expect(resolveAppRoute("/quantri/lop-phu-trach", "")).toBe("admin");
     expect(safeReturnTo("?returnTo=%2Fquantri")).toBe("/quantri");
+  });
+
+  it.each(["/quantri/users", "/quantri/tai-khoan/them", "/quantrifake"])("answers the unknown admin address %s with Không tìm thấy trang", (path) => {
+    expect(resolveAppRoute(path, "")).toBe("notFound");
+    expect(isAdminArea(path)).toBe(path !== "/quantrifake");
+  });
+
+  it.each(["/trang-khong-ton-tai-123", "/Dashboard", "/dashboard/profile", "/auth", "/api-docs"])("answers %s with Không tìm thấy trang, not the student portal (2026-11-04)", (path) => {
+    expect(resolveAppRoute(path, "")).toBe("notFound");
+    expect(resolveAppRoute(path, "?authError=invalid_state")).toBe("notFound");
+    expect(isAdminArea(path)).toBe(false);
+  });
+
+  it("opens the home page for /index.html", () => {
+    expect(resolveAppRoute("/index.html", "")).toBe("landing");
   });
   it("opens the public overview without an authentication decision", () => {
     expect(resolveAppRoute("/", "")).toBe("landing");
@@ -34,9 +52,9 @@ describe("public and authenticated routes", () => {
     "/dieu-khoan-su-dung/chi-tiet",
     "/cau-hoi-thuong-gap-extra",
     "/cau-hoi-thuong-gap/chi-tiet",
-  ])("keeps nearby unsupported path %s behind authentication", (path) => {
-    expect(resolveAppRoute(path, "")).toBe("authenticated");
-    expect(resolveAppRoute(path, "?authError=invalid_state")).toBe("authenticated");
+  ])("answers nearby unsupported path %s with Không tìm thấy trang", (path) => {
+    expect(resolveAppRoute(path, "")).toBe("notFound");
+    expect(resolveAppRoute(path, "?authError=invalid_state")).toBe("notFound");
   });
 
   it("keeps legacy home-page authentication errors visible on login", () => {

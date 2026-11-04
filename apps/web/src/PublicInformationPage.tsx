@@ -125,6 +125,25 @@ function FrequentlyAskedQuestions() {
   );
 }
 
+/**
+ * The header of the public information pages and of Không tìm thấy trang: the logo, the public links, and Đăng nhập or,
+ * for a signed-in visitor, the way back to the portal (usePortalLink). wide: the policy page's wider container.
+ */
+export function PublicHeader({ portal, currentHref, wide = false }: { portal: string | null; currentHref?: string; wide?: boolean }) {
+  return (
+    <header className="lp-header pi-header">
+      <div className={`${wide ? "pi-policy-container" : "pi-container"} pi-header-inner`}>
+        <EduPathBrand href="/" />
+        <nav className="pi-navigation" aria-label="Điều hướng thông tin">
+          <a href="/">Trang chủ</a>
+          {publicInformationLinks.map((link) => <a key={link.href} href={link.href} aria-current={link.href === currentHref ? "page" : undefined}>{link.label}</a>)}
+        </nav>
+        <a className={`lp-button lp-button-small pi-login${portal ? " lp-return-portal" : ""}`} href={portal ?? "/login"}>{portal ? portalLabel : "Đăng nhập"} <Icon name="arrow" /></a>
+      </div>
+    </header>
+  );
+}
+
 export default function PublicInformationPage({ page }: { page: "policy" | "faq" }) {
   const title = page === "faq" ? "Câu hỏi thường gặp" : "Chính sách & Điều khoản";
   const currentHref = publicInformationLinks[page === "policy" ? 0 : 1].href;
@@ -147,16 +166,7 @@ export default function PublicInformationPage({ page }: { page: "policy" | "faq"
   return (
     <div className={`lp-page pi-page${page === "policy" ? " pi-page-policy" : ""}`}>
       <a className="lp-skip-link" href="#noi-dung">Chuyển đến nội dung chính</a>
-      <header className="lp-header pi-header">
-        <div className={`${page === "policy" ? "pi-policy-container" : "pi-container"} pi-header-inner`}>
-          <EduPathBrand href="/" />
-          <nav className="pi-navigation" aria-label="Điều hướng thông tin">
-            <a href="/">Trang chủ</a>
-            {publicInformationLinks.map((link) => <a key={link.href} href={link.href} aria-current={link.href === currentHref ? "page" : undefined}>{link.label}</a>)}
-          </nav>
-          <a className={`lp-button lp-button-small pi-login${portal ? " lp-return-portal" : ""}`} href={portal ?? "/login"}>{portal ? portalLabel : "Đăng nhập"} <Icon name="arrow" /></a>
-        </div>
-      </header>
+      <PublicHeader portal={portal} currentHref={currentHref} wide={page === "policy"} />
       <main id="noi-dung">
         {page === "faq" ? <FrequentlyAskedQuestions /> : <PolicyContent />}
       </main>

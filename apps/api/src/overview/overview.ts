@@ -13,17 +13,18 @@ import { readReadiness, suggestedQuestions } from "../assistant/readiness.js";
 import { assessWithoutHistory } from "../competency-assessment/calculate.js";
 import { FIT_LABELS } from "../competency-assessment/constants.js";
 import {
-  academicSections, courseKey, hasScore, latestResultSection, printedCumulativeCredits, printedSummaryNumber, studyTermCode, termCode,
+  academicSections, conditionOnlyCodes, courseKey, hasScore, isConditionOnly, latestResultSection, printedCumulativeCredits, printedSummaryNumber,
+  studyTermCode, termCode,
 } from "../competency-assessment/course-state.js";
 import { AssessmentError, readAssessmentInputs } from "../competency-assessment/inputs.js";
-import { choiceLabel, choiceRule, physicalEducationSlot } from "../competency-assessment/plan-progress.js";
+import { choiceCreditRange, choiceLabel, choiceRule, physicalEducationSlot, shortfallText } from "../competency-assessment/plan-progress.js";
 import { fold, specialtyLabel } from "../competency-assessment/specialty.js";
-import type { AssessmentInputs, AssessmentResult, CareerRequirementResult, CourseFact } from "../competency-assessment/types.js";
+import type { AssessmentInputs, AssessmentResult, CareerRequirementResult, CourseFact, PlanProgressResult } from "../competency-assessment/types.js";
 import { MAJORS } from "../curricula/majors.js";
 import { normalizeCohortCode, profileSpecialty } from "../graduation/resolve.js";
 import { readStudentGraduation, type StudentGraduation } from "../graduation/student-graduation.js";
 import type { PlanData } from "../plans/model.js";
-import { newestAssessment, readNewestRoadmap, type RoadmapRow } from "../roadmap/jobs.js";
+import { newestAssessment, newestAssessmentInfo, readNewestRoadmap, type RoadmapRow } from "../roadmap/jobs.js";
 import { presentRoadmap } from "../roadmap/present.js";
 import { nextCalendarTerm, vietnamToday } from "../roadmap/window.js";
 import { consentWithdrawn } from "../student/consent.js";
@@ -32,7 +33,7 @@ import { readStudyPlanFacts, type StudyPlanContext } from "../study-plan/context
 import type { StudyPlanData } from "../study-plan/model.js";
 import { termName } from "../term-name.js";
 import type {
-  OverviewCompetency, OverviewGapStatus, OverviewGraduation, OverviewProgress, OverviewProgressTerm, OverviewResponse, OverviewRoadmap,
+  OverviewCompetency, OverviewCourseState, OverviewGapStatus, OverviewGraduation, OverviewProgress, OverviewProgressTerm, OverviewResponse, OverviewRoadmap,
   OverviewRunningCourse, OverviewTerm, OverviewTermCourse, OverviewTermLoad, OverviewTranscript,
 } from "./types.js";
 import { gpaText, overviewWarnings, type WarningInput } from "./warnings.js";
@@ -107,14 +108,21 @@ export function transcriptOverview(data: TranscriptData, updatedAt: Date | strin
   };
 }
 
-/** Courses registered without grades in the studying term, from the transcript alone (when the engine cannot run). */
+/**
+ * Courses registered without grades in the studying term, from the transcript alone (when the engine cannot run). A course
+ * starred in the transcript ("(*)") or with a GDTC/GDQP code is a condition (comp-calc-v19): listed, its credits not counted.
+ */
 export function transcriptRunning(data: TranscriptData, studyTerm: string | null): OverviewRunningCourse[] {
   if (!studyTerm) return [];
   const graded = new Set(data.sections.flatMap((section) => section.courses
     .filter((course) => course.score10 !== null || course.score4 !== null || course.letter?.trim() || course.result?.trim()).map((course) => courseKey(course.code))));
+  const starred = /\(\s*\*\s*\)/;
   return academicSections(data).filter((section) => termCode(section) === studyTerm).flatMap((section) => section.courses)
     .filter((course) => course.score10 === null && course.score4 === null && !course.letter?.trim() && !course.result?.trim())
-    .map((course) => ({ code: courseKey(course.code), name: course.name.replace(/\s*\(\s*\*\s*\)\s*$/, "").trim(), credits: course.credits, retake: graded.has(courseKey(course.code)), skills: [] }));
+    .map((course) => ({
+      code: courseKey(course.code), name: course.name.replace(/\s*\(\s*\*\s*\)\s*$/, "").trim(), credits: course.credits, retake: graded.has(courseKey(course.code)),
+      conditionOnly: starred.test(course.name) || CONDITION_PLAN_CODE.test(course.code.trim()), skills: [],
+    }));
 }
 
 /* ------------------------------------------------------------------------ */
@@ -125,11 +133,11 @@ const scoreText = (value: number) => value.toFixed(1).replace(".", ",");
 /**
  * One course of a plan term as the page prints it; a failed option of a choice says what is left instead of "cần học lại".
  * A failed course says only what to do (user 2026-10-30: "Không cần ghi rõ ✗ VT (vắng thi), cần học lại ghi cần học lại
- * được rồi"); its grade stays on the transcript page.
+ * được rồi"); its grade stays on the transcript page. A course not taken is late only in a term before the one being studied
+ * (comp-calc-v19, user 2026-11-04); in the term being studied it is that term's plan, "chưa đăng ký".
  */
 export function courseRow(course: CourseFact, term: string, studyTerm: string | null, failedNote = "cần học lại"): OverviewTermCourse {
   const base = { code: course.code, name: course.name, credits: course.credits };
-  const due = studyTerm !== null && term <= studyTerm;
   const letter = course.letter?.trim().toUpperCase() || null;
   switch (course.state) {
     case "passed": return { ...base, state: "passed", detail: letter ?? (course.score10 !== null ? scoreText(course.score10) : "Đạt") };
@@ -137,26 +145,71 @@ export function courseRow(course: CourseFact, term: string, studyTerm: string | 
     case "graded_unknown": return { ...base, state: "passed", detail: "chưa rõ kết quả, đối chiếu bảng điểm" };
     case "in_progress": return { ...base, state: "running", detail: course.attempts > 1 ? "đang học lại" : "đang học" };
     case "failed": return { ...base, state: "failed", detail: failedNote };
-    default: return due ? { ...base, state: "late", detail: "chưa học, trễ so với kế hoạch" } : { ...base, state: "planned", detail: "dự kiến" };
+    default:
+      if (studyTerm !== null && term < studyTerm) return { ...base, state: "late", detail: "chưa học, trễ so với kế hoạch" };
+      return { ...base, state: "planned", detail: term === studyTerm ? "chưa đăng ký" : "dự kiến" };
   }
 }
 
 type PlanView = { terms: OverviewProgressTerm[]; late: { code: string; name: string; term: string; credits: number }[] };
 
+/** A plan row of a condition-only (*) course: a GDTC/GDQP code (K26–K28 DGT/DQP too), a BBKTL type or "(*)" in its name. */
+const CONDITION_PLAN_CODE = /^(?:71NAD|71PE|DQP|DGT)/i;
+const conditionPlanRow = (row: { code: string; name: string; type: string }) =>
+  CONDITION_PLAN_CODE.test(row.code.trim()) || row.type.trim().toUpperCase() === "BBKTL" || /\(\s*\*\s*\)/.test(row.name);
+
+/**
+ * "Tín chỉ học kỳ theo kế hoạch" exactly as Kế hoạch đào tạo prints it (apps/web/src/StudentPlans.tsx termCreditsText and
+ * student-plan-results.ts planTermCredits): the plan's own figure of the term, else the credits of the rows every student
+ * takes (outside the term's choice, specialty and note sections, condition-only rows left out). null when the plan has no
+ * figure and the term also offers rows to choose (the plan page then says the sum leaves them out) or a row has no credits.
+ */
+export function planTermCredits(plan: Pick<PlanData, "items" | "sections" | "terms">, termCode: string): number | null {
+  const own = plan.terms.find((term) => term.code === termCode)?.sourceCredits;
+  if (own !== null && own !== undefined && Number.isFinite(own)) return own;
+  const sectionIds = new Set(plan.sections.map((section) => section.id));
+  const counted = plan.items.filter((item) => item.termCode === termCode && !conditionPlanRow(item));
+  const optional = (item: PlanData["items"][number]) => Boolean(item.sectionId) && sectionIds.has(item.sectionId);
+  const core = counted.filter((item) => !optional(item));
+  if (!core.length || core.some((item) => item.credits === null) || counted.some(optional)) return null;
+  return core.reduce((sum, item) => sum + item.credits!, 0);
+}
+
+/**
+ * What the plan view adds to the terms: the engine's progress (its credit groups), the courses registered this term, the
+ * thesis group's courses off the advised way (excludedThesisReplacements) and the elective groups Xét tốt nghiệp passes.
+ */
+export type PlanViewExtras = {
+  progress?: Pick<PlanProgressResult, "late" | "current" | "next" | "nextTerm"> | null;
+  running?: readonly Omit<OverviewRunningCourse, "skills">[];
+  excluded?: ReadonlySet<string>;
+  doneGroups?: ReadonlySet<string>;
+};
+const GROUP_LABEL = /^Nhóm tự chọn (\S+):/;
+
 /**
  * The training plan term by term for the student's specialty, with the rules of the plan progress (plan-progress.ts):
  * courses outside the curriculum, of another specialty, GDTC slots and condition-only courses are left out; a "Chọn k
- * trong n" section counts k of its options (min credits) and lists the options taken, plus what is still to choose;
- * an elective outside such a section is listed once taken (its group is checked by the graduation conditions); sections
- * that never count ("Không tính vào tích lũy") are skipped.
+ * trong n" section lists the options taken, plus what is still to choose; an elective outside such a section is listed once
+ * taken, and its group, while short, as the engine's credit choice ("Nhóm tự chọn TC406: chọn 6 tín chỉ") in the term the
+ * engine puts it; sections that never count ("Không tính vào tích lũy") are skipped. Since comp-calc-v19 (user 2026-11-04):
+ * - plannedCredits is the term's figure on Kế hoạch đào tạo (planTermCredits; Tổng quan said 14, 17 and 0 where that page
+ *   said 17, 11 and 6), else, when that page has none, the student's own: the term's courses, the options chosen in its
+ *   choices (the cheapest still open for the rest) and the engine's credit groups of the term;
+ * - a course is late only in a term before the one being studied; the term being studied lists, besides its plan ("chưa đăng
+ *   ký"), every course registered in it (condition-only ones left out), so its runningCredits are "Đang học";
+ * - lateCredits of a term: what of it is late or failed, the "còn nợ" of its chip.
  */
-export function planTermsView(plan: Pick<PlanData, "items" | "sections" | "terms">, courses: readonly CourseFact[], studyTerm: string | null): PlanView {
+export function planTermsView(plan: Pick<PlanData, "items" | "sections" | "terms">, courses: readonly CourseFact[], studyTerm: string | null, extras: PlanViewExtras = {}): PlanView {
   const byCode = new Map(courses.map((course) => [courseKey(course.code), course]));
   const sections = new Map(plan.sections.map((section) => [section.id, section]));
   const items = [...plan.items].sort((a, b) => (a.termCode < b.termCode ? -1 : a.termCode > b.termCode ? 1 : a.position - b.position));
   type Slot = { label: string; need: number; options: CourseFact[] };
   const plain = new Map<string, CourseFact[]>();
   const slots = new Map<string, Map<string, Slot>>();
+  // Electives outside a "Chọn k" section not taken yet (TC406's courses): their group is the engine's credit choice; a term
+  // the engine says nothing of (after the next one) lists them as the plan does, the thesis way not advised left out.
+  const alternatives = new Map<string, CourseFact[]>();
   const seen = new Set<string>();
   for (const item of items) {
     if (physicalEducationSlot(item.name) !== null) continue;
@@ -173,7 +226,13 @@ export function planTermsView(plan: Pick<PlanData, "items" | "sections" | "terms
       slots.set(item.termCode, termSlots);
       continue;
     }
-    if (course.electiveGroup !== null && course.state === "not_taken") continue;
+    if (course.electiveGroup !== null && course.state === "not_taken") {
+      if (!extras.excluded?.has(course.code) && !extras.doneGroups?.has(course.electiveGroup)
+        && !(alternatives.get(item.termCode) ?? []).some((option) => option.code === course.code)) {
+        alternatives.set(item.termCode, [...(alternatives.get(item.termCode) ?? []), course]);
+      }
+      continue;
+    }
     if (seen.has(course.code)) continue;
     seen.add(course.code);
     plain.set(item.termCode, [...(plain.get(item.termCode) ?? []), course]);
@@ -182,18 +241,45 @@ export function planTermsView(plan: Pick<PlanData, "items" | "sections" | "terms
   const termCodes = [...new Set([...plan.terms.map((term) => term.code), ...items.map((item) => item.termCode)])].sort();
   const late: PlanView["late"] = [];
   const passedLike = (course: CourseFact) => course.state === "passed" || course.state === "exempt" || course.state === "graded_unknown";
+  const before = (term: string) => studyTerm !== null && term < studyTerm;
+
+  // The engine's credit groups still short ("Nhóm tự chọn TC406: chọn 6 tín chỉ"), in the term it puts them: late, the term
+  // being studied (its plan, comp-calc-v19) and the next term. A group of condition-only courses is left out like them.
+  const progress = extras.progress ?? null;
+  const conditionGroup = (options: readonly { code: string }[]) => options.length > 0 && options.every((option) => byCode.get(courseKey(option.code))?.conditionOnly === true);
+  const groupRows = new Map<string, OverviewTermCourse[]>();
+  /** Terms whose groups the engine covers: their courses not taken are not listed one by one. */
+  const coveredGroups = new Map<string, Set<string>>();
+  const addGroup = (term: string | null, label: string, credits: number, state: OverviewCourseState, detail: string) => {
+    if (!term || credits <= 0) return;
+    groupRows.set(term, [...(groupRows.get(term) ?? []), { code: "", name: label, credits, state, detail }]);
+    const code = GROUP_LABEL.exec(label)?.[1];
+    if (code) coveredGroups.set(term, new Set([...(coveredGroups.get(term) ?? []), code]));
+  };
+  for (const entry of progress?.late ?? []) {
+    if (entry.kind === "choice" && entry.unit === "credit" && !conditionGroup(entry.options)) addGroup(entry.termCode, entry.label, entry.missingCredits, "late", "chưa chọn đủ, trễ so với kế hoạch");
+  }
+  for (const entry of progress?.current ?? []) {
+    if (entry.kind === "choice" && entry.unit === "credit" && !conditionGroup(entry.options)) addGroup(entry.termCode, entry.label, entry.missingCredits, "planned", "chưa đăng ký");
+  }
+  for (const entry of progress?.next ?? []) {
+    if (entry.kind === "choice" && entry.unit === "credit" && !conditionGroup(entry.options)) addGroup(progress?.nextTerm ?? null, entry.label, entry.remaining, "planned", "chọn trong các môn của nhóm");
+  }
+  // Every course registered in the term being studied, condition-only ones left out like everywhere in this view.
+  const registered = (extras.running ?? []).filter((course) => !course.conditionOnly);
+
   // As the plan progress allocates them: one course fills one choice only, earliest first; a course the plan also lists
   // on its own still fills a choice, but is not listed or counted twice. A failed option is listed in its first choice only.
   const allocated = new Set<string>();
   const failedListed = new Set<string>();
   const terms = termCodes.map((term): OverviewProgressTerm => {
     const rows = (plain.get(term) ?? []).map((course) => courseRow(course, term, studyTerm));
-    let plannedCredits = rows.reduce((sum, row) => sum + row.credits, 0);
+    let ownCredits = rows.reduce((sum, row) => sum + row.credits, 0);
     let passedCredits = rows.filter((row) => row.state === "passed").reduce((sum, row) => sum + row.credits, 0);
+    let lateCredits = before(term) ? rows.filter((row) => row.state === "late" || row.state === "failed").reduce((sum, row) => sum + row.credits, 0) : 0;
     let complete = rows.every((row) => row.state === "passed");
     for (const row of rows) if (row.state === "late") late.push({ code: row.code, name: row.name, term, credits: row.credits });
     for (const slot of slots.get(term)?.values() ?? []) {
-      const unit = Math.min(...slot.options.map((option) => option.credits));
       const usable = slot.options.filter((option) => option.state !== "not_taken" && !allocated.has(option.code));
       const elsewhere = usable.filter((option) => seen.has(option.code) && (passedLike(option) || option.state === "in_progress"))
         .slice(0, Math.min(slot.need, Math.max(slot.options.length, 1)));
@@ -210,22 +296,67 @@ export function planTermsView(plan: Pick<PlanData, "items" | "sections" | "terms
       const failedNote = missing > 0 ? "học lại hoặc chọn môn khác" : "đã chọn môn khác";
       rows.push(...[...passed, ...running].map((option) => courseRow(option, term, studyTerm)),
         ...failedOwn.map((option) => courseRow(option, term, studyTerm, failedNote)));
-      plannedCredits += need * unit;
+      // The courses chosen, and for the ones still to choose the cheapest options still open, as the engine counts them.
+      const missingCredits = missing > 0 ? choiceCreditRange(slot.options.filter((option) => !allocated.has(option.code)), missing).low : 0;
+      ownCredits += [...passed, ...running].reduce((sum, option) => sum + option.credits, 0) + missingCredits;
       passedCredits += passed.reduce((sum, option) => sum + option.credits, 0);
       if (passed.length < need) complete = false;
       if (missing > 0) {
-        const due = studyTerm !== null && term <= studyTerm;
+        const credits = missingCredits;
         rows.push({
-          code: "", name: choiceLabel(slot.label, slot.need, slot.options.length), credits: missing * unit, state: due ? "late" : "planned",
-          detail: due ? "chưa chọn, trễ so với kế hoạch" : "chọn trong các môn của nhóm",
+          code: "", name: choiceLabel(slot.label, slot.need, slot.options.length), credits,
+          ...(before(term) ? { state: "late" as const, detail: "chưa chọn, trễ so với kế hoạch" }
+            : term === studyTerm ? { state: "planned" as const, detail: "chưa chọn" } : { state: "planned" as const, detail: "chọn trong các môn của nhóm" }),
+        });
+        if (before(term)) lateCredits += credits;
+      }
+    }
+    for (const row of groupRows.get(term) ?? []) {
+      rows.push(row);
+      ownCredits += row.credits;
+      complete = false;
+      if (row.state === "late") lateCredits += row.credits;
+    }
+    // A term after the one being studied: the group's courses the plan puts there, when the engine says nothing of it.
+    if (studyTerm !== null && term > studyTerm) {
+      for (const course of alternatives.get(term) ?? []) {
+        if (course.electiveGroup && coveredGroups.get(term)?.has(course.electiveGroup)) continue;
+        rows.push({ code: course.code, name: course.name, credits: course.credits, state: "planned", detail: `dự kiến · tự chọn ${course.electiveGroup}` });
+      }
+    }
+    if (term === studyTerm) {
+      for (const course of registered) {
+        if (rows.some((row) => row.code && courseKey(row.code) === courseKey(course.code))) continue;
+        const planned = byCode.get(courseKey(course.code))?.plannedTerm ?? null;
+        rows.push({
+          code: course.code, name: course.name, credits: course.credits, state: "running",
+          detail: `${course.retake ? "đang học lại" : "đang học"}${planned && planned !== term ? ` · kế hoạch ${termName(planned)}` : ""}`,
         });
       }
     }
+    const runningCredits = rows.filter((row) => row.state === "running").reduce((sum, row) => sum + row.credits, 0);
     const state = studyTerm === null ? "planned" : term < studyTerm ? (complete ? "done" : "late") : term === studyTerm ? "running" : "planned";
-    return { term: termRef(term), state, passedCredits, plannedCredits, courses: rows };
+    return { term: termRef(term), state, passedCredits, plannedCredits: planTermCredits(plan, term) ?? ownCredits, lateCredits, runningCredits, courses: rows };
   });
   return { terms, late };
 }
+
+/**
+ * The courses registered without grades, in the term being studied (in the CTĐT or not); conditionOnly: a GDTC/GDQP course
+ * (the engine's flag, else the condition codes or a GDTC/GDQP code), listed but counted in no credit total (comp-calc-v19).
+ */
+export function registeredCourses(engine: Engine, conditionCodes: ReadonlySet<string> = new Set()): Omit<OverviewRunningCourse, "skills">[] {
+  const condition = (code: string) => isConditionOnly(code, conditionCodes) || CONDITION_PLAN_CODE.test(code.trim());
+  const inCurriculum = engine.courses.filter((course) => course.state === "in_progress")
+    .map((course) => ({ code: course.code, name: course.name, credits: course.credits, retake: course.attempts > 1, conditionOnly: course.conditionOnly || condition(course.code) }));
+  const outside = engine.transcript.notInCurriculum.filter((course) => course.state === "in_progress")
+    .map((course) => ({ code: course.code, name: course.name ?? course.code, credits: course.credits, retake: false, conditionOnly: condition(course.code) }));
+  return [...inCurriculum, ...outside].sort((a, b) => a.name.localeCompare(b.name, "vi"));
+}
+
+/** Credits of the courses that count (condition-only ones left out). */
+const countedCredits = (courses: readonly { credits: number; conditionOnly: boolean }[]) =>
+  courses.filter((course) => !course.conditionOnly).reduce((sum, course) => sum + course.credits, 0);
 
 type ProgressArgs = {
   engine: Engine;
@@ -235,24 +366,38 @@ type ProgressArgs = {
   totalCredits: number | null;
   /** The transcript's printed accumulated credits. */
   printedCredits: number | null;
+  /** The courses registered in the term being studied ("Học kỳ này"); from the engine when not given. */
+  running?: readonly Omit<OverviewRunningCourse, "skills">[];
 };
 
-/** The progress block: the credit totals and the plan terms (empty, blocked "plan_unavailable", without a plan). */
-export function progressOverview({ engine, plan, studyTerm, totalCredits, printedCredits }: ProgressArgs): { progress: OverviewProgress; late: PlanView["late"] } {
-  const view = plan ? planTermsView(plan, engine.courses, studyTerm) : { terms: [], late: [] };
+/**
+ * The progress block: the credit totals and the plan terms (empty, blocked "plan_unavailable", without a plan). The bar adds
+ * up to the program (user 2026-11-04: 109 + 5 + 20 = 134 on a bar of 126, "Còn lại 0 TC" under "Còn lại sau kỳ này 12 TC"):
+ * passed + running + late + rest = total. remaining (everything after this term) = total − passed − running; late = the
+ * engine's late credits (comp-calc-v19: terms before the one being studied, no condition-only credits), never more than
+ * remaining (passed credits outside the plan's courses leave less to do than the plan lists); rest = remaining − late.
+ */
+export function progressOverview({ engine, plan, studyTerm, totalCredits, printedCredits, running = registeredCourses(engine) }: ProgressArgs): { progress: OverviewProgress; late: PlanView["late"] } {
+  const doneGroups = new Set((engine.graduation?.groups ?? []).filter((group) => group.kind === "elective" && group.status === "pass" && group.curriculumElectiveCode)
+    .map((group) => group.curriculumElectiveCode!));
+  const view = plan ? planTermsView(plan, engine.courses, studyTerm, {
+    progress: engine.progress, running, excluded: new Set(engine.excludedThesisReplacements ?? []), doneGroups,
+  }) : { terms: [], late: [] };
   const passedCredits = printedCredits ?? engine.transcript.creditCheck.computed;
-  const runningCredits = engine.courses.filter((course) => course.state === "in_progress" && !course.conditionOnly).reduce((sum, course) => sum + course.credits, 0)
-    + engine.transcript.notInCurriculum.filter((course) => course.state === "in_progress").reduce((sum, course) => sum + course.credits, 0);
-  const lateCredits = engine.progress?.lateCredits ?? view.late.reduce((sum, course) => sum + course.credits, 0);
+  // "Đang học" is "Học kỳ này": every course registered, condition-only ones left out.
+  const runningCredits = countedCredits(running);
   const remainingCredits = totalCredits === null ? null : Math.max(0, totalCredits - passedCredits - runningCredits);
+  const engineLate = engine.progress?.lateCredits ?? view.late.reduce((sum, course) => sum + course.credits, 0);
+  const lateCredits = remainingCredits === null ? engineLate : Math.min(engineLate, remainingCredits);
+  const restCredits = remainingCredits === null ? null : remainingCredits - lateCredits;
   const ahead = view.terms.filter((term) => studyTerm !== null && term.term.code > studyTerm && term.plannedCredits > 0);
   const termsLeft = plan ? ahead.length : null;
-  const creditsPerTerm = remainingCredits === null || termsLeft === null ? null
-    : termsLeft > 0 ? Math.ceil(remainingCredits / termsLeft) : remainingCredits > 0 ? remainingCredits : null;
+  // No plan term left: no pace ("0 kỳ · ~12 TC/kỳ" before); the page says the plan's terms are over and what is left.
+  const creditsPerTerm = remainingCredits === null || termsLeft === null || termsLeft === 0 ? null : Math.ceil(remainingCredits / termsLeft);
   return {
     progress: {
       blocked: plan ? null : "plan_unavailable",
-      totalCredits, passedCredits, runningCredits, lateCredits, remainingCredits, termsLeft, creditsPerTerm,
+      totalCredits, passedCredits, runningCredits, lateCredits, restCredits, remainingCredits, termsLeft, creditsPerTerm,
       planMaxPerTerm: ahead.length ? Math.max(...ahead.map((term) => term.plannedCredits)) : null,
       terms: view.terms,
     },
@@ -415,13 +560,26 @@ export function plannedTermLoad(planner: PlannerFacts, plan: StudyPlanData, term
   return { credits, status };
 }
 
+/** What the roadmap block reads beside the roadmap itself. */
+export type RoadmapContext = {
+  /** The student's newest competency assessment (newestAssessmentInfo), what Lộ trình AI compares the roadmap with; null: none. */
+  newestAssessmentId?: string | null;
+  /** The term being studied: a course the roadmap calls late but planned for this term or later is not late (comp-calc-v19). */
+  studyTerm?: string | null;
+};
+
 /**
  * The newest AI roadmap: the courses it recommends (retakes and the AI's picks first, as Lộ trình AI đề xuất lists them;
  * none while it is being written), the skills it picked, the first month of its plan that has a text, the saved Kế hoạch
  * học kỳ of its term checked as the planner checks it, and the planner's credit limits per term. Without the planner's
- * facts the saved term's credits are counted from the curriculum and not checked.
+ * facts the saved term's credits are counted from the curriculum and not checked. stale and ended are the two notes of the
+ * Lộ trình AI tab (user review 2026-11-04: the card said "Đã có" while the tab warned): made from an assessment other than the
+ * newest one (roadmap/router.ts), and its window over.
  */
-export function roadmapOverview(row: RoadmapRow | null, saved: StudyPlanData | null, credits: ReadonlyMap<string, number>, now: Date, planner: PlannerFacts | null = null): OverviewRoadmap | null {
+export function roadmapOverview(
+  row: RoadmapRow | null, saved: StudyPlanData | null, credits: ReadonlyMap<string, number>, now: Date, planner: PlannerFacts | null = null,
+  context: RoadmapContext = {},
+): OverviewRoadmap | null {
   if (!row) return null;
   const status = ROADMAP_STATUS[row.status];
   const term = row.facts.window.term ?? null;
@@ -431,15 +589,19 @@ export function roadmapOverview(row: RoadmapRow | null, saved: StudyPlanData | n
     if (courses.length < MAX_ROADMAP_COURSES && !courses.some((course) => course.code === code)) courses.push({ code, name, credits: credit ?? credits.get(courseKey(code)) ?? 0, reason });
   };
   if (status === "completed") {
-    const studyReason = (source: string, label: string | null) =>
-      source === "late" ? "Trễ kế hoạch" : source === "choice" ? (tcCode(label) ? `Tự chọn ${tcCode(label)}` : "Tự chọn") : "Theo kế hoạch";
+    // Late is a course of a term before the one being studied (comp-calc-v19): one of the term being studied that the
+    // roadmap lists as late (by its own term it will be) reads as the plan, like the progress card beside it.
+    const studyTerm = context.studyTerm ?? null;
+    const studyReason = (item: { source: string; choiceLabel: string | null; termCode: string | null }) =>
+      item.source === "late" ? (studyTerm && item.termCode && item.termCode >= studyTerm ? "Theo kế hoạch" : "Trễ kế hoạch")
+        : item.source === "choice" ? (tcCode(item.choiceLabel) ? `Tự chọn ${tcCode(item.choiceLabel)}` : "Tự chọn") : "Theo kế hoạch";
     // Retakes first (they are required), then the AI's picks in its order, then the other facts; a passed course to
     // improve only when the AI picked it.
     const study = view.study.filter((item) => item.source !== "running");
     for (const item of view.improve) if (item.action === "retake") add(item.code, item.name, item.credits, "Học lại");
-    for (const item of study) if (item.advice !== null) add(item.code, item.name, item.credits, studyReason(item.source, item.choiceLabel));
+    for (const item of study) if (item.advice !== null) add(item.code, item.name, item.credits, studyReason(item));
     for (const item of view.improve) if (item.advice !== null && item.action === "improve") add(item.code, item.name, item.credits, "Học cải thiện");
-    for (const item of study) add(item.code, item.name, item.credits, studyReason(item.source, item.choiceLabel));
+    for (const item of study) add(item.code, item.name, item.credits, studyReason(item));
   }
   const picked = view.skills.filter((skill) => skill.picked);
   const month = status === "completed" ? view.months.find((entry) => entry.focus || entry.tasks.length) : undefined;
@@ -462,6 +624,8 @@ export function roadmapOverview(row: RoadmapRow | null, saved: StudyPlanData | n
     firstMonth: month && monthText ? { label: `Tháng ${Number(month.start.slice(5, 7))}/${month.start.slice(0, 4)}`, text: monthText } : null,
     plan,
     limits: planner?.limits ? { min: planner.limits.min, max: planner.limits.max } : null,
+    stale: Boolean(context.newestAssessmentId && row.assessmentId !== context.newestAssessmentId),
+    ended: view.ended,
   };
 }
 
@@ -490,11 +654,9 @@ export function runningOverview(engine: Engine, inputs: AssessmentInputs): Overv
   const skillNames = new Map(inputs.weights.skills.map((skill) => [skill.skillId, skill.name]));
   const skillsOf = (code: string) => [...new Set(inputs.weights.links.filter((link) => courseKey(link.courseCode) === courseKey(code))
     .sort((a, b) => b.weight - a.weight).map((link) => skillNames.get(link.skillId)).filter((name): name is string => Boolean(name)))];
-  const inCurriculum = engine.courses.filter((course) => course.state === "in_progress")
-    .map((course) => ({ code: course.code, name: course.name, credits: course.credits, retake: course.attempts > 1, skills: skillsOf(course.code) }));
-  const outside = engine.transcript.notInCurriculum.filter((course) => course.state === "in_progress")
-    .map((course) => ({ code: course.code, name: course.name ?? course.code, credits: course.credits, retake: false, skills: [] }));
-  return [...inCurriculum, ...outside].sort((a, b) => a.name.localeCompare(b.name, "vi"));
+  // The engine's condition codes (the standard's, else the CTĐT's GDTC/GDQP block) also mark a course outside the CTĐT.
+  const conditions = conditionOnlyCodes(inputs.graduation.standard?.data ?? null, inputs.curriculum.courses);
+  return registeredCourses(engine, conditions).map((course) => ({ ...course, skills: skillsOf(course.code) }));
 }
 
 /* ------------------------------------------------------------------------ */
@@ -539,22 +701,24 @@ export async function readOverview(db: PoolClient, userId: string, now: Date = n
   const saved = await readSavedPlan(db, userId);
   const printedCredits = transcript ? printedCumulativeCredits(transcript) : null;
   const totalCredits = graduationData.evaluation?.credits?.required ?? inputs?.plan.revision?.data.totalCredits ?? null;
+  // "Học kỳ này": the courses registered in the term being studied; "Đang học" and its term in the progress card count them.
+  const running = engine && inputs ? runningOverview(engine, inputs) : transcript ? transcriptRunning(transcript, studyTerm) : [];
 
   let progress: OverviewProgress | null = null;
   let late: { code: string; name: string; term: string }[] = [];
   if (transcript && engine && inputs) {
     const built = progressOverview({
-      engine, plan: inputs.plan.revision?.data ?? null, studyTerm,
+      engine, plan: inputs.plan.revision?.data ?? null, studyTerm, running,
       totalCredits, printedCredits: printedCredits === null || Number.isNaN(printedCredits) ? null : printedCredits,
     });
     progress = built.progress;
     late = built.late;
   } else if (transcript) {
-    const running = transcriptRunning(transcript, studyTerm).reduce((sum, course) => sum + course.credits, 0);
+    const runningCredits = countedCredits(running);
     const passed = printedCredits === null || Number.isNaN(printedCredits) ? 0 : printedCredits;
+    const remainingCredits = totalCredits === null ? null : Math.max(0, totalCredits - passed - runningCredits);
     progress = {
-      blocked, totalCredits, passedCredits: passed, runningCredits: running, lateCredits: 0,
-      remainingCredits: totalCredits === null ? null : Math.max(0, totalCredits - passed - running),
+      blocked, totalCredits, passedCredits: passed, runningCredits, lateCredits: 0, restCredits: remainingCredits, remainingCredits,
       termsLeft: null, creditsPerTerm: null, planMaxPerTerm: null, terms: [],
     };
   }
@@ -568,8 +732,10 @@ export async function readOverview(db: PoolClient, userId: string, now: Date = n
 
   const credits = new Map<string, number>((inputs?.curriculum.courses ?? []).map((course) => [courseKey(course.code), course.credits]));
   const roadmapRow = await readNewestRoadmap(db, userId);
-  const roadmap = roadmapOverview(roadmapRow, saved, credits, now, roadmapRow && options.plannerFacts !== false ? await readPlannerFacts(db, userId, now) : null);
-  const running = engine && inputs ? runningOverview(engine, inputs) : transcript ? transcriptRunning(transcript, studyTerm) : [];
+  // The staleness rule of the Lộ trình AI tab (roadmap/router.ts): made from an assessment other than the newest one.
+  const newestAssessmentId = roadmapRow ? (await newestAssessmentInfo(db, userId))?.id ?? null : null;
+  const roadmap = roadmapOverview(roadmapRow, saved, credits, now, roadmapRow && options.plannerFacts !== false ? await readPlannerFacts(db, userId, now) : null,
+    { newestAssessmentId, studyTerm });
 
   // "Cần chú ý"
   const failed = engine
@@ -581,8 +747,9 @@ export async function readOverview(db: PoolClient, userId: string, now: Date = n
       }))
     : [];
   const failedCodes = new Set(failed.map((course) => course.code));
-  const electives: WarningInput["electives"] = (engine?.progress?.late ?? []).flatMap((entry) => entry.kind === "choice"
-    ? [{ label: entry.label, code: tcCode(entry.label), term: entry.termCode, unit: entry.unit, missing: entry.missing, missingCredits: entry.missingCredits }]
+  // Choices of the terms before the one being studied (comp-calc-v19), their shortfall in the unit of the requirement.
+  const electives: WarningInput["electives"] = (engine?.progress?.late ?? []).flatMap((entry) => entry.kind === "choice" && !entry.conditionOnly
+    ? [{ label: entry.label, code: tcCode(entry.label), term: entry.termCode, unit: entry.unit, missing: entry.missing, missingCredits: entry.missingCredits, shortfall: shortfallText(entry) }]
     : []);
   const gpa = graduationData.evaluation?.gpa;
   const warnings = overviewWarnings({

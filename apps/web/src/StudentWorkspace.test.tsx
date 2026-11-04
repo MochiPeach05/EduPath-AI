@@ -53,6 +53,20 @@ describe("pages in the address", () => {
     expect(pageFromHash("#khong-co-trang")).toBeNull();
   });
 
+  it("opens Lộ trình học tập with a tab after a slash, and no other page with one", () => {
+    expect(pageFromHash("#roadmap")).toBe("roadmap");
+    expect(pageFromHash("#roadmap/tien-do")).toBe("roadmap");
+    expect(pageFromHash("#roadmap/lo-trinh-ai")).toBe("roadmap");
+    expect(pageFromHash("#roadmap/ke-hoach-hoc-ky")).toBe("roadmap");
+    expect(pageFromHash("#roadmap/")).toBeNull();
+    expect(pageFromHash("#roadmap/ke-hoach/khac")).toBeNull();
+    expect(pageFromHash("#plans/ke-hoach-hoc-ky")).toBeNull();
+  });
+
+  it("shows Lộ trình học tập for the address of one of its tabs", () => {
+    expect(render("#roadmap/ke-hoach-hoc-ky")).toContain('<h1 tabindex="-1">Lộ trình học tập</h1>');
+  });
+
   it("shows the overview for an unknown hash", () => {
     expect(render("#khong-co-trang")).toContain('<h1 tabindex="-1">Tổng quan</h1>');
   });

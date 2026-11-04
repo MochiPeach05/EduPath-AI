@@ -799,8 +799,10 @@ function assess(inputs: AssessmentInputs): Assessment {
   /* ---- 9. training-plan progress (§7.8) ---- */
   let progress: AssessmentResult["progress"] = null;
   if (planRevision) {
+    // v19: condition-only courses stay listed but count in no credit total of the progress.
     const planCourses = new Map<string, PlanCourseInfo>([...table.values()].map((row) => [row.code, {
       code: row.code, name: row.name, credits: row.credits, state: row.state, applicable: row.applicable, electiveCode: row.electiveCode,
+      conditionOnly: row.conditionOnly,
     }]));
     const peGroups = Object.values(planRevision.physicalEducationGroups ?? {}).some((codes) => codes.length)
       ? planRevision.physicalEducationGroups : physicalEducationGroupsFor(curriculumCourses);

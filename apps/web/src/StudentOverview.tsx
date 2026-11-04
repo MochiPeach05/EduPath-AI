@@ -120,11 +120,69 @@ export function defaultTermCode(terms: readonly ProgressTerm[]): string | null {
   return (terms.find((term) => term.state === "late") ?? terms.find((term) => term.state === "running")
     ?? [...terms].reverse().find((term) => term.state === "done") ?? terms[0])?.term.code ?? null;
 }
-/** What a term chip says under the credits. */
+/** Credits the way every number is written: the decimal comma, rounded down to the tenth (109 → "109", 1.5 → "1,5"). */
+export const creditText = (value: number) => decimalText(Math.floor(value * 10 + 1e-9) / 10);
+/**
+ * What a term chip says (user review 2026-11-04): the plan's credits of the term as Kế hoạch đào tạo prints them, and its
+ * state; the term being studied says what is registered in it, the figure of "Học kỳ này"; a late term what it still owes.
+ * No "passed/planned" ratio: the plan's figure and the student's courses are two sources (a GDQP course in one, not the other).
+ */
 export function termChip(term: ProgressTerm): { main: string; sub: string } {
-  if (term.state === "running") return { main: `${term.plannedCredits} TC`, sub: "đang học" };
-  if (term.state === "planned") return term.plannedCredits ? { main: `${term.plannedCredits} TC`, sub: "dự kiến" } : { main: "—", sub: "không có" };
-  return { main: `${term.passedCredits}/${term.plannedCredits}`, sub: term.state === "late" ? "còn nợ" : "đủ" };
+  const planned = term.plannedCredits > 0 ? `${creditText(term.plannedCredits)} TC` : "—";
+  // Nothing registered yet (between two terms the latest graded one is "the term being studied"): its plan, not "0 TC đang học".
+  if (term.state === "running") {
+    const running = term.runningCredits ?? term.plannedCredits;
+    return running > 0 ? { main: `${creditText(running)} TC`, sub: "đang học" } : { main: planned, sub: "học kỳ này" };
+  }
+  if (term.state === "planned") return term.plannedCredits ? { main: planned, sub: "dự kiến" } : { main: "—", sub: "không có" };
+  if (term.state === "done") return term.plannedCredits || term.courses.length ? { main: planned, sub: "đủ" } : { main: "—", sub: "không có" };
+  const owed = term.lateCredits;
+  return { main: planned, sub: owed === undefined ? "còn nợ" : owed > 0 ? `còn nợ ${creditText(owed)} TC` : "đang học bù" };
+}
+/** The line above a term's courses: the plan's credits, then what is being studied or still owed in it. */
+export function termFacts(term: ProgressTerm): string {
+  const parts = [term.plannedCredits > 0 ? `Kế hoạch đào tạo: ${creditText(term.plannedCredits)} TC` : "Kế hoạch đào tạo chưa ghi tín chỉ của học kỳ này"];
+  if (term.state === "running" && term.runningCredits) parts.push(`đang học ${creditText(term.runningCredits)} TC`);
+  if (term.state === "late" && term.lateCredits) parts.push(`còn nợ ${creditText(term.lateCredits)} TC`);
+  return parts.join(" · ");
+}
+
+type ProgressData = NonNullable<OverviewResponse["progress"]>;
+/**
+ * The four parts of the bar, the same numbers in the boxes and the legend (user review 2026-11-04: 109 + 5 + 20 = 134 on a
+ * bar of 126, "Còn lại 0 TC" under a box "Còn lại sau kỳ này 12 TC"): passed + running + late + rest = total. rest is the
+ * API's (remaining − late); from an older API, remaining − late here.
+ */
+export function progressParts(progress: ProgressData): { passed: number; running: number; late: number; rest: number | null } {
+  const remaining = progress.remainingCredits;
+  const late = remaining === null ? progress.lateCredits : Math.min(progress.lateCredits, remaining);
+  const rest = progress.restCredits !== undefined ? progress.restCredits : remaining === null ? null : Math.max(0, remaining - late);
+  return { passed: progress.passedCredits, running: progress.runningCredits, late, rest };
+}
+/**
+ * The pace after this term in plain words: the credits left (late included) over the plan's terms left; when the plan has no
+ * term left, that it is over and how much is left (it read "0 kỳ · ~12 TC/kỳ"). null without the programme's total.
+ */
+export function paceText(progress: ProgressData): string | null {
+  const left = progress.remainingCredits;
+  if (left === null) return null;
+  if (left <= 0) return "Đạt các môn đang học là bạn đủ số tín chỉ của chương trình.";
+  if (progress.termsLeft === null) return `Sau học kỳ này bạn còn ${creditText(left)} TC cần học.`;
+  if (progress.termsLeft === 0) return `Kế hoạch đào tạo không còn học kỳ nào sau học kỳ này, nhưng bạn còn ${creditText(left)} TC cần học.`;
+  const perTerm = progress.creditsPerTerm ?? Math.ceil(left / progress.termsLeft);
+  return `Sau học kỳ này còn ${creditText(left)} TC cho ${progress.termsLeft} học kỳ của kế hoạch, khoảng ${creditText(perTerm)} TC mỗi kỳ.`;
+}
+
+type RoadmapData = NonNullable<OverviewResponse["roadmap"]>;
+/**
+ * Why a written roadmap is out of date, by the Lộ trình AI tab's two notes (user review 2026-11-04: the card said "Đã có"
+ * while the tab warned): made before the newest Đánh giá năng lực, or its time is over. null when it is current.
+ */
+export function roadmapOutdated(roadmap: RoadmapData | null): { short: string; text: string } | null {
+  if (!roadmap || roadmap.status !== "completed") return null;
+  if (roadmap.stale) return { short: "Soạn trước lần đánh giá mới nhất", text: "Kết quả Đánh giá năng lực của bạn đã thay đổi sau khi lộ trình này được soạn. Bấm Tạo lại ở Lộ trình học tập để cập nhật theo kết quả mới." };
+  if (roadmap.ended) return { short: "Đã hết thời gian", text: "Lộ trình này đã hết thời gian. Bấm Tạo lại ở Lộ trình học tập để soạn lộ trình cho học kỳ tiếp theo." };
+  return null;
 }
 
 /** A warning's text with its strong parts marked (each first occurrence, left to right, never overlapping). */
@@ -215,7 +273,8 @@ function Kpis({ data, navigate, openTranscript }: { data: OverviewResponse; navi
   const total = progress?.totalCredits ?? null;
   const passed = progress && !progress.blocked ? progress.passedCredits : transcript?.credits ?? null;
   const change = gpaChangeText(transcript?.gpaChange ?? null);
-  const roadmapValue = !roadmap ? "Chưa có" : roadmap.status === "completed" ? "Đã có" : roadmap.status === "pending" ? "Đang soạn" : "Chưa soạn được";
+  const outdated = roadmapOutdated(roadmap);
+  const roadmapValue = !roadmap ? "Chưa có" : roadmap.status === "completed" ? (outdated ? "Cần tạo lại" : "Đã có") : roadmap.status === "pending" ? "Đang soạn" : "Chưa soạn được";
   return <div className="ov-kpis">
     {tile("gpa", "GPA tích lũy", transcript?.gpa4 != null ? <>{formatDecimal(transcript.gpa4)}<small>/ 4</small></> : "—",
       transcript?.gpa4 != null ? <>{transcript.rank && <Chip meaning={meaningOf(transcript.rank)}>{transcript.rank}</Chip>}{change}
@@ -234,7 +293,7 @@ function Kpis({ data, navigate, openTranscript }: { data: OverviewResponse; navi
       graduation ? <GraduationChip graduation={graduation} /> : "Chưa đối chiếu được",
       () => navigate("graduation"))}
     {tile("roadmap", "Lộ trình AI", roadmapValue,
-      roadmap ? <>{roadmap.term && <Chip tone="ai">{roadmap.term.label}</Chip>}</> : "Tạo ở Lộ trình học tập",
+      roadmap ? <>{roadmap.term && <Chip tone="ai">{roadmap.term.label}</Chip>}{outdated && <Chip meaning="warn">{outdated.short}</Chip>}</> : "Tạo ở Lộ trình học tập",
       () => navigate("roadmap"))}
   </div>;
 }
@@ -248,29 +307,32 @@ function ProgressCard({ data, navigate, openTranscript }: { data: OverviewRespon
   if (!progress) return <section className="sw-panel ov-card" aria-labelledby="ov-progress-title">{head}<Empty text="Chưa có bảng điểm nên chưa tính được tiến độ." action="Import bảng điểm" onAction={openTranscript} /></section>;
   if (progress.blocked) return <section className="sw-panel ov-card" aria-labelledby="ov-progress-title">{head}<Empty text={blockedText(progress.blocked)} action={progress.blocked === "specialty_required" ? "Chọn chuyên ngành" : undefined} onAction={() => navigate("profile")} /></section>;
   const total = progress.totalCredits;
-  const scale = Math.max(total ?? 0, progress.passedCredits + progress.runningCredits + progress.lateCredits, 1);
-  const remaining = progress.remainingCredits;
-  const rest = remaining === null ? null : Math.max(0, remaining - progress.lateCredits);
+  // passed + running + late + rest = total: the boxes, the bar and its legend say the same four numbers (user review 2026-11-04).
+  const { passed, running, late, rest } = progressParts(progress);
+  const scale = Math.max(total ?? 0, passed + running + late + (rest ?? 0), 1);
+  const share = (value: number) => `${(value / scale) * 100}%`;
+  const pace = paceText(progress);
   const opened = progress.terms.find((term) => term.term.code === open) ?? null;
   return <section className="sw-panel ov-card" aria-labelledby="ov-progress-title">
     {head}
     <dl className="ov-metrics">
-      <div><dt>Đã đạt</dt><dd>{progress.passedCredits}<small>TC</small></dd><span>{total ? `${Math.round((progress.passedCredits / total) * 100)}% chương trình` : "—"}</span></div>
-      <div><dt>Đang học</dt><dd>{progress.runningCredits}<small>TC</small></dd><span>{data.running.length} môn học kỳ này</span></div>
-      <div><dt>Trễ kế hoạch</dt><dd>{progress.lateCredits}<small>TC</small></dd><span>{progress.lateCredits ? "cần học bù" : "không có"}</span></div>
-      <div><dt>Còn lại sau kỳ này</dt><dd>{remaining ?? "—"}<small>TC</small></dd><span>{progress.termsLeft !== null ? `${progress.termsLeft} kỳ${progress.creditsPerTerm !== null ? ` · ~${progress.creditsPerTerm} TC/kỳ` : ""}` : "—"}</span></div>
+      <div><dt>Đã đạt</dt><dd>{creditText(passed)}<small>TC</small></dd><span>{total ? `${Math.round((passed / total) * 100)}% chương trình` : "—"}</span></div>
+      <div><dt>Đang học</dt><dd>{creditText(running)}<small>TC</small></dd><span>{data.running.length} môn học kỳ này</span></div>
+      <div><dt>Trễ kế hoạch</dt><dd>{creditText(late)}<small>TC</small></dd><span>{late ? "cần học bù" : "không có"}</span></div>
+      <div><dt>Còn lại</dt><dd>{rest === null ? "—" : creditText(rest)}<small>TC</small></dd><span>{rest === null ? "chưa rõ tổng tín chỉ" : "chưa đến hạn"}</span></div>
     </dl>
     <div className="ov-credits">
-      <div className="ov-bar" role="img" aria-label={`${progress.passedCredits} tín chỉ đã đạt, ${progress.runningCredits} đang học, ${progress.lateCredits} trễ kế hoạch${rest !== null ? `, còn lại ${rest}` : ""}`}>
-        <i className="ov-bar-done" style={{ width: `${(progress.passedCredits / scale) * 100}%` }} />
-        <i className="ov-bar-run" style={{ width: `${(progress.runningCredits / scale) * 100}%` }} />
-        {progress.lateCredits > 0 && <i className="ov-bar-late" style={{ width: `${(progress.lateCredits / scale) * 100}%` }} />}
+      <div className="ov-bar" role="img" aria-label={`${creditText(passed)} tín chỉ đã đạt, ${creditText(running)} đang học, ${creditText(late)} trễ kế hoạch${rest !== null ? `, còn lại ${creditText(rest)}` : ""}`}>
+        <i className="ov-bar-done" style={{ width: share(passed) }} />
+        <i className="ov-bar-run" style={{ width: share(running) }} />
+        {late > 0 && <i className="ov-bar-late" style={{ width: share(late) }} />}
       </div>
       <ul className="ov-legend">
-        <li className="ov-legend-done">Đã đạt {progress.passedCredits} TC</li><li className="ov-legend-run">Đang học {progress.runningCredits} TC</li>
-        {progress.lateCredits > 0 && <li className="ov-legend-late">Trễ kế hoạch {progress.lateCredits} TC</li>}
-        {rest !== null && <li className="ov-legend-rest">Còn lại {rest} TC</li>}
+        <li className="ov-legend-done">Đã đạt {creditText(passed)} TC</li><li className="ov-legend-run">Đang học {creditText(running)} TC</li>
+        {late > 0 && <li className="ov-legend-late">Trễ kế hoạch {creditText(late)} TC</li>}
+        {rest !== null && <li className="ov-legend-rest">Còn lại {creditText(rest)} TC</li>}
       </ul>
+      {pace && <p className="ov-note">{pace}</p>}
     </div>
     {progress.terms.length > 0 && <div className="ov-terms-wrap">
       <p className="ov-sub">Theo từng học kỳ của kế hoạch đào tạo. Bấm một học kỳ để xem môn.</p>
@@ -285,8 +347,9 @@ function ProgressCard({ data, navigate, openTranscript }: { data: OverviewRespon
         })}</div>
       </div>)}</div>
       {opened && <div className="ov-term-detail" aria-live="polite"><b>{opened.term.label}</b>
-        {opened.courses.length ? <ul className="ov-rows">{opened.courses.map((course) => <li key={course.code}>
-          <span>{course.name} · {course.credits} TC</span>
+        <span className="ov-sub">{termFacts(opened)}</span>
+        {opened.courses.length ? <ul className="ov-rows">{opened.courses.map((course) => <li key={course.code || course.name}>
+          <span>{course.name} · {creditText(course.credits)} TC</span>
           <span className={`ov-state ov-state-${course.state}`}>{course.state === "passed" ? "✓ " : ""}{course.detail}</span>
         </li>)}</ul> : <p className="ov-sub">Học kỳ này không có môn nào của chuyên ngành bạn.</p>}
       </div>}
@@ -453,15 +516,19 @@ function GpaChart({ data, openTranscript }: { data: OverviewResponse; openTransc
   </section>;
 }
 
+/**
+ * "Học kỳ này": every course registered. A GDTC/GDQP course says "môn điều kiện" instead of its credits, which count in no
+ * total (comp-calc-v19), so the credits here are "Đang học" of the progress card and its term's chip.
+ */
 function NowCard({ data, openTranscript }: { data: OverviewResponse; openTranscript: () => void }) {
   const running = data.running;
-  const credits = running.reduce((sum, course) => sum + course.credits, 0);
+  const credits = running.filter((course) => !course.conditionOnly).reduce((sum, course) => sum + course.credits, 0);
   return <div className="ov-half" role="group" aria-labelledby="ov-now-title">
-    <Head id="ov-now-title" title="Học kỳ này" sub={data.terms.studying?.label ?? "Theo bảng điểm bạn đã import"}>{running.length > 0 && <Chip tone="ai">{running.length} môn · {credits} TC</Chip>}</Head>
+    <Head id="ov-now-title" title="Học kỳ này" sub={data.terms.studying?.label ?? "Theo bảng điểm bạn đã import"}>{running.length > 0 && <Chip tone="ai">{running.length} môn · {creditText(credits)} TC</Chip>}</Head>
     {!data.readiness.transcript ? <Empty text="Import bảng điểm để xem các môn bạn đang học." action="Import bảng điểm" onAction={openTranscript} />
       : !running.length ? <Empty text="Bảng điểm của bạn chưa có môn nào đang học." />
         : <>{running.map((course) => <div key={course.code} className="ov-course">
-          <div className="ov-course-top"><span>{course.name}</span><span className="ov-state ov-state-running">{course.retake ? "đang học lại" : "đang học"} · {course.credits} TC</span></div>
+          <div className="ov-course-top"><span>{course.name}</span><span className="ov-state ov-state-running">{course.retake ? "đang học lại" : "đang học"} · {course.conditionOnly ? "môn điều kiện" : `${creditText(course.credits)} TC`}</span></div>
           {course.skills.length > 0 && <small>Rèn luyện: {course.skills.join(", ")}</small>}
         </div>)}<p className="ov-note">Học xong các môn này, kỹ năng "Sắp học" sẽ có điểm ở lần Đánh giá lại.</p></>}
   </div>;
@@ -494,7 +561,9 @@ function NextCard({ data, navigate }: { data: OverviewResponse; navigate: Naviga
     body = <Empty text={text} action={!data.readiness.assessment ? "Đánh giá năng lực" : !data.readiness.survey ? "Làm khảo sát" : "Mở Lộ trình học tập"}
       onAction={() => navigate(!data.readiness.assessment ? "competency" : !data.readiness.survey ? "profile" : "roadmap")} />;
   } else {
+    const outdated = roadmapOutdated(roadmap);
     body = <>
+      {outdated && <p className="ov-stale">{outdated.text} <button type="button" className="sw-text-link" onClick={() => navigate("roadmap")}>Mở Lộ trình học tập</button></p>}
       {roadmap.courses.length ? <ul className="ov-rows ov-next-courses">{roadmap.courses.map((course) => <li key={course.code}><span>{course.name} · {course.credits} TC</span><Chip tone={reasonTone(course.reason)}>{course.reason}</Chip></li>)}</ul>
         : <p className="ov-sub">Lộ trình không đề xuất thêm môn nào.</p>}
       {/* The roadmap's own picks to practise; "Kỹ năng cần tự học" of Khoảng trống kỹ năng are the skills the program

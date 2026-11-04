@@ -14,7 +14,7 @@ import { portalGuides } from "../../src/assistant/guides.js";
 import {
   knowledgeChunksFrom, readKnowledgeCatalog, resourceKey, type KnowledgeCatalog, type KnowledgeChunkInput, type LearningResource, type LearningResources,
 } from "../../src/assistant/knowledge.js";
-import { formatNumber } from "../../src/competency-assessment/ai/prompt.js";
+import { formatGpa, formatNumber, formatScore } from "../../src/competency-assessment/ai/prompt.js";
 import { levelOf } from "../../src/competency-assessment/calculate.js";
 import { fold } from "../../src/competency-assessment/specialty.js";
 import type { LevelCode, SpecialtyCode } from "../../src/competency-assessment/types.js";
@@ -68,6 +68,10 @@ export const EVAL_FUNCTIONS: readonly EvalFunction[] = ["CHAT-01", "CHAT-02", "C
 
 /** A number as the data writes it (vi-VN "2,85") and as a model may write it ("2.85"). */
 const num = (value: number) => [...new Set([formatNumber(value), String(value)])];
+/** A 0–100 score as the sources write it since assistant-v10, floored to the tenth like the pages ("70,3"), or with a point. */
+const score = (value: number) => [...new Set([formatScore(value), formatScore(value).replace(",", ".")])];
+/** A GPA as the sources write it since assistant-v10, with two decimals ("2,80"), or as a model may shorten it. */
+const gpa = (value: number) => [...new Set([formatGpa(value), ...num(value)])];
 /** A number of credits with its unit: a bare "4" or "15" is too easy to find in any answer. */
 const creditsOf = (value: number) => [...new Set([formatNumber(value), String(value)].flatMap((text) => [`${text} tín chỉ`, `${text} tín`, `${text} TC`]))];
 /** A course by its code or its name (either names it). */
@@ -142,13 +146,13 @@ export function personalQuestions(): EvalQuestion[] {
     question({ id: "c01-gaps", function: "CHAT-01", basis: "personal", question: "Mình còn thiếu những kỹ năng nào so với nghề mục tiêu?",
       expect: gaps.map((item) => skill(item.name)), truth: "syntheticRoadmapFacts().skills: kỹ năng thiếu (gap, self_study)" }),
     question({ id: "c01-weakest", function: "CHAT-01", basis: "personal", question: "Kỹ năng nào của mình đang yếu nhất?",
-      expect: [skill(weakest.name)], truth: `syntheticRoadmapResult().skills: điểm thấp nhất (${weakest.name}, ${formatNumber(weakest.score!)})` }),
+      expect: [skill(weakest.name)], truth: `syntheticRoadmapResult().skills: điểm thấp nhất (${weakest.name}, ${formatScore(weakest.score!)})` }),
     question({ id: "c01-overall", function: "CHAT-01", basis: "personal", question: "Mức năng lực chung của mình hiện nay là gì?",
-      expect: [[LEVEL_NAMES[levelOf(overall)]], num(overall)], truth: "syntheticRoadmapResult().overall.score" }),
+      expect: [[LEVEL_NAMES[levelOf(overall)]], score(overall)], truth: "syntheticRoadmapResult().overall.score" }),
     question({ id: "c01-fit", function: "CHAT-01", basis: "personal", question: "Mình phù hợp với nghề mục tiêu ở mức nào?",
-      expect: [num(fit), [result.career!.fitLabel]], truth: "syntheticRoadmapResult().career.fitScore, fitLabel" }),
+      expect: [score(fit), [result.career!.fitLabel]], truth: "syntheticRoadmapResult().career.fitScore, fitLabel" }),
     question({ id: "c01-skill", function: "CHAT-01", basis: "personal", question: `Kỹ năng ${web.name} của mình đang ở mức nào?`,
-      expect: [[LEVEL_NAMES[levelOf(web.score)]], num(web.score!)], truth: `syntheticRoadmapResult().skills: ${web.name}` }),
+      expect: [[LEVEL_NAMES[levelOf(web.score)]], score(web.score!)], truth: `syntheticRoadmapResult().skills: ${web.name}` }),
     question({ id: "c01-self-study", function: "CHAT-01", basis: "personal", question: `Vì sao kỹ năng ${selfStudy.name} lại được ghi là cần tự học?`,
       expect: [["chưa có học phần", "không có học phần", "chưa có môn", "không có môn", "không dạy", "chưa dạy", "không đo"]],
       truth: `syntheticRoadmapFacts().skills: ${selfStudy.name} (${selfStudy.statusLabel})` }),
@@ -164,7 +168,7 @@ export function personalQuestions(): EvalQuestion[] {
     question({ id: "c02-credits-left", function: "CHAT-02", basis: "personal", question: "Mình còn thiếu bao nhiêu tín chỉ nữa mới đủ để tốt nghiệp?",
       expect: [num(pace.creditsLeft!)], truth: "syntheticRoadmapFacts().pace.creditsLeft" }),
     question({ id: "c02-gpa", function: "CHAT-02", basis: "personal", question: "Điểm trung bình tích lũy hiện tại của mình là bao nhiêu?",
-      expect: [num(pace.gpa!)], truth: "syntheticRoadmapFacts().pace.gpa" }),
+      expect: [gpa(pace.gpa!)], truth: "syntheticRoadmapFacts().pace.gpa" }),
     question({ id: "c02-pace", function: "CHAT-02", basis: "personal", question: "Để tốt nghiệp đúng hạn thì mỗi học kỳ còn lại mình phải học khoảng bao nhiêu tín chỉ?",
       expect: [num(pace.creditsPerTerm!)], truth: "syntheticRoadmapFacts().pace.creditsPerTerm" }),
     question({ id: "c02-choice", function: "CHAT-02", basis: "personal", question: "Nhóm tự chọn TC309 mình còn thiếu bao nhiêu và có thể chọn những môn nào?",

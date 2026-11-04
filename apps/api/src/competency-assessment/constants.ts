@@ -77,7 +77,21 @@ import type { Confidence, FitCode, GapStatus } from "./types.js";
  * chooses Đồ án/Khóa luận tốt nghiệp from 2,80 and Chuyên đề tốt nghiệp 1 and 2 below it; without a GPA the thesis first
  * (v7). The other way's courses not started are never suggested and never make a skill "Sắp học".
  */
-export const CALC_VERSION = "comp-calc-v18";
+/**
+ * v19 (user 2026-11-04, review of Tổng quan → Tiến độ học tập: 109 + 5 + 20 = 134 TC on a bar of 126, "còn thiếu 1 TC" for a
+ * group of 6 TC):
+ * - "Trễ kế hoạch" (progress.late) counts only what the training plan puts in a term BEFORE the term being studied and that is
+ *   neither passed nor in progress; the open items of the term being studied are that term's plan (progress.current), not late
+ *   (v13 counted them late);
+ * - condition-only courses (GDTC/GDQP: conditionCodes, and every GDTC slot) count in no credit total of the progress (late,
+ *   the term being studied, next term); they stay listed with conditionOnly;
+ * - a late credit choice's `missing` is in credits, like a next choice's `remaining` (it counted courses and read "còn thiếu 1
+ *   TC"); plan-progress.ts shortfallText writes every shortfall the one way ("6 TC", "1 học phần (3 TC)");
+ * - a "Chọn k" choice's missing credits are its k cheapest options still open (k × the cheapest option before).
+ * Stored results change only with "Đánh giá lại"; Đánh giá năng lực says so for older ones (web lateBeforeStudyTerm).
+ * Tổng quan computes its progress live and always reads v19.
+ */
+export const CALC_VERSION = "comp-calc-v19";
 /**
  * The graduation evaluation uses no skill level, so it keeps the version of its last change:
  * comp-calc-v10 changed only levels and must not re-date every student's graduation advice.

@@ -9,9 +9,11 @@ export const ROADMAP_POLL_MS = 3000;
 export type RoadmapStatus = "queued" | "processing" | "completed" | "failed" | "cancelled";
 export type RoadmapStudy = {
   code: string; name: string; credits: number | null; source: "running" | "late" | "next" | "following" | "choice";
+  /** An item of the term being studied not registered (comp-calc-v19): not "Trễ kế hoạch" (user 2026-11-04). */
+  thisTerm?: boolean;
   termCode: string | null; choiceLabel: string | null; advice: string | null; careerSkills: string[];
 };
-export type RoadmapChoice = { label: string; source: "next" | "late"; termCode: string | null; need: string; options: { code: string; name: string; credits: number | null }[] };
+export type RoadmapChoice = { label: string; source: "next" | "late"; thisTerm?: boolean; termCode: string | null; need: string; options: { code: string; name: string; credits: number | null }[] };
 export type RoadmapImprove = {
   code: string; name: string; credits: number; letter: string; score10: number | null; action: "retake" | "improve"; advice: string | null; careerSkills: string[];
 };
@@ -112,9 +114,10 @@ export const termShort = (term: string | null | undefined): string | null => (te
 const capitalize = (value: string) => value.charAt(0).toLocaleUpperCase("vi") + value.slice(1);
 
 /** The tag of a course to take. */
-export function studyTag(item: Pick<RoadmapStudy, "source" | "termCode" | "choiceLabel">): { text: string; tone: "running" | "late" | "next" | "following" | "choice" } {
+export function studyTag(item: Pick<RoadmapStudy, "source" | "termCode" | "choiceLabel" | "thisTerm">): { text: string; tone: "running" | "late" | "next" | "following" | "choice" } {
   const term = termShort(item.termCode);
   if (item.source === "running") return { text: term ? `Đang học · ${term}` : "Đang học", tone: "running" };
+  if (item.source === "late" && item.thisTerm) return { text: term ? `Kế hoạch ${term} · chưa đăng ký` : "Kế hoạch học kỳ này · chưa đăng ký", tone: "next" };
   if (item.source === "late") return { text: term ? `Trễ kế hoạch · ${term}` : "Trễ kế hoạch", tone: "late" };
   if (item.source === "choice") return { text: item.choiceLabel ? `Tự chọn: ${item.choiceLabel}` : "Tự chọn", tone: "choice" };
   // Roadmaps written before 2026-10-24 (roadmap-v1) listed the term after the one being studied as "following".
@@ -143,8 +146,13 @@ export function skillTags(skill: Pick<RoadmapSkill, "isRequired" | "kind">): str
 /** "Tháng 1 · 24/10 – 23/11/2026". */
 export const monthTitle = (month: Pick<RoadmapMonth, "month" | "start" | "end">) => `Tháng ${month.month} · ${dayMonth(month.start)} – ${dateText(month.end)}`;
 
+/**
+ * "Nhóm tự chọn TC406: chọn 6 tín chỉ: còn thiếu 6 TC, theo kế hoạch ở HK1 2026–2027". need is the system's shortfall in the
+ * unit of the requirement (comp-calc-v19 shortfallText: "6 TC", "1 học phần (3 TC)"); a roadmap made before wrote "n môn", or
+ * for a group of credits its course count with the TC unit ("1 TC"), until it is made again.
+ */
 export const choiceText = (choice: RoadmapChoice) =>
-  `${choice.label}: còn thiếu ${choice.need}${choice.source === "late" && choice.termCode ? ` (theo kế hoạch ở ${termShort(choice.termCode)})` : ""}`;
+  `${choice.label}: còn thiếu ${choice.need}${choice.source === "late" && choice.termCode ? `, theo kế hoạch ở ${termShort(choice.termCode)}${choice.thisTerm ? ", chưa đăng ký" : ""}` : ""}`;
 
 const ERROR_MESSAGES: Record<string, string> = {
   assessment_required: "Bạn cần có kết quả Đánh giá năng lực trước khi tạo lộ trình.",
