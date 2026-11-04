@@ -640,32 +640,35 @@ function Standard({
               </button>
             )}
             <DataSummary data={data.data} />
-            <div className="cm-actions">
-              <SourceDownloadLink
-                href={`${endpoint}/${id}/source/${data.revisionId}`}
-                fallbackName="tieu-chuan-goc.xlsx"
-              />
-              {editable && (
-                <>
-                  <button
-                    className="am-outline"
-                    onClick={() => setDialog("import")}
-                  >
-                    <Icon name="upload" /> Cập nhật tiêu chuẩn từ Excel
-                  </button>
-                  <button
-                    className="am-outline"
-                    onClick={() => setDialog("status")}
-                  >
-                    <Icon name={data.isActive ? "lock" : "unlock"} />
-                    {data.isActive ? "Khóa tiêu chuẩn" : "Mở khóa tiêu chuẩn"}
-                  </button>
-                </>
-              )}
-            </div>
+            {/* The source workbook is the Quản trị viên's (no CVHT row in the function list, 2026-11-04). */}
+            {canManage && (
+              <div className="cm-actions">
+                <SourceDownloadLink
+                  href={`${endpoint}/${id}/source/${data.revisionId}`}
+                  fallbackName="tieu-chuan-goc.xlsx"
+                />
+                {editable && (
+                  <>
+                    <button
+                      className="am-outline"
+                      onClick={() => setDialog("import")}
+                    >
+                      <Icon name="upload" /> Cập nhật tiêu chuẩn từ Excel
+                    </button>
+                    <button
+                      className="am-outline"
+                      onClick={() => setDialog("status")}
+                    >
+                      <Icon name={data.isActive ? "lock" : "unlock"} />
+                      {data.isActive ? "Khóa tiêu chuẩn" : "Mở khóa tiêu chuẩn"}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
             <p className="cm-help">
               Nguồn: {data.data.sourceWorkbook} · Trang tính {data.data.sourceSheet}.
-              Tệp tải xuống là tệp gốc, chưa bao gồm chỉnh sửa trực tiếp.
+              {canManage && " Tệp tải xuống là tệp gốc, chưa bao gồm chỉnh sửa trực tiếp."}
             </p>
           </section>
           <section className="cm-panel">

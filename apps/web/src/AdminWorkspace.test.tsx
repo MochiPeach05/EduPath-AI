@@ -117,8 +117,16 @@ describe("admin workspace", () => {
     expect(home).toContain("Bạn xem được sinh viên của các lớp Khoa phân công cho bạn.");
     expect(home).toContain(">Lớp phụ trách<");
     for (const path of ["/quantri/lop-phu-trach", "/quantri/quyen-co-van"]) expect(render(path, advisor)).toContain(">Quản lý sinh viên</h1>");
-    // A report, Tài khoản or an announcement page leads an advisor back to Quản lý sinh viên.
-    for (const path of ["/quantri/tong-quan", "/quantri/nhat-ky", "/quantri/tai-khoan", "/quantri/gui-thong-bao"]) expect(render(path, advisor)).toContain(">Quản lý sinh viên</h1>");
+    // A report, Tài khoản or an announcement page leads an advisor back to Quản lý sinh viên, and says why (2026-11-04).
+    for (const [path, name] of [["/quantri/tong-quan", "Báo cáo / Tổng quan"], ["/quantri/nhat-ky", "Báo cáo / Nhật ký"], ["/quantri/tai-khoan", "Tài khoản"],
+      ["/quantri/gui-thong-bao", "Quản lý thông báo / Gửi thông báo"], ["/quantri/lich-su-dang-nhap", "Tài khoản"]]) {
+      const html = render(path, advisor);
+      expect(html).toContain(">Quản lý sinh viên</h1>");
+      expect(html).toContain(`<p class="admin-error am-refused" role="alert">Bạn không có quyền mở trang “${name}”. Trang này chỉ dành cho quản trị viên; cố vấn học tập được chuyển về Quản lý sinh viên.</p>`);
+    }
+    // Its own pages, and the portal's address, open without a refusal; an admin is never refused.
+    for (const path of ["/quantri", "/quantri/quan-ly-sinh-vien", "/quantri/ke-hoach"]) expect(render(path, advisor)).not.toContain("am-refused");
+    expect(render("/quantri/tai-khoan")).not.toContain("am-refused");
     // The catalog pages open read only: no add button.
     const fields = render("/quantri/linh-vuc-nghe-nghiep", advisor);
     expect(fields).toContain(">Lĩnh vực</h1>");

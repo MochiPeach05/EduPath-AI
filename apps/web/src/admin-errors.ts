@@ -24,6 +24,8 @@ const SHARED_CODES: Readonly<Record<string, string>> = {
   authentication_required: ADMIN_ERROR_TEXTS.session,
   insufficient_role: "Bạn không còn quyền thực hiện thao tác này. Hãy đăng xuất và kiểm tra lại tài khoản.",
   read_only_role: "Cố vấn học tập chỉ có quyền xem ở trang quản trị.",
+  // A read of the Quản trị viên's functions by the role advisor (API advisors/access.ts ADVISOR_ADMIN_READS).
+  admin_only: "Chức năng này chỉ dành cho quản trị viên.",
   invalid_origin: "Yêu cầu không hợp lệ. Vui lòng tải lại trang rồi thử lại.",
   database_required: "Hệ thống chưa kết nối cơ sở dữ liệu. Vui lòng thử lại sau.",
 };

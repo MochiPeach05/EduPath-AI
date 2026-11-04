@@ -5,10 +5,10 @@
 // Only what the policy lets an advisor do for the student passes (ACTING_ACTIONS: import the transcript, the competency
 // assessment and its AI comment, the AI roadmap, the graduation advice, Trợ lý AI), even without the student's consent
 // (user: "Cho làm, báo sinh viên"); no consent is recorded in the student's name. Each such action is logged (kind
-// 'advisor') and told to the student by a notification. Reads pass, except the student's own notifications. The role
-// 'advisor' only reads the admin portal (advisorReadOnly). Since the user's "Quản lý sinh viên" (2026-11-03: AD-AST-01…09
-// are "QTV & CVHT"), admins and Ban chủ nhiệm khoa (canManageAdvisors) work the same way in the page of ANY student, not
-// only of the classes they advise; the student is told who did it (actorKind).
+// 'advisor') and told to the student by a notification. Reads pass, except the student's own notifications. In the admin
+// portal the role 'advisor' only reads what its rows of the function list show (advisorReadOnly). Since the user's
+// "Quản lý sinh viên" (2026-11-03: AD-AST-01…09 are "QTV & CVHT"), admins and Ban chủ nhiệm khoa (canManageAdvisors) work
+// the same way in the page of ANY student, not only of the classes they advise; the student is told who did it (actorKind).
 import type { Request, RequestHandler } from "express";
 import type { DatabasePool } from "../db/pool.js";
 import { canManageAdvisors, type AuthenticatedUser } from "../auth/types.js";
@@ -202,16 +202,47 @@ export function advisorActing(db: Db | undefined, staffEmailDomains: ReadonlySet
   };
 }
 
-/** Admin paths (under /api/admin) a cố vấn học tập may not even read: reports, the log, accounts, announcements. */
-export const ADVISOR_CLOSED_ADMIN: readonly RegExp[] = [/^\/reports(\/|$)/, /^\/audit-log(\/|$)/, /^\/accounts(\/|$)/, /^\/announcements(\/|$)/];
-/** The only admin writes of the role 'advisor': opening a student's page, which is logged. */
-export const ADVISOR_ADMIN_WRITES: readonly RegExp[] = [/^\/advisor-portal\/students\/[^/]+\/open$/];
+/**
+ * The admin reads (paths under /api/admin) of the role 'advisor': the rows of the function list whose Tác nhân includes
+ * CVHT, i.e. the views, searches and filters of the "QTV & CVHT" rows and the "Cố vấn học tập" rows (user, 2026-11-04:
+ * only the functions whose actors include CVHT). Every other admin read belongs to the Quản trị viên: the reports and
+ * Nhật ký (AD-REPORT), Tài khoản (AD-AUTH-03…10), Thông báo (AD-NOTI), the source workbooks (AD-PLAN-14), the import
+ * template (AD-ADV-01), the AI runs and proposals (AD-CRS-06, 09, 10, AD-REQ-04) and the editors' own catalog. An admin
+ * route added later stays closed to advisors until it is listed here. Matched as Express routes: without case, with or
+ * without a trailing slash.
+ */
+export const ADVISOR_ADMIN_READS: readonly RegExp[] = [
+  // AD-AUTH-01: the session of the admin portal.
+  /^\/(me|summary)\/?$/i,
+  // AD-PROF-01…04, AD-AST-06: Sinh viên, only the students of the advisor's classes (admin/student-profiles.ts).
+  /^\/students(\/[^/]+(\/transcript)?)?\/?$/i,
+  // AD-AST-01…04, 09: Quản lý sinh viên (advisors/portal-router.ts); opening a student's page is in ADVISOR_ADMIN_WRITES.
+  /^\/advisor-portal\/(me|classes|students|permissions)\/?$/i,
+  // AD-ADV-04, 05: the cố vấn học tập of the Khoa and one of them; not the import template (AD-ADV-01).
+  /^\/advisors(\/(?!import\/?$)[^/]+)?\/?$/i,
+  // AD-CURR-03…06 and AD-SUB-01, 02; AD-PLAN-03…09, 13; AD-GRAD-03…07, 12: the lists and one programme, plan or
+  // standard with any of its versions (?revision=); not the source workbook of a version (/:id/source/:revision).
+  /^\/(curricula|plans|graduation)(\/[^/]+)?\/?$/i,
+  // AD-FIELD-01…03, AD-SKILL-01…03, AD-CAREER-01, 02, 06, 07: fields, skills, careers and one career.
+  /^\/careers(\/[^/]+)?\/?$/i,
+  // AD-REQ-07…10: the requirements of a career, the skills that filter them and the course weights; not the AI
+  // proposals (ai-suggestions, AD-REQ-04).
+  /^\/careers\/requirements(\/(?!ai-suggestions\/?$)[^/]+)?\/?$/i,
+  // AD-COMP-01…04, AD-CMP-01…04, AD-CRS-01…04: groups, skill and course configurations, their cohorts and summary; not
+  // the AI runs (/ai) or the catalog of the skill editor.
+  /^\/competencies\/(groups|skills|courses)(\/[^/]+)?\/?$/i,
+  /^\/competencies\/(cohorts|summary)\/?$/i,
+];
+/** The only admin write of the role 'advisor': opening the page of a student of their classes (AD-AST-05), logged. */
+export const ADVISOR_ADMIN_WRITES: readonly RegExp[] = [/^\/advisor-portal\/students\/[^/]+\/open\/?$/i];
 
-/** Mounted on /api/admin before the admin routers: the role 'advisor' reads the admin portal and changes nothing. */
+/**
+ * Mounted on /api/admin before the admin routers: the role 'advisor' reads what ADVISOR_ADMIN_READS lists (else
+ * admin_only) and changes nothing but ADVISOR_ADMIN_WRITES (else read_only_role).
+ */
 export const advisorReadOnly: RequestHandler = (request, response, next) => {
   if (request.session.user?.role !== "advisor") { next(); return; }
-  if (ADVISOR_CLOSED_ADMIN.some((rule) => rule.test(request.path))) { response.status(403).json({ error: "insufficient_role" }); return; }
   const read = request.method === "GET" || request.method === "HEAD";
-  if (!read && !ADVISOR_ADMIN_WRITES.some((rule) => rule.test(request.path))) { response.status(403).json({ error: "read_only_role" }); return; }
-  next();
+  if ((read ? ADVISOR_ADMIN_READS : ADVISOR_ADMIN_WRITES).some((rule) => rule.test(request.path))) { next(); return; }
+  response.status(403).json({ error: read ? "admin_only" : "read_only_role" });
 };

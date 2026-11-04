@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ADVISOR_STUDENTS_PATH, REPORT_PATHS, adminGroupOf, adminNavigation, adminSidebar, adminSidebarFor, canSeeAdminPage, homeAdminPath, isReportPath, profileIdOf, reportViewOf, resolveAdminPage, studentProfileLink, withoutProfileId, type AdminAccess } from "./admin-navigation";
+import { ADVISOR_STUDENTS_PATH, REPORT_PATHS, adminGroupOf, adminNavigation, adminPageName, adminSidebar, adminSidebarFor, advisorRefusedText, canSeeAdminPage, homeAdminPath, isReportPath, profileIdOf, refusedAdminPage, reportViewOf, resolveAdminPage, studentProfileLink, withoutProfileId, type AdminAccess } from "./admin-navigation";
 describe("admin section navigation", () => {
   it("has account, student-profile, curriculum, graduation, training-plan, career, career-field, skill and competency sections", () => {
     expect(adminNavigation.map(item => item.path)).toEqual(["/quantri/tong-quan", "/quantri/bao-cao-tien-do", "/quantri/bao-cao-nguy-co", "/quantri/bao-cao-ky-nang", "/quantri/bao-cao-nghe-nghiep", "/quantri/bao-cao-mon-hoc", "/quantri/nhat-ky", "/quantri/tai-khoan", "/quantri/sinh-vien", "/quantri/co-van-hoc-tap", "/quantri/quan-ly-sinh-vien", "/quantri/chuong-trinh", "/quantri/tieu-chuan-tot-nghiep", "/quantri/ke-hoach", "/quantri/linh-vuc-nghe-nghiep", "/quantri/ky-nang", "/quantri/vi-tri-nghe-nghiep", "/quantri/nhom-nang-luc", "/quantri/cau-hinh-nang-luc", "/quantri/cau-hinh-mon-hoc", "/quantri/gui-thong-bao", "/quantri/thong-bao-da-gui"]);
@@ -80,6 +80,39 @@ describe("admin navigation by role (cố vấn học tập, 2026-11-03)", () => 
       expect(canSeeAdminPage(path, advisor)).toBe(false);
       expect(resolveAdminPage(path, advisor).path).toBe(ADVISOR_STUDENTS_PATH);
     }
+  });
+
+  it("opens exactly the pages of the rows whose Tác nhân includes CVHT (function list ver0.3, 2026-11-04)", () => {
+    const cvhtPages = {
+      "/quantri/sinh-vien": "AD-PROF-01…04", "/quantri/co-van-hoc-tap": "AD-ADV-04, 05", "/quantri/quan-ly-sinh-vien": "AD-AST-01…09",
+      "/quantri/chuong-trinh": "AD-CURR-03…06, AD-SUB-01, 02", "/quantri/tieu-chuan-tot-nghiep": "AD-GRAD-03…07, 12", "/quantri/ke-hoach": "AD-PLAN-03…09, 13",
+      "/quantri/linh-vuc-nghe-nghiep": "AD-FIELD-01…03", "/quantri/ky-nang": "AD-SKILL-01…03", "/quantri/vi-tri-nghe-nghiep": "AD-CAREER-01, 02, 06, 07, AD-REQ-07…10",
+      "/quantri/nhom-nang-luc": "AD-COMP-01…04", "/quantri/cau-hinh-nang-luc": "AD-CMP-01…04", "/quantri/cau-hinh-mon-hoc": "AD-CRS-01…04",
+    } as Record<string, string>;
+    expect(adminNavigation.filter((page) => canSeeAdminPage(page.path, advisor)).map((page) => page.path)).toEqual(Object.keys(cvhtPages));
+    // Every other page is the Quản trị viên's: AD-REPORT (Báo cáo, Nhật ký), AD-AUTH-03…10 (Tài khoản), AD-NOTI (Thông báo).
+    expect(adminNavigation.filter((page) => !canSeeAdminPage(page.path, advisor)).map((page) => adminPageName(page))).toEqual(["Báo cáo / Tổng quan",
+      "Báo cáo / Tiến độ", "Báo cáo / Nguy cơ", "Báo cáo / Kỹ năng thiếu", "Báo cáo / Vị trí mục tiêu", "Báo cáo / Môn đề xuất", "Báo cáo / Nhật ký", "Tài khoản",
+      "Quản lý thông báo / Gửi thông báo", "Quản lý thông báo / Đã gửi"]);
+    // A page that is not listed stays closed to an advisor, whatever it is.
+    expect(canSeeAdminPage("/quantri/trang-moi", advisor)).toBe(false);
+  });
+
+  it("names the page of the Quản trị viên an advisor asked for, and only for an advisor", () => {
+    expect(refusedAdminPage("/quantri/tai-khoan", advisor)?.label).toBe("Tài khoản");
+    expect(refusedAdminPage("/quantri/nhat-ky/", advisor)?.label).toBe("Nhật ký");
+    // Old links to a closed page are refused as the page they open.
+    expect(refusedAdminPage("/quantri/tao-tai-khoan", advisor)?.path).toBe("/quantri/tai-khoan");
+    expect(refusedAdminPage("/quantri/bao-cao", advisor)?.path).toBe("/quantri/tong-quan");
+    // The advisor's own pages, the portal's address and unknown addresses are not refusals.
+    for (const path of ["/quantri", "/quantri/", "/quantri/ky-nang", "/quantri/lop-phu-trach", ADVISOR_STUDENTS_PATH, "/quantri/unknown"]) {
+      expect(refusedAdminPage(path, advisor)).toBeNull();
+    }
+    for (const role of ["admin", "faculty_board", "department_head", "lecturer"] as const) {
+      expect(refusedAdminPage("/quantri/tai-khoan", { role, advisesClasses: false })).toBeNull();
+    }
+    expect(advisorRefusedText(refusedAdminPage("/quantri/gui-thong-bao", advisor)!))
+      .toBe("Bạn không có quyền mở trang “Quản lý thông báo / Gửi thông báo”. Trang này chỉ dành cho quản trị viên; cố vấn học tập được chuyển về Quản lý sinh viên.");
   });
 
   it("opens Quản lý sinh viên for an advisor and Tổng quan for everyone else", () => {

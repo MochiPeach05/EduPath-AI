@@ -84,12 +84,24 @@ export const ADVISOR_STUDENTS_PATH = "/quantri/quan-ly-sinh-vien";
 export type AdminAccess = { role: AppRole; advisesClasses: boolean | null };
 
 /**
- * Pages a cố vấn học tập (role advisor) does not get: the reports and Nhật ký, Tài khoản and Quản lý thông báo. In the
- * function list those rows belong to the Quản trị viên alone; the advisor's own rows say "QTV & CVHT" or "Cố vấn học tập".
+ * The pages of a cố vấn học tập (role advisor): those of the function-list rows whose Tác nhân includes CVHT ("QTV &
+ * CVHT" and "Cố vấn học tập"; user, 2026-11-04), read only. The reports and Nhật ký (AD-REPORT), Tài khoản (AD-AUTH-03…10)
+ * and Quản lý thông báo (AD-NOTI) belong to the Quản trị viên alone; a page added later stays closed to advisors until it
+ * is listed here. The API keeps the same list (apps/api/src/advisors/access.ts, ADVISOR_ADMIN_READS).
  */
-const ADVISOR_CLOSED_PAGES: ReadonlySet<string> = new Set<string>([
-  ...adminNavigationGroups.filter((group) => group.id === "reports" || group.id === "announcements").flatMap((group) => [...group.paths]),
-  "/quantri/tai-khoan",
+const ADVISOR_PAGES: ReadonlySet<string> = new Set<string>([
+  "/quantri/sinh-vien", // AD-PROF-01…04: the students of the advisor's classes
+  ADVISORS_PATH, // AD-ADV-04, 05
+  ADVISOR_STUDENTS_PATH, // AD-AST-01…09
+  "/quantri/chuong-trinh", // AD-CURR-03…06, AD-SUB-01, 02
+  "/quantri/tieu-chuan-tot-nghiep", // AD-GRAD-03…07, 12
+  "/quantri/ke-hoach", // AD-PLAN-03…09, 13
+  "/quantri/linh-vuc-nghe-nghiep", // AD-FIELD-01…03
+  "/quantri/ky-nang", // AD-SKILL-01…03
+  "/quantri/vi-tri-nghe-nghiep", // AD-CAREER-01, 02, 06, 07, AD-REQ-07…10
+  "/quantri/nhom-nang-luc", // AD-COMP-01…04
+  "/quantri/cau-hinh-nang-luc", // AD-CMP-01…04
+  "/quantri/cau-hinh-mon-hoc", // AD-CRS-01…04
 ]);
 
 /** Quản lý sinh viên always belongs to the admins and Ban chủ nhiệm khoa (every student) and to the role advisor (its classes). */
@@ -100,9 +112,30 @@ const alwaysSeesStudents = (access: AdminAccess) => access.role === "advisor" ||
  * while the answer is unknown it counts as open, so a direct link is not sent away before the answer comes.
  */
 export function canSeeAdminPage(path: string, access: AdminAccess): boolean {
-  if (access.role === "advisor") return !ADVISOR_CLOSED_PAGES.has(path);
+  if (access.role === "advisor") return ADVISOR_PAGES.has(path);
   return path !== ADVISOR_STUDENTS_PATH || alwaysSeesStudents(access) || access.advisesClasses !== false;
 }
+
+/** A page as the sidebar shows it: "Báo cáo / Nhật ký" inside a group, "Tài khoản" alone. */
+export function adminPageName(page: AdminPage): string {
+  const group = adminNavigationGroups.find((item) => (item.paths as readonly string[]).includes(page.path));
+  return group ? `${group.label} / ${page.label}` : page.label;
+}
+
+/**
+ * The page of the Quản trị viên an address asks a cố vấn học tập to open (typed, bookmarked, or an old link to it), or
+ * null. The portal shows the advisor's home instead, with advisorRefusedText above it.
+ */
+export function refusedAdminPage(pathname: string, access: AdminAccess): AdminPage | null {
+  if (access.role !== "advisor") return null;
+  const path = pathname.replace(/\/+$/, "");
+  const page = adminNavigation.find((item) => item.path === (adminPathAliases[path] ?? path));
+  return page && !canSeeAdminPage(page.path, access) ? page : null;
+}
+
+/** What a cố vấn học tập reads after asking for a page of the Quản trị viên. */
+export const advisorRefusedText = (page: AdminPage) =>
+  `Bạn không có quyền mở trang “${adminPageName(page)}”. Trang này chỉ dành cho quản trị viên; cố vấn học tập được chuyển về Quản lý sinh viên.`;
 
 /** The page /quantri opens, and where a closed page leads: Quản lý sinh viên for an advisor, Tổng quan of the reports otherwise. */
 export const homeAdminPath = (access: AdminAccess) => (access.role === "advisor" ? ADVISOR_STUDENTS_PATH : adminNavigation[0].path);

@@ -304,8 +304,70 @@ describe("the role advisor in the admin portal (advisorReadOnly)", () => {
 
   it("does not even read the reports, the log, the accounts and the announcements", async () => {
     const app = admin(advisor);
-    for (const path of ["/api/admin/reports/overview", "/api/admin/audit-log", "/api/admin/accounts", "/api/admin/announcements"]) {
-      expect((await request(app).get(path).expect(403)).body).toEqual({ error: "insufficient_role" });
+    for (const path of ["/api/admin/reports/overview", "/api/admin/reports/progress.xlsx", "/api/admin/audit-log", "/api/admin/accounts",
+      "/api/admin/accounts/history", "/api/admin/announcements"]) {
+      expect((await request(app).get(path).expect(403)).body).toEqual({ error: "admin_only" });
+    }
+  });
+
+  // Function list ver0.3 (user 2026-11-04): CVHT gets the views, searches and filters of its "QTV & CVHT" and "Cố vấn học
+  // tập" rows, nothing else.
+  const ID = "6f1c2a9e-0b7d-4c1e-9a3f-2d4e5f607182";
+  const REVISION = "7a2d3b0f-1c8e-4d2f-8b4a-3e5f60718293";
+  it.each([
+    ["AD-AUTH-01", "/api/admin/me"],
+    ["AD-PROF-01…04", "/api/admin/students"], ["AD-PROF-02", `/api/admin/students/${ID}`], ["AD-AST-06", `/api/admin/students/${ID}/transcript`],
+    ["AD-AST-01", "/api/admin/advisor-portal/classes"], ["AD-AST-02…04", "/api/admin/advisor-portal/students"],
+    ["AD-AST-09", "/api/admin/advisor-portal/permissions"], ["AD-AST", "/api/admin/advisor-portal/me"],
+    ["AD-ADV-04", "/api/admin/advisors"], ["AD-ADV-05", `/api/admin/advisors/${ID}`],
+    ["AD-CURR-03…05", "/api/admin/curricula"], ["AD-CURR-06", `/api/admin/curricula/${ID}`],
+    ["AD-PLAN-03…05", "/api/admin/plans"], ["AD-PLAN-06…09, 13", `/api/admin/plans/${ID}`],
+    ["AD-GRAD-03…05", "/api/admin/graduation"], ["AD-GRAD-06, 07, 12", `/api/admin/graduation/${ID}`],
+    ["AD-FIELD-01…03", "/api/admin/careers/fields"], ["AD-SKILL-01…03", "/api/admin/careers/skills"],
+    ["AD-CAREER-01, 06, 07", "/api/admin/careers"], ["AD-CAREER-02", `/api/admin/careers/${ID}`],
+    ["AD-REQ-07, 09, 10", "/api/admin/careers/requirements"], ["AD-REQ-07", `/api/admin/careers/requirements/${ID}`],
+    ["AD-REQ-10", "/api/admin/careers/requirements/skills"], ["AD-REQ-08", "/api/admin/careers/requirements/course-weights"],
+    ["AD-COMP-01…04", "/api/admin/competencies/groups"], ["AD-COMP-02", `/api/admin/competencies/groups/${ID}`],
+    ["AD-CMP-01…04", "/api/admin/competencies/skills"], ["AD-CMP-02", `/api/admin/competencies/skills/${ID}`],
+    ["AD-CRS-01…04", "/api/admin/competencies/courses"], ["AD-CRS-02", `/api/admin/competencies/courses/${ID}`],
+    ["AD-CRS-04", "/api/admin/competencies/cohorts"], ["AD-CRS-01", "/api/admin/competencies/summary"],
+  ])("reads %s (%s)", async (_code, path) => {
+    await request(admin(advisor)).get(path).expect(200);
+  });
+
+  it.each([
+    ["the source workbook of a programme", `/api/admin/curricula/${ID}/source/${REVISION}`],
+    ["the source workbook of a plan (AD-PLAN-14)", `/api/admin/plans/${ID}/source/${REVISION}`],
+    ["the source workbook of a standard", `/api/admin/graduation/${ID}/source/${REVISION}`],
+    ["the advisor import template (AD-ADV-01)", "/api/admin/advisors/import/template"],
+    ["the AI state of the course links (AD-CRS-06, 09)", "/api/admin/competencies/ai/status"],
+    ["the latest AI run of the courses (AD-CRS-09, 10)", "/api/admin/competencies/ai/batches/latest"],
+    ["an AI proposal of a course (AD-CRS-06)", `/api/admin/competencies/ai/latest?courseId=${ID}&mode=links`],
+    ["one AI proposal of a course", `/api/admin/competencies/ai/${ID}`],
+    ["the skill editor's catalog (AD-CMP-05, 06)", "/api/admin/competencies/catalog"],
+    ["the AI state of the career links (AD-REQ-04)", "/api/admin/careers/requirements/ai-suggestions/status"],
+    ["an AI proposal of a career (AD-REQ-04)", `/api/admin/careers/requirements/ai-suggestions/latest?careerPositionId=${ID}`],
+    ["the AI proposals, whatever the case or a trailing slash", "/api/admin/Careers/Requirements/AI-Suggestions/"],
+    ["a source workbook, whatever the case", `/api/admin/PLANS/${ID}/Source/${REVISION}`],
+    ["an admin route it does not know", "/api/admin/something-new"],
+  ])("does not read %s", async (_what, path) => {
+    expect((await request(admin(advisor)).get(path).expect(403)).body).toEqual({ error: "admin_only" });
+  });
+
+  it("reads its pages with or without a trailing slash and in any case, as Express routes them", async () => {
+    const app = admin(advisor);
+    await request(app).get("/api/admin/curricula/").expect(200);
+    await request(app).get(`/api/admin/Plans/${ID}`).expect(200);
+    await request(app).head("/api/admin/careers/skills").expect(200);
+  });
+
+  it("changes nothing: every other write answers read only", async () => {
+    const app = admin(advisor);
+    for (const [method, path] of [["post", "/api/admin/curricula/preview"], ["patch", `/api/admin/plans/${ID}/status`], ["put", `/api/admin/competencies/courses/${ID}`],
+      ["post", "/api/admin/careers/fields"], ["delete", `/api/admin/careers/requirements/${ID}`], ["post", "/api/admin/competencies/ai/batches"],
+      ["post", "/api/admin/careers/requirements/ai-suggestions"], ["post", "/api/admin/advisors/import/preview"], ["patch", `/api/admin/accounts/${ID}`],
+      ["post", "/api/admin/announcements"], ["post", `/api/admin/advisor-portal/students/${STUDENT_ID}/open/again`]] as const) {
+      expect((await request(app)[method](path).send({}).expect(403)).body).toEqual({ error: "read_only_role" });
     }
   });
 
@@ -314,8 +376,14 @@ describe("the role advisor in the admin portal (advisorReadOnly)", () => {
   });
 
   it("leaves the other roles alone", async () => {
-    const app = admin({ ...advisor, role: "admin" });
-    await request(app).post("/api/admin/careers").send({}).expect(200);
-    await request(app).get("/api/admin/reports/overview").expect(200);
+    for (const role of ["admin", "faculty_board", "department_head", "lecturer"] as const) {
+      const app = admin({ ...advisor, role });
+      await request(app).post("/api/admin/careers").send({}).expect(200);
+      await request(app).get("/api/admin/reports/overview").expect(200);
+      await request(app).get(`/api/admin/plans/${ID}/source/${REVISION}`).expect(200);
+      await request(app).get("/api/admin/competencies/ai/batches/latest").expect(200);
+      await request(app).get("/api/admin/careers/requirements/ai-suggestions/status").expect(200);
+      await request(app).get("/api/admin/advisors/import/template").expect(200);
+    }
   });
 });

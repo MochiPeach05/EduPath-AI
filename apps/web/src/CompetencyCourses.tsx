@@ -50,10 +50,11 @@ export function CompetencyCoursesTab({ canManage, revision, onSaved }: Props) {
         <div><span>Chưa cấu hình</span><strong>{summary.data.missingCount}</strong><small>{summary.data.archivedCount} cấu hình đã lưu trữ</small></div>
         <div><span>Kỹ năng chưa đóng góp</span><strong>{summary.data.unlinkedSkillCount}</strong><small>Có cấu hình năng lực</small></div>
       </div>
-      {summary.data.courseCount > 0 && summary.data.activeCount === 0 && summary.data.draftCount === 0 && <p className="comp-empty-config" role="status">Chưa có {scope} có cấu hình đang áp dụng hoặc bản nháp. Có thể chạy AI cho các môn chưa có liên kết hoặc tạo liên kết kỹ năng kèm trọng số cho từng môn.</p>}
+      {summary.data.courseCount > 0 && summary.data.activeCount === 0 && summary.data.draftCount === 0 && <p className="comp-empty-config" role="status">Chưa có {scope} có cấu hình đang áp dụng hoặc bản nháp.{canManage && " Có thể chạy AI cho các môn chưa có liên kết hoặc tạo liên kết kỹ năng kèm trọng số cho từng môn."}</p>}
       {summary.data.warnings.length > 0 && <details className="cm-warning"><summary>{summary.data.warnings.length} cảnh báo cần rà soát</summary><ul>{summary.data.warnings.map((warning, index) => <li key={`${warning.code}-${index}`}>{warning.courseCode && <strong>{warning.courseCode}: </strong>}{warning.message}</li>)}</ul></details>}
     </>}</section>
-    <CompetencyBulkAi cohort={filters.cohort} canManage={canManage} revision={revision} onSaved={onSaved} />
+    {/* The AI runs and their proposals (AD-CRS-06, 09, 10) are the Quản trị viên's: a cố vấn học tập reads the configurations only. */}
+    {canManage && <CompetencyBulkAi cohort={filters.cohort} canManage={canManage} revision={revision} onSaved={onSaved} />}
     <section className="cm-panel">
       <div className="cm-filters">
         <label className="cm-search">Tìm môn học<input maxLength={200} value={draft.q} onChange={event => setDraft({ ...draft, q: event.target.value })} placeholder="Mã hoặc tên môn học…" /></label>

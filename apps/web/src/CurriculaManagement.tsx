@@ -672,35 +672,37 @@ function CurriculumView({
             {current.data.notes && (
               <p className="cm-prewrap">{current.data.notes}</p>
             )}
-            <div className="cm-actions">
-              <SourceDownloadLink
-                href={`${endpoint}/${id}/source/${current.revisionId}`}
-                fallbackName="khung-ctdt-goc.xlsx"
-                title="Tải xuống tệp Excel nguồn; các chỉnh sửa trực tiếp được lưu trong phiên bản trên hệ thống"
-              />
-              {mutable && (
-                <>
-                  <button
-                    className="am-outline"
-                    onClick={() => setEdit("import")}
-                  >
-                    <Icon name="upload" /> Cập nhật khung từ Excel
-                  </button>
-                  <button
-                    className="am-outline"
-                    onClick={() => setEdit("status")}
-                  >
-                    <Icon name={current.isActive ? "lock" : "unlock"} />{" "}
-                    {current.isActive ? "Khóa khung" : "Mở khóa khung"}
-                  </button>
-                </>
-              )}
-            </div>
+            {/* The source workbook is the Quản trị viên's (no CVHT row in the function list, 2026-11-04). */}
+            {canManage && (
+              <div className="cm-actions">
+                <SourceDownloadLink
+                  href={`${endpoint}/${id}/source/${current.revisionId}`}
+                  fallbackName="khung-ctdt-goc.xlsx"
+                  title="Tải xuống tệp Excel nguồn; các chỉnh sửa trực tiếp được lưu trong phiên bản trên hệ thống"
+                />
+                {mutable && (
+                  <>
+                    <button
+                      className="am-outline"
+                      onClick={() => setEdit("import")}
+                    >
+                      <Icon name="upload" /> Cập nhật khung từ Excel
+                    </button>
+                    <button
+                      className="am-outline"
+                      onClick={() => setEdit("status")}
+                    >
+                      <Icon name={current.isActive ? "lock" : "unlock"} />{" "}
+                      {current.isActive ? "Khóa khung" : "Mở khóa khung"}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
             <p className="cm-help">
               Tệp nguồn: {current.sourceFilename}. Tổng tín chỉ chương trình
-              không phải tổng của tất cả các học phần tự chọn và chuyên ngành. Tệp
-              tải xuống là Excel nguồn; các chỉnh sửa trực tiếp được lưu trong
-              phiên bản trên hệ thống.
+              không phải tổng của tất cả các học phần tự chọn và chuyên ngành.
+              {canManage && " Tệp tải xuống là Excel nguồn; các chỉnh sửa trực tiếp được lưu trong phiên bản trên hệ thống."}
             </p>
           </div>
           {notice && (

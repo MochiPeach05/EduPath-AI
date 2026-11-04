@@ -397,29 +397,32 @@ function PlanView({
             )}
             <Summary data={p.data} />
             {p.data.notes && <p className="cm-prewrap">{p.data.notes}</p>}
-            <div className="cm-actions">
-              <SourceDownloadLink
-                href={`${endpoint}/${id}/source/${p.revisionId}`}
-                fallbackName="ke-hoach-goc.xlsx"
-              />
-              {editable && (
-                <>
-                  <button
-                    className="am-outline"
-                    onClick={() => setModal("import")}
-                  >
-                    <Icon name="upload" /> Cập nhật kế hoạch từ Excel
-                  </button>
-                  <button
-                    className="am-outline"
-                    onClick={() => setModal("status")}
-                  >
-                    <Icon name={p.isActive ? "lock" : "unlock"} />{" "}
-                    {p.isActive ? "Khóa kế hoạch" : "Mở khóa kế hoạch"}
-                  </button>
-                </>
-              )}
-            </div>
+            {/* AD-PLAN-14, Tải xuống tệp Excel nguồn, is the Quản trị viên's alone (function list, 2026-11-04). */}
+            {canManage && (
+              <div className="cm-actions">
+                <SourceDownloadLink
+                  href={`${endpoint}/${id}/source/${p.revisionId}`}
+                  fallbackName="ke-hoach-goc.xlsx"
+                />
+                {editable && (
+                  <>
+                    <button
+                      className="am-outline"
+                      onClick={() => setModal("import")}
+                    >
+                      <Icon name="upload" /> Cập nhật kế hoạch từ Excel
+                    </button>
+                    <button
+                      className="am-outline"
+                      onClick={() => setModal("status")}
+                    >
+                      <Icon name={p.isActive ? "lock" : "unlock"} />{" "}
+                      {p.isActive ? "Khóa kế hoạch" : "Mở khóa kế hoạch"}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
             <p className="cm-help">
               Tệp nguồn: {p.sourceFilename}. Tín chỉ từng kỳ giữ theo tệp
               nguồn, không cộng mọi môn tự chọn hoặc chuyên ngành.

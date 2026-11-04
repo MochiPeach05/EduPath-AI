@@ -26,8 +26,9 @@ export default function CompetencyManagement({ canManage, section }: { canManage
  * credits) is configured once for every cohort that has it; the cohort is only a filter.
  */
 function CourseConfiguration({ canManage, revision, onSaved }: { canManage: boolean; revision: number; onSaved: () => void }) {
+  // A cố vấn học tập reads the configurations (AD-CRS-01…04); linking, weighting and the AI are the Quản trị viên's.
   return <>
-    <div className="cm-toolbar"><p>Gắn kỹ năng với từng môn học và chia trọng số. Mỗi môn (cùng mã, tên và số tín chỉ) chỉ có một cấu hình, dùng chung cho mọi khóa có môn đó; chọn khóa để lọc danh sách. AI có thể đề xuất liên kết và trọng số.</p></div>
+    <div className="cm-toolbar"><p>{canManage ? "Gắn kỹ năng với từng môn học và chia trọng số." : "Kỹ năng và trọng số của từng môn học."} Mỗi môn (cùng mã, tên và số tín chỉ) chỉ có một cấu hình, dùng chung cho mọi khóa có môn đó; chọn khóa để lọc danh sách.{canManage && " AI có thể đề xuất liên kết và trọng số."}</p></div>
     <CompetencyCoursesTab canManage={canManage} revision={revision} onSaved={onSaved} />
   </>;
 }

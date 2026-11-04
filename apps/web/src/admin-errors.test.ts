@@ -22,6 +22,8 @@ describe("admin request failures", () => {
   it("keeps a screen's own text for its codes, then the shared texts, then the server's Vietnamese message", () => {
     expect(adminErrorText(409, { error: "plan_changed" }, screenTexts)).toBe(screenTexts.plan_changed);
     expect(adminErrorText(403, { error: "read_only_role" })).toBe("Cố vấn học tập chỉ có quyền xem ở trang quản trị.");
+    // A function of the Quản trị viên read by a cố vấn học tập (API advisors/access.ts, 2026-11-04).
+    expect(adminErrorText(403, { error: "admin_only" })).toBe("Chức năng này chỉ dành cho quản trị viên.");
     expect(adminErrorText(503, { error: "database_required" })).toBe("Hệ thống chưa kết nối cơ sở dữ liệu. Vui lòng thử lại sau.");
     expect(adminErrorText(400, { error: "invalid_input", message: "Tên kỹ năng không được để trống." })).toBe("Tên kỹ năng không được để trống.");
     // An English or technical message is not shown.
