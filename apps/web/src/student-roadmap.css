@@ -48,7 +48,8 @@
 .rm-item-meta { margin: 0; color: var(--sw-muted); font-size: 12px; line-height: 1.6; }
 .rm-advice { margin: 0; font-size: 14px; line-height: 1.7; }
 .rm-tags { display: inline-flex; flex-wrap: wrap; gap: 4px; }
-.rm-tag { flex: none; padding: 2px 8px; border-radius: 999px; background: #f1f3f6; color: #596576; font-size: 12px; font-weight: 700; line-height: 1.6; }
+/* A long tag ("Tự chọn: Học phần tự chọn: chọn 2 trong các môn dưới") wraps inside the card on a phone (user 2026-11-04). */
+.rm-tag { flex: 0 1 auto; max-width: 100%; overflow-wrap: break-word; padding: 2px 8px; border-radius: 10px; background: #f1f3f6; color: #596576; font-size: 12px; font-weight: 700; line-height: 1.6; }
 .rm-tag-running { background: #e8f0fd; color: #2858a8; }
 .rm-tag-late { background: #fff1db; color: #8a4b08; }
 .rm-tag-next { background: #eaf5ee; color: #246b50; }
