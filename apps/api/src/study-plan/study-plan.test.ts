@@ -31,7 +31,8 @@ function curriculumData() {
 
 type Roadmap = { id: string; facts: unknown; output: unknown; completed_at: Date };
 type Offering = { cohort_code: string; code: string; name: string; term_code: string; section_label: string | null };
-type Options = { specialty?: string | null; standards?: boolean; transcript?: boolean; active?: boolean; roadmap?: Roadmap; offerings?: Offering[] };
+type Options = { specialty?: string | null; standards?: boolean; transcript?: boolean; active?: boolean; roadmap?: Roadmap; offerings?: Offering[];
+  curriculum?: (data: ReturnType<typeof curriculumData>) => ReturnType<typeof curriculumData> };
 function fakeDb(options: Options = {}) {
   const saved: { version: string; data: unknown; updated_at: Date }[] = [];
   const standards = options.standards === false ? [] : syntheticStandards().map((item) => ({ id: item.id, revision_id: item.revisionId, version: item.version, data: item.data }));
@@ -41,7 +42,7 @@ function fakeDb(options: Options = {}) {
     if (sql.includes("SELECT id FROM users")) return options.active === false ? rows([]) : rows([{ id: studentId }]);
     if (sql.includes("FROM student_profiles")) return rows([{ cohort_code: "K29", specialty: options.specialty === undefined ? "CNPM" : options.specialty }]);
     if (sql.includes("FROM student_transcripts")) return rows(options.transcript === false ? [] : [{ data: syntheticTranscript(syntheticStudentTerms()) }]);
-    if (sql.includes("FROM curricula")) return rows(params[0] === "K29" ? [{ data: curriculumData() }] : []);
+    if (sql.includes("FROM curricula")) return rows(params[0] === "K29" ? [{ data: (options.curriculum ?? ((data) => data))(curriculumData()) }] : []);
     if (sql.includes("FROM graduation_standards")) return rows(standards);
     if (sql.includes("FROM training_plans tp JOIN training_plan_items")) {
       const plan = syntheticPlan().data;
@@ -139,6 +140,19 @@ describe("study plan context", () => {
       { cohort_code: "K27", code: "DIT0451", name: "Đồ án thực tập nâng cao", term_code: "HK271", section_label: null }];
     const course = (await facts({ offerings })).context.courses.find((item) => item.code === "71ITIN40304");
     expect(course).toMatchObject({ planTerm: "HK253", offeredTerms: ["HK253", "HK262", "HK263"] });
+  });
+
+  it("asks Cờ vua nâng cao for Cờ vua studied first even when the CTĐT does not write it, and opens PE every term (user 2026-11-04)", async () => {
+    const withAdvanced = (data: ReturnType<typeof curriculumData>) => {
+      const chess = data.courses.find((course) => course.name === "Cờ vua")!;
+      return { ...data, relations: data.relations.filter((relation) => relation.courseCode !== "71PEKC10172"),
+        courses: [...data.courses, { ...chess, code: "71PEKC10172", name: "Cờ vua nâng cao" }] };
+    };
+    const courses = (await facts({ curriculum: withAdvanced })).context.courses;
+    const chess = courses.find((course) => course.name === "Cờ vua")!;
+    expect(courses.find((course) => course.code === "71PEKC10172")).toMatchObject({ prior: [chess.code], prerequisites: [], everyTerm: true });
+    expect(chess.prior).toEqual([]);
+    expect(chess.everyTerm).toBe(true);
   });
 
   it("asks a course of the student's program for the prerequisites of the student's own specialty only", async () => {

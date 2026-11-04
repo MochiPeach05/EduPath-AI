@@ -118,6 +118,23 @@ describe("buildRoadmapFacts", () => {
     expect(built.choices.find((choice) => choice.label.includes("TC310"))!.options.map((item) => item.code)).toEqual(["71ITSE30903"]);
   });
 
+  it("never offers Cờ vua nâng cao before Cờ vua was taken; one being studied or failed is enough (user 2026-11-04)", () => {
+    const options = (chess: "not_taken" | "in_progress" | "failed" | "passed") => {
+      const result = syntheticRoadmapResult();
+      // The synthetic student took Cờ vua already: this test sets its state.
+      const template = result.courses[0]!, others = result.courses.filter((item) => !item.name.startsWith("Cờ vua"));
+      result.courses.splice(0, result.courses.length, ...others,
+        { ...template, code: "71PEKC10062", name: "Cờ vua", specialty: null, state: chess, letter: chess === "failed" ? "F" : chess === "passed" ? "A" : null, score10: chess === "failed" ? 3 : chess === "passed" ? 9 : null, applicable: true, conditionOnly: true },
+        { ...template, code: "71PEKC10172", name: "Cờ vua nâng cao", specialty: null, state: "not_taken", letter: null, score10: null, applicable: true, conditionOnly: true });
+      result.progress = { ...result.progress!, next: [...result.progress!.next, { kind: "choice", label: "Nhóm tự chọn TC102: chọn 1 học phần", required: 1, unit: "course", remaining: 1,
+        options: [{ code: "71PEKC10172", name: "Cờ vua nâng cao", credits: 2, state: "not_taken" }, { code: "71PEBA10052", name: "Cầu lông", credits: 2, state: "not_taken" }] }] };
+      const built = buildRoadmapFacts(ROADMAP_ASSESSMENT, result, roadmapWindow(ROADMAP_NOW));
+      return built.choices.find((choice) => choice.label.includes("TC102"))!.options.map((item) => item.code);
+    };
+    expect(options("not_taken")).toEqual(["71PEBA10052"]);
+    for (const state of ["in_progress", "failed", "passed"] as const) expect(options(state)).toEqual(["71PEKC10172", "71PEBA10052"]);
+  });
+
   it("states a choice's shortfall in the unit of its requirement and keeps the term being studied's own plan (comp-calc-v19)", () => {
     const result = syntheticRoadmapResult();
     const option = (code: string, name: string, credits: number) => ({ code, name, credits, state: "not_taken" as const });

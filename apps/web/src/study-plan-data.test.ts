@@ -163,6 +163,21 @@ describe("planning", () => {
     expect(planIssues(thesis, planned).get("Y")?.prerequisites).toEqual(["X"]);
   });
 
+  it("asks for a học trước course taken before the term: one being studied counts from the next term (user 2026-11-04)", () => {
+    // Cờ vua nâng cao (N) after Cờ vua (K): K is being studied in HK261.
+    const chess = context({ courses: [...context().courses, course("K", { state: "in_progress", inProgressTerm: "HK261", group: "TC002", kind: "elective" }),
+      course("N", { prior: ["K"], group: "TC102", kind: "elective", everyTerm: true })] });
+    const at = (term: string) => planIssues(chess, { schemaVersion: 1, terms: [{ code: term, courses: [{ code: "N" }] }] }).get("N");
+    expect(at("HK261")).toEqual({ prerequisites: [], prior: ["K"], notOffered: null });
+    expect(at("HK262")).toBeUndefined();
+    // Never taken: only after K is planned in an earlier term; failed counts as taken.
+    const notTaken = context({ courses: [...context().courses, course("K"), course("N", { prior: ["K"], everyTerm: true })] });
+    expect(planIssues(notTaken, { schemaVersion: 1, terms: [{ code: "HK262", courses: [{ code: "K" }, { code: "N" }] }] }).get("N")?.prior).toEqual(["K"]);
+    expect(planIssues(notTaken, { schemaVersion: 1, terms: [{ code: "HK262", courses: [{ code: "K" }] }, { code: "HK263", courses: [{ code: "N" }] }] }).get("N")).toBeUndefined();
+    const failed = context({ courses: [...context().courses, course("K", { state: "failed", grade: "F" }), course("N", { prior: ["K"], everyTerm: true })] });
+    expect(planIssues(failed, { schemaVersion: 1, terms: [{ code: "HK262", courses: [{ code: "N" }] }] }).get("N")).toBeUndefined();
+  });
+
   it("flags a prerequisite planned in the same term and a course no training plan opens in that term", () => {
     const issues = planIssues(context(), plan);
     // D (prerequisite of C) is only planned in the same term; C is opened in HK2 but no plan opens it in HK262 itself.

@@ -4,6 +4,7 @@ import { CONDITION_ONLY_BLOCK } from "../competency-assessment/constants.js";
 import { assessGraduationGpa, assessGraduationStandard, graduationCodeAliases, graduationInputs } from "../competency-assessment/graduation.js";
 import { choiceRule } from "../competency-assessment/plan-progress.js";
 import { classifyCurriculumSpecialty, fold, specialtyLabel } from "../competency-assessment/specialty.js";
+import { opensEveryTerm, studiedFirstCodes } from "../curricula/course-rules.js";
 import type { CourseState, CurriculumCourseInput, GraduationStandardInput, SpecialtyCode, TriState } from "../competency-assessment/types.js";
 import type { CurriculumData } from "../curricula/model.js";
 import { majorCondition, majorIdentity } from "../curricula/majors.js";
@@ -19,13 +20,8 @@ import { calendarTermCode, creditLimits, termIndex } from "./model.js";
 type Db = Pick<PoolClient, "query">;
 
 /** One CTĐT course (or a course only the graduation standard lists) as the page needs it. */
-/**
- * The courses the school opens every term, whatever the training plans list (user 2026-11-04: "môn anh văn kì nào cũng mở
- * nhé"): English, by its code (71ENG…) or its name ("Anh văn 5 (AV5)", "Tiếng Anh …").
- */
-export function opensEveryTerm(code: string, name: string): boolean {
-  return /^\d*ENG/i.test(code.trim()) || /^(anh van|tieng anh)\b/.test(fold(name));
-}
+// English and Giáo dục thể chất open every term; Cờ vua nâng cao needs Cờ vua (curricula/course-rules.ts, user 2026-11-04).
+export { opensEveryTerm };
 
 export type StudyPlanCourse = {
   code: string;
@@ -347,6 +343,12 @@ export async function readStudyPlanFacts(db: Db, userId: string, now = new Date(
       state: record?.state ?? "not_taken", inProgressTerm: null, onlyInStandard: true,
       ...planTerms(code, item.name), ...audit(code),
     });
+  }
+  // Courses studied first whatever a revision writes (curricula/course-rules.ts; user 2026-11-04: "phải học xong cờ vua mới
+  // cho đk cờ vua nâng cao"), by name so every cohort's code is covered; the CTĐT's own học trước relation stays.
+  for (const course of courses) {
+    const extra = studiedFirstCodes(course.name, courses).filter((code) => code !== course.code);
+    if (extra.length) course.prior = [...new Set([...course.prior, ...extra])];
   }
   // A course that applies to the student needs only the prerequisites of the student's own program: the planner would
   // otherwise ask a CNPM student for CNDL and TTNT courses. Another specialty's course keeps all of its own.

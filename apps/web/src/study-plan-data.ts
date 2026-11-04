@@ -380,7 +380,8 @@ export type PlanIssue = { prerequisites: string[]; prior: string[]; notOffered: 
 /**
  * Checks of each planned course (Stellic flags missing prerequisites and courses not offered that term):
  * - tiên quyết: passed (or being studied) before the course's term, or planned in an earlier term;
- * - học trước: studied at least once (any result) before, or planned in an earlier term;
+ * - học trước: studied at least once (any result) before the course's term, or planned in an earlier term (Cờ vua
+ *   nâng cao after Cờ vua, user 2026-11-04: "phải học xong cờ vua mới cho đk"; one being studied counts from the next term);
  * - not offered: no training plan opens the course in that semester ("semester"), or, up to the last term the plans
  *   cover, none opens it in that very term although some open it in that semester of other years ("term").
  * Codes outside the CTĐT are not checked, nor another specialty's courses for a course of the student's program (ownRelations).
@@ -396,7 +397,8 @@ export function planIssues(context: Pick<StudyPlanContext, "courses" | "offering
     const running = (code: string) => { const other = byCode.get(code); return other?.state === "in_progress" && (!other.inProgressTerm || termIndex(other.inProgressTerm) < termIndex(term.code)); };
     const prerequisites = ownRelations(course, course.prerequisites, byCode)
       .filter((code) => byCode.has(code) && !isDone(byCode.get(code)!.state) && !running(code) && !earlier(code));
-    const prior = ownRelations(course, course.prior, byCode).filter((code) => byCode.has(code) && byCode.get(code)!.state === "not_taken" && !earlier(code));
+    const studied = (code: string) => { const state = byCode.get(code)!.state; return state === "in_progress" ? running(code) : state !== "not_taken"; };
+    const prior = ownRelations(course, course.prior, byCode).filter((code) => byCode.has(code) && !studied(code) && !earlier(code));
     const offer = offering(course, term.code, context.offeringUntil);
     const notOffered = offer === "ok" ? null : offer;
     if (prerequisites.length || prior.length || notOffered) issues.set(course.code, { prerequisites, prior, notOffered });

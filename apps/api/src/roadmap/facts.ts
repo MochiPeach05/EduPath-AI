@@ -5,6 +5,7 @@
 import { FAIL_LETTERS } from "../competency-assessment/constants.js";
 import { shortfallText } from "../competency-assessment/plan-progress.js";
 import { fold } from "../competency-assessment/specialty.js";
+import { blockedUntilStudied } from "../curricula/course-rules.js";
 import type { AssessmentResult, CourseFact, CourseState, GapStatus, PlanCourseRef } from "../competency-assessment/types.js";
 import { THESIS_NAME_PATTERN, TOPIC_NAME_PATTERN, thesisWay, thesisWayReason, type ThesisPath, type ThesisWay } from "../graduation/thesis.js";
 import type { RoadmapWindow } from "./window.js";
@@ -144,8 +145,11 @@ export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult
   const progress = result.progress;
   // The options of a choice still to take; the thesis group keeps only the way to take, the thesis or its chuyên đề courses.
   const gpa = { actual: result.graduation?.gpa?.actual ?? null, scale: result.graduation?.gpa?.scale ?? 4 };
+  // A choice never offers a course that needs another one studied first which the student has not taken yet
+  // (curricula/course-rules.ts, user 2026-11-04: Cờ vua nâng cao after Cờ vua); one being studied is done by the next term.
+  const studiedNames = (result.courses ?? []).filter((item) => item.state !== "not_taken").map((item) => item.name);
   const offered = (all: readonly PlanCourseRef[]): Pick<RoadmapChoice, "options" | "thesis"> => {
-    const options = all.filter((option) => ownProgram(option.code));
+    const options = all.filter((option) => ownProgram(option.code) && !blockedUntilStudied(option.name, studiedNames));
     const open = (option: PlanCourseRef) => option.state !== "passed" && option.state !== "exempt";
     const plain = ({ code, name, credits }: PlanCourseRef): RoadmapOption => ({ code, name, credits });
     const thesis = options.find((option) => THESIS_NAME_PATTERN.test(fold(option.name)));
