@@ -1,3 +1,4 @@
+import { fitAxisLabels, yearAxisLabels } from "./chart-labels";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { decimalText, scoreText } from "./display-format";
 import { layoutZoom } from "./page-scale";
@@ -378,6 +379,16 @@ export function LineChart({ terms, series, label, columnTip, emptyText }: {
     return lastIndex < 0 ? null : { key: line.key, label: line.label, color: line.color, x: x(lastIndex), y: y(line.values[lastIndex]!), value: line.values[lastIndex]! };
   }).filter((end): end is NonNullable<typeof end> => end !== null).sort((a, b) => a.y - b.y);
   for (let index = 1; index < ends.length; index++) if (ends[index]!.y - ends[index - 1]!.y < 15) ends[index]!.y = ends[index - 1]!.y + 15;
+  // Only the axis labels that fit (user 2026-11-04: "Lỗi chữ đè lên nhau"): every other term when they are close, one
+  // school year under the middle of its terms, short ("23–24") when the full years would touch.
+  const heads = terms.map((term) => term.label.split(" ")[0] ?? term.label);
+  const headShown = fitAxisLabels(terms.map((_, index) => ({ x: x(index), text: heads[index]! })));
+  const groups: { year: string; first: number; last: number }[] = [];
+  terms.forEach((term, index) => {
+    const year = term.label.split(" ")[1] ?? "", group = groups.at(-1);
+    if (group && group.year === year) group.last = index; else groups.push({ year, first: index, last: index });
+  });
+  const years = yearAxisLabels(groups.map((group) => ({ ...group, x: (x(group.first) + x(group.last)) / 2 })));
   return <div ref={frame} className="rp-line-frame">
     <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label={label} className="rp-line">
       {grid.map((value) => <g key={value}><line x1={left} x2={width - right + 8} y1={y(value)} y2={y(value)} className="rp-grid" /><text x={left - 8} y={y(value) + 4} textAnchor="end">{decimalText(value, 1)}</text></g>)}
@@ -386,17 +397,12 @@ export function LineChart({ terms, series, label, columnTip, emptyText }: {
         if (points.length < 2) return null;
         return <path key={`${line.key}-area`} d={`M${points.map(([px, py]) => `${px.toFixed(1)},${py.toFixed(1)}`).join(" L")} L${points.at(-1)![0].toFixed(1)},${top + plotHeight} L${points[0]![0].toFixed(1)},${top + plotHeight} Z`} fill={line.color} opacity="0.12" />;
       })}
-      {terms.map((term, index) => {
-        const [head, year] = term.label.split(" ");
-        // Terms close together keep the school year only under its first term (HK1), so the years never overlap.
-        const showYear = step >= 76 || index === 0 || head === "HK1";
-        return <g key={term.code} className="rp-col" tabIndex={0} data-tip={columnTip(index)}>
-          <rect x={x(index) - step / 2} y={top} width={step} height={plotHeight + bottom} fill="transparent" />
-          <line className="rp-cross" x1={x(index)} x2={x(index)} y1={top} y2={top + plotHeight} />
-          <text x={x(index)} y={height - 26} textAnchor="middle">{head}</text>
-          {showYear && <text x={x(index)} y={height - 10} textAnchor={step >= 76 ? "middle" : "start"} dx={step >= 76 ? 0 : -8}>{year ?? ""}</text>}
-        </g>;
-      })}
+      {terms.map((term, index) => <g key={term.code} className="rp-col" tabIndex={0} data-tip={columnTip(index)}>
+        <rect x={x(index) - step / 2} y={top} width={step} height={plotHeight + bottom} fill="transparent" />
+        <line className="rp-cross" x1={x(index)} x2={x(index)} y1={top} y2={top + plotHeight} />
+        {headShown[index] && <text x={x(index)} y={height - 26} textAnchor="middle">{heads[index]}</text>}
+      </g>)}
+      {years.map((label) => label.shown && <text key={label.first} x={label.x} y={height - 10} textAnchor="middle" pointerEvents="none">{label.text}</text>)}
       {series.map((line) => {
         // A gap (a term without data) breaks the line into pieces.
         const pieces: (readonly [number, number])[][] = [[]];

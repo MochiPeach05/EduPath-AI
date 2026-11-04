@@ -66,7 +66,9 @@
 .rp-coverage .ep-icon { width: 15px; height: 15px; flex: none; margin-top: 2px; }
 
 /* Cards and sections */
-.rp-card { display: grid; gap: 14px; align-content: start; min-width: 0; padding: 18px; border-radius: 18px; background: var(--rp-surface); box-shadow: var(--rp-shadow); }
+/* One column as wide as the card: a wide table scrolls in its own box (.rp-table-wrap) instead of widening the card's
+   column past the card (Nhật ký at 820px, user 2026-11-04). */
+.rp-card { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-content: start; min-width: 0; padding: 18px; border-radius: 18px; background: var(--rp-surface); box-shadow: var(--rp-shadow); }
 .rp-card-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px 16px; }
 .rp-card-head p { margin: 2px 0 0; max-width: 78ch; color: var(--rp-muted); font-size: 13px; }
 .rp-card-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }

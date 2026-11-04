@@ -1,6 +1,7 @@
 import type { CareerSelection } from "./career-types";
 import { useEffect, useState, type ReactNode } from "react";
 import { queueAssistantQuestion } from "./assistant-handoff";
+import { fitAxisLabels, yearAxisLabels } from "./chart-labels";
 import { decimalText, meaningClass, meaningOf, scoreText, type Meaning } from "./display-format";
 import { OVERVIEW_API, type OverviewResponse, type OverviewWarning } from "./overview-types";
 import { PROFILE_SECTIONS, profileSectionOf, type ProfileSection } from "./student-overview-data";
@@ -127,6 +128,8 @@ export const creditText = (value: number) => decimalText(Math.floor(value * 10 +
  * state; the term being studied says what is registered in it, the figure of "Học kỳ này"; a late term what it still owes.
  * No "passed/planned" ratio: the plan's figure and the student's courses are two sources (a GDQP course in one, not the other).
  */
+/** "còn nợ 3 TC" wraps as "còn nợ" / "3 TC" in a narrow term card, never between the number and TC. */
+const keepUnit = (text: string) => text.replace(/ (?=TC\b)/g, "\u00a0");
 export function termChip(term: ProgressTerm): { main: string; sub: string } {
   const planned = term.plannedCredits > 0 ? `${creditText(term.plannedCredits)} TC` : "—";
   // Nothing registered yet (between two terms the latest graded one is "the term being studied"): its plan, not "0 TC đang học".
@@ -342,7 +345,7 @@ function ProgressCard({ data, navigate, openTranscript }: { data: OverviewRespon
           const chip = termChip(term);
           return <button key={term.term.code} type="button" className={`ov-term ov-term-${term.state}`} aria-pressed={open === term.term.code}
             aria-label={`${term.term.label}: ${chip.main} ${chip.sub}`} onClick={() => setOpen(term.term.code)}>
-            <strong>HK{termNumber(term.term.code)}</strong>{chip.main}<em>{chip.sub}</em>
+            <strong>HK{termNumber(term.term.code)}</strong>{keepUnit(chip.main)}<em>{keepUnit(chip.sub)}</em>
           </button>;
         })}</div>
       </div>)}</div>
@@ -475,6 +478,9 @@ function GpaChart({ data, openTranscript }: { data: OverviewResponse; openTransc
     index += group.terms.length;
     return { year: group.year, x: L + (middle * (W - L - R)) / Math.max(last, 1) };
   });
+  // Only the labels that fit: every other term on a narrow chart, short years ("23–24") when the full ones would touch.
+  const termShown = fitAxisLabels(series.map((item, i) => ({ x: x(i), text: `HK${termNumber(item.term.code)}` })));
+  const years = yearAxisLabels(yearLabels);
   const point = hover === null ? null : series[hover] ?? null;
   return <section className="sw-panel ov-card" aria-labelledby="ov-gpa-title">
     {head}
@@ -496,8 +502,8 @@ function GpaChart({ data, openTranscript }: { data: OverviewResponse; openTransc
         {series.map((item, i) => item.studyGpa4 !== null && <circle key={`s${i}`} cx={x(i)} cy={y(item.studyGpa4)} r={4} className="ov-dot-study" />)}
         {series.map((item, i) => item.cumulativeGpa4 !== null && <circle key={`c${i}`} cx={x(i)} cy={y(item.cumulativeGpa4)} r={4} className="ov-dot-cum" />)}
         {endLabels.map((label) => <text key={label.key} x={x(last) + 10} y={label.at + 4} className={`ov-end-label${label.key === "cum" ? " ov-end-strong" : ""}`}>{formatDecimal(label.value)} {label.word}</text>)}
-        {series.map((item, i) => <text key={`x${i}`} x={x(i)} y={H - B + 18} textAnchor="middle" className="ov-axis">HK{termNumber(item.term.code)}</text>)}
-        {yearLabels.map((label) => <text key={label.year} x={label.x} y={H - B + 34} textAnchor="middle" className="ov-axis ov-axis-year">{label.year}</text>)}
+        {series.map((item, i) => termShown[i] && <text key={`x${i}`} x={x(i)} y={H - B + 18} textAnchor="middle" className="ov-axis">HK{termNumber(item.term.code)}</text>)}
+        {years.map((label) => label.shown && <text key={label.year} x={label.x} y={H - B + 34} textAnchor="middle" className="ov-axis ov-axis-year">{label.text}</text>)}
         {point && <line x1={x(hover!)} x2={x(hover!)} y1={T} y2={H - B} className="ov-cross" />}
         {series.map((_, i) => <rect key={`h${i}`} x={x(i) - step / 2} y={T} width={step} height={H - T - B} fill="transparent" onMouseEnter={() => setHover(i)} />)}
       </svg>
