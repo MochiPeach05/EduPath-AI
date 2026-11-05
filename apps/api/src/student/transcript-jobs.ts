@@ -68,7 +68,7 @@ export function createTranscriptWorkerRouter(pool: DatabasePool | undefined, key
     res.json({ job: job ? { id: job.id, filename: job.filename, leaseToken: job.leaseToken, pdf: job.pdf.toString("base64") } : null });
   });
   router.post("/:id/complete", async (req, res) => {
-    const input = z.object({ leaseToken: z.uuid(), result: z.unknown().optional(), error: z.enum(["invalid_pdf", "encrypted_pdf", "too_many_pages", "unsupported_layout", "unreadable_rows", "parse_timeout", "ocr_failed"]).optional() }).safeParse(req.body);
+    const input = z.object({ leaseToken: z.uuid(), result: z.unknown().optional(), error: z.enum(["invalid_pdf", "encrypted_pdf", "too_many_pages", "unsupported_layout", "curriculum_view", "unreadable_rows", "parse_timeout", "ocr_failed"]).optional() }).safeParse(req.body);
     if (!z.uuid().safeParse(req.params.id).success || !input.success || (input.data.error ? input.data.result !== undefined : input.data.result === undefined)) { res.status(400).json({ error: "invalid_input" }); return; }
     let parsed: ReturnType<typeof mapOcrTranscript> | undefined;
     let errorCode: string | undefined = input.data.error;

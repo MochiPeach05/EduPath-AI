@@ -50,6 +50,7 @@ describe("notify", () => {
 
   it("explains a transcript failure by its code", () => {
     expect(transcriptFailed("encrypted_pdf").body).toContain("PDF đang khóa bằng mật khẩu.");
+    expect(transcriptFailed("curriculum_view").body).toContain("không hỗ trợ định dạng “Xem điểm theo CTĐT”");
     expect(transcriptFailed("something_new").body).toContain("Có lỗi khi đọc bảng điểm.");
     expect(transcriptReady(40, 10).body).toContain("đọc xong 40 học phần trong 10 học kỳ");
     expect(transcriptReady(null, null).body).toContain("đã đọc xong từ bảng điểm PDF");

@@ -20,6 +20,8 @@ const errors: Record<string, string> = {
   invalid_pdf: "Chỉ nhận tệp PDF hợp lệ.", pdf_too_large: "Tệp vượt quá giới hạn 5 MB.",
   unsupported_pdf: "Không đọc được PDF này. Hãy xuất lại PDF từ cổng đào tạo của trường.",
   unsupported_layout: "PDF không khớp bảng điểm 8 cột của trường hoặc không có lớp chữ. Hãy dùng bản PDF xuất từ cổng đào tạo.",
+  // The portal's "Xem điểm theo CTĐT" table (OCR worker and API parser: curriculum_view; user 2026-11-05).
+  curriculum_view: "EduPath AI không hỗ trợ định dạng “Xem điểm theo CTĐT”. Ở trang Kết quả học tập của cổng đào tạo, hãy chọn “Xem điểm SV” rồi xuất lại bảng điểm ra PDF.",
   scanned_pdf: "PDF không có lớp chữ và dịch vụ nhận dạng chưa được bật. Vui lòng liên hệ quản trị viên.",
   unreadable_rows: "Có dòng học phần chưa đọc đầy đủ. Bảng điểm cũ vẫn được giữ nguyên; hãy xuất lại tệp PDF.",
   unreadable_grades: "Có ô tín chỉ hoặc điểm không đọc được chính xác. Bảng điểm cũ vẫn được giữ nguyên.",

@@ -165,6 +165,9 @@ export function parsePages(pages: Page[]): TranscriptData {
   let active: TranscriptSection | undefined;
   let count = 0, reviewed = 0, skipped = 0;
   if (pages.some(page => !page.items.some(item => clean(item.text)))) throw new TranscriptError("scanned_pdf");
+  // The portal's "Xem điểm theo CTĐT" table (its column "Môn tương đương"), on any page: a full-page print puts the
+  // portal menu first. It is refused by name (user 2026-11-05: "không hỗ trợ định dạng Xem điểm theo CTĐT").
+  if (pages.some(page => fold(lines(page.items).map(l => l.text).join(" ")).includes("mon tuong duong"))) throw new TranscriptError("curriculum_view");
   const firstText = fold(lines(pages[0]?.items ?? []).map(l => l.text).join(" "));
   if (!["ma mon hoc", "ten mon hoc", "tin chi", "he 10", "he 4"].every(t => firstText.includes(t))) throw new TranscriptError("unsupported_layout");
   for (const page of pages) {

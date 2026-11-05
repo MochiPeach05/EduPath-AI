@@ -99,6 +99,25 @@ def folded(value):
                    if not unicodedata.combining(c)).lower().replace('đ', 'd')
 
 
+# The column only the portal's "Xem điểm theo CTĐT" table has. That table lists the whole curriculum under its planned
+# terms, with group rows (Bắt buộc, Tự chọn, "TC209 (Chọn 9 / 36 tín chỉ)") and one score column (Điểm, Điểm chữ), no
+# hệ 10. EduPath reads only the "Xem điểm SV" transcript (user 2026-11-05: "không hỗ trợ định dạng Xem điểm theo CTĐT").
+# The words "Xem điểm theo CTĐT" themselves are no sign: a full-page print of the transcript shows them on a radio button.
+CURRICULUM_VIEW_MARK = 'mon tuong duong'
+
+
+class CurriculumViewError(ValueError):
+    """The PDF is the "Xem điểm theo CTĐT" table, not a transcript; the worker answers curriculum_view."""
+
+    def __init__(self):
+        super().__init__('curriculum_view')
+
+
+def is_curriculum_view(texts):
+    """True when one of the texts (a page's text layer, the cells of a row read by OCR) has the column "Môn tương đương"."""
+    return any(CURRICULUM_VIEW_MARK in folded(text) for text in texts)
+
+
 def save_json(path, value):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding='utf-8')
@@ -140,6 +159,8 @@ def native_rows(page):
     text = page.get_text()
     if not text.strip():
         return [], False, Counter()
+    if is_curriculum_view([text]):
+        raise CurriculumViewError()
     rows = []
     for table in sorted(page.find_tables().tables, key=lambda t: t.bbox[1]):
         rows.extend(table.extract())
@@ -568,6 +589,9 @@ def extract_transcript(document, source_name, options=None, catalog=None, output
         else:
             method, warnings = 'pdf_text', []
             rows = attach_result_marks(page, rows)
+        # A scan of the "Xem điểm theo CTĐT" table has no text layer: its header row read by OCR tells it.
+        if is_curriculum_view(' '.join(cell or '' for cell in row) for row in rows):
+            raise CurriculumViewError()
         data = {'page': index, 'method': method, 'warnings': warnings, 'rows': rows}
         if page_dir:
             save_json(page_dir / 'extracted_rows.json', data)

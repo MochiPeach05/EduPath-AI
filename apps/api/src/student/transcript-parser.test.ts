@@ -59,6 +59,15 @@ describe("native transcript parser", () => {
     expect(() => parsePages([{ page: 1, items: [...header, term("Năm học 2020-2021 - HK1", 120)] }])).toThrow("unsupported_layout");
   });
 
+  it("refuses the portal's \"Xem điểm theo CTĐT\" table by name, on any page (user 2026-11-05)", () => {
+    const ctdt = [["STT", 30], ["Mã học phần", 66], ["Tên học phần", 160], ["Số tín chỉ", 330], ["Môn tương đương", 380], ["Điểm", 440], ["Điểm chữ", 470], ["Kết quả", 532]]
+      .map(([text, x]) => item(text as string, x as number, 100));
+    const course = row(140, 1, "71ITBS10103", "Nhập môn công nghệ thông tin", 3, "", "3.20", "B+", "");
+    expect(() => parsePages([{ page: 1, items: [...ctdt, ...course] }])).toThrow("curriculum_view");
+    // A full-page print: the portal menu on page 1, the table on page 2.
+    expect(() => parsePages([{ page: 1, items: [item("Kết quả học tập (/Home/Marks)", 30, 100)] }, { page: 2, items: [...ctdt, ...course] }])).toThrow("curriculum_view");
+  });
+
   it("knows both code formats and nothing else", () => {
     for (const code of ["71ITBS10103", "71ENG110013", "71PEBA10052", "DIT0070", "DGT0010", "DTA0015"]) expect(COURSE_CODE_PATTERN.test(code), code).toBe(true);
     for (const code of ["DIT007", "dit0070", "DIT00700", "71IT1010", "Đạt", "2023"]) expect(COURSE_CODE_PATTERN.test(code), code).toBe(false);

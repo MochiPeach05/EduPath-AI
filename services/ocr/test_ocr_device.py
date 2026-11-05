@@ -241,6 +241,67 @@ class OldCourseCodeTests(TestCase):
         self.assertEqual(expected, Counter({"DIT0070": 1, "DGT0020": 1}))
 
 
+class CurriculumViewTests(TestCase):
+    """The portal's "Xem điểm theo CTĐT" table is refused (user 2026-11-05); synthetic text only, no student data."""
+
+    CTDT_HEADER = ["STT", "Mã học phần", "Tên học phần", "Số tín chỉ", "Môn\ntương\nđương", "Điểm", "Điểm chữ", "Kết quả"]
+    SV_HEADER = ["STT", "Mã môn học", "Tên môn học", "Tín chỉ", "Điểm hệ 10", "Điểm hệ 4", "Điểm chữ", "Kết quả"]
+
+    @staticmethod
+    def document(text):
+        class Page:
+            number = 0
+
+            @staticmethod
+            def get_text():
+                return text
+
+            @staticmethod
+            def get_image_info():
+                return []
+
+        class Document:
+            is_pdf = True
+
+            def __iter__(self):
+                return iter([Page()])
+
+        return Document()
+
+    def test_the_text_layer_of_the_curriculum_view_is_refused(self):
+        import test_ocr
+
+        text = "Kết quả học tập\n" + "\n".join(self.CTDT_HEADER) + "\n2023-2024 / HK01\nBắt Buộc\n1\n71ITBS10103"
+        with self.assertRaises(test_ocr.CurriculumViewError) as raised:
+            test_ocr.extract_transcript(self.document(text), "synthetic.pdf", test_ocr.Options(mode="auto"), log=lambda _m: None)
+        self.assertEqual(str(raised.exception), "curriculum_view")
+
+    def test_a_scan_of_the_curriculum_view_is_refused_from_its_ocr_rows(self):
+        import test_ocr
+
+        rows = [self.CTDT_HEADER, ["1", "71ITBS10103", "Nhập môn công nghệ thông tin", "3", "", "3.20", "B+", ""]]
+        with patch.object(test_ocr, "native_rows", return_value=([], False, Counter())), \
+                patch.object(test_ocr, "_ppocr_page", return_value=(rows, [])):
+            with self.assertRaises(test_ocr.CurriculumViewError):
+                test_ocr.extract_transcript(self.document(""), "synthetic.pdf", test_ocr.Options(mode="auto"), log=lambda _m: None)
+
+    def test_the_transcript_view_is_read_even_when_its_page_shows_the_radio_buttons(self):
+        import test_ocr
+
+        text = "Xem điểm SV\nXem điểm theo CTĐT\n" + "\n".join(self.SV_HEADER)
+        self.assertFalse(test_ocr.is_curriculum_view([text]))
+        rows = [self.SV_HEADER, ["Năm học: 2020-2021 - Học kỳ: HK01"], ["1", "DIT0070", "Cơ sở dữ liệu", "3", "7.8", "3.00", "B", "Đạt"]]
+        with patch.object(test_ocr, "native_rows", return_value=(rows, True, Counter())), \
+                patch.object(test_ocr, "attach_result_marks", side_effect=lambda _page, found: found):
+            result = test_ocr.extract_transcript(self.document(text), "synthetic.pdf", test_ocr.Options(mode="auto"), log=lambda _m: None)
+        self.assertEqual(result["course_count"], 1)
+
+    def test_the_worker_passes_the_refusal_to_the_server(self):
+        import worker
+
+        self.assertIn("curriculum_view", worker.PARSE_ERRORS)
+
+
 class ServerRuleTests(TestCase):
     """worker.server_error follows apps/api/src/student/ocr-adapter.ts (synthetic rows, no student data)."""
 

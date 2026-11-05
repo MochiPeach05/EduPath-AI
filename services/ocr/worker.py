@@ -19,6 +19,8 @@ from urllib.request import Request, urlopen, build_opener, HTTPRedirectHandler
 
 ROOT=Path(__file__).resolve().parent
 LOG=ROOT/'logs'/'transcripts.jsonl'
+# The refusals the server knows (apps/api/src/student/transcript-jobs.ts); any other failure is ocr_failed.
+PARSE_ERRORS={'invalid_pdf','encrypted_pdf','too_many_pages','unsupported_layout','curriculum_view'}
 
 def read_config():
     env=ROOT/'.env'
@@ -151,7 +153,7 @@ def parse_pdf(pdf_path,result_path):
             result={'result':extract_transcript(document,'transcript.pdf',options,log=lambda _:None)}
     except ValueError as error:
         code=str(error)
-        result={'error':code if code in {'invalid_pdf','encrypted_pdf','too_many_pages','unsupported_layout'} else 'ocr_failed'}
+        result={'error':code if code in PARSE_ERRORS else 'ocr_failed'}
     except Exception:
         result={'error':'ocr_failed'}
     result_path.write_text(json.dumps(result,ensure_ascii=False),encoding='utf-8')

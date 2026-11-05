@@ -95,6 +95,7 @@ const TRANSCRIPT_FAILURES: Record<string, string> = {
   encrypted_pdf: "PDF đang khóa bằng mật khẩu.",
   too_many_pages: "PDF dài quá 20 trang.",
   unsupported_layout: "Bố cục bảng điểm này chưa được hỗ trợ.",
+  curriculum_view: "EduPath AI không hỗ trợ định dạng “Xem điểm theo CTĐT”. Ở trang Kết quả học tập, bạn chọn “Xem điểm SV” rồi xuất lại PDF.",
   unreadable_rows: "Một số dòng môn học không đọc được.",
   parse_timeout: "Đọc bảng điểm quá lâu nên đã dừng.",
   ocr_failed: "Không nhận dạng được chữ trong PDF.",
