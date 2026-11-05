@@ -253,6 +253,21 @@ export function planProgress(args: {
     .sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0));
   for (const slot of choiceSlots) allocate(slot, substitutes(slot), done, "done");
   for (const slot of choiceSlots) allocate(slot, substitutes(slot), ongoing, "ongoing");
+  // A choice of a CTĐT elective group whose credits are reached (passed, else passed and in progress) is met: a plan can list
+  // more choices of a group than its credits, and a student who took them all in other terms is not late (comp-calc-v20,
+  // user 2026-11-05: "người ta học đúng kế hoạch mà").
+  const groupCredits = (code: string, accept: (state: CourseState) => boolean) => [...courses.values()]
+    .filter((course) => course.applicable && course.electiveCode === code && accept(course.state)).reduce((sum, course) => sum + course.credits, 0);
+  const reached = (codes: ReadonlySet<string>, accept: (state: CourseState) => boolean) => codes.size > 0 && [...codes].every((code) => {
+    const quota = args.quotas.get(code)?.quota ?? null;
+    return quota !== null && quota > 0 && groupCredits(code, accept) >= quota;
+  });
+  for (const slot of choiceSlots) {
+    const missing = slot.need - slot.done - slot.ongoing;
+    if (missing <= 0) continue;
+    if (reached(slot.electiveCodes, done)) slot.done += missing;
+    else if (reached(slot.electiveCodes, (state) => done(state) || ongoing(state))) slot.ongoing += missing;
+  }
 
   for (const group of quotaGroups.values()) {
     for (const course of courses.values()) {

@@ -268,10 +268,44 @@ export function planTermsView(plan: Pick<PlanData, "items" | "sections" | "terms
   // Every course registered in the term being studied, condition-only ones left out like everywhere in this view.
   const registered = (extras.running ?? []).filter((course) => !course.conditionOnly);
 
-  // As the plan progress allocates them: one course fills one choice only, earliest first; a course the plan also lists
-  // on its own still fills a choice, but is not listed or counted twice. A failed option is listed in its first choice only.
+  // As the plan progress allocates them (plan-progress.ts): one course fills one choice only, earliest first; a course the
+  // plan also lists on its own still fills a choice, but is not listed or counted twice. A failed option is listed in its
+  // first choice only. Then, as the engine does (comp-calc-v20, user 2026-11-05: "người ta học đúng kế hoạch mà"), a choice
+  // still short takes the passed or running courses of its CTĐT elective group that no choice used (taken in another term),
+  // earliest choice first; and a choice of a group Xét tốt nghiệp already passes is met.
   const allocated = new Set<string>();
   const failedListed = new Set<string>();
+  type Fill = { need: number; passed: CourseFact[]; running: CourseFact[]; failedOwn: CourseFact[]; others: CourseFact[]; groups: Set<string> };
+  const fills = new Map<Slot, Fill>();
+  for (const term of termCodes) for (const slot of slots.get(term)?.values() ?? []) {
+    const usable = slot.options.filter((option) => option.state !== "not_taken" && !allocated.has(option.code));
+    const elsewhere = usable.filter((option) => seen.has(option.code) && (passedLike(option) || option.state === "in_progress"))
+      .slice(0, Math.min(slot.need, Math.max(slot.options.length, 1)));
+    for (const option of elsewhere) allocated.add(option.code);
+    const need = Math.max(0, Math.min(slot.need, Math.max(slot.options.length, 1)) - elsewhere.length);
+    const own = usable.filter((option) => !seen.has(option.code));
+    const passed = own.filter(passedLike).slice(0, need);
+    const running = own.filter((option) => option.state === "in_progress").slice(0, need - passed.length);
+    for (const option of [...passed, ...running]) allocated.add(option.code);
+    const failedOwn = own.filter((option) => option.state === "failed" && !failedListed.has(option.code));
+    for (const option of failedOwn) failedListed.add(option.code);
+    const groups = new Set(slot.options.map((option) => option.electiveGroup).filter((group): group is string => Boolean(group)));
+    fills.set(slot, { need, passed, running, failedOwn, others: [], groups });
+  }
+  for (const term of termCodes) for (const slot of slots.get(term)?.values() ?? []) {
+    const fill = fills.get(slot)!;
+    let short = fill.need - fill.passed.length - fill.running.length;
+    if (short <= 0 || !fill.groups.size) continue;
+    const candidates = [...byCode.values()].filter((course) => course.applicable && !course.conditionOnly && course.electiveGroup !== null
+      && fill.groups.has(course.electiveGroup) && !allocated.has(course.code) && !seen.has(course.code))
+      .sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0));
+    for (const course of [...candidates.filter(passedLike), ...candidates.filter((course) => course.state === "in_progress")]) {
+      if (short <= 0) break;
+      allocated.add(course.code);
+      fill.others.push(course);
+      short--;
+    }
+  }
   const terms = termCodes.map((term): OverviewProgressTerm => {
     const rows = (plain.get(term) ?? []).map((course) => courseRow(course, term, studyTerm));
     let ownCredits = rows.reduce((sum, row) => sum + row.credits, 0);
@@ -280,27 +314,27 @@ export function planTermsView(plan: Pick<PlanData, "items" | "sections" | "terms
     let complete = rows.every((row) => row.state === "passed");
     for (const row of rows) if (row.state === "late") late.push({ code: row.code, name: row.name, term, credits: row.credits });
     for (const slot of slots.get(term)?.values() ?? []) {
-      const usable = slot.options.filter((option) => option.state !== "not_taken" && !allocated.has(option.code));
-      const elsewhere = usable.filter((option) => seen.has(option.code) && (passedLike(option) || option.state === "in_progress"))
-        .slice(0, Math.min(slot.need, Math.max(slot.options.length, 1)));
-      for (const option of elsewhere) allocated.add(option.code);
-      const need = Math.max(0, Math.min(slot.need, Math.max(slot.options.length, 1)) - elsewhere.length);
-      const own = usable.filter((option) => !seen.has(option.code));
-      const passed = own.filter(passedLike).slice(0, need);
-      const running = own.filter((option) => option.state === "in_progress").slice(0, need - passed.length);
-      for (const option of [...passed, ...running]) allocated.add(option.code);
-      const failedOwn = own.filter((option) => option.state === "failed" && !failedListed.has(option.code));
-      for (const option of failedOwn) failedListed.add(option.code);
-      const missing = need - passed.length - running.length;
+      const { need, passed: ownPassed, running: ownRunning, failedOwn, others, groups } = fills.get(slot)!;
+      const passed = [...ownPassed, ...others.filter(passedLike)];
+      const running = [...ownRunning, ...others.filter((option) => option.state === "in_progress")];
+      const short = need - passed.length - running.length;
+      // A group Xét tốt nghiệp already passes needs no more of its courses (comp-calc-v20).
+      const met = short > 0 && groups.size > 0 && [...groups].every((group) => extras.doneGroups?.has(group) === true);
+      const missing = met ? 0 : short;
       // Any option fills the choice, so a failed one need not be retaken.
       const failedNote = missing > 0 ? "học lại hoặc chọn môn khác" : "đã chọn môn khác";
-      rows.push(...[...passed, ...running].map((option) => courseRow(option, term, studyTerm)),
+      // A course of the group taken in another term says where.
+      const otherRow = (course: CourseFact) => {
+        const row = courseRow(course, term, studyTerm);
+        return course.term && course.term !== term ? { ...row, detail: `${row.detail} · học ở ${termName(course.term)}` } : row;
+      };
+      rows.push(...[...ownPassed, ...ownRunning].map((option) => courseRow(option, term, studyTerm)), ...others.map(otherRow),
         ...failedOwn.map((option) => courseRow(option, term, studyTerm, failedNote)));
       // The courses chosen, and for the ones still to choose the cheapest options still open, as the engine counts them.
       const missingCredits = missing > 0 ? choiceCreditRange(slot.options.filter((option) => !allocated.has(option.code)), missing).low : 0;
       ownCredits += [...passed, ...running].reduce((sum, option) => sum + option.credits, 0) + missingCredits;
       passedCredits += passed.reduce((sum, option) => sum + option.credits, 0);
-      if (passed.length < need) complete = false;
+      if (passed.length < need && !met) complete = false;
       if (missing > 0) {
         const credits = missingCredits;
         rows.push({

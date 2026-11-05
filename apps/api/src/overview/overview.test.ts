@@ -193,6 +193,41 @@ describe("progressOverview", () => {
   });
 });
 
+describe("progressOverview, choices of an elective group (comp-calc-v20, user 2026-11-05)", () => {
+  it("fills a choice with a course of its group taken in another term, and meets a choice of a group already passed", () => {
+    const fact = (code: string, state: CourseFact["state"], term: string | null = null): CourseFact => ({
+      code, name: `Môn ${code}`, credits: 3, type: "TC209", specialty: null, electiveGroup: "TC209", conditionOnly: false, applicable: true, state,
+      outcome: null, inferred: false, score10: null, letter: state === "passed" ? "A" : null, attempts: state === "not_taken" ? 0 : 1,
+      term, plannedTerm: null, plannedTermSource: null,
+    });
+    const item = (position: number, code: string, termCode: string): PlanItem => ({
+      id: `row-${position}`, position, code, name: `Môn ${code}`, credits: 3, type: "TC209", termCode, semester: Number(termCode[4]), studyYear: 2,
+      sectionId: `choice-${termCode}`, prerequisite: "", prior: "", notes: "", hours: { lecture: null, practice: null, project: null, internship: null },
+      sourceRow: position, sourceSheet: "KHĐT", sourceCells: {},
+    });
+    const codes = ["HK241", "HK243", "HK251"];
+    const plan = {
+      terms: codes.map((code) => ({ code, semester: Number(code[4]), studyYear: 2, sourceCredits: 3 })),
+      sections: codes.map((termCode, index) => ({ id: `choice-${termCode}`, termCode, label: "Chọn 1 trong 2 môn sau", kind: "choice" as const, sourceRow: index })),
+      items: [item(1, "E1", "HK241"), item(2, "E2", "HK241"), item(3, "E3", "HK243"), item(4, "E4", "HK243"), item(5, "E5", "HK251"), item(6, "E6", "HK251")],
+    };
+    const facts = [fact("E1", "passed", "HK241"), fact("E2", "passed", "HK241"), ...["E3", "E4", "E5", "E6"].map((code) => fact(code, "not_taken"))];
+    const view = (doneGroups?: ReadonlySet<string>) => planTermsView(plan, facts, "HK261", { doneGroups }).terms
+      .map((term) => [term.term.code, term.courses.map((course) => `${course.code}|${course.state}|${course.detail}`)]);
+    expect(view()).toEqual([
+      ["HK241", ["E1|passed|A"]],
+      ["HK243", ["E2|passed|A · học ở HK1 2024–2025"]],
+      ["HK251", ["|late|chưa chọn, trễ so với kế hoạch"]],
+    ]);
+    // TC209 passed in Xét tốt nghiệp: the choice of HK251 needs nothing more.
+    expect(view(new Set(["TC209"]))).toEqual([
+      ["HK241", ["E1|passed|A"]],
+      ["HK243", ["E2|passed|A · học ở HK1 2024–2025"]],
+      ["HK251", []],
+    ]);
+  });
+});
+
 describe("graduationOverview", () => {
   it("lists every condition of the student's standard, naming the mandatory courses still missing", () => {
     const inputs = syntheticInputs();

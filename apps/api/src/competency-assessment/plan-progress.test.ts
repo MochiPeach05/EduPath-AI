@@ -186,6 +186,35 @@ describe("training-plan progress (spec §7.8)", () => {
   });
 });
 
+describe("comp-calc-v20 (user 2026-11-05): a choice of an elective group whose credits are reached is met", () => {
+  const item = (position: number, code: string, termCode: string) => ({
+    id: `row-${position}`, position, code, name: `Môn ${code}`, credits: 3, type: "TC209", termCode, semester: Number(termCode[4]), studyYear: 2,
+    sectionId: `choice-${termCode}`, prerequisite: "", prior: "", notes: "", hours: { lecture: null, practice: null, project: null, internship: null },
+    sourceRow: position, sourceSheet: "KHĐT", sourceCells: {},
+  });
+  const terms = ["HK241", "HK243", "HK251"];
+  const choicePlan = {
+    terms: terms.map((code) => ({ code, semester: Number(code[4]), studyYear: 2, sourceCredits: 3 })),
+    sections: terms.map((termCode, index) => ({ id: `choice-${termCode}`, termCode, label: "Chọn 1 trong 2 môn sau", kind: "choice" as const, sourceRow: index })),
+    items: [item(1, "E1", "HK241"), item(2, "E2", "HK241"), item(3, "E3", "HK243"), item(4, "E4", "HK243"), item(5, "E5", "HK251"), item(6, "E6", "HK251")],
+  };
+  const codes = ["E1", "E2", "E3", "E4", "E5", "E6"];
+  const runChoices = (states: Record<string, CourseState>, quota: number) => planProgress({
+    plan: choicePlan, physicalEducationGroups: {}, currentTerm: "HK261",
+    courses: new Map(codes.map((code) => [code, { code, name: `Môn ${code}`, credits: 3, state: states[code] ?? "not_taken", applicable: true, electiveCode: "TC209" }])),
+    quotas: new Map([["TC209", { code: "TC209", courseCodes: codes, quota, source: "curriculum" as const }]]),
+  });
+
+  it("fills a later choice with a course of the group taken earlier, and meets the rest once the group's credits are reached", () => {
+    // E1 and E2 both passed in HK241: E2 fills the choice of HK243; the group asks 6 credits, reached, so HK251's is met too.
+    expect(runChoices({ E1: "passed", E2: "passed" }, 6).late).toEqual([]);
+    // A group of 9 credits still needs one: the choice of HK251 is late.
+    expect(runChoices({ E1: "passed", E2: "passed" }, 9).late.map((entry) => [entry.kind, entry.termCode])).toEqual([["choice", "HK251"]]);
+    // Reached with a course in progress: that choice is running, not late.
+    expect(runChoices({ E1: "passed", E2: "passed", E3: "in_progress" }, 9).late).toEqual([]);
+  });
+});
+
 describe("comp-calc-v19 (user 2026-11-04): late only before the term being studied, no condition-only credits", () => {
   // The flags calculate.ts passes from the engine's conditionCodes (the fixture standard's condition-only courses).
   const conditionCodes = new Set(["71NAD110013", "71PEKC10062", "71PESW10042", "71PEBA10052", "71PETT10012"]);

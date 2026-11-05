@@ -90,8 +90,10 @@ import type { Confidence, FitCode, GapStatus } from "./types.js";
  * - a "Chọn k" choice's missing credits are its k cheapest options still open (k × the cheapest option before).
  * Stored results change only with "Đánh giá lại"; Đánh giá năng lực says so for older ones (web lateBeforeStudyTerm).
  * Tổng quan computes its progress live and always reads v19.
+ * comp-calc-v20 (user 2026-11-05: "người ta học đúng kế hoạch mà"): a plan choice of a CTĐT elective group is met once the
+ * group's credits are reached; a plan can list more choices of a group than its credits (plan-progress.ts).
  */
-export const CALC_VERSION = "comp-calc-v19";
+export const CALC_VERSION = "comp-calc-v20";
 /**
  * The graduation evaluation uses no skill level, so it keeps the version of its last change:
  * comp-calc-v10 changed only levels and must not re-date every student's graduation advice.
