@@ -15,7 +15,8 @@ import "./student-curriculum.css";
 import "./student-plans.css";
 
 type List = {
-  items: { id: string; name: string; cohortCode: string; major: string }[];
+  /** fromCurriculum: read from the cohort's CTĐT, which has no KHĐT (API plans/from-curriculum.ts, 2026-11-05). */
+  items: { id: string; name: string; cohortCode: string; major: string; fromCurriculum?: boolean }[];
   suggestedId: string | null;
   profileCohort: string | null;
 };
@@ -24,6 +25,8 @@ type Detail = Pick<
   "name" | "major" | "cohortCode" | "admissionYear" | "totalCredits" | "terms" | "sections"
 > & {
   physicalEducationGroups?: Record<string, string[]>;
+  /** A plan read from the CTĐT: its courses without a planned year and semester, not shown. */
+  unplacedCount?: number;
   items: Omit<
     PlanItem,
     "position" | "sourceRow" | "sourceSheet" | "sourceCells"
@@ -94,7 +97,9 @@ export default function StudentPlans() {
         )}
         {list.data && !!list.data.items.length && (
           <p className="sc-muted">
-            {selected?.cohortCode === profileCohort
+            {selected?.fromCurriculum
+              ? <>Khóa {selected.cohortCode} chưa có kế hoạch đào tạo riêng; các học kỳ dưới đây lấy từ năm học, học kỳ dự kiến của từng học phần trong <CurriculumLink /> khóa {selected.cohortCode}.</>
+              : selected?.cohortCode === profileCohort
               ? "Kế hoạch cùng khóa tuyển sinh của bạn."
               : ownMissing
                 ? <>Chưa có kế hoạch đào tạo của khóa {profileCohort}. Bạn có thể chọn kế hoạch của khóa khác để tham khảo, hoặc xem năm học, học kỳ dự kiến của từng học phần trong <CurriculumLink />.</>
@@ -171,6 +176,11 @@ function PlanContents({ id }: { id: string }) {
         {programName(data.major)} · {data.cohortCode} · Tổng tín chỉ quy định:{" "}
         {data.totalCredits === null ? "Chưa xác định" : decimalText(data.totalCredits)}
       </p>
+      {!!data.unplacedCount && (
+        <p className="sc-muted">
+          {data.unplacedCount} học phần trong chương trình đào tạo không ghi năm học, học kỳ dự kiến nên không có trong kế hoạch này.
+        </p>
+      )}
       <div className="sc-filters">
         <label className="sc-search">
           Tìm học phần

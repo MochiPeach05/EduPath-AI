@@ -4,6 +4,8 @@ import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
 import { studentUser } from "../advisors/access.js";
 import { majorIdentity, majorKey } from "../curricula/majors.js";
+import type { CurriculumData } from "../curricula/model.js";
+import { curriculumIdOf, curriculumPlan, curriculumPlanId, curriculumPlanName, physicalEducationGroupsOf } from "./from-curriculum.js";
 import { identity, type PlanData } from "./model.js";
 
 function studentPlanData(data: PlanData) {
@@ -86,7 +88,7 @@ export function createStudentPlansRouter(pool: DatabasePool | undefined) {
   });
   router.get("/", async (req, res) => {
     z.object({}).strict().parse(req.query);
-    const [result, profile] = await Promise.all([
+    const [result, profile, curricula] = await Promise.all([
       pool!
         .query(`SELECT c.id,c.cohort_code AS "cohortCode",r.data->>'name' AS name,
         r.data->>'major' AS major,(r.data->>'totalCredits')::numeric AS "totalCredits",
@@ -96,20 +98,47 @@ export function createStudentPlansRouter(pool: DatabasePool | undefined) {
       pool!.query("SELECT cohort_code,major_code FROM student_profiles WHERE user_id=$1", [
         studentUser(req).userId,
       ]),
+      pool!.query(`SELECT c.id AS "curriculumId",c.cohort_code AS "cohortCode",r.data->>'major' AS major
+        FROM curricula c JOIN curriculum_revisions r ON r.id=c.current_revision WHERE c.is_active`),
     ]);
+    // A cohort and major without a KHĐT get a plan read from their CTĐT (from-curriculum.ts, user 2026-11-05).
+    const planned = new Set(result.rows.map((row) => `${majorKey(row.major ?? "")}:${row.cohortCode}`));
+    const fromCurricula = curricula.rows
+      .filter((row) => !planned.has(`${majorKey(row.major ?? "")}:${row.cohortCode}`))
+      .map((row) => ({ id: curriculumPlanId(row.curriculumId), cohortCode: row.cohortCode,
+        name: curriculumPlanName(row.major ?? "", row.cohortCode), major: row.major, fromCurriculum: true }));
+    const items = [...result.rows, ...fromCurricula].sort((a, b) =>
+      String(b.cohortCode).localeCompare(String(a.cohortCode)) || majorKey(a.major ?? "").localeCompare(majorKey(b.major ?? "")));
     const profileCohort = profile.rows[0]?.cohort_code ?? null;
     // The cohort's framework of the student's major (052; user, 2026-10-27).
     const major = majorIdentity(profile.rows[0]?.major_code);
-    const matches = result.rows.filter(
+    const matches = items.filter(
       (row) => row.cohortCode === profileCohort && (!major || majorKey(row.major ?? "") === major),
     );
     res.json({
-      items: result.rows,
+      items,
       profileCohort,
       suggestedId: matches.length === 1 ? matches[0]!.id : null,
     });
   });
   router.get("/:id", async (req, res) => {
+    const curriculumId = curriculumIdOf(req.params.id);
+    if (curriculumId !== null) {
+      const found = await pool!.query<{ id: string; data: CurriculumData }>(
+        `SELECT c.id,r.data FROM curricula c JOIN curriculum_revisions r ON r.id=c.current_revision
+         WHERE c.id=$1 AND c.is_active`,
+        [z.uuid().parse(curriculumId)],
+      );
+      z.object({}).strict().parse(req.query);
+      const curriculum = found.rows[0];
+      if (!curriculum) {
+        res.status(404).json({ error: "plan_unavailable" });
+        return;
+      }
+      res.json({ id: req.params.id, version: 0, fromCurriculum: true, ...curriculumPlan(curriculum.data),
+        physicalEducationGroups: physicalEducationGroupsOf(curriculum.data.courses) });
+      return;
+    }
     const id = z.uuid().parse(req.params.id);
     z.object({}).strict().parse(req.query);
     const result = await pool!.query<{
@@ -132,13 +161,7 @@ export function createStudentPlansRouter(pool: DatabasePool | undefined) {
        WHERE c.identity_key=$1 AND c.is_active`,
       [identity(current.data)],
     );
-    const physicalEducationGroups = Object.fromEntries(
-      ["TC002", "TC102"].map((group) => [group,
-        [...new Set((curriculum.rows[0]?.courses ?? [])
-          .filter((course) => course.type.match(/^(TC\d+)\b/)?.[1] === group)
-          .map((course) => course.code.trim().toUpperCase()))],
-      ]),
-    );
+    const physicalEducationGroups = physicalEducationGroupsOf(curriculum.rows[0]?.courses ?? []);
     res.json({
       id: current.id,
       version: current.version,

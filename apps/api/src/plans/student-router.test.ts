@@ -178,6 +178,37 @@ describe("student plans API", () => {
     );
   });
 
+  it("adds a plan read from the CTĐT for a cohort without a KHĐT and suggests it (user 2026-11-05)", async () => {
+    const k27 = "88888888-8888-4888-8888-888888888888";
+    const { app } = setup({ profileCohort: "K27", curriculumRows: [
+      { curriculumId: k27, cohortCode: "K27", major: "Information Technology" },
+      // K29 has its own plan: no copy from its CTĐT.
+      { curriculumId: "99999999-9999-4999-8999-999999999999", cohortCode: "K29", major: "INFORMATION TECHNOLOGY" },
+    ] });
+    const response = await request(app).get("/plans").expect(200);
+    expect(response.body.items).toEqual([activeListRow, { id: `ctdt-${k27}`, cohortCode: "K27", major: "Information Technology",
+      name: "Kế hoạch đào tạo ngành Information Technology khóa 27 (theo chương trình đào tạo)", fromCurriculum: true }]);
+    expect(response.body.suggestedId).toBe(`ctdt-${k27}`);
+  });
+
+  it("serves the plan read from the CTĐT, and 404 once the CTĐT is closed", async () => {
+    const k27 = "88888888-8888-4888-8888-888888888888";
+    const course = (position: number, code: string, studyYear: number | null, semester: number | null, type = "BB") => ({
+      position, code, name: `Course ${code}`, englishName: "", credits: 3, type, block: "", specialty: "", semester, studyYear,
+      prerequisite: "", prior: "", notes: "internal", department: "", departmentCode: "", groupId: "g", sourceRow: position, sourceSheet: "K27", sourceCells: {},
+      hours: { lecture: 30, practice: 30, project: null, internship: null } });
+    const data = { schemaVersion: 1, name: "CTĐT K27", major: "Information Technology", cohortCode: "K27", admissionYear: 2022, totalCredits: 130, notes: "",
+      courses: [course(1, "71IT000001", 1, 1), course(2, "71PEKC10062", 1, 2, "TC102"), course(3, "71IT000003", null, null)],
+      groups: [], electives: [], relations: [], warnings: [], sourceWarnings: [] };
+    const { app } = setup({ curriculumRows: [{ id: k27, data }] });
+    const response = await request(app).get(`/plans/ctdt-${k27}`).expect(200);
+    expect(response.body).toMatchObject({ id: `ctdt-${k27}`, fromCurriculum: true, cohortCode: "K27", unplacedCount: 1,
+      terms: [{ code: "HK221" }, { code: "HK222" }], physicalEducationGroups: { TC002: [], TC102: ["71PEKC10062"] } });
+    expect(JSON.stringify(response.body)).not.toContain("internal");
+    await request(setup({ curriculumRows: [] }).app).get(`/plans/ctdt-${k27}`).expect(404);
+    await request(setup().app).get("/plans/ctdt-not-a-uuid").expect(400);
+  });
+
   it("does not suggest a plan when the student cohort has no exact active match", async () => {
     const { app } = setup({ profileCohort: "K32" });
     const response = await request(app).get("/plans").expect(200);
