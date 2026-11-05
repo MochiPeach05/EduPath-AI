@@ -13,10 +13,10 @@ describe("specialty mapping (spec §4)", () => {
       ["TTNT", "Trí tuệ nhân tạo", "7480201-04", "tri tue nhan tao", "Chuyên ngành Trí tuệ Nhân tạo"],
       ["ANM", "An ninh Mạng và IoTs", "7480201-01", "an ninh mang va iot", "Chuyên ngành An ninh Mạng và IoT"],
       ["KCN", "Không theo chuyên ngành", "", "", ""],
-      ["HTTT_CDS", "HTTT Chuyển đổi số", "", "httt chuyen doi so", "Chuyên ngành HTTT Chuyển đổi số"],
-      ["HTTT_GIS", "HTTT Địa lý", "", "httt dia ly", "Chuyên ngành HTTT Địa lý"],
-      ["MMT_IOT", "IoT", "", "iot", "Chuyên ngành IoT"],
-      ["MMT_ANM", "An ninh mạng", "", "an ninh mang", "Chuyên ngành An ninh mạng"],
+      ["HTTT_CDS", "Hệ thống thông tin – Chuyển đổi số", "", "httt chuyen doi so", "Chuyên ngành HTTT Chuyển đổi số"],
+      ["HTTT_GIS", "Hệ thống thông tin – Địa lý", "", "httt dia ly", "Chuyên ngành HTTT Địa lý"],
+      ["MMT_IOT", "Mạng máy tính – IoT", "", "iot", "Chuyên ngành IoT"],
+      ["MMT_ANM", "Mạng máy tính – An ninh mạng", "", "an ninh mang", "Chuyên ngành An ninh mạng"],
     ]);
     expect(SPECIALTIES.filter((item) => specialtyHasCourses(item.code)).map((item) => item.code))
       .toEqual(["CNPM", "CNDL", "TTNT", "ANM", "HTTT_CDS", "HTTT_GIS", "MMT_IOT", "MMT_ANM"]);

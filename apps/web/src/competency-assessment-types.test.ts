@@ -15,7 +15,7 @@ describe("specialties offered on the student profile", () => {
     expect(specialtiesFor("K31", "7480104").map((item) => item.code)).toEqual(["HTTT_CDS", "HTTT_GIS"]);
     expect(specialtiesFor("K29", "7480102").map((item) => item.code)).toEqual(["MMT_IOT", "MMT_ANM"]);
     for (const major of ["7480201", null, undefined]) expect(specialtiesFor("K29", major).map((item) => item.code)).toEqual(["CNPM", "CNDL", "TTNT"]);
-    expect(specialtyLabel("HTTT_GIS")).toBe("HTTT Địa lý");
+    expect(specialtyLabel("HTTT_GIS")).toBe("Hệ thống thông tin – Địa lý");
   });
 
   it("labels every code, ANM included", () => {

@@ -15,10 +15,11 @@ export const SPECIALTIES: readonly { code: SpecialtyCode; label: string; major: 
   { code: "TTNT", label: "Trí tuệ nhân tạo", major: "7480201" },
   { code: "ANM", label: "An ninh Mạng và IoTs", major: "7480201", cohorts: { from: 27, to: 27 } },
   { code: "KCN", label: "Không theo chuyên ngành", major: "7480201", cohorts: { to: 28 } },
-  { code: "HTTT_CDS", label: "HTTT Chuyển đổi số", major: "7480104" },
-  { code: "HTTT_GIS", label: "HTTT Địa lý", major: "7480104" },
-  { code: "MMT_IOT", label: "IoT", major: "7480102" },
-  { code: "MMT_ANM", label: "An ninh mạng", major: "7480102" },
+  // The other majors' specialties carry the major (user 2026-11-05: "Thêm ngành trong phần chuyên ngành").
+  { code: "HTTT_CDS", label: "Hệ thống thông tin – Chuyển đổi số", major: "7480104" },
+  { code: "HTTT_GIS", label: "Hệ thống thông tin – Địa lý", major: "7480104" },
+  { code: "MMT_IOT", label: "Mạng máy tính – IoT", major: "7480102" },
+  { code: "MMT_ANM", label: "Mạng máy tính – An ninh mạng", major: "7480102" },
 ];
 
 /**

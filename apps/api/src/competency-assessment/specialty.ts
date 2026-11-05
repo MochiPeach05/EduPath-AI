@@ -32,12 +32,12 @@ export const SPECIALTIES: readonly SpecialtyInfo[] = [
   // K28 and earlier (2026-10-23): no program code and no courses of its own; the student takes the
   // cohort's general standard (the "không chuyên ngành" files) and its course list.
   { code: "KCN", label: "Không theo chuyên ngành", major: CNTT_MAJOR, programCode: "", curriculumName: "", planSectionLabel: "", cohorts: { to: 28 } },
-  // The other majors (2026-10-27), as their CTĐT name them; no graduation standard yet ("Chuẩn xét tốt nghiệp tôi sẽ
-  // bổ sung sau").
-  { code: "HTTT_CDS", label: "HTTT Chuyển đổi số", major: "7480104", exact: true, programCode: "", curriculumName: "httt chuyen doi so", planSectionLabel: "Chuyên ngành HTTT Chuyển đổi số" },
-  { code: "HTTT_GIS", label: "HTTT Địa lý", major: "7480104", exact: true, programCode: "", curriculumName: "httt dia ly", planSectionLabel: "Chuyên ngành HTTT Địa lý" },
-  { code: "MMT_IOT", label: "IoT", major: "7480102", exact: true, programCode: "", curriculumName: "iot", planSectionLabel: "Chuyên ngành IoT" },
-  { code: "MMT_ANM", label: "An ninh mạng", major: "7480102", exact: true, programCode: "", curriculumName: "an ninh mang", planSectionLabel: "Chuyên ngành An ninh mạng" },
+  // The other majors (2026-10-27), named by their CTĐT (curriculumName); no graduation standard yet ("Chuẩn xét tốt
+  // nghiệp tôi sẽ bổ sung sau"). The label carries the major (user 2026-11-05: "Thêm ngành trong phần chuyên ngành").
+  { code: "HTTT_CDS", label: "Hệ thống thông tin – Chuyển đổi số", major: "7480104", exact: true, programCode: "", curriculumName: "httt chuyen doi so", planSectionLabel: "Chuyên ngành HTTT Chuyển đổi số" },
+  { code: "HTTT_GIS", label: "Hệ thống thông tin – Địa lý", major: "7480104", exact: true, programCode: "", curriculumName: "httt dia ly", planSectionLabel: "Chuyên ngành HTTT Địa lý" },
+  { code: "MMT_IOT", label: "Mạng máy tính – IoT", major: "7480102", exact: true, programCode: "", curriculumName: "iot", planSectionLabel: "Chuyên ngành IoT" },
+  { code: "MMT_ANM", label: "Mạng máy tính – An ninh mạng", major: "7480102", exact: true, programCode: "", curriculumName: "an ninh mang", planSectionLabel: "Chuyên ngành An ninh mạng" },
 ];
 
 export const isSpecialtyCode = (value: unknown): value is SpecialtyCode =>
