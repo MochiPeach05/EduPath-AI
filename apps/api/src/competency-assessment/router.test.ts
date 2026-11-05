@@ -25,7 +25,8 @@ const student = {
 const result = { meta: { calcVersion: "comp-calc-v1", transcriptVersion }, overall: { score: 72 } } as unknown as AssessmentResult;
 const inputs = { transcript: { version: transcriptVersion } } as unknown as AssessmentInputs;
 
-type Row = { id: string; user_id: string; ai_status: string; created_at: string };
+/** An assessment's own result; only `previous` reads it (the other routes return `result`). */
+type Row = { id: string; user_id: string; ai_status: string; created_at: string; computed?: AssessmentResult };
 type State = { active: boolean; transcript: string | null; recentPrecheck: boolean; recentInTx: boolean; rows: Row[]; consent: string | null; withdrawn: boolean };
 /** The student's cố vấn học tập working in the student's page (advisors/access.ts sets it on the request). */
 const advisor = { ...student, userId: "88888888-8888-4888-8888-888888888888", name: "Cố vấn", email: "co.van@vlu.edu.vn", role: "advisor" } satisfies AuthenticatedUser;
@@ -67,6 +68,19 @@ function setup(options: { state?: Partial<State>; aiQueue?: CompetencyAiQueueHoo
       return { rowCount: rows.length, rows };
     }
     if (sql.startsWith("SELECT id FROM stu_comp_assessments WHERE id=$1 AND user_id=$2")) { const rows = own(params); return { rowCount: rows.length, rows }; }
+    // The newest completed comment older than the given assessment, with the parts of its OWN result the page reads.
+    if (sql.includes("ai_status='completed' AND ai_output IS NOT NULL")) {
+      const mine = state.rows.filter((row) => row.user_id === params[0]);
+      const at = mine.findIndex((row) => row.id === params[1]);
+      const found = at < 0 ? undefined : mine.slice(at + 1).find((row) => row.ai_status === "completed");
+      if (!found) return { rowCount: 0, rows: [] };
+      const computed = found.computed ?? result;
+      return { rowCount: 1, rows: [{
+        id: found.id, created_at: found.created_at, ai_model: "gemma4:e4b", ai_completed_at: "2026-10-10T02:04:00.000Z", ai_output: { summary: "x" },
+        prompt_version: "comp-v13", skill_directory: computed.skillDirectory ?? null, groups: computed.groups ?? null, requirements: computed.career?.requirements ?? null,
+        has_career: Boolean(computed.career), courses: computed.courses ?? null, course_suggestions: computed.courseSuggestions ?? null,
+      }] };
+    }
     if (sql.startsWith("SELECT id,created_at")) {
       const rows = state.rows.filter((row) => row.user_id === params[0]).slice(0, 1).map(stored); return { rowCount: rows.length, rows };
     }
@@ -249,14 +263,14 @@ describe("GET /latest and /latest/status", () => {
     const t = setup();
     const response = await request(t.app).get("/assessments/latest").expect(200);
     expect(response.body).toMatchObject({ assessment: { id: latestId, ai: { status: "failed" } }, aiEnabled: false, workerOnline: false, consentVersion: null });
-    expect(t.poolQuery.mock.calls.at(-1)?.[1]).toEqual([studentId]);
+    expect(t.poolQuery.mock.calls.find(([sql]) => String(sql).startsWith("SELECT id,created_at,meta"))?.[1]).toEqual([studentId]);
     const status = await request(t.app).get("/assessments/latest/status").expect(200);
     expect(status.body).toEqual({ id: latestId, aiStatus: "failed", aiErrorCode: null, workerOnline: false });
   });
 
   it("reports the worker heartbeat when AI is enabled and null when nothing exists", async () => {
     const t = setup({ aiQueue: queue(), state: { rows: [] } });
-    await request(t.app).get("/assessments/latest").expect(200, { assessment: null, aiEnabled: true, workerOnline: true, consentVersion: null });
+    await request(t.app).get("/assessments/latest").expect(200, { assessment: null, aiEnabled: true, workerOnline: true, consentVersion: null, previous: null });
     await request(t.app).get("/assessments/latest/status").expect(200, { id: null, aiStatus: null, aiErrorCode: null, workerOnline: true });
   });
 
@@ -273,6 +287,75 @@ describe("GET /latest and /latest/status", () => {
     const t = setup({ state: { rows: [{ id: olderId, user_id: studentId, ai_status: "completed", created_at: "2026-10-10T02:00:00.000Z" }] } });
     const response = await request(t.app).get("/assessments/latest").expect(200);
     expect(response.body.assessment.ai.output).toEqual({ summary: "x" });
+  });
+});
+
+describe("GET /latest previous (the older comment shown dimmed, like Xét tốt nghiệp)", () => {
+  // Synthetic: the older assessment names its keys differently from the newest one (keys are per assessment).
+  const older = {
+    meta: { calcVersion: "comp-calc-v18", promptVersion: "comp-v12", transcriptVersion },
+    skillDirectory: [{ key: "S01", skillId: "skill-a", name: "Lập trình web", measured: true }, { key: "S02", skillId: "skill-b", name: "Docker", measured: false }],
+    groups: [{ key: "G1", id: "group-1", name: "Kiến thức chuyên môn", score: 80, level: "good", skillCount: 2 }],
+    career: { id: "career-1", nameVi: "Lập trình viên web", requirements: [
+      { requirementId: "r1", skillKey: "S01", status: "met", threshold: 70, score: 91 },
+      { requirementId: "r2", skillKey: null, status: "no_data", threshold: 60, score: null },
+    ] },
+    courses: [{ code: "TST104", name: "Lập trình web", credits: 3, state: "passed", score10: 9.1 }],
+    courseSuggestions: [{ code: "TST105", name: "Kiểm thử phần mềm", credits: 3, kind: "take", priority: 4 }],
+    overall: { score: 80 },
+  } as unknown as AssessmentResult;
+  const rows = (latest: string) => [
+    { id: latestId, user_id: studentId, ai_status: latest, created_at: "2026-10-11T02:00:00.000Z" },
+    { id: olderId, user_id: studentId, ai_status: "completed", created_at: "2026-10-10T02:00:00.000Z", computed: older },
+    { id: foreignId, user_id: "77777777-7777-4777-8777-777777777777", ai_status: "completed", created_at: "2026-10-09T03:00:00.000Z" },
+  ];
+
+  it.each(["queued", "processing", "failed", "cancelled", "deferred", "disabled"])("is the newest older completed comment while the newest is %s", async (status) => {
+    const t = setup({ aiQueue: queue(), state: { rows: rows(status) } });
+    const response = await request(t.app).get("/assessments/latest").expect(200);
+    expect(response.body.assessment).toMatchObject({ id: latestId, ai: { status, output: null } });
+    expect(response.body.previous).toEqual({
+      assessmentId: olderId, assessmentCreatedAt: "2026-10-10T02:00:00.000Z", model: "gemma4:e4b", completedAt: "2026-10-10T02:04:00.000Z",
+      promptVersion: "comp-v13", output: { summary: "x" },
+      // Its own names and career, trimmed to what the page reads (no scores, ids or course details).
+      context: {
+        skillDirectory: [{ key: "S01", name: "Lập trình web" }, { key: "S02", name: "Docker" }],
+        groups: [{ key: "G1", name: "Kiến thức chuyên môn" }],
+        career: { requirements: [{ skillKey: "S01", status: "met" }, { skillKey: null, status: "no_data" }] },
+        courses: [{ code: "TST104", name: "Lập trình web" }],
+        courseSuggestions: [{ code: "TST105", name: "Kiểm thử phần mềm" }],
+      },
+    });
+    // The newest assessment keeps its own result; the lookup is the student's, before the newest one.
+    expect(response.body.assessment.result).toEqual(result);
+    const lookup = t.poolQuery.mock.calls.find(([sql]) => String(sql).includes("ai_status='completed' AND ai_output IS NOT NULL"))!;
+    expect(lookup[1]).toEqual([studentId, latestId]);
+    expect(String(lookup[0])).toContain("(created_at,id)<(SELECT l.created_at,l.id FROM stu_comp_assessments l WHERE l.id=$2 AND l.user_id=$1)");
+  });
+
+  it("is null, and never looked up, once the newest comment is completed", async () => {
+    const t = setup({ aiQueue: queue(), state: { rows: rows("completed") } });
+    const response = await request(t.app).get("/assessments/latest").expect(200);
+    expect(response.body.assessment.ai.status).toBe("completed");
+    expect(response.body.previous).toBeNull();
+    expect(t.poolQuery.mock.calls.some(([sql]) => String(sql).includes("ai_status='completed' AND ai_output IS NOT NULL"))).toBe(false);
+  });
+
+  it("is null without an older completed comment, and leaves out another student's", async () => {
+    const t = setup({ aiQueue: queue(), state: { rows: [rows("failed")[0]!, rows("failed")[2]!] } });
+    expect((await request(t.app).get("/assessments/latest").expect(200)).body.previous).toBeNull();
+  });
+
+  it("goes with an older result without a target career", async () => {
+    const t = setup({ aiQueue: queue(), state: { rows: [rows("queued")[0]!, { ...rows("queued")[1]!, computed: { ...older, career: null } }] } });
+    expect((await request(t.app).get("/assessments/latest").expect(200)).body.previous.context.career).toBeNull();
+  });
+
+  it("is the same for the student's cố vấn học tập working in the student's page", async () => {
+    const t = setup({ aiQueue: queue(), advisor: true, state: { rows: rows("processing") } });
+    const response = await request(t.app).get("/assessments/latest").expect(200);
+    expect(response.body.previous).toMatchObject({ assessmentId: olderId, context: { skillDirectory: [{ key: "S01", name: "Lập trình web" }, { key: "S02", name: "Docker" }] } });
+    expect(t.poolQuery.mock.calls.find(([sql]) => String(sql).includes("ai_status='completed' AND ai_output IS NOT NULL"))?.[1]).toEqual([studentId, latestId]);
   });
 });
 

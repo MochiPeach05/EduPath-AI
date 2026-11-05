@@ -25,6 +25,11 @@
 .rm-ai-icon { display: inline-grid; flex: none; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: #e6eef9; color: #1c4182; }
 .rm-ai-icon svg { width: 18px; height: 18px; }
 .rm-ai-tag { padding: 1px 7px; border: 1px solid #b7c7e3; border-radius: 4px; color: #1c4182; font-size: 12px; font-weight: 800; letter-spacing: .06em; line-height: 1.6; }
+/* The AI parts of an older roadmap kept, dimmed, while the new one is written (the look of Xét tốt nghiệp's previous advice). */
+.rm-previous { display: grid; gap: 10px; min-width: 0; }
+.rm-dimmed { opacity: .72; }
+.rm-old { margin: 0; padding: 8px 12px; border-radius: 6px; background: #f2f4f7; color: var(--sw-muted); font-size: 14px; font-weight: 600; line-height: 1.6; }
+.rm-previous-meta { margin: 0; color: var(--sw-muted); font-size: 12px; line-height: 1.6; }
 
 .rm-section { display: grid; gap: 14px; }
 .rm-section-head { display: flex; align-items: flex-start; gap: 12px; }

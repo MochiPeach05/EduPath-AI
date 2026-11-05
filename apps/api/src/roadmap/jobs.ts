@@ -80,6 +80,18 @@ export async function readNewestRoadmap(db: Db, userId: string): Promise<Roadmap
   return result.rows[0] ?? null;
 }
 
+/**
+ * The newest completed roadmap older than `newestId` (GET /): while the newest one is queued, being written, failed or
+ * cancelled, the page shows this one's AI parts dimmed, like the advice of Xét tốt nghiệp.
+ */
+export async function readPreviousCompletedRoadmap(db: Db, userId: string, newestId: string): Promise<RoadmapRow | null> {
+  const result = await db.query<RoadmapRow>(
+    `SELECT ${rowColumns} FROM stu_roadmaps WHERE user_id=$1 AND status='completed' AND ai_output IS NOT NULL
+      AND (created_at,id)<(SELECT n.created_at,n.id FROM stu_roadmaps n WHERE n.id=$3 AND n.user_id=$1)
+      ORDER BY created_at DESC,id DESC LIMIT 1`, [userId, ROADMAP_INSERT_INTERVAL_SECONDS, newestId]);
+  return result.rows[0] ?? null;
+}
+
 /** The newest assessment without its result (GET /): its id, its time and whether it has a target career. */
 export async function newestAssessmentInfo(db: Db, userId: string): Promise<{ id: string; createdAt: Date | string; hasCareer: boolean } | null> {
   const result = await db.query<{ id: string; createdAt: Date | string; hasCareer: boolean }>(

@@ -2,8 +2,9 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import StudentCompetency, { type CompetencyView } from "./StudentCompetency";
+import { installAdvisorFetch, stopActing } from "./advisor-view";
 import { fixtureAssessment, fixtureResult } from "./student-competency.fixture";
-import type { AiStatus, LatestAssessmentResponse } from "./competency-assessment-types";
+import type { AiStatus, LatestAssessmentResponse, PreviousAiComment } from "./competency-assessment-types";
 import type { GraduationCourseRow, GraduationEvaluation, StudentGraduationResponse } from "./student-graduation-types";
 
 const liveData = vi.hoisted(() => vi.fn());
@@ -597,6 +598,92 @@ describe("StudentCompetency — audit of 2026-10-25", () => {
   it("shows the exempt column in the table view of the proficiency chart", () => {
     const html = withAi("completed");
     expect(html).toContain('aria-label="1 kỹ năng Miễn/công nhận trong nhóm Kỹ năng bổ trợ"');
+  });
+});
+
+describe("StudentCompetency — the older comment while a new one is prepared (user 2026-11-05: like Xét tốt nghiệp)", () => {
+  const note = "Nhận xét trước, viết cho kết quả đánh giá cũ — có thể không còn đúng. Nhận xét mới sẽ thay thế khi sẵn sàng.";
+  // Synthetic older assessment: its S01 is Kiểm thử tự động (Lập trình web in the newest result) and only it has TST120.
+  const previous: PreviousAiComment = {
+    assessmentId: "22222222-2222-4222-8222-222222222222", assessmentCreatedAt: "2026-10-01T02:00:00.000Z", model: "gemma4:e4b",
+    completedAt: "2026-10-01T02:04:00.000Z", promptVersion: "comp-v13",
+    output: {
+      summary: "Nhận xét cũ: kỹ năng S01 cần thêm thời gian.", groupInsights: [{ groupKey: "G1", comment: "Nhóm G1 ở mức Trung bình." }], strengths: [],
+      improvements: [{ skillKey: "S01", priority: "high", comment: "Luyện viết kiểm thử tự động.", courses: [{ courseCode: "TST120", reason: "Học phần đo kỹ năng này." }] }],
+      careerFit: { comment: "Lần trước bạn còn thiếu kỹ năng kiểm thử tự động cho vị trí nghề nghiệp mục tiêu." },
+      gaps: [{ skillKey: "S02", priority: "medium", explanation: "Chưa học Docker.", courses: [], selfStudy: ["Tự cài Docker cho một dự án nhỏ."] }],
+      progress: "", nextSteps: ["Đăng ký DevOps căn bản."],
+    },
+    context: {
+      skillDirectory: [{ key: "S01", name: "Kiểm thử tự động" }, { key: "S02", name: "Docker" }], groups: [{ key: "G1", name: "Kỹ thuật phần mềm" }],
+      career: { requirements: [{ skillKey: "S01", status: "below" }, { skillKey: "S02", status: "not_studied" }] },
+      courses: [{ code: "TST120", name: "DevOps căn bản" }], courseSuggestions: [],
+    },
+  };
+  const page = (status: AiStatus, view?: CompetencyView, extra: Partial<LatestAssessmentResponse> = {}) =>
+    render({ assessment: fixtureAssessment(status, status === "failed" ? "ai_timeout" : null), aiEnabled: true, workerOnline: true, previous, ...extra }, { view });
+  const panel = (html: string) => html.slice(html.indexOf('id="scomp-ai"'), html.indexOf("</section>", html.indexOf('id="scomp-ai"')));
+
+  it.each(["queued", "processing", "failed", "cancelled", "deferred"] as const)("keeps it dimmed under the state box while the comment is %s", (status) => {
+    const html = panel(page(status));
+    const at = { state: html.indexOf("scomp-ai-state"), dimmed: html.indexOf('<div class="scomp-ai-previous scomp-ai-dimmed"><p class="scomp-ai-old">'), footer: html.indexOf("scomp-ai-footer") };
+    expect(at.state).toBeGreaterThan(0);
+    expect(at.dimmed).toBeGreaterThan(at.state);
+    expect(at.footer).toBeGreaterThan(at.dimmed);
+    expect(html).toContain(note);
+    // Read with its own assessment's names, never the newest result's.
+    expect(html).toContain("Nhận xét cũ: kỹ năng Kiểm thử tự động cần thêm thời gian.");
+    expect(html).not.toContain("Nhận xét cũ: kỹ năng Lập trình web");
+    expect(html).toContain("<strong>Kỹ thuật phần mềm.</strong> Nhóm Kỹ thuật phần mềm ở mức Trung bình.");
+    expect(html).toContain("Học phần DevOps căn bản (TST120): Học phần đo kỹ năng này.");
+    // Its own date; the panel's footer stays the one of the current state.
+    expect(html).toMatch(/<p class="scomp-ai-old-meta">Gemma 4 E4B có suy luận, chạy cục bộ · tạo lúc [^<]*2026\.<\/p>/);
+    expect(html).toContain("Mô hình Gemma 4 E4B chạy cục bộ trên máy của nhóm phát triển");
+  });
+  it("keeps the state box's actions right under it", () => {
+    const failed = panel(page("failed"));
+    expect(failed).toContain("Máy AI xử lý quá thời gian cho phép.");
+    expect(failed.indexOf("Tạo lại nhận xét")).toBeLessThan(failed.indexOf(note));
+    const processing = panel(page("processing"));
+    expect(processing.indexOf("Hủy tạo nhận xét")).toBeLessThan(processing.indexOf(note));
+  });
+  it("shows the gap part on Khoảng trống kỹ năng, with that assessment's career", () => {
+    const html = panel(page("processing", "gap"));
+    expect(html).toContain(note);
+    expect(html).toContain("Lần trước bạn còn thiếu kỹ năng kiểm thử tự động cho vị trí nghề nghiệp mục tiêu.");
+    expect(html).toContain("<strong>Docker</strong>");
+    expect(html).toContain("Tự học: Tự cài Docker cho một dự án nhỏ.");
+    // S01 is a career skill of that assessment outside its gaps: "Nâng kỹ năng của vị trí nghề nghiệp".
+    expect(html).toContain("Nâng kỹ năng của vị trí nghề nghiệp");
+    expect(html).toContain("<strong>Kiểm thử tự động</strong>");
+    // No part for this page: nothing dimmed (never "Nhận xét lần này không có phần riêng…").
+    const competencyOnly = { ...previous, output: { ...previous.output, careerFit: { comment: "" }, gaps: [], improvements: [] } };
+    const without = panel(page("processing", "gap", { previous: competencyOnly }));
+    expect(without).not.toContain(note);
+    expect(without).not.toContain("Nhận xét lần này không có phần riêng");
+    expect(panel(page("processing", "competency", { previous: competencyOnly }))).toContain(note);
+  });
+  it("shows nothing older once the comment is ready, without one, or while AI is off", () => {
+    const ready = page("completed");
+    expect(ready).not.toContain(note);
+    expect(ready).not.toContain("scomp-ai-dimmed");
+    expect(ready).toContain("Bạn đang có nền tảng lập trình web rất tốt");
+    expect(page("processing", "competency", { previous: null })).not.toContain(note);
+    expect(page("processing", "competency", { previous: undefined })).not.toContain(note);
+    const off = page("disabled", "competency", { aiEnabled: false });
+    expect(off).toContain("Nhận xét AI chưa được bật");
+    expect(off).not.toContain(note);
+    // AI just switched on: the result has no comment yet, the older one stays until one is made.
+    expect(page("disabled")).toContain(note);
+  });
+  it("is the same for a cố vấn học tập working in the student's page", () => {
+    installAdvisorFetch("00000000-0000-4000-8000-0000000e2e05");
+    try {
+      const html = panel(page("processing"));
+      expect(html).toContain(note);
+      expect(html).toContain("Nhận xét cũ: kỹ năng Kiểm thử tự động cần thêm thời gian.");
+      expect(html).not.toContain("Hủy tạo nhận xét");
+    } finally { stopActing(); }
   });
 });
 

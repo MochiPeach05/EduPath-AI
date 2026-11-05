@@ -5,6 +5,7 @@ import type { AuthenticatedUser } from "../auth/types.js";
 import type { DatabasePool } from "../db/pool.js";
 import type { RoadmapRow } from "./jobs.js";
 import { createRoadmapRouter } from "./router.js";
+import type { RoadmapOutput } from "./validate.js";
 import { ROADMAP_ASSESSMENT, syntheticRoadmapFacts, syntheticRoadmapResult, syntheticSurveyRow } from "./test-fixture.js";
 import { TRANSCRIPT_POLICY_VERSION } from "../student/consent.js";
 
@@ -56,6 +57,11 @@ function setup(options: Setup = {}) {
       return result(rows.slice(0, 1).map((item) => ({ id: item.id, status: item.status, errorCode: item.errorCode })));
     }
     if (sql.includes("FROM stu_roadmaps WHERE user_id=$1 ORDER BY created_at DESC,id DESC LIMIT 1")) return result(rows.slice(0, 1));
+    // The newest completed roadmap before the given one (rows are newest first).
+    if (sql.includes("FROM stu_roadmaps WHERE user_id=$1 AND status='completed' AND ai_output IS NOT NULL")) {
+      const at = rows.findIndex((item) => item.id === _params?.[2]);
+      return result(at < 0 ? [] : rows.slice(at + 1).filter((item) => item.status === "completed" && item.output).slice(0, 1));
+    }
     if (sql.includes("FROM stu_roadmaps WHERE user_id=$1 ORDER BY created_at DESC,id DESC")) return result(rows);
     if (sql.includes("count(*)::int AS count FROM stu_roadmaps")) return result([{ count: 0 }]);
     if (sql.startsWith("INSERT INTO stu_roadmaps")) return result([{ createdAt: new Date("2026-10-24T03:00:00Z") }]);
@@ -121,6 +127,49 @@ describe("GET /", () => {
     const { recorded: _recorded, ...older } = row().facts;
     expect((await request(setup({ rows: [row({ facts: older })] }).app).get("/roadmap")).body.basis).toBeNull();
     await request(setup({ survey: false }).app).post("/roadmap").set("Origin", origin).send({}).expect(409, { error: "survey_required" });
+  });
+
+  describe("previous (the older roadmap shown dimmed, like Xét tốt nghiệp)", () => {
+    const OLDER = "55555555-5555-4555-8555-555555555555";
+    const output: RoadmapOutput = {
+      summary: "Lộ trình trước: ưu tiên học phần trễ kế hoạch.", advice: ["Đăng ký Hệ quản trị cơ sở dữ liệu ngay đầu học kỳ."],
+      study: [{ code: "71ITIS30203", advice: "Học phần trễ kế hoạch, nên đăng ký ngay." }], improve: [], skills: [],
+      months: [{ month: 1, focus: "Ổn định lịch học", tasks: ["Đăng ký học phần trễ."] }],
+    };
+    const older = row({ id: OLDER, assessmentId: OLD_ASSESSMENT, status: "completed", createdAt: new Date("2026-10-20T03:00:00Z"),
+      completedAt: new Date("2026-10-20T03:04:00Z"), model: "gemma4:e4b", output });
+    const lookups = (sql: string[]) => sql.filter((text) => text.includes("status='completed' AND ai_output IS NOT NULL"));
+
+    it.each(["queued", "processing", "failed", "cancelled"] as const)("is the newest older completed roadmap, presented the same way, while the newest is %s", async (status) => {
+      const { app, sql, query } = setup({ rows: [row({ status }), older] });
+      const res = await request(app).get("/roadmap").expect(200);
+      expect(res.body.roadmap).toMatchObject({ id: ROADMAP, status, summary: null, advice: [] });
+      expect(res.body.previous).toMatchObject({
+        id: OLDER, assessmentId: OLD_ASSESSMENT, status: "completed", model: "gemma4:e4b", completedAt: "2026-10-20T03:04:00.000Z",
+        summary: "Lộ trình trước: ưu tiên học phần trễ kế hoạch.", advice: ["Đăng ký Hệ quản trị cơ sở dữ liệu ngay đầu học kỳ."],
+        window: { term: "HK262" },
+      });
+      // Its own output merged with its own facts: the course the AI picked first, with its advice, then the others.
+      expect(res.body.previous.study.map((item: { code: string; advice: string | null }) => [item.code, item.advice])).toEqual([
+        ["71ITIS30203", "Học phần trễ kế hoạch, nên đăng ký ngay."], ["71ITSE41203", null], ["71ITIN40304", null]]);
+      expect(res.body.previous.months[0]).toMatchObject({ month: 1, focus: "Ổn định lịch học", tasks: ["Đăng ký học phần trễ."] });
+      expect(lookups(sql())).toHaveLength(1);
+      expect(query.mock.calls.find(([text]) => lookups([text]).length)?.[1]).toEqual([studentId, 30, ROADMAP]);
+      expect(JSON.stringify(res.body.previous)).not.toMatch(/"aiInput"|"ai_input"|"threshold"/);
+    });
+
+    it("is null, and never looked up, once the newest roadmap is completed", async () => {
+      const { app, sql } = setup({ rows: [row({ status: "completed", output, completedAt: new Date("2026-10-24T03:04:00Z") }), older] });
+      const res = await request(app).get("/roadmap").expect(200);
+      expect(res.body.roadmap.summary).toBe("Lộ trình trước: ưu tiên học phần trễ kế hoạch.");
+      expect(res.body.previous).toBeNull();
+      expect(lookups(sql())).toHaveLength(0);
+    });
+
+    it("is null without an older completed roadmap or without any roadmap", async () => {
+      expect((await request(setup({ rows: [row({ status: "failed", errorCode: "ai_timeout" }), { ...older, status: "failed", output: null }] }).app).get("/roadmap")).body.previous).toBeNull();
+      expect((await request(setup().app).get("/roadmap")).body.previous).toBeNull();
+    });
   });
 
   it("says when the worker is offline or too old for roadmaps", async () => {

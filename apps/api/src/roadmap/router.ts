@@ -13,7 +13,9 @@ import { studentUser } from "../advisors/access.js";
 import { activeConsentVersion, isValidConsent } from "../student/consent.js";
 import { readSurvey, surveyFacts } from "../student/survey.js";
 import { roadmapBasis } from "./basis.js";
-import { createRoadmap, createRoadmapExpiry, newestAssessmentInfo, readNewestRoadmap, RoadmapError, type RoadmapRow, type RoadmapStatus } from "./jobs.js";
+import {
+  createRoadmap, createRoadmapExpiry, newestAssessmentInfo, readNewestRoadmap, readPreviousCompletedRoadmap, RoadmapError, type RoadmapRow, type RoadmapStatus,
+} from "./jobs.js";
 import { presentRoadmap } from "./present.js";
 import { roadmapWindow, vietnamToday } from "./window.js";
 
@@ -91,6 +93,7 @@ export function createRoadmapRouter(pool: DatabasePool | undefined, webOrigin: s
     await expireQuietly();
     const client = await pool!.connect();
     let row: Awaited<ReturnType<typeof readNewestRoadmap>>;
+    let previous: RoadmapRow | null;
     let assessment: Awaited<ReturnType<typeof newestAssessmentInfo>>;
     let survey: Awaited<ReturnType<typeof readSurvey>>;
     let surveyConsent: string | null;
@@ -98,6 +101,7 @@ export function createRoadmapRouter(pool: DatabasePool | undefined, webOrigin: s
       await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
       assessment = await newestAssessmentInfo(client, userId);
       row = await readNewestRoadmap(client, userId);
+      previous = row && row.status !== "completed" ? await readPreviousCompletedRoadmap(client, userId, row.id) : null;
       survey = await readSurvey(client, userId);
       surveyConsent = await activeConsentVersion(client, userId, "profile_survey");
       await client.query("COMMIT");
@@ -109,6 +113,9 @@ export function createRoadmapRouter(pool: DatabasePool | undefined, webOrigin: s
     }
     res.json({
       roadmap: row && presentRoadmap(row, today()),
+      // While the newest roadmap is not completed: the newest completed one before it, presented the same way; the page
+      // shows its AI parts (advice, month plan) dimmed until the new one replaces them.
+      previous: previous && presentRoadmap(previous, today()),
       assessment: assessment && { id: assessment.id, createdAt: iso(assessment.createdAt), hasCareer: assessment.hasCareer === true },
       stale: Boolean(row && assessment && row.assessmentId !== assessment.id),
       // A new roadmap needs the answered profile survey, agreed to under the current policy.

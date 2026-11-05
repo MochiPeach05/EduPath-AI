@@ -151,6 +151,11 @@
 .scomp-page .scomp-ai-footer { padding-top: 12px; border-top: 1px solid var(--sw-border); color: var(--sw-muted); font-size: 12px; line-height: 1.6; }
 .scomp-page .scomp-ai-tip { display: flex; align-items: flex-start; gap: 8px; margin-top: 6px; padding: 8px 10px; border-radius: 6px; background: #f2f6fc; font-size: 14px; line-height: 1.6; }
 .scomp-page .scomp-ai-tip ul { margin: 0; padding-left: 16px; }
+/* An older comment kept, dimmed, while the new one is prepared (the look of Xét tốt nghiệp's previous advice, .sg-ai-dimmed). */
+.scomp-page .scomp-ai-previous { display: grid; gap: 12px; min-width: 0; }
+.scomp-page .scomp-ai-dimmed { opacity: .72; }
+.scomp-page .scomp-ai-old { padding: 8px 12px; border-radius: 6px; background: #f2f4f7; color: var(--sw-muted); font-size: 14px; font-weight: 600; line-height: 1.6; }
+.scomp-page .scomp-ai-old-meta { color: var(--sw-muted); font-size: 12px; line-height: 1.6; }
 
 /* Career fit and gap table */
 .scomp-page .scomp-fit-summary { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 32px; padding: 14px 16px; border: 1px solid var(--sw-border); border-radius: 8px; background: #fbfcfd; }

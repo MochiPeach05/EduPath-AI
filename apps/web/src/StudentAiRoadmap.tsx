@@ -5,6 +5,7 @@ import { useLiveData } from "./use-live-data";
 import {
   ROADMAP_API, ROADMAP_POLL_MS, choiceText, dateText, failureText, roadmapTermLabel, roadmapWindowTitle, formatDateTime, helpsText, improveHeading, improveTag, isPending, modelLabel,
   monthTitle, normalizeRoadmap, normalizeRoadmapResponse, normalizeRoadmapStatus, pendingCopy, requestErrorMessage, sentence, skillTags, studyTag,
+  hasMonthPlan, previousRoadmap, PREVIOUS_ROADMAP_NOTE,
   type Roadmap, type RoadmapBasis, type RoadmapImprove, type RoadmapResponse, type RoadmapSkill, type RoadmapStatus, type RoadmapStudy,
 } from "./student-roadmap-data";
 import { nextTermOffer, type StudyPlanContext } from "./study-plan-data";
@@ -103,7 +104,17 @@ function useRoadmap() {
     if (before && isPending(before) && status === "failed") setAnnouncement("Chưa soạn được lộ trình học tập.");
   }, [status]);
 
-  return { response, loading: live.loading && !response, error: response ? null : live.error, create, creating, createError, announcement };
+  // The newest completed roadmap this page session has shown (the newest one, or the older one the API sent): "Tạo lại"
+  // answers with the new roadmap alone, so its AI parts stay visible, dimmed, until the new one is written.
+  const newest = response?.roadmap ?? null, served = response?.previous ?? null;
+  const [remembered, setRemembered] = useState<Roadmap | null>(null);
+  useEffect(() => {
+    const done = newest?.status === "completed" ? newest : served;
+    if (done) setRemembered(done);
+  }, [newest, served]);
+  const previous = previousRoadmap(response, remembered);
+
+  return { response, previous, loading: live.loading && !response, error: response ? null : live.error, create, creating, createError, announcement };
 }
 
 function Elapsed({ since }: { since: string }) {
@@ -223,18 +234,45 @@ function SkillsSection({ roadmap, completed }: { roadmap: Roadmap; completed: bo
   </section>;
 }
 
-function MonthsSection({ roadmap }: { roadmap: Roadmap }) {
+/** note: over the months of an older roadmap, shown dimmed while the newest one is not ready. */
+function MonthsSection({ roadmap, note }: { roadmap: Roadmap; note?: string }) {
+  const months = <ol className="rm-months">{roadmap.months.map((month) => <li key={month.month} className="rm-month">
+    <h3>{monthTitle(month)}</h3>
+    {month.focus && <p className="rm-month-focus">{month.focus}</p>}
+    {month.tasks.length ? <ul>{month.tasks.map((task, index) => <li key={index}>{task}</li>)}</ul> : <p className="rm-item-meta">Chưa có việc cụ thể cho tháng này.</p>}
+  </li>)}</ol>;
   return <section className="sw-panel rm-section" aria-labelledby="rm-months">
     <header className="rm-section-head"><span className="rm-section-icon" aria-hidden="true"><Icon name="clock" /></span><div>
       <h2 id="rm-months">Kế hoạch theo tháng</h2>
       <p>Cân đối giữa học trên lớp, học lại hoặc học cải thiện và tự học kỹ năng.</p>
     </div></header>
-    <ol className="rm-months">{roadmap.months.map((month) => <li key={month.month} className="rm-month">
-      <h3>{monthTitle(month)}</h3>
-      {month.focus && <p className="rm-month-focus">{month.focus}</p>}
-      {month.tasks.length ? <ul>{month.tasks.map((task, index) => <li key={index}>{task}</li>)}</ul> : <p className="rm-item-meta">Chưa có việc cụ thể cho tháng này.</p>}
-    </li>)}</ol>
+    {note ? <div className="rm-previous rm-dimmed"><p className="rm-old">{note}</p>{months}</div> : months}
   </section>;
+}
+
+/** "Lời khuyên của cố vấn AI": the summary and the key advice points of a roadmap. */
+function AdviceSummary({ roadmap }: { roadmap: Roadmap }) {
+  return <div className="rm-summary">
+    <span className="rm-ai-icon" aria-hidden="true"><Icon name="spark" /></span>
+    <div>
+      <h3>Lời khuyên của cố vấn AI <span className="rm-ai-tag">AI</span></h3>
+      <p>{roadmap.summary}</p>
+      {roadmap.advice.length > 0 && <ul className="rm-advice-list">{roadmap.advice.map((item, index) => <li key={index}>{item}</li>)}</ul>}
+    </div>
+  </div>;
+}
+
+/**
+ * The advice of an older roadmap kept, dimmed, under the state box until the new one is written (user 2026-11-05, like
+ * Xét tốt nghiệp's "Lời khuyên trước, viết cho dữ liệu cũ"), with which roadmap it was and when; its month plan is
+ * dimmed further down.
+ */
+function PreviousAdvice({ roadmap }: { roadmap: Roadmap }) {
+  return <div className="rm-previous rm-dimmed">
+    <p className="rm-old">{PREVIOUS_ROADMAP_NOTE}</p>
+    <AdviceSummary roadmap={roadmap} />
+    <p className="rm-previous-meta">{roadmapWindowTitle(roadmap.window)} · {modelLabel(roadmap.model)} (chạy cục bộ) soạn lúc {formatDateTime(roadmap.completedAt ?? roadmap.createdAt)}.</p>
+  </div>;
 }
 
 /* -------------------------------------------------------------------- page */
@@ -297,11 +335,13 @@ function AiState({ roadmap, response, create, creating }: { roadmap: Roadmap; re
 const regenerateText = (surveyDone: boolean, purpose: string) =>
   surveyDone ? `Bấm Tạo lại ${purpose}` : `Hoàn thành Khảo sát định hướng rồi bấm Tạo lại ${purpose}`;
 
-function RoadmapView({ roadmap, response, create, creating, createError, planContext }: {
-  roadmap: Roadmap; response: RoadmapResponse; create: () => void; creating: boolean; createError: string; planContext: PlanContext;
+/** previous: an older completed roadmap whose AI parts show dimmed while this one is not completed (previousRoadmap). */
+function RoadmapView({ roadmap, previous, response, create, creating, createError, planContext }: {
+  roadmap: Roadmap; previous: Roadmap | null; response: RoadmapResponse; create: () => void; creating: boolean; createError: string; planContext: PlanContext;
 }) {
   const completed = roadmap.status === "completed";
   const pending = isPending(roadmap.status);
+  const earlier = completed ? null : previous;
   return <>
     <section className="sw-panel rm-hero" aria-labelledby="rm-title">
       <div className="rm-hero-head">
@@ -319,20 +359,15 @@ function RoadmapView({ roadmap, response, create, creating, createError, planCon
       {response.stale && <p className="rm-note">Kết quả Đánh giá năng lực của bạn đã thay đổi sau khi lộ trình này được soạn. {regenerateText(response.surveyDone, "để cập nhật theo kết quả mới.")}</p>}
       {roadmap.ended && <p className="rm-note">Lộ trình này đã hết thời gian (đến {dateText(roadmap.window.end)}). {regenerateText(response.surveyDone, "để soạn lộ trình cho học kỳ tiếp theo.")}</p>}
       <AiState roadmap={roadmap} response={response} create={create} creating={creating} />
-      {completed && roadmap.summary && <div className="rm-summary">
-        <span className="rm-ai-icon" aria-hidden="true"><Icon name="spark" /></span>
-        <div>
-          <h3>Lời khuyên của cố vấn AI <span className="rm-ai-tag">AI</span></h3>
-          <p>{roadmap.summary}</p>
-          {roadmap.advice.length > 0 && <ul className="rm-advice-list">{roadmap.advice.map((item, index) => <li key={index}>{item}</li>)}</ul>}
-        </div>
-      </div>}
+      {completed && roadmap.summary && <AdviceSummary roadmap={roadmap} />}
+      {earlier?.summary && <PreviousAdvice roadmap={earlier} />}
       {response.basis && <BasisBox basis={response.basis} />}
     </section>
     <StudySection roadmap={roadmap} planContext={planContext} />
     <ImproveSection roadmap={roadmap} planContext={planContext} />
     <SkillsSection roadmap={roadmap} completed={completed} />
     {completed && <MonthsSection roadmap={roadmap} />}
+    {earlier && hasMonthPlan(earlier) && <MonthsSection roadmap={earlier} note={PREVIOUS_ROADMAP_NOTE} />}
     <p className="rm-footer">{completed
       ? `Lộ trình do ${modelLabel(roadmap.model)} (chạy cục bộ) soạn lúc ${formatDateTime(roadmap.completedAt ?? roadmap.createdAt)} từ kết quả Đánh giá năng lực của bạn.`
       : "Các học phần và kỹ năng trên do hệ thống tính từ kết quả Đánh giá năng lực của bạn."} Lộ trình chỉ để tham khảo: hãy trao đổi với cố vấn học tập và xem lịch đăng ký học phần của trường trước khi đăng ký.</p>
@@ -344,7 +379,7 @@ export type ShownRoadmap = { id: string; status: RoadmapStatus } | null;
 
 /** onRoadmap: told the roadmap shown, once loaded and whenever it or its status changes (a new one written meanwhile). */
 export default function StudentAiRoadmap({ planContext = null, onRoadmap }: { planContext?: PlanContext; onRoadmap?: (roadmap: ShownRoadmap) => void }) {
-  const { response, loading, error, create, creating, createError, announcement } = useRoadmap();
+  const { response, previous, loading, error, create, creating, createError, announcement } = useRoadmap();
   const report = useRef(onRoadmap);
   useEffect(() => { report.current = onRoadmap; });
   const ready = response !== null, shownId = response?.roadmap?.id ?? null, shownStatus = response?.roadmap?.status ?? null;
@@ -387,5 +422,5 @@ export default function StudentAiRoadmap({ planContext = null, onRoadmap }: { pl
     <p className="rm-footer">Lộ trình sẽ dùng kết quả Đánh giá năng lực tạo lúc {formatDateTime(assessment?.createdAt)}. Nếu bảng điểm vừa thay đổi, hãy tạo lại kết quả đánh giá trước.</p>
   </section>;
 
-  return <div className="rm-page">{live}<RoadmapView roadmap={roadmap} response={response} create={create} creating={creating} createError={createError} planContext={planContext} /></div>;
+  return <div className="rm-page">{live}<RoadmapView roadmap={roadmap} previous={previous} response={response} create={create} creating={creating} createError={createError} planContext={planContext} /></div>;
 }

@@ -9,7 +9,7 @@ import { activeConsentVersion, consentWithdrawn, isValidConsent, recordConsent, 
 import { calculateAssessment } from "./calculate.js";
 import { AssessmentError, loadAssessmentInputs } from "./inputs.js";
 import {
-  deleteCompetencyData, findAssessment, insertAssessment, latestAssessment, latestAssessmentStatus,
+  deleteCompetencyData, findAssessment, insertAssessment, latestAssessment, latestAssessmentStatus, previousAiComment,
   pruneAssessments, REGENERABLE_AI_STATUSES, withinCooldown, type AiStatus,
 } from "./repository.js";
 import type { AssessmentInputs, AssessmentResult } from "./types.js";
@@ -117,11 +117,15 @@ export function createCompetencyAssessmentRouter(
 
   // consentVersion: the active 'competency_assessment' consent of THIS student, so the page
   // asks again on a shared browser, after a withdrawal elsewhere, or after a policy change.
+  // previous: while the newest comment is not ready (queued, being written, failed, cancelled…), the newest completed
+  // comment of an older assessment with its own key names; the page shows it dimmed, like Xét tốt nghiệp's advice.
   router.get("/latest", async (req, res) => {
     const userId = studentUser(req).userId;
     const consentVersion = await activeConsentVersion(pool!, userId, "competency_assessment");
     const assessment = await latestAssessment(pool!, userId);
-    res.json({ assessment, aiEnabled, workerOnline: await workerOnline(), consentVersion });
+    const ready = assessment?.ai.status === "completed" && assessment.ai.output !== null;
+    const previous = assessment && !ready ? await previousAiComment(pool!, userId, assessment.id) : null;
+    res.json({ assessment, aiEnabled, workerOnline: await workerOnline(), consentVersion, previous });
   });
 
   router.get("/latest/status", async (req, res) => {

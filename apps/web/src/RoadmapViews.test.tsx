@@ -5,7 +5,7 @@ import { RoadmapPlanner } from "./RoadmapPlanner";
 import { RoadmapTrack } from "./RoadmapProgress";
 import StudentAiRoadmap from "./StudentAiRoadmap";
 import { tabFromHash, tabHash } from "./StudentRoadmap";
-import type { RoadmapResponse } from "./student-roadmap-data";
+import type { Roadmap, RoadmapResponse } from "./student-roadmap-data";
 import { planProposal, type StudyPlanContext, type StudyPlanCourse, type StudyPlanData } from "./study-plan-data";
 
 const liveData = vi.hoisted(() => vi.fn());
@@ -165,6 +165,7 @@ describe("Lộ trình AI đề xuất", () => {
       window: { start: "2026-12-21", end: "2027-04-04", months: [], term: "HK262" }, ended: false, careerName: null, specialtyLabel: null, summary: null, advice: [],
       study: [], choices: [], improve: [], skills: [], months: [],
     },
+    previous: null,
     assessment: { id: "a2", createdAt: "2026-10-25T03:00:00.000Z", hasCareer: true }, stale: true, surveyDone, aiEnabled: true,
     worker: { online: false, supportsRoadmap: false }, upcoming: { term: "HK262", start: "2026-12-21", end: "2027-04-04" },
     basis: { recorded: ["Chưa có minh chứng (chưa có điểm từ học phần nào): React", "Học phần thực tập trong chương trình: Đồ án thực tập (chưa học)"],
@@ -198,6 +199,60 @@ describe("Lộ trình AI đề xuất", () => {
     const html = page(true);
     expect(html).toContain("Lời khuyên dựa trên");
     expect(html).toMatch(/Hệ thống ghi nhận<\/h4>.*Chưa có minh chứng \(chưa có điểm từ học phần nào\): React.*Bạn tự đánh giá<\/h4>.*Thực tập: Đang thực tập/);
+  });
+
+  describe("the older roadmap while a new one is written (user 2026-11-05: like Xét tốt nghiệp)", () => {
+    const note = "Lộ trình trước, viết cho dữ liệu cũ — có thể không còn đúng. Lộ trình mới sẽ thay thế khi sẵn sàng.";
+    const month = (index: number, start: string, end: string, focus: string | null, tasks: string[]) => ({ month: index, start, end, focus, tasks });
+    // Synthetic: the newest roadmap (HK262) is not written yet; the older one covered HK261.
+    const older: Roadmap = {
+      ...response(true).roadmap!, id: "r0", assessmentId: "a0", createdAt: "2026-09-01T03:00:00.000Z", completedAt: "2026-09-01T03:05:00.000Z",
+      window: { start: "2026-09-07", end: "2027-01-24", months: [], term: "HK261" },
+      summary: "Lộ trình trước: học lại Cơ sở lập trình ngay học kỳ này.", advice: ["Đăng ký học lại sớm."],
+      months: [month(1, "2026-09-07", "2026-10-06", "Ổn định lịch học", ["Đăng ký học lại Cơ sở lập trình."]), month(2, "2026-10-07", "2026-11-06", null, [])],
+    };
+    const newest = (status: Roadmap["status"], errorCode: string | null = null): Roadmap => ({
+      ...response(true).roadmap!, id: "r2", assessmentId: "a2", status, errorCode, completedAt: null, model: null, summary: null, advice: [],
+      months: [month(1, "2026-12-21", "2027-01-20", null, [])],
+    });
+    const page = (data: RoadmapResponse) => {
+      liveData.mockReturnValue({ data, error: null, loading: false });
+      return renderToStaticMarkup(createElement(StudentAiRoadmap));
+    };
+
+    it.each([["queued", null], ["processing", null], ["failed", "ai_timeout"], ["cancelled", null]] as const)("keeps its advice and month plan dimmed while the newest is %s", (status, errorCode) => {
+      const html = page({ ...response(true), stale: false, roadmap: newest(status, errorCode), previous: older });
+      const at = { state: html.indexOf('class="rm-ai-state'), advice: html.indexOf('<div class="rm-previous rm-dimmed"><p class="rm-old">'), study: html.indexOf('id="rm-study"') };
+      expect(at.state).toBeGreaterThan(0);
+      expect(at.advice).toBeGreaterThan(at.state);
+      expect(at.study).toBeGreaterThan(at.advice);
+      expect(html).toContain("Lời khuyên của cố vấn AI");
+      expect(html).toContain("Lộ trình trước: học lại Cơ sở lập trình ngay học kỳ này.");
+      expect(html).toContain("<li>Đăng ký học lại sớm.</li>");
+      // Which roadmap and when it was written.
+      expect(html).toMatch(/<p class="rm-previous-meta">Lộ trình HK1 2026–2027 · Gemma 4 E4B \(chạy cục bộ\) soạn lúc [^<]*2026\.<\/p>/);
+      // Its month plan, dimmed under the same note, after the system's sections.
+      const months = html.slice(html.indexOf('id="rm-months"'));
+      expect(html.indexOf('id="rm-months"')).toBeGreaterThan(html.indexOf('id="rm-skills"'));
+      expect(months).toContain(`<div class="rm-previous rm-dimmed"><p class="rm-old">${note}</p><ol class="rm-months">`);
+      expect(months).toContain("Tháng 1 · 07/09 – 06/10/2026");
+      expect(months).toContain("Đăng ký học lại Cơ sở lập trình.");
+      expect(html.match(new RegExp(note, "g"))).toHaveLength(2);
+      // The page's footer stays the one of the current state.
+      expect(html).toContain("Các học phần và kỹ năng trên do hệ thống tính từ kết quả Đánh giá năng lực của bạn.");
+    });
+
+    it("shows only the month plan of an older roadmap without advice, and nothing once the newest is written", () => {
+      const monthsOnly = page({ ...response(true), roadmap: newest("processing"), previous: { ...older, summary: null } });
+      expect(monthsOnly).not.toContain("Lời khuyên của cố vấn AI");
+      expect(monthsOnly).not.toContain("rm-previous-meta");
+      expect(monthsOnly.match(new RegExp(note, "g"))).toHaveLength(1);
+      expect(monthsOnly).toContain("Ổn định lịch học");
+      const written = page({ ...response(true), roadmap: { ...older, id: "r3" }, previous: older });
+      expect(written).not.toContain(note);
+      expect(written).not.toContain("rm-dimmed");
+      expect(page({ ...response(true), roadmap: newest("processing"), previous: null })).not.toContain(note);
+    });
   });
 
   it("keeps Tạo lại for after Khảo sát định hướng, which a new roadmap needs", () => {

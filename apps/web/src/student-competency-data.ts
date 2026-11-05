@@ -1,8 +1,8 @@
 // Pure helpers for the #competency page: labels, formatting, AI key mapping and
 // the polling decision. No fetch, no DOM — everything here is unit tested.
 import type {
-  AiOutput, AiPriority, AiStatus, AssessmentResult, CareerRequirementResult, CareerResult, Confidence,
-  CourseState, Eligibility, HistoryPoint, LevelCode, PlanProgressResult, SelfStudyItem, SkillPlan, SkillResult, StoredAssessment, SupportCourse,
+  AiCommentContext, AiOutput, AiPriority, AiStatus, AssessmentResult, CareerRequirementResult, CareerResult, Confidence,
+  CourseState, Eligibility, HistoryPoint, LevelCode, PlanProgressResult, PreviousAiComment, SelfStudyItem, SkillPlan, SkillResult, StoredAssessment, SupportCourse,
 } from "./competency-assessment-types";
 import { meaningOf, scoreText, termName, type Meaning } from "./display-format";
 import { ADVISOR_ERRORS } from "./advisor-types";
@@ -547,7 +547,7 @@ export function plansFor(result: Pick<AssessmentResult, "career" | "skillPlans">
 }
 
 /** Career requirement skills by key: the AI's improvements about them belong on the gap page too. */
-export const careerSkillKeys = (result: Pick<AssessmentResult, "career">): Set<string> =>
+export const careerSkillKeys = (result: Pick<AiCommentContext, "career">): Set<string> =>
   new Set((result.career?.requirements ?? []).map((req) => req.skillKey).filter((key): key is string => Boolean(key)));
 
 /* ------------------------------------------------- history (STU-COMP-07) */
@@ -918,8 +918,9 @@ const priority = (value: unknown): AiPriority => value === "high" || value === "
  * Maps the model's keys to real names and drops whatever cannot be mapped:
  * unknown skill or group keys, and courses that are not candidates of the
  * engine (the server validates too; this keeps the page safe on its own).
+ * `result` is the context of the assessment the comment was written for (keys are per assessment).
  */
-export function mapAiOutput(output: AiOutput | null | undefined, result: AssessmentResult): MappedAiOutput | null {
+export function mapAiOutput(output: AiOutput | null | undefined, result: AiCommentContext): MappedAiOutput | null {
   if (!output || typeof output !== "object") return null;
   const skills = new Map(result.skillDirectory.map((skill) => [skill.key, skill.name]));
   const groups = new Map(result.groups.map((group) => [group.key, group.name]));
@@ -957,6 +958,71 @@ export function mapAiOutput(output: AiOutput | null | undefined, result: Assessm
     nextSteps: list<unknown>(output.nextSteps).map(text).filter(Boolean),
   };
   return mapped;
+}
+
+/** The AI's advice on the target career's own skills that are not among its gaps ("Nâng kỹ năng của vị trí nghề nghiệp"). */
+export function careerRaise(output: MappedAiOutput, careerKeys: ReadonlySet<string>): MappedAiOutput["improvements"] {
+  const gapKeys = new Set(output.gaps.map((gap) => gap.key));
+  return output.improvements.filter((item) => careerKeys.has(item.key) && !gapKeys.has(item.key));
+}
+/** The comment has something for #skill-gap: fit with the career, its gaps or the career's skills to raise. */
+export const hasGapContent = (output: MappedAiOutput, careerKeys: ReadonlySet<string>): boolean =>
+  Boolean(output.careerFit || output.gaps.length || careerRaise(output, careerKeys).length);
+/** The comment has something for #competency. */
+export const hasCompetencyContent = (output: MappedAiOutput): boolean =>
+  Boolean(output.summary || output.groupInsights.length || output.strengths.length || output.improvements.length || output.progress || output.nextSteps.length);
+
+/** Over an older comment shown while the newest one is not ready (the wording of Xét tốt nghiệp's previous advice). */
+export const PREVIOUS_COMMENT_NOTE = "Nhận xét trước, viết cho kết quả đánh giá cũ — có thể không còn đúng. Nhận xét mới sẽ thay thế khi sẵn sàng.";
+
+const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
+const textOrNull = (value: unknown) => (typeof value === "string" && value ? value : null);
+
+/** GET /latest previous, or null when it is missing (an older API) or unreadable; missing lists are empty. */
+export function normalizePreviousComment(value: unknown): PreviousAiComment | null {
+  if (!isRecord(value) || typeof value.assessmentId !== "string" || !isRecord(value.output) || !isRecord(value.context)) return null;
+  const { context } = value;
+  return {
+    assessmentId: value.assessmentId,
+    assessmentCreatedAt: textOrNull(value.assessmentCreatedAt),
+    model: textOrNull(value.model),
+    completedAt: textOrNull(value.completedAt),
+    promptVersion: textOrNull(value.promptVersion),
+    output: value.output as AiOutput,
+    context: {
+      skillDirectory: list(context.skillDirectory),
+      groups: list(context.groups),
+      career: isRecord(context.career) ? { requirements: list(context.career.requirements) } : null,
+      courses: list(context.courses),
+      courseSuggestions: list(context.courseSuggestions),
+    },
+  };
+}
+
+/** The assessment's own comment, once completed, in the shape of a previous one (what the page remembers). */
+export function ownComment(assessment: StoredAssessment): PreviousAiComment | null {
+  const { ai } = assessment;
+  if (ai.status !== "completed" || !ai.output) return null;
+  return { assessmentId: assessment.id, assessmentCreatedAt: assessment.createdAt, model: ai.model, completedAt: ai.completedAt,
+    promptVersion: assessment.result.meta.promptVersion, output: ai.output, context: assessment.result };
+}
+
+/**
+ * The older comment shown dimmed under the AI state box, like Xét tốt nghiệp's previous advice: while the newest comment
+ * is not ready (queued, being written, failed, cancelled, deferred, or AI only just switched on), the one the API sends
+ * (the newest completed comment of an older assessment), else the newest one this page session has shown for another
+ * assessment ("Đánh giá lại" answers with the new assessment alone). None under "Nhận xét AI chưa được bật": no new
+ * comment would replace it.
+ */
+export function previousComment(input: {
+  assessment: StoredAssessment | null;
+  aiEnabled: boolean;
+  served: PreviousAiComment | null | undefined;
+  remembered: PreviousAiComment | null;
+}): PreviousAiComment | null {
+  const { assessment, remembered } = input;
+  if (!assessment || ownComment(assessment) || (assessment.ai.status === "disabled" && !input.aiEnabled)) return null;
+  return input.served ?? (remembered && remembered.assessmentId !== assessment.id ? remembered : null);
 }
 
 /* ---------------------------------------------------------------- helpers */

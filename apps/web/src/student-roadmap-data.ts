@@ -39,6 +39,11 @@ export type Roadmap = {
 export type RoadmapBasis = { recorded: string[]; selfReported: string[]; surveyChanged: boolean };
 export type RoadmapResponse = {
   roadmap: Roadmap | null;
+  /**
+   * While the newest roadmap is not completed: the newest completed one before it, presented the same way; its AI parts
+   * stay visible, dimmed, until the new one replaces them (null otherwise, and from an older API).
+   */
+  previous: Roadmap | null;
   assessment: { id: string; createdAt: string; hasCareer: boolean } | null;
   stale: boolean;
   /** The profile survey is answered: a new roadmap needs it (an older API without the field counts as yes). */
@@ -85,10 +90,30 @@ export function normalizeRoadmapResponse(value: unknown): RoadmapResponse {
     ? { term: typeof data.upcoming.term === "string" && data.upcoming.term ? data.upcoming.term : null, start: data.upcoming.start, end: data.upcoming.end } : null;
   const lines = (value: unknown) => list<unknown>(value).filter((item): item is string => typeof item === "string");
   const basis = isRecord(data.basis) ? { recorded: lines(data.basis.recorded), selfReported: lines(data.basis.selfReported), surveyChanged: data.basis.surveyChanged === true } : null;
+  const previous = normalizeRoadmap(data.previous);
   return {
-    roadmap: normalizeRoadmap(data.roadmap), assessment, stale: data.stale === true, surveyDone: data.surveyDone !== false, aiEnabled: data.aiEnabled === true,
+    roadmap: normalizeRoadmap(data.roadmap), previous: previous?.status === "completed" ? previous : null, assessment, stale: data.stale === true,
+    surveyDone: data.surveyDone !== false, aiEnabled: data.aiEnabled === true,
     worker: worker(data.worker), upcoming, basis: basis && (basis.recorded.length || basis.selfReported.length) ? basis : null,
   };
+}
+
+/** Over the AI parts of an older roadmap shown while the newest one is not ready (the wording of Xét tốt nghiệp's previous advice). */
+export const PREVIOUS_ROADMAP_NOTE = "Lộ trình trước, viết cho dữ liệu cũ — có thể không còn đúng. Lộ trình mới sẽ thay thế khi sẵn sàng.";
+/** The AI wrote a plan for at least one month. */
+export const hasMonthPlan = (roadmap: Pick<Roadmap, "months">) => roadmap.months.some((month) => month.focus || month.tasks.length > 0);
+
+/**
+ * The older roadmap whose AI parts (Lời khuyên của cố vấn AI, Kế hoạch theo tháng) stay visible, dimmed, while the newest
+ * one is queued, being written, failed or cancelled (user 2026-11-05, like Xét tốt nghiệp): the one the API sends, else
+ * the newest completed one this page session has shown ("Tạo lại" answers with the new roadmap alone). Null when it has
+ * no AI part to show.
+ */
+export function previousRoadmap(response: Pick<RoadmapResponse, "roadmap" | "previous"> | null, remembered: Roadmap | null): Roadmap | null {
+  const roadmap = response?.roadmap;
+  if (!response || !roadmap || roadmap.status === "completed") return null;
+  const previous = response.previous ?? (remembered?.status === "completed" && remembered.id !== roadmap.id ? remembered : null);
+  return previous && (previous.summary || hasMonthPlan(previous)) ? previous : null;
 }
 
 export function normalizeRoadmapStatus(value: unknown): RoadmapStatusResponse {

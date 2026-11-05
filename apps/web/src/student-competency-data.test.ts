@@ -4,9 +4,10 @@ import {
   careerDataText, careerSummaryText, choiceLabel, courseTermText, formatDifference, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isOverdue, isPreconditionError, PRIORITY_LABELS, levelStep, mapAiOutput, missingRequirements, missingRequirementsMessage, modelLabel, needsSelfStudy, nextCourseCount, nextTermOf, plannedCourseNote, plansFor, relatedSkillNames, shownScore, skillGroupKeys,
   scoreDifference, shouldPoll, sortRequirements, studyTermOf, termLabel, upcomingText, CHART_LEVELS, EMPTY_SKILL_FILTERS, LEVEL_COLUMNS,
   careerThresholdsLine, chartLevelLabel, currentImprovements, LEVEL_SCALE, levelOfScore, withCurrentLevels,
+  careerRaise, careerSkillKeys, hasCompetencyContent, hasGapContent, normalizePreviousComment, ownComment, previousComment,
 } from "./student-competency-data";
 import { fixtureAiOutput, fixtureAssessment, fixtureResult } from "./student-competency.fixture";
-import type { CareerRequirementResult } from "./competency-assessment-types";
+import type { AiCommentContext, CareerRequirementResult, PreviousAiComment } from "./competency-assessment-types";
 
 describe("levels named like the transcript's classification (comp-calc-v10, user 2026-10-22)", () => {
   it("reads a score as the transcript's 4-point classification × 25: Xuất sắc 90, Giỏi 80, Khá 62,5, Trung bình 50, Yếu", () => {
@@ -569,6 +570,77 @@ describe("mapAiOutput", () => {
     expect(mapped.strengths).toEqual([]);
     expect(mapped.improvements).toEqual([]);
     expect(mapped.careerFit).toBe("");
+  });
+  it("reads a comment with the trimmed context of its own assessment, where the same key names another skill", () => {
+    // Synthetic: in this older assessment S01 is Kiểm thử tự động (Lập trình web in the fixture) and TST110 exists.
+    const context: AiCommentContext = {
+      skillDirectory: [{ key: "S01", name: "Kiểm thử tự động" }, { key: "S09", name: "Docker" }], groups: [{ key: "G1", name: "Kỹ thuật phần mềm" }],
+      career: { requirements: [{ skillKey: "S01", status: "below" }, { skillKey: "S09", status: "not_studied" }] },
+      courses: [{ code: "TST105", name: "Kiểm thử phần mềm" }], courseSuggestions: [{ code: "TST110", name: "DevOps căn bản" }],
+    };
+    const output = { ...fixtureAiOutput, summary: "Kỹ năng S01 cần thêm thời gian; nhóm G1 ổn.",
+      strengths: [{ skillKey: "S01", comment: "Dưới ngưỡng ở lần đánh giá này nên không là điểm mạnh." }],
+      gaps: [{ skillKey: "S09", priority: "low" as const, explanation: "Chưa học.", courses: [{ courseCode: "TST110", reason: "Học DevOps." }], selfStudy: [] }] };
+    const mapped = mapAiOutput(output, context)!;
+    expect(mapped.summary).toBe("Kỹ năng Kiểm thử tự động cần thêm thời gian; nhóm Kỹ thuật phần mềm ổn.");
+    expect(mapped.strengths).toEqual([]);
+    expect(mapped.gaps[0]).toMatchObject({ name: "Docker", courses: [{ code: "TST110", name: "DevOps căn bản", reason: "Học DevOps." }] });
+    // The same output read with the newest result would name other skills: never mix the two.
+    expect(mapAiOutput(output, fixtureResult)!.summary).toBe("Kỹ năng Lập trình web cần thêm thời gian; nhóm Kiến thức chuyên môn ổn.");
+    expect(careerSkillKeys(context)).toEqual(new Set(["S01", "S09"]));
+  });
+});
+
+describe("the older comment shown dimmed while the new one is prepared (2026-11-05, like Xét tốt nghiệp)", () => {
+  const context: AiCommentContext = { skillDirectory: [{ key: "S01", name: "Kiểm thử tự động" }], groups: [], career: null, courses: [], courseSuggestions: [] };
+  const older: PreviousAiComment = {
+    assessmentId: "22222222-2222-4222-8222-222222222222", assessmentCreatedAt: "2026-10-01T02:00:00.000Z", model: "gemma4:e4b",
+    completedAt: "2026-10-01T02:04:00.000Z", promptVersion: "comp-v13", output: fixtureAiOutput, context,
+  };
+  it("reads the API's previous defensively", () => {
+    expect(normalizePreviousComment({ ...older, context: { skillDirectory: context.skillDirectory, career: { requirements: "x" } } })).toEqual({
+      ...older, context: { skillDirectory: context.skillDirectory, groups: [], career: { requirements: [] }, courses: [], courseSuggestions: [] },
+    });
+    expect(normalizePreviousComment({ ...older, model: 1, completedAt: "" })).toMatchObject({ model: null, completedAt: null });
+    for (const value of [null, undefined, "x", { ...older, assessmentId: 1 }, { ...older, output: null }, { ...older, context: [] }]) {
+      expect(normalizePreviousComment(value)).toBeNull();
+    }
+  });
+  it("is the API's while the newest comment is not ready, else the one this page session showed for another assessment", () => {
+    const remembered = { ...older, assessmentId: "33333333-3333-4333-8333-333333333333" };
+    for (const status of ["queued", "processing", "failed", "cancelled", "deferred", "disabled"] as const) {
+      expect(previousComment({ assessment: fixtureAssessment(status), aiEnabled: true, served: older, remembered })).toBe(older);
+      expect(previousComment({ assessment: fixtureAssessment(status), aiEnabled: true, served: null, remembered })).toBe(remembered);
+    }
+    // A completed comment is shown itself; nothing without an assessment.
+    expect(previousComment({ assessment: fixtureAssessment("completed"), aiEnabled: true, served: older, remembered })).toBeNull();
+    expect(previousComment({ assessment: null, aiEnabled: true, served: older, remembered })).toBeNull();
+    // A stored "completed" without output (never written by the worker) still waits with the older one.
+    const empty = fixtureAssessment("completed");
+    expect(previousComment({ assessment: { ...empty, ai: { ...empty.ai, output: null } }, aiEnabled: true, served: older, remembered: null })).toBe(older);
+    // The session's memory of this very assessment is not "an older comment".
+    expect(previousComment({ assessment: fixtureAssessment("failed"), aiEnabled: true, served: undefined, remembered: { ...older, assessmentId: fixtureAssessment().id } })).toBeNull();
+    // "Nhận xét AI chưa được bật": no new comment would replace it. A job stuck while AI was switched off still shows it.
+    expect(previousComment({ assessment: fixtureAssessment("disabled"), aiEnabled: false, served: older, remembered })).toBeNull();
+    expect(previousComment({ assessment: fixtureAssessment("queued"), aiEnabled: false, served: older, remembered })).toBe(older);
+  });
+  it("remembers an assessment's own completed comment with its own result as the context", () => {
+    const own = ownComment(fixtureAssessment("completed"))!;
+    expect(own).toMatchObject({ assessmentId: fixtureAssessment().id, model: "gemma4:e4b", completedAt: "2026-10-11T02:34:00.000Z", output: fixtureAiOutput });
+    expect(own.context).toBe(fixtureResult);
+    expect(own.promptVersion).toBe(fixtureResult.meta.promptVersion);
+    expect(ownComment(fixtureAssessment("processing"))).toBeNull();
+  });
+  it("tells whether a comment has a part for each page", () => {
+    const mapped = mapAiOutput(fixtureAiOutput, fixtureResult)!;
+    const keys = careerSkillKeys(fixtureResult);
+    expect(hasCompetencyContent(mapped)).toBe(true);
+    expect(hasGapContent(mapped, keys)).toBe(true);
+    const competencyOnly = { ...mapped, careerFit: "", gaps: [], improvements: mapped.improvements.filter((item) => !keys.has(item.key)) };
+    expect(hasGapContent(competencyOnly, keys)).toBe(false);
+    expect(hasCompetencyContent({ ...competencyOnly, summary: "", groupInsights: [], strengths: [], improvements: [], progress: "", nextSteps: [] })).toBe(false);
+    // The career's own skills outside its gaps ("Nâng kỹ năng của vị trí nghề nghiệp").
+    expect(careerRaise(mapped, keys).map((item) => item.key)).toEqual(["S04"]);
   });
 });
 

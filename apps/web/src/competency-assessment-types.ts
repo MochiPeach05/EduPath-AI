@@ -544,6 +544,33 @@ export type StoredAssessment = {
   ai: { status: AiStatus; errorCode: string | null; model: string | null; completedAt: string | null; output: AiOutput | null };
 };
 
+/**
+ * What the page reads of a result to show a comment written for it (mapAiOutput, careerSkillKeys): the names its keys
+ * stand for, its career's requirement statuses and its course names. Keys (S01, G1…) are per assessment, so a comment
+ * is always read with the result it was written for. AssessmentResult has all of it.
+ */
+export type AiCommentContext = {
+  skillDirectory: readonly Pick<AssessmentResult["skillDirectory"][number], "key" | "name">[];
+  groups: readonly Pick<GroupResult, "key" | "name">[];
+  career: { requirements: readonly Pick<CareerRequirementResult, "skillKey" | "status">[] } | null;
+  courses: readonly Pick<CourseFact, "code" | "name">[];
+  courseSuggestions: readonly Pick<CourseSuggestion, "code" | "name">[];
+};
+
+/**
+ * A completed comment of an older assessment with that assessment's own context (API repository.ts PreviousAiComment):
+ * shown dimmed while the newest assessment's comment is not ready, like the advice of Xét tốt nghiệp.
+ */
+export type PreviousAiComment = {
+  assessmentId: string;
+  assessmentCreatedAt: string | null;
+  model: string | null;
+  completedAt: string | null;
+  promptVersion: string | null;
+  output: AiOutput;
+  context: AiCommentContext;
+};
+
 /** GET /api/student/competency-assessments/latest */
 export type LatestAssessmentResponse = {
   assessment: StoredAssessment | null;
@@ -551,6 +578,8 @@ export type LatestAssessmentResponse = {
   workerOnline: boolean;
   /** Policy version of this student's active competency consent (null = none; missing on an older API). */
   consentVersion?: string | null;
+  /** While the newest comment is not ready: the newest completed comment of an older assessment (missing on an older API). */
+  previous?: PreviousAiComment | null;
 };
 /** GET /api/student/competency-assessments/latest/status */
 export type AssessmentStatusResponse = { id: string | null; aiStatus: AiStatus | null; aiErrorCode: string | null; workerOnline: boolean };

@@ -3,13 +3,14 @@ import { Icon } from "./student-icons";
 import { useLiveData } from "./use-live-data";
 import { competencyPolicyHref, isValidConsent, policyVersion } from "./public-information";
 import type { StudentProfile } from "./StudentOverview";
-import { specialtyLabel, type AiStatus, type AssessmentResult, type AssessmentStatusResponse, type CareerRequirementResult, type CourseSuggestion, type LatestAssessmentResponse, type LevelCode, type SkillPlan, type SkillResult, type StoredAssessment, type SupportCourse } from "./competency-assessment-types";
+import { specialtyLabel, type AiStatus, type AssessmentResult, type AssessmentStatusResponse, type CareerRequirementResult, type CourseSuggestion, type LatestAssessmentResponse, type LevelCode, type PreviousAiComment, type SkillPlan, type SkillResult, type StoredAssessment, type SupportCourse } from "./competency-assessment-types";
 import {
   CHART_LEVELS, COMPETENCY_API, CONFIDENCE_LABELS, COURSE_STATE_LABELS, EMPTY_SKILL_FILTERS, FIT_LABELS, FIT_SCALE, LEVEL_COLUMNS, LEVEL_LABELS, LEVEL_SCALE, LEVEL_THRESHOLDS, PRECONDITION_COPY, PRIORITY_LABELS, UNSCORED_STATES,
   aiErrorMessage, aiReasoned, aiStateCopy, bucketSkills, canRegenerate, careerDataText, careerSkillKeys, careerThresholdsLine, chartLevelLabel, choiceLabel, confidentStrengths, courseTermText, currentImprovements, courseStanding, dataUsedLine, displayLevel, eligibilityDisplay, errorMessage, filterSkills, fitLevelOf, fitScoreOf, fitStep, formatDateTime,
   careerSummaryText, formatDifference, formatNumber, formatPercent, formatScore, gapHistory, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isOverdue, isPreconditionError, levelChart, levelSentence, levelStep, nextCourseCount, nextTermOf, noCreditSkill, overallIsPooled, overdueText, countsFromStudyTerm, thesisByGpa, lateBeforeStudyTerm, levelSummary, levelText, mapAiOutput, missingRequirements, skillGroupKeys, missingRequirementsMessage, modelLabel, needsSelfStudy,
   plannedCourseNote, plansFor, relatedSkillNames, scoreDifference, shouldPoll, skillName, sortRequirements, studyTermOf, upcomingText, withCurrentLevels, type ChartLevel, type DisplayLevel, type FitLevel, type LevelBar, type LevelSegment, type MappedAiOutput, type PreconditionError, type SkillFilters, type StatusTone,
   fitMeaning, historyTermName, levelMeaning, noGapText, scoreSources, scoreSourcesText,
+  careerRaise, hasCompetencyContent, hasGapContent, normalizePreviousComment, ownComment, previousComment, PREVIOUS_COMMENT_NOTE,
 } from "./student-competency-data";
 import { meaningClass, termName } from "./display-format";
 import { readGraduation } from "./student-graduation-api";
@@ -45,7 +46,10 @@ async function send<T>(url: string, init?: RequestInit): Promise<T> {
 async function readLatest(response: Response): Promise<LatestAssessmentResponse> {
   const data = await response.json().catch(() => ({})) as LatestAssessmentResponse & { error?: string };
   if (!response.ok) throw new Error(errorMessage(data.error, "Chưa tải được kết quả đánh giá năng lực."));
-  return { assessment: data.assessment ?? null, aiEnabled: Boolean(data.aiEnabled), workerOnline: Boolean(data.workerOnline), consentVersion: typeof data.consentVersion === "string" ? data.consentVersion : null };
+  return {
+    assessment: data.assessment ?? null, aiEnabled: Boolean(data.aiEnabled), workerOnline: Boolean(data.workerOnline),
+    consentVersion: typeof data.consentVersion === "string" ? data.consentVersion : null, previous: normalizePreviousComment(data.previous),
+  };
 }
 async function readTranscriptPresence(response: Response): Promise<boolean> {
   if (!response.ok) throw new Error("Chưa kiểm tra được bảng điểm.");
@@ -802,7 +806,11 @@ function CoursesSection({ result, ai }: { result: AssessmentResult; ai: MappedAi
 
 /* --------------------------------------------------------------------- AI */
 
-function AiPanel({ assessment, aiEnabled, workerOnline, busy, onRegenerate, onCancel, view }: { assessment: StoredAssessment; aiEnabled: boolean; workerOnline: boolean; busy: boolean; onRegenerate: () => void; onCancel: () => void; view: CompetencyView }) {
+/**
+ * previous: an older comment shown dimmed under the state box while this assessment's comment is not ready, read with its
+ * own assessment's names (previousComment); the panel's footer stays the one of the current state.
+ */
+function AiPanel({ assessment, aiEnabled, workerOnline, busy, onRegenerate, onCancel, view, previous }: { assessment: StoredAssessment; aiEnabled: boolean; workerOnline: boolean; busy: boolean; onRegenerate: () => void; onCancel: () => void; view: CompetencyView; previous: PreviousAiComment | null }) {
   const { ai, result } = assessment;
   const mapped = ai.status === "completed" ? mapAiOutput(ai.output, result) : null;
   const pending = shouldPoll(ai.status);
@@ -819,6 +827,7 @@ function AiPanel({ assessment, aiEnabled, workerOnline, busy, onRegenerate, onCa
       {canRegenerate(ai.status, aiEnabled) && <button type="button" className="sw-outline" disabled={busy} onClick={onRegenerate}><Icon name="refresh" />{ai.status === "disabled" ? "Tạo nhận xét" : "Tạo lại nhận xét"}</button>}
       {pending && !isAdvisorView() && <button type="button" className="sr-secondary" disabled={busy} onClick={onCancel}>Hủy tạo nhận xét</button>}
     </div>}
+    {!mapped && previous && <PreviousComment comment={previous} view={view} />}
     <p className="scomp-ai-footer">{ai.status === "completed" ? `${modelLabel(ai.model)}${aiReasoned(result.meta.promptVersion) ? " có suy luận" : ""}, chạy cục bộ · tạo lúc ${formatDateTime(ai.completedAt)}. ` : "Mô hình Gemma 4 E4B chạy cục bộ trên máy của nhóm phát triển, suy luận trước khi viết. "}Nhận xét do AI viết dựa trên kết quả đã tính, có thể chưa chính xác — hãy đối chiếu số liệu và trao đổi với cố vấn học tập.</p>
   </section>;
 }
@@ -845,8 +854,7 @@ function AiContent({ output }: { output: MappedAiOutput }) {
  * courses, and the AI's advice on raising the career's own skills (never the skills outside the career).
  */
 function AiGapContent({ output, hasCareer, careerKeys }: { output: MappedAiOutput; hasCareer: boolean; careerKeys: Set<string> }) {
-  const gapKeys = new Set(output.gaps.map((gap) => gap.key));
-  const raise = output.improvements.filter((item) => careerKeys.has(item.key) && !gapKeys.has(item.key));
+  const raise = careerRaise(output, careerKeys);
   if (!output.careerFit && !output.gaps.length && !raise.length) return <p className="scomp-meta">{hasCareer ? "Nhận xét lần này không có phần riêng về khoảng trống kỹ năng. Kết quả tính toán bên dưới vẫn đầy đủ." : "Chọn vị trí nghề nghiệp mục tiêu rồi đánh giá lại để có nhận xét về khoảng trống kỹ năng."}</p>;
   return <div className="scomp-ai-body">
     {output.careerFit && <div className="scomp-ai-block"><h3>Với vị trí nghề nghiệp mục tiêu</h3><p className="scomp-prose">{output.careerFit}</p></div>}
@@ -859,6 +867,22 @@ function AiGapContent({ output, hasCareer, careerKeys }: { output: MappedAiOutpu
       <strong>{item.name}</strong> <span className="scomp-priority">{PRIORITY_LABELS[item.priority]}</span>. {item.comment}
       {item.courses.length > 0 && <ul className="scomp-ai-sub">{item.courses.map((course) => <li key={course.code}>Học phần {course.name} ({course.code}){course.reason && `: ${course.reason}`}</li>)}</ul>}
     </li>)}</ul></div>}
+  </div>;
+}
+
+/**
+ * An older comment kept, dimmed, under the state box until the new one is ready (user 2026-11-05: every AI comment like
+ * Xét tốt nghiệp's "Lời khuyên trước, viết cho dữ liệu cũ"). Its keys are read with its own assessment's names; nothing
+ * shows when it has no part for this page.
+ */
+function PreviousComment({ comment, view }: { comment: PreviousAiComment; view: CompetencyView }) {
+  const mapped = mapAiOutput(comment.output, comment.context);
+  const careerKeys = careerSkillKeys(comment.context);
+  if (!mapped || (view === "gap" ? !hasGapContent(mapped, careerKeys) : !hasCompetencyContent(mapped))) return null;
+  return <div className="scomp-ai-previous scomp-ai-dimmed">
+    <p className="scomp-ai-old">{PREVIOUS_COMMENT_NOTE}</p>
+    {view === "gap" ? <AiGapContent output={mapped} hasCareer={Boolean(comment.context.career)} careerKeys={careerKeys} /> : <AiContent output={mapped} />}
+    <p className="scomp-ai-old-meta">{modelLabel(comment.model)}{aiReasoned(comment.promptVersion) ? " có suy luận" : ""}, chạy cục bộ · tạo lúc {formatDateTime(comment.completedAt)}.</p>
   </div>;
 }
 
@@ -910,6 +934,16 @@ export default function StudentCompetency({ profile, view = "competency", notice
   const [consentOpen, setConsentOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+
+  // The newest comment this page session has shown (the assessment's own, or the older one the API sent): "Đánh giá lại"
+  // answers with the new assessment alone, so the page keeps showing it, dimmed, until the new comment is ready.
+  const served = data?.previous ?? null;
+  const [remembered, setRemembered] = useState<PreviousAiComment | null>(null);
+  useEffect(() => {
+    const shown = (assessment && ownComment(assessment)) ?? served;
+    if (shown) setRemembered(shown);
+  }, [assessment, served]);
+  const shownPrevious = previousComment({ assessment, aiEnabled: data?.aiEnabled ?? false, served, remembered });
 
   const aiStatus: AiStatus | null = assessment?.ai.status ?? null;
   const assessmentId = assessment?.id ?? null;
@@ -1001,6 +1035,8 @@ export default function StudentCompetency({ profile, view = "competency", notice
     try {
       await send<{ deleted: boolean }>(`${COMPETENCY_API}`, jsonWrite("DELETE", { confirmed: true }));
       setDeleteOpen(false);
+      // Every result and comment is gone: none comes back dimmed after the next assessment.
+      setRemembered(null);
       setCurrent((value) => ({ assessment: null, aiEnabled: value?.aiEnabled ?? false, workerOnline: value?.workerOnline ?? false, consentVersion: null }));
       setAnnouncement("Đã xóa kết quả đánh giá năng lực và rút lại sự đồng ý.");
     } catch (e) { setDeleteError((e as Error).message); }
@@ -1016,7 +1052,7 @@ export default function StudentCompetency({ profile, view = "competency", notice
     (profile.specialty !== undefined && (profile.specialty ?? null) !== result.meta.specialty)
     || (profile.careerPositionId ?? null) !== (result.meta.career?.id ?? null)));
   const copy = HEADER_COPY[view];
-  const aiPanel = assessment && <AiPanel assessment={assessment} aiEnabled={data?.aiEnabled ?? false} workerOnline={data?.workerOnline ?? false} busy={busy !== null} onRegenerate={() => void regenerate()} onCancel={() => void cancelAi()} view={view} />;
+  const aiPanel = assessment && <AiPanel assessment={assessment} aiEnabled={data?.aiEnabled ?? false} workerOnline={data?.workerOnline ?? false} busy={busy !== null} onRegenerate={() => void regenerate()} onCancel={() => void cancelAi()} view={view} previous={shownPrevious} />;
   return <div className="scomp-page">
     <section className="sw-panel scomp-header" aria-labelledby="scomp-title">
       <div className="scomp-header-main">

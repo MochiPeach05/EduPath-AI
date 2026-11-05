@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   choiceText, failureText, improveHeading, monthTitle, normalizeRoadmapResponse, normalizeRoadmapStatus, pendingCopy, requestErrorMessage, ROADMAP_RETRY_CODE, roadmapWindowTitle, skillTags, studyTag, termShort,
+  hasMonthPlan, previousRoadmap, PREVIOUS_ROADMAP_NOTE, type Roadmap,
 } from "./student-roadmap-data";
 
 describe("normalizeRoadmapResponse", () => {
@@ -13,7 +14,7 @@ describe("normalizeRoadmapResponse", () => {
       skills: [{ key: "S01", courses: [], steps: [] }] });
     expect(data).toMatchObject({ stale: true, aiEnabled: true, worker: { online: true, supportsRoadmap: false }, assessment: { id: "a1", hasCareer: true } });
     // An API without surveyDone (before the profile survey) never blocks "Tạo lộ trình".
-    expect(normalizeRoadmapResponse(null)).toEqual({ roadmap: null, assessment: null, stale: false, surveyDone: true, aiEnabled: false, worker: { online: false, supportsRoadmap: false }, upcoming: null, basis: null });
+    expect(normalizeRoadmapResponse(null)).toEqual({ roadmap: null, previous: null, assessment: null, stale: false, surveyDone: true, aiEnabled: false, worker: { online: false, supportsRoadmap: false }, upcoming: null, basis: null });
     // Where the advice comes from (roadmap-v9), strings only; an empty one is none.
     expect(normalizeRoadmapResponse({ basis: { recorded: ["React: chưa có điểm", 1], selfReported: ["Thực tập: Đang thực tập"], surveyChanged: true } }).basis)
       .toEqual({ recorded: ["React: chưa có điểm"], selfReported: ["Thực tập: Đang thực tập"], surveyChanged: true });
@@ -24,6 +25,41 @@ describe("normalizeRoadmapResponse", () => {
     expect(normalizeRoadmapResponse({ surveyDone: false }).surveyDone).toBe(false);
     expect(normalizeRoadmapResponse({ roadmap: { id: 1 } }).roadmap).toBeNull();
     expect(normalizeRoadmapStatus({ id: "r1", status: "processing" })).toEqual({ id: "r1", status: "processing", errorCode: null, worker: { online: false, supportsRoadmap: false } });
+  });
+});
+
+describe("the older roadmap shown dimmed while a new one is written (2026-11-05, like Xét tốt nghiệp)", () => {
+  const roadmap = (id: string, status: Roadmap["status"], extra: Partial<Roadmap> = {}): Roadmap => ({
+    id, assessmentId: "a1", status, errorCode: null, createdAt: "2026-10-20T03:00:00.000Z", completedAt: status === "completed" ? "2026-10-20T03:04:00.000Z" : null,
+    model: status === "completed" ? "gemma4:e4b" : null, window: { start: "2026-12-21", end: "2027-04-04", months: [], term: "HK262" }, ended: false,
+    careerName: null, specialtyLabel: null, summary: status === "completed" ? "Lộ trình trước." : null, advice: [], study: [], choices: [], improve: [], skills: [],
+    months: [{ month: 1, start: "2026-12-21", end: "2027-01-20", focus: status === "completed" ? "Ổn định lịch học" : null, tasks: [] }], ...extra,
+  });
+  const older = roadmap("r1", "completed"), remembered = roadmap("r0", "completed", { summary: "Lộ trình nhớ trong phiên." });
+
+  it("reads the API's previous: a completed roadmap only, none from an older API", () => {
+    expect(normalizeRoadmapResponse({ roadmap: { ...roadmap("r2", "processing") }, previous: older }).previous).toMatchObject({ id: "r1", summary: "Lộ trình trước." });
+    expect(normalizeRoadmapResponse({ roadmap: roadmap("r2", "processing"), previous: roadmap("r1", "failed") }).previous).toBeNull();
+    expect(normalizeRoadmapResponse({ roadmap: roadmap("r2", "processing") }).previous).toBeNull();
+  });
+  it("is the API's while the newest is not completed, else the one this page session showed, and needs an AI part", () => {
+    for (const status of ["queued", "processing", "failed", "cancelled"] as const) {
+      expect(previousRoadmap({ roadmap: roadmap("r2", status), previous: older }, remembered)).toBe(older);
+      expect(previousRoadmap({ roadmap: roadmap("r2", status), previous: null }, remembered)).toBe(remembered);
+    }
+    expect(previousRoadmap({ roadmap: roadmap("r2", "completed"), previous: older }, remembered)).toBeNull();
+    expect(previousRoadmap({ roadmap: null, previous: older }, remembered)).toBeNull();
+    expect(previousRoadmap(null, remembered)).toBeNull();
+    // The session's memory of this very roadmap is not "an older roadmap".
+    expect(previousRoadmap({ roadmap: roadmap("r0", "failed"), previous: null }, remembered)).toBeNull();
+    // Advice or a month plan is enough; a roadmap with neither shows nothing.
+    const monthsOnly = roadmap("r1", "completed", { summary: null });
+    expect(previousRoadmap({ roadmap: roadmap("r2", "queued"), previous: monthsOnly }, null)).toBe(monthsOnly);
+    expect(hasMonthPlan(monthsOnly)).toBe(true);
+    const nothing = roadmap("r1", "completed", { summary: null, months: [{ month: 1, start: "2026-12-21", end: "2027-01-20", focus: null, tasks: [] }] });
+    expect(hasMonthPlan(nothing)).toBe(false);
+    expect(previousRoadmap({ roadmap: roadmap("r2", "queued"), previous: nothing }, null)).toBeNull();
+    expect(PREVIOUS_ROADMAP_NOTE).toBe("Lộ trình trước, viết cho dữ liệu cũ — có thể không còn đúng. Lộ trình mới sẽ thay thế khi sẵn sàng.");
   });
 });
 
