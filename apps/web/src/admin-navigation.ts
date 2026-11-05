@@ -17,9 +17,11 @@ export const adminNavigation = [
   // (user 2026-11-03: "Cái mục quyền cố vấn sửa lại thành quản lý sinh viên").
   { path: "/quantri/co-van-hoc-tap", label: "Cố vấn", eyebrow: "QUẢN LÝ CỐ VẤN HỌC TẬP", icon: "user" },
   { path: "/quantri/quan-ly-sinh-vien", label: "Quản lý sinh viên", eyebrow: "QUẢN LÝ SINH VIÊN CỦA CỐ VẤN HỌC TẬP", icon: "cap" },
-  { path: "/quantri/chuong-trinh", label: "Chương trình", eyebrow: "QUẢN LÝ ĐÀO TẠO", icon: "book" },
-  { path: "/quantri/tieu-chuan-tot-nghiep", label: "Tốt nghiệp", eyebrow: "QUẢN LÝ ĐÀO TẠO", icon: "shield" },
-  { path: "/quantri/ke-hoach", label: "Kế hoạch", eyebrow: "QUẢN LÝ ĐÀO TẠO", icon: "book" },
+  // In the order the Khoa sets them up, under full names (user 2026-11-05: "Chương trình đào tạo → Kế hoạch đào tạo → Xét
+  // tốt nghiệp", "Tốt nghiệp" alone is too vague).
+  { path: "/quantri/chuong-trinh", label: "Chương trình đào tạo", eyebrow: "QUẢN LÝ ĐÀO TẠO", icon: "book" },
+  { path: "/quantri/ke-hoach", label: "Kế hoạch đào tạo", eyebrow: "QUẢN LÝ ĐÀO TẠO", icon: "book" },
+  { path: "/quantri/tieu-chuan-tot-nghiep", label: "Xét tốt nghiệp", eyebrow: "QUẢN LÝ ĐÀO TẠO", icon: "shield" },
   { path: "/quantri/linh-vuc-nghe-nghiep", label: "Lĩnh vực", eyebrow: "QUẢN LÝ NGHỀ NGHIỆP", icon: "book" },
   { path: "/quantri/ky-nang", label: "Kỹ năng", eyebrow: "QUẢN LÝ NGHỀ NGHIỆP", icon: "book" },
   { path: "/quantri/vi-tri-nghe-nghiep", label: "Vị trí nghề nghiệp", eyebrow: "QUẢN LÝ NGHỀ NGHIỆP", icon: "users" },
@@ -94,8 +96,8 @@ const ADVISOR_PAGES: ReadonlySet<string> = new Set<string>([
   ADVISORS_PATH, // AD-ADV-04, 05
   ADVISOR_STUDENTS_PATH, // AD-AST-01…09
   "/quantri/chuong-trinh", // AD-CURR-03…06, AD-SUB-01, 02
-  "/quantri/tieu-chuan-tot-nghiep", // AD-GRAD-03…07, 12
   "/quantri/ke-hoach", // AD-PLAN-03…09, 13
+  "/quantri/tieu-chuan-tot-nghiep", // AD-GRAD-03…07, 12
   "/quantri/linh-vuc-nghe-nghiep", // AD-FIELD-01…03
   "/quantri/ky-nang", // AD-SKILL-01…03
   "/quantri/vi-tri-nghe-nghiep", // AD-CAREER-01, 02, 06, 07, AD-REQ-07…10

@@ -2,14 +2,14 @@ import { describe, expect, it } from "vitest";
 import { ADVISOR_STUDENTS_PATH, REPORT_PATHS, adminGroupOf, adminNavigation, adminPageName, adminSidebar, adminSidebarFor, advisorRefusedText, canSeeAdminPage, homeAdminPath, isReportPath, profileIdOf, refusedAdminPage, reportViewOf, resolveAdminPage, studentProfileLink, withoutProfileId, type AdminAccess } from "./admin-navigation";
 describe("admin section navigation", () => {
   it("has account, student-profile, curriculum, graduation, training-plan, career, career-field, skill and competency sections", () => {
-    expect(adminNavigation.map(item => item.path)).toEqual(["/quantri/tong-quan", "/quantri/bao-cao-tien-do", "/quantri/bao-cao-nguy-co", "/quantri/bao-cao-ky-nang", "/quantri/bao-cao-nghe-nghiep", "/quantri/bao-cao-mon-hoc", "/quantri/nhat-ky", "/quantri/tai-khoan", "/quantri/sinh-vien", "/quantri/co-van-hoc-tap", "/quantri/quan-ly-sinh-vien", "/quantri/chuong-trinh", "/quantri/tieu-chuan-tot-nghiep", "/quantri/ke-hoach", "/quantri/linh-vuc-nghe-nghiep", "/quantri/ky-nang", "/quantri/vi-tri-nghe-nghiep", "/quantri/nhom-nang-luc", "/quantri/cau-hinh-nang-luc", "/quantri/cau-hinh-mon-hoc", "/quantri/gui-thong-bao", "/quantri/thong-bao-da-gui"]);
+    expect(adminNavigation.map(item => item.path)).toEqual(["/quantri/tong-quan", "/quantri/bao-cao-tien-do", "/quantri/bao-cao-nguy-co", "/quantri/bao-cao-ky-nang", "/quantri/bao-cao-nghe-nghiep", "/quantri/bao-cao-mon-hoc", "/quantri/nhat-ky", "/quantri/tai-khoan", "/quantri/sinh-vien", "/quantri/co-van-hoc-tap", "/quantri/quan-ly-sinh-vien", "/quantri/chuong-trinh", "/quantri/ke-hoach", "/quantri/tieu-chuan-tot-nghiep", "/quantri/linh-vuc-nghe-nghiep", "/quantri/ky-nang", "/quantri/vi-tri-nghe-nghiep", "/quantri/nhom-nang-luc", "/quantri/cau-hinh-nang-luc", "/quantri/cau-hinh-mon-hoc", "/quantri/gui-thong-bao", "/quantri/thong-bao-da-gui"]);
   });
   it("uses short sidebar names, which are also the page title and breadcrumb", () => {
-    expect(adminNavigation.map(item => item.label)).toEqual(["Tổng quan", "Tiến độ", "Nguy cơ", "Kỹ năng thiếu", "Vị trí mục tiêu", "Môn đề xuất", "Nhật ký", "Tài khoản", "Sinh viên", "Cố vấn", "Quản lý sinh viên", "Chương trình", "Tốt nghiệp", "Kế hoạch", "Lĩnh vực", "Kỹ năng", "Vị trí nghề nghiệp", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học", "Gửi thông báo", "Đã gửi"]);
+    expect(adminNavigation.map(item => item.label)).toEqual(["Tổng quan", "Tiến độ", "Nguy cơ", "Kỹ năng thiếu", "Vị trí mục tiêu", "Môn đề xuất", "Nhật ký", "Tài khoản", "Sinh viên", "Cố vấn", "Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp", "Lĩnh vực", "Kỹ năng", "Vị trí nghề nghiệp", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học", "Gửi thông báo", "Đã gửi"]);
   });
   it("groups the career pages under Quản lý nghề nghiệp, the competency pages under Quản lý năng lực and the announcements under Quản lý thông báo", () => {
     expect(adminSidebar.map(entry => entry.kind === "page" ? entry.page.label : `${entry.label}: ${entry.pages.map(page => page.label).join(", ")}`))
-      .toEqual(["Báo cáo: Tổng quan, Tiến độ, Nguy cơ, Kỹ năng thiếu, Vị trí mục tiêu, Môn đề xuất, Nhật ký", "Tài khoản", "Sinh viên", "Cố vấn học tập: Cố vấn, Quản lý sinh viên", "Chương trình", "Tốt nghiệp", "Kế hoạch", "Quản lý nghề nghiệp: Lĩnh vực, Kỹ năng, Vị trí nghề nghiệp",
+      .toEqual(["Báo cáo: Tổng quan, Tiến độ, Nguy cơ, Kỹ năng thiếu, Vị trí mục tiêu, Môn đề xuất, Nhật ký", "Tài khoản", "Sinh viên", "Cố vấn học tập: Cố vấn, Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp", "Quản lý nghề nghiệp: Lĩnh vực, Kỹ năng, Vị trí nghề nghiệp",
         "Quản lý năng lực: Nhóm năng lực, Cấu hình năng lực, Cấu hình môn học", "Quản lý thông báo: Gửi thông báo, Đã gửi"]);
     expect(adminGroupOf("/quantri/thong-bao-da-gui")).toBe("announcements");
     expect(adminNavigation.filter(item => item.eyebrow === "QUẢN LÝ NĂNG LỰC").map(item => item.label)).toEqual(["Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học"]);
@@ -74,7 +74,7 @@ describe("admin navigation by role (cố vấn học tập, 2026-11-03)", () => 
   const sidebarText = (access: AdminAccess) => adminSidebarFor(access).map(entry => entry.kind === "page" ? entry.page.label : `${entry.label}: ${entry.pages.map(page => page.label).join(", ")}`);
 
   it("gives an advisor no reports, Nhật ký, Tài khoản or Quản lý thông báo, the rows the function list leaves to the Quản trị viên", () => {
-    expect(sidebarText(advisor)).toEqual(["Sinh viên", "Cố vấn học tập: Cố vấn, Quản lý sinh viên", "Chương trình", "Tốt nghiệp", "Kế hoạch",
+    expect(sidebarText(advisor)).toEqual(["Sinh viên", "Cố vấn học tập: Cố vấn, Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp",
       "Quản lý nghề nghiệp: Lĩnh vực, Kỹ năng, Vị trí nghề nghiệp", "Quản lý năng lực: Nhóm năng lực, Cấu hình năng lực, Cấu hình môn học"]);
     for (const path of [...Object.values(REPORT_PATHS), "/quantri/tai-khoan", "/quantri/gui-thong-bao", "/quantri/thong-bao-da-gui"]) {
       expect(canSeeAdminPage(path, advisor)).toBe(false);
@@ -85,7 +85,7 @@ describe("admin navigation by role (cố vấn học tập, 2026-11-03)", () => 
   it("opens exactly the pages of the rows whose Tác nhân includes CVHT (function list ver0.3, 2026-11-04)", () => {
     const cvhtPages = {
       "/quantri/sinh-vien": "AD-PROF-01…04", "/quantri/co-van-hoc-tap": "AD-ADV-04, 05", "/quantri/quan-ly-sinh-vien": "AD-AST-01…09",
-      "/quantri/chuong-trinh": "AD-CURR-03…06, AD-SUB-01, 02", "/quantri/tieu-chuan-tot-nghiep": "AD-GRAD-03…07, 12", "/quantri/ke-hoach": "AD-PLAN-03…09, 13",
+      "/quantri/chuong-trinh": "AD-CURR-03…06, AD-SUB-01, 02", "/quantri/ke-hoach": "AD-PLAN-03…09, 13", "/quantri/tieu-chuan-tot-nghiep": "AD-GRAD-03…07, 12",
       "/quantri/linh-vuc-nghe-nghiep": "AD-FIELD-01…03", "/quantri/ky-nang": "AD-SKILL-01…03", "/quantri/vi-tri-nghe-nghiep": "AD-CAREER-01, 02, 06, 07, AD-REQ-07…10",
       "/quantri/nhom-nang-luc": "AD-COMP-01…04", "/quantri/cau-hinh-nang-luc": "AD-CMP-01…04", "/quantri/cau-hinh-mon-hoc": "AD-CRS-01…04",
     } as Record<string, string>;
