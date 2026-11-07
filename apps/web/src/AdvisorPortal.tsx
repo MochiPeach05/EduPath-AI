@@ -5,7 +5,7 @@ import { CheckedForm } from "./CheckedForm";
 import { useLiveFilters } from "./use-live-filters";
 import { sortParams, sortRows, useTableSort, type SortRule, type TableSort } from "./table-sort";
 import {
-  ADVISOR_PORTAL_API, type AdvisedStudentRow, type AdvisorClass, type AdvisorMe, type AdvisorPermissionItem, type AdvisorPermissions,
+  ADVISOR_PORTAL_API, type AdvisedStudentRow, type AdvisorClass, type AdvisorMe,
 } from "./advisor-types";
 import { STUDENT_STATUS_TEXT, advisorRequest, isStudentStatus, openStudentPage } from "./advisor-admin";
 import "./curricula.css";
@@ -43,7 +43,6 @@ export default function AdvisorPortal({ scope }: { scope: StudentScope }) {
   return <section className="cm-workspace career-workspace av-workspace">
     <p className="av-lead">{text.lead} Bấm Xem chi tiết để mở trang của một sinh viên ở thẻ mới, như chính sinh viên đó thấy.</p>
     <StudentManagement scope={scope} />
-    <PermissionsSection />
   </section>;
 }
 
@@ -194,39 +193,4 @@ function StudentManagement({ scope }: { scope: StudentScope }) {
       </>}
     </section>
   </>;
-}
-
-function PermissionCard({ tone, title, items }: { tone: "view" | "act" | "never"; title: string; items: readonly AdvisorPermissionItem[] }) {
-  return <section className={`cm-panel av-perm av-perm-${tone}`} aria-label={title}>
-    <h2><Icon name={tone === "never" ? "lock" : tone === "act" ? "check" : "eye"} /> {title}</h2>
-    <ul>{items.map((item) => <li key={item.label}><strong>{item.label}</strong><span>{item.detail}</span></li>)}</ul>
-  </section>;
-}
-
-/** What may be seen and done in a student's page (AD-AST-09; exported for its test). */
-export function PermissionsView({ permissions }: { permissions: AdvisorPermissions }) {
-  return <>
-    <p className="av-lead">Cố vấn học tập làm việc với sinh viên thuộc lớp mình phụ trách; quản trị viên và Ban chủ nhiệm khoa với mọi sinh viên, theo Chính sách bảo mật của EduPath AI. Ở trang quản trị, cố vấn học tập chỉ có quyền xem.</p>
-    <div className="av-perm-grid">
-      <PermissionCard tone="view" title="Xem được" items={permissions.view} />
-      <PermissionCard tone="act" title="Làm thay sinh viên được" items={permissions.act} />
-      <PermissionCard tone="never" title="Không làm thay được" items={permissions.never} />
-    </div>
-    {permissions.notes.length > 0 && <section className="cm-panel av-perm-notes" aria-label="Ghi nhận và thông báo">
-      <h2><Icon name="bell" /> Ghi nhận và thông báo</h2>
-      <ul>{permissions.notes.map((note) => <li key={note}>{note}</li>)}</ul>
-    </section>}
-  </>;
-}
-
-/** The last section of Quản lý sinh viên, folded: the list of AD-AST-09 (GET /permissions). */
-function PermissionsSection() {
-  const state = useData<AdvisorPermissions>(`${ADVISOR_PORTAL_API}/permissions`);
-  return <details className="av-perm-section">
-    <summary><Icon name="shield" /><span>Quyền khi làm việc với trang sinh viên</span></summary>
-    <div className="av-perm-body">
-      <Status {...state} />
-      {state.data && <PermissionsView permissions={state.data} />}
-    </div>
-  </details>;
 }

@@ -1,9 +1,9 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AdvisorDetailDialog, AdvisorTable, ClassChips, ImportPreview } from "./AdvisorsManagement";
-import AdvisorPortal, { ClassTable, PermissionsView, SCOPE_TEXT, StudentTable, withClass } from "./AdvisorPortal";
+import AdvisorPortal, { ClassTable, SCOPE_TEXT, StudentTable, withClass } from "./AdvisorPortal";
 import { useTableSort } from "./table-sort";
-import { ADVISORS_API, type AdvisedStudentRow, type AdvisorClass, type AdvisorImportPreview, type AdvisorPermissions, type AdvisorRow } from "./advisor-types";
+import { ADVISORS_API, type AdvisedStudentRow, type AdvisorClass, type AdvisorImportPreview, type AdvisorRow } from "./advisor-types";
 
 // Each request answers what a test gave for its address; any other is still loading, as on a page's first paint.
 const liveData = vi.hoisted(() => vi.fn());
@@ -152,20 +152,6 @@ describe("Quản lý sinh viên page (2026-11-03)", () => {
     for (const header of ["Bảng điểm", "Đánh giá năng lực", "Khảo sát", "Lộ trình AI", "Vị trí mục tiêu"]) expect(html).toContain(`<span>${header}</span>`);
   });
 
-  it("shows what may be seen, done for a student and never done in a student's page, with the notes", () => {
-    const permissions: AdvisorPermissions = {
-      view: [{ label: "Lớp phụ trách", detail: "Các lớp được Khoa phân công." }],
-      act: [{ label: "Import bảng điểm", detail: "Tải bảng điểm PDF lên thay sinh viên." }],
-      never: [{ label: "Xóa dữ liệu", detail: "Không xóa dữ liệu của sinh viên." }],
-      notes: ["Mỗi việc cố vấn làm thay được ghi vào Nhật ký thao tác."],
-    };
-    const html = renderToStaticMarkup(<PermissionsView permissions={permissions} />);
-    for (const title of ["Xem được", "Làm thay sinh viên được", "Không làm thay được", "Ghi nhận và thông báo"]) expect(html).toContain(title);
-    expect(html).toContain("<strong>Import bảng điểm</strong><span>Tải bảng điểm PDF lên thay sinh viên.</span>");
-    expect(html).toContain("<li>Mỗi việc cố vấn làm thay được ghi vào Nhật ký thao tác.</li>");
-    expect(html).toContain("quản trị viên và Ban chủ nhiệm khoa với mọi sinh viên");
-  });
-
   it("says whose students the page lists: every student for the admins, the classes of an advisor", () => {
     const all = renderToStaticMarkup(<AdvisorPortal scope="all" />);
     const own = renderToStaticMarkup(<AdvisorPortal scope="own" />);
@@ -177,10 +163,8 @@ describe("Quản lý sinh viên page (2026-11-03)", () => {
     expect(own).toContain('<h2 id="av-students-title">Sinh viên lớp phụ trách</h2>');
     for (const html of [all, own]) {
       expect(html).toContain("Bấm Xem chi tiết để mở trang của một sinh viên ở thẻ mới");
-      // The permissions come last, folded.
-      expect(html).toContain('<details class="av-perm-section"><summary>');
-      expect(html).not.toContain("<details class=\"av-perm-section\" open");
-      expect(html.indexOf("av-students-title")).toBeLessThan(html.indexOf("Quyền khi làm việc với trang sinh viên"));
+      // No section of permissions any more (user 2026-11-07: "Xóa cái quyền làm việc này đi").
+      expect(html).not.toContain("Quyền khi làm việc với trang sinh viên");
     }
   });
 });

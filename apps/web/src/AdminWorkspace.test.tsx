@@ -141,13 +141,11 @@ describe("admin workspace", () => {
     expect(render("/quantri/linh-vuc-nghe-nghiep")).toContain("Thêm lĩnh vực");
   });
 
-  it("shows an admin every student on Quản lý sinh viên, with the permissions folded at the end (2026-11-03)", () => {
+  it("shows an admin every student on Quản lý sinh viên, without a section of permissions (2026-11-07)", () => {
     const html = render("/quantri/quan-ly-sinh-vien");
     expect(html).toContain("Bạn xem được mọi sinh viên của Khoa; cố vấn học tập chỉ xem sinh viên các lớp mình phụ trách.");
     expect(html).not.toContain(">Lớp phụ trách<");
-    expect(html).toContain('<details class="av-perm-section"><summary>');
-    expect(html).toContain("<span>Quyền khi làm việc với trang sinh viên</span>");
-    expect(html.indexOf('id="av-students-title"')).toBeLessThan(html.indexOf("av-perm-section"));
+    expect(html).not.toContain("Quyền khi làm việc với trang sinh viên");
     for (const role of ["faculty_board", "advisor"] as const) expect(render("/quantri/quan-ly-sinh-vien", { ...user, role })).toContain(">Quản lý sinh viên</h1>");
   });
 });
