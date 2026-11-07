@@ -1,9 +1,16 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
-import { AdvisorTable, ClassChips, ImportPreview } from "./AdvisorsManagement";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { AdvisorDetailDialog, AdvisorTable, ClassChips, ImportPreview } from "./AdvisorsManagement";
 import AdvisorPortal, { ClassTable, PermissionsView, SCOPE_TEXT, StudentTable, withClass } from "./AdvisorPortal";
 import { useTableSort } from "./table-sort";
-import type { AdvisedStudentRow, AdvisorClass, AdvisorImportPreview, AdvisorPermissions, AdvisorRow } from "./advisor-types";
+import { ADVISORS_API, type AdvisedStudentRow, type AdvisorClass, type AdvisorImportPreview, type AdvisorPermissions, type AdvisorRow } from "./advisor-types";
+
+// Each request answers what a test gave for its address; any other is still loading, as on a page's first paint.
+const liveData = vi.hoisted(() => vi.fn());
+vi.mock("./use-live-data", () => ({ useLiveData: liveData }));
+const answers = new Map<string, unknown>();
+liveData.mockImplementation((url: string) => answers.has(url) ? { data: answers.get(url), error: null, loading: false } : { data: null, error: null, loading: true });
+afterEach(() => answers.clear());
 
 const advisor = (over: Partial<AdvisorRow> = {}): AdvisorRow => ({
   stt: 1, userId: "11111111-1111-4111-8111-111111111111", name: "Nguyễn Văn An", email: "an.nv@vlu.edu.vn", staffCode: "GV001", unit: "Bộ môn CNPM",
@@ -33,6 +40,25 @@ describe("Cố vấn page", () => {
     expect(html).toContain("Đang hoạt động");
     expect(html).toContain("Chưa có lớp");
     expect(html).toContain('aria-label="Thao tác với cố vấn học tập Nguyễn Văn An"');
+  });
+
+  it("colours the account red until the advisor signs in and green after, in the list and the details (user 2026-11-07)", () => {
+    const list = renderToStaticMarkup(<Advisors rows={[advisor(), advisor({ stt: 2, userId: "2", account: "active" }), advisor({ stt: 3, userId: "3", account: "locked" })]} canManage />);
+    expect(list).toContain('<td><span class="am-state av-state am-not-signed-in">Chưa đăng nhập</span></td>');
+    expect(list).toContain('<td><span class="am-state av-state am-signed-in">Đang hoạt động</span></td>');
+    // Đã khóa is another state: it keeps the red of a locked account.
+    expect(list).toContain('<td><span class="am-state av-state am-state-locked">Đã khóa</span></td>');
+    const details = (over: Partial<AdvisorRow>) => {
+      const row = advisor(over);
+      answers.set(`${ADVISORS_API}/${row.userId}`, { advisor: { ...row, createdAt: "2026-11-03T01:00:00.000Z", updatedAt: "2026-11-03T01:00:00.000Z", classDetails: [] } });
+      return renderToStaticMarkup(<AdvisorDetailDialog id={row.userId} canManage={false} close={() => undefined} edit={() => undefined} />);
+    };
+    const pending = details({});
+    expect(pending).toContain('<dt>Tài khoản</dt><dd><span class="am-state av-state am-not-signed-in">Chưa đăng nhập</span></dd>');
+    expect(pending).toContain('<dt>Đăng nhập gần nhất</dt><dd><span class="am-not-signed-in">Chưa đăng nhập</span></dd>');
+    const active = details({ account: "active", lastLoginAt: "2026-11-06T02:15:00.000Z" });
+    expect(active).toContain('<dt>Tài khoản</dt><dd><span class="am-state av-state am-signed-in">Đang hoạt động</span></dd>');
+    expect(active).toContain('<dt>Đăng nhập gần nhất</dt><dd><span class="am-signed-in">09:15 06/11/2026</span></dd>');
   });
 
   it("writes the whole list of classes in a chip row's tooltip", () => {

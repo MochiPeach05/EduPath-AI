@@ -12,8 +12,9 @@
 .av-table { min-width: 860px; }
 .av-table td { vertical-align: top; }
 .av-table td:nth-child(2) { min-width: 200px; }
-.av-state { font-size: 12px; }
-.av-state-pending { color: #77510b; }
+/* The account state at 12px. admin-workspace.css (.am-state at 10px, in green) comes after this sheet in the bundle, so
+   the rule names both classes; the colours are the shared sign-in ones (AccountState: Chưa đăng nhập in red). */
+.am-state.av-state { font-size: 12px; }
 
 /* Classes as small chips, the rest as "+n". */
 .av-classes { display: inline-flex; flex-wrap: wrap; gap: 4px; max-width: 280px; }

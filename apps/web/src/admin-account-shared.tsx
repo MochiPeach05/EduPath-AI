@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "rea
 import { Icon } from "./ui-icon";
 import { CheckedForm } from "./CheckedForm";
 import { adminFailureText, readAdminResponse } from "./admin-errors";
+import { formatVnDateTime } from "./display-format";
 export { Icon } from "./ui-icon";
 const failures: Record<string, string> = {
   student_not_found: "Không tìm thấy sinh viên hoặc tài khoản không còn mang vai trò Sinh viên.",
@@ -23,6 +24,22 @@ const failures: Record<string, string> = {
 };
 export type Account = { stt?: number; id: string; name: string; email: string | null; username: string | null; role: AppRole; isActive: boolean; lastLoginAt: string | null };
 export type AccountPage = { items: Account[]; total: number; page: number; pageSize: number };
+
+/**
+ * Whether an account has signed in, in the same colours on every admin page that shows it (user 2026-11-07: "chưa đăng
+ * nhập thì chữ màu đỏ … đăng nhập rồi thì chữ màu xanh"): red until the first sign-in, green from then on, always next to
+ * the words that say it (admin-workspace.css). On an .am-state the dot takes the colour too.
+ */
+export const signInClass = (signedIn: boolean) => (signedIn ? "am-signed-in" : "am-not-signed-in");
+
+/**
+ * A sign-in time ("08:30 28/10/2026") in green, or `empty` in red when the account has none: it never signed in. A time
+ * that cannot be read is printed as `empty`, so it is red too and the colour always matches the words.
+ */
+export function SignInTime({ at, empty = "Chưa đăng nhập" }: { at: string | null | undefined; empty?: string }) {
+  const text = formatVnDateTime(at, empty);
+  return <span className={signInClass(text !== empty)}>{text}</span>;
+}
 
 /** A field label ending in the red asterisk that marks the field as required.
     The asterisk is hidden from screen readers, which announce the input's own

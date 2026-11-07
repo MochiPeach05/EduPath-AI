@@ -3,7 +3,7 @@ import { nameInitials, personName } from "./person-name";
 import { useLiveFilters } from "./use-live-filters";
 import { useEffect, useState } from "react";
 import { useData, Status, Pagination, Modal } from "./admin-ui";
-import { Icon } from "./admin-account-shared";
+import { Icon, SignInTime } from "./admin-account-shared";
 import { specialtyLabel } from "./competency-assessment-types";
 import { majorLabel } from "./majors";
 import TranscriptTables, { transcriptNotes } from "./TranscriptTables";
@@ -54,7 +54,7 @@ function StudentDetails({ id }: { id: string }) {
     <dl className="am-detail-grid">{Object.entries({ "Họ và tên": student.name, "Mã sinh viên": student.studentCode, ...(student.majorCode !== undefined ? { "Ngành": majorLabel(student.majorCode) } : {}), "Email": student.email, "Tên đăng nhập": student.username, "Khóa học": student.cohortCode, "Lớp học": classOf(student), "Năm nhập học": student.cohortYear, ...(student.specialty !== undefined ? { "Chuyên ngành": specialtyLabel(student.specialty) } : {}), ...(student.surveyUpdatedAt !== undefined ? { "Khảo sát định hướng": student.surveyComplete ? "Đã hoàn thành" : student.surveyUpdatedAt ? "Cần cập nhật" : "Chưa làm" } : {}), "Trạng thái tài khoản": student.isActive ? "Đang hoạt động" : "Đã khóa", "Trạng thái hồ sơ": statusLabels[student.profileStatus] }).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value ?? "Chưa cập nhật"}</dd></div>)}</dl>
     {student.interests?.trim() && <><h3>Sở thích (ghi trước đây)</h3><p className="sp-career-goal">{student.interests.trim()}</p></>}
     <h3>Vị trí nghề nghiệp mục tiêu</h3><p className="sp-career-goal">{student.careerPosition ? `${student.careerPosition.nameVi} — ${student.careerPosition.nameEn}${student.careerPosition.deletedAt ? " (đã ngừng sử dụng)" : ""}` : "Chưa chọn vị trí nghề nghiệp."}</p>
-    <h3>Thông tin cập nhật</h3><dl className="am-detail-grid">{Object.entries({ "Tạo tài khoản EduPath": date(student.accountCreatedAt), "Đăng nhập đầu tiên": date(student.firstLoginAt), "Đăng nhập gần nhất": date(student.lastLoginAt), "Tạo hồ sơ": date(student.profileCreatedAt), "Cập nhật hồ sơ gần nhất": date(student.profileUpdatedAt) }).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
+    <h3>Thông tin cập nhật</h3><dl className="am-detail-grid">{Object.entries({ "Tạo tài khoản EduPath": date(student.accountCreatedAt), "Đăng nhập đầu tiên": <SignInTime at={student.firstLoginAt} empty="Chưa có dữ liệu" />, "Đăng nhập gần nhất": <SignInTime at={student.lastLoginAt} empty="Chưa có dữ liệu" />, "Tạo hồ sơ": date(student.profileCreatedAt), "Cập nhật hồ sơ gần nhất": date(student.profileUpdatedAt) }).map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>
     <StudentTranscriptView id={id} />
   </div>}</>;
 }

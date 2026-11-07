@@ -426,8 +426,16 @@
   color: #a41c3b;
 }
 
-.am-state {
+/* An account state, its dot in the colour of its words: the admin portal's green and red. .am-signed-in and
+   .am-not-signed-in give the same two colours to whether an account has signed in (user 2026-11-07: red until the first
+   sign-in, green from then on; signInClass, admin-account-shared.tsx), on a state like this one or on a sign-in time.
+   The red rule comes after .am-state, so on the same element it wins. */
+.am-state,
+.am-signed-in {
   color: #277448;
+}
+
+.am-state {
   font-size: 10px;
   white-space: nowrap;
 }
@@ -442,7 +450,8 @@
   margin-right: 6px;
 }
 
-.am-state-locked {
+.am-state-locked,
+.am-not-signed-in {
   color: #aa3a45;
 }
 

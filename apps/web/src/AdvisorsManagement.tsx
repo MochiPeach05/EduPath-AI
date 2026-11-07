@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { ActionMenu, Modal, Pagination, Status, useData } from "./admin-ui";
-import { Icon, RequiredLabel, roleLabels } from "./admin-account-shared";
+import { Icon, RequiredLabel, SignInTime, roleLabels, signInClass } from "./admin-account-shared";
 import { CheckedForm } from "./CheckedForm";
 import { sortRows, useTableSort, type SortRule, type TableSort } from "./table-sort";
 import {
@@ -79,8 +79,9 @@ export function ClassChips({ classes, shown = 3 }: { classes: readonly string[];
   </span>;
 }
 
+/** The advisor's account: Chưa đăng nhập in red and Đang hoạt động in green (signInClass), Đã khóa in the red of a locked account. */
 export function AccountState({ status }: { status: AdvisorAccountStatus }) {
-  return <span className={`am-state av-state${status === "locked" ? " am-state-locked" : status === "pending" ? " av-state-pending" : ""}`}>{ACCOUNT_TEXT[status]}</span>;
+  return <span className={`am-state av-state ${status === "locked" ? "am-state-locked" : signInClass(status === "active")}`}>{ACCOUNT_TEXT[status]}</span>;
 }
 
 type RowMode = "detail" | "edit" | "delete";
@@ -173,7 +174,8 @@ export function ClassDetailTable({ classes }: { classes: readonly AdvisorClassDe
   </table></div>;
 }
 
-function AdvisorDetailDialog({ id, canManage, close, edit }: { id: string; canManage: boolean; close: () => void; edit: () => void }) {
+/** One advisor with the classes they advise (exported for its test). */
+export function AdvisorDetailDialog({ id, canManage, close, edit }: { id: string; canManage: boolean; close: () => void; edit: () => void }) {
   const state = useData<{ advisor: AdvisorDetail }>(`${ADVISORS_API}/${encodeURIComponent(id)}`);
   const advisor = state.data?.advisor;
   return <Modal title="Chi tiết cố vấn học tập" onClose={close}>
@@ -186,7 +188,7 @@ function AdvisorDetailDialog({ id, canManage, close, edit }: { id: string; canMa
           <div><dt>Mã giảng viên</dt><dd>{advisor.staffCode ?? "Chưa bổ sung"}</dd></div>
           <div><dt>Đơn vị</dt><dd>{advisor.unit ?? "Chưa bổ sung"}</dd></div>
           <div><dt>Tài khoản</dt><dd><AccountState status={advisor.account} />{advisor.role !== "advisor" && <small>Vẫn giữ vai trò {roleText(advisor.role)}</small>}</dd></div>
-          <div><dt>Đăng nhập gần nhất</dt><dd>{advisorTime(advisor.lastLoginAt)}</dd></div>
+          <div><dt>Đăng nhập gần nhất</dt><dd><SignInTime at={advisor.lastLoginAt} /></dd></div>
           <div><dt>Thêm vào danh sách</dt><dd>{advisorTime(advisor.createdAt, "—")}</dd></div>
           <div><dt>Cập nhật gần nhất</dt><dd>{advisorTime(advisor.updatedAt, "—")}</dd></div>
         </dl>
