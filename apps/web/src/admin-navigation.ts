@@ -87,11 +87,15 @@ export type AdminAccess = { role: AppRole; advisesClasses: boolean | null };
 
 /**
  * The pages of a cố vấn học tập (role advisor): those of the function-list rows whose Tác nhân includes CVHT ("QTV &
- * CVHT" and "Cố vấn học tập"; user, 2026-11-04), read only. The reports and Nhật ký (AD-REPORT), Tài khoản (AD-AUTH-03…10)
- * and Quản lý thông báo (AD-NOTI) belong to the Quản trị viên alone; a page added later stays closed to advisors until it
- * is listed here. The API keeps the same list (apps/api/src/advisors/access.ts, ADVISOR_ADMIN_READS).
+ * CVHT" and "Cố vấn học tập"; user, 2026-11-04), read only, and since 2026-11-07 (user: "cho CVHT xem nữa") Thống kê
+ * over the students of their own classes and Nhật ký with their own actions (AD-REPORT; the API scopes them). Tài khoản
+ * (AD-AUTH-03…10) and Quản lý thông báo (AD-NOTI) belong to the Quản trị viên alone; a page added later stays closed to
+ * advisors until it is listed here. The API keeps the same list (apps/api/src/advisors/access.ts, ADVISOR_ADMIN_READS).
  */
 const ADVISOR_PAGES: ReadonlySet<string> = new Set<string>([
+  // AD-REPORT-01…11: Thống kê over the own classes, Nhật ký with the own actions (REPORT_PATHS, written out: it comes later).
+  "/quantri/tong-quan", "/quantri/bao-cao-tien-do", "/quantri/bao-cao-nguy-co", "/quantri/bao-cao-ky-nang", "/quantri/bao-cao-nghe-nghiep",
+  "/quantri/bao-cao-mon-hoc", "/quantri/nhat-ky",
   "/quantri/sinh-vien", // AD-PROF-01…04: the students of the advisor's classes
   ADVISORS_PATH, // AD-ADV-04, 05
   ADVISOR_STUDENTS_PATH, // AD-AST-01…09

@@ -107,7 +107,8 @@ describe("admin workspace", () => {
   it("gives a cố vấn học tập the pages of the CVHT rows and opens Quản lý sinh viên (2026-11-03)", () => {
     const advisor: AuthenticatedUser = { ...user, userId: "a1", name: "Cố vấn", role: "advisor" };
     const home = render("/quantri", advisor);
-    expect(sidebarNames(home)).toEqual(["Sinh viên", "Cố vấn học tập", "Cố vấn", "Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp",
+    expect(sidebarNames(home)).toEqual(["Thống kê", "Tổng quan", "Tiến độ", "Nguy cơ", "Kỹ năng thiếu", "Vị trí mục tiêu", "Môn đề xuất", "Nhật ký",
+      "Sinh viên", "Cố vấn học tập", "Cố vấn", "Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp",
       "Quản lý nghề nghiệp", "Lĩnh vực", "Kỹ năng", "Vị trí nghề nghiệp", "Quản lý năng lực", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học"]);
     expect(home).toContain(">Quản lý sinh viên</h1>");
     expect(home).toContain(">QUẢN LÝ SINH VIÊN CỦA CỐ VẤN HỌC TẬP</p>");
@@ -117,8 +118,14 @@ describe("admin workspace", () => {
     expect(home).toContain("Bạn xem được sinh viên của các lớp Khoa phân công cho bạn.");
     expect(home).toContain(">Lớp phụ trách<");
     for (const path of ["/quantri/lop-phu-trach", "/quantri/quyen-co-van"]) expect(render(path, advisor)).toContain(">Quản lý sinh viên</h1>");
-    // A report, Tài khoản or an announcement page leads an advisor back to Quản lý sinh viên, and says why (2026-11-04).
-    for (const [path, name] of [["/quantri/tong-quan", "Thống kê / Tổng quan"], ["/quantri/nhat-ky", "Thống kê / Nhật ký"], ["/quantri/tai-khoan", "Tài khoản"],
+    // Thống kê and Nhật ký open (user 2026-11-07), over the own classes and actions (the API scopes them).
+    for (const path of ["/quantri/tong-quan", "/quantri/bao-cao-nguy-co", "/quantri/nhat-ky"]) {
+      const html = render(path, advisor);
+      expect(html).not.toContain("am-refused");
+      expect(html).not.toContain(">Quản lý sinh viên</h1>");
+    }
+    // Tài khoản or an announcement page leads an advisor back to Quản lý sinh viên, and says why (2026-11-04).
+    for (const [path, name] of [["/quantri/tai-khoan", "Tài khoản"],
       ["/quantri/gui-thong-bao", "Quản lý thông báo / Gửi thông báo"], ["/quantri/lich-su-dang-nhap", "Tài khoản"]]) {
       const html = render(path, advisor);
       expect(html).toContain(">Quản lý sinh viên</h1>");

@@ -1,8 +1,11 @@
-// Báo cáo của cổng quản trị (AD-REPORT-01…10, 2026-10-31): GET /api/admin/reports/*. Every active admin role reads and
-// exports everything, students by name included (user: "hiện đầy đủ", "mọi quản trị viên"); every Excel export is
-// written to the Nhật ký thao tác. The rows come from the cached source (cache.ts), the answers from aggregate.ts.
+// Thống kê của cổng quản trị (AD-REPORT-01…10, 2026-10-31): GET /api/admin/reports/*. Every active admin role reads and
+// exports everything, students by name included (user: "hiện đầy đủ", "mọi quản trị viên"); a cố vấn học tập reads and
+// exports the same pages over the students of the classes they advise (user 2026-11-07: "cho CVHT xem nữa"; privacy policy
+// 2026-11-03). Every Excel export is written to the Nhật ký thao tác. The rows come from the cached source (cache.ts),
+// the answers from aggregate.ts.
 import { Router } from "express";
 import { z } from "zod";
+import { advisedStudentIds, advisorClassesOf } from "../../advisors/access.js";
 import { adminRoles, type AuthenticatedUser } from "../../auth/types.js";
 import { SPECIALTIES } from "../../competency-assessment/specialty.js";
 import { MAJORS } from "../../curricula/majors.js";
@@ -92,19 +95,40 @@ export function createReportsRouter(pool: DatabasePool | undefined, options: Rep
     res.send(body);
   };
   const filtersOf = (query: Filters): Filters => ({ cohort: query.cohort, major: query.major, specialty: query.specialty, q: query.q });
+  /** A cố vấn học tập's classes and students; null for the other admin roles, who read every student. */
+  const scopeOf = async (user: AuthenticatedUser): Promise<{ classes: string[]; students: ReadonlySet<string> } | null> => {
+    if (user.role !== "advisor") return null;
+    const [classes, students] = await Promise.all([advisorClassesOf(pool!, user.userId), advisedStudentIds(pool!, user.userId)]);
+    return { classes, students };
+  };
+  /** The cached rows the account may count: an advisor's own students only. */
+  const rowsOf = async (req: import("express").Request, at: Date) => {
+    const [{ rows, generatedAt }, scope] = await Promise.all([source!.rows(at), scopeOf(req.session.user!)]);
+    return { rows: scope ? rows.filter((row) => scope.students.has(row.userId)) : rows, generatedAt, scope };
+  };
+  /** The scope in words for the Excel notes and the log: ["lớp 71K29CNTT08, 71K29CNTT09"] for an advisor. */
+  const scopeWords = (scope: { classes: string[] } | null) =>
+    scope ? [scope.classes.length ? `lớp ${scope.classes.join(", ")}` : "chưa phụ trách lớp nào"] : [];
 
   router.get("/options", async (req, res) => {
     if (!parse(z.object({}).strict(), req.query)) { invalid(res); return; }
+    const at = now();
+    if (req.session.user!.role === "advisor") {
+      // The cohorts of the advisor's own students, and which classes the numbers cover.
+      const { rows, scope } = await rowsOf(req, at);
+      res.json({ ...reportOptions(rows.map((row) => row.cohort), at), scope: { classes: scope?.classes ?? [] } });
+      return;
+    }
     const cohorts = await pool!.query<{ cohort: string | null }>(`SELECT DISTINCT p.cohort_code AS cohort FROM users u JOIN student_profiles p ON p.user_id=u.id
       WHERE (COALESCE(u.role_override,u.role)='student' OR u.is_student) AND NULLIF(btrim(p.cohort_code),'') IS NOT NULL`);
-    res.json(reportOptions(cohorts.rows.map((row) => row.cohort), now()));
+    res.json({ ...reportOptions(cohorts.rows.map((row) => row.cohort), at), scope: null });
   });
 
   router.get("/dashboard", async (req, res) => {
     const query = parse(filtersQuery, req.query);
     if (!query) { invalid(res); return; }
     const at = now();
-    const { rows, generatedAt } = await source!.rows(at);
+    const { rows, generatedAt } = await rowsOf(req, at);
     res.json(dashboardReport(rows, query, generatedAt, at));
   });
 
@@ -112,7 +136,7 @@ export function createReportsRouter(pool: DatabasePool | undefined, options: Rep
     const query = parse(progressQuery, req.query);
     if (!query) { invalid(res); return; }
     const at = now();
-    const { rows, generatedAt } = await source!.rows(at);
+    const { rows, generatedAt } = await rowsOf(req, at);
     res.json(progressReport(rows, query, generatedAt, at));
   });
 
@@ -120,9 +144,9 @@ export function createReportsRouter(pool: DatabasePool | undefined, options: Rep
     const query = parse(progressQuery, req.query);
     if (!query) { invalid(res); return; }
     const at = now();
-    const { rows } = await source!.rows(at);
+    const { rows, scope } = await rowsOf(req, at);
     const list = progressRows(rows, query);
-    const words = filterWords(query);
+    const words = [...scopeWords(scope), ...filterWords(query)];
     const body = await progressWorkbook(list, filterRows(rows, filtersOf(query)), words, at);
     await recordAudit(pool, actorOf(req.session.user!), {
       kind: "report", action: "Xuất Excel", summary: `Sinh viên theo tiến độ (${[...words, `${list.length} dòng`].join(", ")})`, targetType: "report", targetId: "progress",
@@ -134,7 +158,7 @@ export function createReportsRouter(pool: DatabasePool | undefined, options: Rep
     const query = parse(riskQuery, req.query);
     if (!query) { invalid(res); return; }
     const at = now();
-    const { rows, generatedAt } = await source!.rows(at);
+    const { rows, generatedAt } = await rowsOf(req, at);
     res.json(riskReport(rows, query, generatedAt, at));
   });
 
@@ -142,9 +166,9 @@ export function createReportsRouter(pool: DatabasePool | undefined, options: Rep
     const query = parse(riskQuery, req.query);
     if (!query) { invalid(res); return; }
     const at = now();
-    const { rows } = await source!.rows(at);
+    const { rows, scope } = await rowsOf(req, at);
     const list = riskRows(rows, query);
-    const words = filterWords(query);
+    const words = [...scopeWords(scope), ...filterWords(query)];
     const body = await riskWorkbook(list, filterRows(rows, filtersOf(query)), words, at);
     await recordAudit(pool, actorOf(req.session.user!), {
       kind: "report", action: "Xuất Excel", summary: `Sinh viên có nguy cơ chậm tiến độ (${[...words, `${list.length} dòng`].join(", ")})`, targetType: "report", targetId: "risk",
@@ -156,14 +180,14 @@ export function createReportsRouter(pool: DatabasePool | undefined, options: Rep
     const query = parse(skillsQuery, req.query);
     if (!query) { invalid(res); return; }
     const at = now();
-    const { rows, generatedAt } = await source!.rows(at);
+    const { rows, generatedAt } = await rowsOf(req, at);
     res.json(skillsReport(rows, query, generatedAt, at));
   });
 
   router.get("/skills/students", async (req, res) => {
     const query = parse(skillStudentsQuery, req.query);
     if (!query) { invalid(res); return; }
-    const { rows } = await source!.rows(now());
+    const { rows } = await rowsOf(req, now());
     res.json(skillStudents(rows, query));
   });
 
@@ -171,10 +195,10 @@ export function createReportsRouter(pool: DatabasePool | undefined, options: Rep
     const query = parse(skillsQuery, req.query);
     if (!query) { invalid(res); return; }
     const at = now();
-    const { rows } = await source!.rows(at);
+    const { rows, scope } = await rowsOf(req, at);
     const scoped = filterRows(rows, filtersOf(query));
     const withCareer = scoped.filter((row) => row.competency?.career && (!query.career || row.competency.career.name === query.career));
-    const words = filterWords(query);
+    const words = [...scopeWords(scope), ...filterWords(query)];
     const body = await skillsWorkbook(withCareer, scoped, words, at);
     const gaps = withCareer.reduce((sum, row) => sum + (row.competency?.career?.gaps.length ?? 0), 0);
     await recordAudit(pool, actorOf(req.session.user!), {
@@ -188,7 +212,7 @@ export function createReportsRouter(pool: DatabasePool | undefined, options: Rep
     const query = parse(filtersQuery, req.query);
     if (!query) { invalid(res); return; }
     const at = now();
-    const { rows, generatedAt } = await source!.rows(at);
+    const { rows, generatedAt } = await rowsOf(req, at);
     res.json(careersReport(rows, query, generatedAt, at));
   });
 
@@ -196,14 +220,14 @@ export function createReportsRouter(pool: DatabasePool | undefined, options: Rep
     const query = parse(filtersQuery, req.query);
     if (!query) { invalid(res); return; }
     const at = now();
-    const { rows, generatedAt } = await source!.rows(at);
+    const { rows, generatedAt } = await rowsOf(req, at);
     res.json(coursesReport(rows, query, generatedAt, at));
   });
 
   router.get("/courses/students", async (req, res) => {
     const query = parse(courseStudentsQuery, req.query);
     if (!query) { invalid(res); return; }
-    const { rows } = await source!.rows(now());
+    const { rows } = await rowsOf(req, now());
     res.json(courseStudents(rows, query));
   });
 

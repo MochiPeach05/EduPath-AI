@@ -48,7 +48,7 @@ describe("audit log API", () => {
     await request(app).get("/audit-log").query({ q: "  Xuất EXCEL ", kind: "report", actor: "Phạm Thu Trang", page: 3, pageSize: 50 }).expect(200);
     const [sql, values] = listCalls()[0]!;
     expect(String(sql)).toContain("ORDER BY at DESC, id DESC");
-    expect(values).toEqual(["xuat excel", "report", "Phạm Thu Trang", 50, 100]);
+    expect(values).toEqual(["xuat excel", "report", "Phạm Thu Trang", 50, 100, null]);
     // The actor by name only, also on rows written with "MSSV - Họ tên - Lớp": the profile's name part (QA 2026-11-04).
     expect(String(sql)).toContain("($3::text IS NULL OR COALESCE(NULLIF(btrim(p.full_name), ''), l.actor_name) = $3)");
     expect(String(sql)).toContain("FROM ad_audit_log l LEFT JOIN student_profiles p ON p.user_id = l.actor_user_id");
@@ -56,6 +56,17 @@ describe("audit log API", () => {
     await request(app).get("/audit-log").query({ pageSize: 101 }).expect(400);
     await request(app).get("/audit-log").query({ kind: "grades" }).expect(400);
     await request(app).get("/audit-log").query({ extra: "1" }).expect(400);
+  });
+
+  it("shows a cố vấn học tập their own actions only, and only their own name to filter by (user 2026-11-07)", async () => {
+    const { app, listCalls } = setup("advisor");
+    await request(app).get("/audit-log").expect(200);
+    const [sql, values] = listCalls()[0]!;
+    expect(values).toEqual(["", null, null, 20, 0, actor.userId]);
+    expect(String(sql).match(/\(\$6::uuid IS NULL OR l\.actor_user_id = \$6\)/g)).toHaveLength(2);
+    const admin = setup("admin");
+    await request(admin.app).get("/audit-log").expect(200);
+    expect(admin.listCalls()[0]![1]).toEqual(["", null, null, 20, 0, null]);
   });
 
   it("sorts by a whitelisted column, newest first on ties", async () => {

@@ -4,6 +4,8 @@ Người dùng (31/10/2026) duyệt bản xem trước 2 (https://claude.ai/code
 - "hiện đầy đủ": báo cáo có tên và MSSV, kể cả kỹ năng còn thiếu, nghề mục tiêu và môn AI đề xuất;
 - "mọi quản trị viên": mọi vai trò của cổng quản trị đều xem và xuất Excel được.
 
+Ngày 7/11/2026 nhóm menu đổi tên thành "Thống kê", và người dùng yêu cầu "cho CVHT xem nữa". Cố vấn học tập (vai trò `advisor`) xem và xuất Excel mọi trang Thống kê, nhưng chỉ tính sinh viên các lớp mình phụ trách (`advisedStudentIds`, `scopeOf` trong `apps/api/src/admin/reports/router.ts`). Giới hạn này theo chính sách 03/11/2026: cố vấn chỉ xem sinh viên lớp mình. `/options` trả thêm `scope: { classes }` để trang ghi rõ phạm vi. Nhật ký thao tác của cố vấn chỉ gồm thao tác của chính họ. Các vai trò khác vẫn xem toàn bộ, `scope: null`.
+
 Sau đó người dùng yêu cầu: "mọi phần đều có xem trung bình toàn khóa với từng khóa". Vì vậy mọi số liệu tổng hợp trả về dạng `CohortSplit`, gồm `all` (toàn khóa) và `byCohort` (từng khóa, khóa cũ trước). Trang có công tắc "Toàn khóa | Từng khóa" ở mỗi phần.
 
 ## Chức năng

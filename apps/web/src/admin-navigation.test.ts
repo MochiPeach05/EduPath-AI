@@ -73,10 +73,15 @@ describe("admin navigation by role (cố vấn học tập, 2026-11-03)", () => 
   const admin = (advisesClasses: boolean | null): AdminAccess => ({ role: "admin", advisesClasses });
   const sidebarText = (access: AdminAccess) => adminSidebarFor(access).map(entry => entry.kind === "page" ? entry.page.label : `${entry.label}: ${entry.pages.map(page => page.label).join(", ")}`);
 
-  it("gives an advisor no reports, Nhật ký, Tài khoản or Quản lý thông báo, the rows the function list leaves to the Quản trị viên", () => {
-    expect(sidebarText(advisor)).toEqual(["Sinh viên", "Cố vấn học tập: Cố vấn, Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp",
+  it("gives an advisor Thống kê (2026-11-07) but not Tài khoản or Quản lý thông báo, the rows left to the Quản trị viên", () => {
+    expect(sidebarText(advisor)).toEqual(["Thống kê: Tổng quan, Tiến độ, Nguy cơ, Kỹ năng thiếu, Vị trí mục tiêu, Môn đề xuất, Nhật ký",
+      "Sinh viên", "Cố vấn học tập: Cố vấn, Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp",
       "Quản lý nghề nghiệp: Lĩnh vực, Kỹ năng, Vị trí nghề nghiệp", "Quản lý năng lực: Nhóm năng lực, Cấu hình năng lực, Cấu hình môn học"]);
-    for (const path of [...Object.values(REPORT_PATHS), "/quantri/tai-khoan", "/quantri/gui-thong-bao", "/quantri/thong-bao-da-gui"]) {
+    for (const path of Object.values(REPORT_PATHS)) {
+      expect(canSeeAdminPage(path, advisor)).toBe(true);
+      expect(resolveAdminPage(path, advisor).path).toBe(path);
+    }
+    for (const path of ["/quantri/tai-khoan", "/quantri/gui-thong-bao", "/quantri/thong-bao-da-gui"]) {
       expect(canSeeAdminPage(path, advisor)).toBe(false);
       expect(resolveAdminPage(path, advisor).path).toBe(ADVISOR_STUDENTS_PATH);
     }
@@ -84,15 +89,18 @@ describe("admin navigation by role (cố vấn học tập, 2026-11-03)", () => 
 
   it("opens exactly the pages of the rows whose Tác nhân includes CVHT (function list ver0.3, 2026-11-04)", () => {
     const cvhtPages = {
+      // Thống kê over the own classes and Nhật ký with the own actions (user 2026-11-07: "cho CVHT xem nữa").
+      "/quantri/tong-quan": "AD-REPORT", "/quantri/bao-cao-tien-do": "AD-REPORT", "/quantri/bao-cao-nguy-co": "AD-REPORT",
+      "/quantri/bao-cao-ky-nang": "AD-REPORT", "/quantri/bao-cao-nghe-nghiep": "AD-REPORT", "/quantri/bao-cao-mon-hoc": "AD-REPORT",
+      "/quantri/nhat-ky": "AD-REPORT-11",
       "/quantri/sinh-vien": "AD-PROF-01…04", "/quantri/co-van-hoc-tap": "AD-ADV-04, 05", "/quantri/quan-ly-sinh-vien": "AD-AST-01…09",
       "/quantri/chuong-trinh": "AD-CURR-03…06, AD-SUB-01, 02", "/quantri/ke-hoach": "AD-PLAN-03…09, 13", "/quantri/tieu-chuan-tot-nghiep": "AD-GRAD-03…07, 12",
       "/quantri/linh-vuc-nghe-nghiep": "AD-FIELD-01…03", "/quantri/ky-nang": "AD-SKILL-01…03", "/quantri/vi-tri-nghe-nghiep": "AD-CAREER-01, 02, 06, 07, AD-REQ-07…10",
       "/quantri/nhom-nang-luc": "AD-COMP-01…04", "/quantri/cau-hinh-nang-luc": "AD-CMP-01…04", "/quantri/cau-hinh-mon-hoc": "AD-CRS-01…04",
     } as Record<string, string>;
     expect(adminNavigation.filter((page) => canSeeAdminPage(page.path, advisor)).map((page) => page.path)).toEqual(Object.keys(cvhtPages));
-    // Every other page is the Quản trị viên's: AD-REPORT (Thống kê, Nhật ký), AD-AUTH-03…10 (Tài khoản), AD-NOTI (Thông báo).
-    expect(adminNavigation.filter((page) => !canSeeAdminPage(page.path, advisor)).map((page) => adminPageName(page))).toEqual(["Thống kê / Tổng quan",
-      "Thống kê / Tiến độ", "Thống kê / Nguy cơ", "Thống kê / Kỹ năng thiếu", "Thống kê / Vị trí mục tiêu", "Thống kê / Môn đề xuất", "Thống kê / Nhật ký", "Tài khoản",
+    // Every other page is the Quản trị viên's: AD-AUTH-03…10 (Tài khoản), AD-NOTI (Thông báo).
+    expect(adminNavigation.filter((page) => !canSeeAdminPage(page.path, advisor)).map((page) => adminPageName(page))).toEqual(["Tài khoản",
       "Quản lý thông báo / Gửi thông báo", "Quản lý thông báo / Đã gửi"]);
     // A page that is not listed stays closed to an advisor, whatever it is.
     expect(canSeeAdminPage("/quantri/trang-moi", advisor)).toBe(false);
@@ -100,12 +108,12 @@ describe("admin navigation by role (cố vấn học tập, 2026-11-03)", () => 
 
   it("names the page of the Quản trị viên an advisor asked for, and only for an advisor", () => {
     expect(refusedAdminPage("/quantri/tai-khoan", advisor)?.label).toBe("Tài khoản");
-    expect(refusedAdminPage("/quantri/nhat-ky/", advisor)?.label).toBe("Nhật ký");
     // Old links to a closed page are refused as the page they open.
     expect(refusedAdminPage("/quantri/tao-tai-khoan", advisor)?.path).toBe("/quantri/tai-khoan");
-    expect(refusedAdminPage("/quantri/bao-cao", advisor)?.path).toBe("/quantri/tong-quan");
-    // The advisor's own pages, the portal's address and unknown addresses are not refusals.
-    for (const path of ["/quantri", "/quantri/", "/quantri/ky-nang", "/quantri/lop-phu-trach", ADVISOR_STUDENTS_PATH, "/quantri/unknown"]) {
+    // The advisor's own pages (Thống kê and Nhật ký since 2026-11-07, also by an old link), the portal's address and
+    // unknown addresses are not refusals.
+    for (const path of ["/quantri", "/quantri/", "/quantri/ky-nang", "/quantri/lop-phu-trach", ADVISOR_STUDENTS_PATH, "/quantri/unknown",
+      "/quantri/nhat-ky/", "/quantri/bao-cao"]) {
       expect(refusedAdminPage(path, advisor)).toBeNull();
     }
     for (const role of ["admin", "faculty_board", "department_head", "lecturer"] as const) {
@@ -118,10 +126,12 @@ describe("admin navigation by role (cố vấn học tập, 2026-11-03)", () => 
   it("opens Quản lý sinh viên for an advisor and Tổng quan for everyone else", () => {
     expect(homeAdminPath(advisor)).toBe("/quantri/quan-ly-sinh-vien");
     expect(homeAdminPath(admin(true))).toBe("/quantri/tong-quan");
-    for (const path of ["/quantri", "/quantri/", "/quantri/unknown", "/quantri/bao-cao"]) {
+    for (const path of ["/quantri", "/quantri/", "/quantri/unknown"]) {
       expect(resolveAdminPage(path, advisor)).toMatchObject({ path: "/quantri/quan-ly-sinh-vien", label: "Quản lý sinh viên", eyebrow: "QUẢN LÝ SINH VIÊN CỦA CỐ VẤN HỌC TẬP" });
       expect(adminGroupOf(path, advisor)).toBe("advisors");
     }
+    // The old address of the reports opens Tổng quan, which an advisor reads since 2026-11-07.
+    expect(resolveAdminPage("/quantri/bao-cao", advisor).path).toBe("/quantri/tong-quan");
     expect(resolveAdminPage("/quantri/ky-nang", advisor).path).toBe("/quantri/ky-nang");
   });
 

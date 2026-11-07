@@ -1,5 +1,6 @@
-// Nhật ký thao tác (AD-REPORT-11): GET /api/admin/audit-log, newest first, for every admin role. Rows older than one
-// year are deleted when the log is read, at most once an hour.
+// Nhật ký thao tác (AD-REPORT-11): GET /api/admin/audit-log, newest first, for every admin role; a cố vấn học tập reads
+// their own actions only (user 2026-11-07: "cho CVHT xem nữa"). Rows older than one year are deleted when the log is
+// read, at most once an hour.
 import { Router } from "express";
 import { z } from "zod";
 import { adminRoles } from "../../auth/types.js";
@@ -49,6 +50,8 @@ export function createAuditLogRouter(pool: Pick<DatabasePool, "query"> | undefin
     }).strict().safeParse(request.query);
     if (!input.success) { response.status(400).json({ error: "invalid_query" }); return; }
     const { q, kind, actor, page, pageSize, sort, dir } = input.data;
+    // A cố vấn học tập sees what they did themselves, not the other accounts' actions.
+    const own = request.session.user!.role === "advisor" ? request.session.user!.userId : null;
     // Sortable headers like every admin table (admin/table-sort.ts); newest first breaks ties. Keys are whitelisted above.
     // Người thực hiện in Vietnamese order (Đ after D, QA 2026-11-04).
     const column = sort === "actor" ? '"actorName"' : sort === "kind" ? "kind" : "at";
@@ -61,11 +64,13 @@ export function createAuditLogRouter(pool: Pick<DatabasePool, "query"> | undefin
     const result = await pool!.query<{ items: Row[]; total: number; actors: string[] }>(`WITH filtered AS (
         SELECT l.id, l.created_at AS at, ${ACTOR} AS "actorName", l.actor_role AS "actorRole", l.kind, l.action, l.summary FROM ${LOGGED}
         WHERE ($1 = '' OR strpos(l.search_text, $1) > 0) AND ($2::text IS NULL OR l.kind = $2) AND ($3::text IS NULL OR ${ACTOR} = $3)
+          AND ($6::uuid IS NULL OR l.actor_user_id = $6)
       ), paged AS (SELECT * FROM filtered ORDER BY ${order} LIMIT $4 OFFSET $5)
       SELECT COALESCE((SELECT json_agg(paged ORDER BY ${order}) FROM paged), '[]'::json) AS items,
         (SELECT count(*)::int FROM filtered) AS total,
-        COALESCE((SELECT json_agg(name ORDER BY ${vietnameseOrder("name")}) FROM (SELECT DISTINCT ${ACTOR} AS name FROM ${LOGGED}) names), '[]'::json) AS actors`,
-    [foldText(q), kind ?? null, actor || null, pageSize, (page - 1) * pageSize]);
+        COALESCE((SELECT json_agg(name ORDER BY ${vietnameseOrder("name")}) FROM (SELECT DISTINCT ${ACTOR} AS name FROM ${LOGGED}
+          WHERE ($6::uuid IS NULL OR l.actor_user_id = $6)) names), '[]'::json) AS actors`,
+    [foldText(q), kind ?? null, actor || null, pageSize, (page - 1) * pageSize, own]);
     const row = result.rows[0] ?? { items: [], total: 0, actors: [] };
     const items: AuditEntry[] = row.items.map((item) => ({
       id: item.id, at: new Date(item.at).toISOString(), actorName: item.actorName, actorRole: item.actorRole ? roleLabel(item.actorRole) : null,

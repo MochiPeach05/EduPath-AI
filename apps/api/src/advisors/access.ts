@@ -66,6 +66,13 @@ export const isUuid = (value: unknown): value is string => typeof value === "str
 /** "71k29cntt01 " → "71K29CNTT01" (class-code.ts holds the whole rule of a class code). */
 export { normalizeClassName } from "./class-code.js";
 
+/** The student accounts of the classes an account advises (canonical class codes, class-code.ts). */
+export async function advisedStudentIds(db: Db, userId: string): Promise<Set<string>> {
+  const result = await db.query<{ id: string }>(`SELECT u.id FROM users u JOIN student_profiles p ON p.user_id = u.id
+    WHERE ${STUDENT_CLASS} IN (SELECT class_name FROM ad_advisor_classes WHERE advisor_user_id = $1)`, [userId]);
+  return new Set(result.rows.map((row) => row.id));
+}
+
 /** The classes an account advises, in order (empty for an account that advises none). */
 export async function advisorClassesOf(db: Db, userId: string): Promise<string[]> {
   const result = await db.query<{ class_name: string }>(
@@ -205,8 +212,9 @@ export function advisorActing(db: Db | undefined, staffEmailDomains: ReadonlySet
 /**
  * The admin reads (paths under /api/admin) of the role 'advisor': the rows of the function list whose Tác nhân includes
  * CVHT, i.e. the views, searches and filters of the "QTV & CVHT" rows and the "Cố vấn học tập" rows (user, 2026-11-04:
- * only the functions whose actors include CVHT). Every other admin read belongs to the Quản trị viên: the reports and
- * Nhật ký (AD-REPORT), Tài khoản (AD-AUTH-03…10), Thông báo (AD-NOTI), the source workbooks (AD-PLAN-14), the import
+ * only the functions whose actors include CVHT), and since 2026-11-07 (user: "cho CVHT xem nữa") Thống kê over the students
+ * of their own classes and Nhật ký with their own actions (AD-REPORT). Every other admin read belongs to the Quản trị viên:
+ * Tài khoản (AD-AUTH-03…10), Thông báo (AD-NOTI), the source workbooks (AD-PLAN-14), the import
  * template (AD-ADV-01), the AI runs and proposals (AD-CRS-06, 09, 10, AD-REQ-04) and the editors' own catalog. An admin
  * route added later stays closed to advisors until it is listed here. Matched as Express routes: without case, with or
  * without a trailing slash.
@@ -232,6 +240,10 @@ export const ADVISOR_ADMIN_READS: readonly RegExp[] = [
   // the AI runs (/ai) or the catalog of the skill editor.
   /^\/competencies\/(groups|skills|courses)(\/[^/]+)?\/?$/i,
   /^\/competencies\/(cohorts|summary)\/?$/i,
+  // AD-REPORT-01…10: Thống kê and its Excel files, over the students of the advisor's classes (admin/reports/router.ts).
+  /^\/reports\/(options|dashboard|progress|risk|skills|careers|courses)(\.xlsx|\/students)?\/?$/i,
+  // AD-REPORT-11: Nhật ký thao tác, the advisor's own actions (admin/audit/router.ts).
+  /^\/audit-log\/?$/i,
 ];
 /** The only admin write of the role 'advisor': opening the page of a student of their classes (AD-AST-05), logged. */
 export const ADVISOR_ADMIN_WRITES: readonly RegExp[] = [/^\/advisor-portal\/students\/[^/]+\/open\/?$/i];

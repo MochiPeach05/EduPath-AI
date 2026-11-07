@@ -22,6 +22,7 @@ export const ADVISOR_PERMISSIONS: AdvisorPermissions = {
     { label: "Trang của sinh viên", detail: "Xem chi tiết mở toàn bộ trang sinh viên (hồ sơ, bảng điểm, Khảo sát định hướng, Đánh giá năng lực, Khoảng trống kỹ năng, Định hướng nghề nghiệp, Lộ trình học tập, Xét tốt nghiệp, chương trình và kế hoạch đào tạo) của sinh viên lớp mình phụ trách, hoặc của mọi sinh viên với quản trị viên và Ban chủ nhiệm khoa." },
     { label: "Danh mục của Khoa", detail: "Chương trình đào tạo, kế hoạch đào tạo, tiêu chuẩn xét tốt nghiệp, năng lực, kỹ năng, lĩnh vực và vị trí nghề nghiệp, ở chế độ chỉ xem." },
     { label: "Cố vấn học tập", detail: "Danh sách cố vấn học tập của Khoa và các lớp từng người phụ trách." },
+    { label: "Thống kê", detail: "Các trang Thống kê (tổng quan, tiến độ, nguy cơ, kỹ năng thiếu, vị trí mục tiêu, môn đề xuất) và tệp Excel của chúng, chỉ tính sinh viên các lớp mình phụ trách; Nhật ký thao tác chỉ gồm các thao tác của chính mình." },
   ],
   act: [
     { label: "Import bảng điểm", detail: "Tải bảng điểm PDF lên thay sinh viên, kể cả khi sinh viên chưa import lần nào." },
@@ -36,7 +37,7 @@ export const ADVISOR_PERMISSIONS: AdvisorPermissions = {
     { label: "Xóa dữ liệu", detail: "Không xóa bảng điểm, kết quả đánh giá, lộ trình hay cuộc trò chuyện của sinh viên." },
     { label: "Thông báo của sinh viên", detail: "Không xem, đánh dấu đã đọc hay xóa thông báo trong chuông của sinh viên." },
     { label: "Lựa chọn của sinh viên", detail: "Không chọn chuyên ngành, vị trí nghề nghiệp mục tiêu, không sửa Kế hoạch học kỳ." },
-    { label: "Trang quản trị", detail: "Vai trò Cố vấn học tập chỉ xem: không thêm, sửa, xóa, import dữ liệu hay tải tệp Excel nguồn, không chạy AI đề xuất liên kết kỹ năng; không xem Thống kê, Nhật ký thao tác, Tài khoản và Thông báo." },
+    { label: "Trang quản trị", detail: "Vai trò Cố vấn học tập chỉ xem: không thêm, sửa, xóa, import dữ liệu hay tải tệp Excel nguồn, không chạy AI đề xuất liên kết kỹ năng; không xem Tài khoản và Thông báo." },
   ],
   notes: [
     "Mỗi việc làm thay được ghi vào Nhật ký thao tác (người làm, việc đã làm, sinh viên).",

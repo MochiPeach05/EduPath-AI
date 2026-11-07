@@ -52,6 +52,8 @@
 
 /* Filter bar (AD-REPORT-10) */
 .rp-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; padding: 12px 14px; border-radius: 16px; background: var(--rp-surface); box-shadow: var(--rp-shadow); }
+/* A cố vấn học tập's numbers are those of their classes (2026-11-07): one line over the filters. */
+.rp-filters .rp-scope { flex-basis: 100%; min-width: 0; margin: 0; padding: 6px 10px; border-radius: 10px; background: var(--rp-data-soft); color: var(--rp-ink); font-size: 13px; font-weight: 600; line-height: 1.5; }
 .rp-filters-inline { padding: 0; box-shadow: none; }
 .rp-field { display: grid; gap: 4px; min-width: 0; font-size: 12px; font-weight: 700; color: var(--rp-muted); }
 .rp-field select, .rp-field input { height: 38px; min-width: 0; max-width: 100%; padding: 0 10px; border: 1px solid #dfe3eb; border-radius: 10px; background: #fbfcfe; color: var(--rp-ink); font: inherit; font-size: 14px; font-weight: 500; }

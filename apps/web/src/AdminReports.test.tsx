@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import AdminReports, {
-  AuditTable, AveragesTable, CareersView, CoursesView, DashboardView, ProgressView, RiskView, SkillsView, bandParts, cohortGpaLines, coverageNotes, coverageText,
+  FilterBar, advisorScopeText, AuditTable, AveragesTable, CareersView, CoursesView, DashboardView, ProgressView, RiskView, SkillsView, bandParts, cohortGpaLines, coverageNotes, coverageText,
   dataBaseText, fitParts, fitWord, gpaColumnTip, matrixRows, progressLegend, progressParts, recentLogText, skillsLeadText, updatedText,
 } from "./AdminReports";
 import { EMPTY_FILTERS, apiFilters, fileNameFrom, filtersFromSearch, filtersToSearch, reportErrorText, reportUrl } from "./admin-report-api";
@@ -59,6 +59,18 @@ const noop = () => undefined;
 const plainHeader = (label: unknown) => <th>{String(label)}</th>;
 
 afterEach(() => vi.unstubAllGlobals());
+
+describe("Thống kê of a cố vấn học tập (user 2026-11-07)", () => {
+  const options = { cohorts: ["K29"], majors: [], specialties: [], studyTerm: null };
+  it("says over the filters that the numbers are those of the advisor's classes", () => {
+    expect(advisorScopeText(["71K29CNTT08", "71K29CNTT09"])).toBe("Số liệu chỉ gồm sinh viên các lớp bạn phụ trách: 71K29CNTT08, 71K29CNTT09.");
+    expect(advisorScopeText([])).toBe("Bạn chưa phụ trách lớp nào nên chưa có số liệu.");
+    const own = renderToStaticMarkup(<FilterBar filters={EMPTY_FILTERS} setFilters={() => {}} options={{ ...options, scope: { classes: ["71K29CNTT08"] } }} />);
+    expect(own).toContain('<p class="rp-scope">Số liệu chỉ gồm sinh viên các lớp bạn phụ trách: 71K29CNTT08.</p>');
+    const all = renderToStaticMarkup(<FilterBar filters={EMPTY_FILTERS} setFilters={() => {}} options={{ ...options, scope: null }} />);
+    expect(all).not.toContain("rp-scope");
+  });
+});
 
 describe("report requests", () => {
   it("keep the filters in the address bar and send them to the API", () => {

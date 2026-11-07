@@ -20,8 +20,11 @@ const rows = [
   reportRow({ name: "Lê Gia Cường", studentCode: "9900000003", cohort: "K31", hasTranscript: false, status: "no_transcript", gpa: null }),
 ];
 
-function setup(options: { role?: string; admin?: boolean } = {}) {
+function setup(options: { role?: string; admin?: boolean; classes?: string[]; students?: string[] } = {}) {
   const query = vi.fn(async (sql: string) => {
+    // A cố vấn học tập's classes and the students of those classes (advisors/access.ts).
+    if (sql.startsWith("SELECT class_name FROM ad_advisor_classes")) return { rowCount: 1, rows: (options.classes ?? []).map((name) => ({ class_name: name })) };
+    if (sql.startsWith("SELECT u.id FROM users u JOIN student_profiles p")) return { rowCount: 1, rows: (options.students ?? []).map((id) => ({ id })) };
     if (sql.startsWith("SELECT id FROM users WHERE id=$1 AND entra_tenant_id=$2 AND is_active")) {
       return options.admin === false ? { rowCount: 0, rows: [] } : { rowCount: 1, rows: [{ id: ADMIN }] };
     }
@@ -51,6 +54,41 @@ async function workbookOf(body: Buffer) {
 }
 
 afterEach(() => vi.restoreAllMocks());
+
+describe("reports API for a cố vấn học tập (user 2026-11-07: \"cho CVHT xem nữa\")", () => {
+  const ownStudent = rows[0]!.userId;
+
+  it("counts and lists the students of the advisor's classes only, with their cohorts and classes in the options", async () => {
+    const advisor = setup({ role: "advisor", classes: ["71K29CNTT08"], students: [ownStudent] }).app;
+    const options = await request(advisor).get("/r/options").expect(200);
+    expect(options.body).toMatchObject({ cohorts: ["K29"], scope: { classes: ["71K29CNTT08"] } });
+    const progress = await request(advisor).get("/r/progress").expect(200);
+    expect(JSON.stringify(progress.body)).toContain("Nguyễn Văn An");
+    expect(JSON.stringify(progress.body)).not.toContain("Trần Thị Bình");
+    expect(JSON.stringify(progress.body)).not.toContain("Lê Gia Cường");
+    const risk = await request(advisor).get("/r/risk").expect(200);
+    expect(JSON.stringify(risk.body)).not.toContain("Trần Thị Bình");
+    // Another admin role keeps every student, and no scope.
+    const admin = setup({ role: "admin" }).app;
+    expect((await request(admin).get("/r/options").expect(200)).body).toMatchObject({ cohorts: ["K29", "K30", "K31"], scope: null });
+    expect(JSON.stringify((await request(admin).get("/r/progress").expect(200)).body)).toContain("Trần Thị Bình");
+  });
+
+  it("exports the advisor's students only and names the classes in the log", async () => {
+    const spy = vi.spyOn(audit, "recordAudit").mockResolvedValue();
+    const advisor = setup({ role: "advisor", classes: ["71K29CNTT08"], students: [ownStudent] }).app;
+    await request(advisor).get("/r/progress.xlsx").buffer(true).parse(binary).expect(200);
+    expect(spy.mock.calls[0]![2]).toMatchObject({ summary: expect.stringContaining("lớp 71K29CNTT08") });
+    expect(spy.mock.calls[0]![2]).toMatchObject({ summary: expect.stringContaining("1 dòng") });
+  });
+
+  it("shows nothing to an advisor without classes", async () => {
+    const advisor = setup({ role: "advisor" }).app;
+    expect((await request(advisor).get("/r/options").expect(200)).body).toMatchObject({ cohorts: [], scope: { classes: [] } });
+    const progress = await request(advisor).get("/r/progress").expect(200);
+    for (const name of ["Nguyễn Văn An", "Trần Thị Bình", "Lê Gia Cường"]) expect(JSON.stringify(progress.body)).not.toContain(name);
+  });
+});
 
 describe("reports API", () => {
   it("is for active admins of any admin role", async () => {

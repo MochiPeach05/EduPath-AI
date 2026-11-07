@@ -21,6 +21,8 @@ export type ReportOptions = {
   majors: { code: string; name: string }[];
   specialties: { code: string; name: string; majorCode: string | null }[];
   studyTerm: ReportTerm | null;
+  /** Whose numbers the pages show: null for every student, else the classes of a cố vấn học tập (2026-11-07). */
+  scope?: { classes: string[] } | null;
 };
 
 /**

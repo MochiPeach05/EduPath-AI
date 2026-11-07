@@ -146,6 +146,11 @@ function useReportFilters(): [ReportFilterState, (next: ReportFilterState) => vo
   return [filters, set];
 }
 
+/** Over the filter bar of a cố vấn học tập (2026-11-07): the numbers are those of the classes they advise. */
+export const advisorScopeText = (classes: readonly string[]) => classes.length
+  ? `Số liệu chỉ gồm sinh viên các lớp bạn phụ trách: ${classes.join(", ")}.`
+  : "Bạn chưa phụ trách lớp nào nên chưa có số liệu.";
+
 /** The shared filter bar (AD-REPORT-10: search and filters, one row since the user's function-list merge of 2026-10-31). */
 export function FilterBar({ filters, setFilters, options }: { filters: ReportFilterState; setFilters: (next: ReportFilterState) => void; options: ReportOptions | null }) {
   const [draft, setDraft] = useState(filters.q);
@@ -155,7 +160,9 @@ export function FilterBar({ filters, setFilters, options }: { filters: ReportFil
   const specialties = (options?.specialties ?? []).filter((item) => !filters.major || !item.majorCode || item.majorCode === filters.major);
   const submit = (event: FormEvent) => { event.preventDefault(); if (draft.trim() !== filters.q) setFilters({ ...filters, q: draft.trim() }); };
   const any = Boolean(filters.q || filters.cohort || filters.major || filters.specialty || draft.trim());
+  const scope = options?.scope ?? null;
   return <form className="rp-filters" role="search" aria-label="Tìm kiếm và lọc dữ liệu thống kê" onSubmit={submit}>
+    {scope && <p className="rp-scope">{advisorScopeText(scope.classes)}</p>}
     <label className="rp-field rp-field-search">Tìm sinh viên<span className="rp-search"><Icon name="search" /><input id="rp-q" type="search" value={draft} maxLength={120} placeholder="MSSV hoặc họ tên" onChange={(event) => setDraft(event.target.value)} /></span></label>
     <label className="rp-field">Khóa<select id="rp-cohort" value={filters.cohort} onChange={(event) => setFilters({ ...filters, cohort: event.target.value })}><option value="">Tất cả</option>{(options?.cohorts ?? []).map((cohort) => <option key={cohort} value={cohort}>{cohort}</option>)}</select></label>
     <label className="rp-field">Ngành<select id="rp-major" value={filters.major} onChange={(event) => {
@@ -811,7 +818,8 @@ export function AuditTable({ data, page, setPage, sortHeader }: { data: AuditPag
   </>;
 }
 
-function AuditLogPage() {
+/** own: a cố vấn học tập, whose log holds their own actions only (the API scopes it, 2026-11-07). */
+function AuditLogPage({ own = false }: { own?: boolean }) {
   const [draft, setDraft] = useState("");
   const q = useDebounced(draft).trim();
   const [actor, setActor] = useState("");
@@ -829,10 +837,10 @@ function AuditLogPage() {
   return <>
     <Intro view="audit" head={null} studyTerm={null} actions={<span className="rp-pill">Lưu <b>1 năm</b></span>} />
     <section className="rp-card" aria-labelledby="rp-audit-title">
-      <div className="rp-card-head"><div><h2 id="rp-audit-title">Nhật ký thao tác {state.data && <span className="rp-count">{countText(state.data.total)}</span>}</h2><p>Lịch sử đăng nhập vẫn ở Tài khoản.</p></div></div>
+      <div className="rp-card-head"><div><h2 id="rp-audit-title">Nhật ký thao tác {state.data && <span className="rp-count">{countText(state.data.total)}</span>}</h2><p>{own ? "Các thao tác của chính bạn." : "Lịch sử đăng nhập vẫn ở Tài khoản."}</p></div></div>
       <form className="rp-filters rp-filters-inline" role="search" aria-label="Tìm trong nhật ký" onSubmit={(event) => event.preventDefault()}>
         <label className="rp-field rp-field-search">Tìm trong nhật ký<span className="rp-search"><Icon name="search" /><input id="rp-audit-q" type="search" value={draft} maxLength={120} placeholder="Người thực hiện, thao tác, nội dung" onChange={(event) => setDraft(event.target.value)} /></span></label>
-        <label className="rp-field">Người thực hiện<select id="rp-audit-actor" value={actor} onChange={(event) => setActor(event.target.value)}><option value="">Tất cả</option>{actors.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
+        {!own && <label className="rp-field">Người thực hiện<select id="rp-audit-actor" value={actor} onChange={(event) => setActor(event.target.value)}><option value="">Tất cả</option>{actors.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>}
         <label className="rp-field">Loại thao tác<select id="rp-audit-kind" value={kind} onChange={(event) => setKind(event.target.value as "" | AuditKind)}><option value="">Tất cả</option>{(Object.keys(AUDIT_TEXT) as AuditKind[]).map((value) => <option key={value} value={value}>{AUDIT_TEXT[value]}</option>)}</select></label>
         <button type="button" className="rp-reset" disabled={!draft && !actor && !kind} onClick={() => { setDraft(""); setActor(""); setKind(""); }}>Xóa bộ lọc</button>
       </form>
@@ -858,6 +866,6 @@ export default function AdminReports({ path, navigate }: { path: string; navigat
           : view === "skills" ? <SkillsPage filters={filters} studyTerm={studyTerm} bar={bar} navigate={navigate} />
             : view === "careers" ? <CareersPage filters={filters} studyTerm={studyTerm} bar={bar} />
               : view === "courses" ? <CoursesPage filters={filters} studyTerm={studyTerm} bar={bar} navigate={navigate} />
-                : <AuditLogPage />}
+                : <AuditLogPage own={Boolean(options.data?.scope)} />}
   </div>;
 }

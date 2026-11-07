@@ -302,10 +302,14 @@ describe("the role advisor in the admin portal (advisorReadOnly)", () => {
     expect((await request(app).delete(`/api/admin/advisors/${ADVISOR_ID}`).expect(403)).body).toEqual({ error: "read_only_role" });
   });
 
-  it("does not even read the reports, the log, the accounts and the announcements", async () => {
+  it("reads Thống kê and its Excel files and Nhật ký (user 2026-11-07), not the accounts and the announcements", async () => {
     const app = admin(advisor);
-    for (const path of ["/api/admin/reports/overview", "/api/admin/reports/progress.xlsx", "/api/admin/audit-log", "/api/admin/accounts",
-      "/api/admin/accounts/history", "/api/admin/announcements"]) {
+    for (const path of ["/api/admin/reports/options", "/api/admin/reports/dashboard", "/api/admin/reports/progress", "/api/admin/reports/progress.xlsx",
+      "/api/admin/reports/risk.xlsx", "/api/admin/reports/skills/students", "/api/admin/reports/courses/students", "/api/admin/reports/careers",
+      "/api/admin/audit-log"]) {
+      expect((await request(app).get(path).expect(200)).body).toEqual({ ok: true });
+    }
+    for (const path of ["/api/admin/reports/overview", "/api/admin/accounts", "/api/admin/accounts/history", "/api/admin/announcements"]) {
       expect((await request(app).get(path).expect(403)).body).toEqual({ error: "admin_only" });
     }
   });
