@@ -369,7 +369,7 @@ export default function StudentWorkspace({ user, advisor = null }: { user: Authe
           </> : <NotificationsPanel onUnread={notifications.setUnread} onNavigate={link => { closePanel(false); const target = pageFromHash(link); if (target) navigate(target); }} />}
         </section>}
       </header>
-      {advisor && <AdvisorViewBanner advisorName={advisor.name} role={advisor.role ?? "advisor"} studentName={name} studentCode={profile?.studentCode} className={profile?.className}
+      {advisor && <AdvisorViewBanner advisorName={advisor.name} role={advisor.role ?? "advisor"} studentName={name} studentCode={profile?.studentCode} className={profile?.classCode || profile?.className}
         blocked={advisorBlocked} onClose={closeAdvisorView} />}
       <div className={`sw-body ${menu ? "sw-body-menu-open" : ""}`}>
         {menu && <button className="sw-drawer-backdrop" aria-label="Đóng menu bên trái" tabIndex={-1} onClick={() => { setMenu(false); navigationButton.current?.focus(); }} />}

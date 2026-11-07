@@ -9,6 +9,8 @@ import {
   type Roadmap, type RoadmapBasis, type RoadmapImprove, type RoadmapResponse, type RoadmapSkill, type RoadmapStatus, type RoadmapStudy,
 } from "./student-roadmap-data";
 import { nextTermOffer, type StudyPlanContext } from "./study-plan-data";
+import { isAdvisorView } from "./advisor-view";
+import { ActingConfirmDialog, roadmapConfirm } from "./acting-confirm";
 import "./student-roadmap.css";
 
 /**
@@ -379,7 +381,12 @@ export type ShownRoadmap = { id: string; status: RoadmapStatus } | null;
 
 /** onRoadmap: told the roadmap shown, once loaded and whenever it or its status changes (a new one written meanwhile). */
 export default function StudentAiRoadmap({ planContext = null, onRoadmap }: { planContext?: PlanContext; onRoadmap?: (roadmap: ShownRoadmap) => void }) {
-  const { response, previous, loading, error, create, creating, createError, announcement } = useRoadmap();
+  const { response, previous, loading, error, create: send, creating, createError, announcement } = useRoadmap();
+  // A cố vấn học tập or a Khoa admin confirms first: the roadmap is replaced and the student is told (QA 2026-11-07).
+  const [confirming, setConfirming] = useState(false);
+  const create = () => { if (isAdvisorView()) setConfirming(true); else send(); };
+  const confirmDialog = confirming && <ActingConfirmDialog {...roadmapConfirm(Boolean(response?.roadmap))} onClose={() => setConfirming(false)}
+    onConfirm={() => { setConfirming(false); send(); }} />;
   const report = useRef(onRoadmap);
   useEffect(() => { report.current = onRoadmap; });
   const ready = response !== null, shownId = response?.roadmap?.id ?? null, shownStatus = response?.roadmap?.status ?? null;
@@ -399,7 +406,7 @@ export default function StudentAiRoadmap({ planContext = null, onRoadmap }: { pl
   </section>;
 
   if (!roadmap) return <section className="sw-panel rm-start">
-    {live}
+    {live}{confirmDialog}
     <span className="rm-start-icon" aria-hidden="true"><Icon name="route" /></span>
     <h2>Lộ trình học tập cho học kỳ tới</h2>
     <p>EduPath AI đóng vai cố vấn học tập, soạn cho bạn kế hoạch {response.upcoming?.term ? roadmapTermLabel(response.upcoming.term) : "học kỳ tới"}{response.upcoming ? ` (dự kiến từ ${dateText(response.upcoming.start)} đến ${dateText(response.upcoming.end)})` : ""}:</p>
@@ -422,5 +429,5 @@ export default function StudentAiRoadmap({ planContext = null, onRoadmap }: { pl
     <p className="rm-footer">Lộ trình sẽ dùng kết quả Đánh giá năng lực tạo lúc {formatDateTime(assessment?.createdAt)}. Nếu bảng điểm vừa thay đổi, hãy tạo lại kết quả đánh giá trước.</p>
   </section>;
 
-  return <div className="rm-page">{live}<RoadmapView roadmap={roadmap} previous={previous} response={response} create={create} creating={creating} createError={createError} planContext={planContext} /></div>;
+  return <div className="rm-page">{live}{confirmDialog}<RoadmapView roadmap={roadmap} previous={previous} response={response} create={create} creating={creating} createError={createError} planContext={planContext} /></div>;
 }

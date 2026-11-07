@@ -167,12 +167,38 @@ const vietnamDay = (date = new Date()) => new Intl.DateTimeFormat("en-CA", { tim
 export const studentLabel = (student: Pick<AdvisedStudent, "studentCode" | "name" | "className">) =>
   `${[student.studentCode, student.name].filter(Boolean).join(" – ")}${student.className ? ` (lớp ${student.className})` : ""}`;
 
+/** How long one "Mở trang sinh viên" in the log covers the further reads of the same account on the same student. */
+export const STUDENT_VIEW_LOG_MS = 30 * 60 * 1000;
+/**
+ * When each account last had a student's page logged as opened (this server's memory: a restart logs anew). QA
+ * 2026-11-07: opening /dashboard?sv=… straight, or reading the API, left no line in the Nhật ký; every read is now covered.
+ */
+export function createStudentViews(windowMs = STUDENT_VIEW_LOG_MS) {
+  const last = new Map<string, number>();
+  return {
+    /** Records that the account's opening of the student's page was logged at `at`. */
+    mark(actorId: string, studentId: string, at = Date.now()) {
+      last.set(`${actorId}:${studentId}`, at);
+      if (last.size > 10_000) for (const [key, time] of last) if (at - time >= windowMs) last.delete(key);
+    },
+    /** True when nothing was logged for that account and student within the window. */
+    due(actorId: string, studentId: string, at = Date.now()) {
+      const time = last.get(`${actorId}:${studentId}`);
+      return time === undefined || at - time >= windowMs;
+    },
+  };
+}
+export type StudentViews = ReturnType<typeof createStudentViews>;
+/** This server's record, shared by advisorActing and POST /advisor-portal/students/:id/open (repository.ts open). */
+export const studentViews: StudentViews = createStudentViews();
+
 /**
  * Mounted on /api/student before the student routers (app.ts). A student passes untouched; an admin-portal account or a
  * staff mailbox passes only for the student named by X-Advisor-Student that advisedStudent gives it (its own classes; any
- * student for admins and Ban chủ nhiệm khoa), and only for reads and ACTING_ACTIONS.
+ * student for admins and Ban chủ nhiệm khoa), and only for reads and ACTING_ACTIONS. A read logs "Mở trang sinh viên"
+ * once per account, student and half hour (studentViews), however the page was opened.
  */
-export function advisorActing(db: Db | undefined, staffEmailDomains: ReadonlySet<string>): RequestHandler {
+export function advisorActing(db: Db | undefined, staffEmailDomains: ReadonlySet<string>, views: StudentViews = studentViews): RequestHandler {
   return async (request, response, next) => {
     const user = request.session.user;
     if (!user || canUseStudentPortal(user, staffEmailDomains)) { next(); return; }
@@ -188,6 +214,17 @@ export function advisorActing(db: Db | undefined, staffEmailDomains: ReadonlySet
         response.status(403).json({ error: "advisor_action_not_allowed" }); return;
       }
       request.advisorActing = { advisor: user, student };
+      if (read) {
+        const path = request.originalUrl.split("?")[0] ?? "";
+        response.once("finish", () => {
+          if (response.statusCode >= 400 || !views.due(user.userId, student.user.userId)) return;
+          views.mark(user.userId, student.user.userId);
+          void recordAudit(db, auditActorOf(user), {
+            kind: "advisor", action: "Mở trang sinh viên", summary: studentLabel(student), targetType: "student", targetId: student.user.userId,
+            method: request.method, path,
+          });
+        });
+      }
       if (action && action.log !== false) {
         const path = request.originalUrl.split("?")[0] ?? "";
         response.once("finish", () => {

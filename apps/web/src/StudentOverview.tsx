@@ -23,6 +23,8 @@ export type StudentProfile = {
   /** Chuyên ngành (CNPM/CNDL/TTNT; K27 còn có ANM); null = chưa xác định, absent on older APIs. */
   specialty?: string | null;
   name: string; studentCode: string | null; cohortCode: string | null;
+  /** The class as advisors and admins name it ("71K29CNTT08", advisors/class-code.ts); absent on older APIs. */
+  classCode?: string | null;
   className: string | null; cohortYear: number | null; currentSemester: number | null;
   email: string | null; careerGoal: string | null; interests: string | null; profileStatus: string;
   /** When the profile survey ("Khảo sát định hướng") was saved; null when not yet. */

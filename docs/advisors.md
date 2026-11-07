@@ -74,6 +74,7 @@ Hợp đồng dữ liệu: `apps/web/src/advisor-types.ts`.
   - Lộ trình AI vẫn cần Khảo sát định hướng do chính sinh viên làm và đồng ý.
 - **Trợ lý AI:** người mở trang chỉ thấy cuộc trò chuyện mình tạo. Sinh viên thấy tất cả: cuộc trò chuyện của CVHT có thẻ "Cố vấn học tập tạo", của quản trị viên hay Ban chủ nhiệm khoa có thẻ "Cán bộ Khoa tạo" (`createdByRole`).
 - **Ghi lại và thông báo:** mỗi việc làm thay ghi một dòng nhật ký (loại `advisor`, hiện là "Làm thay sinh viên" ở trang Nhật ký; tên sinh viên, không có dữ liệu) và gửi thông báo cho sinh viên, tối đa một thông báo cho mỗi người, mỗi việc, mỗi ngày.
+- **Mở trang sinh viên (QA 7/11/2026):** mọi lần đọc dữ liệu sinh viên qua `X-Advisor-Student` đều ghi một dòng "Mở trang sinh viên" vào nhật ký. Mỗi tài khoản với mỗi sinh viên chỉ ghi một lần trong 30 phút (`studentViews` trong `advisors/access.ts`), nên mở thẳng `/dashboard?sv=…` hay gọi API cũng đều được ghi. Khi làm thay sinh viên, nút Đánh giá năng lực, Đánh giá lại và Tạo lộ trình hỏi xác nhận trước (`acting-confirm.tsx`). Thanh thông báo hiện mã lớp chuẩn (`classCode`).
 - **Giao diện của thẻ:** có dải "Bạn đang xem trang của … với tư cách cố vấn học tập" (hoặc "quản trị viên", "Ban chủ nhiệm khoa", theo vai trò của tài khoản) kèm nút "Đóng trang sinh viên", nút này quay về Quản lý sinh viên. Chuông và nút đăng xuất bị ẩn, cùng các nút không được dùng khi làm thay: lưu hoặc xóa khảo sát, chọn mục tiêu, xóa dữ liệu, sửa Kế hoạch học kỳ, hỏi đồng ý. Các dòng ghi chú của thẻ nói với người đang xem ("bạn chỉ xem").
 
 ## Kiểm thử (03/11/2026)

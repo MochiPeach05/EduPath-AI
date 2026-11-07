@@ -5,7 +5,7 @@ import type { AuthenticatedUser } from "../auth/types.js";
 import { requireAuthentication } from "../middleware/authorization.js";
 import { advisorAction } from "../notifications/notify.js";
 import {
-  ACTING_ACTIONS, actingAction, actingAdvisor, advisorActing, advisorReadOnly, advisedStudent, normalizeClassName, studentLabel, studentUser,
+  ACTING_ACTIONS, actingAction, actingAdvisor, advisorActing, advisorReadOnly, advisedStudent, normalizeClassName, studentLabel, studentUser, createStudentViews, STUDENT_VIEW_LOG_MS,
 } from "./access.js";
 import { CLASS_OF } from "./class-code.js";
 
@@ -50,7 +50,7 @@ function setup(user: AuthenticatedUser | null, row: Record<string, unknown> | nu
   });
   const app = express();
   app.use(((req, _res, next) => { req.session = { user: user ?? undefined } as typeof req.session; next(); }) as RequestHandler);
-  app.use("/api/student", advisorActing({ query } as never, staffDomains));
+  app.use("/api/student", advisorActing({ query } as never, staffDomains, createStudentViews()));
   const who: RequestHandler = (req, res) => {
     res.status(status).json({ student: studentUser(req).userId, advisor: actingAdvisor(req)?.userId ?? null, label: req.advisorActing ? studentLabel(req.advisorActing.student) : null });
   };
@@ -99,12 +99,30 @@ describe("a cố vấn học tập in a student's page (advisorActing)", () => {
     expect(other.query.mock.calls[0]?.[1]).toEqual([STUDENT_ID, ADVISOR_ID]);
   });
 
-  it("reads the student's page as the student, and names the advisor", async () => {
+  it("reads the student's page as the student, names the advisor, and logs the opening once (QA 2026-11-07)", async () => {
     const { app, writes } = setup(advisor);
     const answer = await request(app).get("/api/student/overview").set("X-Advisor-Student", STUDENT_ID).expect(200);
     expect(answer.body).toEqual({ student: STUDENT_ID, advisor: ADVISOR_ID, label: "2374802010994 – Sinh viên Thử nghiệm (lớp 71K29CNTT99)" });
     await settle();
+    // Opened straight from /dashboard?sv=… or read through the API: one "Mở trang sinh viên", however many reads follow.
+    expect(writes.map((write) => write.table)).toEqual(["audit"]);
+    expect(writes[0]!.values.slice(1, 11)).toEqual([ADVISOR_ID, "Nguyễn Văn Cố Vấn", "advisor", "advisor", "Mở trang sinh viên",
+      "2374802010994 – Sinh viên Thử nghiệm (lớp 71K29CNTT99)", "student", STUDENT_ID, "GET", "/api/student/overview"]);
+    await request(app).get("/api/student/overview").set("X-Advisor-Student", STUDENT_ID).expect(200);
+    await settle();
+    expect(writes).toHaveLength(1);
+  });
+
+  it("logs a refused read of the student's data nowhere, and logs again after half an hour", async () => {
+    const { app, writes } = setup(advisor, advisedRow, 500);
+    await request(app).get("/api/student/overview").set("X-Advisor-Student", STUDENT_ID).expect(500);
+    await settle();
     expect(writes).toEqual([]);
+    const views = createStudentViews();
+    views.mark("a", "s", 1_000);
+    expect(views.due("a", "s", 1_000 + STUDENT_VIEW_LOG_MS - 1)).toBe(false);
+    expect(views.due("a", "s", 1_000 + STUDENT_VIEW_LOG_MS)).toBe(true);
+    expect(views.due("a", "other", 1_000)).toBe(true);
   });
 
   it("works for a staff account of another admin-portal role that advises the class", async () => {
@@ -202,10 +220,11 @@ describe("a quản trị viên or Ban chủ nhiệm khoa in a student's page (QT
     const { app, query } = setup({ ...qtv, role }, null, 200, anyRow);
     const answer = await request(app).get("/api/student/overview").set("X-Advisor-Student", STUDENT_ID).expect(200);
     expect(answer.body).toEqual({ student: STUDENT_ID, advisor: ADMIN_ID, label: "2374802010994 – Sinh viên Thử nghiệm (lớp 71K29CNTT05)" });
-    // The own classes first, then any active student account.
-    expect(query.mock.calls.map((call) => call[1])).toEqual([[STUDENT_ID, ADMIN_ID], [STUDENT_ID, ADMIN_ID]]);
-    expect(String(query.mock.calls[1]?.[0])).toMatch(/u\.is_active AND COALESCE\(u\.role_override, u\.role\)='student'/);
-    expect(String(query.mock.calls[1]?.[0])).toContain(`${CLASS_OF} AS class_name`);
+    // The own classes first, then any active student account (the log of the opening comes after, QA 2026-11-07).
+    const lookups = query.mock.calls.filter(([sql]) => !String(sql).includes("INSERT INTO ad_audit_log"));
+    expect(lookups.map((call) => call[1])).toEqual([[STUDENT_ID, ADMIN_ID], [STUDENT_ID, ADMIN_ID]]);
+    expect(String(lookups[1]?.[0])).toMatch(/u\.is_active AND COALESCE\(u\.role_override, u\.role\)='student'/);
+    expect(String(lookups[1]?.[0])).toContain(`${CLASS_OF} AS class_name`);
   });
 
   it("keeps the other admin-portal roles to their own classes", async () => {

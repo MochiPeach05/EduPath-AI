@@ -20,6 +20,7 @@ import "./student-curriculum.css";
 import "./student-graduation.css";
 import "./student-records.css";
 import { isAdvisorView } from "./advisor-view";
+import { ActingConfirmDialog, assessmentConfirm } from "./acting-confirm";
 import "./student-competency.css";
 
 // Two student pages share this module and one stored assessment:
@@ -933,6 +934,7 @@ export default function StudentCompetency({ profile, view = "competency", notice
   const [announcement, setAnnouncement] = useState("");
   const [consentOpen, setConsentOpen] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [actingConfirm, setActingConfirm] = useState(false);
   const [deleteError, setDeleteError] = useState("");
 
   // The newest comment this page session has shown (the assessment's own, or the older one the API sent): "Đánh giá lại"
@@ -1008,8 +1010,10 @@ export default function StudentCompetency({ profile, view = "competency", notice
   // (from 2026-10-25) is not asked again.
   const start = () => {
     if (missing.length) { setAnnouncement(""); setError(missingRequirementsMessage(missing)); return; }
-    // A cố vấn học tập runs it for the student without the consent dialog (advisor-view.ts; the API records no consent).
-    if (isAdvisorView() || isValidConsent(data?.consentVersion)) void run(false); else setConsentOpen(true);
+    // A cố vấn học tập runs it for the student without the consent dialog (advisor-view.ts; the API records no consent),
+    // once confirmed: the result is replaced and the student is told (QA 2026-11-07).
+    if (isAdvisorView()) { setActingConfirm(true); return; }
+    if (isValidConsent(data?.consentVersion)) void run(false); else setConsentOpen(true);
   };
   const confirmConsent = () => { void run(true); };
   const regenerate = async () => {
@@ -1098,5 +1102,7 @@ export default function StudentCompetency({ profile, view = "competency", notice
     </>)}
     {consentOpen && <ConsentDialog busy={busy === "run"} onClose={() => setConsentOpen(false)} onConfirm={confirmConsent} />}
     {deleteOpen && <DeleteDialog busy={busy === "delete"} error={deleteError} onClose={() => setDeleteOpen(false)} onConfirm={() => void remove()} />}
+    {actingConfirm && <ActingConfirmDialog {...assessmentConfirm(Boolean(assessment))} onClose={() => setActingConfirm(false)}
+      onConfirm={() => { setActingConfirm(false); void run(false); }} />}
   </div>;
 }

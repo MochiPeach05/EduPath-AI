@@ -12,7 +12,7 @@ import { SURVEY_COMPLETE_SQL } from "../admin/student-profiles.js";
 import { byGivenName, byOrder, byText, orderBy, type OwnOrder, type SortDirection } from "../admin/table-sort.js";
 import { SPECIALTIES, specialtyLabel } from "../competency-assessment/specialty.js";
 import type { SpecialtyCode } from "../competency-assessment/types.js";
-import { advisedStudent, studentLabel } from "./access.js";
+import { advisedStudent, studentLabel, studentViews } from "./access.js";
 import { isAdvisorEmail, planImport, type AdvisorSheet, type ImportLookups, type PlannedAdvisor } from "./import.js";
 import {
   AdvisorError, CLASS_OF, type AdvisedStudentRow, type AdvisedStudentStatus, type AdvisorClass, type AdvisorDetail, type AdvisorImportPreview,
@@ -360,6 +360,8 @@ export class PostgresAdvisorRepository {
     if (!student) throw new AdvisorError("student_not_advised", 403);
     await recordAudit(this.pool, auditActorOf(actor), { kind: "advisor", action: "Mở trang sinh viên", summary: studentLabel(student),
       targetType: "student", targetId: studentId, method: "POST", path });
+    // The page's own reads that follow are covered by this line (access.ts advisorActing).
+    studentViews.mark(actor.userId, studentId);
     return { url: `/dashboard?sv=${encodeURIComponent(studentId)}#overview` };
   }
 }
