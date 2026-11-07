@@ -2,14 +2,14 @@ import { canManageAdvisors, type AppRole } from "./types";
 
 export const adminNavigation = [
   // AD-REPORT-01…11 (2026-10-31): the reports come first and Tổng quan is the page /quantri opens.
-  { path: "/quantri/tong-quan", label: "Tổng quan", eyebrow: "BÁO CÁO", icon: "home" },
-  { path: "/quantri/bao-cao-tien-do", label: "Tiến độ", eyebrow: "BÁO CÁO", icon: "route" },
-  { path: "/quantri/bao-cao-nguy-co", label: "Nguy cơ", eyebrow: "BÁO CÁO", icon: "bell" },
+  { path: "/quantri/tong-quan", label: "Tổng quan", eyebrow: "THỐNG KÊ", icon: "home" },
+  { path: "/quantri/bao-cao-tien-do", label: "Tiến độ", eyebrow: "THỐNG KÊ", icon: "route" },
+  { path: "/quantri/bao-cao-nguy-co", label: "Nguy cơ", eyebrow: "THỐNG KÊ", icon: "bell" },
   // "Kỹ năng" and "Vị trí nghề nghiệp" already name the catalog pages of Quản lý nghề nghiệp, so the reports say what they count.
-  { path: "/quantri/bao-cao-ky-nang", label: "Kỹ năng thiếu", eyebrow: "BÁO CÁO", icon: "spark" },
-  { path: "/quantri/bao-cao-nghe-nghiep", label: "Vị trí mục tiêu", eyebrow: "BÁO CÁO", icon: "target" },
-  { path: "/quantri/bao-cao-mon-hoc", label: "Môn đề xuất", eyebrow: "BÁO CÁO", icon: "book" },
-  { path: "/quantri/nhat-ky", label: "Nhật ký", eyebrow: "BÁO CÁO", icon: "clock" },
+  { path: "/quantri/bao-cao-ky-nang", label: "Kỹ năng thiếu", eyebrow: "THỐNG KÊ", icon: "spark" },
+  { path: "/quantri/bao-cao-nghe-nghiep", label: "Vị trí mục tiêu", eyebrow: "THỐNG KÊ", icon: "target" },
+  { path: "/quantri/bao-cao-mon-hoc", label: "Môn đề xuất", eyebrow: "THỐNG KÊ", icon: "book" },
+  { path: "/quantri/nhat-ky", label: "Nhật ký", eyebrow: "THỐNG KÊ", icon: "clock" },
   { path: "/quantri/tai-khoan", label: "Tài khoản", eyebrow: "QUẢN LÝ TÀI KHOẢN", icon: "users" },
   { path: "/quantri/sinh-vien", label: "Sinh viên", eyebrow: "QUẢN LÝ HỒ SƠ SINH VIÊN", icon: "profile" },
   // AD-ADV-01…05 and AD-AST-01…09 (2026-11-03): the faculty's cố vấn học tập, then Quản lý sinh viên, where an advisor sees
@@ -39,7 +39,7 @@ export type AdminPage = (typeof adminNavigation)[number];
  * first page is in adminNavigation; its pages keep their own paths, titles and breadcrumbs.
  */
 const adminNavigationGroups = [
-  { id: "reports", label: "Báo cáo", icon: "chart", paths: ["/quantri/tong-quan", "/quantri/bao-cao-tien-do", "/quantri/bao-cao-nguy-co", "/quantri/bao-cao-ky-nang", "/quantri/bao-cao-nghe-nghiep", "/quantri/bao-cao-mon-hoc", "/quantri/nhat-ky"] },
+  { id: "reports", label: "Thống kê", icon: "chart", paths: ["/quantri/tong-quan", "/quantri/bao-cao-tien-do", "/quantri/bao-cao-nguy-co", "/quantri/bao-cao-ky-nang", "/quantri/bao-cao-nghe-nghiep", "/quantri/bao-cao-mon-hoc", "/quantri/nhat-ky"] },
   { id: "advisors", label: "Cố vấn học tập", icon: "compass", paths: ["/quantri/co-van-hoc-tap", "/quantri/quan-ly-sinh-vien"] },
   // In the order they are set up: fields, then the shared skills, then the careers that use both.
   { id: "careers", label: "Quản lý nghề nghiệp", icon: "briefcase", paths: ["/quantri/linh-vuc-nghe-nghiep", "/quantri/ky-nang", "/quantri/vi-tri-nghe-nghiep"] },
@@ -118,7 +118,7 @@ export function canSeeAdminPage(path: string, access: AdminAccess): boolean {
   return path !== ADVISOR_STUDENTS_PATH || alwaysSeesStudents(access) || access.advisesClasses !== false;
 }
 
-/** A page as the sidebar shows it: "Báo cáo / Nhật ký" inside a group, "Tài khoản" alone. */
+/** A page as the sidebar shows it: "Thống kê / Nhật ký" inside a group, "Tài khoản" alone. */
 export function adminPageName(page: AdminPage): string {
   const group = adminNavigationGroups.find((item) => (item.paths as readonly string[]).includes(page.path));
   return group ? `${group.label} / ${page.label}` : page.label;

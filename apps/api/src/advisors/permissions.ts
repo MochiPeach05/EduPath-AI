@@ -36,7 +36,7 @@ export const ADVISOR_PERMISSIONS: AdvisorPermissions = {
     { label: "Xóa dữ liệu", detail: "Không xóa bảng điểm, kết quả đánh giá, lộ trình hay cuộc trò chuyện của sinh viên." },
     { label: "Thông báo của sinh viên", detail: "Không xem, đánh dấu đã đọc hay xóa thông báo trong chuông của sinh viên." },
     { label: "Lựa chọn của sinh viên", detail: "Không chọn chuyên ngành, vị trí nghề nghiệp mục tiêu, không sửa Kế hoạch học kỳ." },
-    { label: "Trang quản trị", detail: "Vai trò Cố vấn học tập chỉ xem: không thêm, sửa, xóa, import dữ liệu hay tải tệp Excel nguồn, không chạy AI đề xuất liên kết kỹ năng; không xem Báo cáo, Nhật ký thao tác, Tài khoản và Thông báo." },
+    { label: "Trang quản trị", detail: "Vai trò Cố vấn học tập chỉ xem: không thêm, sửa, xóa, import dữ liệu hay tải tệp Excel nguồn, không chạy AI đề xuất liên kết kỹ năng; không xem Thống kê, Nhật ký thao tác, Tài khoản và Thông báo." },
   ],
   notes: [
     "Mỗi việc làm thay được ghi vào Nhật ký thao tác (người làm, việc đã làm, sinh viên).",

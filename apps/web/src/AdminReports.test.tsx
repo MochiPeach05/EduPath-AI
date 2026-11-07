@@ -76,8 +76,8 @@ describe("report requests", () => {
     expect(fileNameFrom("attachment; filename=\"nguy-co.xlsx\"", "x.xlsx")).toBe("nguy-co.xlsx");
     expect(fileNameFrom("attachment; filename=\"../../etc/a.xlsx\"", "x.xlsx")).toBe("..-..-etc-a.xlsx");
     expect(fileNameFrom(null, "bao-cao.xlsx")).toBe("bao-cao.xlsx");
-    expect(reportErrorText(403, "insufficient_role")).toBe("Bạn không có quyền xem báo cáo này.");
-    expect(reportErrorText(500, undefined)).toBe("Không tải được báo cáo. Vui lòng thử lại.");
+    expect(reportErrorText(403, "insufficient_role")).toBe("Bạn không có quyền xem thống kê này.");
+    expect(reportErrorText(500, undefined)).toBe("Không tải được thống kê. Vui lòng thử lại.");
   });
 });
 
@@ -289,12 +289,12 @@ describe("report pages", () => {
   it("opens on the shared filter bar and a loading state", () => {
     vi.stubGlobal("window", { location: { pathname: "/quantri/tong-quan", search: "?cohort=K29", hash: "" } });
     const html = renderToStaticMarkup(<AdminReports path="/quantri/tong-quan" navigate={noop} />);
-    expect(html).toContain('aria-label="Tìm kiếm và lọc dữ liệu báo cáo"');
+    expect(html).toContain('aria-label="Tìm kiếm và lọc dữ liệu thống kê"');
     expect(html).toContain(">AD-REPORT-01</span>Tổng quan dữ liệu và hoạt động</p>");
     expect(html).toContain("Thao tác gần đây");
-    expect(html).toContain("Đang tải báo cáo…");
+    expect(html).toContain("Đang tải thống kê…");
     const audit = renderToStaticMarkup(<AdminReports path="/quantri/nhat-ky" navigate={noop} />);
-    expect(audit).not.toContain('aria-label="Tìm kiếm và lọc dữ liệu báo cáo"');
+    expect(audit).not.toContain('aria-label="Tìm kiếm và lọc dữ liệu thống kê"');
     expect(audit).toContain("Tìm trong nhật ký");
     // Codes after the function-list merge of 2026-10-31: the filter bar is AD-REPORT-10, Nhật ký is AD-REPORT-11.
     expect(audit).toContain(">AD-REPORT-11</span>Nhật ký thao tác</p>");

@@ -29,7 +29,7 @@ describe("admin workspace", () => {
   it("shows the short names in the sidebar, in order, with the groups and their pages", () => {
     // Quản lý sinh viên is always an admin's page (every student, 2026-11-03), before GET advisor-portal/me answers too.
     expect(sidebarNames(render("/quantri/tai-khoan"))).toEqual(
-      ["Báo cáo", "Tổng quan", "Tiến độ", "Nguy cơ", "Kỹ năng thiếu", "Vị trí mục tiêu", "Môn đề xuất", "Nhật ký", "Tài khoản", "Sinh viên", "Cố vấn học tập", "Cố vấn", "Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp", "Quản lý nghề nghiệp", "Lĩnh vực", "Kỹ năng", "Vị trí nghề nghiệp",
+      ["Thống kê", "Tổng quan", "Tiến độ", "Nguy cơ", "Kỹ năng thiếu", "Vị trí mục tiêu", "Môn đề xuất", "Nhật ký", "Tài khoản", "Sinh viên", "Cố vấn học tập", "Cố vấn", "Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp", "Quản lý nghề nghiệp", "Lĩnh vực", "Kỹ năng", "Vị trí nghề nghiệp",
         "Quản lý năng lực", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học", "Quản lý thông báo", "Gửi thông báo", "Đã gửi"]);
   });
 
@@ -78,7 +78,7 @@ describe("admin workspace", () => {
     const competencyPages = ["/quantri/nhom-nang-luc", "/quantri/cau-hinh-nang-luc", "/quantri/cau-hinh-mon-hoc"];
     const announcementPages = ["/quantri/gui-thong-bao", "/quantri/thong-bao-da-gui"];
     const advisorPages = ["/quantri/co-van-hoc-tap", "/quantri/quan-ly-sinh-vien"];
-    const reportPages = adminNavigation.filter(item => item.eyebrow === "BÁO CÁO").map(item => item.path as string);
+    const reportPages = adminNavigation.filter(item => item.eyebrow === "THỐNG KÊ").map(item => item.path as string);
     for (const { path } of adminNavigation) {
       expect(openGroups(render(path))).toEqual(careerPages.includes(path) ? ["careers"] : competencyPages.includes(path) ? ["competencies"]
         : announcementPages.includes(path) ? ["announcements"] : reportPages.includes(path) ? ["reports"] : advisorPages.includes(path) ? ["advisors"] : []);
@@ -98,8 +98,8 @@ describe("admin workspace", () => {
   it("opens on Tổng quan of the reports, with the shared filter bar (2026-10-31)", () => {
     const html = render("/quantri");
     expect(html).toContain(">Tổng quan</h1>");
-    expect(html).toContain(">BÁO CÁO</p>");
-    expect(html).toContain('aria-label="Tìm kiếm và lọc dữ liệu báo cáo"');
+    expect(html).toContain(">THỐNG KÊ</p>");
+    expect(html).toContain('aria-label="Tìm kiếm và lọc dữ liệu thống kê"');
     expect(html).toContain('<a href="/quantri/tong-quan" aria-current="page">');
     expect(render("/quantri/nhat-ky")).toContain("Tìm trong nhật ký");
   });
@@ -118,7 +118,7 @@ describe("admin workspace", () => {
     expect(home).toContain(">Lớp phụ trách<");
     for (const path of ["/quantri/lop-phu-trach", "/quantri/quyen-co-van"]) expect(render(path, advisor)).toContain(">Quản lý sinh viên</h1>");
     // A report, Tài khoản or an announcement page leads an advisor back to Quản lý sinh viên, and says why (2026-11-04).
-    for (const [path, name] of [["/quantri/tong-quan", "Báo cáo / Tổng quan"], ["/quantri/nhat-ky", "Báo cáo / Nhật ký"], ["/quantri/tai-khoan", "Tài khoản"],
+    for (const [path, name] of [["/quantri/tong-quan", "Thống kê / Tổng quan"], ["/quantri/nhat-ky", "Thống kê / Nhật ký"], ["/quantri/tai-khoan", "Tài khoản"],
       ["/quantri/gui-thong-bao", "Quản lý thông báo / Gửi thông báo"], ["/quantri/lich-su-dang-nhap", "Tài khoản"]]) {
       const html = render(path, advisor);
       expect(html).toContain(">Quản lý sinh viên</h1>");

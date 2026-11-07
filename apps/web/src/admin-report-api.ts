@@ -47,20 +47,20 @@ export function reportUrl(path: string, filters: ReportFilterState, extra: Recor
 
 const failures: Record<string, string> = {
   authentication_required: "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.",
-  insufficient_role: "Bạn không có quyền xem báo cáo này.",
-  forbidden: "Bạn không có quyền xem báo cáo này.",
+  insufficient_role: "Bạn không có quyền xem thống kê này.",
+  forbidden: "Bạn không có quyền xem thống kê này.",
   invalid_query: "Bộ lọc chưa hợp lệ. Vui lòng chọn lại.",
   invalid_input: "Bộ lọc chưa hợp lệ. Vui lòng chọn lại.",
   not_found: "Không tìm thấy dữ liệu của mục này.",
-  database_required: "Báo cáo cần kết nối cơ sở dữ liệu. Vui lòng thử lại sau.",
+  database_required: "Thống kê cần kết nối cơ sở dữ liệu. Vui lòng thử lại sau.",
 };
 /** The Vietnamese message of a failed report request. */
 export function reportErrorText(status: number, code: string | undefined): string {
   if (code && failures[code]) return failures[code]!;
   if (status === 401) return failures.authentication_required!;
   if (status === 403) return failures.forbidden!;
-  if (status === 404) return "Báo cáo chưa sẵn sàng trên máy chủ. Vui lòng thử lại sau.";
-  return "Không tải được báo cáo. Vui lòng thử lại.";
+  if (status === 404) return "Thống kê chưa sẵn sàng trên máy chủ. Vui lòng thử lại sau.";
+  return "Không tải được thống kê. Vui lòng thử lại.";
 }
 
 async function readReport<T>(response: Response): Promise<T> {
@@ -89,7 +89,7 @@ export function useReport<T>(url: string | null): ReportState<T> {
       .then((data) => { if (!controller.signal.aborted) setState({ data, error: null, loading: false }); })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        setState({ data: null, error: error instanceof Error && error.message ? error.message : "Không tải được báo cáo. Vui lòng thử lại.", loading: false });
+        setState({ data: null, error: error instanceof Error && error.message ? error.message : "Không tải được thống kê. Vui lòng thử lại.", loading: false });
       });
     return () => controller.abort();
   }, [url, attempt]);

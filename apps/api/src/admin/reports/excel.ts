@@ -49,7 +49,7 @@ function notes(workbook: ExcelJS.Workbook, title: string, filters: readonly stri
     ["Bộ lọc", filters.length ? filters.join("; ") : "Tất cả sinh viên"],
     ["Phạm vi", scopeLine(scope)],
     ...extra.map((line, index): [string, string] => [index === 0 ? "Cách tính" : "", line]),
-    ["Nguồn", "EduPath AI, cổng quản trị (Báo cáo)."],
+    ["Nguồn", "EduPath AI, cổng quản trị (Thống kê)."],
   ];
   for (const [label, value] of lines) {
     const row = worksheet.addRow([label, value]);

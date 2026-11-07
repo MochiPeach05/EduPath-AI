@@ -9,7 +9,7 @@ describe("admin section navigation", () => {
   });
   it("groups the career pages under Quản lý nghề nghiệp, the competency pages under Quản lý năng lực and the announcements under Quản lý thông báo", () => {
     expect(adminSidebar.map(entry => entry.kind === "page" ? entry.page.label : `${entry.label}: ${entry.pages.map(page => page.label).join(", ")}`))
-      .toEqual(["Báo cáo: Tổng quan, Tiến độ, Nguy cơ, Kỹ năng thiếu, Vị trí mục tiêu, Môn đề xuất, Nhật ký", "Tài khoản", "Sinh viên", "Cố vấn học tập: Cố vấn, Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp", "Quản lý nghề nghiệp: Lĩnh vực, Kỹ năng, Vị trí nghề nghiệp",
+      .toEqual(["Thống kê: Tổng quan, Tiến độ, Nguy cơ, Kỹ năng thiếu, Vị trí mục tiêu, Môn đề xuất, Nhật ký", "Tài khoản", "Sinh viên", "Cố vấn học tập: Cố vấn, Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp", "Quản lý nghề nghiệp: Lĩnh vực, Kỹ năng, Vị trí nghề nghiệp",
         "Quản lý năng lực: Nhóm năng lực, Cấu hình năng lực, Cấu hình môn học", "Quản lý thông báo: Gửi thông báo, Đã gửi"]);
     expect(adminGroupOf("/quantri/thong-bao-da-gui")).toBe("announcements");
     expect(adminNavigation.filter(item => item.eyebrow === "QUẢN LÝ NĂNG LỰC").map(item => item.label)).toEqual(["Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học"]);
@@ -45,11 +45,11 @@ describe("admin section navigation", () => {
     expect(resolveAdminPage(path).path).toBe("/quantri/tai-khoan");
   });
   it.each(["/quantri", "/quantri/", "/quantri/bao-cao", "/quantri/unknown"])("opens Tổng quan of the reports for %s (2026-10-31)", path => {
-    expect(resolveAdminPage(path)).toMatchObject({ path: "/quantri/tong-quan", label: "Tổng quan", eyebrow: "BÁO CÁO" });
+    expect(resolveAdminPage(path)).toMatchObject({ path: "/quantri/tong-quan", label: "Tổng quan", eyebrow: "THỐNG KÊ" });
     expect(adminGroupOf(path)).toBe("reports");
   });
   it("knows which pages are reports and which report each one shows", () => {
-    expect(Object.values(REPORT_PATHS).every((path) => adminNavigation.some((item) => item.path === path && item.eyebrow === "BÁO CÁO"))).toBe(true);
+    expect(Object.values(REPORT_PATHS).every((path) => adminNavigation.some((item) => item.path === path && item.eyebrow === "THỐNG KÊ"))).toBe(true);
     expect(reportViewOf("/quantri/bao-cao-ky-nang/")).toBe("skills");
     expect(reportViewOf("/quantri/nhat-ky?q=xuat")).toBe("audit");
     expect(isReportPath("/quantri/ky-nang")).toBe(false);
@@ -90,9 +90,9 @@ describe("admin navigation by role (cố vấn học tập, 2026-11-03)", () => 
       "/quantri/nhom-nang-luc": "AD-COMP-01…04", "/quantri/cau-hinh-nang-luc": "AD-CMP-01…04", "/quantri/cau-hinh-mon-hoc": "AD-CRS-01…04",
     } as Record<string, string>;
     expect(adminNavigation.filter((page) => canSeeAdminPage(page.path, advisor)).map((page) => page.path)).toEqual(Object.keys(cvhtPages));
-    // Every other page is the Quản trị viên's: AD-REPORT (Báo cáo, Nhật ký), AD-AUTH-03…10 (Tài khoản), AD-NOTI (Thông báo).
-    expect(adminNavigation.filter((page) => !canSeeAdminPage(page.path, advisor)).map((page) => adminPageName(page))).toEqual(["Báo cáo / Tổng quan",
-      "Báo cáo / Tiến độ", "Báo cáo / Nguy cơ", "Báo cáo / Kỹ năng thiếu", "Báo cáo / Vị trí mục tiêu", "Báo cáo / Môn đề xuất", "Báo cáo / Nhật ký", "Tài khoản",
+    // Every other page is the Quản trị viên's: AD-REPORT (Thống kê, Nhật ký), AD-AUTH-03…10 (Tài khoản), AD-NOTI (Thông báo).
+    expect(adminNavigation.filter((page) => !canSeeAdminPage(page.path, advisor)).map((page) => adminPageName(page))).toEqual(["Thống kê / Tổng quan",
+      "Thống kê / Tiến độ", "Thống kê / Nguy cơ", "Thống kê / Kỹ năng thiếu", "Thống kê / Vị trí mục tiêu", "Thống kê / Môn đề xuất", "Thống kê / Nhật ký", "Tài khoản",
       "Quản lý thông báo / Gửi thông báo", "Quản lý thông báo / Đã gửi"]);
     // A page that is not listed stays closed to an advisor, whatever it is.
     expect(canSeeAdminPage("/quantri/trang-moi", advisor)).toBe(false);
@@ -137,7 +137,7 @@ describe("admin navigation by role (cố vấn học tập, 2026-11-03)", () => 
       expect(sidebarText(access)).toContain("Cố vấn học tập: Cố vấn, Quản lý sinh viên");
       expect(resolveAdminPage(ADVISOR_STUDENTS_PATH, access).path).toBe(ADVISOR_STUDENTS_PATH);
     }
-    expect(sidebarText(admin(true))[0]).toBe("Báo cáo: Tổng quan, Tiến độ, Nguy cơ, Kỹ năng thiếu, Vị trí mục tiêu, Môn đề xuất, Nhật ký");
+    expect(sidebarText(admin(true))[0]).toBe("Thống kê: Tổng quan, Tiến độ, Nguy cơ, Kỹ năng thiếu, Vị trí mục tiêu, Môn đề xuất, Nhật ký");
     expect(sidebarText(other(null))).toContain("Cố vấn học tập: Cố vấn");
     expect(sidebarText(other(false))).toContain("Cố vấn học tập: Cố vấn");
     expect(sidebarText(other(true))).toContain("Cố vấn học tập: Cố vấn, Quản lý sinh viên");

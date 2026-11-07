@@ -155,7 +155,7 @@ export function FilterBar({ filters, setFilters, options }: { filters: ReportFil
   const specialties = (options?.specialties ?? []).filter((item) => !filters.major || !item.majorCode || item.majorCode === filters.major);
   const submit = (event: FormEvent) => { event.preventDefault(); if (draft.trim() !== filters.q) setFilters({ ...filters, q: draft.trim() }); };
   const any = Boolean(filters.q || filters.cohort || filters.major || filters.specialty || draft.trim());
-  return <form className="rp-filters" role="search" aria-label="Tìm kiếm và lọc dữ liệu báo cáo" onSubmit={submit}>
+  return <form className="rp-filters" role="search" aria-label="Tìm kiếm và lọc dữ liệu thống kê" onSubmit={submit}>
     <label className="rp-field rp-field-search">Tìm sinh viên<span className="rp-search"><Icon name="search" /><input id="rp-q" type="search" value={draft} maxLength={120} placeholder="MSSV hoặc họ tên" onChange={(event) => setDraft(event.target.value)} /></span></label>
     <label className="rp-field">Khóa<select id="rp-cohort" value={filters.cohort} onChange={(event) => setFilters({ ...filters, cohort: event.target.value })}><option value="">Tất cả</option>{(options?.cohorts ?? []).map((cohort) => <option key={cohort} value={cohort}>{cohort}</option>)}</select></label>
     <label className="rp-field">Ngành<select id="rp-major" value={filters.major} onChange={(event) => {
@@ -206,7 +206,7 @@ function Coverage({ head }: { head: ReportHead }) {
 function Loading<T>({ state, children }: { state: { data: T | null; error: string | null; loading: boolean; retry: () => void }; children: (data: T) => ReactNode }) {
   if (state.data) return <div className={state.loading ? "rp-refreshing" : undefined} aria-busy={state.loading}>{children(state.data)}</div>;
   if (state.error) return <div className="rp-card rp-state"><p className="admin-error" role="alert">{state.error}</p><button type="button" className="rp-btn" onClick={state.retry}><Icon name="refresh" />Thử lại</button></div>;
-  return <div className="rp-card rp-state" role="status">Đang tải báo cáo…</div>;
+  return <div className="rp-card rp-state" role="status">Đang tải thống kê…</div>;
 }
 
 const EMPTY_SCOPE = "Chưa có sinh viên nào tải bảng điểm trong phạm vi lọc.";
@@ -443,7 +443,7 @@ export const progressLegend = (counts: ProgressCounts, withCounts: boolean) =>
 function ProgressSection({ split, navigate }: { split: CohortSplit<ProgressCounts>; navigate: (path: string) => void }) {
   const [mode, setMode] = useState<CohortMode>("all");
   return <Card id="rp-progress" title="Tiến độ học tập" className="rp-span-3" sub={`Mỗi sinh viên một trạng thái, tính giống trang Tổng quan của sinh viên. ${UNKNOWN_NOTE}`}
-    actions={<><ModeSwitch value={mode} onChange={setMode} label="tiến độ học tập" /><button type="button" className="rp-link" onClick={() => navigate(REPORT_PATHS.progress)}>Xem báo cáo tiến độ</button></>}>
+    actions={<><ModeSwitch value={mode} onChange={setMode} label="tiến độ học tập" /><button type="button" className="rp-link" onClick={() => navigate(REPORT_PATHS.progress)}>Xem thống kê tiến độ</button></>}>
     <Legend items={progressLegend(split.all, mode === "all")} label="Tình trạng" />
     <ShareBars label={mode === "all" ? "Tiến độ học tập toàn khóa" : "Tiến độ học tập theo từng khóa"}
       rows={mode === "all" ? [{ key: "all", label: "Toàn khóa", parts: progressParts(split.all) }] : split.byCohort.map((cohort) => ({ key: cohort.cohort, label: cohort.cohort, parts: progressParts(cohort) }))} />
