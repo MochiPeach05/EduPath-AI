@@ -208,6 +208,9 @@
 .ov-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .ov-tags .ov-sub { margin: 0; }
 .ov-month { padding: 10px 12px; border-radius: 10px; background: var(--ov-ai-soft); font-size: var(--ov-fs-text); }
+/* The previous roadmap, dimmed while a new one is written (2026-11-07; the look of the Lộ trình AI tab's .rm-previous). */
+.ov-previous { display: grid; gap: 10px; min-width: 0; opacity: .72; }
+.ov-previous-note { margin: 0; padding: 8px 12px; border-radius: 9px; background: #f2f4f7; color: var(--sw-muted); font-size: var(--ov-fs-small); font-weight: 600; line-height: 1.5; }
 /* The saved Kế hoạch học kỳ of the roadmap's term, in the planner's words */
 .ov-load { display: grid; gap: 4px; padding-top: 10px; border-top: 1px solid #f0f2f5; }
 .ov-load-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 10px; font-size: var(--ov-fs-text); }

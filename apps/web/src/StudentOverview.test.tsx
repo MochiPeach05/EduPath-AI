@@ -335,6 +335,20 @@ describe("Tổng quan progress after the review of 2026-11-04 (comp-calc-v19)", 
     expect(creditText(1.55)).toBe("1,5");
   });
 
+  it("keeps the previous roadmap, dimmed, while a new one is written or failed (2026-11-07)", () => {
+    const { createdAt, term, courses, skills, firstMonth } = full.roadmap!;
+    const pending = { ...full, roadmap: { ...full.roadmap!, status: "pending" as const, courses: [], skills: [], firstMonth: null,
+      previous: { createdAt, term, courses, skills, firstMonth } } };
+    const html = dashboard(pending);
+    expect(html).toContain('<div class="ov-previous"><p class="ov-previous-note">Lộ trình trước, viết cho dữ liệu cũ — có thể không còn đúng. Lộ trình mới sẽ thay thế khi sẵn sàng.</p>');
+    expect(text(html)).toContain("EduPath AI đang soạn lộ trình cho học kỳ tới, bạn quay lại sau ít phút nhé.");
+    expect(text(html)).toContain(`${courses[0]!.name} · ${courses[0]!.credits} TC`);
+    // Without an earlier roadmap the card says only what is happening.
+    const alone = dashboard({ ...full, roadmap: { ...pending.roadmap, previous: null } });
+    expect(alone).not.toContain("ov-previous");
+    expect(text(alone)).toContain("EduPath AI đang soạn lộ trình cho học kỳ tới");
+  });
+
   it("says on the card that the roadmap is out of date, by the Lộ trình AI tab's rules", () => {
     const stale = { ...full, roadmap: { ...full.roadmap!, stale: true, ended: false } };
     const plain = text(dashboard(stale));

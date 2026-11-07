@@ -5,6 +5,7 @@ import { fitAxisLabels, yearAxisLabels } from "./chart-labels";
 import { decimalText, meaningClass, meaningOf, scoreText, type Meaning } from "./display-format";
 import { OVERVIEW_API, type OverviewResponse, type OverviewWarning } from "./overview-types";
 import { PROFILE_SECTIONS, profileSectionOf, type ProfileSection } from "./student-overview-data";
+import { PREVIOUS_ROADMAP_NOTE } from "./student-roadmap-data";
 import { SURVEY_API, gapSentence, surveyGaps, type SurveyResponse } from "./profile-survey";
 import { Icon } from "./student-icons";
 import "./student-overview.css";
@@ -564,7 +565,19 @@ function NextCard({ data, navigate }: { data: OverviewResponse; navigate: Naviga
         : !data.readiness.assessment ? "Lộ trình AI cần kết quả Đánh giá năng lực và Khảo sát định hướng."
           : !data.readiness.survey ? "Bạn hoàn thành Khảo sát định hướng để tạo Lộ trình AI cho học kỳ tới."
             : "Bạn chưa tạo Lộ trình AI cho học kỳ tới.";
-    body = <Empty text={text} action={!data.readiness.assessment ? "Đánh giá năng lực" : !data.readiness.survey ? "Làm khảo sát" : "Mở Lộ trình học tập"}
+    const previous = roadmap?.previous ?? null;
+    // While a new roadmap is written or failed, the previous one stays, dimmed, as on the Lộ trình AI tab (2026-11-07).
+    body = previous ? <>
+      <p className="ov-sub">{text}</p>
+      <div className="ov-previous">
+        <p className="ov-previous-note">{PREVIOUS_ROADMAP_NOTE}</p>
+        {previous.courses.length ? <ul className="ov-rows ov-next-courses">{previous.courses.map((course) => <li key={course.code}><span>{course.name} · {course.credits} TC</span><Chip tone={reasonTone(course.reason)}>{course.reason}</Chip></li>)}</ul>
+          : <p className="ov-sub">Lộ trình không đề xuất thêm môn nào.</p>}
+        {previous.skills.length > 0 && <div className="ov-tags"><span className="ov-sub">Lộ trình AI gợi ý luyện thêm:</span>{previous.skills.map((skill) => <Chip key={skill}>{skill}</Chip>)}</div>}
+        {previous.firstMonth && <div className="ov-month"><b>{previous.firstMonth.label}:</b> {previous.firstMonth.text}</div>}
+      </div>
+      <button type="button" className="sw-text-link ov-foot-link" onClick={() => navigate("roadmap")}>Mở Lộ trình AI đề xuất <Icon name="arrow" /></button>
+    </> : <Empty text={text} action={!data.readiness.assessment ? "Đánh giá năng lực" : !data.readiness.survey ? "Làm khảo sát" : "Mở Lộ trình học tập"}
       onAction={() => navigate(!data.readiness.assessment ? "competency" : !data.readiness.survey ? "profile" : "roadmap")} />;
   } else {
     const outdated = roadmapOutdated(roadmap);

@@ -24,7 +24,7 @@ import { MAJORS } from "../curricula/majors.js";
 import { normalizeCohortCode, profileSpecialty } from "../graduation/resolve.js";
 import { readStudentGraduation, type StudentGraduation } from "../graduation/student-graduation.js";
 import type { PlanData } from "../plans/model.js";
-import { newestAssessment, newestAssessmentInfo, readNewestRoadmap, type RoadmapRow } from "../roadmap/jobs.js";
+import { newestAssessment, newestAssessmentInfo, readNewestRoadmap, readPreviousCompletedRoadmap, type RoadmapRow } from "../roadmap/jobs.js";
 import { presentRoadmap } from "../roadmap/present.js";
 import { nextCalendarTerm, vietnamToday } from "../roadmap/window.js";
 import { consentWithdrawn } from "../student/consent.js";
@@ -34,7 +34,7 @@ import type { StudyPlanData } from "../study-plan/model.js";
 import { termName } from "../term-name.js";
 import type {
   OverviewCompetency, OverviewCourseState, OverviewGapStatus, OverviewGraduation, OverviewProgress, OverviewProgressTerm, OverviewResponse, OverviewRoadmap,
-  OverviewRunningCourse, OverviewTerm, OverviewTermCourse, OverviewTermLoad, OverviewTranscript,
+  OverviewRunningCourse, OverviewTerm, OverviewTermCourse, OverviewTermLoad, OverviewTranscript, PreviousRoadmapCard,
 } from "./types.js";
 import { gpaText, overviewWarnings, type WarningInput } from "./warnings.js";
 
@@ -610,6 +610,12 @@ export type RoadmapContext = {
  * Lộ trình AI tab (user review 2026-11-04: the card said "Đã có" while the tab warned): made from an assessment other than the
  * newest one (roadmap/router.ts), and its window over.
  */
+/** The card's part of an earlier roadmap, when it was completed (shown dimmed while a new one is written). */
+export function previousRoadmapCard(card: OverviewRoadmap | null): PreviousRoadmapCard | null {
+  if (!card || card.status !== "completed") return null;
+  return { createdAt: card.createdAt, term: card.term, courses: card.courses, skills: card.skills, firstMonth: card.firstMonth };
+}
+
 export function roadmapOverview(
   row: RoadmapRow | null, saved: StudyPlanData | null, credits: ReadonlyMap<string, number>, now: Date, planner: PlannerFacts | null = null,
   context: RoadmapContext = {},
@@ -768,8 +774,13 @@ export async function readOverview(db: PoolClient, userId: string, now: Date = n
   const roadmapRow = await readNewestRoadmap(db, userId);
   // The staleness rule of the Lộ trình AI tab (roadmap/router.ts): made from an assessment other than the newest one.
   const newestAssessmentId = roadmapRow ? (await newestAssessmentInfo(db, userId))?.id ?? null : null;
-  const roadmap = roadmapOverview(roadmapRow, saved, credits, now, roadmapRow && options.plannerFacts !== false ? await readPlannerFacts(db, userId, now) : null,
+  const newest = roadmapOverview(roadmapRow, saved, credits, now, roadmapRow && options.plannerFacts !== false ? await readPlannerFacts(db, userId, now) : null,
     { newestAssessmentId, studyTerm });
+  // While a new roadmap is written or failed, the newest completed one before it (the Lộ trình AI tab shows it too).
+  const earlier = roadmapRow && newest && newest.status !== "completed" ? await readPreviousCompletedRoadmap(db, userId, roadmapRow.id) : null;
+  const roadmap = newest && newest.status !== "completed"
+    ? { ...newest, previous: previousRoadmapCard(earlier && roadmapOverview(earlier, saved, credits, now, null, { newestAssessmentId, studyTerm })) }
+    : newest;
 
   // "Cần chú ý"
   const failed = engine

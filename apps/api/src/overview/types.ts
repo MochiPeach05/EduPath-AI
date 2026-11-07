@@ -94,7 +94,14 @@ export type OverviewRoadmap = {
   /** The Lộ trình AI tab's notes: made from an assessment other than the newest one; its window is over. */
   stale: boolean;
   ended: boolean;
+  /**
+   * While this roadmap is being written or failed: the newest completed one before it, shown dimmed until it is replaced
+   * (2026-11-07, as the Lộ trình AI tab does); null otherwise.
+   */
+  previous?: PreviousRoadmapCard | null;
 };
+/** What the card shows of an earlier roadmap. */
+export type PreviousRoadmapCard = Pick<OverviewRoadmap, "createdAt" | "term" | "courses" | "skills" | "firstMonth">;
 
 /** A term of the saved Kế hoạch học kỳ as the planner checks it (credits against the limits per term). */
 export type OverviewTermLoad = { credits: number; status: "over" | "under" | "ok" | "empty" };

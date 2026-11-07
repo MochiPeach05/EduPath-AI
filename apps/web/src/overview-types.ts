@@ -168,6 +168,12 @@ export type OverviewResponse = {
     /** The planner's credits per term (min, max), null when the CTĐT is unknown. */
     limits: { min: number; max: number } | null;
     /**
+     * While this roadmap is being written or failed: the newest completed one before it, shown dimmed until it is
+     * replaced (2026-11-07). Absent from an older API.
+     */
+    previous?: { createdAt: string; term: OverviewTerm | null; courses: { code: string; name: string; credits: number; reason: string }[];
+      skills: string[]; firstMonth: { label: string; text: string } | null } | null;
+    /**
      * The Lộ trình AI tab's notes, by its rules: made from an assessment other than the newest one (stale); its window is over
      * (ended). Absent from an older API.
      */

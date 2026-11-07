@@ -9,7 +9,7 @@ import type { RoadmapRow } from "../roadmap/jobs.js";
 import { ROADMAP_ASSESSMENT, syntheticRoadmapFacts } from "../roadmap/test-fixture.js";
 import type { StudyPlanCourse } from "../study-plan/context.js";
 import {
-  competencyOverview, graduationOverview, nextTermOverview, planTermCredits, planTermsView, plannedTermLoad, progressOverview, roadmapOverview, runningOverview,
+  competencyOverview, graduationOverview, nextTermOverview, planTermCredits, planTermsView, plannedTermLoad, previousRoadmapCard, progressOverview, roadmapOverview, runningOverview,
   termRef, transcriptOverview, transcriptRunning, type PlannerFacts,
 } from "./overview.js";
 
@@ -329,6 +329,13 @@ describe("roadmapOverview", () => {
       skills: ["Docker"], firstMonth: { label: "Tháng 1/2027", text: "Tập trung." }, plan: { credits: 6, status: "ok" }, limits: null,
       stale: false, ended: false,
     });
+  });
+
+  it("keeps what the card shows of an earlier completed roadmap, for the time a new one is written (2026-11-07)", () => {
+    const done = roadmapOverview(row(), null, credits, now)!;
+    expect(previousRoadmapCard(done)).toEqual({ createdAt: done.createdAt, term: done.term, courses: done.courses, skills: done.skills, firstMonth: done.firstMonth });
+    expect(previousRoadmapCard({ ...done, status: "failed" })).toBeNull();
+    expect(previousRoadmapCard(null)).toBeNull();
   });
 
   it("says the roadmap is outdated by the Lộ trình AI tab's rule: an older assessment, or its term over", () => {
