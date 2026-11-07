@@ -2,6 +2,11 @@
 
 > OCR update: see [OCR demo setup](ocr-demo.md). When `OCR_WORKER_KEY` is configured, upload returns 202 and a persistent job; the local Python worker reads PDF text first and falls back to OCR. The synchronous native-only behavior below remains the fallback for deployments without a worker key.
 
+> **Server-side text layer (2026-11-07).** In OCR mode the API first reads every queued PDF on its own server, using the OCR worker's own code in text-only mode (`services/ocr/worker.py --parse --text-only`: PyMuPDF, with numpy and OpenCV for the result marks; never OCR, never Paddle; `apps/api/src/student/text-layer.ts`). A PDF whose every page has a usable text layer is finished there with exactly the worker's result (`completeTranscriptJob`). A PDF that needs OCR, or any failure of the reader, goes back to the queue unchanged for the worker on the PC. While that worker is off, the page says so, as before. The web page is unchanged: `GET /transcript` reports `workerOnline: true` while the server holds or will read a job.
+> - **Install:** on Render, `scripts/python-text-layer.mjs` (run by the root `build`) installs `services/ocr/requirements-text.txt` into `services/ocr/.pydeps`. Elsewhere the reader is off unless `TEXT_LAYER_PYTHON` names a Python with those packages.
+> - **Health check:** `GET /api/health` reports `textLayer: off | checking | ready`.
+> - **Limits:** one PDF at a time; about 95 MB and 1–2 CPU seconds per transcript, measured on 12 test PDFs.
+
 Students can import, replace, view and delete their own transcript from **Hồ sơ & bảng điểm**, and edit class, current semester, interests and career goal. Identity fields remain read-only.
 
 ## Storage and deployment

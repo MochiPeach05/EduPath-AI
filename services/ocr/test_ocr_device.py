@@ -512,6 +512,38 @@ class SummaryLineTests(TestCase):
         self.assertIn("- Xếp loại học tập HK: Trung bình", summaries[0]["raw_cells"][0].split("\n"))
 
 
+class TextOnlyTests(TestCase):
+    """worker.py --parse --text-only, the API's own reader on Render (2026-11-07): never OCR, never Paddle."""
+
+    def test_a_page_without_text_asks_for_ocr_instead_of_running_it(self):
+        import tempfile
+        import pymupdf
+        import test_ocr
+        import worker
+
+        with tempfile.TemporaryDirectory() as tmp:
+            pdf, out = Path(tmp) / "scan.pdf", Path(tmp) / "out.json"
+            document = pymupdf.open()
+            document.new_page()
+            document.save(pdf)
+            document.close()
+            with patch.object(test_ocr, "_ppocr_page", side_effect=AssertionError("OCR must not run")),                     patch.object(worker, "log_result") as log:
+                worker.parse_pdf(pdf, out, text_only=True)
+            self.assertEqual(__import__("json").loads(out.read_text(encoding="utf-8")), {"needs_ocr": True})
+            log.assert_not_called()
+
+    def test_an_unexpected_failure_hands_the_job_back(self):
+        import tempfile
+        import worker
+
+        with tempfile.TemporaryDirectory() as tmp:
+            pdf, out = Path(tmp) / "broken.pdf", Path(tmp) / "out.json"
+            pdf.write_bytes(b"%PDF-1.7 not really a pdf")
+            with patch.object(worker, "log_result"):
+                worker.parse_pdf(pdf, out, text_only=True)
+            self.assertEqual(__import__("json").loads(out.read_text(encoding="utf-8")), {"fallback": True})
+
+
 if __name__ == "__main__":
     import unittest
 

@@ -126,9 +126,12 @@ def log_result(started,result):
     except Exception:
         pass
 
-def parse_pdf(pdf_path,result_path):
+def parse_pdf(pdf_path,result_path,text_only=False):
+    """text_only: the text layer alone, never OCR (the API's own reader on Render, apps/api/src/student/text-layer.ts,
+    user 2026-11-07). A page that needs OCR answers {'needs_ocr': True} and an unexpected failure {'fallback': True}:
+    the API then hands the job back to this worker's queue. Paddle is never imported."""
     import pymupdf
-    from test_ocr import Options, extract_transcript, DEFAULT_REC_MODEL
+    from test_ocr import Options, OcrRequired, extract_transcript, DEFAULT_REC_MODEL
     started=time.perf_counter()
     result={}
     try:
@@ -141,23 +144,28 @@ def parse_pdf(pdf_path,result_path):
             # Bound raster allocation for malformed/oversized PDF canvases at 150 DPI.
             if any(p.rect.width<=0 or p.rect.height<=0 or p.rect.width*p.rect.height*(150/72)**2>10_000_000 for p in document):
                 raise ValueError('unsupported_layout')
-            model_dir=DEFAULT_REC_MODEL
-            # Paddle's Windows native loader cannot open Unicode model paths.
-            if os.name=='nt' and not str(model_dir).isascii():
-                model_dir=Path(stack.enter_context(tempfile.TemporaryDirectory(prefix='edupath-model-')))
-                if not str(model_dir).isascii():
-                    raise ValueError('ASCII temporary directory required for Paddle on Windows')
-                for name in ('inference.json','inference.pdiparams','inference.yml'):
-                    shutil.copyfile(DEFAULT_REC_MODEL/name,model_dir/name)
-            options=Options(device=os.environ.get('OCR_DEVICE','auto'),det_model=os.environ.get('OCR_DET_MODEL','PP-OCRv5_mobile_det'),rec_model_dir=model_dir)
+            if text_only:
+                options=Options(ocr_enabled=False)
+            else:
+                model_dir=DEFAULT_REC_MODEL
+                # Paddle's Windows native loader cannot open Unicode model paths.
+                if os.name=='nt' and not str(model_dir).isascii():
+                    model_dir=Path(stack.enter_context(tempfile.TemporaryDirectory(prefix='edupath-model-')))
+                    if not str(model_dir).isascii():
+                        raise ValueError('ASCII temporary directory required for Paddle on Windows')
+                    for name in ('inference.json','inference.pdiparams','inference.yml'):
+                        shutil.copyfile(DEFAULT_REC_MODEL/name,model_dir/name)
+                options=Options(device=os.environ.get('OCR_DEVICE','auto'),det_model=os.environ.get('OCR_DET_MODEL','PP-OCRv5_mobile_det'),rec_model_dir=model_dir)
             result={'result':extract_transcript(document,'transcript.pdf',options,log=lambda _:None)}
+    except OcrRequired:
+        result={'needs_ocr':True}
     except ValueError as error:
         code=str(error)
-        result={'error':code if code in PARSE_ERRORS else 'ocr_failed'}
+        result={'error':code} if code in PARSE_ERRORS else {'fallback':True} if text_only else {'error':'ocr_failed'}
     except Exception:
-        result={'error':'ocr_failed'}
+        result={'fallback':True} if text_only else {'error':'ocr_failed'}
     result_path.write_text(json.dumps(result,ensure_ascii=False),encoding='utf-8')
-    log_result(started,result)
+    if not text_only: log_result(started,result)
 
 def process_job(job):
     started=time.perf_counter()
@@ -233,9 +241,10 @@ def run(once=False):
 if __name__=='__main__':
     parser=argparse.ArgumentParser()
     parser.add_argument('--parse',nargs=2,metavar=('PDF','RESULT'))
+    parser.add_argument('--text-only',action='store_true',help='with --parse: the text layer alone, never OCR (the API on Render)')
     parser.add_argument('--once',action='store_true')
     args=parser.parse_args()
-    if args.parse: parse_pdf(Path(args.parse[0]),Path(args.parse[1]))
+    if args.parse: parse_pdf(Path(args.parse[0]),Path(args.parse[1]),text_only=args.text_only)
     else:
         try: run(args.once)
         except KeyboardInterrupt: print('Worker stopped.')

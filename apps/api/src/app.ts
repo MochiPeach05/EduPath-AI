@@ -31,6 +31,7 @@ import { createCurriculaRouter } from "./curricula/router.js";
 import { createPlansRouter } from "./plans/router.js";
 import { createStudentCurriculaRouter } from "./curricula/student-router.js";
 import { createTranscriptWorkerRouter } from "./student/transcript-jobs.js";
+import { postgresTextLayerJobs, startTextLayerReader, textLayerPython } from "./student/text-layer.js";
 import type { AppConfig } from "./config.js";
 import { createAuthRouter } from "./auth/router.js";
 import type { MicrosoftAuthClient } from "./auth/types.js";
@@ -94,6 +95,10 @@ export function createApp({
     }
     : undefined;
   app.use("/api/worker/transcripts", createTranscriptWorkerRouter(databasePool,config.ocrWorkerKey, { afterTranscriptImport }));
+  // A PDF with a text layer is read on this server with the OCR worker's own code (text-layer.ts, 2026-11-07); the PC
+  // worker keeps the PDFs that need OCR. Only with the OCR queue (OCR_WORKER_KEY) and a Python (on Render, python3).
+  const textLayer = startTextLayerReader(config.ocrWorkerKey ? textLayerPython() : null,
+    config.ocrWorkerKey && databasePool ? postgresTextLayerJobs(databasePool, { afterTranscriptImport }) : null);
   // The AI worker router authenticates before parsing its own body, so it must come before express.json.
   app.use("/api/worker/competency-assessments", createCompetencyWorkerRouter(databasePool, config.aiWorkerKey));
   app.use("/api/admin/graduation", express.json({ limit: "2mb" }));
@@ -149,7 +154,8 @@ export function createApp({
   app.use("/api/student", advisorActing(databasePool, config.staffEmailDomains));
 
   app.get("/api/health", (_request, response) => {
-    response.json({ status: "ok", service: "edupath-api" });
+    // textLayer: whether this server reads transcripts with a text layer itself (off, checking, ready).
+    response.json({ status: "ok", service: "edupath-api", textLayer: textLayer.status() });
   });
 
   app.use(
@@ -223,7 +229,7 @@ export function createApp({
   // AI comments are queued only when AI_WORKER_KEY is configured; otherwise ai_status is 'disabled'.
   app.use("/api/student/competency-assessments", createCompetencyAssessmentRouter(databasePool, config.webOrigin,
     createCompetencyAiQueue({ enabled: Boolean(config.aiWorkerKey) }), { promptVersion: PROMPT_VERSION }));
-  app.use("/api/student", createStudentDataRouter(databasePool, config.webOrigin,Boolean(config.ocrWorkerKey), { afterTranscriptImport }));
+  app.use("/api/student", createStudentDataRouter(databasePool, config.webOrigin,Boolean(config.ocrWorkerKey), { afterTranscriptImport, textLayer }));
   app.use("/api/admin/students", createStudentProfilesRouter(studentProfileRepository, adminAccountRepository));
   // Quản lý cố vấn học tập (AD-ADV-01…05) and an advisor's Lớp phụ trách (AD-AST-01…05, 09), 2026-11-03.
   app.use("/api/admin/advisors", createAdvisorsRouter(databasePool, config.webOrigin, config.staffEmailDomains));

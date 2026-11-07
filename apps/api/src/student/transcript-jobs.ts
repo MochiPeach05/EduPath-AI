@@ -11,7 +11,14 @@ import { notifyInTransaction, notifySafely, transcriptFailed, transcriptReady } 
 
 /** Runs once a transcript import or replacement has COMMITTED (graduation advice, design §5.7). */
 export type TranscriptImportHook = (userId: string) => Promise<unknown>;
-export type TranscriptImportOptions = { afterTranscriptImport?: TranscriptImportHook | undefined };
+export type TranscriptImportOptions = {
+  afterTranscriptImport?: TranscriptImportHook | undefined;
+  /**
+   * The server's own text-layer reader (text-layer.ts, 2026-11-07): kicked after an upload is queued, and asked whether it
+   * reads a job, so the page does not say the PC worker is off while the server reads the PDF.
+   */
+  textLayer?: { kick(): void; covers(jobId: string): boolean } | undefined;
+};
 /**
  * Starts the hook after the response without waiting for it: it can neither fail nor delay the
  * import. A failure is logged with an error code only, never data.
@@ -44,6 +51,59 @@ export async function enqueueTranscript(client: PoolClient, userId: string, file
   return result.rows[0];
 }
 
+/** What the holder of a job's lease sends when it is done: the worker's result, or one of its error codes. */
+export type JobOutcome = { leaseToken: string; result?: unknown; error?: string | undefined };
+
+/**
+ * Finishes a leased job, for the OCR worker (POST /:id/complete) and the server's text-layer reader alike: the result is
+ * mapped (mapOcrTranscript) and stored, the results of the replaced transcript are deleted, the bell tells the student and
+ * the graduation advice is queued; the same lease completing twice is a no-op. Throws TranscriptError job_expired when the
+ * lease is no longer the caller's.
+ */
+export async function completeTranscriptJob(pool: DatabasePool, id: string, input: JobOutcome, options: TranscriptImportOptions = {}): Promise<void> {
+  let parsed: ReturnType<typeof mapOcrTranscript> | undefined;
+  let errorCode: string | undefined = input.error;
+  if (!errorCode) { try { parsed = mapOcrTranscript(input.result); } catch (e) { if (e instanceof TranscriptError) errorCode = e.code; else throw e; } }
+  const client = await pool.connect();
+  let imported: string | null = null;
+  try {
+    await client.query("BEGIN");
+    const owner = await client.query<{ user_id: string }>("SELECT user_id FROM transcript_jobs WHERE id=$1", [id]);
+    if (!owner.rowCount) throw new TranscriptError("job_expired", 409);
+    const uid = owner.rows[0]!.user_id;
+    const user = await client.query<{ is_active: boolean }>("SELECT is_active FROM users WHERE id=$1 FOR UPDATE", [uid]);
+    const locked = await client.query<{ status: string; lease_token: string | null; valid: boolean; filename: string; pdf_data: Buffer | null; expected_version: string | null }>(
+      "SELECT *,lease_until>now() AS valid FROM transcript_jobs WHERE id=$1 FOR UPDATE", [id]);
+    const job = locked.rows[0];
+    if (job?.status === 'completed' && job.lease_token === input.leaseToken) { await client.query("COMMIT"); return; }
+    if (!job || job.status !== "processing" || job.lease_token !== input.leaseToken || !job.valid || !job.pdf_data) throw new TranscriptError("job_expired", 409);
+    if (!user.rows[0]?.is_active) errorCode = "insufficient_role";
+    const current = await client.query<{ version: string }>("SELECT version FROM student_transcripts WHERE user_id=$1 FOR UPDATE", [uid]);
+    if ((current.rows[0]?.version ?? null) !== job.expected_version) errorCode = "transcript_changed";
+    if (!errorCode && parsed) {
+      await client.query(`INSERT INTO student_transcripts(user_id,version,filename,pdf_data,file_size,sha256,parsed_data)
+        VALUES($1,$2,$3,$4,$5,$6,$7::jsonb) ON CONFLICT(user_id) DO UPDATE SET version=EXCLUDED.version,filename=EXCLUDED.filename,pdf_data=EXCLUDED.pdf_data,
+        file_size=EXCLUDED.file_size,sha256=EXCLUDED.sha256,parsed_data=EXCLUDED.parsed_data,updated_at=now()`,
+        [uid, randomUUID(), job.filename, job.pdf_data, job.pdf_data.length, createHash("sha256").update(job.pdf_data).digest("hex"), JSON.stringify(parsed)]);
+      // Results computed from the replaced transcript no longer apply.
+      await deleteCompetencyData(client, uid);
+      await deleteGraduationAdvice(client, uid);
+    }
+    await client.query("UPDATE transcript_jobs SET status=$2,error_code=$3,pdf_data=NULL,updated_at=now() WHERE id=$1", [id, errorCode ? "failed" : "completed", errorCode ?? null]);
+    // The PDF is read in the background, so the bell tells the student how it ended (2026-10-30, STU-PROG-04).
+    if (errorCode !== "insufficient_role") {
+      const terms = parsed?.sections.filter((section) => section.academicYear).length ?? null;
+      await notifyInTransaction(client, uid, {
+        ...(errorCode ? transcriptFailed(errorCode) : transcriptReady(parsed?.courseCount ?? null, terms)), sourceKey: `transcript:${id}`,
+      });
+    }
+    await client.query("COMMIT");
+    if (!errorCode && parsed) imported = uid;
+  } catch (e) { await client.query("ROLLBACK"); throw e; } finally { client.release(); }
+  // Committed: queue graduation advice for the new transcript (best-effort).
+  if (imported) runAfterTranscriptImport(options.afterTranscriptImport, imported);
+}
+
 export function createTranscriptWorkerRouter(pool: DatabasePool | undefined, key: string | undefined, options: TranscriptImportOptions = {}) {
   const router = Router();
   router.use((req, res, next) => {
@@ -70,47 +130,8 @@ export function createTranscriptWorkerRouter(pool: DatabasePool | undefined, key
   router.post("/:id/complete", async (req, res) => {
     const input = z.object({ leaseToken: z.uuid(), result: z.unknown().optional(), error: z.enum(["invalid_pdf", "encrypted_pdf", "too_many_pages", "unsupported_layout", "curriculum_view", "unreadable_rows", "parse_timeout", "ocr_failed"]).optional() }).safeParse(req.body);
     if (!z.uuid().safeParse(req.params.id).success || !input.success || (input.data.error ? input.data.result !== undefined : input.data.result === undefined)) { res.status(400).json({ error: "invalid_input" }); return; }
-    let parsed: ReturnType<typeof mapOcrTranscript> | undefined;
-    let errorCode: string | undefined = input.data.error;
-    if (!errorCode) { try { parsed = mapOcrTranscript(input.data.result); } catch (e) { if (e instanceof TranscriptError) errorCode = e.code; else throw e; } }
-    const client = await pool!.connect();
-    let imported: string | null = null;
-    try {
-      await client.query("BEGIN");
-      const owner = await client.query<{ user_id: string }>("SELECT user_id FROM transcript_jobs WHERE id=$1", [req.params.id]);
-      if (!owner.rowCount) throw new TranscriptError("job_expired", 409);
-      const uid = owner.rows[0]!.user_id;
-      const user = await client.query<{ is_active: boolean }>("SELECT is_active FROM users WHERE id=$1 FOR UPDATE", [uid]);
-      const locked = await client.query<{ status: string; lease_token: string | null; valid: boolean; filename: string; pdf_data: Buffer | null; expected_version: string | null }>(
-        "SELECT *,lease_until>now() AS valid FROM transcript_jobs WHERE id=$1 FOR UPDATE", [req.params.id]);
-      const job = locked.rows[0];
-      if (job?.status === 'completed' && job.lease_token === input.data.leaseToken) { await client.query("COMMIT"); res.json({ ok: true }); return; }
-      if (!job || job.status !== "processing" || job.lease_token !== input.data.leaseToken || !job.valid || !job.pdf_data) throw new TranscriptError("job_expired", 409);
-      if (!user.rows[0]?.is_active) errorCode = "insufficient_role";
-      const current = await client.query<{ version: string }>("SELECT version FROM student_transcripts WHERE user_id=$1 FOR UPDATE", [uid]);
-      if ((current.rows[0]?.version ?? null) !== job.expected_version) errorCode = "transcript_changed";
-      if (!errorCode && parsed) {
-        await client.query(`INSERT INTO student_transcripts(user_id,version,filename,pdf_data,file_size,sha256,parsed_data)
-          VALUES($1,$2,$3,$4,$5,$6,$7::jsonb) ON CONFLICT(user_id) DO UPDATE SET version=EXCLUDED.version,filename=EXCLUDED.filename,pdf_data=EXCLUDED.pdf_data,
-          file_size=EXCLUDED.file_size,sha256=EXCLUDED.sha256,parsed_data=EXCLUDED.parsed_data,updated_at=now()`,
-          [uid, randomUUID(), job.filename, job.pdf_data, job.pdf_data.length, createHash("sha256").update(job.pdf_data).digest("hex"), JSON.stringify(parsed)]);
-        // Results computed from the replaced transcript no longer apply.
-        await deleteCompetencyData(client, uid);
-        await deleteGraduationAdvice(client, uid);
-      }
-      await client.query("UPDATE transcript_jobs SET status=$2,error_code=$3,pdf_data=NULL,updated_at=now() WHERE id=$1", [req.params.id, errorCode ? "failed" : "completed", errorCode ?? null]);
-      // The PDF is read in the background, so the bell tells the student how it ended (2026-10-30, STU-PROG-04).
-      if (errorCode !== "insufficient_role") {
-        const terms = parsed?.sections.filter((section) => section.academicYear).length ?? null;
-        await notifyInTransaction(client, uid, {
-          ...(errorCode ? transcriptFailed(errorCode) : transcriptReady(parsed?.courseCount ?? null, terms)), sourceKey: `transcript:${req.params.id}`,
-        });
-      }
-      await client.query("COMMIT"); res.json({ ok: true });
-      if (!errorCode && parsed) imported = uid;
-    } catch (e) { await client.query("ROLLBACK"); throw e; } finally { client.release(); }
-    // Committed: queue graduation advice for the new transcript (best-effort).
-    if (imported) runAfterTranscriptImport(options.afterTranscriptImport, imported);
+    await completeTranscriptJob(pool!, req.params.id, input.data, options);
+    res.json({ ok: true });
   });
   const errors: ErrorRequestHandler = (e, _req, res, next) => { if (e instanceof TranscriptError) { res.status(e.status).json({ error: e.code }); return; } next(e); };
   router.use(errors);

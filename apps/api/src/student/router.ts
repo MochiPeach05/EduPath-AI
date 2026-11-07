@@ -140,8 +140,12 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
     const jobs = await pool!.query(`SELECT ${jobColumns} FROM transcript_jobs WHERE user_id=$1 ORDER BY created_at DESC LIMIT 1`, [studentUser(req).userId]);
     const worker = await pool!.query<{ online: boolean }>("SELECT seen_at>now()-interval '60 seconds' AS online FROM transcript_worker_status WHERE id=1");
     const row = result.rows[0];
+    // A pending job the server reads itself (text-layer.ts) has a reader too: the page must not say the PC worker is off.
+    const job = jobs.rows[0] as { id: string; status: string } | undefined;
+    const serverReads = Boolean(job && (job.status === "queued" || job.status === "processing") && options.textLayer?.covers(job.id));
     // Marks of a stored transcript that are not errors (withoutSettledReviews) are left out, as a new upload does.
-    res.json({ transcript: row ? { ...row, data: withoutSettledReviews(row.data) } : null, job: jobs.rows[0] ?? null, workerOnline: worker.rows[0]?.online ?? false, ocrEnabled });
+    res.json({ transcript: row ? { ...row, data: withoutSettledReviews(row.data) } : null, job: jobs.rows[0] ?? null,
+      workerOnline: (worker.rows[0]?.online ?? false) || serverReads, ocrEnabled });
   });
   router.delete("/transcript/job", async (req, res) => {
     const input = z.object({ id: z.uuid() }).safeParse(req.body);
@@ -191,7 +195,10 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
       if (!advisor) await recordTranscriptConsent(client, studentUser(req).userId);
       if (ocrEnabled) {
         const job = await enqueueTranscript(client, studentUser(req).userId, filename, req.body, rawVersion);
-        await client.query("COMMIT"); res.status(202).json({ job }); return;
+        await client.query("COMMIT"); res.status(202).json({ job });
+        // The server reads a PDF with a text layer at once; one that needs OCR waits for the PC worker (text-layer.ts).
+        options.textLayer?.kick();
+        return;
       }
       const result = await client.query<TranscriptRow>(`INSERT INTO student_transcripts
         (user_id,version,filename,pdf_data,file_size,sha256,parsed_data) VALUES($1,$2,$3,$4,$5,$6,$7::jsonb)

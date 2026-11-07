@@ -4,3 +4,5 @@ __pycache__/
 *.pyc
 output/
 logs/
+# PyMuPDF, numpy and OpenCV for the API's text-layer reader (Render build, scripts/python-text-layer.mjs)
+.pydeps/

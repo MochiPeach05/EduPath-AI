@@ -1,0 +1,6 @@
+# The API's own text-layer reader on Render (apps/api/src/student/text-layer.ts, 2026-11-07): worker.py --parse
+# --text-only needs PyMuPDF, and numpy with OpenCV for the result marks (images in the PDF). No Paddle: it never OCRs.
+# Same pins as requirements.txt. Installed by scripts/python-text-layer.mjs into services/ocr/.pydeps.
+pymupdf==1.28.2
+numpy==2.3.5
+opencv-python-headless==4.10.0.84

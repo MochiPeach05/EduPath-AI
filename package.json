@@ -10,7 +10,7 @@
     "setup:demo-env": "node scripts/import-demo-env.mjs",
     "dev": "concurrently --names API,WEB --prefix-colors cyan,magenta \"npm run dev --workspace @edupath/api\" \"npm run dev --workspace @edupath/web\"",
     "start": "npm run start --workspace @edupath/api",
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build --workspaces --if-present && node scripts/python-text-layer.mjs",
     "test": "npm run test --workspaces --if-present",
     "typecheck": "npm run typecheck --workspaces --if-present"
   },
