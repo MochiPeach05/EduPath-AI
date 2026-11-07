@@ -41,7 +41,6 @@
 /* Intro: report code and title, explanation, pills */
 .rp-intro { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px; }
 .rp-title { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0; font-size: 18px; font-weight: 800; text-wrap: balance; }
-.rp-code { font: 600 12px/1.6 "Cascadia Mono", ui-monospace, monospace; color: var(--rp-brand-deep); background: var(--rp-brand-soft); border-radius: 6px; padding: 1px 7px; }
 .rp-lead { margin: 4px 0 0; max-width: 78ch; color: var(--rp-muted); }
 .rp-pills { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .rp-pill { display: inline-flex; align-items: center; gap: 6px; min-height: 34px; padding: 4px 12px; border-radius: 999px; background: var(--rp-surface); box-shadow: var(--rp-shadow); font-size: 13px; color: var(--rp-muted); }

@@ -179,7 +179,7 @@ export function FilterBar({ filters, setFilters, options }: { filters: ReportFil
 function Intro({ view, head, studyTerm, actions }: { view: ReportView; head: ReportHead | null; studyTerm: ReportTerm | null; actions?: ReactNode }) {
   const text = PAGE_TEXT[view];
   return <div className="rp-intro">
-    <div><p className="rp-title"><span className="rp-code">AD-REPORT-{text.code}</span>{text.title}</p><p className="rp-lead">{text.lead}</p></div>
+    <div><p className="rp-title">{text.title}</p><p className="rp-lead">{text.lead}</p></div>
     <div className="rp-pills">
       {view !== "audit" && <span className="rp-pill">Học kỳ đang học <b>{termLabel(head?.studyTerm ?? studyTerm)}</b></span>}
       {head && <span className="rp-pill">Cập nhật <b>{updatedText(head.generatedAt)}</b></span>}
@@ -818,8 +818,11 @@ export function AuditTable({ data, page, setPage, sortHeader }: { data: AuditPag
   </>;
 }
 
-/** own: a cố vấn học tập, whose log holds their own actions only (the API scopes it, 2026-11-07). */
-function AuditLogPage({ own = false }: { own?: boolean }) {
+/**
+ * scoped: a cố vấn học tập, whose log holds their own actions and those about the students of their classes (the API
+ * scopes it, user 2026-11-07: "Của mình + lớp mình").
+ */
+function AuditLogPage({ scoped = false }: { scoped?: boolean }) {
   const [draft, setDraft] = useState("");
   const q = useDebounced(draft).trim();
   const [actor, setActor] = useState("");
@@ -837,10 +840,10 @@ function AuditLogPage({ own = false }: { own?: boolean }) {
   return <>
     <Intro view="audit" head={null} studyTerm={null} actions={<span className="rp-pill">Lưu <b>1 năm</b></span>} />
     <section className="rp-card" aria-labelledby="rp-audit-title">
-      <div className="rp-card-head"><div><h2 id="rp-audit-title">Nhật ký thao tác {state.data && <span className="rp-count">{countText(state.data.total)}</span>}</h2><p>{own ? "Các thao tác của chính bạn." : "Lịch sử đăng nhập vẫn ở Tài khoản."}</p></div></div>
+      <div className="rp-card-head"><div><h2 id="rp-audit-title">Nhật ký thao tác {state.data && <span className="rp-count">{countText(state.data.total)}</span>}</h2><p>{scoped ? "Gồm thao tác của bạn và các thao tác liên quan đến sinh viên các lớp bạn phụ trách." : "Lịch sử đăng nhập vẫn ở Tài khoản."}</p></div></div>
       <form className="rp-filters rp-filters-inline" role="search" aria-label="Tìm trong nhật ký" onSubmit={(event) => event.preventDefault()}>
         <label className="rp-field rp-field-search">Tìm trong nhật ký<span className="rp-search"><Icon name="search" /><input id="rp-audit-q" type="search" value={draft} maxLength={120} placeholder="Người thực hiện, thao tác, nội dung" onChange={(event) => setDraft(event.target.value)} /></span></label>
-        {!own && <label className="rp-field">Người thực hiện<select id="rp-audit-actor" value={actor} onChange={(event) => setActor(event.target.value)}><option value="">Tất cả</option>{actors.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>}
+        <label className="rp-field">Người thực hiện<select id="rp-audit-actor" value={actor} onChange={(event) => setActor(event.target.value)}><option value="">Tất cả</option>{actors.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
         <label className="rp-field">Loại thao tác<select id="rp-audit-kind" value={kind} onChange={(event) => setKind(event.target.value as "" | AuditKind)}><option value="">Tất cả</option>{(Object.keys(AUDIT_TEXT) as AuditKind[]).map((value) => <option key={value} value={value}>{AUDIT_TEXT[value]}</option>)}</select></label>
         <button type="button" className="rp-reset" disabled={!draft && !actor && !kind} onClick={() => { setDraft(""); setActor(""); setKind(""); }}>Xóa bộ lọc</button>
       </form>
@@ -866,6 +869,6 @@ export default function AdminReports({ path, navigate }: { path: string; navigat
           : view === "skills" ? <SkillsPage filters={filters} studyTerm={studyTerm} bar={bar} navigate={navigate} />
             : view === "careers" ? <CareersPage filters={filters} studyTerm={studyTerm} bar={bar} />
               : view === "courses" ? <CoursesPage filters={filters} studyTerm={studyTerm} bar={bar} navigate={navigate} />
-                : <AuditLogPage own={Boolean(options.data?.scope)} />}
+                : <AuditLogPage scoped={Boolean(options.data?.scope)} />}
   </div>;
 }

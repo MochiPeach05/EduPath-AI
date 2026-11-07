@@ -302,13 +302,16 @@ describe("report pages", () => {
     vi.stubGlobal("window", { location: { pathname: "/quantri/tong-quan", search: "?cohort=K29", hash: "" } });
     const html = renderToStaticMarkup(<AdminReports path="/quantri/tong-quan" navigate={noop} />);
     expect(html).toContain('aria-label="Tìm kiếm và lọc dữ liệu thống kê"');
-    expect(html).toContain(">AD-REPORT-01</span>Tổng quan dữ liệu và hoạt động</p>");
+    // No function-list code before the title (user 2026-11-07).
+    expect(html).toContain('<p class="rp-title">Tổng quan dữ liệu và hoạt động</p>');
+    expect(html).not.toContain("AD-REPORT");
     expect(html).toContain("Thao tác gần đây");
     expect(html).toContain("Đang tải thống kê…");
     const audit = renderToStaticMarkup(<AdminReports path="/quantri/nhat-ky" navigate={noop} />);
     expect(audit).not.toContain('aria-label="Tìm kiếm và lọc dữ liệu thống kê"');
     expect(audit).toContain("Tìm trong nhật ký");
     // Codes after the function-list merge of 2026-10-31: the filter bar is AD-REPORT-10, Nhật ký is AD-REPORT-11.
-    expect(audit).toContain(">AD-REPORT-11</span>Nhật ký thao tác</p>");
+    expect(audit).toContain('<p class="rp-title">Nhật ký thao tác</p>');
+    expect(audit).not.toContain("AD-REPORT");
   });
 });

@@ -22,7 +22,7 @@ export const ADVISOR_PERMISSIONS: AdvisorPermissions = {
     { label: "Trang của sinh viên", detail: "Xem chi tiết mở toàn bộ trang sinh viên (hồ sơ, bảng điểm, Khảo sát định hướng, Đánh giá năng lực, Khoảng trống kỹ năng, Định hướng nghề nghiệp, Lộ trình học tập, Xét tốt nghiệp, chương trình và kế hoạch đào tạo) của sinh viên lớp mình phụ trách, hoặc của mọi sinh viên với quản trị viên và Ban chủ nhiệm khoa." },
     { label: "Danh mục của Khoa", detail: "Chương trình đào tạo, kế hoạch đào tạo, tiêu chuẩn xét tốt nghiệp, năng lực, kỹ năng, lĩnh vực và vị trí nghề nghiệp, ở chế độ chỉ xem." },
     { label: "Cố vấn học tập", detail: "Danh sách cố vấn học tập của Khoa và các lớp từng người phụ trách." },
-    { label: "Thống kê", detail: "Các trang Thống kê (tổng quan, tiến độ, nguy cơ, kỹ năng thiếu, vị trí mục tiêu, môn đề xuất) và tệp Excel của chúng, chỉ tính sinh viên các lớp mình phụ trách; Nhật ký thao tác chỉ gồm các thao tác của chính mình." },
+    { label: "Thống kê", detail: "Các trang Thống kê (tổng quan, tiến độ, nguy cơ, kỹ năng thiếu, vị trí mục tiêu, môn đề xuất) và tệp Excel của chúng, chỉ tính sinh viên các lớp mình phụ trách; Nhật ký thao tác gồm thao tác của chính mình và các thao tác liên quan đến sinh viên các lớp mình phụ trách." },
   ],
   act: [
     { label: "Import bảng điểm", detail: "Tải bảng điểm PDF lên thay sinh viên, kể cả khi sinh viên chưa import lần nào." },

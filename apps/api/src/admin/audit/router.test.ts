@@ -10,7 +10,8 @@ const row = { id: "e1", at: "2026-10-31T02:12:00.000Z", actorName: "Phạm Thu T
 
 function setup(role: AppRole | null = "faculty_board", options: { active?: boolean; now?: () => number } = {}) {
   const query = vi.fn(async (sql: string) => {
-    if (sql.includes("FROM users")) return { rowCount: options.active === false ? 0 : 1, rows: [] };
+    // The role check of the account (the list's own subquery of an advisor's students also reads users).
+    if (sql.includes("FROM users WHERE id=$1")) return { rowCount: options.active === false ? 0 : 1, rows: [] };
     if (sql.startsWith("DELETE FROM ad_audit_log")) return { rowCount: 0, rows: [] };
     return { rowCount: 1, rows: [{ items: [row], total: 1, actors: ["Lê Quốc Bảo", "Phạm Thu Trang"] }] };
   });
@@ -58,12 +59,14 @@ describe("audit log API", () => {
     await request(app).get("/audit-log").query({ extra: "1" }).expect(400);
   });
 
-  it("shows a cố vấn học tập their own actions only, and only their own name to filter by (user 2026-11-07)", async () => {
+  it("shows a cố vấn học tập their own actions and those about their classes' students, names included (user 2026-11-07)", async () => {
     const { app, listCalls } = setup("advisor");
     await request(app).get("/audit-log").expect(200);
     const [sql, values] = listCalls()[0]!;
     expect(values).toEqual(["", null, null, 20, 0, actor.userId]);
-    expect(String(sql).match(/\(\$6::uuid IS NULL OR l\.actor_user_id = \$6\)/g)).toHaveLength(2);
+    // The rows and the names to filter by follow the same rule.
+    expect(String(sql).split("$6::uuid IS NULL OR l.actor_user_id = $6 OR (l.target_type = 'student' AND l.target_id IN (")).toHaveLength(3);
+    expect(String(sql)).toContain("SELECT class_name FROM ad_advisor_classes WHERE advisor_user_id = $6");
     const admin = setup("admin");
     await request(admin.app).get("/audit-log").expect(200);
     expect(admin.listCalls()[0]![1]).toEqual(["", null, null, 20, 0, null]);
