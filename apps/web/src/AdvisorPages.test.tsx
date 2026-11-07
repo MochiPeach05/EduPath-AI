@@ -47,7 +47,7 @@ describe("Cố vấn page", () => {
         { rows: [2, 3], name: "Nguyễn Văn An", email: "an.nv@vlu.edu.vn", staffCode: "GV001", unit: null, classes: ["71K29CNTT01", "71K29CNTT02"], status: "update",
           changes: ["Thêm lớp 71K29CNTT02", "Lớp 71K29CNTT01 chuyển từ Trần Thị Bình"], problems: [], emptyClasses: ["71K29CNTT02"] },
         { rows: [4], name: "Lê Văn Cường", email: "cuong@gmail.com", staffCode: null, unit: null, classes: ["71K30CNTT01"], status: "error",
-          changes: [], problems: ["Email không phải email cán bộ của trường (@vlu.edu.vn)."], emptyClasses: [] },
+          changes: [], problems: ["Email không phải email của trường (@vlu.edu.vn hoặc @vanlanguni.vn)."], emptyClasses: [] },
         { rows: [5], name: "Phạm Thu Dung", email: "dung.pt@vlu.edu.vn", staffCode: null, unit: "Bộ môn HTTT", classes: ["71K30CNTT02"], status: "add",
           changes: ["Thêm cố vấn mới"], problems: [], emptyClasses: [] },
       ],
@@ -58,7 +58,7 @@ describe("Cố vấn page", () => {
     expect(html).toContain('<span class="av-status av-status-update">Cập nhật</span>');
     expect(html).toContain('<span class="av-status av-status-error">Lỗi</span>');
     expect(html).toContain('<li class="av-note-change">Lớp 71K29CNTT01 chuyển từ Trần Thị Bình</li>');
-    expect(html).toContain('<li class="av-note-error">Email không phải email cán bộ của trường (@vlu.edu.vn).</li>');
+    expect(html).toContain('<li class="av-note-error">Email không phải email của trường (@vlu.edu.vn hoặc @vanlanguni.vn).</li>');
     expect(html).toContain("Chưa có sinh viên trong EduPath AI: 71K29CNTT02");
     expect(html).toContain("Các cố vấn có Lỗi sẽ được bỏ qua");
     expect(html).toContain('<tr class="av-row-error">');

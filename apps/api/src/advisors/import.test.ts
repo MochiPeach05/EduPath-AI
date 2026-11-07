@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  advisorTemplate, headerField, planImport, readAdvisorGrid, readAdvisorSheets, readAdvisorWorkbook, splitClasses, type AdvisorSheet,
+  advisorDomainText, advisorTemplate, headerField, isAdvisorEmail, planImport, readAdvisorGrid, readAdvisorSheets, readAdvisorWorkbook, splitClasses, type AdvisorSheet,
   type ImportLookups,
 } from "./import.js";
 import { AdvisorError } from "./model.js";
@@ -263,19 +263,28 @@ describe("planImport", () => {
   });
 
   it.each([
-    ["an email outside the staff domains", { ...item, email: "nva@gmail.com" }, {}, "Email không phải email cán bộ của trường (@vlu.edu.vn)."],
+    ["an email outside the school domains", { ...item, email: "nva@gmail.com" }, {}, "Email không phải email của trường (@vlu.edu.vn hoặc @vanlanguni.vn)."],
     ["a student account", item, { accounts: new Map([["nva@vlu.edu.vn", [{ id: "s1", role: "student", isActive: true }]]]) },
-      "Email này là tài khoản sinh viên, không làm cố vấn học tập được."],
+      "Email này đang là tài khoản sinh viên; đổi vai trò ở trang Tài khoản trước nếu muốn cho làm cố vấn học tập."],
     ["a locked account", item, { accounts: new Map([["nva@vlu.edu.vn", [{ id: "u1", role: "lecturer", isActive: false }]]]) },
       "Tài khoản của email này đang bị khóa; mở khóa ở trang Tài khoản trước."],
     ["two accounts", item, { accounts: new Map([["nva@vlu.edu.vn", [{ id: "u1", role: "lecturer", isActive: true }, { id: "u2", role: "advisor", isActive: true }]]]) },
       "Email này trùng với nhiều tài khoản trong EduPath AI."],
-    ["no staff domain set up", item, { staffDomains: new Set<string>() }, "Email không phải email cán bộ của trường."],
+    ["a staff email when no staff domain is set up", item, { staffDomains: new Set<string>() }, "Email không phải email của trường (@vanlanguni.vn)."],
   ] as const)("refuses %s", (_name, row, extra, problem) => {
     const { preview } = planImport("f.xlsx", sheet([row]), lookups(extra as Partial<ImportLookups>));
     expect(preview.items[0]).toMatchObject({ status: "error", changes: [], emptyClasses: [] });
     expect(preview.items[0]!.problems).toContain(problem);
     expect(preview.summary).toMatchObject({ error: 1, classes: 0 });
+  });
+
+  it("takes a student mailbox of the school too (user 2026-11-07), and says which domains are the school's", () => {
+    const { preview } = planImport("f.xlsx", sheet([{ ...item, email: "duy.2374802010999@vanlanguni.vn" }]), lookups());
+    expect(preview.items[0]!.problems).toEqual([]);
+    expect(isAdvisorEmail("A.B@VanLangUni.vn", new Set(["vlu.edu.vn"]))).toBe(true);
+    expect(isAdvisorEmail("nva@vlu.edu.vn", new Set(["vlu.edu.vn"]))).toBe(true);
+    expect(isAdvisorEmail("nva@gmail.com", new Set(["vlu.edu.vn"]))).toBe(false);
+    expect(advisorDomainText(new Set(["vlu.edu.vn", "staff.vlu.edu.vn"]))).toBe("@vlu.edu.vn, @staff.vlu.edu.vn hoặc @vanlanguni.vn");
   });
 
   it("passes on the sheets read, their notes and the sheet of an advisor's rows", () => {

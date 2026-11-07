@@ -44,7 +44,9 @@ Hợp đồng dữ liệu: `apps/web/src/advisor-types.ts`.
   - Hàng tiêu đề nằm dưới các dòng tên trường, khoa, năm học; nhận dạng không phân biệt dấu, hoa thường: MGV hoặc Mã giảng viên, CVHT hoặc Họ và tên, EMAIL, MÃ LỚP hoặc Lớp phụ trách, Đơn vị (Bộ môn, Khoa). Các cột STT, KHÓA, SLSV, GHI CHÚ, CVHT NỘP KẾ HOẠCH… được bỏ qua.
   - MGV dạng số được đọc thành chữ. Ô lớp tách theo `,`, `;`, `/`, khoảng trắng và xuống dòng; số đứng một mình nối tiếp lớp đứng trước ("71K27CNTT01, 02, 03" là ba lớp). Cùng một email trên nhiều dòng thì gộp thành một CVHT.
   - Mọi trang tính đang hiện có dòng tiêu đề đều được đọc và gộp theo email; trang ẩn không bao giờ được đọc. Một lớp có hai CVHT, hoặc một email ghi hai họ tên hay hai MGV, là lỗi ở các dòng đó. Phần xem trước nói rõ đã đọc những trang nào và các trang có khớp nhau không.
-  - Email phải thuộc miền của cán bộ (`STAFF_EMAIL_DOMAINS`, mặc định vlu.edu.vn). Lớp chưa có sinh viên chỉ là cảnh báo.
+  - Email phải là email của trường: miền cán bộ (`STAFF_EMAIL_DOMAINS`, mặc định vlu.edu.vn) hoặc miền sinh viên vanlanguni.vn
+    (từ 2026-11-07). Tài khoản đang là sinh viên phải được đổi vai trò ở trang Tài khoản trước. `STAFF_EMAIL_DOMAINS` không đổi:
+    nó còn quyết định tài khoản nào không bao giờ vào cổng sinh viên. Lớp chưa có sinh viên chỉ là cảnh báo.
   - File năm học 2026–2027: hai trang đang hiện (GUI PDT 30 dòng, theo lớp 120 dòng) ghi cùng một phân công, 30 CVHT và 120 lớp. "Tải file mẫu" theo đúng bố cục này.
   - Tệp là nguồn chuẩn cho những CVHT có trong tệp; lớp ghi cho người khác thì được chuyển sang (có dòng "Lớp … chuyển từ …"). CVHT không có trong tệp giữ nguyên.
   - Thêm hoặc sửa tay thì báo `class_taken` khi lớp đã có người phụ trách.

@@ -13,7 +13,7 @@ import { byGivenName, byOrder, byText, orderBy, type OwnOrder, type SortDirectio
 import { SPECIALTIES, specialtyLabel } from "../competency-assessment/specialty.js";
 import type { SpecialtyCode } from "../competency-assessment/types.js";
 import { advisedStudent, studentLabel } from "./access.js";
-import { planImport, type AdvisorSheet, type ImportLookups, type PlannedAdvisor } from "./import.js";
+import { isAdvisorEmail, planImport, type AdvisorSheet, type ImportLookups, type PlannedAdvisor } from "./import.js";
 import {
   AdvisorError, CLASS_OF, type AdvisedStudentRow, type AdvisedStudentStatus, type AdvisorClass, type AdvisorDetail, type AdvisorImportPreview,
   type AdvisorImportResult, type AdvisorInput, type AdvisorMe, type AdvisorRow,
@@ -91,8 +91,6 @@ const EVERY_CLASS = `SELECT DISTINCT class_name FROM class_members WHERE class_n
 /** Admins and Ban chủ nhiệm khoa work with every student (AD-AST "QTV & CVHT"); anyone else with their own classes. */
 const seesEveryStudent = (actor: Pick<AuthenticatedUser, "role">) => canManageAdvisors(actor.role);
 
-const isStaffEmail = (email: string, domains: ReadonlySet<string>) => domains.has(email.slice(email.lastIndexOf("@") + 1).toLowerCase());
-
 export class PostgresAdvisorRepository {
   constructor(private readonly pool: DatabasePool, private readonly staffEmailDomains: ReadonlySet<string>) {}
 
@@ -133,7 +131,8 @@ export class PostgresAdvisorRepository {
   // ------------------------------------------------------------------------------------------------ AD-ADV-02, edits
 
   async create(actor: AuthenticatedUser, input: AdvisorInput): Promise<AdvisorDetail> {
-    if (!isStaffEmail(input.email, this.staffEmailDomains)) throw new AdvisorError("email_not_staff", 400);
+    // A staff or a student mailbox of the school (import.ts advisorEmailDomains, user 2026-11-07).
+    if (!isAdvisorEmail(input.email, this.staffEmailDomains)) throw new AdvisorError("email_not_staff", 400);
     return this.change(actor, async (client) => {
       const account = await this.account(client, input.email);
       if (account && await this.isAdvisor(client, account.id)) throw new AdvisorError("advisor_exists", 409);

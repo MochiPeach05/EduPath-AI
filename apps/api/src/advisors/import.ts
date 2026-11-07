@@ -394,24 +394,41 @@ export type PlannedAdvisor = AdvisorImportItem & { sheet?: string; userId: strin
 /** The preview with the sheets read and the notes about them (readAdvisorSheets); items may name their sheet. */
 export type AdvisorPreview = AdvisorImportPreview & { items: (AdvisorImportItem & { sheet?: string })[]; sheets: string[]; notes: ImportNote[] };
 
-const domainOf = (email: string) => email.slice(email.lastIndexOf("@") + 1);
+const domainOf = (email: string) => email.slice(email.lastIndexOf("@") + 1).toLowerCase();
+/**
+ * The school's student mailbox domain. An advisor may have such an email too (user 2026-11-07: "cho phép cả
+ * @vanlanguni.vn"); with the advisor role the account uses the admin portal only, like every admin-portal role.
+ * STAFF_EMAIL_DOMAINS stays the staff mailboxes alone: it also decides who never uses the student portal.
+ */
+export const STUDENT_EMAIL_DOMAIN = "vanlanguni.vn";
+/** The domains an advisor's email may have: the staff mailboxes (STAFF_EMAIL_DOMAINS) and the student one. */
+export const advisorEmailDomains = (staffDomains: ReadonlySet<string>): ReadonlySet<string> =>
+  new Set([...[...staffDomains].map((domain) => domain.toLowerCase()), STUDENT_EMAIL_DOMAIN]);
+/** The email has one of the advisor domains. */
+export const isAdvisorEmail = (email: string, staffDomains: ReadonlySet<string>) => advisorEmailDomains(staffDomains).has(domainOf(email));
+/** "@vlu.edu.vn hoặc @vanlanguni.vn" */
+export const advisorDomainText = (staffDomains: ReadonlySet<string>) => {
+  const domains = [...advisorEmailDomains(staffDomains)].map((domain) => `@${domain}`);
+  return domains.length > 1 ? `${domains.slice(0, -1).join(", ")} hoặc ${domains.at(-1)}` : domains.join("");
+};
 const words = (list: readonly string[]) => list.join(", ");
+/** One account, one role (portal rule): a student account advises only once Tài khoản gives it the advisor role. */
+export const STUDENT_ACCOUNT_PROBLEM = "Email này đang là tài khoản sinh viên; đổi vai trò ở trang Tài khoản trước nếu muốn cho làm cố vấn học tập.";
 // Roles an import leaves as they are: the advisor keeps the rights of the role and advises the classes too.
 const KEPT_ROLES = new Set(["admin", "faculty_board", "department_head", "advisor"]);
 
 /** The preview of a workbook against the database (AD-ADV-03), and the plan applying it follows. */
 export function planImport(fileName: string, sheet: AdvisorSheet, lookups: ImportLookups): { preview: AdvisorPreview; plan: PlannedAdvisor[] } {
-  const domains = [...lookups.staffDomains];
   const plan: PlannedAdvisor[] = sheet.items.map((item) => {
     const problems = [...item.problems];
-    // A school account only, as the form's own rule (repository.ts): with no staff domain set up, no email is one.
-    if (item.email && !problems.some((problem) => problem.startsWith("Email")) && !lookups.staffDomains.has(domainOf(item.email))) {
-      problems.push(`Email không phải email cán bộ của trường${domains.length ? ` (${domains.map((domain) => `@${domain}`).join(", ")})` : ""}.`);
+    // A school account only (staff or student mailbox), as the form's own rule (repository.ts).
+    if (item.email && !problems.some((problem) => problem.startsWith("Email")) && !isAdvisorEmail(item.email, lookups.staffDomains)) {
+      problems.push(`Email không phải email của trường (${advisorDomainText(lookups.staffDomains)}).`);
     }
     const matches = item.email ? lookups.accounts.get(item.email) ?? [] : [];
     if (matches.length > 1) problems.push("Email này trùng với nhiều tài khoản trong EduPath AI.");
     const account = matches.length === 1 ? matches[0]! : null;
-    if (account?.role === "student") problems.push("Email này là tài khoản sinh viên, không làm cố vấn học tập được.");
+    if (account?.role === "student") problems.push(STUDENT_ACCOUNT_PROBLEM);
     if (account && !account.isActive) problems.push("Tài khoản của email này đang bị khóa; mở khóa ở trang Tài khoản trước.");
     if (problems.length) {
       return { ...item, problems, status: "error", changes: [], emptyClasses: [], userId: account?.id ?? null, roleChange: false };

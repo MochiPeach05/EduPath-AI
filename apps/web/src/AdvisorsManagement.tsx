@@ -225,7 +225,7 @@ function AdvisorEditor({ current, close, saved }: { current: AdvisorRow | null; 
           onChange={(event) => setForm({ ...form, email: event.target.value })} />
           <span className="cm-help">{current
             ? "Email là tài khoản đăng nhập nên không đổi được; muốn đổi email, xóa cố vấn này rồi thêm lại."
-            : "Email cán bộ của trường, dùng để đăng nhập Microsoft. Nếu người này chưa từng đăng nhập EduPath AI, tài khoản được tạo sẵn với vai trò Cố vấn học tập."}</span></label>
+            : "Email của trường (@vlu.edu.vn hoặc @vanlanguni.vn), dùng để đăng nhập Microsoft. Nếu người này chưa từng đăng nhập EduPath AI, tài khoản được tạo sẵn với vai trò Cố vấn học tập."}</span></label>
         <div className="av-form-row">
           <label>Mã giảng viên<input maxLength={50} value={form.staffCode} onChange={(event) => setForm({ ...form, staffCode: event.target.value })} /></label>
           <label>Đơn vị<input maxLength={200} value={form.unit} placeholder="Ví dụ: Bộ môn Công nghệ phần mềm" onChange={(event) => setForm({ ...form, unit: event.target.value })} /></label>
@@ -336,7 +336,7 @@ function AdvisorImport({ close, imported }: { close: () => void; imported: (resu
       <p>1. Chọn tệp Excel → 2. Xem trước và rà soát → 3. Xác nhận import</p>
       <label className="cm-upload">Danh sách cố vấn học tập (.xlsx · tối đa 5 MB)
         <input type="file" accept=".xlsx" disabled={busy} onChange={(event) => void inspect(event.target.files?.[0] ?? null)} /></label>
-      <p className="cm-help">Dùng file phân công của Khoa: cột CVHT, EMAIL (@vlu.edu.vn), MÃ LỚP và MGV nếu có; mỗi dòng là một cố vấn hoặc một lớp, nhiều lớp trong một ô cách nhau bằng dấu phẩy. Trang tính ẩn không được đọc.{" "}
+      <p className="cm-help">Dùng file phân công của Khoa: cột CVHT, EMAIL (@vlu.edu.vn hoặc @vanlanguni.vn), MÃ LỚP và MGV nếu có; mỗi dòng là một cố vấn hoặc một lớp, nhiều lớp trong một ô cách nhau bằng dấu phẩy. Trang tính ẩn không được đọc.{" "}
         <a className="av-template" href={`${ADVISORS_API}/import/template`} download><Icon name="download" /> Tải file mẫu</a></p>
       {busy && <p role="status">{preview ? "Đang import danh sách…" : "Đang đọc tệp Excel…"}</p>}
       {error && <p className="admin-error" role="alert">{error}</p>}
