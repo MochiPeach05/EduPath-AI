@@ -100,6 +100,32 @@ class RowBuilderTest(unittest.TestCase):
         self.assertGreater(peak(gemma_ocr.deskew(tilted)), 2 * peak(tilted))
         self.assertIs(gemma_ocr.deskew(page), page)
 
+    def test_a_strip_missing_course_rows_is_read_again_and_the_fullest_answer_kept(self):
+        answers = [[{'kind': 'header', 'text': '1 71ITBS10103 ... 2 71ITBS10203 ...'}],
+                   [course('1', '71ITBS10103')], [course('1', '71ITBS10103'), course('2', '71ITBS10203')]]
+        calls = []
+        def read(jpeg):
+            calls.append(jpeg)
+            return answers[len(calls) - 1]
+        items = gemma_ocr.read_checked(read, b'jpeg', rows=2, first=False)
+        self.assertEqual(len(calls), 3)
+        self.assertEqual([item['code'] for item in items], ['71ITBS10103', '71ITBS10203'])
+        # The first strip of a page may count the column header as an eight-cell row: one course row less is enough.
+        calls.clear()
+        answers[:] = [[course('1', '71ITBS10103')]]
+        gemma_ocr.read_checked(read, b'jpeg', rows=2, first=True)
+        self.assertEqual(len(calls), 1)
+
+    def test_a_code_with_one_look_alike_character_gets_its_form_back(self):
+        self.assertEqual(gemma_ocr.fixed_code('71P0LE10022'), '71POLE10022')
+        self.assertEqual(gemma_ocr.fixed_code('71ITBS1O103'), '71ITBS10103')
+        self.assertEqual(gemma_ocr.fixed_code('D1T0070'), 'DIT0070')
+        # Right already, or no single change makes it right: left as read (the server marks it).
+        self.assertEqual(gemma_ocr.fixed_code('71ITBS10103'), '71ITBS10103')
+        self.assertEqual(gemma_ocr.fixed_code('ABC'), 'ABC')
+        rows = gemma_ocr.RowBuilder().rows([TERM1, course('1', '71P0LE 10022')])
+        self.assertEqual(rows[1][1], '71POLE10022')
+
     def test_reads_the_json_of_an_answer_in_a_fence_or_with_words_around(self):
         self.assertEqual(gemma_ocr.json_text('```json\n{"items": []}\n```'), '{"items": []}')
         self.assertEqual(gemma_ocr.json_text('Đây là kết quả: {"items": [1]} xong'), '{"items": [1]}')

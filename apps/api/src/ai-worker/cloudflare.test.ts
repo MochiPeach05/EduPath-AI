@@ -1,12 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   CLOUDFLARE_CHAT_MODEL,
+  SCHEMA_NOTE,
   SseAccumulator,
   buildCloudflareChatBody,
   cloudflareChat,
   cloudflareEmbed,
   cloudflareEmbeddingInfo,
   createCloudflareHealth,
+  jsonOnly,
   visibleContent,
   type CloudflareRuntime
 } from "./cloudflare.js";
@@ -45,19 +47,29 @@ function sse(chunks: string[], init: { status?: number; hang?: boolean } = {}): 
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
 
 describe("the chat body Workers AI receives", () => {
-  it("turns the job into an OpenAI chat completion: num_predict as max_completion_tokens, the schema as response_format, thinking stated", () => {
-    const body = buildCloudflareChatBody(runtime, job);
+  it("turns the job into an OpenAI chat completion: num_predict as max_completion_tokens, the schema at the end of the prompt, thinking stated", () => {
+    // Thinking only with AI_THINKING=on, with room for it on top of num_predict. No response_format: under json_schema mode
+    // Gemma 26B padded its answer with blank lines up to the token limit (2026-11-08).
+    const body = buildCloudflareChatBody({ ...runtime, thinking: true }, job);
     expect(body).toEqual({
       model: "@cf/google/gemma-4-26b-a4b-it",
-      messages: [{ role: "system", content: "Hệ thống thử" }, { role: "user", content: "Dữ liệu thử" }],
+      messages: [{ role: "system", content: "Hệ thống thử" }, { role: "user", content: `Dữ liệu thử\n\n${SCHEMA_NOTE}\n${JSON.stringify(job.schema)}` }],
       stream: true,
       stream_options: { include_usage: true },
-      max_completion_tokens: 8192,
+      max_completion_tokens: 8192 + 16_384,
       chat_template_kwargs: { enable_thinking: true },
       temperature: 0.4,
-      top_p: 0.95,
-      response_format: { type: "json_schema", json_schema: { name: "answer", schema: job.schema } }
+      top_p: 0.95
     });
+    expect(buildCloudflareChatBody(runtime, job, true)).toHaveProperty("response_format");
+  });
+
+  it("keeps thinking off by default even when the job asks for it (Gemma 26B looped in its thoughts, 2026-11-08)", () => {
+    const body = buildCloudflareChatBody(runtime, job);
+    expect(body.chat_template_kwargs).toEqual({ enable_thinking: false });
+    expect(body.max_completion_tokens).toBe(8192);
+    // A roadmap's 12288 (sized for E4B's thinking) is capped without thinking, so a runaway answer costs less.
+    expect(buildCloudflareChatBody(runtime, { ...job, options: { num_predict: 12288 } }).max_completion_tokens).toBe(8192);
   });
 
   it("says thinking is off when the job does not ask for it (Workers AI turns it on otherwise), and sends no schema for plain text", () => {
@@ -88,16 +100,12 @@ describe("cloudflareChat", () => {
     await expect(cloudflareChat(runtime, job, { fetch })).rejects.toMatchObject({ code: "ai_output_truncated" });
   });
 
-  it("drops a JSON schema Workers AI refuses (400) once and asks again with the prompt alone", async () => {
-    const bodies: Record<string, unknown>[] = [];
-    const fetch: FetchLike = async (_url, init) => {
-      bodies.push(JSON.parse(String(init?.body)));
-      return bodies.length === 1 ? json({ errors: [{ code: 5006, message: "bad schema" }], success: false }, 400) : sse([delta('{"summary":"Ổn"}'), finish(), "data: [DONE]\n\n"]);
-    };
-    const result = await cloudflareChat(runtime, job, { fetch });
-    expect(result.content).toBe('{"summary":"Ổn"}');
-    expect(bodies[0]).toHaveProperty("response_format");
-    expect(bodies[1]).not.toHaveProperty("response_format");
+  it("takes the JSON object out of an answer in a fence or with words around it, for a job with a schema only", async () => {
+    const fenced: FetchLike = async () => sse([delta("Đây là kết quả:\n```json\n"), delta('{"summary":"Ổn"}'), delta("\n```"), finish(), "data: [DONE]\n\n"]);
+    expect((await cloudflareChat(runtime, job, { fetch: fenced })).content).toBe('{"summary":"Ổn"}');
+    const plain: FetchLike = async () => sse([delta("Câu trả lời {không phải JSON}"), finish(), "data: [DONE]\n\n"]);
+    expect((await cloudflareChat(runtime, { ...job, schema: null }, { fetch: plain })).content).toBe("Câu trả lời {không phải JSON}");
+    expect(jsonOnly("không có JSON")).toBe("không có JSON");
   });
 
   it("asks again when Workers AI is busy or fails, at most twice, then reports ai_failed", async () => {

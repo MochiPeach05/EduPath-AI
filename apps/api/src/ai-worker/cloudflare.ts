@@ -20,6 +20,12 @@ export interface CloudflareRuntime {
   /** The chat model (CLOUDFLARE_CHAT_MODEL). */
   model: string;
   timeoutMs: number;
+  /**
+   * Whether a job that asks for thinking gets it (AI_THINKING=on). Off by default: on 2026-11-08 Gemma 4 26B on Workers
+   * AI thought through 8192, then 24576 tokens (10 minutes) of a Trợ lý AI answer without starting it, while answers
+   * without thinking came in seconds. Thinking was turned on for the PC's much smaller E4B.
+   */
+  thinking?: boolean;
 }
 
 interface CloudflareDeps {
@@ -38,6 +44,14 @@ const DEFAULT_MAX_OUTPUT_CHARS = 200_000;
 const DEFAULT_RETRY_DELAYS_MS = [3_000, 10_000] as const;
 /** A job without num_predict (none today): room for thinking and a long answer. */
 const DEFAULT_MAX_COMPLETION_TOKENS = 16_384;
+/** Extra room for thinking on top of a job's num_predict when thinking is on (AI_THINKING=on). */
+export const THINKING_ALLOWANCE = 16_384;
+/**
+ * The most an answer without thinking may take: num_predict was sized for the PC's E4B thinking first; a JSON answer of
+ * Gemma 26B is a few thousand tokens, and a runaway answer then costs at most this many (2026-11-08: two failed
+ * roadmaps and comments used the day's free neurons).
+ */
+export const ANSWER_CAP = 8_192;
 
 const base = (runtime: Pick<CloudflareRuntime, "accountId">) => `${API_ORIGIN}/client/v4/accounts/${encodeURIComponent(runtime.accountId)}/ai`;
 const headers = (runtime: Pick<CloudflareRuntime, "apiToken">) => ({
@@ -47,11 +61,21 @@ const headers = (runtime: Pick<CloudflareRuntime, "apiToken">) => ({
 });
 
 /**
- * The /v1/chat/completions body of a job: Ollama's num_predict becomes max_completion_tokens (it covers thinking and
- * answer on both), temperature and top_p go as they are (num_ctx and top_k have no counterpart), the JSON schema
- * becomes response_format, and thinking is always stated because Workers AI turns it on when nothing is said.
+ * How a job's JSON schema reaches Gemma on Workers AI: in the prompt, not as response_format. Under json_schema mode Gemma
+ * 26B padded a roadmap with blank lines up to its 12288-token limit (2026-11-08: two thirds of the text was whitespace)
+ * while the same prompt without it answered in JSON at once; the API's checks of each answer stay as they are.
  */
-export function buildCloudflareChatBody(runtime: Pick<CloudflareRuntime, "model">, job: OllamaJob, withSchema = true): Record<string, unknown> {
+export const SCHEMA_NOTE = "Trả về đúng một đối tượng JSON hợp lệ theo lược đồ JSON dưới đây (đủ các khóa bắt buộc, đúng kiểu dữ liệu), không kèm chữ nào khác ngoài JSON:";
+
+/**
+ * The /v1/chat/completions body of a job: Ollama's num_predict becomes max_completion_tokens (it covers thinking and
+ * answer on both), temperature and top_p go as they are (num_ctx and top_k have no counterpart), the JSON schema goes
+ * at the end of the user message (SCHEMA_NOTE; response_format only when withSchema asks for it), and thinking is
+ * always stated because Workers AI turns it on when nothing is said.
+ */
+export function buildCloudflareChatBody(runtime: Pick<CloudflareRuntime, "model" | "thinking">, job: OllamaJob, withSchema = false): Record<string, unknown> {
+  const hasSchema = job.schema !== null && job.schema !== undefined && typeof job.schema === "object";
+  const think = job.think === true && runtime.thinking === true;
   const numberOption = (key: string) => {
     const value = job.options[key];
     return typeof value === "number" && Number.isFinite(value) ? value : undefined;
@@ -61,21 +85,32 @@ export function buildCloudflareChatBody(runtime: Pick<CloudflareRuntime, "model"
     model: runtime.model,
     messages: [
       { role: "system", content: job.system },
-      { role: "user", content: job.user }
+      { role: "user", content: hasSchema && !withSchema ? `${job.user}\n\n${SCHEMA_NOTE}\n${JSON.stringify(job.schema)}` : job.user }
     ],
     stream: true,
     stream_options: { include_usage: true },
-    max_completion_tokens: maxTokens !== undefined && maxTokens > 0 ? Math.round(maxTokens) : DEFAULT_MAX_COMPLETION_TOKENS,
-    chat_template_kwargs: { enable_thinking: job.think === true }
+    max_completion_tokens: think
+      ? (maxTokens !== undefined && maxTokens > 0 ? Math.round(maxTokens) : DEFAULT_MAX_COMPLETION_TOKENS) + THINKING_ALLOWANCE
+      : Math.min(maxTokens !== undefined && maxTokens > 0 ? Math.round(maxTokens) : DEFAULT_MAX_COMPLETION_TOKENS, ANSWER_CAP),
+    chat_template_kwargs: { enable_thinking: think }
   };
   const temperature = numberOption("temperature");
   const topP = numberOption("top_p");
   if (temperature !== undefined) body.temperature = temperature;
   if (topP !== undefined) body.top_p = topP;
-  if (withSchema && job.schema !== null && job.schema !== undefined && typeof job.schema === "object") {
+  if (withSchema && hasSchema) {
     body.response_format = { type: "json_schema", json_schema: { name: "answer", schema: job.schema } };
   }
   return body;
+}
+
+/** The JSON object of an answer that should be one: without a ```json fence or words around it; the text as it is else. */
+export function jsonOnly(text: string): string {
+  const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(text);
+  const inner = (fenced?.[1] ?? text).trim();
+  const start = inner.indexOf("{");
+  const end = inner.lastIndexOf("}");
+  return start >= 0 && end > start ? inner.slice(start, end + 1) : text;
 }
 
 /**
@@ -242,7 +277,7 @@ export async function cloudflareChat(runtime: CloudflareRuntime, job: OllamaJob,
   const started = Date.now();
 
   try {
-    let withSchema = true;
+    const withSchema = false;
     let response: Response | null = null;
     for (let attempt = 0; ; attempt++) {
       if (reason) throw reasonError(reason);
@@ -256,11 +291,6 @@ export async function cloudflareChat(runtime: CloudflareRuntime, job: OllamaJob,
           signal: controller.signal
         });
         if (response.ok) break;
-        if (response.status === 400 && withSchema && job.schema) {
-          await response.body?.cancel().catch(() => undefined);
-          withSchema = false;
-          continue;
-        }
         failure = await responseFailure(response);
       } catch (error) {
         if (reason) throw reasonError(reason);
@@ -310,7 +340,9 @@ export async function cloudflareChat(runtime: CloudflareRuntime, job: OllamaJob,
     const finish = accumulator.finishReason ?? "stop";
     if (finish === "length") throw new AiWorkerError("ai_output_truncated", "finish_reason_length");
     if (finish !== "stop") throw new AiWorkerError("ai_failed", "unexpected_finish_reason");
-    return { content: visibleContent(accumulator.content), doneReason: finish, metrics: usageMetrics(accumulator.usage, Date.now() - started) };
+    const visible = visibleContent(accumulator.content);
+    const content = job.schema !== null && job.schema !== undefined ? jsonOnly(visible) : visible;
+    return { content, doneReason: finish, metrics: usageMetrics(accumulator.usage, Date.now() - started) };
   } finally {
     clearTimeout(overall);
     if (idle) clearTimeout(idle);

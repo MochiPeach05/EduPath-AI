@@ -62,7 +62,8 @@ async function startServer(): Promise<void> {
         workerKey: config.aiWorkerKey,
         accountId: config.ai.cloudflare.accountId,
         apiToken: config.ai.cloudflare.apiToken,
-        concurrency: config.ai.concurrency
+        concurrency: config.ai.concurrency,
+        thinking: config.ai.thinking
       });
     });
 

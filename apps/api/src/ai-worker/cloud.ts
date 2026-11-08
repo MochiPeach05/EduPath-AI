@@ -15,6 +15,8 @@ export interface CloudWorkerOptions {
   apiToken: string;
   /** Jobs at a time: each loop claims and runs one job. */
   concurrency: number;
+  /** Let jobs that ask for thinking think (AI_THINKING=on); off by default (cloudflare.ts CloudflareRuntime.thinking). */
+  thinking?: boolean;
   timeoutMs?: number;
   log?: WorkerLogger;
   /** Calls to Workers AI (tests). */
@@ -42,10 +44,13 @@ function defaultLog(event: string, fields: LogFields = {}): void {
 /** Starts `concurrency` worker loops; stop() ends them after the job each one is running (its lease then lapses). */
 export function startCloudAiWorker(options: CloudWorkerOptions): { stop(): void; done: Promise<void> } {
   const log = options.log ?? defaultLog;
-  const runtime: CloudflareRuntime = { accountId: options.accountId, apiToken: options.apiToken, model: CLOUDFLARE_CHAT_MODEL, timeoutMs: options.timeoutMs ?? 600_000 };
+  const runtime: CloudflareRuntime = {
+    accountId: options.accountId, apiToken: options.apiToken, model: CLOUDFLARE_CHAT_MODEL, timeoutMs: options.timeoutMs ?? 600_000,
+    thinking: options.thinking === true
+  };
   const port = cloudModelPort(runtime, options.fetch);
   const controller = new AbortController();
-  log("starting", { provider: "cloudflare", model: CLOUDFLARE_CHAT_MODEL, loops: options.concurrency });
+  log("starting", { provider: "cloudflare", model: CLOUDFLARE_CHAT_MODEL, loops: options.concurrency, thinking: runtime.thinking === true });
   const loops = Array.from({ length: options.concurrency }, (_, index) => {
     const client = createWorkerClient({ apiUrl: `http://127.0.0.1:${options.port}`, workerKey: options.workerKey, ...(options.apiFetch ? { fetch: options.apiFetch } : {}) });
     const loopLog: WorkerLogger = (event, fields = {}) => log(event, { loop: index + 1, ...fields });

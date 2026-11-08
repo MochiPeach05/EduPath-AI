@@ -24,6 +24,11 @@ from urllib.request import Request, urlopen
 MODEL = '@cf/google/gemma-4-26b-a4b-it'
 DPI = 200
 STRIPS = 3
+# Gemma 4 on Workers AI sees every image through about 270 tokens, whatever its size or `detail` (measured 2026-11-08:
+# low, auto and high alike, and a strip half as tall costs the same), so a bigger image is shrunk before it is read. A
+# strip of at most this many pixels is read at its own resolution: about five table rows at 200 DPI (the user asked for
+# the most the OCR can get: "bạn đã tăng lượng token ocr lên tối đa chưa").
+IMAGE_PIXELS = 600_000
 # Kept for callers; strips no longer overlap (they end on the table's borders, strip_cuts).
 OVERLAP = 0.0
 # Requests in flight at once (Workers AI takes them in parallel; a 4-page scan is 12 strips).
@@ -70,7 +75,7 @@ PROMPT = """Ảnh là một dải ngang của bảng điểm sinh viên Trườn
 - kind "course": dòng môn học có số thứ tự; stt (số thứ tự), code (mã học phần), name (tên học phần), credits (số tín chỉ), score10 (điểm hệ 10), score4 (điểm hệ 4), letter (điểm chữ), result: "passed" khi cột Kết quả có dấu tích hoặc chữ Đạt, "failed" khi có dấu X hoặc chữ Không đạt, null khi trống.
 - kind "summary": khối tổng kết cuối mỗi học kỳ, thường gồm HAI ô đặt cạnh nhau: ô bên trái (Số tín chỉ đạt học kỳ, Điểm TB học kỳ (Hệ 4), Xếp loại học tập HK, Điểm rèn luyện học kỳ...) và ô bên phải (Tổng số tín chỉ đăng ký, Điểm TB học tập (Hệ 4), Tổng số tín chỉ tích lũy, Điểm TB tích lũy (Hệ 4), Xếp loại học tập tích lũy...). Ghi vào lines MỌI dòng của CẢ HAI ô, mỗi dòng một chuỗi "Nhãn: giá trị" chép nguyên văn như in (bỏ dấu gạch đầu dòng). Không dùng các trường của dòng môn học (stt, code, name, score4...) cho khối tổng kết.
 - kind "section": tiêu đề một phần khác của bảng, ví dụ "Điểm bảo lưu"; ghi vào text.
-- kind "header": dòng tên các cột của bảng; ghi các tên cột vào text.
+- kind "header": CHỈ dòng tên các cột (STT, Mã môn học, Tên môn học...); ghi các tên cột vào text. Không bao giờ chép dòng môn học vào header: mỗi dòng môn học là một mục "course" riêng.
 Quy tắc:
 - Chép đúng từng ký tự như in: mã học phần, tên học phần, điểm (giữ dấu chấm hoặc dấu phẩy như in), điểm chữ (A+, A, B+, B, C+, C, D+, D, F, VT, CT, MT...).
 - Không sửa, không đoán, không tự tính. Ô trống hoặc không đọc rõ thì để null.
@@ -147,7 +152,11 @@ def table_image(page, dpi=DPI):
     top, bottom = max(0, min(b['top'] for b in bands) - margin), min(height, max(b['bottom'] for b in bands) + margin)
     left, right = max(0, min(c[0] for c in cells) - margin), min(width, max(c[1] for c in cells) + margin)
     borders = sorted({edge - top for band in bands for edge in (band['top'], band['bottom']) if top < edge < bottom})
-    return np.ascontiguousarray(image[top:bottom, left:right]), borders
+    # Low bands of eight cells: the course rows (and the column header), to check that Gemma read every one of them. A
+    # summary box can show eight cells where the column rulings run through it, but it is three times as tall.
+    rows = [((band['top'] + band['bottom']) / 2 - top) for band in bands
+            if len(band['cells']) == 8 and band['bottom'] - band['top'] < dpi * 0.75]
+    return np.ascontiguousarray(image[top:bottom, left:right]), borders, rows
 
 
 def strip_cuts(height, borders, target):
@@ -166,21 +175,46 @@ def strip_cuts(height, borders, target):
     return cuts
 
 
-def strip_images(page, dpi=DPI, count=STRIPS, overlap=OVERLAP):
-    """JPEG images (quality 90: a grey scan strip stays near 300 kB, a PNG would be 2 MB) of the page's table
-    (table_image) in strips of about a third of a page, cut on the table's borders, with white space above and below."""
+def strip_jobs(page, dpi=DPI, pixels=IMAGE_PIXELS):
+    """[(JPEG, eight-cell rows in it)] of the page's table (table_image) in strips cut on the table's borders, each small
+    enough (IMAGE_PIXELS with its white margin) that Gemma reads it at full resolution (quality 90). The first strip of
+    a page may hold the column header among its eight-cell rows."""
     import cv2
-    image, borders = table_image(page, dpi)
-    target = page.rect.height * dpi / 72 / count
-    pad = int(dpi * 0.3)
-    images = []
+    image, borders, rows = table_image(page, dpi)
+    pad = int(dpi * 0.1)
+    target = max(dpi * 0.5, pixels / image.shape[1] - 2 * pad)
+    jobs = []
     for top, bottom in strip_cuts(image.shape[0], borders, target):
         strip = cv2.copyMakeBorder(image[top:bottom], pad, pad, 0, 0, cv2.BORDER_CONSTANT, value=(255, 255, 255))
         ok, jpeg = cv2.imencode('.jpg', cv2.cvtColor(strip, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 90])
         if not ok:
             raise GemmaOcrError('image_failed')
-        images.append(jpeg.tobytes())
-    return images
+        jobs.append((jpeg.tobytes(), sum(1 for y in rows if top <= y < bottom)))
+    return jobs
+
+
+def strip_images(page, dpi=DPI, pixels=IMAGE_PIXELS):
+    """The JPEG strips of strip_jobs."""
+    return [jpeg for jpeg, _ in strip_jobs(page, dpi, pixels)]
+
+
+# A strip whose answer has fewer course rows than its eight-cell rows is read again, at most this many more times; the
+# answer with the most course rows is kept (user test 2026-11-08: Gemma once wrote a strip's five rows as one header).
+RETRIES = 2
+
+
+def read_checked(read, jpeg, rows, first):
+    """Gemma's items for a strip, read again while they miss a course row (the first strip of a page may hold the
+    column header, one eight-cell row that is no course)."""
+    best = None
+    for _ in range(RETRIES + 1):
+        items = read(jpeg)
+        courses = sum(1 for item in items if item.get('kind') == 'course')
+        if best is None or courses > best[0]:
+            best = (courses, items)
+        if courses >= rows - (1 if first else 0):
+            break
+    return best[1]
 
 
 def json_text(content):
@@ -250,11 +284,12 @@ def read_strip(image_jpeg, endpoint=None):
 def read_pages(document, indexes, reader=read_strip):
     """{page index: [items of its strips, in order]} for the pages that need OCR, every strip read in parallel."""
     endpoint = settings() if reader is read_strip else None
-    jobs = [(index, strip) for index in indexes for strip in strip_images(document[index])]
+    read = (lambda jpeg: reader(jpeg, endpoint)) if endpoint else reader
+    jobs = [(index, jpeg, rows, number == 0) for index in indexes for number, (jpeg, rows) in enumerate(strip_jobs(document[index]))]
     with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
-        answers = list(pool.map(lambda job: reader(job[1], endpoint) if endpoint else reader(job[1]), jobs))
+        answers = list(pool.map(lambda job: read_checked(read, job[1], job[2], job[3]), jobs))
     pages = {index: [] for index in indexes}
-    for (index, _), items in zip(jobs, answers):
+    for (index, *_), items in zip(jobs, answers):
         pages[index].extend(items)
     return pages
 
@@ -275,6 +310,19 @@ def year_text(value):
 
 
 RESULT_MARKS = {'passed': '✓', 'failed': '✗'}
+# Characters a reader mixes up in a course code: a digit in the letters part, or a letter in the digits part.
+LOOKALIKES = {'0': 'O', 'O': '0', '1': 'I', 'I': '1', '5': 'S', 'S': '5', '8': 'B', 'B': '8', '2': 'Z', 'Z': '2', '6': 'G', 'G': '6'}
+
+
+def fixed_code(code):
+    """A code that does not have the VLU form, with the one look-alike character that gives it the form when exactly one
+    such change does ('71P0LE10022' → '71POLE10022', user test 2026-11-08); else the code as read."""
+    from test_ocr import CODE
+    if not code or CODE.fullmatch(code):
+        return code
+    candidates = {code[:i] + LOOKALIKES[c] + code[i + 1:] for i, c in enumerate(code) if c in LOOKALIKES}
+    valid = [candidate for candidate in candidates if CODE.fullmatch(candidate)]
+    return valid[0] if len(valid) == 1 else code
 LABELS = {folded(label): label for _, label in SUMMARY}
 
 
@@ -352,6 +400,7 @@ class RowBuilder:
                 self.last, self.last_number = 'term', None
             elif kind == 'course':
                 cells = [text(item.get(key)) for key in ('stt', 'code', 'name', 'credits', 'score10', 'score4', 'letter')]
+                cells[1] = fixed_code(cells[1].replace(' ', ''))
                 cells.append(RESULT_MARKS.get(item.get('result'), ''))
                 if not any(cells[1:7]):
                     continue

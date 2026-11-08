@@ -27,6 +27,7 @@ const environmentSchema = z.object({
   CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
   CLOUDFLARE_API_TOKEN: z.string().optional(),
   AI_CONCURRENCY: z.string().optional(),
+  AI_THINKING: z.string().optional(),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   WEB_ORIGIN: z.url().optional(),
@@ -74,10 +75,12 @@ export interface AiProviderConfig {
   cloudflare: { accountId: string; apiToken: string } | null;
   /** Jobs the in-process worker runs at a time (AI_CONCURRENCY, 1–4, default 2). */
   concurrency: number;
+  /** AI_THINKING=on: jobs that ask for Gemma's thinking get it on Cloudflare too (off by default, cloudflare.ts). */
+  thinking: boolean;
 }
 
 /** AI_PROVIDER and the Cloudflare values, read without ever failing the start. */
-export function aiProviderConfig(environment: { [key in "AI_PROVIDER" | "CLOUDFLARE_ACCOUNT_ID" | "CLOUDFLARE_API_TOKEN" | "AI_CONCURRENCY"]?: string | undefined }): AiProviderConfig {
+export function aiProviderConfig(environment: { [key in "AI_PROVIDER" | "CLOUDFLARE_ACCOUNT_ID" | "CLOUDFLARE_API_TOKEN" | "AI_CONCURRENCY" | "AI_THINKING"]?: string | undefined }): AiProviderConfig {
   const clean = (value: string | undefined) => (value ?? "").trim().replace(/^["']|["']$/g, "").trim();
   const accountId = clean(environment.CLOUDFLARE_ACCOUNT_ID).toLowerCase();
   const apiToken = clean(environment.CLOUDFLARE_API_TOKEN);
@@ -85,7 +88,8 @@ export function aiProviderConfig(environment: { [key in "AI_PROVIDER" | "CLOUDFL
   return {
     provider: clean(environment.AI_PROVIDER).toLowerCase() === "cloudflare" ? "cloudflare" : "ollama",
     cloudflare: /^[0-9a-f]{32}$/.test(accountId) && /^[A-Za-z0-9_-]{20,400}$/.test(apiToken) ? { accountId, apiToken } : null,
-    concurrency: Number.isInteger(concurrency) && concurrency >= 1 && concurrency <= 4 ? concurrency : 2
+    concurrency: Number.isInteger(concurrency) && concurrency >= 1 && concurrency <= 4 ? concurrency : 2,
+    thinking: clean(environment.AI_THINKING).toLowerCase() === "on"
   };
 }
 

@@ -15,7 +15,7 @@ Worker AI trong API vẫn chạy đúng vòng lặp và giao thức của worker
 
 - `num_predict` → `max_completion_tokens`.
 - `schema` → `response_format: json_schema`. Nếu Workers AI từ chối lược đồ (400), gửi lại một lần không kèm lược đồ.
-- Luôn gửi `chat_template_kwargs.enable_thinking`, vì Workers AI bật suy nghĩ khi không nói gì. Phần suy nghĩ không bao giờ được giữ lại.
+- Luôn gửi `chat_template_kwargs.enable_thinking`, vì Workers AI bật suy nghĩ khi không nói gì. Mặc định suy nghĩ TẮT, kể cả với việc có yêu cầu suy nghĩ. Thử ngày 8/11: Gemma 4 26B suy nghĩ hết 8.192 rồi 24.576 token (10 phút) cho một câu trả lời của Trợ lý AI mà vẫn chưa trả lời; tắt suy nghĩ thì trả lời đúng sau 9 giây. Muốn bật lại thì đặt `AI_THINKING=on`; khi đó mỗi việc được cộng thêm 16.384 token cho phần suy nghĩ. Phần suy nghĩ không bao giờ được giữ lại.
 - Hết 10.000 neuron miễn phí trong ngày (mã 4006), token bị từ chối hoặc không có model: báo `ollama_unavailable`, không thử lại.
 - Model bận (3040), 429 hoặc 5xx: thử lại tối đa 2 lần.
 
@@ -29,9 +29,11 @@ Khi `AI_PROVIDER=cloudflare`:
 
 1. Trang không có lớp chữ dùng được được vẽ ở 200 DPI. Bản scan được xoay thẳng như với PaddleOCR (`rectify`). Nếu vẫn không thấy khung bảng (bảng ngắn ở trang cuối, đường kẻ dọc quá ngắn để xoay), `deskew` thử các góc trong ±1,5° và chọn góc làm các hàng mực sắc nét nhất.
 2. `ppocr_table.table_bands` tìm khung bảng. Chỉ phần khung bảng được gửi đi; mọi thứ ngoài khung bảng bị cắt bỏ: tiêu đề, đầu trang, chân trang, phần thông tin quanh bảng. Không tìm thấy khung bảng thì trang không được gửi (`table_not_found`).
-3. Phần bảng được cắt thành các dải khoảng 1/3 trang, cắt đúng trên đường kẻ ngang của bảng (`strip_cuts`). Không dòng nào bị cắt đôi hay đọc hai lần. Thử ngày 8/11: khi các dải còn chồng lên nhau, dòng cuối của học kỳ trước bị đọc lại sang học kỳ sau. Mỗi dải có thêm lề trắng trên và dưới, mã hóa JPEG chất lượng 90 (khoảng 300 kB). Mọi dải của mọi trang được gửi song song, tối đa 6 yêu cầu cùng lúc.
+3. Phần bảng được cắt thành các dải, cắt đúng trên đường kẻ ngang của bảng (`strip_cuts`). Mỗi dải nhỏ đủ để Gemma đọc ở độ phân giải gốc: tối đa `IMAGE_PIXELS` = 600.000 điểm ảnh, khoảng 4–5 dòng ở 200 DPI. Đo ngày 8/11: Gemma 4 trên Workers AI nhìn mọi ảnh qua khoảng 270 token, dù `detail` là low, auto hay high, nên ảnh lớn hơn sẽ bị thu nhỏ trước khi đọc. Không dòng nào bị cắt đôi hay đọc hai lần. Thử ngày 8/11: khi các dải còn chồng lên nhau, dòng cuối của học kỳ trước bị đọc lại sang học kỳ sau. Mỗi dải có thêm lề trắng trên và dưới, mã hóa JPEG chất lượng 90 (khoảng 300 kB). Mọi dải của mọi trang được gửi song song, tối đa 6 yêu cầu cùng lúc.
 4. Gemma trả JSON `items`: `term`, `course`, `summary` (`lines` hoặc `text`: từng dòng "Nhãn: giá trị" của CẢ HAI ô tổng kết), `section`, `header`. Nhiệt độ 0, không suy nghĩ.
+4b. Kiểm tra đủ dòng: dòng kẻ thấp có 8 ô là dòng môn. Nếu Gemma trả về ít dòng môn hơn số dòng đó (dải đầu trang được trừ 1 cho dòng tên cột), dải được đọc lại, tối đa 2 lần, và giữ câu trả lời nhiều dòng môn nhất (`read_checked`). Thử ngày 8/11: Gemma từng chép cả 5 dòng môn của một dải vào mục `header`.
 5. `RowBuilder` chuyển các mục thành đúng các dòng 8 ô mà lớp chữ và PaddleOCR tạo ra:
+   - mã môn sai định dạng VLU được sửa khi đổi đúng một ký tự dễ nhầm (0/O, 1/I, 5/S, 8/B, 2/Z, 6/G) cho ra đúng một mã hợp lệ (`fixed_code`, ví dụ 71P0LE10022 thành 71POLE10022);
    - nhãn tổng kết được so gần đúng với nhãn chuẩn; nhãn chép hai lần chỉ tính một;
    - các mảnh của cùng một khối tổng kết gộp lại;
    - học kỳ bị sót tiêu đề (dòng môn ngay sau khối tổng kết, hoặc số thứ tự bắt đầu lại từ 1) thành học kỳ kế tiếp, và trang có `term_title_inferred`;
@@ -45,6 +47,11 @@ Trang có `method: "gemma"`. `ocr_settings` là `{ engine: "gemma", model, dpi, 
 - Số tín chỉ, điểm hệ 4, điểm chữ và kết quả đúng 100%; điểm hệ 10 đúng 99,7%; mã môn đúng 98,7% (các dòng sai đều bị đánh dấu cần kiểm tra).
 - Khối tổng kết khớp 610/639 dòng.
 - Khoảng 30 giây và 150–320 neuron mỗi bảng điểm.
+
+Đánh giá lại sau khi dùng dải đọc ở độ phân giải gốc và kiểm tra đủ dòng (8/11), trên 2 bảng điểm giả (106 dòng môn):
+- 106 dòng đọc được, 0 bịa thêm, 0 sót; 105 dòng đúng hoàn toàn. Dòng còn lại nhầm O với 0 trong mã môn, nay đã được `fixed_code` sửa.
+- Khối tổng kết khớp 207/207 dòng.
+- Khoảng 50 giây và 400 neuron mỗi bảng điểm.
 
 ## Cấu hình (`apps/api/.env`, Render → Environment)
 
