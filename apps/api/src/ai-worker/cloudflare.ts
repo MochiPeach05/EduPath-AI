@@ -61,20 +61,26 @@ const headers = (runtime: Pick<CloudflareRuntime, "apiToken">) => ({
 });
 
 /**
- * How a job's JSON schema reaches Gemma on Workers AI: in the prompt, not as response_format. Under json_schema mode Gemma
- * 26B padded a roadmap with blank lines up to its 12288-token limit (2026-11-08: two thirds of the text was whitespace)
- * while the same prompt without it answered in JSON at once; the API's checks of each answer stay as they are.
+ * How a job's JSON schema reaches Gemma on Workers AI (tests 2026-11-08, without thinking): json_schema mode first, the
+ * only one that keeps the answer to the schema (two of two comments passed the API's checks; json_object let a comment
+ * add an empty key and write nextSteps as objects), but it once padded a roadmap with blank lines up to the token limit;
+ * so a run of blanks (or a schema Workers AI refuses) stops it at once and the answer is asked again in json_object
+ * mode (six of six comments and roadmaps came back as valid JSON). The schema is also at the end of the prompt.
  */
 export const SCHEMA_NOTE = "Trả về đúng một đối tượng JSON hợp lệ theo lược đồ JSON dưới đây (đủ các khóa bắt buộc, đúng kiểu dữ liệu), không kèm chữ nào khác ngoài JSON:";
+
+/** How a JSON answer is asked for: json_object mode (default), json_schema mode (not used: see SCHEMA_NOTE), or none. */
+export type JsonMode = "json_object" | "json_schema" | "none";
 
 /**
  * The /v1/chat/completions body of a job: Ollama's num_predict becomes max_completion_tokens (it covers thinking and
  * answer on both), temperature and top_p go as they are (num_ctx and top_k have no counterpart), the JSON schema goes
- * at the end of the user message (SCHEMA_NOTE; response_format only when withSchema asks for it), and thinking is
- * always stated because Workers AI turns it on when nothing is said.
+ * at the end of the user message (SCHEMA_NOTE) with the response_format of `mode`, and thinking is always stated because
+ * Workers AI turns it on when nothing is said.
  */
-export function buildCloudflareChatBody(runtime: Pick<CloudflareRuntime, "model" | "thinking">, job: OllamaJob, withSchema = false): Record<string, unknown> {
+export function buildCloudflareChatBody(runtime: Pick<CloudflareRuntime, "model" | "thinking">, job: OllamaJob, mode: JsonMode = "json_object"): Record<string, unknown> {
   const hasSchema = job.schema !== null && job.schema !== undefined && typeof job.schema === "object";
+  const withSchema = mode === "json_schema";
   const think = job.think === true && runtime.thinking === true;
   const numberOption = (key: string) => {
     const value = job.options[key];
@@ -100,9 +106,22 @@ export function buildCloudflareChatBody(runtime: Pick<CloudflareRuntime, "model"
   if (topP !== undefined) body.top_p = topP;
   if (withSchema && hasSchema) {
     body.response_format = { type: "json_schema", json_schema: { name: "answer", schema: job.schema } };
+  } else if (mode === "json_object" && hasSchema) {
+    body.response_format = { type: "json_object" };
   }
   return body;
 }
+
+/** An answer to ask again in the next JSON mode: it ran into blank space, or Workers AI refused the schema (400). */
+class ModeFallback extends Error {
+  constructor(readonly reason: "whitespace_runaway" | "schema_rejected") {
+    super(reason);
+    this.name = "ModeFallback";
+  }
+}
+/** Blank characters at the end of an answer that mean it no longer writes anything (a JSON answer pads a few dozen). */
+const RUNAWAY_BLANKS = 1500;
+const endsInRunaway = (text: string) => (/\s+$/.exec(text.slice(-RUNAWAY_BLANKS - 10))?.[0].length ?? 0) >= RUNAWAY_BLANKS;
 
 /** The JSON object of an answer that should be one: without a ```json fence or words around it; the text as it is else. */
 export function jsonOnly(text: string): string {
@@ -110,7 +129,54 @@ export function jsonOnly(text: string): string {
   const inner = (fenced?.[1] ?? text).trim();
   const start = inner.indexOf("{");
   const end = inner.lastIndexOf("}");
-  return start >= 0 && end > start ? inner.slice(start, end + 1) : text;
+  if (start < 0 || end <= start) return text;
+  const json = inner.slice(start, end + 1);
+  for (const candidate of [json, repairJson(json)]) {
+    try {
+      const parsed: unknown = JSON.parse(candidate);
+      // An empty key ("": " ") is a slip of json_object mode, never a field of a schema.
+      return hasEmptyKey(parsed) ? JSON.stringify(withoutEmptyKeys(parsed)) : candidate;
+    } catch {
+      // the next candidate
+    }
+  }
+  return json;
+}
+
+function hasEmptyKey(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(hasEmptyKey);
+  if (!value || typeof value !== "object") return false;
+  return Object.entries(value).some(([key, item]) => key === "" || hasEmptyKey(item));
+}
+
+function withoutEmptyKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withoutEmptyKeys);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(Object.entries(value).filter(([key]) => key !== "").map(([key, item]) => [key, withoutEmptyKeys(item)]));
+}
+
+/**
+ * The small slips of JSON written without json_schema mode, mended so the answer is not thrown away (2026-11-08: about
+ * one competency comment in four had a stray empty string before a closing brace, `"…",""}`): a line break or tab left
+ * raw inside a string, an empty string with no value before } or ], a comma before } or ]. Only the text outside the
+ * strings is touched, except the control characters, which are escaped.
+ */
+export function repairJson(text: string): string {
+  let out = "";
+  let inString = false;
+  let escaped = false;
+  for (const char of text) {
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') inString = false;
+      else if (char === "\n") { out += "\\n"; continue; }
+      else if (char === "\r") { out += "\\r"; continue; }
+      else if (char === "\t") { out += "\\t"; continue; }
+    } else if (char === '"') inString = true;
+    out += char;
+  }
+  return out.replace(/,\s*""\s*(?=[}\]])/g, "").replace(/,\s*(?=[}\]])/g, "");
 }
 
 /**
@@ -249,10 +315,23 @@ function pause(ms: number, signal: AbortSignal): Promise<void> {
 /**
  * One streamed chat completion, like ollamaChat: resolves with the visible content and Ollama-named metrics, or throws
  * an AiWorkerError (ai_timeout, ai_output_truncated, ollama_unavailable = Workers AI unreachable, refused or out of the
- * day's neurons, ai_failed) or GenerationAbortedError. A request Workers AI could not take is sent again up to twice;
- * a JSON schema it refuses (400) is dropped once and the prompt's own description of the JSON is relied on.
+ * day's neurons, ai_failed) or GenerationAbortedError. A request Workers AI could not take is sent again up to twice. A
+ * JSON answer asked in json_object mode that runs into blank space is stopped at once and asked again without the mode.
  */
 export async function cloudflareChat(runtime: CloudflareRuntime, job: OllamaJob, deps: CloudflareDeps = {}, signal?: AbortSignal): Promise<OllamaChatResult> {
+  const hasSchema = job.schema !== null && job.schema !== undefined && typeof job.schema === "object";
+  const modes: JsonMode[] = hasSchema ? ["json_schema", "json_object"] : ["none"];
+  for (let index = 0; ; index++) {
+    try {
+      return await chatOnce(runtime, job, deps, signal, modes[index]!);
+    } catch (error) {
+      if (!(error instanceof ModeFallback)) throw error;
+      if (index + 1 >= modes.length) throw new AiWorkerError("ai_failed", error.reason);
+    }
+  }
+}
+
+async function chatOnce(runtime: CloudflareRuntime, job: OllamaJob, deps: CloudflareDeps, signal: AbortSignal | undefined, mode: JsonMode): Promise<OllamaChatResult> {
   const fetchImpl: FetchLike = deps.fetch ?? fetch;
   const inactivityMs = deps.inactivityMs ?? DEFAULT_INACTIVITY_MS;
   const retryDelays = deps.retryDelaysMs ?? DEFAULT_RETRY_DELAYS_MS;
@@ -277,7 +356,6 @@ export async function cloudflareChat(runtime: CloudflareRuntime, job: OllamaJob,
   const started = Date.now();
 
   try {
-    const withSchema = false;
     let response: Response | null = null;
     for (let attempt = 0; ; attempt++) {
       if (reason) throw reasonError(reason);
@@ -286,13 +364,18 @@ export async function cloudflareChat(runtime: CloudflareRuntime, job: OllamaJob,
         response = await fetchImpl(`${base(runtime)}/v1/chat/completions`, {
           method: "POST",
           headers: headers(runtime),
-          body: JSON.stringify(buildCloudflareChatBody(runtime, job, withSchema)),
+          body: JSON.stringify(buildCloudflareChatBody(runtime, job, mode)),
           redirect: "error",
           signal: controller.signal
         });
         if (response.ok) break;
+        if (response.status === 400 && mode === "json_schema") {
+          await response.body?.cancel().catch(() => undefined);
+          throw new ModeFallback("schema_rejected");
+        }
         failure = await responseFailure(response);
       } catch (error) {
+        if (error instanceof ModeFallback) throw error;
         if (reason) throw reasonError(reason);
         failure = { retry: isConnectionError(error), error: new AiWorkerError(isConnectionError(error) ? "ollama_unavailable" : "ai_failed", "request_failed") };
       }
@@ -327,6 +410,10 @@ export async function cloudflareChat(runtime: CloudflareRuntime, job: OllamaJob,
       if (chunk.done) break;
       resetIdle();
       accumulator.push(decoder.decode(chunk.value, { stream: true }));
+      if (job.schema && endsInRunaway(accumulator.content)) {
+        await reader.cancel().catch(() => undefined);
+        throw new ModeFallback("whitespace_runaway");
+      }
       reportContent();
       if (accumulator.done) {
         await reader.cancel().catch(() => undefined);

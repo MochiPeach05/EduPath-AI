@@ -59,9 +59,40 @@ describe("the chat body Workers AI receives", () => {
       max_completion_tokens: 8192 + 16_384,
       chat_template_kwargs: { enable_thinking: true },
       temperature: 0.4,
-      top_p: 0.95
+      top_p: 0.95,
+      response_format: { type: "json_object" }
     });
-    expect(buildCloudflareChatBody(runtime, job, true)).toHaveProperty("response_format");
+    expect(buildCloudflareChatBody(runtime, job, "json_schema").response_format).toEqual({ type: "json_schema", json_schema: { name: "answer", schema: job.schema } });
+    expect(buildCloudflareChatBody(runtime, job, "none")).not.toHaveProperty("response_format");
+    expect(buildCloudflareChatBody(runtime, { ...job, schema: null })).not.toHaveProperty("response_format");
+  });
+
+  it("asks in json_schema mode first, and in json_object mode when the answer runs into blank space or the schema is refused", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    const runaway: FetchLike = async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return bodies.length === 1
+        ? sse([delta('{"summary":'), ...Array.from({ length: 40 }, () => delta(" ".repeat(50))), delta("\n"), finish("length"), "data: [DONE]\n\n"])
+        : sse([delta('{"summary":"Ổn"}'), finish(), "data: [DONE]\n\n"]);
+    };
+    expect((await cloudflareChat(runtime, job, { fetch: runaway })).content).toBe('{"summary":"Ổn"}');
+    expect((bodies[0]!.response_format as { type: string }).type).toBe("json_schema");
+    expect(bodies[1]!.response_format).toEqual({ type: "json_object" });
+    bodies.length = 0;
+    const refused: FetchLike = async (_url, init) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return bodies.length === 1 ? json({ errors: [{ code: 5006, message: "bad schema" }], success: false }, 400) : sse([delta('{"summary":"Được"}'), finish(), "data: [DONE]\n\n"]);
+    };
+    expect((await cloudflareChat(runtime, job, { fetch: refused })).content).toBe('{"summary":"Được"}');
+    expect(bodies.map((body) => (body.response_format as { type: string }).type)).toEqual(["json_schema", "json_object"]);
+    // A plain-text answer (Trợ lý AI) asks for no JSON at all.
+    bodies.length = 0;
+    await cloudflareChat(runtime, { ...job, schema: null }, { fetch: async (_url, init) => { bodies.push(JSON.parse(String(init?.body))); return sse([delta("Chào bạn"), finish(), "data: [DONE]\n\n"]); } });
+    expect(bodies[0]).not.toHaveProperty("response_format");
+  });
+
+  it("drops the empty keys json_object mode sometimes adds", () => {
+    expect(JSON.parse(jsonOnly('{"careerFit":{"comment":"Phù hợp.","":" "},"gaps":[{"":"x","key":"S1"}]}'))).toEqual({ careerFit: { comment: "Phù hợp." }, gaps: [{ key: "S1" }] });
   });
 
   it("keeps thinking off by default even when the job asks for it (Gemma 26B looped in its thoughts, 2026-11-08)", () => {
@@ -106,6 +137,15 @@ describe("cloudflareChat", () => {
     const plain: FetchLike = async () => sse([delta("Câu trả lời {không phải JSON}"), finish(), "data: [DONE]\n\n"]);
     expect((await cloudflareChat(runtime, { ...job, schema: null }, { fetch: plain })).content).toBe("Câu trả lời {không phải JSON}");
     expect(jsonOnly("không có JSON")).toBe("không có JSON");
+  });
+
+  it("mends the small slips of JSON written without json_schema mode, and leaves good JSON alone", () => {
+    // Seen 2026-11-08 in a competency comment: a stray empty string before a closing brace.
+    expect(JSON.parse(jsonOnly('{"careerFit":{"comment":"Phù hợp.",""},"gaps":[]}'))).toEqual({ careerFit: { comment: "Phù hợp." }, gaps: [] });
+    expect(JSON.parse(jsonOnly('{"steps":["Ôn SQL","Làm dự án",],"note":"Dòng 1\nDòng 2"}'))).toEqual({ steps: ["Ôn SQL", "Làm dự án"], note: "Dòng 1\nDòng 2" });
+    expect(JSON.parse(jsonOnly('{"text":"Có dấu phẩy, và \\"ngoặc\\" trong chuỗi: ,\\"\\"}"}'))).toEqual({ text: 'Có dấu phẩy, và "ngoặc" trong chuỗi: ,""}' });
+    expect(jsonOnly('{"a":1}')).toBe('{"a":1}');
+    expect(jsonOnly('{"a":')).toBe('{"a":');
   });
 
   it("asks again when Workers AI is busy or fails, at most twice, then reports ai_failed", async () => {

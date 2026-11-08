@@ -14,7 +14,10 @@ Người dùng chốt ngày 8/11/2026: "Chốt phương án chuyển ocr thành 
 Worker AI trong API vẫn chạy đúng vòng lặp và giao thức của worker trên PC (`worker.ts`, gọi `/api/worker/...` qua `127.0.0.1`). Nhờ vậy cách nhận việc, gia hạn, thử lại và kiểm tra kết quả không đổi. Chỉ phần gọi mô hình khác (`ai-worker/cloudflare.ts`):
 
 - `num_predict` → `max_completion_tokens`.
-- `schema` → `response_format: json_schema`. Nếu Workers AI từ chối lược đồ (400), gửi lại một lần không kèm lược đồ.
+- `schema`: thử chế độ `json_schema` trước, vì chỉ chế độ này giữ câu trả lời đúng lược đồ. Thử ngày 8/11, không suy nghĩ: 2/2 nhận xét năng lực qua bộ kiểm tra của API.
+  - Nếu câu trả lời kéo theo một dải trống dài (từ 1.500 ký tự trắng ở cuối), hoặc Workers AI từ chối lược đồ (400), dừng ngay và hỏi lại ở chế độ `json_object`. Khi đó lược đồ được đặt ở cuối câu lệnh (`SCHEMA_NOTE`). Lý do: một lộ trình ở chế độ `json_schema` từng chèn khoảng trắng tới hết 12.288 token, 2/3 là khoảng trắng; `json_object` cho 6/6 JSON hợp lệ.
+  - `jsonOnly` lấy JSON ra khỏi khối ```json hay chữ bao quanh, sửa vài lỗi cú pháp nhỏ (`repairJson`: xuống dòng chưa thoát, chuỗi rỗng thừa, dấu phẩy thừa) và bỏ khóa rỗng (`"": " "`).
+  - Câu trả lời không suy nghĩ tối đa 8.192 token (`ANSWER_CAP`).
 - Luôn gửi `chat_template_kwargs.enable_thinking`, vì Workers AI bật suy nghĩ khi không nói gì. Mặc định suy nghĩ TẮT, kể cả với việc có yêu cầu suy nghĩ. Thử ngày 8/11: Gemma 4 26B suy nghĩ hết 8.192 rồi 24.576 token (10 phút) cho một câu trả lời của Trợ lý AI mà vẫn chưa trả lời; tắt suy nghĩ thì trả lời đúng sau 9 giây. Muốn bật lại thì đặt `AI_THINKING=on`; khi đó mỗi việc được cộng thêm 16.384 token cho phần suy nghĩ. Phần suy nghĩ không bao giờ được giữ lại.
 - Hết 10.000 neuron miễn phí trong ngày (mã 4006), token bị từ chối hoặc không có model: báo `ollama_unavailable`, không thử lại.
 - Model bận (3040), 429 hoặc 5xx: thử lại tối đa 2 lần.
@@ -52,6 +55,14 @@ Trang có `method: "gemma"`. `ocr_settings` là `{ engine: "gemma", model, dpi, 
 - 106 dòng đọc được, 0 bịa thêm, 0 sót; 105 dòng đúng hoàn toàn. Dòng còn lại nhầm O với 0 trong mã môn, nay đã được `fixed_code` sửa.
 - Khối tổng kết khớp 207/207 dòng.
 - Khoảng 50 giây và 400 neuron mỗi bảng điểm.
+
+## Thử trên tài khoản phụ (8/11)
+
+Các lần thử dùng tài khoản Cloudflare phụ (`CLOUDFLARE_TEST_ACCOUNT_ID`, `CLOUDFLARE_TEST_API_TOKEN` trong `apps/api/.env`), không bao giờ dùng tài khoản của web. Với sinh viên giả của schema e2e:
+- Nhận xét năng lực: xong sau 51 giây, qua bộ kiểm tra của API.
+- Lộ trình AI: xong sau 79 giây, 10 môn, 4 tháng.
+- Lời khuyên xét tốt nghiệp: 18 giây.
+- Trợ lý AI: 3–9 giây.
 
 ## Cấu hình (`apps/api/.env`, Render → Environment)
 
