@@ -72,15 +72,16 @@
 .as-state p { margin: 0; }
 
 /* Empty state: a greeting and one starter question per function. */
-.as-welcome { display: grid; justify-items: center; gap: 10px; max-width: 720px; margin: 0 auto; padding: 20px 0 8px; text-align: center; }
-.as-welcome-icon { display: inline-grid; place-items: center; width: 48px; height: 48px; margin-bottom: 4px; border-radius: 14px; background: var(--as-ai-soft); color: var(--as-ai); }
-.as-welcome-icon svg { width: 24px; height: 24px; }
+/* Compact so the welcome and its questions fit the chat without a scrollbar (user 2026-11-08). */
+.as-welcome { display: grid; justify-items: center; gap: 8px; max-width: 720px; margin: 0 auto; padding: 0 0 4px; text-align: center; }
+.as-welcome-icon { display: inline-grid; place-items: center; width: 40px; height: 40px; border-radius: 12px; background: var(--as-ai-soft); color: var(--as-ai); }
+.as-welcome-icon svg { width: 22px; height: 22px; }
 .sw-shell .as-welcome h2 { font-size: 22px; letter-spacing: -.4px; line-height: 1.35; }
 .as-welcome > p { max-width: 580px; margin: 0; color: var(--sw-muted); font-size: 13.5px; line-height: 1.65; }
-.as-starters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; width: 100%; margin: 16px 0 0; padding: 0; list-style: none; text-align: left; }
+.as-starters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; width: 100%; margin: 8px 0 0; padding: 0; list-style: none; text-align: left; }
 .as-starters li:last-child:nth-child(odd) { grid-column: 1 / -1; justify-self: center; width: calc(50% - 5px); }
 /* .sw-shell: the portal's button reset (border: 0) would otherwise win. */
-.sw-shell .as-starter { display: flex; align-items: center; gap: 12px; width: 100%; height: 100%; padding: 12px 14px; border: 1px solid var(--sw-border); border-radius: 10px; background: #fff; color: var(--sw-ink); font-size: 13.5px; font-weight: 600; line-height: 1.5; text-align: left; }
+.sw-shell .as-starter { display: flex; align-items: center; gap: 12px; width: 100%; height: 100%; padding: 10px 14px; border: 1px solid var(--sw-border); border-radius: 10px; background: #fff; color: var(--sw-ink); font-size: 13.5px; font-weight: 600; line-height: 1.5; text-align: left; }
 .sw-shell .as-starter:hover:not(:disabled) { border-color: var(--ep-control-border-hover); background: var(--ep-control-soft); }
 .as-starter svg { flex: none; width: 18px; height: 18px; color: var(--sw-red); }
 
@@ -198,6 +199,15 @@ span.as-source:focus { outline: none; }
   .sw-shell .as-suggestion { min-height: 34px; white-space: nowrap; }
 }
 
+/* A short window keeps the questions in view: the welcome icon goes, as on a phone. */
+@media (max-height: 760px) {
+  .as-welcome-icon { display: none; }
+  .as-scroll:has(.as-welcome) { padding-top: 16px; padding-bottom: 12px; }
+}
+/* Very short: the heading and the questions only. */
+@media (max-height: 680px) {
+  .as-welcome > p { display: none; }
+}
 @media (max-width: 600px) {
   .as-starters { grid-template-columns: minmax(0, 1fr); }
   .as-starters li:last-child:nth-child(odd) { width: 100%; }
