@@ -91,6 +91,18 @@ describe("Kế hoạch học kỳ", () => {
     context, plan, onChange: () => {}, saveState: "idle", saveError: "", origin: null, onOpenAi: () => {}, readOnly,
   }));
 
+  it("names the class of another cohort a planned course is studied in, once per card (user 2026-11-08)", () => {
+    const retake = course("R", { name: "Môn học lại", state: "failed", grade: "F", offeredTerms: ["HK262"],
+      classes: [{ term: "HK262", cohort: "K30", major: null, source: "plan" }, { term: "HK263", cohort: "K32", major: null, source: "curriculum" }] });
+    const html = renderToStaticMarkup(createElement(RoadmapPlanner, {
+      context: { ...context, courses: [...context.courses, retake] }, plan: { schemaVersion: 1, terms: [{ code: "HK261", courses: [] }, { code: "HK262", courses: [{ code: "R" }] }] },
+      onChange: () => {}, saveState: "idle", saveError: "", origin: null, onOpenAi: () => {},
+    }));
+    expect(html).toContain('<small class="rm-class">Học cùng lớp khóa K30 (theo kế hoạch đào tạo)</small>');
+    expect(html.match(/lớp khóa K30/g)).toHaveLength(1);
+    expect(html).toContain("Kỳ sau (HK2 2026–2027): có mở · thường mở HK2");
+  });
+
   it("shows a cố vấn học tập the plan with nothing to move, add or hide", () => {
     const html = planner({ schemaVersion: 1, aiAdded: { completedAt: "2026-10-24T10:00:00.000Z", term: "HK262", codes: ["C"], addedAt: "2026-10-24T10:05:00.000Z" },
       terms: [{ code: "HK261", courses: [] }, { code: "HK262", courses: [{ code: "C" }] }] }, true);

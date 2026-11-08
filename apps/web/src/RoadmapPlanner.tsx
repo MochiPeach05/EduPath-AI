@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, type DragEvent } from "react";
 import { Icon } from "./student-icons";
 import { Mark } from "./RoadmapProgress";
 import {
-  MAX_TERMS, aiAddedText, aiCleanedText, exemptText, formatNumber, limitsText, moveCourse, nextTerm, nextTermOffer, offeredSemesters, ownRelations, planIssues,
+  MAX_TERMS, aiAddedText, aiCleanedText, classesText, exemptText, formatNumber, limitsText, moveCourse, nextTerm, nextTermOffer, offeredSemesters, ownRelations, planIssues,
   plannedTerms, poolSections, proposalAddedText, runningIn, searchCourses, termLabel, termLoad, termLoadText, thesisCleanedText, thesisHint, type AiSuggestion,
   type PlanIssue, type PlanOrigin, type PlanProposal, type StudyPlanContext, type StudyPlanCourse, type StudyPlanData,
 } from "./study-plan-data";
@@ -30,10 +30,19 @@ function issueTexts(issue: PlanIssue | undefined, course: StudyPlanCourse, term:
   ];
 }
 
-/** "Kỳ sau (HK2 2026–2027): có mở · thường mở HK2" (nextTermOffer). */
-function OfferLine({ course, context }: { course: StudyPlanCourse; context: StudyPlanContext }) {
-  const offer = nextTermOffer(course, context);
+/**
+ * "Kỳ sau (HK2 2026–2027): có mở, học cùng lớp khóa K30 (theo kế hoạch đào tạo) · thường mở HK2" (nextTermOffer); in a
+ * term, the class of that term is its own line (ClassLine) and the next term's line leaves it out.
+ */
+function OfferLine({ course, context, classes = true }: { course: StudyPlanCourse; context: StudyPlanContext; classes?: boolean }) {
+  const offer = nextTermOffer(course, context, { classes });
   return <small className={`rm-offer rm-offer-${offer.tone}`}>{offer.text}</small>;
+}
+
+/** "Học cùng lớp khóa K30, K31 (theo kế hoạch đào tạo)": the class of a planned course in its term (user 2026-11-08). */
+function ClassLine({ course, term, context }: { course: StudyPlanCourse; term: string; context: StudyPlanContext }) {
+  const text = classesText(course, term, context.cohortCode);
+  return text ? <small className="rm-class">Học cùng {text}</small> : null;
 }
 
 function CourseFacts({ course, names, byCode, context }: { course: StudyPlanCourse; names: ReadonlyMap<string, string>; byCode: ReadonlyMap<string, StudyPlanCourse>; context: StudyPlanContext }) {
@@ -214,7 +223,8 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
                   <div>
                     <strong>{course?.name ?? item.code}</strong><span className="rm-course-code">{item.code}</span>
                     {course && <small className="rm-course-facts">{formatNumber(course.credits)} TC{course.state === "failed" ? " · học lại" : ""}{course.state === "passed" ? ` · học cải thiện${course.grade ? ` (đã đạt ${course.grade})` : ""}` : ""}{course.conditional ? " · môn điều kiện" : ""}</small>}
-                    {course && <OfferLine course={course} context={context} />}
+                    {course && <ClassLine course={course} term={term.code} context={context} />}
+                    {course && <OfferLine course={course} context={context} classes={false} />}
                     {problems.map((text) => <small key={text} className="rm-issue"><Mark kind="warning" /> {text}</small>)}
                   </div>
                   {!readOnly && <div className="rm-term-actions">

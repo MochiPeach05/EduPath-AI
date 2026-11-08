@@ -28,7 +28,14 @@ export type StudyPlanCourse = {
   planTerm: string | null; offeredTerms: string[];
   /** Opened every term whatever the training plans list: English (API opensEveryTerm); absent before 2026-11-04. */
   everyTerm?: boolean; grade: string | null; takenTerm: string | null; attempts: number; equivalent: string | null;
+  /** The classes of every cohort from the term of today on (API StudyPlanClass, 2026-11-08); absent before. */
+  classes?: StudyPlanClass[];
 };
+/**
+ * A class: the term a cohort studies the course in, by its training plan ("plan") or, for a cohort without one, its CTĐT
+ * ("curriculum"). major: the short name of another major ("HTTT"), null for the student's own.
+ */
+export type StudyPlanClass = { term: string; cohort: string; major: string | null; source: "plan" | "curriculum" };
 export type StudyPlanGraduationGroup = {
   label: string; kind: "mandatory" | "elective"; unit: "môn" | "TC"; required: number | null; passed: number | null; status: TriState; courseCodes: string[];
 };
@@ -483,17 +490,40 @@ export const offeredSemesters = (course: Pick<StudyPlanCourse, "offeredTerms" | 
   course.everyTerm ? "mọi học kỳ" : [...new Set(course.offeredTerms.map((term) => `HK${term.slice(4)}`))].sort().join(", ");
 
 /**
+ * The other cohorts' classes of a course in a term (user 2026-11-08: "những môn học rớt, học lại, cải thiện, trễ kế hoạch
+ * đều là học lại chung với các khóa sau ghi rõ lớp học đấy thuộc khóa nào trong ctdt hoặc file kế hoạch"): "lớp khóa K30,
+ * K31 (theo kế hoạch đào tạo)", "lớp khóa K32 (theo CTĐT)". Null when the student's own cohort studies it then (the
+ * student's own class) or no cohort does. The student's major's classes, else another major's ("K30 HTTT").
+ */
+export function classesText(course: Pick<StudyPlanCourse, "classes">, term: string, ownCohort: string | null | undefined): string | null {
+  const all = (course.classes ?? []).filter((item) => item.term === term);
+  if (!all.length || all.some((item) => item.cohort === ownCohort && !item.major)) return null;
+  const own = all.filter((item) => !item.major);
+  const shown = own.length ? own : all;
+  const names = (source: StudyPlanClass["source"]) =>
+    [...new Set(shown.filter((item) => item.source === source).map((item) => (item.major ? `${item.cohort} ${item.major}` : item.cohort)))];
+  const parts = ([["plan", "theo kế hoạch đào tạo"], ["curriculum", "theo CTĐT"]] as const)
+    .map(([source, label]) => [names(source), label] as const).filter(([list]) => list.length).map(([list, label]) => `${list.join(", ")} (${label})`);
+  return `lớp khóa ${parts.join(", ")}`;
+}
+
+/**
  * Whether the training plans open a course in the term after the current one, and in which semester they usually do
  * (user 2026-11-03: "ghi rõ kì sau mở hay không và thường mở ở học kì nào"): "Kỳ sau (HK2 2026–2027): có mở · thường mở
  * HK2". Every cohort's plan counts (a course one cohort studies next term is opened then); past the last term the plans
  * cover, the semester decides ("có thể mở").
  */
-export function nextTermOffer(course: Pick<StudyPlanCourse, "offeredTerms" | "everyTerm">, context: Pick<StudyPlanContext, "currentTerm" | "offeringUntil">): { tone: "ok" | "warn" | "unknown"; text: string } {
+export function nextTermOffer(course: Pick<StudyPlanCourse, "offeredTerms" | "everyTerm" | "classes">,
+  context: Pick<StudyPlanContext, "currentTerm" | "offeringUntil"> & Partial<Pick<StudyPlanContext, "cohortCode">>,
+  options: { classes?: boolean } = {}): { tone: "ok" | "warn" | "unknown"; text: string } {
   const next = nextTerm(context.currentTerm);
-  if (course.everyTerm) return { tone: "ok", text: `Kỳ sau (${termLabel(next)}): có mở · mở mọi học kỳ` };
+  // The other cohorts' class it would be studied in (classesText, user 2026-11-08), unless the caller names it apart.
+  const joined = options.classes === false ? null : classesText(course, next, context.cohortCode);
+  const open = (word: string) => `${word}${joined ? `, học cùng ${joined}` : ""}`;
+  if (course.everyTerm) return { tone: "ok", text: `Kỳ sau (${termLabel(next)}): ${open("có mở")} · mở mọi học kỳ` };
   if (!course.offeredTerms.length) return { tone: "unknown", text: "Chưa có kế hoạch đào tạo nào xếp lịch mở môn này" };
   const lead = `Kỳ sau (${termLabel(next)})`, usual = `thường mở ${offeredSemesters(course)}`;
-  if (course.offeredTerms.includes(next)) return { tone: "ok", text: `${lead}: có mở · ${usual}` };
+  if (course.offeredTerms.includes(next)) return { tone: "ok", text: `${lead}: ${open("có mở")} · ${usual}` };
   if (offering(course, next, context.offeringUntil) === "ok") return { tone: "ok", text: `${lead}: có thể mở · ${usual}` };
   return { tone: "warn", text: `${lead}: không mở theo kế hoạch đào tạo · ${usual}` };
 }

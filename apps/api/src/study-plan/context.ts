@@ -7,7 +7,7 @@ import { classifyCurriculumSpecialty, fold, specialtyLabel } from "../competency
 import { opensEveryTerm, studiedFirstCodes } from "../curricula/course-rules.js";
 import type { CourseState, CurriculumCourseInput, GraduationStandardInput, SpecialtyCode, TriState } from "../competency-assessment/types.js";
 import type { CurriculumData } from "../curricula/model.js";
-import { majorCondition, majorIdentity } from "../curricula/majors.js";
+import { majorCondition, majorIdentity, majorShortName } from "../curricula/majors.js";
 import { normalizeCohortCode, profileSpecialty, resolveStudentStandard } from "../graduation/resolve.js";
 import { replacementPath, startsReplacementPath, THESIS_NAME_PATTERN, thesisWay, thesisWayReason, type ThesisPath, type ThesisWay } from "../graduation/thesis.js";
 import type { TranscriptData } from "../student/transcript-parser.js";
@@ -64,6 +64,13 @@ export type StudyPlanCourse = {
   offeredTerms: string[];
   /** The school opens the course every term whatever the training plans say: English (opensEveryTerm). */
   everyTerm: boolean;
+  /**
+   * The classes of the course (user 2026-11-08: "những môn học rớt, học lại, cải thiện, trễ kế hoạch đều là học lại chung
+   * với các khóa sau ghi rõ lớp học đấy thuộc khóa nào trong ctdt hoặc file kế hoạch"): each cohort's term from its
+   * training plan, or from its CTĐT for a cohort without one; the term's courses of other cohorts are what a student
+   * off the plan joins.
+   */
+  classes: StudyPlanClass[];
   /** The letter of the attempt that counts (A … F, VT, MT), the term it was taken and how many times the course was taken. */
   grade: string | null;
   takenTerm: string | null;
@@ -71,6 +78,12 @@ export type StudyPlanCourse = {
   /** The other code the course is counted through: an older code of the standard, or a same-name course of another cohort. */
   equivalent: string | null;
 };
+
+/**
+ * A class: the term a cohort studies the course in, by its training plan ("plan") or, without one, its CTĐT
+ * ("curriculum"). major: the short name of another major's cohort ("HTTT"), null for the student's own major.
+ */
+export type StudyPlanClass = { term: string; cohort: string; major: string | null; source: "plan" | "curriculum" };
 
 export type StudyPlanGraduationGroup = {
   label: string; kind: "mandatory" | "elective"; unit: "môn" | "TC"; required: number | null;
@@ -183,6 +196,23 @@ async function readCurriculum(db: Db, cohortCode: string, major: string | null):
 }
 
 type PlanOffering = { cohort_code: string; major_key?: string; code: string; name: string; term_code: string; section_label?: string | null };
+type CurriculumClassRow = { cohort_code: string; major_key: string; admission_year: number | null; code: string; name: string; study_year: number | null; semester: number | null };
+
+/**
+ * The courses of the active CTĐTs whose cohort and major have no active training plan, with the CTĐT's study year and
+ * semester (user 2026-11-08: the class a course is studied in, "trong ctdt hoặc file kế hoạch"): such a cohort studies by
+ * its CTĐT (as plans/from-curriculum.ts builds its plan).
+ */
+async function readCurriculumClasses(db: Db): Promise<CurriculumClassRow[]> {
+  return (await db.query<CurriculumClassRow>(
+    `SELECT c.cohort_code,split_part(c.identity_key, ':', 1) AS major_key,
+       CASE WHEN jsonb_typeof(r.data->'admissionYear')='number' THEN (r.data->>'admissionYear')::int END AS admission_year,
+       cc.code,cc.name,cc.study_year,cc.semester
+     FROM curricula c JOIN curriculum_revisions r ON r.id=c.current_revision JOIN curriculum_courses cc ON cc.revision_id=c.current_revision
+     WHERE c.is_active AND NOT EXISTS (SELECT 1 FROM training_plans tp WHERE tp.is_active AND tp.cohort_code=c.cohort_code
+       AND split_part(tp.identity_key, ':', 1)=split_part(c.identity_key, ':', 1))
+     ORDER BY c.cohort_code,cc.position`)).rows;
+}
 
 /**
  * Items of every active training plan (kế hoạch đào tạo): which course each cohort's plan opens in which term, with the
@@ -271,6 +301,7 @@ export async function readStudyPlanFacts(db: Db, userId: string, now = new Date(
   const curriculum = cohortCode ? await readCurriculum(db, cohortCode, major) : null;
   const { standard } = await resolveStudentStandard(db, { cohortCode, specialty, majorCode });
   const offerings = await readPlanOfferings(db);
+  const curriculumClasses = await readCurriculumClasses(db);
   const cohortNumber = Number(/^K(\d{2})$/.exec(cohortCode ?? "")?.[1]);
   // The CTĐT's intake year, else the cohort's as the student identity reads it (K29 → 2023).
   const admissionYear = curriculum?.admissionYear ?? (Number.isInteger(cohortNumber) ? cohortNumber + 1994 : null);
@@ -295,10 +326,35 @@ export async function readStudyPlanFacts(db: Db, userId: string, now = new Date(
   // A course matches a plan row by code, or by name when cohorts carry different codes for it (rows in plan order).
   const planRows = (code: string, name: string) => [...new Set([...rowsByCode.get(code) ?? [], ...rowsByName.get(fold(name)) ?? []])]
     .sort((a, b) => a.position - b.position).map((entry) => entry.row);
-  /** The term of the cohort's own training plan and every term a training plan opens the course in. */
+  // The CTĐT terms of the cohorts without a training plan (the intake year of the CTĐT, else the cohort's: K32 → 2026).
+  const curriculumTerms = curriculumClasses.flatMap((row) => {
+    const intake = row.admission_year ?? (Number(/^K(\d{2})$/.exec(normalizeCohortCode(row.cohort_code) ?? "")?.[1]) + 1994 || null);
+    const term = curriculumTermCode(intake, row.study_year, row.semester);
+    return term ? [{ row, term }] : [];
+  });
+  const curriculumByCode = groupBy(curriculumTerms, (entry) => courseKey(entry.row.code));
+  const curriculumByName = groupBy(curriculumTerms, (entry) => fold(entry.row.name));
+  const majorOf = (key: string | undefined) => (!key || !major || key === major ? null : majorShortName(key));
+  const todayTerm = calendarTermCode(now);
+  /**
+   * The term of the cohort's own training plan, every term a training plan (or the CTĐT of a cohort without one) opens
+   * the course in, and the classes of every cohort, matched by code or by name as the plan rows are.
+   */
   const planTerms = (code: string, name: string) => {
     const rows = planRows(code, name);
-    return { planTerm: termsOf(rows.filter(ownPlan))[0] ?? null, offeredTerms: termsOf(rows), everyTerm: opensEveryTerm(code, name) };
+    const fromCurriculum = [...new Set([...curriculumByCode.get(code) ?? [], ...curriculumByName.get(fold(name)) ?? []])];
+    // Classes from the term of today on: a class already past is nobody's to join.
+    const classes = new Map<string, StudyPlanClass>();
+    const add = (item: StudyPlanClass) => {
+      if (termIndex(item.term) >= termIndex(todayTerm)) classes.set(`${item.term}\n${item.cohort}\n${item.major ?? ""}`, item);
+    };
+    for (const row of rows) add({ term: row.term_code, cohort: normalizeCohortCode(row.cohort_code) ?? row.cohort_code, major: majorOf(row.major_key), source: "plan" });
+    for (const { row, term } of fromCurriculum) add({ term, cohort: normalizeCohortCode(row.cohort_code) ?? row.cohort_code, major: majorOf(row.major_key), source: "curriculum" });
+    const offeredTerms = [...new Set([...termsOf(rows), ...fromCurriculum.map((entry) => entry.term)])].sort((a, b) => termIndex(a) - termIndex(b));
+    return {
+      planTerm: termsOf(rows.filter(ownPlan))[0] ?? null, offeredTerms, everyTerm: opensEveryTerm(code, name),
+      classes: [...classes.values()].sort((a, b) => termIndex(a.term) - termIndex(b.term) || a.cohort.localeCompare(b.cohort) || (a.major ?? "").localeCompare(b.major ?? "")),
+    };
   };
 
   // The other code a course is counted through: an older code of the standard (K26 "DIT0091 / 71ITDS30103"), or a

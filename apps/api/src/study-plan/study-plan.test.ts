@@ -31,7 +31,9 @@ function curriculumData() {
 
 type Roadmap = { id: string; facts: unknown; output: unknown; completed_at: Date };
 type Offering = { cohort_code: string; code: string; name: string; term_code: string; section_label: string | null };
+type CurriculumClass = { cohort_code: string; major_key: string; admission_year: number | null; code: string; name: string; study_year: number | null; semester: number | null };
 type Options = { specialty?: string | null; standards?: boolean; transcript?: boolean; active?: boolean; roadmap?: Roadmap; offerings?: Offering[];
+  curriculumClasses?: CurriculumClass[];
   curriculum?: (data: ReturnType<typeof curriculumData>) => ReturnType<typeof curriculumData> };
 function fakeDb(options: Options = {}) {
   const saved: { version: string; data: unknown; updated_at: Date }[] = [];
@@ -42,6 +44,7 @@ function fakeDb(options: Options = {}) {
     if (sql.includes("SELECT id FROM users")) return options.active === false ? rows([]) : rows([{ id: studentId }]);
     if (sql.includes("FROM student_profiles")) return rows([{ cohort_code: "K29", specialty: options.specialty === undefined ? "CNPM" : options.specialty }]);
     if (sql.includes("FROM student_transcripts")) return rows(options.transcript === false ? [] : [{ data: syntheticTranscript(syntheticStudentTerms()) }]);
+    if (sql.includes("JOIN curriculum_courses cc")) return rows(options.curriculumClasses ?? []);
     if (sql.includes("FROM curricula")) return rows(params[0] === "K29" ? [{ data: (options.curriculum ?? ((data) => data))(curriculumData()) }] : []);
     if (sql.includes("FROM graduation_standards")) return rows(standards);
     if (sql.includes("FROM training_plans tp JOIN training_plan_items")) {
@@ -140,6 +143,23 @@ describe("study plan context", () => {
       { cohort_code: "K27", code: "DIT0451", name: "Đồ án thực tập nâng cao", term_code: "HK271", section_label: null }];
     const course = (await facts({ offerings })).context.courses.find((item) => item.code === "71ITIN40304");
     expect(course).toMatchObject({ planTerm: "HK253", offeredTerms: ["HK253", "HK262", "HK263"] });
+  });
+
+  it("names the cohorts whose classes a course is studied in, by their training plan or, without one, their CTĐT (user 2026-11-08)", async () => {
+    // K30's plan opens the internship in HK262 (fakeDb); K32 has no plan, its CTĐT puts it in year 1, HK2 (HK262 for 2026),
+    // K31's in year 2, HK1 (HK261, the term of today); past classes, as K29's own HK253, are left out.
+    const curriculumClasses = [
+      { cohort_code: "K32", major_key: "cong nghe thong tin", admission_year: 2026, code: "71ITIN40304", name: "Đồ án thực tập", study_year: 1, semester: 2 },
+      { cohort_code: "K31", major_key: "cong nghe thong tin", admission_year: null, code: "OLD0450", name: "Đồ án  thực tập", study_year: 2, semester: 1 },
+    ];
+    const course = (await facts({ curriculumClasses })).context.courses.find((item) => item.code === "71ITIN40304")!;
+    expect(course.classes).toEqual([
+      { term: "HK261", cohort: "K31", major: null, source: "curriculum" },
+      { term: "HK262", cohort: "K30", major: null, source: "plan" },
+      { term: "HK262", cohort: "K32", major: null, source: "curriculum" },
+    ]);
+    // The CTĐT's terms count as opened, as the plans' do.
+    expect(course.offeredTerms).toEqual(["HK253", "HK261", "HK262"]);
   });
 
   it("asks Cờ vua nâng cao for Cờ vua studied first even when the CTĐT does not write it, and opens PE every term (user 2026-11-04)", async () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  aiAddedText, aiCleanedText, applyProposal, auditGroups, auditNote, cleanAiAdded, cleanThesisWay, creditProgress, declineProposal, exemptText, groupCountText,
+  aiAddedText, aiCleanedText, applyProposal, auditGroups, auditNote, classesText, cleanAiAdded, cleanThesisWay, creditProgress, declineProposal, exemptText, groupCountText,
   limitsText, moveCourse, neededTone, nextTermOffer, offering, orderAiAdded, ownRelations, planChoiceText, planIssues, planProposal, poolSections, proposalAddedText,
   proposalSummaryText, searchCourses, termLabel, termLoad, termLoadText, thesisCleanedText, thesisHint, thesisLeftOut, withTerms, type AiProposal,
   type StudyPlanContext, type StudyPlanCourse, type StudyPlanData, type StudyPlanThesis,
@@ -247,6 +247,28 @@ describe("planning", () => {
       .toBe("Kỳ sau (HK3 2026–2027): không mở theo kế hoạch đào tạo · thường mở HK2");
     expect(nextTermOffer(course("Q", { offeredTerms: ["HK253"] }), context({ currentTerm: "HK262", offeringUntil: "HK262" })).text)
       .toBe("Kỳ sau (HK3 2026–2027): có thể mở · thường mở HK3");
+  });
+
+  it("names the other cohorts' class a course off the student's plan is studied in, and where that comes from (user 2026-11-08)", () => {
+    const classes = [
+      { term: "HK262", cohort: "K30", major: null, source: "plan" as const }, { term: "HK262", cohort: "K31", major: null, source: "plan" as const },
+      { term: "HK262", cohort: "K32", major: null, source: "curriculum" as const }, { term: "HK262", cohort: "K30", major: "HTTT", source: "plan" as const },
+      { term: "HK263", cohort: "K30", major: "HTTT", source: "plan" as const }, { term: "HK271", cohort: "K30", major: null, source: "plan" as const },
+    ];
+    const retake = course("R", { state: "failed", grade: "F", offeredTerms: ["HK262", "HK263"], classes });
+    expect(classesText(retake, "HK262", "K29")).toBe("lớp khóa K30, K31 (theo kế hoạch đào tạo), K32 (theo CTĐT)");
+    // Only another major studies it then: its classes, named with the major.
+    expect(classesText(retake, "HK263", "K29")).toBe("lớp khóa K30 HTTT (theo kế hoạch đào tạo)");
+    // The student's own cohort studies it then (the student's own class), or nobody does: nothing to name.
+    expect(classesText(retake, "HK271", "K30")).toBeNull();
+    expect(classesText(retake, "HK272", "K29")).toBeNull();
+    expect(classesText(course("Z"), "HK262", "K29")).toBeNull();
+    // The next term's line says it; a term card names its own term apart (classes: false).
+    const k29 = context({ cohortCode: "K29" });
+    expect(nextTermOffer(retake, k29).text).toBe("Kỳ sau (HK2 2026–2027): có mở, học cùng lớp khóa K30, K31 (theo kế hoạch đào tạo), K32 (theo CTĐT) · thường mở HK2, HK3");
+    expect(nextTermOffer(retake, k29, { classes: false }).text).toBe("Kỳ sau (HK2 2026–2027): có mở · thường mở HK2, HK3");
+    const english = course("71ENG610063", { name: "Anh văn 6 (AV6)", everyTerm: true, classes: [{ term: "HK262", cohort: "K31", major: null, source: "plan" }] });
+    expect(nextTermOffer(english, k29).text).toBe("Kỳ sau (HK2 2026–2027): có mở, học cùng lớp khóa K31 (theo kế hoạch đào tạo) · mở mọi học kỳ");
   });
 
   it("takes out what an older AI roadmap added and the plan must not hold, nothing the student placed (user 2026-11-03)", () => {

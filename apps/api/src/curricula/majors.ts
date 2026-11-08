@@ -29,6 +29,14 @@ export const MAJORS = [
 export type MajorCode = (typeof MAJORS)[number]["code"];
 export const CNTT_MAJOR: MajorCode = "7480201";
 
+/** The short name of a major by its identity key ("he thong thong tin" → "HTTT"), as the Faculty writes it. */
+const SHORT_NAMES: Record<string, string> = {
+  "cong nghe thong tin": "CNTT",
+  "he thong thong tin": "HTTT",
+  "mang may tinh va truyen thong du lieu": "MMT&TTDL",
+};
+export const majorShortName = (key: string) => SHORT_NAMES[key] ?? key;
+
 /** A CTĐT/KHĐT identity names its major folded ("cong nghe thong tin" of "cong nghe thong tin:K29"). */
 export const majorKey = (name: string) =>
   name.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/đ/gi, "d").toLowerCase().replace(/\s+/g, " ").trim();
