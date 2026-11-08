@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { modelLabel, modelPlace } from "./ai-model";
 import { formatDateTime, formatElapsed, type workerLine } from "./career-ai-suggestions";
 import type { CourseAiSuggestion } from "./competency-ai";
 
@@ -17,6 +18,6 @@ export function ReviewHead({ suggestion, heading, text }: { suggestion: CourseAi
   return <div className="cai-review-head">
     <h3>{heading}</h3>
     <p className="cai-muted">{text}</p>
-    <p className="cai-meta">Gợi ý bởi {suggestion.model ?? "mô hình AI"} chạy cục bộ · {formatDateTime(suggestion.completedAt)}</p>
+    <p className="cai-meta">Gợi ý bởi {suggestion.model ? modelLabel(suggestion.model) : "mô hình AI"} {modelPlace(suggestion.model)} · {formatDateTime(suggestion.completedAt)}</p>
   </div>;
 }

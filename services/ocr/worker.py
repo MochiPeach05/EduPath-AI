@@ -90,7 +90,7 @@ def schema_problems(d):
         cells=c.get('raw_cells')
         if cells is not None and not (isinstance(cells,list) and len(cells)<=20 and all(x is None or text(x) for x in cells)): bad('raw_cells')
     if not isinstance(d.get('needs_review'),bool): bad('needs_review')
-    if not 1<=len(pages)<=20 or any(not integer(p.get('page'),1,20) or p.get('method') not in ('pdf_text','ppocr')
+    if not 1<=len(pages)<=20 or any(not integer(p.get('page'),1,20) or p.get('method') not in ('pdf_text','ppocr','gemma')
             or not isinstance(p.get('warnings'),list) or len(p['warnings'])>100 for p in pages): bad('pages')
     if len(summaries)>200: bad('summaries',f'{len(summaries)} rows')
     for s in summaries:
@@ -126,10 +126,12 @@ def log_result(started,result):
     except Exception:
         pass
 
-def parse_pdf(pdf_path,result_path,text_only=False):
+def parse_pdf(pdf_path,result_path,text_only=False,gemma=False):
     """text_only: the text layer alone, never OCR (the API's own reader on Render, apps/api/src/student/text-layer.ts,
     user 2026-11-07). A page that needs OCR answers {'needs_ocr': True} and an unexpected failure {'fallback': True}:
-    the API then hands the job back to this worker's queue. Paddle is never imported."""
+    the API then hands the job back to this worker's queue. Paddle is never imported.
+    gemma (user 2026-11-08): the pages that need OCR are read by Gemma 4 on Cloudflare Workers AI (gemma_ocr.py) instead
+    of PaddleOCR, on the API server too; Gemma failing answers {'error': 'ocr_failed', 'reason': …}."""
     import pymupdf
     from test_ocr import Options, OcrRequired, extract_transcript, DEFAULT_REC_MODEL
     started=time.perf_counter()
@@ -146,6 +148,8 @@ def parse_pdf(pdf_path,result_path,text_only=False):
                 raise ValueError('unsupported_layout')
             if text_only:
                 options=Options(ocr_enabled=False)
+            elif gemma:
+                options=Options(engine='gemma')
             else:
                 model_dir=DEFAULT_REC_MODEL
                 # Paddle's Windows native loader cannot open Unicode model paths.
@@ -159,6 +163,11 @@ def parse_pdf(pdf_path,result_path,text_only=False):
             result={'result':extract_transcript(document,'transcript.pdf',options,log=lambda _:None)}
     except OcrRequired:
         result={'needs_ocr':True}
+    except RuntimeError as error:
+        # gemma_ocr.GemmaOcrError: Workers AI did not read a page (no answer, refused, the day's quota, not JSON).
+        gemma_failed=gemma and type(error).__name__=='GemmaOcrError'
+        result=({'error':'ocr_failed','reason':str(error)[:40]} if gemma_failed
+            else {'fallback':True} if text_only else {'error':'ocr_failed'})
     except ValueError as error:
         code=str(error)
         result={'error':code} if code in PARSE_ERRORS else {'fallback':True} if text_only else {'error':'ocr_failed'}
@@ -242,9 +251,10 @@ if __name__=='__main__':
     parser=argparse.ArgumentParser()
     parser.add_argument('--parse',nargs=2,metavar=('PDF','RESULT'))
     parser.add_argument('--text-only',action='store_true',help='with --parse: the text layer alone, never OCR (the API on Render)')
+    parser.add_argument('--gemma',action='store_true',help='with --parse: OCR with Gemma 4 on Cloudflare Workers AI (the API on Render)')
     parser.add_argument('--once',action='store_true')
     args=parser.parse_args()
-    if args.parse: parse_pdf(Path(args.parse[0]),Path(args.parse[1]),text_only=args.text_only)
+    if args.parse: parse_pdf(Path(args.parse[0]),Path(args.parse[1]),text_only=args.text_only,gemma=args.gemma)
     else:
         try: run(args.once)
         except KeyboardInterrupt: print('Worker stopped.')

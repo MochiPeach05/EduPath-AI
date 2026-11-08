@@ -856,12 +856,8 @@ export function aiReasoned(promptVersion: string | null | undefined): boolean {
   return Boolean(match && Number(match[1]) >= 7);
 }
 
-/** "gemma4:e4b" → "Gemma 4 E4B". */
-export function modelLabel(model: string | null | undefined): string {
-  if (!model) return "Gemma 4 E4B";
-  const match = /^gemma(\d+):e(\d+)b/i.exec(model);
-  return match ? `Gemma ${match[1]} E${match[2]}B` : model;
-}
+/** "gemma4:e4b" → "Gemma 4 E4B", "@cf/google/gemma-4-26b-a4b-it" → "Gemma 4 26B" (ai-model.ts). */
+export { modelLabel, modelPlace } from "./ai-model";
 
 export type MappedAiOutput = {
   summary: string;

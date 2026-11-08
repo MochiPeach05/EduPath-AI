@@ -104,11 +104,16 @@ export async function completeTranscriptJob(pool: DatabasePool, id: string, inpu
   if (imported) runAfterTranscriptImport(options.afterTranscriptImport, imported);
 }
 
-export function createTranscriptWorkerRouter(pool: DatabasePool | undefined, key: string | undefined, options: TranscriptImportOptions = {}) {
+/**
+ * refuseWorker (Gemma OCR on and this server's reader ready, 2026-11-08): the PC worker is answered 403 worker_moved, so
+ * every PDF is read here, the scans by Gemma.
+ */
+export function createTranscriptWorkerRouter(pool: DatabasePool | undefined, key: string | undefined, options: TranscriptImportOptions & { refuseWorker?: () => boolean } = {}) {
   const router = Router();
   router.use((req, res, next) => {
     res.setHeader("Cache-Control", "no-store");
     if (!key || !pool) { res.status(503).json({ error: "worker_disabled" }); return; }
+    if (options.refuseWorker?.()) { res.status(403).json({ error: "worker_moved" }); return; }
     const supplied = req.get("authorization") ?? "";
     const hash = (s: string) => createHash("sha256").update(s).digest();
     if (!timingSafeEqual(hash(supplied), hash(`Bearer ${key}`))) { res.status(401).json({ error: "unauthorized" }); return; }

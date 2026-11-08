@@ -137,7 +137,16 @@ export function createCompetencyAiExpiry(intervalMs: number = AI_HOUSEKEEPING_IN
   };
 }
 
-export function createCompetencyWorkerRouter(pool: DatabasePool | undefined, aiWorkerKey: string | undefined) {
+/** A connection from this machine (the in-process Cloudflare worker calls 127.0.0.1). */
+export function isLoopbackAddress(address: string | undefined): boolean {
+  return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
+}
+
+/**
+ * localOnly (AI_PROVIDER=cloudflare, 2026-11-08): the worker routes answer only connections from this machine, the
+ * in-process worker of ai-worker/cloud.ts; a PC worker still polling gets 403 worker_moved.
+ */
+export function createCompetencyWorkerRouter(pool: DatabasePool | undefined, aiWorkerKey: string | undefined, options: { localOnly?: boolean } = {}) {
   const router = Router();
   const hash = (value: string) => createHash("sha256").update(value).digest();
   const expected = aiWorkerKey ? hash(`Bearer ${aiWorkerKey}`) : null;
@@ -158,6 +167,7 @@ export function createCompetencyWorkerRouter(pool: DatabasePool | undefined, aiW
   const authenticate: RequestHandler = (req, res, next) => {
     res.setHeader("Cache-Control", "no-store");
     if (!expected || !pool) { res.status(503).json({ error: "worker_disabled" }); return; }
+    if (options.localOnly && !isLoopbackAddress(req.socket.remoteAddress)) { res.status(403).json({ error: "worker_moved" }); return; }
     if (!timingSafeEqual(hash(req.get("authorization") ?? ""), expected)) { res.status(401).json({ error: "unauthorized" }); return; }
     next();
   };

@@ -7,7 +7,7 @@ import {
   ADVICE_API, ADVICE_POLL_MS, COURSE_FILTERS, COURSE_STATES, GRADUATION_API, INLINE_COURSES, IN_PLACE_OF_NOTE, OUTSIDE_STANDARD_NOTE,
   OUTSIDE_STANDARD_TITLE, STATUS_DISPLAY,
   adviceAnnouncement, adviceFocusLabel, adviceStateCopy, adviceView, asOfLine, conditionItems, courseStateText, filterCourses,
-  formatDateTime, formatElapsed, formatNumber, groupFacts, groupShortfall, groupViews, methodNotes, modelLabel,
+  formatDateTime, formatElapsed, formatNumber, groupFacts, groupShortfall, groupViews, methodNotes, modelLabel, modelPlace,
   normalizeAdviceResponse, normalizeAdviceStatus, normalizeAdviceWrite, outsideStandardViews, profileLineParts, requestErrorMessage, scoreParts,
   shouldPollAdvice, standardDocumentName, standardMetaParts, standardNameParts, standardNotesText, standardThresholds, suggestionItems, toneClass,
   unresolvedCopy, verdictHeadline, warningNotes,
@@ -162,7 +162,7 @@ function AdviceContent({ advice, note }: { advice: StoredAdvice & { output: Advi
       <h4>Bước tiếp theo</h4>
       <ol className="sg-ai-steps">{output.nextSteps.map((step, index) => <li key={index}>{step}</li>)}</ol>
     </div>}
-    <p className="sg-ai-footer">{modelLabel(advice.model)}, chạy cục bộ · tạo lúc {formatDateTime(advice.completedAt ?? advice.createdAt)}. Lời khuyên do AI viết dựa trên kết quả đã tính, có thể chưa chính xác — hãy đối chiếu số liệu và trao đổi với cố vấn học tập.</p>
+    <p className="sg-ai-footer">{modelLabel(advice.model)}, {modelPlace(advice.model)} · tạo lúc {formatDateTime(advice.completedAt ?? advice.createdAt)}. Lời khuyên do AI viết dựa trên kết quả đã tính, có thể chưa chính xác — hãy đối chiếu số liệu và trao đổi với cố vấn học tập.</p>
   </div>;
 }
 

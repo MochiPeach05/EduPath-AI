@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parent
 CODE = re.compile(r'\b(?:\d{2}[A-Z]{2,10}\d{5,8}|[A-Z]{3}\d{4})\b')
 # Best model of training/BAO_CAO_OCR.md; 150 DPI was the most stable setting in pipeline tuning.
 DEFAULT_REC_MODEL = ROOT / 'models/f3'
-DEFAULT_DPI = {'ppocr': 150, 'vl': 300}
+DEFAULT_DPI = {'ppocr': 150, 'vl': 300, 'gemma': 200}
 DEFAULT_DET_MODEL = 'PP-OCRv5_server_det'
 PASS_LETTERS = {'A+', 'A', 'B+', 'B', 'C+', 'C', 'D+', 'D'}
 # VT (vắng thi, absent from the exam) and CT (cấm thi, barred from the exam; user 2026-10-26) are printed in the score
@@ -494,7 +494,7 @@ class OcrRequired(RuntimeError):
 @dataclass
 class Options:
     mode: str = 'auto'  # auto | native | ocr
-    engine: str = 'ppocr'  # ppocr | vl
+    engine: str = 'ppocr'  # ppocr | vl | gemma (Gemma 4 on Cloudflare Workers AI, gemma_ocr.py)
     ocr_enabled: bool = True
     device: str = 'gpu:0'
     dpi: int | None = None  # default: DEFAULT_DPI[engine]
@@ -564,19 +564,33 @@ def extract_transcript(document, source_name, options=None, catalog=None, output
     if options.engine == 'vl' and output_dir is None:
         raise ValueError('The vl engine writes page crops and needs output_dir')
     pages = []
+    natives = [native_rows(page) if document.is_pdf else ([], False, Counter()) for page in document]
+    # Gemma reads every page that needs OCR at once, each in strips (gemma_ocr.py, user 2026-11-08); the rows of its
+    # items are built in page order below, so a row repeated where strips or pages meet is kept once.
+    gemma_items, gemma_rows = {}, None
+    if options.engine == 'gemma' and options.ocr_enabled and options.mode != 'native':
+        import gemma_ocr
+        wanted = [i for i, (_, usable, _) in enumerate(natives) if options.mode == 'ocr' or not usable]
+        if wanted:
+            gemma_items, gemma_rows = gemma_ocr.read_pages(document, wanted), gemma_ocr.RowBuilder()
     for index, page in enumerate(document, 1):
         page_dir = None
         if output_dir is not None:
             page_dir = Path(output_dir) / f'page_{index}'
             page_dir.mkdir(parents=True, exist_ok=True)
-        rows, usable, expected = native_rows(page) if document.is_pdf else ([], False, Counter())
+        rows, usable, expected = natives[index - 1]
         needs_ocr = options.mode == 'ocr' or not usable
         if options.mode == 'native' and not usable:
             raise RuntimeError(f'Page {index}: native extraction incomplete; use --mode auto')
         if needs_ocr and not options.ocr_enabled:
             raise OcrRequired(f'Page {index} has no usable text layer and OCR is disabled')
         if needs_ocr:
-            if options.engine == 'ppocr':
+            if options.engine == 'gemma':
+                method = 'gemma'
+                rows, warnings = gemma_rows.rows(gemma_items[index - 1]), []
+                if is_curriculum_view(gemma_rows.headers):
+                    raise CurriculumViewError()
+            elif options.engine == 'ppocr':
                 method = 'ppocr'
                 rows, warnings = _ppocr_page(page, document.is_pdf, options, models, page_dir, log)
             else:
@@ -603,9 +617,10 @@ def extract_transcript(document, source_name, options=None, catalog=None, output
     return {
         'schema_version': '1.1', 'source_file': source_name, 'adapter': 'vlu_8_columns',
         'course_count': len(courses),
-        'ocr_settings': {'engine': options.engine, 'det_model': options.det_model,
-                         'device': models.get('device', options.device),
-                         'rec_model_dir': str(options.rec_model_dir), 'dpi': options.dpi or DEFAULT_DPI[options.engine]}
+        'ocr_settings': ({'engine': 'gemma', 'model': gemma_ocr.MODEL, 'dpi': DEFAULT_DPI['gemma']} if options.engine == 'gemma' else
+                         {'engine': options.engine, 'det_model': options.det_model,
+                          'device': models.get('device', options.device),
+                          'rec_model_dir': str(options.rec_model_dir), 'dpi': options.dpi or DEFAULT_DPI[options.engine]})
         if ocr_used else None,
         'needs_review': not courses or bool(unparsed) or any(c['needs_review'] for c in courses)
                         or any(s['needs_review'] for s in semesters) or any(p['warnings'] for p in pages),

@@ -2,7 +2,7 @@ import {
   MAX_ANSWER_CHARS,
   knowledgeOutputSchema,
   prepareBodySchema,
-  queryEmbeddingText,
+  embeddingProfile,
   standaloneQuestion,
   type AssistantClaim,
   type EmbedSpec,
@@ -271,7 +271,8 @@ async function answerQuestion(job: AssistantClaim, info: OllamaModelInfo, deps: 
   const embedMetrics: JobMetrics = {};
   const standalone = await rewriteQuestion(job, deps, signal, embedMetrics);
   // The standalone question is what the search should find; the server's own text stays the fallback.
-  const embed = job.embed && standalone ? { model: job.embed.model, inputs: [queryEmbeddingText(standalone)] } : job.embed;
+  // Written the way the job's embedding model wants a question (EmbeddingGemma's prompt, or the plain text for BGE-M3).
+  const embed = job.embed && standalone ? { model: job.embed.model, inputs: [embeddingProfile(job.embed.model).query(standalone)] } : job.embed;
   if (embed) {
     const started = Date.now();
     try {

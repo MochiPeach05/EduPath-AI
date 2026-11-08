@@ -5,6 +5,9 @@
 // (completeTranscriptJob). A PDF that needs OCR, and any failure of the reader itself, goes back to the queue as it was,
 // for the worker on the user's PC; while that worker is off the page says so, as before. One PDF at a time: a Render
 // free instance has 512 MB and 0.1 CPU (about 95 MB and 1–2 CPU seconds per transcript, measured 2026-11-07).
+// With Gemma OCR (AI_PROVIDER=cloudflare, user 2026-11-08: "chuyển ocr thành gemma luôn") a PDF that needs OCR is read here
+// too, by worker.py --parse --gemma (services/ocr/gemma_ocr.py: Gemma 4 on Cloudflare Workers AI reads the scanned pages),
+// and nothing goes back to the PC: a PDF Gemma cannot read ends with ocr_failed, which the student can try again.
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -22,6 +25,8 @@ export const PYDEPS_DIR = join(OCR_DIR, ".pydeps");
 const FINAL_ERRORS: ReadonlySet<string> = new Set(["invalid_pdf", "encrypted_pdf", "too_many_pages", "unsupported_layout", "curriculum_view"]);
 
 export type TextLayerOutcome = { kind: "result"; result: unknown } | { kind: "error"; code: string } | { kind: "ocr" } | { kind: "fallback" };
+/** The Cloudflare values Gemma OCR runs with; null: PDFs that need OCR stay with the PC worker. */
+export type GemmaOcr = { accountId: string; apiToken: string };
 
 /** worker.py's answer in text-only mode; anything unexpected hands the job back to the PC worker. */
 export function textLayerOutcome(value: unknown): TextLayerOutcome {
@@ -33,6 +38,13 @@ export function textLayerOutcome(value: unknown): TextLayerOutcome {
   return { kind: "fallback" };
 }
 
+/** worker.py --gemma's answer: a result, or an error that ends the job (never back to the PC queue). */
+export function gemmaOutcome(value: unknown): TextLayerOutcome {
+  const outcome = textLayerOutcome(value);
+  if (outcome.kind === "result" || outcome.kind === "error") return outcome;
+  return { kind: "error", code: "ocr_failed" };
+}
+
 /** The Python of the reader: TEXT_LAYER_PYTHON, else python3 on Render (RENDER is set there), else none. */
 export function textLayerPython(env: NodeJS.ProcessEnv = process.env): string | null {
   const configured = env.TEXT_LAYER_PYTHON?.trim();
@@ -40,40 +52,52 @@ export function textLayerPython(env: NodeJS.ProcessEnv = process.env): string | 
   return env.RENDER ? "python3" : null;
 }
 
-/** Only what Python needs: never the server's secrets. */
-function childEnv(): NodeJS.ProcessEnv {
+/** Only what Python needs: never the server's secrets (the Cloudflare values go only to a Gemma OCR run). */
+function childEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = {};
   for (const key of ["PATH", "SYSTEMROOT", "TEMP", "TMP", "TMPDIR", "HOME", "LANG", "LC_ALL"]) {
     if (process.env[key] !== undefined) env[key] = process.env[key];
   }
-  return { ...env, PYTHONPATH: [PYDEPS_DIR, OCR_DIR].join(delimiter), PYTHONIOENCODING: "utf-8", PYTHONDONTWRITEBYTECODE: "1" };
+  return { ...env, PYTHONPATH: [PYDEPS_DIR, OCR_DIR].join(delimiter), PYTHONIOENCODING: "utf-8", PYTHONDONTWRITEBYTECODE: "1", ...extra };
 }
 
 /** Exit code of a child process, null when it could not start or ran past the time limit. */
-function run(command: string, args: string[], timeoutMs: number): Promise<number | null> {
+function run(command: string, args: string[], timeoutMs: number, extraEnv: Record<string, string> = {}): Promise<number | null> {
   return new Promise((resolve) => {
     let child: ReturnType<typeof spawn>;
-    try { child = spawn(command, args, { env: childEnv(), stdio: "ignore", windowsHide: true }); } catch { resolve(null); return; }
+    try { child = spawn(command, args, { env: childEnv(extraEnv), stdio: "ignore", windowsHide: true }); } catch { resolve(null); return; }
     const timer = setTimeout(() => { child.kill("SIGKILL"); resolve(null); }, timeoutMs);
     child.once("error", () => { clearTimeout(timer); resolve(null); });
     child.once("exit", (code) => { clearTimeout(timer); resolve(code); });
   });
 }
 
-/** Reads one PDF: worker.py --parse --text-only in its own process, with a time limit. */
+/**
+ * Reads one PDF: worker.py --parse --text-only in its own process, with a time limit. With Gemma OCR, a PDF that needs OCR
+ * (or that the text-only pass failed on) is read again with --gemma; that pass always ends the job.
+ */
 export type TextLayerRunner = (pdf: Buffer) => Promise<TextLayerOutcome>;
-export function pythonTextLayerRunner(python: string, timeoutMs = 120_000): TextLayerRunner {
+export function pythonTextLayerRunner(python: string, timeoutMs = 120_000, gemma: GemmaOcr | null = null, gemmaTimeoutMs = 600_000): TextLayerRunner {
   return async (pdf) => {
     const dir = await mkdtemp(join(tmpdir(), "edupath-text-"));
     try {
       const input = join(dir, "in.pdf");
       const output = join(dir, "out.json");
       await writeFile(input, pdf);
-      const code = await run(python, ["-s", "-B", join(OCR_DIR, "worker.py"), "--parse", input, output, "--text-only"], timeoutMs);
-      if (code !== 0) return { kind: "fallback" };
-      return textLayerOutcome(JSON.parse(await readFile(output, "utf8")));
+      const parse = (flag: string, limit: number, env: Record<string, string> = {}) =>
+        run(python, ["-s", "-B", join(OCR_DIR, "worker.py"), "--parse", input, output, flag], limit, env);
+      let outcome: TextLayerOutcome = { kind: "fallback" };
+      try {
+        if ((await parse("--text-only", timeoutMs)) === 0) outcome = textLayerOutcome(JSON.parse(await readFile(output, "utf8")));
+      } catch { outcome = { kind: "fallback" }; }
+      if (!gemma || outcome.kind === "result" || outcome.kind === "error") return outcome;
+      await rm(output, { force: true });
+      const code = await parse("--gemma", gemmaTimeoutMs, { CLOUDFLARE_ACCOUNT_ID: gemma.accountId, CLOUDFLARE_API_TOKEN: gemma.apiToken });
+      if (code === null) return { kind: "error", code: "parse_timeout" };
+      if (code !== 0) return { kind: "error", code: "ocr_failed" };
+      return gemmaOutcome(JSON.parse(await readFile(output, "utf8")));
     } catch {
-      return { kind: "fallback" };
+      return gemma ? { kind: "error", code: "ocr_failed" } : { kind: "fallback" };
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
@@ -176,6 +200,8 @@ export function createTextLayerReader(jobs: TextLayerJobs, runner: TextLayerRunn
  */
 export function startTextLayerReader(python: string | null, jobs: TextLayerJobs | null, options: {
   runner?: TextLayerRunner; probe?: (python: string) => Promise<boolean>; log?: Pick<Console, "warn" | "info">;
+  /** Gemma OCR (AI_PROVIDER=cloudflare): this server reads the PDFs that need OCR too. */
+  gemma?: GemmaOcr | null;
 } = {}): TextLayerReader {
   const log = options.log ?? console;
   let state: TextLayerStatus = python && jobs ? "checking" : "off";
@@ -184,7 +210,7 @@ export function startTextLayerReader(python: string | null, jobs: TextLayerJobs 
   if (python && jobs) {
     void (options.probe ?? probeTextLayer)(python).then((ok) => {
       if (!ok) { state = "off"; log.warn("[transcript] text-layer reader off: python, PyMuPDF, numpy or OpenCV missing"); return; }
-      reader = createTextLayerReader(jobs, options.runner ?? pythonTextLayerRunner(python), log);
+      reader = createTextLayerReader(jobs, options.runner ?? pythonTextLayerRunner(python, 120_000, options.gemma ?? null), log);
       state = "ready";
       log.info("[transcript] text-layer reader ready");
       reader.kick();

@@ -94,13 +94,18 @@ export function createApp({
       if (graduationAdviceEnabled) await ensureGraduationAdviceAfterImport(databasePool, userId);
     }
     : undefined;
-  app.use("/api/worker/transcripts", createTranscriptWorkerRouter(databasePool,config.ocrWorkerKey, { afterTranscriptImport }));
   // A PDF with a text layer is read on this server with the OCR worker's own code (text-layer.ts, 2026-11-07); the PC
   // worker keeps the PDFs that need OCR. Only with the OCR queue (OCR_WORKER_KEY) and a Python (on Render, python3).
+  // On Cloudflare (AI_PROVIDER=cloudflare, 2026-11-08) Gemma reads the scans here too and the PC worker is refused.
+  const gemmaOcr = config.ai?.provider === "cloudflare" ? config.ai.cloudflare : null;
   const textLayer = startTextLayerReader(config.ocrWorkerKey ? textLayerPython() : null,
-    config.ocrWorkerKey && databasePool ? postgresTextLayerJobs(databasePool, { afterTranscriptImport }) : null);
+    config.ocrWorkerKey && databasePool ? postgresTextLayerJobs(databasePool, { afterTranscriptImport }) : null, { gemma: gemmaOcr });
+  app.use("/api/worker/transcripts", createTranscriptWorkerRouter(databasePool,config.ocrWorkerKey, {
+    afterTranscriptImport, refuseWorker: () => gemmaOcr !== null && textLayer.status() === "ready" }));
   // The AI worker router authenticates before parsing its own body, so it must come before express.json.
-  app.use("/api/worker/competency-assessments", createCompetencyWorkerRouter(databasePool, config.aiWorkerKey));
+  // On Cloudflare (AI_PROVIDER=cloudflare) only this process's own worker may claim AI jobs: a PC worker still running is
+  // refused, so every job runs on the same models.
+  app.use("/api/worker/competency-assessments", createCompetencyWorkerRouter(databasePool, config.aiWorkerKey, { localOnly: config.ai?.provider === "cloudflare" }));
   app.use("/api/admin/graduation", express.json({ limit: "2mb" }));
   app.use("/api/admin/competencies", express.json({ limit: "2mb" }));
   app.use(express.json({ limit: "100kb" }));

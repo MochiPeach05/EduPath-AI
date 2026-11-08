@@ -218,12 +218,8 @@ export function pendingCopy(status: "queued" | "processing", workerState: Roadma
   return { title: "Đang chờ đến lượt…", text: "Yêu cầu của bạn đã vào hàng đợi của EduPath AI." };
 }
 
-/** "gemma4:e4b" → "Gemma 4 E4B". */
-export function modelLabel(model: string | null | undefined): string {
-  if (!model) return "Gemma 4 E4B";
-  const match = /^gemma(\d+):e(\d+)b/i.exec(model);
-  return match ? `Gemma ${match[1]} E${match[2]}B` : model;
-}
+/** "gemma4:e4b" → "Gemma 4 E4B", "@cf/google/gemma-4-26b-a4b-it" → "Gemma 4 26B" (ai-model.ts). */
+export { modelLabel, modelPlace } from "./ai-model";
 
 /** hh:mm dd/mm/yyyy in Vietnam time. */
 export function formatDateTime(iso: string | null | undefined): string {

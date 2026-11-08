@@ -16,15 +16,49 @@
 import { z } from "zod";
 import { ASSISTANT_CHAT_KIND, KNOWLEDGE_EMBEDDING_KIND } from "../competency-assessment/ai/worker-protocol.js";
 
+/** An embedding model of the knowledge index: its vector length and how it wants a question and a document written. */
+export type EmbeddingProfile = {
+  model: string;
+  dimensions: number;
+  query: (query: string) => string;
+  document: (title: string, text: string) => string;
+};
 /**
- * Google's EmbeddingGemma (308M, 768 dimensions, multilingual), pulled into the worker's Ollama. Gemma 4 itself has no
- * embedding endpoint ("This server does not support embeddings"). Chunks embedded by another model are embedded again.
+ * embeddinggemma: Google's EmbeddingGemma (308M, 768 dimensions, multilingual) in the PC worker's Ollama, with its
+ * retrieval prompt formats. bge-m3: BAAI's BGE-M3 (1024 dimensions, multilingual, no prompt format) on Cloudflare Workers
+ * AI (user 2026-11-08; EmbeddingGemma there is shut down on 2026-11-20). Gemma 4 itself has no embedding endpoint.
  */
-export const EMBEDDING_MODEL = "embeddinggemma";
-export const EMBEDDING_DIMENSIONS = 768;
-/** EmbeddingGemma's prompt formats for retrieval: the question and a document of the index. */
-export const queryEmbeddingText = (query: string) => `task: search result | query: ${query}`;
-export const documentEmbeddingText = (title: string, text: string) => `title: ${title.trim() || "none"} | text: ${text}`;
+export const EMBEDDING_PROFILES: Readonly<Record<string, EmbeddingProfile>> = {
+  embeddinggemma: {
+    model: "embeddinggemma",
+    dimensions: 768,
+    query: (query) => `task: search result | query: ${query}`,
+    document: (title, text) => `title: ${title.trim() || "none"} | text: ${text}`,
+  },
+  "bge-m3": {
+    model: "bge-m3",
+    dimensions: 1024,
+    query: (query) => query,
+    document: (title, text) => (title.trim() ? `${title.trim()}
+${text}` : text),
+  },
+};
+/** The profile of a model a job names (an unknown name gets EmbeddingGemma's, as before profiles existed). */
+export const embeddingProfile = (model: string): EmbeddingProfile => EMBEDDING_PROFILES[model] ?? EMBEDDING_PROFILES.embeddinggemma!;
+/** The index's model: BGE-M3 when the AI runs on Cloudflare (AI_PROVIDER=cloudflare), else EmbeddingGemma. */
+export function activeEmbeddingModel(environment: { AI_PROVIDER?: string | undefined } = process.env): string {
+  return (environment.AI_PROVIDER ?? "").trim().toLowerCase() === "cloudflare" ? "bge-m3" : "embeddinggemma";
+}
+
+/**
+ * The model of this server's knowledge index, read once when the module loads (server.ts loads .env first). Chunks
+ * embedded by another model are embedded again, and the search uses only vectors of this model meanwhile.
+ */
+export const EMBEDDING_MODEL = activeEmbeddingModel();
+export const EMBEDDING_DIMENSIONS = embeddingProfile(EMBEDDING_MODEL).dimensions;
+/** The model's formats for retrieval: the question and a document of the index. */
+export const queryEmbeddingText = (query: string) => embeddingProfile(EMBEDDING_MODEL).query(query);
+export const documentEmbeddingText = (title: string, text: string) => embeddingProfile(EMBEDDING_MODEL).document(title, text);
 
 /**
  * v2 (2026-10-29): Gemma thinks before it answers (prompt.ts ASSISTANT_THINK); skill keys no longer in the data.

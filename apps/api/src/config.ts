@@ -20,6 +20,13 @@ const environmentSchema = z.object({
   OCR_WORKER_KEY: optionalWorkerKey,
   // Bearer key of the local AI worker (competency comments). Optional: without it AI is disabled.
   AI_WORKER_KEY: optionalWorkerKey,
+  // Where the AI jobs run (user 2026-11-08): "ollama" (default) = the worker on the PC polls this API; "cloudflare" = this
+  // process runs the worker itself on Cloudflare Workers AI (ai-worker/cloud.ts). Read leniently: a wrong value or a
+  // badly pasted Cloudflare id never stops the site, server.ts only logs why the AI worker did not start.
+  AI_PROVIDER: z.string().optional(),
+  CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
+  CLOUDFLARE_API_TOKEN: z.string().optional(),
+  AI_CONCURRENCY: z.string().optional(),
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   WEB_ORIGIN: z.url().optional(),
@@ -61,9 +68,32 @@ const environmentSchema = z.object({
   { message: "AI_WORKER_KEY must differ from OCR_WORKER_KEY", path: ["AI_WORKER_KEY"] }
 );
 
+/** Where the AI jobs run; cloudflare is null unless both values look right. */
+export interface AiProviderConfig {
+  provider: "ollama" | "cloudflare";
+  cloudflare: { accountId: string; apiToken: string } | null;
+  /** Jobs the in-process worker runs at a time (AI_CONCURRENCY, 1–4, default 2). */
+  concurrency: number;
+}
+
+/** AI_PROVIDER and the Cloudflare values, read without ever failing the start. */
+export function aiProviderConfig(environment: { [key in "AI_PROVIDER" | "CLOUDFLARE_ACCOUNT_ID" | "CLOUDFLARE_API_TOKEN" | "AI_CONCURRENCY"]?: string | undefined }): AiProviderConfig {
+  const clean = (value: string | undefined) => (value ?? "").trim().replace(/^["']|["']$/g, "").trim();
+  const accountId = clean(environment.CLOUDFLARE_ACCOUNT_ID).toLowerCase();
+  const apiToken = clean(environment.CLOUDFLARE_API_TOKEN);
+  const concurrency = Number(clean(environment.AI_CONCURRENCY) || 2);
+  return {
+    provider: clean(environment.AI_PROVIDER).toLowerCase() === "cloudflare" ? "cloudflare" : "ollama",
+    cloudflare: /^[0-9a-f]{32}$/.test(accountId) && /^[A-Za-z0-9_-]{20,400}$/.test(apiToken) ? { accountId, apiToken } : null,
+    concurrency: Number.isInteger(concurrency) && concurrency >= 1 && concurrency <= 4 ? concurrency : 2
+  };
+}
+
 export interface AppConfig {
   ocrWorkerKey?: string;
   aiWorkerKey?: string;
+  /** Absent in hand-made test configs: the PC worker (ollama). */
+  ai?: AiProviderConfig;
   nodeEnv: "development" | "test" | "production";
   port: number;
   webOrigin: string;
@@ -129,6 +159,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
   return {
     ...(parsed.OCR_WORKER_KEY ? {ocrWorkerKey:parsed.OCR_WORKER_KEY} : {}),
     ...(parsed.AI_WORKER_KEY ? { aiWorkerKey: parsed.AI_WORKER_KEY } : {}),
+    ai: aiProviderConfig(parsed),
     nodeEnv: parsed.NODE_ENV,
     port: parsed.PORT,
     webOrigin,

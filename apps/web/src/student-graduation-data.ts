@@ -69,12 +69,8 @@ export function formatElapsed(since: string | null | undefined, now: number): st
 export function termText(term: string | null | undefined): string | null {
   return term ? termName(term.trim()) : null;
 }
-/** "gemma4:e4b" → "Gemma 4 E4B". */
-export function modelLabel(model: string | null | undefined): string {
-  if (!model) return "Gemma 4 E4B";
-  const match = /^gemma(\d+):e(\d+)b/i.exec(model);
-  return match ? `Gemma ${match[1]} E${match[2]}B` : model;
-}
+/** "gemma4:e4b" → "Gemma 4 E4B", "@cf/google/gemma-4-26b-a4b-it" → "Gemma 4 26B" (ai-model.ts). */
+export { modelLabel, modelPlace } from "./ai-model";
 /** "A", "A và B", "A, B và C". */
 export function joinVi(parts: readonly string[]): string {
   if (parts.length < 2) return parts[0] ?? "";

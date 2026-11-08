@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Modal, Status, useData } from "./admin-ui";
+import { modelLabel, modelPlace } from "./ai-model";
 import { Icon, RequiredLabel } from "./admin-account-shared";
 import type { Career, CareerRequirement, CareerSkill } from "./career-types";
 import {
@@ -242,7 +243,7 @@ function Review({ suggestion, career, catalog, linked, linkedState, refreshLinke
     <div className="cai-review-head">
       <h3>{suggestion.items.length ? `AI đề xuất ${suggestion.items.length.toLocaleString("vi-VN")} kỹ năng cho ${career.nameVi}` : `AI chưa đề xuất kỹ năng nào cho ${career.nameVi}`}</h3>
       <p className="cai-muted">{suggestion.items.length ? "Bỏ chọn hoặc xóa dòng không phù hợp, sửa nội dung rồi lưu." : "AI chưa tìm thấy kỹ năng nào còn thiếu cho vị trí nghề nghiệp này. Bạn có thể tạo lại đề xuất hoặc thêm kỹ năng thủ công."}</p>
-      <p className="cai-meta">Gợi ý bởi {suggestion.model ?? "mô hình AI"} chạy cục bộ · {formatDateTime(suggestion.completedAt)}</p>
+      <p className="cai-meta">Gợi ý bởi {suggestion.model ? modelLabel(suggestion.model) : "mô hình AI"} {modelPlace(suggestion.model)} · {formatDateTime(suggestion.completedAt)}</p>
     </div>
     <Status {...linkedState} /><Status {...catalog} />
     {catalogRows.length > 0 && <section className="cai-section" aria-labelledby={`cai-${suggestion.id}-catalog`}>

@@ -11,6 +11,7 @@ import { PostgresAdminAccountRepository } from "./admin/accounts.js";
 import { PostgresAuthActivity } from "./auth/activity.js";
 import { PostgresStudentProfileRepository } from "./admin/student-profiles.js";
 import { chooseVietnameseCollation } from "./admin/table-sort.js";
+import { startCloudAiWorker } from "./ai-worker/cloud.js";
 
 async function startServer(): Promise<void> {
   const config = loadConfig();
@@ -47,12 +48,27 @@ async function startServer(): Promise<void> {
       } : {})
     });
 
+    let cloudWorker: ReturnType<typeof startCloudAiWorker> | null = null;
     const server = app.listen(config.port, () => {
       console.log(`EduPath API listening on http://localhost:${config.port}`);
+      // AI_PROVIDER=cloudflare (user 2026-11-08): this process runs the AI jobs on Cloudflare Workers AI, no PC needed.
+      if (config.ai?.provider !== "cloudflare") return;
+      if (!databasePool || !config.aiWorkerKey || !config.ai.cloudflare) {
+        console.error("[AI] AI_PROVIDER=cloudflare needs DATABASE_URL, AI_WORKER_KEY, CLOUDFLARE_ACCOUNT_ID (32 hex characters) and CLOUDFLARE_API_TOKEN; the AI worker was not started");
+        return;
+      }
+      cloudWorker = startCloudAiWorker({
+        port: config.port,
+        workerKey: config.aiWorkerKey,
+        accountId: config.ai.cloudflare.accountId,
+        apiToken: config.ai.cloudflare.apiToken,
+        concurrency: config.ai.concurrency
+      });
     });
 
     const shutdown = (signal: string) => {
       console.log(`[SERVER] Received ${signal}; shutting down`);
+      cloudWorker?.stop();
       server.close(() => {
         void (databasePool?.end() ?? Promise.resolve()).finally(() => process.exit(0));
       });

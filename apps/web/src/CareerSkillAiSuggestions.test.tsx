@@ -67,7 +67,7 @@ describe("CareerSkillAiSuggestions", () => {
   it("lists catalog and new skills as editable cards with the right defaults", () => {
     const html = render(completed);
     expect(html).toContain("AI đề xuất 4 kỹ năng cho Chuyên viên phân tích dữ liệu");
-    expect(html).toContain("Gợi ý bởi gemma4:e4b chạy cục bộ");
+    expect(html).toContain("Gợi ý bởi Gemma 4 E4B chạy cục bộ");
     expect(html.indexOf("Kỹ năng trong danh mục")).toBeLessThan(html.indexOf("Kỹ năng chưa có trong danh mục"));
     expect(html).toContain("Khi lưu, kỹ năng mới sẽ được thêm vào mục Kỹ năng.");
     expect(html).toContain("Lý do AI đề xuất: Công việc cốt lõi của vị trí.");

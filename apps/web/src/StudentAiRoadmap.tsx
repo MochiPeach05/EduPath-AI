@@ -3,7 +3,7 @@ import { decimalText } from "./display-format";
 import { Icon } from "./student-icons";
 import { useLiveData } from "./use-live-data";
 import {
-  ROADMAP_API, ROADMAP_POLL_MS, choiceText, dateText, failureText, roadmapTermLabel, roadmapWindowTitle, formatDateTime, helpsText, improveHeading, improveTag, isPending, modelLabel,
+  ROADMAP_API, ROADMAP_POLL_MS, choiceText, dateText, failureText, roadmapTermLabel, roadmapWindowTitle, formatDateTime, helpsText, improveHeading, improveTag, isPending, modelLabel, modelPlace,
   monthTitle, normalizeRoadmap, normalizeRoadmapResponse, normalizeRoadmapStatus, pendingCopy, requestErrorMessage, sentence, skillTags, studyTag,
   hasMonthPlan, previousRoadmap, PREVIOUS_ROADMAP_NOTE,
   type Roadmap, type RoadmapBasis, type RoadmapImprove, type RoadmapResponse, type RoadmapSkill, type RoadmapStatus, type RoadmapStudy,
@@ -273,7 +273,7 @@ function PreviousAdvice({ roadmap }: { roadmap: Roadmap }) {
   return <div className="rm-previous rm-dimmed">
     <p className="rm-old">{PREVIOUS_ROADMAP_NOTE}</p>
     <AdviceSummary roadmap={roadmap} />
-    <p className="rm-previous-meta">{roadmapWindowTitle(roadmap.window)} · {modelLabel(roadmap.model)} (chạy cục bộ) soạn lúc {formatDateTime(roadmap.completedAt ?? roadmap.createdAt)}.</p>
+    <p className="rm-previous-meta">{roadmapWindowTitle(roadmap.window)} · {modelLabel(roadmap.model)} ({modelPlace(roadmap.model)}) soạn lúc {formatDateTime(roadmap.completedAt ?? roadmap.createdAt)}.</p>
   </div>;
 }
 
@@ -371,7 +371,7 @@ function RoadmapView({ roadmap, previous, response, create, creating, createErro
     {completed && <MonthsSection roadmap={roadmap} />}
     {earlier && hasMonthPlan(earlier) && <MonthsSection roadmap={earlier} note={PREVIOUS_ROADMAP_NOTE} />}
     <p className="rm-footer">{completed
-      ? `Lộ trình do ${modelLabel(roadmap.model)} (chạy cục bộ) soạn lúc ${formatDateTime(roadmap.completedAt ?? roadmap.createdAt)} từ kết quả Đánh giá năng lực của bạn.`
+      ? `Lộ trình do ${modelLabel(roadmap.model)} (${modelPlace(roadmap.model)}) soạn lúc ${formatDateTime(roadmap.completedAt ?? roadmap.createdAt)} từ kết quả Đánh giá năng lực của bạn.`
       : "Các học phần và kỹ năng trên do hệ thống tính từ kết quả Đánh giá năng lực của bạn."} Lộ trình chỉ để tham khảo: hãy trao đổi với cố vấn học tập và xem lịch đăng ký học phần của trường trước khi đăng ký.</p>
   </>;
 }

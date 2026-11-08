@@ -5,8 +5,9 @@ import type { DatabasePool } from "../db/pool.js";
 import { TRANSCRIPT_POLICY_VERSION } from "./consent.js";
 import { createStudentDataRouter } from "./router.js";
 import {
-  createTextLayerReader, startTextLayerReader, textLayerOutcome, textLayerPython, type TextLayerJobs, type TextLayerOutcome, type TextLayerReader,
+  createTextLayerReader, gemmaOutcome, startTextLayerReader, textLayerOutcome, textLayerPython, type TextLayerJobs, type TextLayerOutcome, type TextLayerReader,
 } from "./text-layer.js";
+import { createTranscriptWorkerRouter } from "./transcript-jobs.js";
 
 // The server's own text-layer reader (user 2026-11-07): a fake queue and a fake Python; synthetic jobs only.
 const pdf = Buffer.from("%PDF-1.7\n%synthetic\n");
@@ -42,6 +43,25 @@ describe("the text-layer reader's answers", () => {
     expect(textLayerOutcome({ error: "ocr_failed" })).toEqual({ kind: "fallback" });
     expect(textLayerOutcome({ needs_ocr: true })).toEqual({ kind: "ocr" });
     for (const value of [{ fallback: true }, null, [], "x", { result: null }]) expect(textLayerOutcome(value)).toEqual({ kind: "fallback" });
+  });
+
+  it("ends every job Gemma reads (2026-11-08): a result, a refusal, else ocr_failed, never back to the PC queue", () => {
+    expect(gemmaOutcome({ result: { course_count: 1 } })).toEqual({ kind: "result", result: { course_count: 1 } });
+    expect(gemmaOutcome({ error: "curriculum_view" })).toEqual({ kind: "error", code: "curriculum_view" });
+    for (const value of [{ error: "ocr_failed", reason: "daily_limit" }, { needs_ocr: true }, { fallback: true }, null]) {
+      expect(gemmaOutcome(value)).toEqual({ kind: "error", code: "ocr_failed" });
+    }
+  });
+
+  it("refuses the PC worker once Gemma reads the scans on the server, and only then", async () => {
+    const key = "k".repeat(40);
+    let moved = true;
+    const app = express().use("/w", createTranscriptWorkerRouter({} as DatabasePool, key, { refuseWorker: () => moved }));
+    const refused = await request(app).post("/w/claim").set("authorization", `Bearer ${key}`).send({});
+    expect([refused.status, refused.body]).toEqual([403, { error: "worker_moved" }]);
+    moved = false;
+    const wrongKey = await request(app).post("/w/claim").set("authorization", "Bearer wrong").send({});
+    expect(wrongKey.status).toBe(401);
   });
 
   it("runs only where a Python is set up: TEXT_LAYER_PYTHON, else python3 on Render", () => {
