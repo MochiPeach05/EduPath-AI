@@ -6,6 +6,7 @@ import type { CurriculumCourseInput, GraduationStandardInput, SpecialtyCode } fr
 import type { DatabasePool } from "../db/pool.js";
 import type { TranscriptData } from "../student/transcript-parser.js";
 import { GRADUATION_ADVICE_PROMPT_VERSION } from "./advice/prompt.js";
+import { convertibleCourses, type ConvertibleCourses } from "./convertible.js";
 import { evaluateGraduation, type GraduationEvaluation } from "./evaluation.js";
 import { normalizeCohortCode, profileSpecialty, resolveStudentStandard, type StudentGraduationResolution } from "./resolve.js";
 import { majorCondition, majorIdentity } from "../curricula/majors.js";
@@ -39,10 +40,15 @@ export type StudentGraduation = {
   fingerprint: string | null;
   /** Only for "specialty_unset": the one specialty whose mandatory courses the student passed. */
   specialtySuggestion: StudentGraduationSpecialtySuggestion | null;
+  /**
+   * Passed mandatory courses of another specialty, counted nowhere until the school converts them into electives
+   * (convertible.ts, user 2026-11-08: "Không tính, chỉ nhắc"); null without a specialty or a transcript.
+   */
+  convertible: ConvertibleCourses | null;
 };
 
 /** Courses of the single active CTĐT of the cohort and major (current revision); [] when there is none or several. */
-async function readCohortCurriculumCourses(db: Db, cohortCode: string, majorCode: string | null): Promise<CurriculumCourseInput[]> {
+export async function readCohortCurriculumCourses(db: Db, cohortCode: string, majorCode: string | null): Promise<CurriculumCourseInput[]> {
   const curricula = await db.query<{ revision_id: string }>(
     `SELECT c.current_revision AS revision_id FROM curricula c JOIN curriculum_revisions r ON r.id=c.current_revision
      WHERE c.is_active AND c.cohort_code=$1 AND ${majorCondition("c", 2)} ORDER BY c.id`, [cohortCode, majorIdentity(majorCode)]);
@@ -86,7 +92,7 @@ export async function readStudentGraduation(db: Db, userId: string): Promise<Stu
     ? { version: transcriptRow.version, updatedAt: new Date(transcriptRow.updated_at).toISOString(), data: transcriptRow.data }
     : null;
   // The CTĐT only refines credits and elective codes, or suggests a specialty; missing or ambiguous → none.
-  const curriculumCourses = transcript && profile.cohortCode && (standard || resolution === "specialty_unset")
+  const curriculumCourses = transcript && profile.cohortCode && (standard || resolution === "specialty_unset" || profile.specialty)
     ? await readCohortCurriculumCourses(db, profile.cohortCode, profile.majorCode) : [];
   const evaluation = standard && transcript ? evaluateGraduation({ standard, transcript, curriculumCourses }) : null;
   return {
@@ -97,6 +103,7 @@ export async function readStudentGraduation(db: Db, userId: string): Promise<Stu
     evaluation,
     fingerprint: standard && evaluation ? graduationFingerprint({ profile, standard, evaluation }) : null,
     specialtySuggestion: resolution === "specialty_unset" && transcript ? specialtySuggestionFor(curriculumCourses, transcript.data, profile.cohortCode) : null,
+    convertible: transcript && profile.specialty ? convertibleCourses(curriculumCourses, transcript.data, profile.cohortCode, profile.specialty) : null,
   };
 }
 

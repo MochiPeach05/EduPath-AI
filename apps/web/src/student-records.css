@@ -648,6 +648,9 @@
     color: #704900;
 }
 
+/* Another specialty's mandatory course, convertible into an elective (2026-11-08). */
+.sr-convertible { margin: 0 0 12px; padding: 10px 14px; border-radius: 8px; background: #eef4fc; color: #24518f; font-size: 13.5px; line-height: 1.6; }
+.sr-other-specialty { display: block; margin-top: 2px; color: #24518f; font-size: 12px; line-height: 1.5; }
 .sr-review {
     padding: 16px 20px;
     margin-block: 16px;

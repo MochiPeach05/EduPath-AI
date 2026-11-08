@@ -77,7 +77,7 @@ export function syntheticGraduation(options: SyntheticGraduationOptions = {}): E
   const profile: StudentGraduation["profile"] = { cohortCode: "K29", specialty: "CNPM", majorCode: "7480201" };
   return {
     profile, resolution: "specialty", standard, transcript: { version: transcript.version, updatedAt: transcript.updatedAt },
-    evaluation, fingerprint: graduationFingerprint({ profile, standard, evaluation }), specialtySuggestion: null,
+    evaluation, fingerprint: graduationFingerprint({ profile, standard, evaluation }), specialtySuggestion: null, convertible: null,
   };
 }
 

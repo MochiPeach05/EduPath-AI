@@ -266,6 +266,16 @@ describe("StudentGraduation result", () => {
     expect(html).toContain("Kiểm tra kết quả 1 học phần có điểm nhưng chưa rõ Đạt/Chưa đạt:");
     expect(html).toContain("tối đa 2 môn");
   });
+  it("reminds of a passed mandatory course of another specialty the school can convert, counted nowhere (2026-11-08)", () => {
+    const convertible = { courses: [{ code: "71ITSE41003", name: "Nhập môn công nghệ phần mềm", credits: 3, specialty: "Công nghệ phần mềm" }], groupCode: "TC309" };
+    const html = render(ready(graduation({ convertible })));
+    expect(html).toContain('<p class="sg-convertible" role="note">');
+    expect(text(html)).toContain("Môn Nhập môn công nghệ phần mềm (3 TC, chuyên ngành Công nghệ phần mềm) thuộc chuyên ngành khác nên chưa được tính vào nhóm học phần nào của bạn. "
+      + "Bạn có thể liên hệ nhà trường để chuyển môn này thành môn tự chọn chuyên ngành (TC309).");
+    for (const none of [null, { courses: [], groupCode: null }]) expect(render(ready(graduation({ convertible: none })))).not.toContain("sg-convertible");
+    expect(render(ready(graduation()))).not.toContain("sg-convertible");
+  });
+
   it("shows data warnings as notes", () => {
     const html = render(ready(graduation({ evaluation: evaluation("fail", { warnings: [
       { code: "results_inferred", count: 1 }, { code: "credits_mismatch", printed: 126, computedLower: 120, computedUpper: 123 }, { code: "ocr_needs_review" },

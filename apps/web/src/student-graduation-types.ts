@@ -161,6 +161,8 @@ export type StudentGraduationResponse = {
   evaluation: GraduationEvaluation | null;
   /** Only for "specialty_unset": the one specialty whose mandatory courses the student passed. */
   specialtySuggestion: StudentGraduationSpecialtySuggestion | null;
+  /** Passed mandatory courses of another specialty, counted nowhere (API graduation/convertible.ts); absent on older APIs. */
+  convertible?: import("./convertible-courses").ConvertibleCourses | null;
 };
 
 /* ------------------------------------------- /api/student/graduation/advice */

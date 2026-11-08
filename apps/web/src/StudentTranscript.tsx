@@ -3,6 +3,7 @@ import { Icon } from "./student-icons";
 import TranscriptProgress from "./TranscriptProgress";
 import { policyVersion } from "./public-information";
 import TranscriptTables, { courseMatcher, transcriptNotes } from "./TranscriptTables";
+import type { ConvertibleCourses } from "./convertible-courses";
 import { PROFILE_SECTIONS, TRANSCRIPT_UPDATED_EVENT, formatUpdatedAt } from "./student-overview-data";
 import { isAdvisorView } from "./advisor-view";
 import { decimalText } from "./display-format";
@@ -54,7 +55,7 @@ export function failedImportMessage(code: string | null): string {
 export { courseMatcher };
 /** A request the API refused, carrying the message to show; anything else (a network error's own text is English) gets the request's fallback. */
 class TranscriptRequestError extends Error {}
-async function read(response: Response, fallback: string): Promise<{ transcript?: Transcript | null; job?: ImportJob | null; workerOnline?: boolean; ocrEnabled?: boolean }> {
+async function read(response: Response, fallback: string): Promise<{ transcript?: Transcript | null; job?: ImportJob | null; workerOnline?: boolean; ocrEnabled?: boolean; convertible?: ConvertibleCourses | null }> {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new TranscriptRequestError(errors[data.error] ?? fallback);
   return data;
@@ -183,6 +184,8 @@ export default function StudentTranscript() {
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [job, setJob] = useState<ImportJob | null>(null);
   const [workerOnline, setWorkerOnline] = useState(false);
+  // Passed mandatory courses of another specialty (graduation/convertible.ts): marked, counted nowhere.
+  const [convertible, setConvertible] = useState<ConvertibleCourses | null>(null);
   const pendingJob = job?.status === "queued" || job?.status === "processing";
   const [file, setFile] = useState<File | null>(null);
   const [confirmed, setConfirmed] = useState(false);
@@ -225,7 +228,7 @@ export default function StudentTranscript() {
   const load = useCallback(async () => {
     controller.current?.abort(); const pending = new AbortController(); controller.current = pending;
     setLoading(true); setLoadError(""); setLoaded(false);
-    try { const data = await read(await fetch("/api/student/transcript", { credentials: "include", signal: pending.signal }), FAILED.load); if (!pending.signal.aborted) { setTranscript(data.transcript ?? null); setJob(data.job ?? null); setWorkerOnline(data.workerOnline ?? false); setLoaded(true); } }
+    try { const data = await read(await fetch("/api/student/transcript", { credentials: "include", signal: pending.signal }), FAILED.load); if (!pending.signal.aborted) { setTranscript(data.transcript ?? null); setJob(data.job ?? null); setWorkerOnline(data.workerOnline ?? false); setConvertible(data.convertible ?? null); setLoaded(true); } }
     catch (e) { if (!pending.signal.aborted) setLoadError(messageOf(e, FAILED.load)); }
     finally { if (!pending.signal.aborted) setLoading(false); }
   }, []);
@@ -238,7 +241,7 @@ export default function StudentTranscript() {
         const data = await read(await fetch("/api/student/transcript", { credentials: "include", signal: pending.signal }), FAILED.poll);
         if (!pending.signal.aborted) {
           setJob(data.job ?? null); setWorkerOnline(data.workerOnline ?? false);
-          setTranscript(data.transcript ?? null); setError("");
+          setTranscript(data.transcript ?? null); setConvertible(data.convertible ?? null); setError("");
           // The 100% bar says it was saved (TranscriptProgress); no second message.
           if (data.job?.status === "completed") { setImportCompleted(true); setMessage(""); announceTranscriptUpdated(); }
         }
@@ -336,7 +339,7 @@ export default function StudentTranscript() {
     {(uploading || pendingJob || importCompleted) && <TranscriptProgress key={importAttempt} stage={uploading ? "uploading" : pendingJob ? job?.status === "queued" ? "queued" : "processing" : "completed"} workerOnline={workerOnline} />}
     {job && pendingJob && <div className="sr-job"><div role="status" aria-live="polite" aria-atomic="true"><strong>{job.status === "queued" ? "Đã nhận PDF · Đang chờ xử lý" : "Đang đọc bảng điểm"}</strong><p>{job.filename}</p><p>{workerOnline ? "Hệ thống đọc chữ trong PDF trước, tự nhận dạng khi cần. Bạn có thể rời trang và quay lại sau." : "Máy xử lý hiện chưa kết nối. PDF đã được giữ trong hàng đợi và sẽ được xử lý khi máy kết nối lại."}</p></div><ol className="sr-job-steps" aria-label="Tiến trình import"><li>1. Đã tải PDF</li><li aria-current="step">2. {job.status === "queued" ? "Chờ đọc bảng điểm" : "Đọc chữ / nhận dạng"}</li><li>3. Lưu kết quả</li></ol><button className="sr-secondary" disabled={busy} onClick={() => void cancelJob()}>Hủy xử lý</button></div>}
     {transcriptWarnings.length > 0 && <div className="sr-review" role="note">{transcriptWarnings.join(" ")}</div>}
-    {loaded && transcript && <TranscriptTables key={transcript.version} data={transcript.data} />}
+    {loaded && transcript && <TranscriptTables key={transcript.version} data={transcript.data} convertible={convertible} />}
     {deleteOpen && <DeleteTranscriptDialog busy={busy} error={deleteError} onClose={() => setDeleteOpen(false)} onConfirm={() => void remove()} />}
   </section>;
 }

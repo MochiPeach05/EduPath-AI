@@ -67,6 +67,22 @@ const open = (transcript: Transcript["data"], filters: { term?: string; search?:
   shownTerms(transcript, { term: filters.term ?? "all", search: filters.search ?? "" }, folds).map(view => [view.title, view.open]);
 
 describe("TranscriptTables", () => {
+  it("marks a passed mandatory course of another specialty and says how to have it converted, on the student's page only (2026-11-08)", () => {
+    const transcript = history();
+    transcript.sections[1]!.courses.push(row(3, { code: "71ITSE41003", name: "Nhập môn công nghệ phần mềm" }));
+    const convertible = { courses: [{ code: "71ITSE41003", name: "Nhập môn công nghệ phần mềm", credits: 3, specialty: "Công nghệ phần mềm" }], groupCode: "TC309" };
+    const html = renderToStaticMarkup(createElement(TranscriptTables, { data: transcript, convertible }));
+    expect(html).toContain('<p class="sr-convertible" role="note">Môn Nhập môn công nghệ phần mềm (3 TC, chuyên ngành Công nghệ phần mềm) thuộc chuyên ngành khác');
+    expect(html).toContain("liên hệ nhà trường để chuyển môn này thành môn tự chọn chuyên ngành (TC309).</p>");
+    // The mark sits on that row alone.
+    expect(html.match(/class="sr-other-specialty"/g)).toHaveLength(1);
+    expect(html).toContain('<td>Nhập môn công nghệ phần mềm<small class="sr-other-specialty">Môn của chuyên ngành khác: liên hệ nhà trường để chuyển thành môn tự chọn</small></td>');
+    // The admin portal's student details pass the transcript alone: no note, no mark.
+    const plain = render(transcript);
+    expect(plain).not.toContain("sr-convertible");
+    expect(plain).not.toContain("sr-other-specialty");
+  });
+
   it("draws each term as the student page does: filters, the eight columns, results and the printed summaries", () => {
     const html = render(data());
     expect(html).toContain("Tất cả học kỳ");

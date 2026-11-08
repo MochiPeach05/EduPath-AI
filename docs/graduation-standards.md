@@ -74,8 +74,11 @@ Router chỉ đọc `apps/api/src/graduation/student-router.ts`. Dữ liệu đ�
   transcript: null | { version: string; updatedAt: string };
   evaluation: null | GraduationEvaluation;       // null khi chưa có tiêu chuẩn hoặc bảng điểm
   specialtySuggestion: null | { code; label; count };
+  convertible: null | { courses: { code; name; credits; specialty }[]; groupCode: string | null };
 }
 ```
+
+Môn bắt buộc của chuyên ngành khác (`convertible`, 2026-11-08): khi đã có bảng điểm và chuyên ngành, đây là các môn bắt buộc của chuyên ngành khác trong CTĐT của khóa mà sinh viên đã đạt (ví dụ sinh viên đổi từ Công nghệ phần mềm sang Trí tuệ nhân tạo). Các môn này **không được tính** vào nhóm học phần nào; trang Xét tốt nghiệp và trang bảng điểm chỉ nhắc sinh viên liên hệ nhà trường để chuyển thành môn tự chọn chuyên ngành. `groupCode` là nhóm tự chọn có các môn "Tự chọn Chuyên ngành" của CTĐT (TC206 với K26, TC209 với K28, TC309 với K29–K31), `null` khi CTĐT không có nhóm này (`apps/api/src/graduation/convertible.ts`). `GET /api/student/transcript` trả cùng trường này.
 
 `standard` chỉ gồm các điều kiện sinh viên cần; chi tiết workbook nguồn và ghi chú rà soát ở lại cổng quản trị. Cần đăng nhập (401 `authentication_required`); `Cache-Control: no-store`; không có database → 503 `database_required`; tài khoản không hoạt động → 403 `account_unavailable`; mọi lệnh khác GET/HEAD → 405 `read_only` (header `Allow: GET, HEAD`); có query string → 400 `invalid_graduation_query`. Đường dẫn `/:id` cũ trả 404.
 

@@ -143,6 +143,9 @@
 .sg-page .sg-more[open] > summary { margin-bottom: 6px; }
 
 /* Warnings, method, disclaimer */
+/* Another specialty's mandatory course, convertible into an elective (2026-11-08). */
+.sg-page .sg-convertible { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 10px 14px; border-radius: 8px; background: #eef4fc; color: #24518f; font-size: 14px; line-height: 1.6; }
+.sg-page .sg-convertible svg { flex: none; width: 18px; height: 18px; margin-top: 2px; }
 .sg-page .sg-warnings { display: grid; gap: 8px; margin: 0; padding: 0; list-style: none; }
 .sg-page .sg-warnings > li { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid #e9d39b; border-radius: 8px; background: #fff8e8; color: #5c4210; font-size: 14px; line-height: 1.6; }
 .sg-page .sg-warnings > li > span:first-child { flex: none; display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%; background: #805900; color: #fff; font-size: 12px; font-weight: 800; line-height: 1; }

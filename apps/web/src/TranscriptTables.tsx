@@ -4,6 +4,7 @@ import { Icon } from "./student-icons";
 import type { Transcript } from "./StudentTranscript";
 import { INFERRED_RESULT_NOTE, attemptOutcome, isFailLetter, isRowWarning, reviewLabels, transcriptCreditCheck, type CreditCheck } from "./transcript-results";
 import { academicSections, foldText, printedSemesterGpa } from "./student-overview-data";
+import { CONVERTIBLE_ROW_NOTE, convertibleCodes, convertibleText, isConvertible, type ConvertibleCourses } from "./convertible-courses";
 import "./student-records.css";
 import "./transcript-terms.css";
 
@@ -141,7 +142,7 @@ function CreditMismatch({ check }: { check: CreditCheck }) {
  * One term: its header is a button (the WAI-ARIA disclosure pattern) that opens or folds the table and the printed
  * summaries under it. "1 môn chưa đạt" is the one red note; rows to check are amber, the term being studied grey.
  */
-function TermSection({ term, studying, panelId, onToggle }: { term: TermView; studying: boolean; panelId: string; onToggle: () => void }) {
+function TermSection({ term, studying, panelId, onToggle, others }: { term: TermView; studying: boolean; panelId: string; onToggle: () => void; others: ReadonlySet<string> }) {
   const { section, title, courses, open } = term;
   const facts = termFacts(section);
   const line = [`${facts.courses} môn`, facts.credits > 0 ? credits(facts.credits) : "", facts.average ? `Điểm TB học kỳ ${facts.average}` : ""].filter(Boolean).join(" · ");
@@ -158,14 +159,19 @@ function TermSection({ term, studying, panelId, onToggle }: { term: TermView; st
       {flags.length > 0 && <>{" "}<span className="tt-term-flags">{flags.map(([, meaning, text], i) => <Fragment key={meaning}>{i > 0 && " "}<span className={`tt-flag ${meaningClass(meaning)}`}>{text}</span></Fragment>)}</span></>}
     </button></h3>
     <div className="tt-term-panel" id={panelId} hidden={!open}>
-      <div className="sr-table-scroll" tabIndex={0} role="region" aria-label={`Bảng điểm ${title}`}><table><caption className="sr-only">{`Bảng điểm ${title}`}</caption><thead><tr><th scope="col">STT</th><th scope="col">Mã môn học</th><th scope="col">Tên môn học</th><th scope="col">Tín chỉ</th><th scope="col">Hệ 10</th><th scope="col">Hệ 4</th><th scope="col">Điểm chữ</th><th scope="col">Kết quả</th></tr></thead><tbody>{courses.map((course, index) => <tr key={`${course.sourcePage}-${course.ordinal}-${index}`} className={course.review?.length ? "sr-row-review" : undefined}><td>{course.ordinal}</td><td>{course.code || "—"}</td><td>{course.name}{course.review?.length ? <small className="sr-review-reasons">Cần kiểm tra: {reviewLabels(course.review).join(", ")}</small> : null}</td><td>{course.printed?.credits !== undefined ? course.printed.credits || "—" : decimalText(course.credits)}</td><td>{course.score10 !== null ? decimalText(course.score10) : course.printed?.score10 ?? "—"}</td><td>{course.score4 === null ? course.printed?.score4 ?? "—" : decimalText(course.score4, 2)}</td><td><span className={isFailLetter(course.letter) ? "sr-grade-fail" : "sr-grade"}>{course.letter ?? "—"}</span></td><ResultCell course={course} /></tr>)}</tbody></table></div>
+      <div className="sr-table-scroll" tabIndex={0} role="region" aria-label={`Bảng điểm ${title}`}><table><caption className="sr-only">{`Bảng điểm ${title}`}</caption><thead><tr><th scope="col">STT</th><th scope="col">Mã môn học</th><th scope="col">Tên môn học</th><th scope="col">Tín chỉ</th><th scope="col">Hệ 10</th><th scope="col">Hệ 4</th><th scope="col">Điểm chữ</th><th scope="col">Kết quả</th></tr></thead><tbody>{courses.map((course, index) => <tr key={`${course.sourcePage}-${course.ordinal}-${index}`} className={course.review?.length ? "sr-row-review" : undefined}><td>{course.ordinal}</td><td>{course.code || "—"}</td><td>{course.name}{isConvertible(others, course.code) && <small className="sr-other-specialty">{CONVERTIBLE_ROW_NOTE}</small>}{course.review?.length ? <small className="sr-review-reasons">Cần kiểm tra: {reviewLabels(course.review).join(", ")}</small> : null}</td><td>{course.printed?.credits !== undefined ? course.printed.credits || "—" : decimalText(course.credits)}</td><td>{course.score10 !== null ? decimalText(course.score10) : course.printed?.score10 ?? "—"}</td><td>{course.score4 === null ? course.printed?.score4 ?? "—" : decimalText(course.score4, 2)}</td><td><span className={isFailLetter(course.letter) ? "sr-grade-fail" : "sr-grade"}>{course.letter ?? "—"}</span></td><ResultCell course={course} /></tr>)}</tbody></table></div>
       {section.summaries.length > 0 && <dl className="sr-summaries">{section.summaries.map((summary, i) => <div key={i}><dt>{summary.label}</dt><dd>{summary.value === null ? "—" : printedFigure(summary.value)}</dd></div>)}</dl>}
     </div>
   </section>;
 }
 
-/** Remount it (`key`) to clear the filters and fold the terms as at first, e.g. after a new import. */
-export default function TranscriptTables({ data }: { data: TranscriptData }) {
+/**
+ * Remount it (`key`) to clear the filters and fold the terms as at first, e.g. after a new import. convertible: the passed
+ * mandatory courses of another specialty, marked and counted nowhere (the student's own page; user 2026-11-08).
+ */
+export default function TranscriptTables({ data, convertible = null }: { data: TranscriptData; convertible?: ConvertibleCourses | null }) {
+  const others = convertibleCodes(convertible);
+  const convertibleNote = convertibleText(convertible);
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [folds, dispatch] = useReducer(foldTerms, data, initialTermFolds);
@@ -180,12 +186,13 @@ export default function TranscriptTables({ data }: { data: TranscriptData }) {
   const foldAll = (open: boolean) => dispatch({ type: "all", ids: data.sections.map(section => section.id), open });
   return <>
     {creditCheck.status === "mismatch" && <CreditMismatch check={creditCheck} />}
+    {convertibleNote && <p className="sr-convertible" role="note">{convertibleNote}</p>}
     <div className="sr-table-filters"><label>Học kỳ<select value={filter} onChange={e => { setFilter(e.target.value); dispatch({ type: "filter-changed" }); }}><option value="all">Tất cả học kỳ</option>{data.sections.map(s => <option key={s.id} value={s.id}>{sectionTitle(s)}</option>)}</select></label><label>Tìm học phần<input value={search} onChange={e => { setSearch(e.target.value); dispatch({ type: "filter-changed" }); }} placeholder="Mã hoặc tên học phần…" /></label><span>{count} dòng học phần</span></div>
     {count > 0 && <div className="tt-terms">
       {terms.length > 1 && <div className="tt-terms-bar"><p>Bấm vào học kỳ để mở hoặc thu gọn.</p><div className="tt-terms-actions"><button type="button" className="tt-text-button" onClick={() => foldAll(true)}>Mở tất cả</button><button type="button" className="tt-text-button" onClick={() => foldAll(false)}>Thu gọn tất cả</button></div></div>}
       {/* Phones: the grade columns sit right of the screen (the tables keep one column layout across terms). */}
       {terms.some(term => term.open) && <p className="sr-swipe-hint" aria-hidden="true">Vuốt ngang để xem điểm <Icon name="arrow" /></p>}
-      {terms.map(term => <TermSection key={term.section.id} term={term} studying={term.section.id === studying} panelId={`${idPrefix}-term-${term.index}`} onToggle={() => dispatch({ type: "toggle", id: term.section.id, filtered })} />)}
+      {terms.map(term => <TermSection key={term.section.id} term={term} studying={term.section.id === studying} panelId={`${idPrefix}-term-${term.index}`} onToggle={() => dispatch({ type: "toggle", id: term.section.id, filtered })} others={others} />)}
     </div>}
     {!count && <p className="sw-empty">Không tìm thấy học phần phù hợp.</p>}
     <p className="sw-muted">(*) Môn điều kiện theo ghi chú PDF. Các tổng kết học kỳ được lấy nguyên từ bảng điểm của trường, không tính lại theo các dòng đang lọc.</p>

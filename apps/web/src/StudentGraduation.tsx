@@ -17,6 +17,7 @@ import {
 import type {
   AdviceOutput, GradStatus, GraduationAdviceResponse, GraduationEvaluation, StoredAdvice, StudentGraduationResponse,
 } from "./student-graduation-types";
+import { convertibleText } from "./convertible-courses";
 import "./student-curriculum.css";
 import "./student-graduation.css";
 
@@ -250,7 +251,8 @@ function Suggestions({ items }: { items: SuggestionItem[] }) {
   </div>;
 }
 
-function EvaluationResult({ evaluation, advice }: { evaluation: GraduationEvaluation; advice: AdviceState }) {
+/** convertible: the reminder about another specialty's passed mandatory courses (convertibleText), shown with the data notes. */
+function EvaluationResult({ evaluation, advice, convertible }: { evaluation: GraduationEvaluation; advice: AdviceState; convertible: string | null }) {
   const verdict = verdictHeadline(evaluation);
   const items = conditionItems(evaluation);
   const unknown = items.filter((item) => item.status === "unknown");
@@ -266,6 +268,7 @@ function EvaluationResult({ evaluation, advice }: { evaluation: GraduationEvalua
     {warnings.length > 0 && <ul className="sg-warnings" aria-label="Lưu ý về dữ liệu">{warnings.map((warning) => <li key={warning.code}>
       <span aria-hidden="true">!</span><span>{warning.text}</span>
     </li>)}</ul>}
+    {convertible && <p className="sg-convertible" role="note"><Icon name="info" /><span>{convertible}</span></p>}
     <details className="sg-method">
       <summary>Cách đối chiếu</summary>
       <ul>{methodNotes(evaluation).map((note) => <li key={note}>{note}</li>)}</ul>
@@ -276,12 +279,14 @@ function EvaluationResult({ evaluation, advice }: { evaluation: GraduationEvalua
 
 function ResultSection({ data, advice }: { data: StudentGraduationResponse; advice: AdviceState }) {
   const evaluation = data.evaluation;
+  // Another specialty's mandatory courses: counted nowhere, the school can convert them (user 2026-11-08).
+  const convertible = convertibleText(data.convertible);
   return <section className="sw-panel sg-section sg-result" aria-labelledby="sg-result-title">
     <div>
       <h2 id="sg-result-title" className="sg-title">Kết quả xét tốt nghiệp tính đến thời điểm hiện tại</h2>
       {evaluation && <p className="sg-meta">{asOfLine(evaluation)}</p>}
     </div>
-    {evaluation ? <EvaluationResult evaluation={evaluation} advice={advice} /> : <div className="sg-empty-state">
+    {evaluation ? <EvaluationResult evaluation={evaluation} advice={advice} convertible={convertible} /> : <div className="sg-empty-state">
       <span className="sg-empty-icon" aria-hidden="true"><Icon name="document" /></span>
       <h3>Chưa có bảng điểm để đối chiếu</h3>
       <p>Hãy import bảng điểm PDF xuất từ cổng đào tạo tại mục Hồ sơ và bảng điểm. Kết quả xét tốt nghiệp sẽ được tính ngay sau khi import.</p>

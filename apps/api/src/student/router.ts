@@ -14,6 +14,9 @@ import { bothOrNeither, INTEREST_HOBBIES, INTEREST_MAX, INTEREST_TECH, interestF
 import { deleteCompetencyData } from "../competency-assessment/repository.js";
 import { specialtyOffered } from "../competency-assessment/specialty.js";
 import { deleteGraduationAdvice } from "../graduation/advice/jobs.js";
+import { convertibleCourses } from "../graduation/convertible.js";
+import { normalizeCohortCode, profileSpecialty } from "../graduation/resolve.js";
+import { readCohortCurriculumCourses } from "../graduation/student-graduation.js";
 
 const transcriptColumns = `version, filename, file_size AS "fileSize", parsed_data AS data,
   created_at AS "createdAt", updated_at AS "updatedAt"`;
@@ -143,9 +146,20 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
     // A pending job the server reads itself (text-layer.ts) has a reader too: the page must not say the PC worker is off.
     const job = jobs.rows[0] as { id: string; status: string } | undefined;
     const serverReads = Boolean(job && (job.status === "queued" || job.status === "processing") && options.textLayer?.covers(job.id));
+    // Passed mandatory courses of another specialty: counted nowhere, the page says the school can convert them
+    // (graduation/convertible.ts, user 2026-11-08).
+    let convertible = null;
+    if (row) {
+      const profile = (await pool!.query<{ cohort_code: string | null; specialty: string | null; major_code: string | null }>(
+        "SELECT cohort_code,specialty,major_code FROM student_profiles WHERE user_id=$1", [studentUser(req).userId])).rows[0];
+      const cohort = normalizeCohortCode(profile?.cohort_code), specialty = profileSpecialty(profile?.specialty);
+      if (cohort && specialty) {
+        convertible = convertibleCourses(await readCohortCurriculumCourses(pool!, cohort, profile?.major_code?.trim() || null), row.data, cohort, specialty);
+      }
+    }
     // Marks of a stored transcript that are not errors (withoutSettledReviews) are left out, as a new upload does.
     res.json({ transcript: row ? { ...row, data: withoutSettledReviews(row.data) } : null, job: jobs.rows[0] ?? null,
-      workerOnline: (worker.rows[0]?.online ?? false) || serverReads, ocrEnabled });
+      workerOnline: (worker.rows[0]?.online ?? false) || serverReads, ocrEnabled, convertible });
   });
   router.delete("/transcript/job", async (req, res) => {
     const input = z.object({ id: z.uuid() }).safeParse(req.body);

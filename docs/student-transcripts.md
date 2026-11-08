@@ -7,6 +7,8 @@
 > - **Health check:** `GET /api/health` reports `textLayer: off | checking | ready`.
 > - **Limits:** one PDF at a time; about 95 MB and 1–2 CPU seconds per transcript, measured on 12 test PDFs.
 
+> **Other specialty's mandatory courses (2026-11-08).** `GET /transcript` also returns `convertible` (see [graduation-standards.md](graduation-standards.md)): the passed mandatory courses of another specialty of the cohort's CTĐT. The page marks those rows and notes that the school can convert them into specialty electives; they count in no group.
+
 Students can import, replace, view and delete their own transcript from **Hồ sơ & bảng điểm**, and edit class, current semester, interests and career goal. Identity fields remain read-only.
 
 ## Storage and deployment
