@@ -133,6 +133,51 @@ class RowBuilderTest(unittest.TestCase):
         for reason in ('table_not_found', 'not_json', 'truncated', 'http_400', 'image_failed'):
             self.assertEqual(worker.gemma_error(reason), 'ocr_failed')
 
+    def test_a_page_without_a_table_is_skipped_with_a_warning_and_only_no_table_at_all_fails(self):
+        import unittest.mock as mock
+        jobs = {0: [(b'a', 1, 0, 1)], 1: gemma_ocr.GemmaOcrError('table_not_found'), 2: [(b'c', 1, 0, 0)]}
+
+        def strip_jobs(page):
+            value = jobs[page]
+            if isinstance(value, Exception):
+                raise value
+            return value
+        reads = {b'a': [TERM1, course('1', '71ITBS10103')], b'c': [course('2', '71ITBS10203')]}
+        with mock.patch.object(gemma_ocr, 'strip_jobs', strip_jobs):
+            pages = gemma_ocr.read_pages({0: 0, 1: 1, 2: 2}, [0, 1, 2], reader=lambda jpeg: reads[jpeg])
+            self.assertEqual(pages[1], [{'kind': 'warning', 'text': 'table_not_found'}])
+            builder = gemma_ocr.RowBuilder()
+            builder.rows(pages[0])
+            self.assertEqual(builder.rows(pages[1]), [])
+            self.assertEqual(builder.page_warnings, ['table_not_found'])
+            self.assertEqual(builder.rows(pages[2])[0][1], '71ITBS10203')
+            with self.assertRaises(gemma_ocr.GemmaOcrError):
+                gemma_ocr.read_pages({1: 1}, [1], reader=lambda jpeg: [])
+
+    def test_a_summary_box_read_with_too_few_lines_is_read_again(self):
+        half = {'kind': 'summary', 'lines': ['Tổng số tín chỉ đăng ký: 100', 'Điểm TB học tập (Hệ 4): 3.0', 'Tổng số tín chỉ tích lũy: 54',
+                                             'Điểm TB tích lũy (Hệ 4): 3.1', 'Xếp loại học tập tích lũy: Khá']}
+        whole = {'kind': 'summary', 'lines': half['lines'] + ['Số tín chỉ đạt học kỳ: 18', 'Điểm TB học kỳ (Hệ 4): 2.33',
+                                                             'Xếp loại học tập HK: Yếu', 'Điểm rèn luyện học kỳ: 81']}
+        answers = [[half], [whole]]
+        calls = []
+        def read(jpeg):
+            calls.append(jpeg)
+            return answers[len(calls) - 1]
+        items = gemma_ocr.read_checked(read, b'jpeg', rows=0, first=False, boxes=1)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(len(gemma_ocr.summary_values(items[0])), 9)
+
+    def test_a_strip_missing_a_term_title_is_read_again(self):
+        answers = [[course('1', '71ITBS10103')], [{'kind': 'term', 'year': '2024-2025', 'semester': 1}, course('1', '71ITBS10103')]]
+        calls = []
+        def read(jpeg):
+            calls.append(jpeg)
+            return answers[len(calls) - 1]
+        items = gemma_ocr.read_checked(read, b'jpeg', rows=1, first=False, boxes=0, titles=1)
+        self.assertEqual(len(calls), 2)
+        self.assertEqual(items[0]['kind'], 'term')
+
     def test_reads_the_json_of_an_answer_in_a_fence_or_with_words_around(self):
         self.assertEqual(gemma_ocr.json_text('```json\n{"items": []}\n```'), '{"items": []}')
         self.assertEqual(gemma_ocr.json_text('Đây là kết quả: {"items": [1]} xong'), '{"items": [1]}')

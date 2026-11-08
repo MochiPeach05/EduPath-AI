@@ -33,7 +33,9 @@ IMAGE_PIXELS = 600_000
 OVERLAP = 0.0
 # Requests in flight at once (Workers AI takes them in parallel; a 4-page scan is 12 strips).
 PARALLEL = 6
-RETRY_DELAYS = (3, 10)
+# Workers AI answers a 500 now and then: three more tries over about 45 seconds (user test 2026-11-08: one strip of a
+# 4-page transcript failed twice in a row and took the whole transcript with it).
+RETRY_DELAYS = (3, 10, 30)
 # What the strips of one PDF cost (requests and tokens as Workers AI counts them), added to the result's ocr_settings so
 # the day's use of the free allowance can be followed. Never any text.
 USAGE = {'requests': 0, 'prompt_tokens': 0, 'completion_tokens': 0}
@@ -156,7 +158,13 @@ def table_image(page, dpi=DPI):
     # summary box can show eight cells where the column rulings run through it, but it is three times as tall.
     rows = [((band['top'] + band['bottom']) / 2 - top) for band in bands
             if len(band['cells']) == 8 and band['bottom'] - band['top'] < dpi * 0.75]
-    return np.ascontiguousarray(image[top:bottom, left:right]), borders, rows
+    # Tall bands: the summary boxes (two cells of four or five lines each), to check that both cells were read.
+    boxes = [((band['top'] + band['bottom']) / 2 - top) for band in bands if band['bottom'] - band['top'] >= dpi * 0.75]
+    # Low bands of one cell across the table: the term titles (and the "Điểm bảo lưu" title), so a title Gemma left out is
+    # read again instead of guessed (user test 2026-11-08: a real transcript that skips summer terms put rows in the wrong term).
+    titles = [((band['top'] + band['bottom']) / 2 - top) for band in bands
+              if len(band['cells']) == 1 and band['bottom'] - band['top'] < dpi * 0.75]
+    return np.ascontiguousarray(image[top:bottom, left:right]), borders, rows, boxes, titles
 
 
 def strip_cuts(height, borders, target):
@@ -176,11 +184,11 @@ def strip_cuts(height, borders, target):
 
 
 def strip_jobs(page, dpi=DPI, pixels=IMAGE_PIXELS):
-    """[(JPEG, eight-cell rows in it)] of the page's table (table_image) in strips cut on the table's borders, each small
-    enough (IMAGE_PIXELS with its white margin) that Gemma reads it at full resolution (quality 90). The first strip of
-    a page may hold the column header among its eight-cell rows."""
+    """[(JPEG, eight-cell rows, summary boxes, term titles in it)] of the page's table (table_image) in strips cut on the table's
+    borders, each small enough (IMAGE_PIXELS with its white margin) that Gemma reads it at full resolution (quality 90).
+    The first strip of a page may hold the column header among its eight-cell rows."""
     import cv2
-    image, borders, rows = table_image(page, dpi)
+    image, borders, rows, boxes, titles = table_image(page, dpi)
     pad = int(dpi * 0.1)
     target = max(dpi * 0.5, pixels / image.shape[1] - 2 * pad)
     jobs = []
@@ -189,13 +197,14 @@ def strip_jobs(page, dpi=DPI, pixels=IMAGE_PIXELS):
         ok, jpeg = cv2.imencode('.jpg', cv2.cvtColor(strip, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 90])
         if not ok:
             raise GemmaOcrError('image_failed')
-        jobs.append((jpeg.tobytes(), sum(1 for y in rows if top <= y < bottom)))
+        count = lambda marks: sum(1 for y in marks if top <= y < bottom)  # noqa: E731
+        jobs.append((jpeg.tobytes(), count(rows), count(boxes), count(titles)))
     return jobs
 
 
 def strip_images(page, dpi=DPI, pixels=IMAGE_PIXELS):
     """The JPEG strips of strip_jobs."""
-    return [jpeg for jpeg, _ in strip_jobs(page, dpi, pixels)]
+    return [jpeg for jpeg, *_ in strip_jobs(page, dpi, pixels)]
 
 
 # A strip whose answer has fewer course rows than its eight-cell rows is read again, at most this many more times; the
@@ -203,16 +212,25 @@ def strip_images(page, dpi=DPI, pixels=IMAGE_PIXELS):
 RETRIES = 2
 
 
-def read_checked(read, jpeg, rows, first):
+# Lines a summary box has at least (its two cells hold nine on the VLU transcript; a term still running has fewer).
+BOX_LINES = 7
+
+
+def read_checked(read, jpeg, rows, first, boxes=0, titles=0):
     """Gemma's items for a strip, read again while they miss a course row (the first strip of a page may hold the
-    column header, one eight-cell row that is no course)."""
+    column header, one eight-cell row that is no course) or a summary box came back with fewer than BOX_LINES known
+    lines (user test 2026-11-08 on real transcripts: the left cell of a box was now and then left out). The answer with
+    the most course rows, then the most summary lines, is kept."""
     best = None
     for _ in range(RETRIES + 1):
         items = read(jpeg)
         courses = sum(1 for item in items if item.get('kind') == 'course')
-        if best is None or courses > best[0]:
-            best = (courses, items)
-        if courses >= rows - (1 if first else 0):
+        lines = sum(len(summary_values(item)) for item in items if item.get('kind') == 'summary')
+        heads = sum(1 for item in items if item.get('kind') in ('term', 'section'))
+        score = (courses, min(heads, titles), lines)
+        if best is None or score > best[0]:
+            best = (score, items)
+        if courses >= rows - (1 if first else 0) and heads >= titles and lines >= boxes * BOX_LINES:
             break
     return best[1]
 
@@ -282,13 +300,28 @@ def read_strip(image_jpeg, endpoint=None):
 
 
 def read_pages(document, indexes, reader=read_strip):
-    """{page index: [items of its strips, in order]} for the pages that need OCR, every strip read in parallel."""
+    """{page index: [items of its strips, in order]} for the pages that need OCR, every strip read in parallel. A page
+    without a table grid (a page of signatures, a blank last page) is not sent: its items are one warning,
+    table_not_found, that marks the transcript for review (user test 2026-11-08: such a page made the whole transcript
+    fail). Only when no page has a table does the transcript fail."""
     endpoint = settings() if reader is read_strip else None
     read = (lambda jpeg: reader(jpeg, endpoint)) if endpoint else reader
-    jobs = [(index, jpeg, rows, number == 0) for index in indexes for number, (jpeg, rows) in enumerate(strip_jobs(document[index]))]
+    jobs, skipped = [], []
+    for index in indexes:
+        try:
+            jobs.extend((index, jpeg, rows, number == 0, boxes, titles)
+                        for number, (jpeg, rows, boxes, titles) in enumerate(strip_jobs(document[index])))
+        except GemmaOcrError as error:
+            if str(error) != 'table_not_found':
+                raise
+            skipped.append(index)
+    if not jobs:
+        raise GemmaOcrError('table_not_found')
     with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
-        answers = list(pool.map(lambda job: read_checked(read, job[1], job[2], job[3]), jobs))
+        answers = list(pool.map(lambda job: read_checked(read, job[1], job[2], job[3], job[4], job[5]), jobs))
     pages = {index: [] for index in indexes}
+    for index in skipped:
+        pages[index].append({'kind': 'warning', 'text': 'table_not_found'})
     for (index, *_), items in zip(jobs, answers):
         pages[index].extend(items)
     return pages
@@ -437,4 +470,7 @@ class RowBuilder:
                     self.last, self.last_number = 'section', None
             elif kind == 'header':
                 self.headers.append(text(item.get('text')))
+            elif kind == 'warning' and text(item.get('text')) and text(item.get('text')) not in self.page_warnings:
+                # From read_pages, never from Gemma (its schema has no such kind): a page that was not read.
+                self.page_warnings.append(text(item.get('text')))
         return rows

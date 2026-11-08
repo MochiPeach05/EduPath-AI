@@ -58,6 +58,23 @@ Trang có `method: "gemma"`. `ocr_settings` là `{ engine: "gemma", model, dpi, 
 - Khối tổng kết khớp 207/207 dòng.
 - Khoảng 50 giây và 400 neuron mỗi bảng điểm.
 
+## Thử với bảng điểm thật của bộ thử (8/11, tài khoản phụ, chỉ in số đếm)
+
+13 PDF trong thư mục thử của người dùng:
+- 10 PDF có lớp chữ: PyMuPDF đọc trên máy chủ, mỗi file khoảng 1 giây, server đều nhận.
+- 3 bản scan: Gemma đọc mỗi file trong 23–37 giây. So với PaddleOCR trên PC: 130/130 dòng giống hệt ở cả 6 trường.
+- Ép Gemma đọc 4 PDF có lớp chữ như bản scan, lấy lớp chữ làm đáp án:
+  - file 2: 53/53 dòng đúng hoàn toàn;
+  - file 4: 51/51;
+  - file 5: 52/52;
+  - file 1 (7 trang, 15 học kỳ): 77/77 ở hai lần chạy; một lần khác thiếu 5 dòng, vì Gemma không cho kết quả giống nhau mọi lần.
+- Khối tổng kết khớp 93–98% số dòng.
+
+Các bản sửa từ lần thử này:
+- Trang không có khung bảng (trang chữ ký, trang trống) bị bỏ qua kèm cảnh báo `table_not_found` thay vì làm hỏng cả bảng điểm.
+- Lỗi 500 được thử lại sau 3, 10 rồi 30 giây.
+- Ngoài kiểm tra số dòng môn, mỗi dải còn được kiểm tra số tiêu đề học kỳ (dòng một ô) và số dòng của khối tổng kết (dòng cao; ít nhất 7 dòng mỗi khối). Thiếu thì đọc lại, vì tiêu đề bị sót sẽ bị đoán là học kỳ kế tiếp, mà sinh viên thường bỏ học kỳ hè.
+
 ## Thử trên tài khoản phụ (8/11)
 
 Các lần thử dùng tài khoản Cloudflare phụ (`CLOUDFLARE_TEST_ACCOUNT_ID`, `CLOUDFLARE_TEST_API_TOKEN` trong `apps/api/.env`), không bao giờ dùng tài khoản của web. Với sinh viên giả của schema e2e:
