@@ -30,11 +30,12 @@ describe("public policy, terms and FAQ", () => {
     expect(competencyCategory?.label).toBe("Đánh giá năng lực và AI");
   });
 
-  it("explains what the local AI model receives, what it never receives and how long results are kept", () => {
-    expect(competencyText).toContain("Gemma 4 E4B");
-    expect(competencyText).toContain("chạy cục bộ");
+  it("explains what the AI model on Cloudflare Workers AI receives, what it never receives and how long results are kept", () => {
+    expect(competencyText).toContain("Gemma 4 26B");
+    expect(competencyText).toContain("Cloudflare Workers AI");
     expect(competencyText).toContain("không nhận họ tên, mã số sinh viên, email, lớp");
-    expect(competencyText).toContain("dịch vụ AI đám mây");
+    expect(competencyText).toContain("không lưu lại và không dùng dữ liệu để huấn luyện mô hình AI");
+    expect(competencyText).not.toContain("chạy cục bộ");
     expect(competencyText).toContain("tối đa 20 lần đánh giá gần nhất");
     expect(competencyText).toContain("rút lại sự đồng ý");
   });

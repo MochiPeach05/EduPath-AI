@@ -129,7 +129,7 @@ function ConsentDialog({ busy, onClose, onConfirm }: { busy: boolean; onClose: (
     <h2 id="scomp-consent-title">Đồng ý đánh giá năng lực</h2>
     <div id="scomp-consent-text">
       <p>EduPath AI sẽ dùng bảng điểm, khóa, chuyên ngành và vị trí nghề nghiệp mục tiêu của bạn để tính điểm năng lực, khoảng trống kỹ năng và gợi ý học phần. Kết quả được lưu trong tài khoản của bạn (tối đa 20 lần gần nhất) đến khi bạn xóa.</p>
-      <p>Nếu nhận xét AI được bật, mô hình chạy cục bộ trên máy của nhóm phát triển chỉ nhận mã, tên học phần, điểm và kết quả đã tính — không nhận họ tên, MSSV, email hay tệp PDF.</p>
+      <p>Nếu nhận xét AI được bật, mô hình chạy trên Cloudflare Workers AI chỉ nhận mã, tên học phần, điểm và kết quả đã tính — không nhận họ tên, MSSV, email hay tệp PDF.</p>
     </div>
     <label className="sr-confirm scomp-consent-check"><input type="checkbox" checked={checked} disabled={busy} onChange={(event) => setChecked(event.target.checked)} /><span>Tôi đồng ý để EduPath AI xử lý dữ liệu học tập của tôi cho việc đánh giá năng lực theo <a href={competencyPolicyHref} target="_blank" rel="noreferrer">Chính sách bảo mật</a>.</span></label>
     <div className="sr-actions sr-form-actions">

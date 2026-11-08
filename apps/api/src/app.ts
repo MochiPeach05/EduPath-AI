@@ -160,7 +160,8 @@ export function createApp({
 
   app.get("/api/health", (_request, response) => {
     // textLayer: whether this server reads transcripts with a text layer itself (off, checking, ready).
-    response.json({ status: "ok", service: "edupath-api", textLayer: textLayer.status() });
+    // ai: where the AI jobs run (ollama = the PC worker, cloudflare = this server on Workers AI); no secret, no state.
+    response.json({ status: "ok", service: "edupath-api", textLayer: textLayer.status(), ai: config.ai?.provider ?? "ollama" });
   });
 
   app.use(

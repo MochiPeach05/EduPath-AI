@@ -42,11 +42,11 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
   {
     question: "EduPath AI dùng AI vào việc gì?",
     answer: [
-      "EduPath AI dùng mô hình ngôn ngữ Gemma 4 E4B ở bốn trang. Trong Đánh giá năng lực, mô hình viết nhận xét học tập giúp bạn hiểu kết quả của mình: điểm mạnh nằm ở đâu, kỹ năng nào còn thiếu so với vị trí nghề nghiệp mục tiêu, nên ưu tiên học phần nào trong danh sách hệ thống gợi ý và nên tự học thêm những gì.",
+      "EduPath AI dùng mô hình ngôn ngữ Gemma 4 26B, chạy trên Cloudflare Workers AI, ở bốn trang. Trong Đánh giá năng lực, mô hình viết nhận xét học tập giúp bạn hiểu kết quả của mình: điểm mạnh nằm ở đâu, kỹ năng nào còn thiếu so với vị trí nghề nghiệp mục tiêu, nên ưu tiên học phần nào trong danh sách hệ thống gợi ý và nên tự học thêm những gì.",
       "Mô hình cũng soạn Lộ trình AI (lộ trình cho học kỳ tới) trong trang Lộ trình học tập: học phần nên học, học phần cần học lại và học cải thiện, kỹ năng nên tự học và lời khuyên theo mục tiêu của bạn, dựa trên kết quả đánh giá năng lực và Khảo sát định hướng trong hồ sơ. Các học phần được đề xuất được thêm vào Kế hoạch học kỳ để bạn điều chỉnh.",
       "Trong trang Xét tốt nghiệp, mục Lời khuyên từ EduPath AI gợi ý cách hoàn thành những điều kiện còn thiếu, dựa trên kết quả đối chiếu bảng điểm của bạn với tiêu chuẩn xét tốt nghiệp của khóa và chuyên ngành.",
-      "Trang Trợ lý AI trả lời câu hỏi của bạn về điểm trong bảng điểm, kỹ năng còn thiếu, lộ trình, lý do học phần được đề xuất, chương trình đào tạo, điều kiện tốt nghiệp và tài nguyên tự học. Trợ lý tìm thông tin liên quan trong bảng điểm, kết quả của bạn và trong dữ liệu chung của Khoa (bằng mô hình EmbeddingGemma, cũng chạy cục bộ), rồi Gemma 4 E4B trả lời kèm số nguồn như [1], [2]; điểm được chép đúng như in trên bảng điểm, tài nguyên tự học chỉ lấy từ danh sách đã được kiểm tra.",
-      "Mọi con số như điểm kỹ năng, mức năng lực, khoảng trống kỹ năng, mức phù hợp với vị trí nghề nghiệp và kết quả đối chiếu xét tốt nghiệp đều do hệ thống tính (điểm kỹ năng theo trọng số học phần mà Khoa cấu hình), không do AI đưa ra. Mô hình chạy cục bộ trên một máy tính do nhóm phát triển EduPath AI quản lý, nên dữ liệu của bạn không được gửi tới dịch vụ AI đám mây nào."
+      "Trang Trợ lý AI trả lời câu hỏi của bạn về điểm trong bảng điểm, kỹ năng còn thiếu, lộ trình, lý do học phần được đề xuất, chương trình đào tạo, điều kiện tốt nghiệp và tài nguyên tự học. Trợ lý tìm thông tin liên quan trong bảng điểm, kết quả của bạn và trong dữ liệu chung của Khoa (bằng mô hình BGE-M3), rồi Gemma 4 26B trả lời kèm số nguồn như [1], [2]; điểm được chép đúng như in trên bảng điểm, tài nguyên tự học chỉ lấy từ danh sách đã được kiểm tra.",
+      "Mọi con số như điểm kỹ năng, mức năng lực, khoảng trống kỹ năng, mức phù hợp với vị trí nghề nghiệp và kết quả đối chiếu xét tốt nghiệp đều do hệ thống tính (điểm kỹ năng theo trọng số học phần mà Khoa cấu hình), không do AI đưa ra. Từ ngày 08/11/2026, các mô hình AI chạy trên Cloudflare Workers AI; Cloudflare không lưu dữ liệu sau khi xử lý xong và không dùng dữ liệu để huấn luyện mô hình AI."
     ],
     note: "Nhận xét, lộ trình và lời khuyên do AI viết chỉ để tham khảo và có thể chưa chính xác. Hãy đối chiếu với số liệu trên trang và trao đổi với giảng viên hoặc cố vấn học tập trước khi quyết định."
   },
@@ -128,7 +128,7 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
     question: "Mô hình AI nhận những dữ liệu nào của tôi?",
     answer: [
       "Để viết nhận xét, mô hình chỉ nhận mã và tên học phần theo chương trình đào tạo, điểm của bạn ở các học phần đó, khóa, chuyên ngành, vị trí nghề nghiệp mục tiêu và các kết quả hệ thống đã tính như điểm kỹ năng, khoảng trống và học phần gợi ý.",
-      "Mô hình không nhận họ tên, mã số sinh viên, email, lớp hay tệp PDF bảng điểm của bạn. Mô hình chạy cục bộ trên máy tính do nhóm phát triển EduPath AI quản lý, nhận yêu cầu qua một kênh có xác thực, và dữ liệu không được gửi tới dịch vụ AI đám mây nào."
+      "Mô hình không nhận họ tên, mã số sinh viên, email, lớp hay tệp PDF bảng điểm của bạn. Mô hình chạy trên Cloudflare Workers AI và nhận yêu cầu từ máy chủ EduPath AI qua kết nối có xác thực; Cloudflare không lưu dữ liệu sau khi xử lý xong và không dùng dữ liệu để huấn luyện mô hình AI."
     ],
     note: "Khi soạn Lộ trình AI, mô hình nhận thêm câu trả lời Khảo sát định hướng (kể cả thế mạnh và sở trường) và danh sách thành tích bạn liệt kê. Khi trả lời trong Trợ lý AI, mô hình nhận câu hỏi, vài lượt trò chuyện gần nhất, những phần kết quả liên quan đến câu hỏi và điểm trong bảng điểm của bạn (điểm trung bình và tín chỉ tích lũy, học phần chưa đạt; điểm từng học phần khi bạn hỏi về điểm). Dữ liệu gửi cho mô hình được xóa sau khi xử lý xong; chỉ nhận xét, lộ trình và cuộc trò chuyện được lưu lại. Chi tiết xem mục Đánh giá năng lực và AI, mục Khảo sát và lộ trình AI, mục Trợ lý AI trong Chính sách bảo mật."
   },
@@ -192,7 +192,7 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
   {
     question: "Bảng điểm PDF của tôi được lưu và xử lý như thế nào?",
     answer: [
-      "Sau khi bạn tải lên, EduPath AI tự động đọc tệp PDF để lấy danh sách môn học, tín chỉ, điểm và kết quả theo từng học kỳ. Tệp chỉ dùng để tạo bảng điểm trong tài khoản của bạn và không được gửi cho dịch vụ AI hay đơn vị nào bên ngoài.",
+      "Sau khi bạn tải lên, EduPath AI tự động đọc tệp PDF để lấy danh sách môn học, tín chỉ, điểm và kết quả theo từng học kỳ. Tệp chỉ dùng để tạo bảng điểm trong tài khoản của bạn; tệp PDF không được gửi cho dịch vụ AI hay đơn vị nào bên ngoài. Nếu tệp là bản scan hoặc ảnh chụp (không có lớp chữ), ảnh phần bảng điểm của từng trang, đã cắt bỏ mọi phần bên ngoài bảng, được gửi tới mô hình Gemma 4 trên Cloudflare Workers AI để đọc chữ; Cloudflare không lưu dữ liệu sau khi xử lý xong và không dùng dữ liệu để huấn luyện mô hình AI.",
       "Mỗi tài khoản lưu một bảng điểm. Bảng điểm được giữ đến khi bạn thay bằng bản mới, bấm Xóa bảng điểm hoặc khi tài khoản được xóa.",
       "Nếu bạn dùng Đánh giá năng lực, phần dữ liệu từ bảng điểm gửi cho mô hình AI viết nhận xét chỉ gồm mã học phần, tên học phần theo chương trình đào tạo và điểm, không gồm tệp PDF. Khi bạn hỏi Trợ lý AI, mô hình nhận điểm trung bình và số tín chỉ tích lũy, các học phần chưa đạt và, khi câu hỏi nói về điểm, điểm của các học phần liên quan hoặc cả bảng điểm, cũng không gồm tệp PDF."
     ],
@@ -232,10 +232,12 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
 // 2026-11-03: the student's cố vấn học tập sees the student's pages and may do some things for them (user: "Cập nhật luôn,
 // không hỏi lại"; no one is asked again); the same day, the Khoa's admins and Ban chủ nhiệm khoa got the same for every
 // student (Quản lý sinh viên, AD-AST "QTV & CVHT"; same version).
-export const policyVersion = "2026-11-03";
+// 2026-11-08: the AI models and the reading of scanned transcripts run on Cloudflare Workers AI instead of a PC of the
+// team (user: "điền vào .env dùm và triển khai luôn"; no one is asked again, as on 2026-10-26).
+export const policyVersion = "2026-11-08";
 export const policyUpdatedAt = policyVersion.split("-").reverse().join("/");
-// Consents given under this version or later still count, so policies 2026-10-26, 2026-10-28, 2026-10-29, 2026-10-31 and
-// 2026-11-03 ask no one again (user, 2026-10-26).
+// Consents given under this version or later still count, so policies 2026-10-26, 2026-10-28, 2026-10-29, 2026-10-31,
+// 2026-11-03 and 2026-11-08 ask no one again (user, 2026-10-26).
 // Must equal CONSENT_VALID_SINCE in apps/api/src/student/consent.ts.
 export const consentValidSince = "2026-10-25";
 export const isValidConsent = (version: string | null | undefined) => typeof version === "string" && version >= consentValidSince;
@@ -278,7 +280,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
               "Đánh giá năng lực chỉ chạy khi bạn yêu cầu và đồng ý. Điểm và mức năng lực do hệ thống tính; AI chỉ viết nhận xét để bạn tham khảo.",
               "Lộ trình học tập cho học kỳ tới do AI soạn dùng kết quả đánh giá năng lực, câu trả lời khảo sát định hướng (kể cả thế mạnh, phần mô tả công nghệ bạn thành thạo và sở trường) và thành tích bạn liệt kê, khi bạn yêu cầu và đã đồng ý.",
               "Trợ lý AI chỉ xử lý dữ liệu của bạn khi bạn gửi câu hỏi: trợ lý dùng điểm trong bảng điểm (điểm từng học phần khi bạn hỏi về điểm), kết quả đánh giá năng lực, lộ trình, khảo sát định hướng (khi bạn đã đồng ý cho khảo sát) và dữ liệu chung của Khoa để trả lời. Câu hỏi và câu trả lời được lưu trong tài khoản của bạn; bạn xóa được bất cứ lúc nào.",
-              "Mô hình AI chạy cục bộ, không nhận họ tên, mã số sinh viên, email, lớp hay tệp PDF bảng điểm của bạn, và dữ liệu không được gửi tới dịch vụ AI đám mây.",
+              "Mô hình AI chạy trên Cloudflare Workers AI, không nhận họ tên, mã số sinh viên, email, lớp hay tệp PDF bảng điểm của bạn; Cloudflare không lưu dữ liệu sau khi xử lý xong và không dùng dữ liệu để huấn luyện mô hình AI.",
               "EduPath AI không bán dữ liệu, không hiển thị quảng cáo và không theo dõi bạn trên các trang web khác.",
               "Dữ liệu được lưu trên dịch vụ lưu trữ đám mây, máy chủ có thể đặt ngoài Việt Nam."
             ]]
@@ -384,7 +386,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
             paragraphs: [[
               "Không bán, cho thuê hay trao đổi dữ liệu cá nhân của bạn.",
               "Không dùng dữ liệu của bạn để quảng cáo.",
-              "Không gửi bảng điểm hay dữ liệu học tập của bạn tới dịch vụ AI đám mây hay đơn vị nào bên ngoài để đọc hoặc phân tích.",
+              "Chỉ gửi tới Cloudflare Workers AI phần dữ liệu cần cho từng chức năng AI (và với bản scan, ảnh phần bảng điểm để đọc chữ); không gửi tệp PDF bảng điểm hay dữ liệu học tập của bạn tới dịch vụ AI hay đơn vị nào khác.",
               "Không đưa họ tên, mã số sinh viên, email, lớp hay tệp PDF bảng điểm của bạn vào dữ liệu gửi cho mô hình AI.",
               "Không dùng dữ liệu của bạn cho mục đích khác khi chưa thông báo cho bạn."
             ]]
@@ -398,7 +400,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
           {
             title: "Bảng điểm được đọc như thế nào?",
             paragraphs: [
-              "Sau khi bạn tải lên, EduPath AI tự động đọc tệp PDF để lấy danh sách môn học, số tín chỉ, điểm và kết quả theo từng học kỳ. Tệp chỉ được dùng để tạo bảng điểm trong tài khoản của bạn.",
+              "Sau khi bạn tải lên, EduPath AI tự động đọc tệp PDF để lấy danh sách môn học, số tín chỉ, điểm và kết quả theo từng học kỳ. Tệp chỉ được dùng để tạo bảng điểm trong tài khoản của bạn. Với bản scan hoặc ảnh chụp, ảnh phần bảng điểm (đã cắt bỏ mọi phần bên ngoài bảng) được gửi tới Gemma 4 trên Cloudflare Workers AI để đọc chữ; tệp PDF không được gửi đi.",
               "Việc đọc tự động có thể nhầm, nhất là với ảnh chụp hoặc bản scan. Hãy đối chiếu kết quả với bảng điểm gốc sau mỗi lần tải lên."
             ]
           },
@@ -447,8 +449,8 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
           {
             title: "Về các tính năng AI",
             paragraphs: [
-              "Sau khi hệ thống tính xong, EduPath AI tạo thêm một nhận xét học tập bằng mô hình ngôn ngữ Gemma 4 E4B. Nhận xét giúp bạn hiểu kết quả của mình: điểm mạnh nằm ở đâu, khoảng trống nào cần ưu tiên so với nghề mục tiêu, nên chọn học phần nào trong danh sách do hệ thống đưa ra và nên tự học thêm những gì.",
-              "Mô hình chạy cục bộ trên một máy tính do nhóm phát triển EduPath AI quản lý. Máy này nhận yêu cầu từ EduPath AI qua một kênh có xác thực; dữ liệu của bạn không được gửi tới bất kỳ dịch vụ AI đám mây nào.",
+              "Sau khi hệ thống tính xong, EduPath AI tạo thêm một nhận xét học tập bằng mô hình ngôn ngữ Gemma 4 26B trên Cloudflare Workers AI. Nhận xét giúp bạn hiểu kết quả của mình: điểm mạnh nằm ở đâu, khoảng trống nào cần ưu tiên so với nghề mục tiêu, nên chọn học phần nào trong danh sách do hệ thống đưa ra và nên tự học thêm những gì.",
+              "Mô hình chạy trên Cloudflare Workers AI và nhận yêu cầu từ máy chủ EduPath AI qua kết nối có xác thực. Cloudflare chỉ xử lý dữ liệu trong lúc tạo kết quả, không lưu lại và không dùng dữ liệu để huấn luyện mô hình AI.",
               "Nhận xét chỉ mang tính tham khảo và có thể chưa chính xác. Quyết định học tập vẫn thuộc về bạn, cùng với giảng viên và cố vấn học tập; hãy đối chiếu với số liệu trên trang trước khi quyết định.",
               "Khi máy chạy mô hình chưa sẵn sàng, bạn vẫn xem được đầy đủ kết quả do hệ thống tính, chỉ chưa có phần nhận xét."
             ]
@@ -500,7 +502,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
           {
             title: "Lộ trình AI dùng những dữ liệu nào?",
             paragraphs: [
-              "Khi bạn bấm Tạo lộ trình, mô hình Gemma 4 E4B chạy cục bộ soạn lộ trình cho học kỳ tới từ:",
+              "Khi bạn bấm Tạo lộ trình, mô hình Gemma 4 26B trên Cloudflare Workers AI soạn lộ trình cho học kỳ tới từ:",
               [
                 "Kết quả đánh giá năng lực mới nhất của bạn: mã và tên học phần, điểm, học phần cần học, cần cải thiện, kỹ năng nghề còn thiếu, tiến độ học tập và xét tốt nghiệp.",
                 "Khóa, chuyên ngành và nghề mục tiêu của bạn.",
@@ -528,7 +530,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
           {
             title: "Trợ lý AI dùng những dữ liệu nào?",
             paragraphs: [
-              "Khi bạn gửi một câu hỏi, EduPath AI chọn những phần dữ liệu liên quan để mô hình Gemma 4 E4B chạy cục bộ trả lời:",
+              "Khi bạn gửi một câu hỏi, EduPath AI chọn những phần dữ liệu liên quan để mô hình Gemma 4 26B trên Cloudflare Workers AI trả lời:",
               [
                 "Câu hỏi của bạn và vài lượt trò chuyện gần nhất trong cùng cuộc trò chuyện.",
                 "Kết quả đánh giá năng lực mới nhất của bạn: khóa, chuyên ngành, nghề mục tiêu, mức các kỹ năng, kỹ năng nghề còn thiếu, học phần đang học, cần học, cần cải thiện, tiến độ học tập và xét tốt nghiệp.",
@@ -537,7 +539,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
                 "Câu trả lời khảo sát định hướng, chỉ khi bạn đã đồng ý cho việc dùng khảo sát và câu hỏi nói về lộ trình hoặc tự học.",
                 "Dữ liệu chung của Khoa: chương trình đào tạo, kế hoạch đào tạo, danh mục kỹ năng và nghề nghiệp, tiêu chuẩn xét tốt nghiệp, hướng dẫn sử dụng EduPath AI và danh sách tài nguyên tự học đã được kiểm tra."
               ],
-              "Để tìm phần dữ liệu chung liên quan, câu hỏi được chuyển thành một dãy số bằng mô hình EmbeddingGemma, cũng chạy cục bộ. Mô hình không nhận họ tên, mã số sinh viên, email, lớp hay tệp PDF bảng điểm của bạn. Câu trả lời chỉ để tham khảo và có thể chưa chính xác; hãy đối chiếu với số liệu trên trang và trao đổi với cố vấn học tập trước khi quyết định."
+              "Để tìm phần dữ liệu chung liên quan, câu hỏi được chuyển thành một dãy số bằng mô hình BGE-M3, cũng trên Cloudflare Workers AI. Mô hình không nhận họ tên, mã số sinh viên, email, lớp hay tệp PDF bảng điểm của bạn. Câu trả lời chỉ để tham khảo và có thể chưa chính xác; hãy đối chiếu với số liệu trên trang và trao đổi với cố vấn học tập trước khi quyết định."
             ]
           },
           {
@@ -569,14 +571,15 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
               "Để EduPath AI hoạt động, nhà trường sử dụng dịch vụ của:",
               [
                 "Microsoft: dịch vụ đăng nhập bằng tài khoản trường.",
-                "Nhà cung cấp dịch vụ lưu trữ đám mây: nơi vận hành EduPath AI và lưu trữ dữ liệu."
+                "Nhà cung cấp dịch vụ lưu trữ đám mây: nơi vận hành EduPath AI và lưu trữ dữ liệu.",
+                "Cloudflare (Workers AI, từ ngày 08/11/2026): chạy các mô hình AI và đọc chữ trên bảng điểm dạng scan; chỉ xử lý dữ liệu trong lúc tạo kết quả, không lưu lại và không dùng để huấn luyện mô hình AI."
               ],
               "Các đối tác này chỉ được xử lý dữ liệu trong phạm vi cần thiết để cung cấp dịch vụ cho nhà trường."
             ]
           },
           {
-            title: "Máy chạy mô hình AI",
-            paragraphs: ["Nhận xét và lộ trình AI được tạo trên một máy tính do nhóm phát triển EduPath AI quản lý, bằng mô hình chạy ngay trên máy đó. Máy này chỉ nhận phần dữ liệu nêu ở mục Đánh giá năng lực và AI và mục Khảo sát và lộ trình AI, không nhận họ tên, mã số sinh viên, email hay lớp của bạn, và không gửi dữ liệu tới dịch vụ AI đám mây."]
+            title: "Nơi chạy mô hình AI",
+            paragraphs: ["Từ ngày 08/11/2026, nhận xét, lộ trình AI, lời khuyên xét tốt nghiệp và câu trả lời của Trợ lý AI được tạo bằng mô hình chạy trên Cloudflare Workers AI. Máy chủ EduPath AI chỉ gửi phần dữ liệu nêu ở mục Đánh giá năng lực và AI và mục Khảo sát và lộ trình AI, không gửi họ tên, mã số sinh viên, email hay lớp của bạn; Cloudflare chỉ xử lý dữ liệu trong lúc tạo kết quả, không lưu lại và không dùng để huấn luyện mô hình AI."]
           },
           {
             title: "Khi pháp luật yêu cầu",
@@ -592,7 +595,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
             title: "Dữ liệu được lưu ở đâu?",
             paragraphs: [
               "Dữ liệu của bạn được lưu trên dịch vụ lưu trữ đám mây, và máy chủ có thể đặt ngoài lãnh thổ Việt Nam. Dù dữ liệu được lưu ở đâu, các cam kết và quyền của bạn trong chính sách này vẫn được giữ nguyên.",
-              "Riêng phần dữ liệu dùng để tạo nhận xét, lộ trình AI và câu trả lời của Trợ lý AI được xử lý trên máy tính do nhóm phát triển EduPath AI quản lý và được xóa sau khi xử lý xong."
+              "Riêng phần dữ liệu dùng để tạo nhận xét, lộ trình AI và câu trả lời của Trợ lý AI được xử lý trên Cloudflare Workers AI và không được lưu lại sau khi xử lý xong."
             ]
           },
           {
