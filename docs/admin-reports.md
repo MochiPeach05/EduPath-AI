@@ -13,7 +13,7 @@ Sau đó người dùng yêu cầu: "mọi phần đều có xem trung bình to�
 | --- | --- | --- |
 | 01 | Tổng quan (`/quantri/tong-quan`, trang mở đầu) | GPA trung bình, xếp loại học lực, bảng điểm trung bình theo khóa / ngành / chuyên ngành, độ thành thạo kỹ năng theo nhóm năng lực, độ phù hợp với nghề, tiến độ theo khóa; nút nhỏ "Thao tác gần đây" |
 | 02, 03 | Tiến độ | Trạng thái giống trang Tổng quan của sinh viên; xuất Excel |
-| 04, 05 | Nguy cơ | Đúng các mục "Cần chú ý" của sinh viên; xuất Excel |
+| 04, 05 | Nguy cơ | Đúng các mục "Cảnh báo chậm tiến độ" của sinh viên; xuất Excel |
 | 06, 07 | Kỹ năng thiếu | Theo nghề mục tiêu; bấm một kỹ năng để xem sinh viên; xuất Excel |
 | 08 | Nghề mục tiêu | Số sinh viên và phân bố mức phù hợp theo nghề |
 | 09 | Môn đề xuất | Môn Lộ trình AI đề xuất: học mới, học lại, học cải thiện |
@@ -26,7 +26,7 @@ Function list (`requirements/Nhom1_DanhSachChucNang_ver0.5.xlsx`, sửa từ b�
 Hợp đồng: `apps/web/src/admin-report-types.ts` (bản sao `types.ts`).
 
 **Một dòng mỗi sinh viên** (`rows.ts`):
-- `readOverview` (cùng hàm của trang Tổng quan sinh viên, bỏ phần kiểm tra Kế hoạch học kỳ): GPA và các dòng tổng kết in trên bảng điểm, tiến độ so với KHĐT, "Cần chú ý", năng lực.
+- `readOverview` (cùng hàm của trang Tổng quan sinh viên, bỏ phần kiểm tra Kế hoạch học kỳ): GPA và các dòng tổng kết in trên bảng điểm, tiến độ so với KHĐT, "Cảnh báo chậm tiến độ", năng lực.
 - Điểm nhóm năng lực, điểm từng kỹ năng và khoảng trống của nghề: từ lần Đánh giá năng lực mới nhất, chỉ khi Tổng quan đang hiện lần đó. Vì vậy sau khi sinh viên rút lại đồng ý thì không còn số liệu năng lực.
 - Môn Lộ trình AI đề xuất: lấy từ lộ trình hoàn tất mới nhất.
 - Trạng thái:

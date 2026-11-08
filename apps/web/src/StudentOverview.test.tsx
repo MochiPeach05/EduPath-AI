@@ -146,12 +146,12 @@ describe("Tổng quan dashboard", () => {
     expect(html).toMatch(/class="ov-sugs"[^>]*><button type="button">/);
   });
 
-  it("shows the six key figures, the cards in the approved order and Cần chú ý last, without a notifications block", () => {
+  it("shows the six key figures, the cards in the approved order and Cảnh báo chậm tiến độ last, without a notifications block", () => {
     const html = dashboard(full);
     const plain = text(html);
     for (const figure of ["GPA tích lũy 2,85 / 4 Khá +0,03 so với học kỳ trước", "Tín chỉ đã đạt 79 / 126 63% chương trình · 6 TC đang học", "Năng lực chung 68,4 / 100 Khá",
       "Mức phù hợp với vị trí nghề nghiệp 74,6 / 100 Phù hợp 4/6 kỹ năng đạt ngưỡng", "Xét tốt nghiệp Chưa đủ Còn 4 điều kiện", "Lộ trình AI Đã có"]) expect(plain).toContain(figure);
-    const order = ["Tiến độ học tập", "Học kỳ này", "Học kỳ tới · theo Lộ trình AI", "Xét tốt nghiệp", "Năng lực và vị trí nghề nghiệp mục tiêu", "Điểm trung bình theo học kỳ", "Hỏi nhanh Trợ lý AI", "Cần chú ý"]
+    const order = ["Tiến độ học tập", "Học kỳ này", "Học kỳ tới · theo Lộ trình AI", "Xét tốt nghiệp", "Năng lực và vị trí nghề nghiệp mục tiêu", "Điểm trung bình theo học kỳ", "Hỏi nhanh Trợ lý AI", "Cảnh báo chậm tiến độ"]
       .map((title) => html.indexOf(`>${title}</h2>`));
     expect(order.every((at) => at >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);

@@ -30,7 +30,7 @@ import "./admin-reports.css";
 const PAGE_TEXT: Record<ReportView, { code: string; title: string; lead: string }> = {
   dashboard: { code: "01", title: "Tổng quan dữ liệu và hoạt động", lead: "Điểm trung bình, năng lực, mức phù hợp với vị trí nghề nghiệp và tiến độ của sinh viên trong phạm vi lọc." },
   progress: { code: "02–03", title: "Thống kê sinh viên theo tiến độ", lead: "Tính giống trang Tổng quan của sinh viên: tín chỉ đã đạt so với kế hoạch đào tạo của khóa, đến học kỳ đang học." },
-  risk: { code: "04–05", title: "Sinh viên có nguy cơ chậm tiến độ", lead: "Đúng các mục \"Cần chú ý\" sinh viên thấy trên trang của mình. Hệ thống tự tính, không dùng AI; chỉ để tham khảo, không thay cảnh báo học vụ." },
+  risk: { code: "04–05", title: "Sinh viên có nguy cơ chậm tiến độ", lead: "Đúng các mục \"Cảnh báo chậm tiến độ\" sinh viên thấy trên trang Tổng quan của mình. Hệ thống tự tính, không dùng AI; chỉ để tham khảo, không thay cảnh báo học vụ." },
   skills: { code: "06–07", title: "Thống kê kỹ năng còn thiếu", lead: "Từ lần Đánh giá năng lực mới nhất của mỗi sinh viên, so với vị trí nghề nghiệp mục tiêu. Bấm một kỹ năng để xem sinh viên còn thiếu." },
   careers: { code: "08", title: "Thống kê vị trí nghề nghiệp mục tiêu", lead: "Vị trí nghề nghiệp sinh viên chọn trong Đánh giá năng lực và mức phù hợp hiện tại." },
   courses: { code: "09", title: "Thống kê môn học được đề xuất", lead: "Các môn Lộ trình AI đề xuất cho sinh viên. Bấm một môn để xem sinh viên được đề xuất." },

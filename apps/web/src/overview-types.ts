@@ -2,9 +2,9 @@
  * Tổng quan (STU-PROG-01…03, 2026-10-30): the API of GET /api/student/overview as the student page reads it. One request
  * builds the whole dashboard on the server (apps/api/src/overview): the printed transcript figures, the progress against
  * the cohort's training plan (kế hoạch đào tạo) term by term, the graduation check, the latest competency assessment, the
- * latest AI roadmap, the courses being studied, the "Cần chú ý" warnings and the suggested questions of Trợ lý AI.
+ * latest AI roadmap, the courses being studied, the "Cảnh báo chậm tiến độ" warnings and the suggested questions of Trợ lý AI.
  * Approved preview: https://claude.ai/code/artifact/e8499fd2-b393-45c5-a261-1fead4e09652 (user 2026-10-30: "Ok triển khai
- * đi"; notifications live only in the bell, "Cần chú ý" at the bottom).
+ * đi"; notifications live only in the bell, "Cảnh báo chậm tiến độ", named "Cần chú ý" until 2026-11-08, at the bottom).
  *
  * Every section is null when its data is missing; the page then shows that section's empty state. Numbers are numbers
  * (the page formats them, "2,85"); terms are HKyyS codes with a label. Errors: 401, 403 account_unavailable,
@@ -186,7 +186,7 @@ export type OverviewResponse = {
    */
   running: { code: string; name: string; credits: number; retake: boolean; conditionOnly?: boolean; skills: string[] }[];
   /**
-   * "Cần chú ý" (STU-PROG-03), computed by the system (no AI) from the progress, the transcript and the graduation check.
+   * "Cảnh báo chậm tiến độ" (STU-PROG-03), computed by the system (no AI) from the progress, the transcript and the graduation check.
    * level: the worst item, "ok" when nothing is wrong, "none" without enough data.
    */
   warnings: {

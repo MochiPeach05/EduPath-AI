@@ -12,7 +12,7 @@ Thứ tự từ việc cần làm ngay tới chi tiết:
    - cột phải: **Xét tốt nghiệp** (từng điều kiện của tiêu chuẩn của chính sinh viên), **Năng lực và nghề mục tiêu** (kỹ năng mạnh nhất kèm môn minh chứng, kỹ năng còn thiếu, mức phù hợp), **Điểm trung bình theo học kỳ** (3 dòng hệ 4 in cuối mỗi học kỳ: Điểm TB học kỳ, Điểm TB học tập, Điểm TB tích lũy; vạch 2,00; bảng số liệu; màu #3a6ad4/#1f9e89/#a33ea1 qua kiểm tra mù màu).
 5. Màn hình hẹp: một cột.
 6. **Hỏi nhanh Trợ lý AI**: ô hỏi và câu gợi ý; câu hỏi được chuyển sang trang Trợ lý AI và gửi ngay (`assistant-handoff.ts`, sessionStorage, tối đa 60 giây).
-7. **Cần chú ý** (STU-PROG-03) ở cuối trang.
+7. **Cảnh báo chậm tiến độ** (STU-PROG-03; tên cũ "Cần chú ý", đổi theo người dùng ngày 8/11) ở cuối trang.
 
 Không có khối thông báo trên trang: thông báo chỉ ở chuông (`docs/notifications.md`).
 
@@ -36,7 +36,8 @@ Hợp đồng: `apps/web/src/overview-types.ts`. Một lần đọc, một giao 
 - Màu theo chữ (`meaningOf`): xanh lá Xuất sắc/Giỏi/Rất phù hợp/Phù hợp, xanh dương Khá, vàng Trung bình/Ít phù hợp và các mục trễ, đỏ chỉ cho chưa đạt (môn F/VT/CT, GPA dưới ngưỡng), xám chưa có điểm.
 - Chữ tối thiểu 12px, chữ thường 14px.
 
-## Cần chú ý (`overview/warnings.ts`, hàm thuần `overviewWarnings`)
+## Cảnh báo chậm tiến độ (`overview/warnings.ts`, hàm thuần `overviewWarnings`)
+Nhãn mức bên cạnh tên thẻ giữ nguyên: ▲ Nguy cơ chậm tiến độ, ● Cần chú ý, ✓ Đúng tiến độ, Chưa đủ dữ liệu.
 Hệ thống tự tính, không dùng AI; chỉ để tham khảo, không thay cảnh báo học vụ của trường.
 | Loại | Mức | Khi nào |
 | --- | --- | --- |

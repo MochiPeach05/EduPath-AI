@@ -14,7 +14,7 @@ Người dùng (30/10/2026): thông báo gồm "AI đã chạy xong ở mục n�
 | assessment_comment | Nhận xét AI của Đánh giá năng lực xong | Đánh giá năng lực |
 | roadmap_ready / roadmap_failed | Lộ trình AI soạn xong hoặc lỗi | Lộ trình học tập |
 | graduation_advice | Lời khuyên xét tốt nghiệp xong | Điều kiện xét tốt nghiệp |
-| warning | Một mục mới của "Cần chú ý" (`docs/student-overview.md`) | theo mục |
+| warning | Một mục mới của "Cảnh báo chậm tiến độ" (`docs/student-overview.md`) | theo mục |
 | catalog_updated | Khoa đổi bản hiện hành của CTĐT, KHĐT hoặc tiêu chuẩn xét tốt nghiệp của khóa và ngành sinh viên (nhắc Đánh giá lại) | Đánh giá năng lực |
 | announcement | Khoa gửi (AD-NOTI-01) | trang Khoa chọn |
 

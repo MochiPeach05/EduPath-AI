@@ -47,7 +47,7 @@ export type NotificationType = "ai" | "warn" | "khoa" | "sys";
  * - assessment_comment: the AI comment of a competency assessment is ready;
  * - roadmap_ready / roadmap_failed: the AI roadmap was written or failed;
  * - graduation_advice: the graduation advice was written;
- * - warning: a "Cần chú ý" warning of the overview appeared (one per warning key);
+ * - warning: a warning of the overview's "Cảnh báo chậm tiến độ" appeared (one per warning key);
  * - catalog_updated: the faculty changed the student's CTĐT, training plan or graduation standard (Đánh giá lại);
  * - announcement: sent by the faculty (AD-NOTI-01);
  * - advisor_action: the student's cố vấn học tập did something for them (AD-AST-07, 08; 2026-11-03).

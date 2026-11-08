@@ -13,7 +13,7 @@ import "./student-overview.css";
 // Tổng quan (STU-PROG-01…03, 2026-10-30; user: "Ok triển khai đi" on the approved preview
 // https://claude.ai/code/artifact/e8499fd2-b393-45c5-a261-1fead4e09652): the student's dashboard from one request,
 // GET /api/student/overview. Key figures first, then progress beside the graduation check, competency beside the GPA by
-// term, this term beside the next one, a quick question to Trợ lý AI and "Cần chú ý" last. Notifications live only in
+// term, this term beside the next one, a quick question to Trợ lý AI and "Cảnh báo chậm tiến độ" last. Notifications live only in
 // the bell of the header (user: "thông báo xóa đi vì mình có cái icon chuông cái đó là thông báo rồi mà").
 
 export type StudentProfile = {
@@ -632,11 +632,15 @@ function AskCard({ suggestions, navigate }: { suggestions: readonly string[]; na
   </section>;
 }
 
+/**
+ * "Cảnh báo chậm tiến độ" (STU-PROG-03; named "Cần chú ý" until the user's 2026-11-08 "Không ghi 'Cần lưu ý' -> sửa thành 'Cảnh báo
+ * chậm tiến độ'"); the level beside it keeps its words (LEVEL).
+ */
 function WarningsCard({ warnings, navigate }: { warnings: OverviewResponse["warnings"]; navigate: Navigate }) {
   const [tone, label] = LEVEL[warnings.level];
   const icon = (item: OverviewWarning) => (item.level === "ok" ? "✓" : item.level === "risk" ? "!" : "i");
   return <section className="sw-panel ov-card" aria-labelledby="ov-warn-title">
-    <Head id="ov-warn-title" title="Cần chú ý"><span className={`ov-level ov-level-${tone}`}>{label}</span></Head>
+    <Head id="ov-warn-title" title="Cảnh báo chậm tiến độ"><span className={`ov-level ov-level-${tone}`}>{label}</span></Head>
     {warnings.items.length ? <ul className="ov-warnings">{warnings.items.map((item) => {
       const page = pageOfLink(item.action?.link);
       return <li key={`${item.kind}:${item.key}`} className={`ov-warning ov-warning-${item.level}`}>
@@ -654,7 +658,7 @@ export function OverviewDashboard({ data, navigate, openTranscript }: { data: Ov
   return <>
     <Kpis data={data} navigate={navigate} openTranscript={openTranscript} />
     {/* Two columns that stack on their own (user 2026-10-30: "cách bố cục cứ xấu xấu"): cards of one row no longer leave
-        a gap beside a shorter neighbour. Full-width sections end the page, "Cần chú ý" last. */}
+        a gap beside a shorter neighbour. Full-width sections end the page, "Cảnh báo chậm tiến độ" last. */}
     <div className="ov-columns">
       <div className="ov-col">
         <ProgressCard data={data} navigate={navigate} openTranscript={openTranscript} />

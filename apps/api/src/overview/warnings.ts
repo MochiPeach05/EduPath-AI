@@ -1,7 +1,8 @@
-// "Cần chú ý" of Tổng quan (STU-PROG-03, 2026-10-30): warnings the system computes, no AI, from the progress against the
-// training plan, the transcript and the graduation check. Pure, so the faculty's report of students at risk (AD-REPORT-04)
-// and the notifications can reuse the same rules. The texts are the portal's neutral voice, as the approved preview reads;
-// terms are written "HK2 2024–2025" as on every student page (term-name.ts).
+// "Cảnh báo chậm tiến độ" of Tổng quan (STU-PROG-03, 2026-10-30; named "Cần chú ý" until 2026-11-08): warnings the
+// system computes, no AI, from the progress against the training plan, the transcript and the graduation check. Pure, so
+// the faculty's report of students at risk (AD-REPORT-04) and the notifications can reuse the same rules. The texts are
+// the portal's neutral voice, as the approved preview reads; terms are written "HK2 2024–2025" as on every student page
+// (term-name.ts).
 import { shortfallText } from "../competency-assessment/plan-progress.js";
 import { termName } from "../term-name.js";
 import type { OverviewWarning, OverviewWarnings } from "./types.js";
