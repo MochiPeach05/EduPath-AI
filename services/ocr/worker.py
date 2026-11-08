@@ -126,6 +126,13 @@ def log_result(started,result):
     except Exception:
         pass
 
+def gemma_error(reason):
+    """The job's error for a Gemma OCR failure: ocr_busy when Workers AI could not take the work for now (the day's free
+    neurons used up, busy, unreachable, a refused token, not configured; the student can try again later), else ocr_failed (2026-11-08)."""
+    reason=str(reason)
+    busy=reason in {'daily_limit','unreachable','cloudflare_not_configured'} or reason in {'http_401','http_403','http_404','http_408','http_429'} or reason.startswith('http_5')
+    return 'ocr_busy' if busy else 'ocr_failed'
+
 def parse_pdf(pdf_path,result_path,text_only=False,gemma=False):
     """text_only: the text layer alone, never OCR (the API's own reader on Render, apps/api/src/student/text-layer.ts,
     user 2026-11-07). A page that needs OCR answers {'needs_ocr': True} and an unexpected failure {'fallback': True}:
@@ -166,7 +173,7 @@ def parse_pdf(pdf_path,result_path,text_only=False,gemma=False):
     except RuntimeError as error:
         # gemma_ocr.GemmaOcrError: Workers AI did not read a page (no answer, refused, the day's quota, not JSON).
         gemma_failed=gemma and type(error).__name__=='GemmaOcrError'
-        result=({'error':'ocr_failed','reason':str(error)[:40]} if gemma_failed
+        result=({'error':gemma_error(error),'reason':str(error)[:40]} if gemma_failed
             else {'fallback':True} if text_only else {'error':'ocr_failed'})
     except ValueError as error:
         code=str(error)

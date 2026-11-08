@@ -48,7 +48,8 @@ describe("the text-layer reader's answers", () => {
   it("ends every job Gemma reads (2026-11-08): a result, a refusal, else ocr_failed, never back to the PC queue", () => {
     expect(gemmaOutcome({ result: { course_count: 1 } })).toEqual({ kind: "result", result: { course_count: 1 } });
     expect(gemmaOutcome({ error: "curriculum_view" })).toEqual({ kind: "error", code: "curriculum_view" });
-    for (const value of [{ error: "ocr_failed", reason: "daily_limit" }, { needs_ocr: true }, { fallback: true }, null]) {
+    expect(gemmaOutcome({ error: "ocr_busy", reason: "daily_limit" })).toEqual({ kind: "error", code: "ocr_busy" });
+    for (const value of [{ error: "ocr_failed", reason: "not_json" }, { needs_ocr: true }, { fallback: true }, null]) {
       expect(gemmaOutcome(value)).toEqual({ kind: "error", code: "ocr_failed" });
     }
   });

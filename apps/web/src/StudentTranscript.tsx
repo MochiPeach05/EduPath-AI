@@ -17,7 +17,8 @@ export type Transcript = { version: string; filename: string; fileSize: number; 
 type ImportJob = { id: string; filename: string; status: "queued" | "processing" | "completed" | "failed" | "cancelled"; errorCode: string | null };
 const errors: Record<string, string> = {
   import_pending: "Bạn đang có một bảng điểm chờ xử lý. Hãy đợi hoặc hủy tác vụ trước.", queue_full: "Đang có nhiều bảng điểm chờ xử lý. Vui lòng thử lại sau.",
-  worker_timeout: "Bảng điểm chưa xử lý được trong thời gian cho phép. Vui lòng tải lại PDF sau ít phút.", ocr_failed: "Không nhận dạng được bảng điểm. Hãy thử lại với PDF rõ, lưu từ cổng đào tạo.", invalid_ocr_result: "Kết quả nhận dạng chưa hợp lệ. Bảng điểm cũ vẫn được giữ nguyên.",
+  worker_timeout: "Bảng điểm chưa xử lý được trong thời gian cho phép. Vui lòng tải lại PDF sau ít phút.", ocr_failed: "Không nhận dạng được bảng điểm. Hãy thử lại với PDF rõ, lưu từ cổng đào tạo.",
+  ocr_busy: "Máy đọc bảng điểm scan đang tạm ngưng nên chưa đọc được PDF này. Bảng điểm cũ vẫn được giữ nguyên. Hãy thử lại sau, hoặc dùng bản PDF xuất trực tiếp từ cổng đào tạo (đọc được ngay).", invalid_ocr_result: "Kết quả nhận dạng chưa hợp lệ. Bảng điểm cũ vẫn được giữ nguyên.",
   invalid_pdf: "Chỉ nhận tệp PDF hợp lệ.", pdf_too_large: "Tệp vượt quá giới hạn 5 MB.",
   unsupported_pdf: "Không đọc được PDF này. Hãy xuất lại PDF từ cổng đào tạo của trường.",
   unsupported_layout: "PDF không khớp bảng điểm 8 cột của trường hoặc không có lớp chữ. Hãy dùng bản PDF xuất từ cổng đào tạo.",

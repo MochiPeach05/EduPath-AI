@@ -99,6 +99,7 @@ const TRANSCRIPT_FAILURES: Record<string, string> = {
   unreadable_rows: "Một số dòng môn học không đọc được.",
   parse_timeout: "Đọc bảng điểm quá lâu nên đã dừng.",
   ocr_failed: "Không nhận dạng được chữ trong PDF.",
+  ocr_busy: "Máy đọc bảng điểm scan đang tạm ngưng. Hãy thử lại sau, hoặc dùng PDF xuất từ cổng đào tạo.",
   worker_timeout: "Máy đọc bảng điểm không phản hồi kịp.",
   transcript_changed: "Bảng điểm của bạn vừa thay đổi trong lúc đọc nên bản này không được lưu.",
 };

@@ -26,7 +26,9 @@ Khi `AI_PROVIDER=cloudflare`:
 
 - Route `/api/worker/competency-assessments` chỉ nhận kết nối từ chính máy chủ. Worker AI trên PC nếu còn chạy sẽ nhận 403 `worker_moved`.
 - Route `/api/worker/transcripts` trả 403 `worker_moved` cho worker OCR trên PC, khi trình đọc của máy chủ đã sẵn sàng.
-- Mọi PDF đều kết thúc trên máy chủ. PDF mà Gemma không đọc được kết thúc bằng `ocr_failed`, sinh viên có thể thử lại.
+- Mọi PDF đều kết thúc trên máy chủ.
+  - Khi Workers AI tạm thời không nhận việc (hết lượt miễn phí trong ngày, quá tải, mất kết nối, token bị từ chối), PDF kết thúc bằng `ocr_busy` (`worker.gemma_error`). Trang báo máy đọc bản scan đang tạm ngưng, bảng điểm cũ vẫn giữ, gợi ý thử lại sau hoặc dùng PDF xuất từ cổng đào tạo.
+  - Các lỗi khác (không tìm thấy khung bảng, câu trả lời không phải JSON) kết thúc bằng `ocr_failed`.
 
 ## OCR bằng Gemma (`services/ocr/gemma_ocr.py`)
 
@@ -63,6 +65,9 @@ Các lần thử dùng tài khoản Cloudflare phụ (`CLOUDFLARE_TEST_ACCOUNT_I
 - Lộ trình AI: xong sau 79 giây, 10 môn, 4 tháng.
 - Lời khuyên xét tốt nghiệp: 18 giây.
 - Trợ lý AI: 3–9 giây.
+- Tải bảng điểm qua API (sinh viên giả K28):
+  - PDF có lớp chữ: đọc xong sau 3 giây (8 học kỳ, 44 môn);
+  - cùng bảng điểm ở dạng scan: Gemma đọc xong sau 33 giây, cũng 8 học kỳ và 44 môn.
 
 ## Cấu hình (`apps/api/.env`, Render → Environment)
 

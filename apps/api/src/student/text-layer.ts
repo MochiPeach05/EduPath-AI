@@ -38,8 +38,12 @@ export function textLayerOutcome(value: unknown): TextLayerOutcome {
   return { kind: "fallback" };
 }
 
-/** worker.py --gemma's answer: a result, or an error that ends the job (never back to the PC queue). */
+/**
+ * worker.py --gemma's answer: a result, or an error that ends the job (never back to the PC queue): ocr_busy when Workers
+ * AI could not take the work for now (the student tries again later, 2026-11-08), else ocr_failed.
+ */
 export function gemmaOutcome(value: unknown): TextLayerOutcome {
+  if (typeof value === "object" && value !== null && (value as { error?: unknown }).error === "ocr_busy") return { kind: "error", code: "ocr_busy" };
   const outcome = textLayerOutcome(value);
   if (outcome.kind === "result" || outcome.kind === "error") return outcome;
   return { kind: "error", code: "ocr_failed" };

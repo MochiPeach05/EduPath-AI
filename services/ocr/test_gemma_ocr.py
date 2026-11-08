@@ -126,6 +126,13 @@ class RowBuilderTest(unittest.TestCase):
         rows = gemma_ocr.RowBuilder().rows([TERM1, course('1', '71P0LE 10022')])
         self.assertEqual(rows[1][1], '71POLE10022')
 
+    def test_a_reader_that_cannot_take_the_work_now_is_busy_not_a_bad_pdf(self):
+        import worker
+        for reason in ('daily_limit', 'unreachable', 'http_401', 'http_429', 'http_503', 'cloudflare_not_configured'):
+            self.assertEqual(worker.gemma_error(reason), 'ocr_busy')
+        for reason in ('table_not_found', 'not_json', 'truncated', 'http_400', 'image_failed'):
+            self.assertEqual(worker.gemma_error(reason), 'ocr_failed')
+
     def test_reads_the_json_of_an_answer_in_a_fence_or_with_words_around(self):
         self.assertEqual(gemma_ocr.json_text('```json\n{"items": []}\n```'), '{"items": []}')
         self.assertEqual(gemma_ocr.json_text('Đây là kết quả: {"items": [1]} xong'), '{"items": [1]}')
