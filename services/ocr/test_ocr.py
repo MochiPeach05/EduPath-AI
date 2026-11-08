@@ -587,7 +587,8 @@ def extract_transcript(document, source_name, options=None, catalog=None, output
         if needs_ocr:
             if options.engine == 'gemma':
                 method = 'gemma'
-                rows, warnings = gemma_rows.rows(gemma_items[index - 1]), []
+                rows = gemma_rows.rows(gemma_items[index - 1])
+                warnings = list(gemma_rows.page_warnings)
                 if is_curriculum_view(gemma_rows.headers):
                     raise CurriculumViewError()
             elif options.engine == 'ppocr':
@@ -617,7 +618,7 @@ def extract_transcript(document, source_name, options=None, catalog=None, output
     return {
         'schema_version': '1.1', 'source_file': source_name, 'adapter': 'vlu_8_columns',
         'course_count': len(courses),
-        'ocr_settings': ({'engine': 'gemma', 'model': gemma_ocr.MODEL, 'dpi': DEFAULT_DPI['gemma']} if options.engine == 'gemma' else
+        'ocr_settings': ({'engine': 'gemma', 'model': gemma_ocr.MODEL, 'dpi': DEFAULT_DPI['gemma'], 'usage': dict(gemma_ocr.USAGE)} if options.engine == 'gemma' else
                          {'engine': options.engine, 'det_model': options.det_model,
                           'device': models.get('device', options.device),
                           'rec_model_dir': str(options.rec_model_dir), 'dpi': options.dpi or DEFAULT_DPI[options.engine]})

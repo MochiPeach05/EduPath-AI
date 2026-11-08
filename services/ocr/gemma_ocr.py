@@ -12,6 +12,7 @@ printed or logged but counts.
 """
 import base64
 from concurrent.futures import ThreadPoolExecutor
+from difflib import get_close_matches
 import json
 import os
 import re
@@ -23,11 +24,15 @@ from urllib.request import Request, urlopen
 MODEL = '@cf/google/gemma-4-26b-a4b-it'
 DPI = 200
 STRIPS = 3
-# Each strip reaches 7% of the page into its neighbours, so every row is whole in at least one strip.
-OVERLAP = 0.07
+# Kept for callers; strips no longer overlap (they end on the table's borders, strip_cuts).
+OVERLAP = 0.0
 # Requests in flight at once (Workers AI takes them in parallel; a 4-page scan is 12 strips).
 PARALLEL = 6
 RETRY_DELAYS = (3, 10)
+# What the strips of one PDF cost (requests and tokens as Workers AI counts them), added to the result's ocr_settings so
+# the day's use of the free allowance can be followed. Never any text.
+USAGE = {'requests': 0, 'prompt_tokens': 0, 'completion_tokens': 0}
+_USAGE_LOCK = __import__('threading').Lock()
 
 # The summary box fields, with the labels test_ocr.SUMMARY_FIELDS knows.
 SUMMARY = [
@@ -54,7 +59,7 @@ SCHEMA = {
             'text': NULLABLE, 'year': NULLABLE, 'semester': {'type': ['integer', 'null']},
             'stt': NULLABLE, 'code': NULLABLE, 'name': NULLABLE, 'credits': NULLABLE, 'score10': NULLABLE,
             'score4': NULLABLE, 'letter': NULLABLE, 'result': {'type': ['string', 'null'], 'enum': ['passed', 'failed', None]},
-            'fields': {'type': ['object', 'null'], 'properties': {key: NULLABLE for key, _ in SUMMARY}},
+            'lines': {'type': ['array', 'null'], 'items': {'type': 'string'}},
         },
         'required': ['kind'],
     }}},
@@ -63,13 +68,14 @@ SCHEMA = {
 PROMPT = """Ảnh là một dải ngang của bảng điểm sinh viên Trường Đại học Văn Lang. Liệt kê theo thứ tự từ trên xuống mọi mục nhìn thấy TRỌN VẸN trong ảnh:
 - kind "term": dòng tên học kỳ; year là năm học dạng "2023-2024", semester là số của học kỳ (1, 2 hoặc 3).
 - kind "course": dòng môn học có số thứ tự; stt (số thứ tự), code (mã học phần), name (tên học phần), credits (số tín chỉ), score10 (điểm hệ 10), score4 (điểm hệ 4), letter (điểm chữ), result: "passed" khi cột Kết quả có dấu tích hoặc chữ Đạt, "failed" khi có dấu X hoặc chữ Không đạt, null khi trống.
-- kind "summary": khối tổng kết của học kỳ (các dòng bắt đầu bằng dấu gạch: Số tín chỉ đạt học kỳ, Điểm TB học kỳ (Hệ 4), Điểm TB học kỳ (Hệ 10), Xếp loại học tập HK, Điểm rèn luyện học kỳ, Tổng số tín chỉ đăng ký, Điểm TB học tập (Hệ 4), Điểm TB học tập (Hệ 10), Tổng số tín chỉ tích lũy, Điểm TB tích lũy (Hệ 4), Điểm TB tích lũy (Hệ 10), Xếp loại học tập tích lũy); ghi giá trị của từng dòng vào fields theo đúng tên.
+- kind "summary": khối tổng kết cuối mỗi học kỳ, thường gồm HAI ô đặt cạnh nhau: ô bên trái (Số tín chỉ đạt học kỳ, Điểm TB học kỳ (Hệ 4), Xếp loại học tập HK, Điểm rèn luyện học kỳ...) và ô bên phải (Tổng số tín chỉ đăng ký, Điểm TB học tập (Hệ 4), Tổng số tín chỉ tích lũy, Điểm TB tích lũy (Hệ 4), Xếp loại học tập tích lũy...). Ghi vào lines MỌI dòng của CẢ HAI ô, mỗi dòng một chuỗi "Nhãn: giá trị" chép nguyên văn như in (bỏ dấu gạch đầu dòng). Không dùng các trường của dòng môn học (stt, code, name, score4...) cho khối tổng kết.
 - kind "section": tiêu đề một phần khác của bảng, ví dụ "Điểm bảo lưu"; ghi vào text.
 - kind "header": dòng tên các cột của bảng; ghi các tên cột vào text.
 Quy tắc:
 - Chép đúng từng ký tự như in: mã học phần, tên học phần, điểm (giữ dấu chấm hoặc dấu phẩy như in), điểm chữ (A+, A, B+, B, C+, C, D+, D, F, VT, CT, MT...).
 - Không sửa, không đoán, không tự tính. Ô trống hoặc không đọc rõ thì để null.
-- Bỏ qua dòng bị cắt dở ở mép trên hoặc mép dưới ảnh, tiêu đề trang, thông tin sinh viên, chữ ký.
+- Ảnh được cắt đúng theo đường kẻ của bảng nên không có dòng nào bị cắt: chép MỌI dòng, kể cả dòng đầu tiên và dòng cuối cùng của ảnh.
+- Bỏ qua tiêu đề trang, thông tin sinh viên, chữ ký.
 - Không thêm dòng nào không có trong ảnh. Ảnh không có mục nào thì trả về {"items": []}.
 Chỉ trả về JSON {"items": [...]}."""
 
@@ -91,18 +97,48 @@ def settings():
             {'Content-Type': 'application/json', 'Authorization': f'Bearer {token}'})
 
 
+def deskew(image, limit=1.5, step=0.1):
+    """The image turned by the angle (within ±limit degrees) that makes its ink rows sharpest: the horizontal profile of
+    a straight table has the highest peaks. For pages rectify() leaves as they are (a short table, whose rulings are
+    too short to fit; user test 2026-11-08: the last page of a scan tilted by half a degree had no table grid)."""
+    import cv2
+    import numpy as np
+    small = cv2.resize(cv2.cvtColor(image, cv2.COLOR_RGB2GRAY), None, fx=0.5, fy=0.5, interpolation=cv2.INTER_AREA)
+    ink = (small < 180).astype(np.float32)
+    height, width = ink.shape
+
+    def sharpness(angle):
+        turned = cv2.warpAffine(ink, cv2.getRotationMatrix2D((width / 2, height / 2), angle, 1.0), (width, height),
+                                flags=cv2.INTER_NEAREST, borderValue=0)
+        return float((turned.sum(axis=1) ** 2).sum())
+
+    # Ties (thin lines barely change their rows for a few hundredths of a degree) go to the smallest turn.
+    best = max(np.arange(-limit, limit + step / 2, step), key=lambda angle: (sharpness(angle), -abs(angle)))
+    best = max(np.arange(best - step, best + step + 0.001, step / 5), key=lambda angle: (sharpness(angle), -abs(angle)))
+    if abs(best) < 0.05:  # under 1,5 px over a page width: nothing to turn
+        return image
+    full_height, full_width = image.shape[:2]
+    matrix = cv2.getRotationMatrix2D((full_width / 2, full_height / 2), float(best), 1.0)
+    return cv2.warpAffine(image, matrix, (full_width, full_height), flags=cv2.INTER_CUBIC, borderValue=(255, 255, 255))
+
+
 def table_image(page, dpi=DPI):
-    """The page as an RGB array with everything outside the ruled transcript table painted white and cut off, so only the
-    table (terms, course rows, summary boxes) ever leaves the server: no title, page header or footer, nor anything
-    printed around the table. A scan is straightened first, as for PaddleOCR. No table grid: the page is not sent."""
+    """The page as an RGB array cut down to the ruled transcript table, so only the table (terms, course rows, summary
+    boxes) ever leaves the server: no title, page header or footer, nor anything printed around the table; and the
+    table's horizontal borders in that array (where a strip may end without cutting a row). A scan is straightened
+    first, as for PaddleOCR. No table grid: the page is not sent."""
     import numpy as np
     from ppocr_table import rectify, table_bands
     from test_ocr import is_scanned
     pix = page.get_pixmap(dpi=dpi, alpha=False)
     image = np.frombuffer(pix.samples, np.uint8).reshape(pix.height, pix.width, 3).copy()
-    if is_scanned(page):
+    scanned = is_scanned(page)
+    if scanned:
         image, _ = rectify(image)
     bands, _ = table_bands(image)
+    if not bands and scanned:
+        image = deskew(image)
+        bands, _ = table_bands(image)
     cells = [cell for band in bands for cell in band['cells']]
     if not bands or not cells:
         raise GemmaOcrError('table_not_found')
@@ -110,23 +146,37 @@ def table_image(page, dpi=DPI):
     margin = int(dpi * 0.15)
     top, bottom = max(0, min(b['top'] for b in bands) - margin), min(height, max(b['bottom'] for b in bands) + margin)
     left, right = max(0, min(c[0] for c in cells) - margin), min(width, max(c[1] for c in cells) + margin)
-    return np.ascontiguousarray(image[top:bottom, left:right])
+    borders = sorted({edge - top for band in bands for edge in (band['top'], band['bottom']) if top < edge < bottom})
+    return np.ascontiguousarray(image[top:bottom, left:right]), borders
+
+
+def strip_cuts(height, borders, target):
+    """[(top, bottom)] strips of about `target` pixels that start and end on the table's borders, so no row is ever cut
+    or read twice (user test 2026-11-08: overlapping strips put a row of one term under the next). A row taller than
+    the target is a strip of its own; a short rest joins the strip before it."""
+    edges = sorted({0, height, *[y for y in borders if 0 < y < height]})
+    cuts, start = [], 0
+    while start < height:
+        inside = [y for y in edges if start < y <= start + target]
+        end = max(inside) if inside else min(y for y in edges if y > start)
+        if height - end < target * 0.3:
+            end = height
+        cuts.append((start, end))
+        start = end
+    return cuts
 
 
 def strip_images(page, dpi=DPI, count=STRIPS, overlap=OVERLAP):
-    """JPEG images (quality 90: a grey scan strip stays near 300 kB, a PNG would be 2 MB) of overlapping horizontal strips
-    of the page's table (table_image), top to bottom: about a third of a page each, fewer for a short table; neighbours
-    share 7% of a page so every row is whole in at least one."""
+    """JPEG images (quality 90: a grey scan strip stays near 300 kB, a PNG would be 2 MB) of the page's table
+    (table_image) in strips of about a third of a page, cut on the table's borders, with white space above and below."""
     import cv2
-    image = table_image(page, dpi)
-    height = image.shape[0]
-    page_height = page.rect.height * dpi / 72
-    count = max(1, min(count, round(height / (page_height / count) + 0.2)))
-    step, reach = height / count, int(overlap * page_height)
+    image, borders = table_image(page, dpi)
+    target = page.rect.height * dpi / 72 / count
+    pad = int(dpi * 0.3)
     images = []
-    for index in range(count):
-        top, bottom = max(0, int(index * step) - reach), min(height, int((index + 1) * step) + reach)
-        ok, jpeg = cv2.imencode('.jpg', cv2.cvtColor(image[top:bottom], cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 90])
+    for top, bottom in strip_cuts(image.shape[0], borders, target):
+        strip = cv2.copyMakeBorder(image[top:bottom], pad, pad, 0, 0, cv2.BORDER_CONSTANT, value=(255, 255, 255))
+        ok, jpeg = cv2.imencode('.jpg', cv2.cvtColor(strip, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 90])
         if not ok:
             raise GemmaOcrError('image_failed')
         images.append(jpeg.tobytes())
@@ -179,6 +229,11 @@ def read_strip(image_jpeg, endpoint=None):
                 time.sleep(RETRY_DELAYS[attempt])
                 continue
             raise GemmaOcrError('unreachable') from None
+    usage = answer.get('usage') or {}
+    with _USAGE_LOCK:
+        USAGE['requests'] += 1
+        for key in ('prompt_tokens', 'completion_tokens'):
+            USAGE[key] += int(usage.get(key) or 0)
     choice = (answer.get('choices') or [{}])[0]
     if choice.get('finish_reason') == 'length':
         raise GemmaOcrError('truncated')
@@ -220,20 +275,68 @@ def year_text(value):
 
 
 RESULT_MARKS = {'passed': '✓', 'failed': '✗'}
+LABELS = {folded(label): label for _, label in SUMMARY}
+
+
+def summary_label(raw):
+    """The summary label test_ocr knows that a printed label is (exactly, or within a few misread letters), else None."""
+    key = folded(raw).strip(' -:')
+    if key in LABELS:
+        return LABELS[key]
+    close = get_close_matches(key, list(LABELS), n=1, cutoff=0.8)
+    return LABELS[close[0]] if close else None
+
+
+def summary_values(item):
+    """{known label: printed value} of a summary item: its lines "Nhãn: giá trị" (a label Gemma wrote twice, "Nhãn: Nhãn:
+    giá trị", counts once), and the older keyed fields. Lines of no known label are left out (never guessed)."""
+    values = {}
+    fields = item.get('fields') if isinstance(item.get('fields'), dict) else {}
+    pieces = [f'{label}: {fields.get(key)}' for key, label in SUMMARY if text(fields.get(key))]
+    pieces += [line for line in (item.get('lines') or []) if isinstance(line, str)]
+    # Gemma also writes the box as one text, a line per field.
+    pieces += str(item.get('text') or '').splitlines()
+    for piece in pieces:
+        label, colon, value = text(piece).lstrip('- ').partition(':')
+        known = summary_label(label) if colon else None
+        if not known:
+            continue
+        value = value.strip()
+        again, colon2, rest = value.partition(':')
+        if colon2 and summary_label(again) == known:
+            value = rest.strip()
+        if value and known not in values:
+            values[known] = value
+    return values
+
+
+def next_term(term):
+    """The term after ('2025-2026', 3): ('2026-2027', 1); VLU years have three terms."""
+    year, semester = term
+    if semester < 3:
+        return year, semester + 1
+    first = int(year[:4]) + 1
+    return f'{first}-{first + 1}', 1
 
 
 class RowBuilder:
-    """Turns the items of every OCR page, in reading order, into test_ocr rows. The strips overlap, so a row read twice
-    is kept once: a course by its number within the term (or by its code when the number is unreadable), the same term
-    title in a row once, and summary pieces next to each other merge into one box."""
+    """Turns the items of every OCR page, in reading order, into test_ocr rows: the same term title in a row once, a
+    course row Gemma wrote twice once (same number and code within the term), summary pieces next to each other merged
+    into one box. A term whose title Gemma did not read (course rows right after a summary box, or numbers starting
+    again at 1) becomes the term after the current one, and its page says term_title_inferred so the student checks it;
+    a row whose number repeats with another code is kept (the server marks it), never dropped."""
 
     def __init__(self):
         self.term = None
         self.seen = {}
         self.headers = []
+        self.last = None
+        self.last_number = None
+        self.page_warnings = []
 
     def rows(self, items):
         rows = []
+        self.page_warnings = []
         for item in items:
             kind = item.get('kind')
             if kind == 'term':
@@ -246,35 +349,43 @@ class RowBuilder:
                 if self.term != (year, semester):
                     self.term = (year, semester)
                     rows.append([f'Năm học {year} - HK{semester}'] + [''] * 7)
+                self.last, self.last_number = 'term', None
             elif kind == 'course':
                 cells = [text(item.get(key)) for key in ('stt', 'code', 'name', 'credits', 'score10', 'score4', 'letter')]
                 cells.append(RESULT_MARKS.get(item.get('result'), ''))
                 if not any(cells[1:7]):
                     continue
+                restarted = cells[0] == '1' and self.last == 'course' and self.last_number not in (None, '1')
+                if self.term and (self.last == 'summary' or restarted):
+                    self.term = next_term(self.term)
+                    rows.append([f'Năm học {self.term[0]} - HK{self.term[1]}'] + [''] * 7)
+                    if 'term_title_inferred' not in self.page_warnings:
+                        self.page_warnings.append('term_title_inferred')
                 key = (self.term, cells[0]) if cells[0].isdigit() else (self.term, '', cells[1])
-                if key in self.seen:
+                if self.seen.get(key, [None, None])[1] == cells[1]:
                     continue
-                self.seen[key] = cells
+                self.seen.setdefault(key, cells)
                 rows.append(cells)
+                self.last, self.last_number = 'course', cells[0]
             elif kind == 'summary':
-                fields = item.get('fields') if isinstance(item.get('fields'), dict) else {}
-                values = {key: text(fields.get(key)) for key, _ in SUMMARY}
+                values = summary_values(item)
                 previous = rows[-1] if rows and rows[-1][0].startswith('- ') else None
                 if previous is not None:
                     known = dict(line[2:].split(': ', 1) for line in previous[0].split('\n'))
-                    for key, label in SUMMARY:
-                        if values[key] and label not in known:
-                            known[label] = values[key]
+                    for label, value in values.items():
+                        known.setdefault(label, value)
                     previous[0] = '\n'.join(f'- {label}: {known[label]}' for _, label in SUMMARY if label in known)
                     continue
-                lines = [f'- {label}: {values[key]}' for key, label in SUMMARY if values[key]]
+                lines = [f'- {label}: {values[label]}' for _, label in SUMMARY if label in values]
                 if lines:
                     rows.append(['\n'.join(lines)] + [''] * 7)
+                    self.last = 'summary'
             elif kind == 'section':
                 title = text(item.get('text'))
                 if 'bao luu' in folded(title) and not (rows and rows[-1][0] == title):
                     self.term = None
                     rows.append([title] + [''] * 7)
+                    self.last, self.last_number = 'section', None
             elif kind == 'header':
                 self.headers.append(text(item.get('text')))
         return rows
