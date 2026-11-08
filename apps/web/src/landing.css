@@ -68,7 +68,8 @@
   gap: 26px;
   padding: 7px 20px;
   color: #fff;
-  background: #b51639;
+  /* Slate navy #2D334D like the footer (user 2026-11-08: "cái trên đầu này đổi màu theo luôn"). */
+  background: #2d334d;
   font-size: 11px;
 }
 
@@ -1126,10 +1127,10 @@
   color: #f6cbd1;
 }
 
-/* Footer in navy #010433, the colour of the image the user sent (2026-11-03: "sửa lại header như cũ còn footer mới màu
-   đó"), with cool greys to match. */
+/* Footer in slate navy #2D334D (user 2026-11-08: "Lấy bảng màu này sửa footer ở trang chủ"; #010433 since 2026-11-03),
+   with cool greys to match. */
 .lp-footer {
-  background: #010433;
+  background: #2d334d;
   color: #dfe3f5;
   padding-top: 58px;
 }
