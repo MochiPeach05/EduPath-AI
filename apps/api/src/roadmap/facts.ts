@@ -3,6 +3,7 @@
 // training-plan progress and the gaps to the target career) and the roadmap window. No names, student codes,
 // emails, classes or interests (the privacy policy of 2026-10-11 keeps interests away from the model).
 import { FAIL_LETTERS } from "../competency-assessment/constants.js";
+import { courseKey, isPassedState } from "../competency-assessment/course-state.js";
 import { shortfallText } from "../competency-assessment/plan-progress.js";
 import { fold } from "../competency-assessment/specialty.js";
 import { blockedUntilStudied } from "../curricula/course-rules.js";
@@ -20,7 +21,19 @@ import type { RoadmapWindow } from "./window.js";
  * roadmap prepares the term after it, so it stays among the courses to catch up ("late"), but it is not called late
  * anywhere (user 2026-11-04: "Chưa tính trễ"); absent in roadmaps made before.
  */
-export type RoadmapCourse = { code: string; name: string; credits: number; source: "running" | "late" | "next"; termCode: string | null; careerSkills: string[]; thisTerm?: boolean };
+export type RoadmapCourse = {
+  code: string; name: string; credits: number; source: "running" | "late" | "next"; termCode: string | null; careerSkills: string[]; thisTerm?: boolean;
+  /**
+   * What the course waits for at the registration the roadmap prepares (roadmap-v15, user 2026-11-08: "AI đang đề xuất
+   * av 5,6,7 vào một kì như vậy là không được … chưa đạt môn tiên quyết sao mà đk được"): its tiên quyết not passed
+   * ("prerequisite") and its học trước never taken ("prior"), neither being studied now. Such a course is never proposed
+   * for that term; absent when it waits for nothing, and in roadmaps made before.
+   */
+  waitsFor?: RoadmapWait[];
+};
+export type RoadmapWait = { code: string; name: string; kind: "prerequisite" | "prior" };
+/** A relation of the CTĐT the assessment read (curriculum_relations): tiên quyết (a pass needed) or học trước (any attempt). */
+export type RoadmapRelation = { courseCode: string; kind: "prerequisite" | "prior"; targetCodes: string[] };
 export type RoadmapOption = { code: string; name: string; credits: number | null };
 /**
  * A choice of the training plan ("chọn n TC trong …") still open. The thesis group (TC406, user 2026-10-24: "chuyên đề 1
@@ -99,9 +112,14 @@ const RETAKE_LETTERS = new Set(FAIL_LETTERS);
 /** The order a gap is worth working on: below the threshold, not studied, only self-study, then still to come. */
 const STATUS_ORDER: Record<string, number> = { below: 0, not_studied: 1, no_data: 2, upcoming: 3, met: 4 };
 
-export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult, window: RoadmapWindow): RoadmapFacts {
+/**
+ * relations: the tiên quyết and học trước of the CTĐT revision the assessment read (none: nothing waits, as before
+ * roadmap-v15).
+ */
+export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult, window: RoadmapWindow, relations: readonly RoadmapRelation[] = []): RoadmapFacts {
   // Stored results of older calc versions may lack a list: read every list defensively.
   const course = new Map((result.courses ?? []).map((item) => [item.code, item]));
+  const factOf = new Map((result.courses ?? []).map((item) => [courseKey(item.code), item]));
   // Only the student's own program is proposed (user 2026-11-03: "chuyên ngành nào thì đề xuất môn học đó thôi chứ không có
   // đề xuất môn khác chuyên ngành nữa"): a common course or one of the student's specialty, never another specialty's,
   // not even one the student once took (the engine counts those as applicable). A code the CTĐT does not list stays.
@@ -118,6 +136,21 @@ export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult
     for (const row of skill.evidenceCourses) careerSkillsOf.set(row.code, [...new Set([...(careerSkillsOf.get(row.code) ?? []), skill.name])]);
   }
   const skillsOf = (code: string) => careerSkillsOf.get(code) ?? [];
+  // What a course waits for at the registration the roadmap prepares (roadmap-v15, user 2026-11-08): a tiên quyết not
+  // passed, a học trước never taken; one being studied now is done by then, as the planner counts it (study-plan-data.ts
+  // planIssues). Only courses of the student's own program and of the CTĐT are asked for (ownProgram).
+  const relationsOf = new Map<string, RoadmapRelation[]>();
+  for (const relation of relations) relationsOf.set(courseKey(relation.courseCode), [...(relationsOf.get(courseKey(relation.courseCode)) ?? []), relation]);
+  const waitsFor = (code: string): RoadmapWait[] => {
+    const waits: RoadmapWait[] = [];
+    for (const relation of relationsOf.get(courseKey(code)) ?? []) for (const target of relation.targetCodes) {
+      const fact = factOf.get(courseKey(target));
+      if (!fact || fact.code === code || !ownProgram(fact.code) || fact.state === "in_progress") continue;
+      const met = relation.kind === "prerequisite" ? isPassedState(fact.state) : fact.state !== "not_taken" && fact.state !== "not_in_curriculum";
+      if (!met && !waits.some((wait) => wait.code === fact.code)) waits.push({ code: fact.code, name: fact.name, kind: relation.kind });
+    }
+    return waits;
+  };
 
   const improve: RoadmapImprove[] = (result.courses ?? [])
     .filter((item) => item.applicable && ownProgram(item.code) && !item.conditionOnly && item.letter && (
@@ -132,7 +165,9 @@ export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult
   const study: RoadmapCourse[] = [];
   const add = (fact: Pick<CourseFact, "code" | "name" | "credits">, source: RoadmapCourse["source"], termCode: string | null, thisTerm = false) => {
     if (improving.has(fact.code) || study.some((item) => item.code === fact.code) || !ownProgram(fact.code)) return;
-    study.push({ code: fact.code, name: fact.name, credits: fact.credits, source, termCode, careerSkills: skillsOf(fact.code), ...(thisTerm ? { thisTerm: true } : {}) });
+    const waits = source === "running" ? [] : waitsFor(fact.code);
+    study.push({ code: fact.code, name: fact.name, credits: fact.credits, source, termCode, careerSkills: skillsOf(fact.code),
+      ...(thisTerm ? { thisTerm: true } : {}), ...(waits.length ? { waitsFor: waits } : {}) });
   };
   // The term being studied, when courses are registered without grades: the transcript's own (studyTermCode, stored since
   // comp-calc-v13), else the latest term of those courses. A retake keeps the term of its failed attempt in result.courses,
@@ -146,14 +181,16 @@ export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult
   // The options of a choice still to take; the thesis group keeps only the way to take, the thesis or its chuyên đề courses.
   const gpa = { actual: result.graduation?.gpa?.actual ?? null, scale: result.graduation?.gpa?.scale ?? 4 };
   // A choice never offers a course that needs another one studied first which the student has not taken yet
-  // (curricula/course-rules.ts, user 2026-11-04: Cờ vua nâng cao after Cờ vua); one being studied is done by the next term.
+  // (curricula/course-rules.ts, user 2026-11-04: Cờ vua nâng cao after Cờ vua), nor, outside the thesis group, one whose
+  // tiên quyết or học trước the CTĐT names is not done (roadmap-v15); one being studied is done by the next term. The
+  // thesis group keeps the way the system advises (roadmap-v13) as it was.
   const studiedNames = (result.courses ?? []).filter((item) => item.state !== "not_taken").map((item) => item.name);
   const offered = (all: readonly PlanCourseRef[]): Pick<RoadmapChoice, "options" | "thesis"> => {
     const options = all.filter((option) => ownProgram(option.code) && !blockedUntilStudied(option.name, studiedNames));
     const open = (option: PlanCourseRef) => option.state !== "passed" && option.state !== "exempt";
     const plain = ({ code, name, credits }: PlanCourseRef): RoadmapOption => ({ code, name, credits });
     const thesis = options.find((option) => THESIS_NAME_PATTERN.test(fold(option.name)));
-    if (!thesis) return { options: options.filter(open).map(plain), thesis: null };
+    if (!thesis) return { options: options.filter((option) => open(option) && !waitsFor(option.code).length).map(plain), thesis: null };
     const topics = options.filter((option) => TOPIC_NAME_PATTERN.test(fold(option.name)));
     // A chuyên đề under way (or passed) is the chuyên đề path: only the other one is left.
     const started = topics.some((option) => option.state !== "not_taken" && option.state !== "failed" && option.state !== "not_in_curriculum");

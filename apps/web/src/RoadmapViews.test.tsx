@@ -6,7 +6,7 @@ import { RoadmapTrack } from "./RoadmapProgress";
 import StudentAiRoadmap from "./StudentAiRoadmap";
 import { tabFromHash, tabHash } from "./StudentRoadmap";
 import type { Roadmap, RoadmapResponse } from "./student-roadmap-data";
-import { planProposal, type StudyPlanContext, type StudyPlanCourse, type StudyPlanData } from "./study-plan-data";
+import { planProposal, type PlanProposal, type StudyPlanContext, type StudyPlanCourse, type StudyPlanData } from "./study-plan-data";
 
 const liveData = vi.hoisted(() => vi.fn());
 vi.mock("./use-live-data", () => ({ useLiveData: liveData }));
@@ -129,6 +129,15 @@ describe("Kế hoạch học kỳ", () => {
     // HK263 holds 2 TC: no warning, and the reason under its credits.
     expect(html).toMatch(/aria-label="HK3 2026–2027".*?2 TC<\/span>.*?Học kỳ hè: không yêu cầu tối thiểu 4 TC/);
     expect(html).not.toContain("dưới mức tối thiểu");
+  });
+
+  it("lists the AI's courses it moves after their tiên quyết, from and to (user 2026-11-08)", () => {
+    const proposal: PlanProposal = { plan: empty, roadmap: null, added: [], aiRemoved: [], thesisRemoved: [], keepable: ["C"], moved: [{ code: "C", from: "HK262", to: "HK263" }] };
+    const html = renderToStaticMarkup(createElement(RoadmapPlanner, {
+      context, plan: empty, onChange: () => {}, saveState: "idle", saveError: "", origin: null, onOpenAi: () => {}, proposal, onApply: () => {}, onDecline: () => {},
+    }));
+    expect(html).toContain("Chuyển 1 học phần do lộ trình AI đề xuất ra sau môn tiên quyết của nó, vì chỉ đăng ký được khi đã đạt môn tiên quyết:");
+    expect(html).toContain("<li><strong>Môn C</strong> (C): HK2 2026–2027 → HK3 2026–2027</li>");
   });
 
   it("proposes the AI roadmap's courses with Áp dụng and Bỏ qua, the plan unchanged, and nothing to apply for a cố vấn", () => {

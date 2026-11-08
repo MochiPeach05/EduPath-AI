@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   aiAddedText, aiCleanedText, applyProposal, auditGroups, auditNote, cleanAiAdded, cleanThesisWay, creditProgress, declineProposal, exemptText, groupCountText,
-  limitsText, moveCourse, neededTone, nextTermOffer, offering, ownRelations, planChoiceText, planIssues, planProposal, poolSections, proposalAddedText,
+  limitsText, moveCourse, neededTone, nextTermOffer, offering, orderAiAdded, ownRelations, planChoiceText, planIssues, planProposal, poolSections, proposalAddedText,
   proposalSummaryText, searchCourses, termLabel, termLoad, termLoadText, thesisCleanedText, thesisHint, thesisLeftOut, withTerms, type AiProposal,
   type StudyPlanContext, type StudyPlanCourse, type StudyPlanData, type StudyPlanThesis,
 } from "./study-plan-data";
@@ -337,15 +337,41 @@ describe("planning", () => {
       const before = JSON.stringify(current);
       const proposed = planProposal(ctx, current, proposal, now)!;
       expect(JSON.stringify(current)).toBe(before);
-      expect(proposed.added).toEqual([{ code: "C", term: "HK262" }, { code: "E", term: "HK263" }]);
+      // C waits for D (its tiên quyết, failed), which the plan retakes in HK262: C goes after it, to the next HK2 a plan
+      // opens it in (user 2026-11-08: never a course and its tiên quyết in one term).
+      expect(proposed.added).toEqual([{ code: "C", term: "HK272" }, { code: "E", term: "HK263" }]);
       expect(proposed.roadmap).toEqual({ id: roadmapId, completedAt: proposal.completedAt, term: "HK262" });
       expect([proposed.aiRemoved, proposed.thesisRemoved, proposed.keepable]).toEqual([[], [], []]);
       // Applied, the plan remembers the roadmap and what it added.
       expect(proposed.plan.roadmapId).toBe(roadmapId);
       expect(proposed.plan.aiAdded).toEqual({ completedAt: proposal.completedAt, term: "HK262", codes: ["C", "E"], addedAt: now.toISOString() });
-      expect(proposed.plan.terms.map((term) => [term.code, term.courses.map((item) => item.code)])).toEqual([["HK261", []], ["HK262", ["D", "C"]], ["HK263", ["E"]]]);
+      expect(proposed.plan.terms.map((term) => [term.code, term.courses.map((item) => item.code)])).toEqual([["HK261", []], ["HK262", ["D"]], ["HK263", ["E"]], ["HK272", ["C"]]]);
+      expect(proposed.moved).toEqual([]);
       expect(proposalAddedText(proposed)).toBe("Thêm 2 học phần do lộ trình AI đề xuất (lộ trình soạn lúc 17:00 24/10/2026), vào học kỳ mà kế hoạch đào tạo mở môn đó:");
       expect(proposalSummaryText(proposed)).toBe("thêm 2 học phần do lộ trình AI đề xuất");
+    });
+
+    it("proposes moving what an AI roadmap added after the courses it waits for: Anh văn 5, 6, 7 one term after the other (user 2026-11-08)", () => {
+      const english = (code: string, prerequisites: string[], state: StudyPlanCourse["state"] = "not_taken") =>
+        course(code, { name: `Anh văn ${code.slice(2)}`, prerequisites, state, everyTerm: true, ...(state === "in_progress" ? { inProgressTerm: "HK261" } : {}) });
+      const av = context({ courses: [english("AV4", [], "in_progress"), english("AV5", ["AV4"]), english("AV6", ["AV5"]), english("AV7", ["AV6"]), course("OWN", { prerequisites: ["AV7"] })] });
+      // An older roadmap put the three in HK262; the student placed OWN there too.
+      const old = withTerms(av, {
+        schemaVersion: 1, roadmapId: "r1", aiAdded: { completedAt: "2026-11-08T04:58:00.000Z", term: "HK262", codes: ["AV5", "AV6", "AV7"], addedAt: "2026-11-08T05:00:00.000Z" },
+        terms: [{ code: "HK262", courses: [{ code: "AV5" }, { code: "AV6" }, { code: "AV7" }, { code: "OWN" }] }],
+      });
+      const proposed = planProposal(av, old, null, now)!;
+      expect(proposed.moved).toEqual([{ code: "AV6", from: "HK262", to: "HK263" }, { code: "AV7", from: "HK262", to: "HK271" }]);
+      expect(proposed.plan.terms.map((term) => [term.code, term.courses.map((item) => item.code)]))
+        .toEqual([["HK261", []], ["HK262", ["AV5", "OWN"]], ["HK263", ["AV6"]], ["HK271", ["AV7"]]]);
+      expect(proposalSummaryText(proposed)).toBe("chuyển 2 học phần ra sau môn tiên quyết");
+      expect(proposed.keepable).toEqual(["AV6", "AV7"]);
+      // The student's own placement keeps its warning; AV4 being studied counts as done for AV5.
+      expect(planIssues(av, proposed.plan).get("OWN")?.prerequisites).toEqual(["AV7"]);
+      expect(planIssues(av, proposed.plan).has("AV5")).toBe(false);
+      // Applied, nothing is left to move; declined, the same moves never come back.
+      expect(orderAiAdded(av, proposed.plan).moved).toEqual([]);
+      expect(planProposal(av, declineProposal(old, proposed), null, now)).toBeNull();
     });
 
     it("proposes nothing once the roadmap is taken in or declined, or when it adds nothing", () => {

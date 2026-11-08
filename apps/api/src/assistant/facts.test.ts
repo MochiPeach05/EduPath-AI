@@ -82,6 +82,7 @@ function db(options: { assessment?: boolean; survey?: boolean; consent?: string 
     if (sql.includes("FROM data_consents")) return rows(options.consent === null ? [] : [{ policy_version: options.consent ?? TRANSCRIPT_POLICY_VERSION }]);
     if (sql.includes("FROM stu_roadmaps")) return rows(options.roadmap === null ? [] : [options.roadmap ?? roadmap()]);
     if (sql.includes("FROM student_profiles p")) return rows([{ cohortCode: "K29", specialty: null, career: "Lập trình viên Web" }]);
+    if (sql.includes("FROM curriculum_relations")) return rows([]);
     throw new Error(`unexpected query: ${sql}`);
   });
   return { query } as unknown as Pick<DatabasePool, "query">;

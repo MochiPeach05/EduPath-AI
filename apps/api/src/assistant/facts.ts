@@ -11,7 +11,7 @@ import { fold, specialtyLabel } from "../competency-assessment/specialty.js";
 import type { AssessmentResult, LevelCode, SkillResult, SpecialtyCode } from "../competency-assessment/types.js";
 import type { DatabasePool } from "../db/pool.js";
 import { buildRoadmapFacts, type RoadmapFacts } from "../roadmap/facts.js";
-import { newestAssessment, readNewestRoadmap, type RoadmapRow } from "../roadmap/jobs.js";
+import { newestAssessment, readNewestRoadmap, readRoadmapRelations, type RoadmapRow } from "../roadmap/jobs.js";
 import { roadmapDataSections } from "../roadmap/prompt.js";
 import { roadmapWindow } from "../roadmap/window.js";
 import { activeConsentVersion, isValidConsent } from "../student/consent.js";
@@ -164,7 +164,7 @@ export async function studentSources(db: Db, userId: string, question: string, i
   const transcriptPart = transcript ? [transcriptSource(transcript, question, intents)] : [];
   if (!assessment) return { sources: [await profileOnly(db, userId, transcript !== null), ...transcriptPart], gapSkills: [] };
   const wants = (...names: AssistantIntent[]) => names.some((name) => intents.includes(name));
-  const facts = buildRoadmapFacts(assessment.id, assessment.computed, roadmapWindow(now));
+  const facts = buildRoadmapFacts(assessment.id, assessment.computed, roadmapWindow(now), await readRoadmapRelations(db, assessment.computed));
   let survey = null;
   if (wants("roadmap", "resources")) {
     const row = await readSurvey(db, userId);

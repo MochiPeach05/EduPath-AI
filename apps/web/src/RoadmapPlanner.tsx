@@ -64,6 +64,10 @@ function ProposalBox({ context, proposal, names, onApply, onDecline }: {
       <p>{proposalAddedText(proposal)}</p>
       <ul>{proposal.added.map((item) => <li key={item.code}><strong>{names.get(item.code) ?? item.code}</strong> ({item.code}): {termLabel(item.term)}</li>)}</ul>
     </div>}
+    {proposal.moved.length > 0 && <div>
+      <p>Chuyển {proposal.moved.length} học phần do lộ trình AI đề xuất ra sau môn tiên quyết của nó, vì chỉ đăng ký được khi đã đạt môn tiên quyết:</p>
+      <ul>{proposal.moved.map((move) => <li key={move.code}><strong>{names.get(move.code) ?? move.code}</strong> ({move.code}): {termLabel(move.from)} → {termLabel(move.to)}</li>)}</ul>
+    </div>}
     {proposal.aiRemoved.length > 0 && <p>{aiCleanedText(context, proposal.aiRemoved, true)}</p>}
     {proposal.thesisRemoved.length > 0 && <p>{thesisCleanedText(context, proposal.thesisRemoved, true)}</p>}
     <div className="rm-actions">

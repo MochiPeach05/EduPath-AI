@@ -264,6 +264,26 @@ describe("where the plan starts", () => {
       .toEqual([{ code: "SUMMER", term: "HK263" }, { code: "ANY", term: "HK262" }, { code: "RARE", term: "HK262" }]);
   });
 
+  it("places a course after the courses of the same proposal it waits for: Anh văn 5, 6 and 7 in three terms (user 2026-11-08)", async () => {
+    const roadmap: Roadmap = {
+      id: "99999999-9999-4999-8999-999999999999", completed_at: new Date("2026-11-08T04:58:00Z"),
+      facts: { nextTerm: "HK262", study: [], choices: [] },
+      output: { study: [{ code: "AV7" }, { code: "AV6" }, { code: "AV5" }, { code: "LATER" }], improve: [] },
+    };
+    const db = { query: vi.fn(async () => ({ rowCount: 1, rows: [roadmap] })) };
+    const english = (code: string, state: string, prerequisites: string[]) =>
+      ({ code, state, offeredTerms: [], everyTerm: true, applicable: true, prerequisites, prior: [] });
+    const context = { currentTerm: "HK261", offeringUntil: "HK263", courses: [
+      english("AV4", "in_progress", []), english("AV5", "not_taken", ["AV4"]), english("AV6", "not_taken", ["AV5"]), english("AV7", "not_taken", ["AV6"]),
+      { code: "LATER", state: "not_taken", offeredTerms: ["HK262"], applicable: true, prerequisites: [], prior: ["AV5"] },
+    ] };
+    // English opens every term: AV5 (AV4 being studied is done by then) in HK262, AV6 in HK263, AV7 in HK271. LATER, an
+    // HK2 course to study after AV5, goes to the next HK2.
+    expect((await readAiProposal(db as never, studentId, context as never, null))!.courses).toEqual([
+      { code: "AV7", term: "HK271" }, { code: "AV6", term: "HK263" }, { code: "AV5", term: "HK262" }, { code: "LATER", term: "HK272" },
+    ]);
+  });
+
   it("adds only courses still missing of the student's program; improvements are suggested, never added (user 2026-11-03)", async () => {
     const roadmap: Roadmap = {
       id: "99999999-9999-4999-8999-999999999999", completed_at: new Date("2026-11-03T07:24:00Z"),

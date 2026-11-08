@@ -240,6 +240,42 @@ describe("buildRoadmapFacts", () => {
   });
 });
 
+describe("courses that wait for their tiên quyết or học trước (roadmap-v15)", () => {
+  // Synthetic relations (user 2026-11-08: "AI đang đề xuất av 5,6,7 vào một kì như vậy là không được"): the late course
+  // needs the failed one passed first; the internship needs the course being studied, done by the next term; a choice
+  // option needs the failed one too.
+  const result = syntheticRoadmapResult();
+  const relations = [
+    { courseCode: "71ITIS30203", kind: "prerequisite" as const, targetCodes: ["71ITBS10203"] },
+    { courseCode: "71ITIN40304", kind: "prerequisite" as const, targetCodes: ["71ITSE41203"] },
+    { courseCode: "71ITSE30803", kind: "prerequisite" as const, targetCodes: ["71itbs10203 "] },
+  ];
+  const facts = buildRoadmapFacts(ROADMAP_ASSESSMENT, result, roadmapWindow(ROADMAP_NOW), relations);
+  const failedName = result.courses.find((item) => item.code === "71ITBS10203")!.name;
+
+  it("marks what a course waits for at the registration the roadmap prepares, a course being studied counted done", () => {
+    expect(facts.study.map((item) => [item.code, item.waitsFor ?? null])).toEqual([
+      ["71ITSE41203", null],
+      ["71ITIS30203", [{ code: "71ITBS10203", name: failedName, kind: "prerequisite" }]],
+      ["71ITIN40304", null],
+    ]);
+    // A choice offers no option that waits.
+    expect(facts.choices[0]!.options.map((option) => option.code)).toEqual(["71ITSE30903"]);
+    // Without relations (roadmaps before roadmap-v15) nothing waits.
+    expect(syntheticRoadmapFacts().study.some((item) => item.waitsFor)).toBe(false);
+  });
+
+  it("lists a waiting course apart and lets the text name it, never the study codes", () => {
+    const input = buildRoadmapInput(facts);
+    expect(input.promptVersion).toBe("roadmap-v15");
+    expect(input.user).toContain("Chưa đăng ký được ở HK2 2026–2027 (cần đạt môn tiên quyết hoặc học môn học trước; học ở các học kỳ sau):");
+    expect(input.user).toContain(`- 71ITIS30203 Hệ quản trị cơ sở dữ liệu (3 TC): cần đạt ${failedName} trước`);
+    expect(input.keys.courses.map((item) => item.code)).toEqual(["71ITSE41203", "71ITIN40304", "71ITSE30903"]);
+    expect(input.keys.names.map((item) => item.code)).toContain("71ITIS30203");
+    expect(input.system).toContain("Không bao giờ đề nghị học cùng một học kỳ một học phần và môn tiên quyết của nó");
+  });
+});
+
 describe("buildRoadmapInput", () => {
   const facts = syntheticRoadmapFacts();
   const input = buildRoadmapInput(facts);

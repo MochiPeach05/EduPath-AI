@@ -80,11 +80,11 @@ export async function readAiPlan(db: Db, userId: string, context: Pick<StudyPlan
   const first = nextTerm(context.currentTerm);
   const term = facts.nextTerm && termIndex(facts.nextTerm) >= termIndex(first) ? facts.nextTerm : first;
   const byCode = new Map(context.courses.map((course) => [course.code, course]));
-  // The term a plan opens it in, else one of the semester plans open it in, else the term of the roadmap.
-  const placeOf = (course: Pick<StudyPlanCourse, "offeredTerms" | "everyTerm">) => {
-    const candidates = [term, nextTerm(term), nextTerm(nextTerm(term))];
+  // The term a plan opens it in, else one of the semester plans open it in, else the first term it may go to (from).
+  const placeOf = (course: Pick<StudyPlanCourse, "offeredTerms" | "everyTerm">, from = term) => {
+    const candidates = [from, nextTerm(from), nextTerm(nextTerm(from))];
     return candidates.find((candidate) => opensIn(course, candidate, context.offeringUntil))
-      ?? candidates.find((candidate) => sameSemester(course, candidate)) ?? term;
+      ?? candidates.find((candidate) => sameSemester(course, candidate)) ?? from;
   };
   const suggestions: AiSuggestion[] = [];
   for (const item of row.output.improve ?? []) {
@@ -103,15 +103,54 @@ export async function readAiPlan(db: Db, userId: string, context: Pick<StudyPlan
     const topics = choice.thesis?.topics.map((item) => item.code) ?? [];
     if (topics.some((code) => picked.includes(code))) picked.push(...topics);
   }
-  const courses: AiProposal["courses"] = [];
+  const chosen: StudyPlanCourse[] = [];
   for (const code of new Set(picked)) {
     const course = byCode.get(code);
     // Another specialty's course, a passed one (an improvement), one being studied or the thesis group's other way never
     // goes into the plan.
     if (!course || !course.applicable || !needsPlanning(course) || excluded.has(code)) continue;
-    courses.push({ code, term: placeOf(course) });
+    chosen.push(course);
   }
+  const placed = chainedTerms(chosen, byCode, (course, from) => placeOf(course, from ?? term));
+  const courses: AiProposal["courses"] = chosen.map((course) => ({ code: course.code, term: placed.get(course.code)! }));
   return { proposal: { roadmapId: row.id, completedAt: new Date(row.completed_at).toISOString(), term, courses }, suggestions, roadmapId: row.id };
+}
+
+/**
+ * The term of each course of a proposal, a course after the courses of the same proposal it waits for (user 2026-11-08:
+ * "AI đang đề xuất av 5,6,7 vào một kì như vậy là không được … chưa đạt môn tiên quyết sao mà đk được"): a tiên quyết
+ * not passed, a học trước never taken, neither being studied, goes first and the course from the term after it (Anh văn
+ * 5, then 6, then 7). place(course, from) gives the first term a course goes to from a term (null: the proposal's term).
+ * A wait outside the proposal, or a loop, places the course as before.
+ */
+export function chainedTerms(courses: readonly StudyPlanCourse[], byCode: ReadonlyMap<string, StudyPlanCourse>,
+  place: (course: StudyPlanCourse, from: string | null) => string): Map<string, string> {
+  const proposed = new Map(courses.map((course) => [course.code, course]));
+  const waits = (course: StudyPlanCourse, code: string, kind: "prerequisite" | "prior") => {
+    const other = byCode.get(code);
+    if (!other || other.state === "in_progress") return false;
+    return kind === "prerequisite" ? !isPassedState(other.state) : other.state === "not_taken" || other.state === "not_in_curriculum";
+  };
+  const placed = new Map<string, string>();
+  const placing = new Set<string>();
+  const termOf = (course: StudyPlanCourse): string => {
+    const known = placed.get(course.code);
+    if (known) return known;
+    placing.add(course.code);
+    let from: string | null = null;
+    for (const [kind, codes] of [["prerequisite", course.prerequisites ?? []], ["prior", course.prior ?? []]] as const) for (const code of codes) {
+      const first = proposed.get(code);
+      if (!first || first === course || placing.has(code) || !waits(course, code, kind)) continue;
+      const after = nextTerm(termOf(first));
+      if (!from || termIndex(after) > termIndex(from)) from = after;
+    }
+    placing.delete(course.code);
+    const at = place(course, from);
+    placed.set(course.code, at);
+    return at;
+  };
+  for (const course of courses) termOf(course);
+  return placed;
 }
 
 /** The proposal alone (readAiPlan): what the plan has not taken in yet, or null. */

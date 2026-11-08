@@ -16,7 +16,7 @@ import type { AssessmentResult } from "../competency-assessment/types.js";
 import type { DatabasePool } from "../db/pool.js";
 import { activeConsentVersion, isValidConsent } from "../student/consent.js";
 import { readSurvey, surveyFacts } from "../student/survey.js";
-import { buildRoadmapFacts, type RoadmapFacts } from "./facts.js";
+import { buildRoadmapFacts, type RoadmapFacts, type RoadmapRelation } from "./facts.js";
 import { sanitizeText } from "../competency-assessment/ai/prompt.js";
 import { buildRoadmapInput } from "./prompt.js";
 import { roadmapContextFromAiInput, validateRoadmapOutput, type RoadmapOutput } from "./validate.js";
@@ -107,6 +107,18 @@ export async function newestAssessment(db: Db, userId: string): Promise<{ id: st
   return result.rows[0] ?? null;
 }
 
+/**
+ * The tiên quyết and học trước of the CTĐT revision an assessment read (roadmap-v15, user 2026-11-08): what the roadmap's
+ * facts check each course against (facts.ts waitsFor). None for a result without its revision, or a revision gone.
+ */
+export async function readRoadmapRelations(db: Db, result: Pick<AssessmentResult, "meta">): Promise<RoadmapRelation[]> {
+  const revisionId = result.meta?.curriculum?.revisionId;
+  if (!revisionId) return [];
+  return (await db.query<RoadmapRelation>(
+    `SELECT course_code AS "courseCode",kind,target_codes AS "targetCodes" FROM curriculum_relations
+     WHERE revision_id=$1 ORDER BY course_code,kind`, [revisionId])).rows;
+}
+
 /* ------------------------------------------------------------------------ */
 /* Housekeeping */
 
@@ -181,7 +193,7 @@ export async function createRoadmap(client: PoolClient, userId: string, options:
   await client.query(`UPDATE stu_roadmaps SET status='cancelled',ai_input=NULL,lease_token=NULL,lease_until=NULL,completed_at=now(),updated_at=now()
     WHERE user_id=$1 AND status IN ${PENDING}`, [userId]);
   const window = roadmapWindow(options.now ?? new Date());
-  const facts = buildRoadmapFacts(assessment.id, assessment.computed, window);
+  const facts = buildRoadmapFacts(assessment.id, assessment.computed, window, await readRoadmapRelations(client, assessment.computed));
   const aiInput = buildRoadmapInput(facts, surveyFacts(survey));
   const id = randomUUID();
   const inserted = await client.query<{ createdAt: Date | string }>(

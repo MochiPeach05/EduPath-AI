@@ -170,6 +170,59 @@ export function cleanAiAdded(context: Pick<StudyPlanContext, "courses">, plan: S
   return { plan: { ...cleaned, aiAdded: { ...plan.aiAdded!, codes: codes.filter((code) => !removed.includes(code)) } }, removed };
 }
 
+/** An AI-added course moved after the courses it waits for (orderAiAdded). */
+export type PlanMove = { code: string; from: string; to: string };
+
+/**
+ * The plan with each course the AI roadmap added moved after the courses it waits for (user 2026-11-08: "AI đang đề xuất
+ * av 5,6,7 vào một kì như vậy là không được … chưa đạt môn tiên quyết sao mà đk được"): a tiên quyết not passed or a học
+ * trước never taken (neither being studied) that the plan puts in the same term or later. The course goes to the first
+ * term after it that a training plan opens it in (within three terms, else that first term), one after the other (Anh văn
+ * 5, 6, 7). Only what the AI added and the student did not keep is moved; the student's own placements keep their
+ * warnings (planIssues). Returns the plan and the moves.
+ */
+export function orderAiAdded(context: Pick<StudyPlanContext, "courses"> & Partial<Pick<StudyPlanContext, "offeringUntil">>, plan: StudyPlanData): { plan: StudyPlanData; moved: PlanMove[] } {
+  const byCode = new Map(context.courses.map((course) => [course.code, course]));
+  const kept = keptCodes(plan);
+  const codes = (plan.aiAdded?.codes ?? []).map((code) => code.toUpperCase()).filter((code) => !kept.has(code) && byCode.has(code));
+  const waiting = (code: string, kind: "prerequisite" | "prior") => {
+    const other = byCode.get(code);
+    if (!other || other.state === "in_progress") return false;
+    return kind === "prerequisite" ? !isDone(other.state) : other.state === "not_taken" || other.state === "not_in_curriculum";
+  };
+  let next = plan;
+  const moved = new Map<string, PlanMove>();
+  // A chain moves one link per round (AV6 after AV5, then AV7 after AV6's new term); a loop stops at the round limit.
+  for (let round = 0; round <= codes.length; round++) {
+    const placed = plannedTerms(next);
+    let changed = false;
+    for (const code of codes) {
+      const course = byCode.get(code)!;
+      const at = placed.get(code);
+      if (!at) continue;
+      let from: string | null = null;
+      for (const [kind, targets] of [["prerequisite", course.prerequisites ?? []], ["prior", course.prior ?? []]] as const) {
+        for (const target of ownRelations(course, targets, byCode)) {
+          const there = placed.get(target);
+          if (!there || termIndex(there) < termIndex(at) || !waiting(target, kind)) continue;
+          const after = nextTerm(there);
+          if (!from || termIndex(after) > termIndex(from)) from = after;
+        }
+      }
+      if (!from) continue;
+      const candidates = [from, nextTerm(from), nextTerm(nextTerm(from))];
+      const to = candidates.find((term) => offering(course, term, context.offeringUntil ?? null) === "ok") ?? from;
+      if (!next.terms.some((term) => term.code === to) && next.terms.length >= MAX_TERMS) continue;
+      next = moveCourse(next, code, to);
+      placed.set(code, to);
+      moved.set(code, { code, from: moved.get(code)?.from ?? at, to });
+      changed = true;
+    }
+    if (!changed) break;
+  }
+  return { plan: next, moved: [...moved.values()] };
+}
+
 /** The courses of the thesis group's way the system advises (upper-case codes; none without a way). */
 const thesisAdvised = (thesis: StudyPlanThesis) =>
   (thesis.way === "thesis" ? [thesis.thesis] : thesis.way === "replacement" ? thesis.replacements : []).map((code) => code.toUpperCase());
@@ -251,6 +304,8 @@ export type PlanProposal = {
   added: { code: string; term: string }[];
   aiRemoved: string[];
   thesisRemoved: string[];
+  /** Courses an AI roadmap added before, moved after the courses they wait for (orderAiAdded, user 2026-11-08). */
+  moved: PlanMove[];
   keepable: string[];
 };
 
@@ -259,8 +314,8 @@ export type PlanProposal = {
  * the AI roadmap's proposal unless the plan has taken that roadmap in or the student declined it (roadmapId), and the
  * thesis group's other way again (the AI's courses can make the plan hold both ways).
  */
-export function planProposal(context: Pick<StudyPlanContext, "courses" | "thesis">, plan: StudyPlanData, aiProposal: AiProposal | null,
-  now = new Date()): PlanProposal | null {
+export function planProposal(context: Pick<StudyPlanContext, "courses" | "thesis"> & Partial<Pick<StudyPlanContext, "offeringUntil">>, plan: StudyPlanData,
+  aiProposal: AiProposal | null, now = new Date()): PlanProposal | null {
   const ai = cleanAiAdded(context, plan);
   const before = cleanThesisWay(context, ai.plan);
   let next = before.plan;
@@ -275,12 +330,15 @@ export function planProposal(context: Pick<StudyPlanContext, "courses" | "thesis
     }
   }
   const after = cleanThesisWay(context, next);
-  const placed = plannedTerms(after.plan);
+  // The AI's courses after the courses they wait for, those just added as well as those added before (user 2026-11-08).
+  const ordered = orderAiAdded(context, after.plan);
+  const placed = plannedTerms(ordered.plan);
   const added = addedCodes.filter((code) => placed.has(code)).map((code) => ({ code, term: placed.get(code)! }));
+  const moved = ordered.moved.filter((move) => !addedCodes.includes(move.code));
   const thesisRemoved = [...before.removed, ...after.removed.filter((code) => !addedCodes.includes(code))];
-  if (!added.length && !ai.removed.length && !thesisRemoved.length) return null;
-  return { plan: after.plan, roadmap: added.length ? roadmap : null, added, aiRemoved: ai.removed, thesisRemoved,
-    keepable: [...new Set([...ai.removed, ...before.removed].map((code) => code.toUpperCase()))] };
+  if (!added.length && !ai.removed.length && !thesisRemoved.length && !moved.length) return null;
+  return { plan: ordered.plan, roadmap: added.length ? roadmap : null, added, aiRemoved: ai.removed, thesisRemoved, moved,
+    keepable: [...new Set([...ai.removed, ...before.removed, ...moved.map((move) => move.code)].map((code) => code.toUpperCase()))] };
 }
 
 /**
@@ -293,10 +351,12 @@ export function declineProposal(plan: StudyPlanData, proposal: PlanProposal): St
 }
 
 /** "thêm 3 học phần do lộ trình AI đề xuất và bỏ 2 học phần": what a proposal does, for Theo dõi tiến độ. */
-export function proposalSummaryText(proposal: Pick<PlanProposal, "added" | "aiRemoved" | "thesisRemoved">): string {
+export function proposalSummaryText(proposal: Pick<PlanProposal, "added" | "aiRemoved" | "thesisRemoved"> & Partial<Pick<PlanProposal, "moved">>): string {
   const removed = proposal.aiRemoved.length + proposal.thesisRemoved.length;
-  return [proposal.added.length ? `thêm ${proposal.added.length} học phần do lộ trình AI đề xuất` : null,
-    removed ? `bỏ ${removed} học phần` : null].filter(Boolean).join(" và ");
+  const moved = proposal.moved?.length ?? 0;
+  return joinVi([proposal.added.length ? `thêm ${proposal.added.length} học phần do lộ trình AI đề xuất` : null,
+    moved ? `chuyển ${moved} học phần ra sau môn tiên quyết` : null,
+    removed ? `bỏ ${removed} học phần` : null].filter((part): part is string => Boolean(part)));
 }
 
 /** The heading of the courses a proposal adds: "Thêm 2 học phần do lộ trình AI đề xuất (lộ trình soạn lúc 17:00 24/10/2026), …". */
