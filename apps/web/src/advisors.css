@@ -63,6 +63,7 @@
 /* Quản lý sinh viên: the classes (with their cố vấn học tập when every class is listed), then their students */
 .av-classes-table { min-width: 860px; }
 .av-classes-table-all { min-width: 1020px; }
+/* Khóa, Lớp, then the advisor (user 2026-11-08: khóa rồi mới đến lớp). */
 .av-classes-table-all td:nth-child(3) { min-width: 160px; }
 .av-classes-table td { padding-block: 14px; }
 .av-classes-table :is(.am-outline) { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }

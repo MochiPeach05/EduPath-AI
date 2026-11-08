@@ -108,7 +108,9 @@ describe("Quản lý sinh viên page (2026-11-03)", () => {
   it("shows each class with its students and how many did each step, the chosen class marked", () => {
     const html = renderToStaticMarkup(<Classes classes={classes} />);
     expect(html).toContain("<td class=\"av-num\">38/45</td>");
-    expect(html).toContain('<tr class="av-row-current"><td><strong>71K29CNTT02</strong>');
+    // Khóa first, then Lớp (user 2026-11-08).
+    expect(html).toMatch(/<tr class="av-row-current"><td>K\d+<\/td><td><strong>71K29CNTT02<\/strong>/);
+    expect(html.indexOf("<span>Khóa</span>")).toBeLessThan(html.indexOf("<span>Lớp</span>"));
     // The chosen class's button is the current one, not a toggle: pressing it again keeps the class (QA 2026-11-04).
     expect(html.match(/aria-current="true"/g)).toHaveLength(1);
     expect(html).not.toContain("aria-pressed");
@@ -132,8 +134,8 @@ describe("Quản lý sinh viên page (2026-11-03)", () => {
     expect(html).toContain('<table class="cm-table av-classes-table av-classes-table-all">');
     expect(html.indexOf("<span>Khóa</span>")).toBeLessThan(html.indexOf("<span>Cố vấn học tập</span>"));
     expect(html.indexOf("<span>Cố vấn học tập</span>")).toBeLessThan(html.indexOf("<span>Sinh viên</span>"));
-    expect(html).toContain("<td>K29</td><td>Nguyễn Văn An</td>");
-    expect(html).toContain('<td>K29</td><td><span class="career-empty">Chưa phân công</span></td>');
+    expect(html).toContain("</strong></td><td>Nguyễn Văn An</td>");
+    expect(html).toContain('</strong></td><td><span class="career-empty">Chưa phân công</span></td>');
   });
 
   it("lists the students with their steps in words and Xem chi tiết, which opens their page", () => {

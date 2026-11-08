@@ -66,12 +66,12 @@ export function ClassTable({ classes, sort, sortHeader, selected, onPick, showAd
   onPick: (className: string) => void; showAdvisor?: boolean;
 }) {
   return <div className="cm-table-scroll"><table className={`cm-table av-classes-table${showAdvisor ? " av-classes-table-all" : ""}`}>
-    <thead><tr>{sortHeader("Lớp", "className")}{sortHeader("Khóa", "cohort")}{showAdvisor && sortHeader("Cố vấn học tập", "advisorName")}{sortHeader("Sinh viên", "students")}
+    <thead><tr>{sortHeader("Khóa", "cohort")}{sortHeader("Lớp", "className")}{showAdvisor && sortHeader("Cố vấn học tập", "advisorName")}{sortHeader("Sinh viên", "students")}
       {sortHeader("Có bảng điểm", "withTranscript")}{sortHeader("Đã đánh giá năng lực", "assessed")}{sortHeader("Đã làm khảo sát", "surveyDone")}{sortHeader("Có Lộ trình AI", "roadmap")}
       <th scope="col">Thao tác</th></tr></thead>
     <tbody>{sortRows(classes, classSort, sort).map(({ row }) => <tr key={row.className} className={row.className === selected ? "av-row-current" : undefined}>
-      <td><strong>{row.className}</strong></td>
       <td>{row.cohort ?? "—"}</td>
+      <td><strong>{row.className}</strong></td>
       {showAdvisor && <td>{row.advisorName?.trim() ? row.advisorName : <span className="career-empty">Chưa phân công</span>}</td>}
       <td className="av-num">{row.students.toLocaleString("vi-VN")}</td>
       <td className="av-num">{share(row.withTranscript, row.students)}</td>
