@@ -113,10 +113,14 @@ describe("the chat body Workers AI receives", () => {
 });
 
 describe("cloudflareChat", () => {
-  it("streams the answer, skips the thinking, and reports Ollama-named metrics", async () => {
+  it("streams the answer, skips the thinking, and reports Ollama-named metrics and the neurons it cost", async () => {
     const fetch = vi.fn<FetchLike>(async () => sse([delta("", { reasoning_content: "nghĩ trước" }), delta('{"summary":'), delta('"Tốt"}'), finish(), usage, "data: [DONE]\n\n"]));
     const seen: string[] = [];
-    const result = await cloudflareChat(runtime, job, { fetch, onContent: (text) => seen.push(text) });
+    const spent: number[] = [];
+    const result = await cloudflareChat(runtime, job, { fetch, onContent: (text) => seen.push(text), onNeurons: (n) => spent.push(n) });
+    // usage: 5000 prompt and 1200 answer tokens at Gemma's prices.
+    expect(spent).toHaveLength(1);
+    expect(spent[0]).toBeCloseTo(5000 * 0.10 / 11 + 1200 * 0.30 / 11);
     expect(result.content).toBe('{"summary":"Tốt"}');
     expect(result.doneReason).toBe("stop");
     expect(result.metrics).toMatchObject({ prompt_eval_count: 5000, eval_count: 1200 });
@@ -219,6 +223,17 @@ describe("cloudflareEmbed", () => {
     await expect(cloudflareEmbed(runtime, { model: "bge-m3", inputs: ["x", "y"] }, { fetch: async () => json({ data: [{ index: 0, embedding: [1] }] }) })).rejects.toMatchObject({ detail: "embedding_count" });
     await expect(cloudflareEmbed(runtime, { model: "bge-m3", inputs: ["x", "y"] }, { fetch: async () => json({ data: [{ index: 0, embedding: [1] }, { index: 1, embedding: [1, 2] }] }) })).rejects.toMatchObject({ detail: "embedding_dimensions" });
     expect(cloudflareEmbeddingInfo("bge-m3")).toEqual({ version: "cloudflare-workers-ai", digest: "@cf/baai/bge-m3" });
+  });
+});
+
+describe("the day's neuron budget in the health check", () => {
+  it("says Workers AI is unavailable once the day's budget is spent, so the worker stops taking jobs", async () => {
+    const fetch = vi.fn<FetchLike>(async () => json({ success: true, result: [{ name: CLOUDFLARE_CHAT_MODEL }] }));
+    let left = true;
+    const health = createCloudflareHealth(runtime, { fetch, budget: { limit: 9_000, allows: async () => left, spend: async () => undefined } });
+    await expect(health()).resolves.toMatchObject({ digest: CLOUDFLARE_CHAT_MODEL });
+    left = false;
+    await expect(health()).rejects.toMatchObject({ code: "ollama_unavailable", detail: "daily_budget" });
   });
 });
 

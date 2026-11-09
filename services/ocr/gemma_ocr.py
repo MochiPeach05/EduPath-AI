@@ -38,7 +38,7 @@ PARALLEL = 6
 RETRY_DELAYS = (3, 10, 30)
 # What the strips of one PDF cost (requests and tokens as Workers AI counts them), added to the result's ocr_settings so
 # the day's use of the free allowance can be followed. Never any text.
-USAGE = {'requests': 0, 'prompt_tokens': 0, 'completion_tokens': 0}
+USAGE = {'requests': 0, 'prompt_tokens': 0, 'completion_tokens': 0, 'neurons': 0.0}
 _USAGE_LOCK = __import__('threading').Lock()
 
 # The summary box fields, with the labels test_ocr.SUMMARY_FIELDS knows.
@@ -286,6 +286,10 @@ def read_strip(image_jpeg, endpoint=None):
         USAGE['requests'] += 1
         for key in ('prompt_tokens', 'completion_tokens'):
             USAGE[key] += int(usage.get(key) or 0)
+        # What Workers AI reports it spent, else the tokens at Gemma's prices (apps/api/src/ai-worker/budget.ts).
+        reported = usage.get('neurons')
+        USAGE['neurons'] += float(reported) if isinstance(reported, (int, float)) else (
+            int(usage.get('prompt_tokens') or 0) * 0.10 / 11 + int(usage.get('completion_tokens') or 0) * 0.30 / 11)
     choice = (answer.get('choices') or [{}])[0]
     if choice.get('finish_reason') == 'length':
         raise GemmaOcrError('truncated')

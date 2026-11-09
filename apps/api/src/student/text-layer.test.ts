@@ -5,7 +5,7 @@ import type { DatabasePool } from "../db/pool.js";
 import { TRANSCRIPT_POLICY_VERSION } from "./consent.js";
 import { createStudentDataRouter } from "./router.js";
 import {
-  createTextLayerReader, gemmaOutcome, startTextLayerReader, textLayerOutcome, textLayerPython, type TextLayerJobs, type TextLayerOutcome, type TextLayerReader,
+  createTextLayerReader, gemmaNeurons, gemmaOutcome, startTextLayerReader, textLayerOutcome, textLayerPython, type TextLayerJobs, type TextLayerOutcome, type TextLayerReader,
 } from "./text-layer.js";
 import { createTranscriptWorkerRouter } from "./transcript-jobs.js";
 
@@ -52,6 +52,13 @@ describe("the text-layer reader's answers", () => {
     for (const value of [{ error: "ocr_failed", reason: "not_json" }, { needs_ocr: true }, { fallback: true }, null]) {
       expect(gemmaOutcome(value)).toEqual({ kind: "error", code: "ocr_failed" });
     }
+  });
+
+  it("adds the neurons a Gemma OCR run reported to the day's budget, from a result or beside an error", () => {
+    expect(gemmaNeurons({ result: { ocr_settings: { usage: { neurons: 312.5 } } } })).toBe(312.5);
+    expect(gemmaNeurons({ error: "ocr_busy", usage: { neurons: 40 } })).toBe(40);
+    expect(gemmaNeurons({ result: { ocr_settings: null } })).toBe(0);
+    expect(gemmaNeurons(null)).toBe(0);
   });
 
   it("refuses the PC worker once Gemma reads the scans on the server, and only then", async () => {

@@ -12,6 +12,7 @@ import { PostgresAuthActivity } from "./auth/activity.js";
 import { PostgresStudentProfileRepository } from "./admin/student-profiles.js";
 import { chooseVietnameseCollation } from "./admin/table-sort.js";
 import { startCloudAiWorker } from "./ai-worker/cloud.js";
+import { createNeuronBudget } from "./ai-worker/budget.js";
 
 async function startServer(): Promise<void> {
   const config = loadConfig();
@@ -63,7 +64,8 @@ async function startServer(): Promise<void> {
         accountId: config.ai.cloudflare.accountId,
         apiToken: config.ai.cloudflare.apiToken,
         concurrency: config.ai.concurrency,
-        thinking: config.ai.thinking
+        thinking: config.ai.thinking,
+        budget: createNeuronBudget({ limit: config.ai.dailyNeurons, db: databasePool })
       });
     });
 

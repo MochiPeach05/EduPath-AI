@@ -86,6 +86,14 @@ Các lần thử dùng tài khoản Cloudflare phụ (`CLOUDFLARE_TEST_ACCOUNT_I
   - PDF có lớp chữ: đọc xong sau 3 giây (8 học kỳ, 44 môn);
   - cùng bảng điểm ở dạng scan: Gemma đọc xong sau 33 giây, cũng 8 học kỳ và 44 môn.
 
+## Ngân sách neuron mỗi ngày (`ai-worker/budget.ts`, migration 059)
+
+Ngày 9/11: tài khoản miễn phí đã dùng 11.060 neuron trong ngày 8/11 vẫn bị lỗi 4006 ("used up your daily free allocation") sau mốc 00:00 UTC, dù trang quản lý ghi 0/10k. Đây là lỗi đã biết của Cloudflare với tài khoản miễn phí từng vượt 10.000 neuron; Cloudflare Community có nhiều báo cáo kẹt từ 5 đến hơn 10 tiếng. Vì vậy server không để tài khoản vượt mức:
+- Mỗi lần gọi chat, embedding hay đọc bản scan bằng Gemma đều cộng số neuron vào bảng `ai_daily_usage` (theo ngày UTC). Số lấy từ `usage.neurons` mà Workers AI trả về; nếu không có thì tính từ số token theo giá (Gemma 4 26B: 0,10 và 0,30 USD mỗi triệu token; BGE-M3: 0,0118 USD; 1.000 neuron = 0,011 USD).
+- Giới hạn mặc định 9.000/ngày (`AI_DAILY_NEURONS`; `off` là không giới hạn, dành cho gói trả phí). Mỗi việc mới cần dư ít nhất 600 neuron.
+- Khi chạm mức: worker báo `daily_budget` và ngừng nhận việc. Các việc AI nằm chờ trong hàng đợi tới 00:00 UTC (7h sáng ở Việt Nam) rồi chạy tiếp. Bảng điểm scan kết thúc bằng `ocr_busy` mà không gửi ảnh đi.
+- Thiếu bảng `ai_daily_usage` (schema thử) thì đếm trong bộ nhớ.
+
 ## Cấu hình (`apps/api/.env`, Render → Environment)
 
 - `CLOUDFLARE_ACCOUNT_ID`: 32 ký tự hex.

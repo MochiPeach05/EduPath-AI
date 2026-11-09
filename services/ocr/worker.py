@@ -175,6 +175,10 @@ def parse_pdf(pdf_path,result_path,text_only=False,gemma=False):
         gemma_failed=gemma and type(error).__name__=='GemmaOcrError'
         result=({'error':gemma_error(error),'reason':str(error)[:40]} if gemma_failed
             else {'fallback':True} if text_only else {'error':'ocr_failed'})
+        if gemma_failed:
+            # What the strips read before the failure cost: the server adds it to the day's neuron budget.
+            import gemma_ocr
+            result['usage']=dict(gemma_ocr.USAGE)
     except ValueError as error:
         code=str(error)
         result={'error':code} if code in PARSE_ERRORS else {'fallback':True} if text_only else {'error':'ocr_failed'}

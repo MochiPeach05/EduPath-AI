@@ -3,6 +3,7 @@
 // leases, retries and output checks stay as they are; only the models are Cloudflare's (cloudflare.ts). server.ts starts it
 // when AI_PROVIDER=cloudflare. Logs carry ids, codes and numbers only: never a prompt, an answer or the API token.
 import { createWorkerClient } from "./client.js";
+import { UNLIMITED_BUDGET, type NeuronBudget } from "./budget.js";
 import { CLOUDFLARE_CHAT_MODEL, cloudflareChat, cloudflareEmbed, cloudflareEmbeddingInfo, createCloudflareHealth, type CloudflareRuntime } from "./cloudflare.js";
 import type { FetchLike } from "./ollama.js";
 import { errorFields, runWorker, type LogFields, type OllamaPort, type WorkerLogger } from "./worker.js";
@@ -17,6 +18,8 @@ export interface CloudWorkerOptions {
   concurrency: number;
   /** Let jobs that ask for thinking think (AI_THINKING=on); off by default (cloudflare.ts CloudflareRuntime.thinking). */
   thinking?: boolean;
+  /** The day's neuron budget (budget.ts); none: no limit. */
+  budget?: NeuronBudget;
   timeoutMs?: number;
   log?: WorkerLogger;
   /** Calls to Workers AI (tests). */
@@ -26,9 +29,9 @@ export interface CloudWorkerOptions {
 }
 
 /** The worker's model port on Workers AI: Gemma for chat, BGE-M3 for embeddings, one health check for every loop. */
-export function cloudModelPort(runtime: CloudflareRuntime, fetchImpl?: FetchLike): OllamaPort {
-  const deps = fetchImpl ? { fetch: fetchImpl } : {};
-  const health = createCloudflareHealth(runtime, deps);
+export function cloudModelPort(runtime: CloudflareRuntime, fetchImpl?: FetchLike, budget: NeuronBudget = UNLIMITED_BUDGET): OllamaPort {
+  const deps = { ...(fetchImpl ? { fetch: fetchImpl } : {}), onNeurons: (neurons: number) => void budget.spend(neurons) };
+  const health = createCloudflareHealth(runtime, { ...(fetchImpl ? { fetch: fetchImpl } : {}), budget });
   return {
     chat: (job, signal, onContent) => cloudflareChat(runtime, job, { ...deps, onContent }, signal),
     modelInfo: health,
@@ -48,9 +51,9 @@ export function startCloudAiWorker(options: CloudWorkerOptions): { stop(): void;
     accountId: options.accountId, apiToken: options.apiToken, model: CLOUDFLARE_CHAT_MODEL, timeoutMs: options.timeoutMs ?? 600_000,
     thinking: options.thinking === true
   };
-  const port = cloudModelPort(runtime, options.fetch);
+  const port = cloudModelPort(runtime, options.fetch, options.budget);
   const controller = new AbortController();
-  log("starting", { provider: "cloudflare", model: CLOUDFLARE_CHAT_MODEL, loops: options.concurrency, thinking: runtime.thinking === true });
+  log("starting", { provider: "cloudflare", model: CLOUDFLARE_CHAT_MODEL, loops: options.concurrency, thinking: runtime.thinking === true, dailyNeurons: options.budget?.limit ?? null });
   const loops = Array.from({ length: options.concurrency }, (_, index) => {
     const client = createWorkerClient({ apiUrl: `http://127.0.0.1:${options.port}`, workerKey: options.workerKey, ...(options.apiFetch ? { fetch: options.apiFetch } : {}) });
     const loopLog: WorkerLogger = (event, fields = {}) => log(event, { loop: index + 1, ...fields });

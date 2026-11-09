@@ -49,9 +49,12 @@ describe("the AI worker inside the API on Cloudflare Workers AI", () => {
 
 describe("AI_PROVIDER and the Cloudflare values", () => {
   it("runs on Cloudflare only when asked, and keeps the values only when they look right (a bad paste never stops the site)", () => {
-    expect(aiProviderConfig({})).toEqual({ provider: "ollama", cloudflare: null, concurrency: 2, thinking: false });
+    expect(aiProviderConfig({})).toEqual({ provider: "ollama", cloudflare: null, concurrency: 2, thinking: false, dailyNeurons: 9_000 });
+    expect(aiProviderConfig({ AI_DAILY_NEURONS: "off" }).dailyNeurons).toBeNull();
+    expect(aiProviderConfig({ AI_DAILY_NEURONS: "4500" }).dailyNeurons).toBe(4_500);
+    expect(aiProviderConfig({ AI_DAILY_NEURONS: "nhiều" }).dailyNeurons).toBe(9_000);
     const good = aiProviderConfig({ AI_PROVIDER: " Cloudflare ", CLOUDFLARE_ACCOUNT_ID: ` "${"AB".repeat(16)}" `, CLOUDFLARE_API_TOKEN: "tok_".padEnd(40, "x"), AI_CONCURRENCY: "3", AI_THINKING: "on" });
-    expect(good).toEqual({ provider: "cloudflare", cloudflare: { accountId: "ab".repeat(16), apiToken: "tok_".padEnd(40, "x") }, concurrency: 3, thinking: true });
+    expect(good).toEqual({ provider: "cloudflare", cloudflare: { accountId: "ab".repeat(16), apiToken: "tok_".padEnd(40, "x") }, concurrency: 3, thinking: true, dailyNeurons: 9_000 });
     expect(aiProviderConfig({ AI_PROVIDER: "cloudflare", CLOUDFLARE_ACCOUNT_ID: "not-an-id", CLOUDFLARE_API_TOKEN: "x".repeat(40) }).cloudflare).toBeNull();
     expect(aiProviderConfig({ AI_PROVIDER: "cloud", AI_CONCURRENCY: "9" })).toMatchObject({ provider: "ollama", concurrency: 2 });
   });

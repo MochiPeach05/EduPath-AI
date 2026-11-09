@@ -6,6 +6,7 @@
 // Nothing here logs a prompt, an answer or the API token.
 import { AiWorkerError, GenerationAbortedError, type FetchLike, type OllamaChatResult, type OllamaJob, type OllamaMetrics, type OllamaModelInfo } from "./ollama.js";
 import type { EmbedSpec } from "../assistant/protocol.js";
+import { chatNeurons, embedNeurons, type NeuronBudget } from "./budget.js";
 
 export const CLOUDFLARE_CHAT_MODEL = "@cf/google/gemma-4-26b-a4b-it";
 /** The embedding models a job may name (assistant/protocol.ts EMBEDDING_PROFILES) and their Workers AI ids. */
@@ -37,6 +38,8 @@ interface CloudflareDeps {
   onContent?: ((content: string) => void) | undefined;
   /** Waits before the 2nd and 3rd try of a request Workers AI could not take (busy, 5xx, network). */
   retryDelaysMs?: readonly number[];
+  /** Called with the neurons each call spent (Workers AI's usage, else an estimate), for the day's budget. */
+  onNeurons?: ((neurons: number) => void) | undefined;
 }
 
 const DEFAULT_INACTIVITY_MS = 120_000;
@@ -412,6 +415,7 @@ async function chatOnce(runtime: CloudflareRuntime, job: OllamaJob, deps: Cloudf
       accumulator.push(decoder.decode(chunk.value, { stream: true }));
       if (job.schema && endsInRunaway(accumulator.content)) {
         await reader.cancel().catch(() => undefined);
+        deps.onNeurons?.(chatNeurons(null, { promptChars: job.system.length + job.user.length, outputChars: accumulator.content.length }));
         throw new ModeFallback("whitespace_runaway");
       }
       reportContent();
@@ -424,6 +428,7 @@ async function chatOnce(runtime: CloudflareRuntime, job: OllamaJob, deps: Cloudf
     accumulator.push(decoder.decode());
     accumulator.end();
     reportContent();
+    deps.onNeurons?.(chatNeurons(accumulator.usage, { promptChars: job.system.length + job.user.length, outputChars: accumulator.content.length }));
     const finish = accumulator.finishReason ?? "stop";
     if (finish === "length") throw new AiWorkerError("ai_output_truncated", "finish_reason_length");
     if (finish !== "stop") throw new AiWorkerError("ai_failed", "unexpected_finish_reason");
@@ -448,7 +453,7 @@ const MAX_EMBED_RESPONSE_CHARS = 32_000_000;
 export async function cloudflareEmbed(
   runtime: Pick<CloudflareRuntime, "accountId" | "apiToken" | "timeoutMs">,
   spec: EmbedSpec,
-  deps: Pick<CloudflareDeps, "fetch" | "retryDelaysMs"> = {},
+  deps: Pick<CloudflareDeps, "fetch" | "retryDelaysMs" | "onNeurons"> = {},
   signal?: AbortSignal
 ): Promise<number[][]> {
   const model = CLOUDFLARE_EMBEDDING_MODELS[spec.model];
@@ -500,6 +505,7 @@ export async function cloudflareEmbed(
     } catch {
       throw new AiWorkerError("ai_failed", "response_not_json");
     }
+    deps.onNeurons?.(embedNeurons((parsed as { usage?: Record<string, unknown> } | null)?.usage, spec.inputs.reduce((sum, input) => sum + input.length, 0)));
     const data = (parsed as { data?: unknown } | null)?.data;
     if (!Array.isArray(data) || data.length !== spec.inputs.length) throw new AiWorkerError("ai_failed", "embedding_count");
     const ordered = [...data].sort((a, b) => Number((a as { index?: unknown })?.index ?? 0) - Number((b as { index?: unknown })?.index ?? 0));
@@ -534,12 +540,15 @@ const HEALTH_TTL_MS = 10 * 60_000;
  * 10 minutes (the worker asks before every claim); a refusal or no answer is ollama_unavailable, so the worker stops its
  * heartbeat and the pages say the AI is not ready.
  */
-export function createCloudflareHealth(runtime: Pick<CloudflareRuntime, "accountId" | "apiToken" | "model">, deps: Pick<CloudflareDeps, "fetch"> & { now?: () => number } = {}) {
+export function createCloudflareHealth(runtime: Pick<CloudflareRuntime, "accountId" | "apiToken" | "model">,
+  deps: Pick<CloudflareDeps, "fetch"> & { now?: () => number; budget?: NeuronBudget } = {}) {
   const fetchImpl: FetchLike = deps.fetch ?? fetch;
   const now = deps.now ?? Date.now;
   let checkedAt = Number.NEGATIVE_INFINITY;
   const info: OllamaModelInfo = { version: CLOUDFLARE_VERSION, digest: runtime.model };
   return async (): Promise<OllamaModelInfo> => {
+    // The day's neurons nearly spent (budget.ts): no new job until the next UTC day; queued jobs wait instead of failing.
+    if (deps.budget && !(await deps.budget.allows())) throw new AiWorkerError("ollama_unavailable", "daily_budget");
     if (now() - checkedAt < HEALTH_TTL_MS) return info;
     const name = runtime.model.split("/").at(-1) ?? runtime.model;
     let response: Response;

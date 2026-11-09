@@ -32,6 +32,7 @@ import { createPlansRouter } from "./plans/router.js";
 import { createStudentCurriculaRouter } from "./curricula/student-router.js";
 import { createTranscriptWorkerRouter } from "./student/transcript-jobs.js";
 import { postgresTextLayerJobs, startTextLayerReader, textLayerPython } from "./student/text-layer.js";
+import { createNeuronBudget } from "./ai-worker/budget.js";
 import type { AppConfig } from "./config.js";
 import { createAuthRouter } from "./auth/router.js";
 import type { MicrosoftAuthClient } from "./auth/types.js";
@@ -99,7 +100,11 @@ export function createApp({
   // On Cloudflare (AI_PROVIDER=cloudflare, 2026-11-08) Gemma reads the scans here too and the PC worker is refused.
   const gemmaOcr = config.ai?.provider === "cloudflare" ? config.ai.cloudflare : null;
   const textLayer = startTextLayerReader(config.ocrWorkerKey ? textLayerPython() : null,
-    config.ocrWorkerKey && databasePool ? postgresTextLayerJobs(databasePool, { afterTranscriptImport }) : null, { gemma: gemmaOcr });
+    config.ocrWorkerKey && databasePool ? postgresTextLayerJobs(databasePool, { afterTranscriptImport }) : null, {
+      gemma: gemmaOcr,
+      // Scans count against the same day's neurons as the AI jobs (ai-worker/budget.ts, migration 059).
+      budget: gemmaOcr ? createNeuronBudget({ limit: config.ai?.dailyNeurons ?? null, db: databasePool }) : null,
+    });
   app.use("/api/worker/transcripts", createTranscriptWorkerRouter(databasePool,config.ocrWorkerKey, {
     afterTranscriptImport, refuseWorker: () => gemmaOcr !== null && textLayer.status() === "ready" }));
   // The AI worker router authenticates before parsing its own body, so it must come before express.json.

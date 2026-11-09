@@ -16,6 +16,7 @@ import { delimiter, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { DatabasePool } from "../db/pool.js";
 import { completeTranscriptJob, type TranscriptImportOptions } from "./transcript-jobs.js";
+import { JOB_RESERVE, type NeuronBudget } from "../ai-worker/budget.js";
 
 /** services/ocr, from src/student and dist/student alike. */
 export const OCR_DIR = fileURLToPath(new URL("../../../../services/ocr/", import.meta.url));
@@ -81,7 +82,15 @@ function run(command: string, args: string[], timeoutMs: number, extraEnv: Recor
  * (or that the text-only pass failed on) is read again with --gemma; that pass always ends the job.
  */
 export type TextLayerRunner = (pdf: Buffer) => Promise<TextLayerOutcome>;
-export function pythonTextLayerRunner(python: string, timeoutMs = 120_000, gemma: GemmaOcr | null = null, gemmaTimeoutMs = 600_000): TextLayerRunner {
+/** The neurons a Gemma OCR run reported (worker.py: result.ocr_settings.usage, or usage beside an error). */
+export function gemmaNeurons(value: unknown): number {
+  const data = (value ?? {}) as { result?: { ocr_settings?: { usage?: { neurons?: unknown } } }; usage?: { neurons?: unknown } };
+  const neurons = Number(data.result?.ocr_settings?.usage?.neurons ?? data.usage?.neurons ?? 0);
+  return Number.isFinite(neurons) && neurons > 0 ? neurons : 0;
+}
+
+export function pythonTextLayerRunner(python: string, timeoutMs = 120_000, gemma: GemmaOcr | null = null, gemmaTimeoutMs = 600_000,
+  budget: NeuronBudget | null = null): TextLayerRunner {
   return async (pdf) => {
     const dir = await mkdtemp(join(tmpdir(), "edupath-text-"));
     try {
@@ -95,11 +104,15 @@ export function pythonTextLayerRunner(python: string, timeoutMs = 120_000, gemma
         if ((await parse("--text-only", timeoutMs)) === 0) outcome = textLayerOutcome(JSON.parse(await readFile(output, "utf8")));
       } catch { outcome = { kind: "fallback" }; }
       if (!gemma || outcome.kind === "result" || outcome.kind === "error") return outcome;
+      // The day's neurons nearly spent (ai-worker/budget.ts): the scan is not sent; the student tries again later.
+      if (budget && !(await budget.allows(JOB_RESERVE))) return { kind: "error", code: "ocr_busy" };
       await rm(output, { force: true });
       const code = await parse("--gemma", gemmaTimeoutMs, { CLOUDFLARE_ACCOUNT_ID: gemma.accountId, CLOUDFLARE_API_TOKEN: gemma.apiToken });
       if (code === null) return { kind: "error", code: "parse_timeout" };
       if (code !== 0) return { kind: "error", code: "ocr_failed" };
-      return gemmaOutcome(JSON.parse(await readFile(output, "utf8")));
+      const answer: unknown = JSON.parse(await readFile(output, "utf8"));
+      await budget?.spend(gemmaNeurons(answer));
+      return gemmaOutcome(answer);
     } catch {
       return gemma ? { kind: "error", code: "ocr_failed" } : { kind: "fallback" };
     } finally {
@@ -206,6 +219,8 @@ export function startTextLayerReader(python: string | null, jobs: TextLayerJobs 
   runner?: TextLayerRunner; probe?: (python: string) => Promise<boolean>; log?: Pick<Console, "warn" | "info">;
   /** Gemma OCR (AI_PROVIDER=cloudflare): this server reads the PDFs that need OCR too. */
   gemma?: GemmaOcr | null;
+  /** The day's neuron budget Gemma OCR counts against (ai-worker/budget.ts). */
+  budget?: NeuronBudget | null;
 } = {}): TextLayerReader {
   const log = options.log ?? console;
   let state: TextLayerStatus = python && jobs ? "checking" : "off";
@@ -214,7 +229,7 @@ export function startTextLayerReader(python: string | null, jobs: TextLayerJobs 
   if (python && jobs) {
     void (options.probe ?? probeTextLayer)(python).then((ok) => {
       if (!ok) { state = "off"; log.warn("[transcript] text-layer reader off: python, PyMuPDF, numpy or OpenCV missing"); return; }
-      reader = createTextLayerReader(jobs, options.runner ?? pythonTextLayerRunner(python, 120_000, options.gemma ?? null), log);
+      reader = createTextLayerReader(jobs, options.runner ?? pythonTextLayerRunner(python, 120_000, options.gemma ?? null, 600_000, options.budget ?? null), log);
       state = "ready";
       log.info("[transcript] text-layer reader ready");
       reader.kick();
