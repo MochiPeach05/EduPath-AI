@@ -8,6 +8,7 @@
  * GET    /threads/:id                → { thread: AssistantThread; messages: AssistantMessage[] }  (oldest first)
  * POST   /threads/:id/messages { content } → { thread: AssistantThread; messages: AssistantMessage[] } (the question + the answer)
  * DELETE /threads/:id                → 204
+ * GET    /search?q=text              → { results: AssistantSearchResult[] }  (Tìm cuộc trò chuyện, 2026-11-09)
  * GET    /messages/:id               → { message: AssistantMessage }
  * POST   /messages/:id/feedback { value: 1 | -1 | null } → { message: AssistantMessage }
  * POST   /messages/:id/retry         → { message: AssistantMessage }                           (a failed answer, queued again)
@@ -77,3 +78,10 @@ export type AssistantMessage = {
  */
 export type AssistantThreadsResponse = { threads: AssistantThread[]; workerOnline: boolean; suggestions?: string[] };
 export type AssistantThreadResponse = { thread: AssistantThread; messages: AssistantMessage[] };
+/**
+ * A conversation whose title or messages hold every word of the search, accents or not, in the list's order (newest
+ * first); snippet: a piece of the message that matched (plain text, about 160 characters, "…" where cut), null when the
+ * title shows every word.
+ */
+export type AssistantSearchResult = { thread: AssistantThread; snippet: string | null };
+export type AssistantSearchResponse = { results: AssistantSearchResult[] };

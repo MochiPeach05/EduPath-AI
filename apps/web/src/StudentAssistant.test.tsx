@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import StudentAssistant, {
   ANSWER_POLL_MS, AssistantView, DeleteConfirm, FALLBACK_SUGGESTIONS, OFFLINE_NOTICE, STARTER_QUESTIONS, assistantApi, assistantErrorMessage, fitWelcome, newestFirst,
+  searchResults, type ThreadSearch,
   offeredQuestions, readSuggestions, threadAuthorTag, threadTimeLabel, watchAnswer,
   type AssistantViewProps,
 } from "./StudentAssistant";
@@ -169,6 +170,56 @@ describe("Trợ lý AI page", () => {
       .toContain('<p class="sr-only" role="status" aria-live="polite" aria-atomic="true"><span>Trợ lý đã trả lời xong câu hỏi của bạn.</span></p>');
     // The answer being written is not a live region.
     expect(conversation([question, message("a1", "assistant", "Bạn", { status: "processing" })])).not.toMatch(/aria-live="polite"[^>]*>[^<]*<span>Bạn/);
+  });
+});
+
+describe("Tìm cuộc trò chuyện", () => {
+  const search = (query: string, server?: Parameters<typeof searchResults>[2]): ThreadSearch => {
+    const words = query.length >= 2 ? query.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "").replace(/đ/g, "d").split(/\s+/).filter(Boolean) : [];
+    return { query, onQuery: () => undefined, words, ...searchResults(threads, words, server) };
+  };
+
+  it("filters the titles at once, then shows the server's matches in titles and messages with the words marked", () => {
+    expect(search("ky nang").results?.map((result) => result.thread.id)).toEqual(["t1"]);
+    expect(search("ky nang").scope).toBe("titles");
+    const found = search("co so du lieu", [{ thread: threads[1], snippet: "Học kỳ tới bạn nên học: Cơ sở dữ liệu nâng cao" }]);
+    expect(found.scope).toBe("all");
+    const html = view({ search: found });
+    const box = html.slice(html.indexOf('as-threads"'), html.indexOf("</section>"));
+    expect(box).toContain('<input id="as-search-wide" type="search" maxLength="100" placeholder="Tìm cuộc trò chuyện…"');
+    expect(box).toContain('aria-label="Xóa nội dung tìm kiếm"');
+    expect(box).toContain('<span class="as-thread-snippet">Học kỳ tới bạn nên học: <mark class="as-hit">Cơ sở dữ liệu</mark> nâng cao</span>');
+    expect(box).toContain("Tìm thấy 1 cuộc trò chuyện.");
+    // The list gives way to the results: the other conversation and its delete button are not shown.
+    expect(box).not.toContain(threads[0].title);
+    expect(box).not.toContain('aria-label="Xóa cuộc trò chuyện: ');
+  });
+
+  it("says when nothing matches, when only the titles could be searched, and keeps the list for a search too short", () => {
+    const none = view({ search: search("đồ án", []) });
+    expect(none).toContain("Không có cuộc trò chuyện nào chứa “đồ án”.");
+    const failed = view({ search: search("ky nang", null) });
+    expect(failed).toContain("Chưa tìm được trong nội dung các cuộc trò chuyện; kết quả chỉ theo tên.");
+    expect(failed).toContain('<mark class="as-hit">kỹ năng</mark>');
+    const short = view({ search: search("k") });
+    expect(short).toContain('class="as-thread-list"');
+    expect(short.match(/aria-label="Xóa cuộc trò chuyện: /g)).toHaveLength(2);
+    // A conversation deleted since the server answered is left out; the list's order is kept.
+    const kept = searchResults(threads, ["mon"], [{ thread: threads[1], snippet: null }, { thread: { ...threads[0], id: "gone" }, snippet: "x" }]);
+    expect(kept.results?.map((result) => result.thread.id)).toEqual(["t2"]);
+    // No box without conversations, and none on narrow screens until the search button is pressed.
+    expect(view({ threads: [], search: search("") })).not.toContain('type="search"');
+    const narrow = view({ search: search("") });
+    expect(narrow).toContain('class="sw-outline as-picker-search" aria-label="Tìm cuộc trò chuyện" title="Tìm cuộc trò chuyện" aria-expanded="false"');
+    expect(narrow).not.toContain("as-search-narrow");
+  });
+
+  it("asks the server with the folded words, encoded", async () => {
+    const fetchMock = stubFetch(() => ({ status: 200, body: { results: [] } }));
+    await assistantApi.search("co so du lieu");
+    expect(fetchMock).toHaveBeenCalledWith("/api/student/assistant/search?q=co%20so%20du%20lieu", expect.objectContaining({ credentials: "include" }));
+    stubFetch(() => ({ status: 200, body: { threads: [] } }));
+    await expect(assistantApi.search("sql")).rejects.toMatchObject({ code: "unknown" });
   });
 });
 

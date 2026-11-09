@@ -3,10 +3,12 @@ import { formatAnswer, safeHttpsUrl } from "./assistant-format";
 import { takeQueuedQuestion } from "./assistant-handoff";
 import {
   ASSISTANT_API, ASSISTANT_MAX_QUESTION,
-  type AssistantMessage, type AssistantMessageStatus, type AssistantSource, type AssistantThread, type AssistantThreadResponse, type AssistantThreadsResponse,
+  type AssistantMessage, type AssistantMessageStatus, type AssistantSearchResponse, type AssistantSearchResult, type AssistantSource, type AssistantThread,
+  type AssistantThreadResponse, type AssistantThreadsResponse,
 } from "./assistant-types";
 import { Icon } from "./student-icons";
 import { isAdvisorView } from "./advisor-view";
+import { MAX_SEARCH_CHARS, matchRanges, searchWords, titleHas } from "./assistant-search";
 import "./student-assistant.css";
 
 // "Trợ lý AI" (STU-CHAT-01..05, 2026-10-28): a chat with EduPath AI about the student's skill gaps, roadmap, recommended
@@ -114,6 +116,8 @@ export const assistantApi = {
   feedback: (id: string, value: 1 | -1 | null) => call<{ message: AssistantMessage }>(`/messages/${path(id)}/feedback`,
     { method: "POST", body: json({ value }) }, hasMessage),
   retry: (id: string) => call<{ message: AssistantMessage }>(`/messages/${path(id)}/retry`, { method: "POST", body: json({}) }, hasMessage),
+  search: (words: string, signal?: AbortSignal) => call<AssistantSearchResponse>(`/search?q=${encodeURIComponent(words)}`, { signal },
+    (body) => Array.isArray(body.results)),
 };
 
 export const isAnswerPending = (status: AssistantMessageStatus) => status === "queued" || status === "processing";
@@ -458,6 +462,114 @@ function useAssistant() {
   };
 }
 
+/* -------------------------------------------------------------------- search */
+
+/** How long typing pauses before the server is asked; the titles are filtered at once. */
+export const SEARCH_DELAY_MS = 300;
+
+/** Tìm cuộc trò chuyện (2026-11-09), shared by the list (wide) and the selector (narrow). */
+export type ThreadSearch = {
+  query: string;
+  onQuery: (query: string) => void;
+  /** The folded words of the search (assistant-search.ts); [] while it is too short to look for. */
+  words: string[];
+  /** null without a search; else the matches, in the list's order. */
+  results: AssistantSearchResult[] | null;
+  /** "titles": the titles so far, the server is being asked; "all": titles and messages; "titles-only": the server did not answer. */
+  scope: "titles" | "all" | "titles-only";
+};
+
+/**
+ * The results of a search from the list and the server's answer (undefined: not answered yet; null: failed). The list's
+ * own copies are shown, in its order, so a conversation deleted meanwhile is left out.
+ */
+export function searchResults(threads: readonly AssistantThread[] | null, words: readonly string[],
+  server: readonly AssistantSearchResult[] | null | undefined): Pick<ThreadSearch, "results" | "scope"> {
+  if (!words.length) return { results: null, scope: "titles" };
+  const list = threads ?? [];
+  if (server) {
+    const pieces = new Map(server.map((result) => [result.thread.id, result.snippet]));
+    return { results: list.filter((thread) => pieces.has(thread.id)).map((thread) => ({ thread, snippet: pieces.get(thread.id) ?? null })), scope: "all" };
+  }
+  return { results: list.filter((thread) => titleHas(thread.title, words)).map((thread) => ({ thread, snippet: null })),
+    scope: server === null ? "titles-only" : "titles" };
+}
+
+function useThreadSearch(threads: AssistantThread[] | null): ThreadSearch {
+  const [query, setQuery] = useState("");
+  const words = searchWords(query);
+  const key = words.join(" ");
+  const [found, setFound] = useState<{ key: string; results: AssistantSearchResult[] | null } | null>(null);
+  useEffect(() => {
+    if (!key) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      assistantApi.search(key, controller.signal).then(
+        (data) => { if (!controller.signal.aborted) setFound({ key, results: data.results }); },
+        () => { if (!controller.signal.aborted) setFound({ key, results: null }); });
+    }, SEARCH_DELAY_MS);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [key]);
+  return { query, onQuery: setQuery, words, ...searchResults(threads, words, found?.key === key ? found.results : undefined) };
+}
+
+/** The text with the words of a search marked. */
+export function Highlight({ text, words }: { text: string; words: readonly string[] }) {
+  const ranges = matchRanges(text, words);
+  if (!ranges.length) return <>{text}</>;
+  const parts: ReactNode[] = [];
+  let at = 0;
+  ranges.forEach(([start, end], index) => {
+    if (start > at) parts.push(text.slice(at, start));
+    parts.push(<mark key={index} className="as-hit">{text.slice(start, end)}</mark>);
+    at = end;
+  });
+  if (at < text.length) parts.push(text.slice(at));
+  return <>{parts}</>;
+}
+
+function SearchBox({ search, id, autoFocus = false, onEscape }: { search: ThreadSearch; id: string; autoFocus?: boolean; onEscape?: () => void }) {
+  return <div className="as-search" role="search">
+    <label htmlFor={id} className="sr-only">Tìm cuộc trò chuyện</label>
+    <Icon name="search" />
+    <input id={id} type="search" value={search.query} maxLength={MAX_SEARCH_CHARS} placeholder="Tìm cuộc trò chuyện…" autoComplete="off" spellCheck={false}
+      autoFocus={autoFocus} onChange={(event) => search.onQuery(event.target.value)}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        event.preventDefault();
+        if (search.query) search.onQuery(""); else onEscape?.();
+      }} />
+    {search.query && <button type="button" className="as-search-clear" aria-label="Xóa nội dung tìm kiếm" title="Xóa nội dung tìm kiếm"
+      onClick={() => { search.onQuery(""); document.getElementById(id)?.focus(); }}><Icon name="close" /></button>}
+  </div>;
+}
+
+function SearchResults({ search, selectedId, now, onSelect }: { search: ThreadSearch; selectedId: string | null; now: Date; onSelect: (id: string) => void }) {
+  const results = search.results ?? [];
+  const asked = search.query.trim();
+  const advisorView = isAdvisorView();
+  return <div className="as-search-results">
+    <p className="sr-only" role="status" aria-live="polite">{search.scope === "titles" ? ""
+      : results.length ? `Tìm thấy ${results.length} cuộc trò chuyện.` : "Không tìm thấy cuộc trò chuyện nào."}</p>
+    {results.length > 0 && <ul className="as-thread-list" aria-label={`Kết quả tìm “${asked}”`}>
+      {results.map(({ thread, snippet }) => {
+        const current = thread.id === selectedId;
+        return <li key={thread.id} className={`as-thread${current ? " is-current" : ""}`}>
+          <button type="button" className="as-thread-open" aria-current={current ? "true" : undefined} onClick={() => onSelect(thread.id)}>
+            <span className="as-thread-title"><Highlight text={thread.title} words={search.words} /></span>
+            {snippet && <span className="as-thread-snippet"><Highlight text={snippet} words={search.words} /></span>}
+            {thread.byAdvisor && !advisorView && <span className="as-thread-tag">{threadAuthorTag(thread)}</span>}
+            <time className="as-thread-time" dateTime={thread.updatedAt}>{threadTimeLabel(thread.updatedAt, now)}</time>
+          </button>
+        </li>;
+      })}
+    </ul>}
+    {!results.length && <p className="as-list-note">{search.scope === "titles" ? "Đang tìm trong các cuộc trò chuyện…"
+      : `Không có cuộc trò chuyện nào chứa “${asked}”.`}</p>}
+    {search.scope === "titles-only" && <p className="as-list-note">Chưa tìm được trong nội dung các cuộc trò chuyện; kết quả chỉ theo tên.</p>}
+  </div>;
+}
+
 /* ---------------------------------------------------------------------- view */
 
 /** The thumbs of the feedback buttons, in the line style of ui-icon.tsx; down is up turned over. */
@@ -510,6 +622,8 @@ type ListProps = {
   onAskDelete: (id: string, opener: HTMLElement) => void;
   onCancelDelete: () => void;
   onDelete: (id: string) => Promise<string | null>;
+  /** Tìm cuộc trò chuyện; none in tests of other parts. */
+  search?: ThreadSearch;
 };
 
 function ListState({ threads, listError, onReloadList }: Pick<ListProps, "threads" | "listError" | "onReloadList">) {
@@ -530,8 +644,9 @@ function ThreadList(props: ListProps) {
   return <section className="sw-panel as-threads" aria-labelledby="as-threads-title">
     <h2 id="as-threads-title">Cuộc trò chuyện</h2>
     <button type="button" className="sw-primary as-new" onClick={props.onNew}><Icon name="plus" />Cuộc trò chuyện mới</button>
-    <ListState {...props} />
-    {threads && threads.length > 0 && <ul className="as-thread-list">
+    {props.search && threads && threads.length > 0 && <SearchBox search={props.search} id="as-search-wide" />}
+    {props.search?.results ? <SearchResults search={props.search} selectedId={selectedId} now={now} onSelect={props.onSelect} /> : <ListState {...props} />}
+    {!props.search?.results && threads && threads.length > 0 && <ul className="as-thread-list">
       {threads.map((thread) => {
         const current = thread.id === selectedId;
         // The question goes under the conversation it deletes, which stays in view; Hủy gives focus back to its button.
@@ -557,6 +672,9 @@ function ThreadPicker(props: ListProps) {
   const { threads, selectedId, confirming, now } = props;
   const advisorView = isAdvisorView();
   const selected = threads?.find((thread) => thread.id === selectedId) ?? null;
+  const [searching, setSearching] = useState(false);
+  const search = props.search;
+  const closeSearch = () => { setSearching(false); search?.onQuery(""); };
   return <div className="as-picker">
     <div className="as-picker-row">
       <label className="as-picker-select">
@@ -567,10 +685,16 @@ function ThreadPicker(props: ListProps) {
           {threads?.map((thread) => <option key={thread.id} value={thread.id}>{thread.title} · {threadTimeLabel(thread.updatedAt, now)}{thread.byAdvisor && !advisorView ? ` · ${threadAuthorTag(thread)}` : ""}</option>)}
         </select>
       </label>
+      {search && threads && threads.length > 0 && <button type="button" className="sw-outline as-picker-search" aria-label="Tìm cuộc trò chuyện"
+        title="Tìm cuộc trò chuyện" aria-expanded={searching} onClick={() => (searching ? closeSearch() : setSearching(true))}><Icon name="search" /></button>}
       {selected && !advisorView && <button type="button" className="sw-outline as-picker-delete" aria-label={`Xóa cuộc trò chuyện: ${selected.title}`} title="Xóa cuộc trò chuyện"
         aria-expanded={confirming === selected.id} onClick={(event) => props.onAskDelete(selected.id, event.currentTarget)}><Icon name="trash" /></button>}
       <button type="button" className="sw-primary as-picker-new" onClick={props.onNew}><Icon name="plus" /><span>Cuộc trò chuyện mới</span></button>
     </div>
+    {searching && search && <div className="as-picker-find">
+      <SearchBox search={search} id="as-search-narrow" autoFocus onEscape={closeSearch} />
+      {search.results && <SearchResults search={search} selectedId={selectedId} now={now} onSelect={(id) => { closeSearch(); props.onSelect(id); }} />}
+    </div>}
     {selected && confirming === selected.id && <DeleteConfirm onConfirm={() => props.onDelete(selected.id)} onCancel={props.onCancelDelete} />}
     {!threads && <ListState {...props} />}
   </div>;
@@ -829,6 +953,8 @@ export type AssistantViewProps = {
   onRate: (message: AssistantMessage, value: 1 | -1) => void;
   actionError: ActionError | null;
   announcement: Announcement;
+  /** Tìm cuộc trò chuyện (useThreadSearch); absent: no search box. */
+  search?: ThreadSearch;
   /** The clock of the dates in the list (tests). */
   now?: Date;
 };
@@ -868,7 +994,7 @@ export function AssistantView(props: AssistantViewProps) {
   }, [messages, count, selectedId]);
 
   const listProps: ListProps = {
-    threads, listError: props.listError, onReloadList: props.onReloadList, selectedId, confirming, now,
+    threads, listError: props.listError, onReloadList: props.onReloadList, selectedId, confirming, now, ...(props.search ? { search: props.search } : {}),
     onSelect: (id) => { setConfirming(null); props.onSelect(id); },
     onNew: () => { setConfirming(null); props.onSelect(null); input.current?.focus(); },
     onAskDelete: (id, opener) => { deleteOpener.current = opener; setConfirming(id); },
@@ -942,5 +1068,6 @@ function useQueuedQuestion({ threads, listError, selectedId, onSelect, onSend }:
 export default function StudentAssistant() {
   const assistant = useAssistant();
   useQueuedQuestion(assistant);
-  return <AssistantView {...assistant} />;
+  const search = useThreadSearch(assistant.threads);
+  return <AssistantView {...assistant} search={search} />;
 }

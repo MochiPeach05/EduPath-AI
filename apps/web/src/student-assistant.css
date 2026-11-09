@@ -44,6 +44,22 @@
 .as-thread-delete { display: inline-grid; flex: none; place-items: center; width: 32px; height: 32px; margin-right: 4px; border-radius: 6px; background: none; color: #98a1b0; }
 .as-thread-delete:hover { background: #fff; color: var(--sw-red); }
 .as-thread-delete svg { width: 16px; height: 16px; }
+/* Tìm cuộc trò chuyện (2026-11-09): a box under Cuộc trò chuyện mới; the words found are marked in the titles and in the
+   piece of the message that matched. */
+.as-search { position: relative; display: flex; align-items: center; min-width: 0; }
+.as-search > .ep-icon { position: absolute; left: 11px; width: 16px; height: 16px; color: var(--sw-muted); pointer-events: none; }
+.sw-shell .as-search input { width: 100%; min-width: 0; min-height: 40px; padding: 8px 38px 8px 34px; border: 1px solid #d7dce3; border-radius: 8px; background: #fff; color: var(--sw-ink); font-size: 13.5px; }
+.sw-shell .as-search input::placeholder { color: #858b96; }
+.sw-shell .as-search input:hover { border-color: var(--ep-control-border-hover); }
+.sw-shell .as-search input:focus-visible { border-color: var(--ep-control-focus); outline: 2px solid var(--ep-control-focus); outline-offset: 1px; }
+.as-search input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+.sw-shell .as-search-clear { position: absolute; right: 4px; display: inline-grid; place-items: center; width: 32px; height: 32px; border-radius: 6px; background: none; color: #7b8190; }
+.sw-shell .as-search-clear:hover { background: var(--ep-control-soft); color: var(--sw-red); }
+.as-search-clear .ep-icon { width: 15px; height: 15px; }
+.as-search-results { display: flex; flex: 1; flex-direction: column; gap: 6px; min-height: 0; }
+.as-thread-snippet { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; color: #5f6573; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.as-hit { padding: 0 1px; border-radius: 3px; background: #fdecc8; color: inherit; }
+
 /* The list scrolls, so the focus ring is drawn inside the buttons where it cannot be cut off. */
 .as-thread-list :is(button, a):focus-visible { outline-offset: -3px; }
 
@@ -59,6 +75,11 @@
 .as-picker select { width: 100%; min-height: 44px; padding: 8px 12px; border: 1px solid #d7dce3; border-radius: 8px; background: #fff; color: var(--sw-ink); font-size: 14px; font-weight: 600; text-overflow: ellipsis; }
 .as-page .as-picker-delete { flex: none; width: 44px; padding: 0; color: var(--sw-red); }
 .as-picker-new { flex: none; }
+.as-page .as-picker-search { flex: none; width: 44px; padding: 0; }
+/* The search opens under the selector, its results in a box of their own that scrolls. */
+.as-picker-find { display: grid; gap: 8px; min-width: 0; }
+.as-picker-find .as-search-results { max-height: min(50vh, 360px); padding: 6px; overflow-y: auto; border: 1px solid #e3e6eb; border-radius: 8px; background: #fff; }
+.as-picker-find .as-thread-list { overflow: visible; }
 
 /* ---- Chat ---- */
 .as-chat { grid-area: chat; display: flex; flex-direction: column; min-height: 0; padding: 0; overflow: hidden; }

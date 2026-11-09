@@ -15,6 +15,7 @@ import {
 } from "./chat.js";
 import { MAX_QUESTION_CHARS } from "./protocol.js";
 import { readReadiness, suggestedQuestions } from "./readiness.js";
+import { MAX_SEARCH_CHARS, searchThreads } from "./thread-search.js";
 import { notifyAssistantWork } from "./wakeup.js";
 
 type AssistantRouterOptions = {
@@ -29,6 +30,8 @@ const emptyObject = z.object({}).strict();
 /** The page checks the length too; the server counts characters again after trimming (askQuestion). */
 const questionBody = z.object({ content: z.string().max(MAX_QUESTION_CHARS * 4) }).strict();
 const feedbackBody = z.object({ value: z.union([z.literal(1), z.literal(-1), z.null()]) }).strict();
+/** GET /search?q=: Tìm cuộc trò chuyện (thread-search.ts); a longer search is cut to MAX_SEARCH_CHARS there. */
+const searchQuery = z.object({ q: z.string().max(MAX_SEARCH_CHARS * 4) }).strict();
 
 async function inTransaction<T>(pool: DatabasePool, work: (client: PoolClient) => Promise<T>): Promise<T> {
   const client = await pool.connect();
@@ -77,6 +80,12 @@ export function createAssistantRouter(pool: DatabasePool | undefined, webOrigin:
     // The questions shown above the input: setting up first (import the transcript…), then the student's own results.
     const suggestions = suggestedQuestions(await readReadiness(pool!, userId));
     res.json({ threads: threads.map(presentThread), workerOnline: await workerOnline(), suggestions });
+  });
+
+  router.get("/search", async (req, res) => {
+    const { q } = searchQuery.parse(req.query);
+    const found = await searchThreads(pool!, studentUser(req).userId, q.trim(), advisorOf(req));
+    res.json({ results: found.map(({ thread, snippet }) => ({ thread: presentThread(thread), snippet })) });
   });
 
   /** A question answered at once (readiness.ts) leaves nothing for the worker. */

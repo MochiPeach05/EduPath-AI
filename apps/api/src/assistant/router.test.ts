@@ -14,8 +14,10 @@ vi.mock("./chat.js", async (importActual) => {
   };
 });
 vi.mock("./wakeup.js", () => ({ notifyAssistantWork: vi.fn() }));
+vi.mock("./thread-search.js", async (importActual) => ({ ...(await importActual<typeof import("./thread-search.js")>()), searchThreads: vi.fn() }));
 const chat = await import("./chat.js");
 const { notifyAssistantWork } = await import("./wakeup.js");
+const { searchThreads } = await import("./thread-search.js");
 const { createAssistantRouter } = await import("./router.js");
 
 const studentId = "11111111-1111-4111-8111-111111111111";
@@ -59,6 +61,27 @@ function setup(options: { enabled?: boolean; worker?: { online: boolean; kinds: 
 }
 
 afterEach(() => vi.clearAllMocks());
+
+describe("Tìm cuộc trò chuyện (GET /search)", () => {
+  it("answers the matching conversations with their pieces of text, in the student's own list or the advisor's", async () => {
+    vi.mocked(searchThreads).mockResolvedValue([{ thread, snippet: "…học **Cơ sở dữ liệu**…" }]);
+    const response = await request(setup().app).get("/assistant/search").query({ q: "  cơ sở dữ liệu " }).expect(200);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.body).toEqual({ results: [{ thread: { id: threadId, title: thread.title, createdAt: "2026-10-28T01:00:00.000Z",
+      updatedAt: "2026-10-28T01:00:00.000Z", byAdvisor: false, createdByRole: null }, snippet: "…học **Cơ sở dữ liệu**…" }] });
+    expect(vi.mocked(searchThreads).mock.calls[0]!.slice(1)).toEqual([studentId, "cơ sở dữ liệu", null]);
+    await request(setup({ acting: true }).app).get("/assistant/search").query({ q: "sql" }).expect(200);
+    expect(vi.mocked(searchThreads).mock.calls[1]!.slice(1)).toEqual([studentId, "sql", advisorId]);
+  });
+
+  it("refuses a search that is missing, repeated or far too long, and needs a signed-in student", async () => {
+    await request(setup().app).get("/assistant/search").expect(400);
+    await request(setup().app).get("/assistant/search?q=a&q=b").expect(400);
+    await request(setup().app).get("/assistant/search").query({ q: "x".repeat(401) }).expect(400);
+    await request(setup({ user: null }).app).get("/assistant/search").query({ q: "sql" }).expect(401);
+    expect(searchThreads).not.toHaveBeenCalled();
+  });
+});
 
 describe("assistant student API", () => {
   it("needs a signed-in student and the web origin for writes", async () => {

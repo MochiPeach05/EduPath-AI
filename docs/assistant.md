@@ -231,6 +231,18 @@ Bảng `ai_knowledge_chunks` (migration 055) chỉ chứa dữ liệu danh mục
 - Đoạn chưa có embedding vẫn tìm được theo từ.
 - Kho có vài nghìn đoạn, nên tìm chính xác trong bộ nhớ là đủ nhanh và không cần pgvector. Postgres local không có pgvector; Supabase có bản 0.8.2 nếu sau này cần.
 
+## Tìm cuộc trò chuyện (9/11/2026)
+Theo yêu cầu của người dùng: "Thêm một chức năng tìm kiếm cuộc hội thoại nữa".
+- **Ô "Tìm cuộc trò chuyện…"** nằm dưới nút "Cuộc trò chuyện mới". Dưới 900px, nó mở bằng nút kính lúp cạnh ô chọn cuộc trò chuyện.
+- **Cách tìm:**
+  - Tìm theo tên cuộc trò chuyện, câu hỏi và câu trả lời đã xong; không phân biệt hoa thường, có dấu hay không dấu ("dieu kien" tìm ra "Điều kiện").
+  - Một cuộc trò chuyện khớp khi có đủ mọi từ, ở tên hoặc ở bất kỳ tin nhắn nào; cần ít nhất 2 chữ.
+- **Kết quả:**
+  - Tên được lọc ngay khi gõ; sau 300 ms máy chủ trả thêm các cuộc trò chuyện khớp trong nội dung (`GET /search?q=`, `thread-search.ts`).
+  - Khi tên chưa có đủ các từ, kết quả kèm một đoạn trích khoảng 160 ký tự của tin nhắn khớp. Từ khớp được tô màu.
+  - Esc hoặc nút × xóa nội dung tìm kiếm, danh sách trở lại.
+- **Phạm vi:** chỉ 50 cuộc trò chuyện mà danh sách hiện. Cố vấn học tập chỉ tìm trong các cuộc trò chuyện mình tạo. Tìm kiếm chỉ đọc dữ liệu, không ghi lại từ khóa.
+
 ## Lưu trữ, quyền riêng tư
 - **Bảng:**
   - `stu_chat_threads`, `stu_chat_messages`: hội thoại;
@@ -269,9 +281,9 @@ Người dùng (30/10): "Trợ lý AI trả lời “2.45”" và "Học kỳ đ
 - **API** (`apps/api/src/assistant/`):
   - `protocol.ts` (giao thức worker), `intent.ts`, `facts.ts`, `transcript.ts` (nguồn Bảng điểm), `prompt.ts` (assistant-v7), `validate.ts` (kiểm tra câu trả lời, gộp số nguồn);
   - `readiness.ts` (trả lời ngay khi chưa có kết quả, câu hỏi gợi ý);
-  - `chat.ts` (hội thoại và job), `router.ts` (API cho sinh viên), `wakeup.ts`;
+  - `chat.ts` (hội thoại và job), `router.ts` (API cho sinh viên), `thread-search.ts` (Tìm cuộc trò chuyện), `wakeup.ts`;
   - `knowledge.ts`, `knowledge-jobs.ts`, `guides.ts`, `search.ts`, `learning-resources.json`.
 - **Worker:** `apps/api/src/ai-worker/`.
-- **Web:** `apps/web/src/StudentAssistant.tsx`, `assistant-format.ts`, `assistant-types.ts`.
+- **Web:** `apps/web/src/StudentAssistant.tsx`, `assistant-format.ts`, `assistant-types.ts`, `assistant-search.ts`.
 - **Kiểm tra link tài nguyên:** `node scripts/check-learning-resources.mjs`.
 - **Đánh giá chất lượng:** `docs/assistant-evaluation.md`.
