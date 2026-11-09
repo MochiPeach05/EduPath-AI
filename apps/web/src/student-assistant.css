@@ -199,15 +199,13 @@ span.as-source:focus { outline: none; }
   .sw-shell .as-suggestion { min-height: 34px; white-space: nowrap; }
 }
 
-/* A short window keeps the questions in view: the welcome icon goes, as on a phone. */
-@media (max-height: 760px) {
-  .as-welcome-icon { display: none; }
-  .as-scroll:has(.as-welcome) { padding-top: 16px; padding-bottom: 12px; }
-}
-/* Very short: the heading and the questions only. */
-@media (max-height: 680px) {
-  .as-welcome > p { display: none; }
-}
+/* The welcome measures the chat, not the window (fitWelcome in StudentAssistant.tsx; user 2026-11-09: the AI icon had
+   gone from a 1536×696 window with room for it). The icon shows whenever the chat holds it with the questions, and goes
+   only where it would bring a scrollbar (a short window, or the notice above the chat that Trợ lý AI is paused); then
+   the lead sentence too. */
+.as-scroll:has(.as-welcome) { padding-top: 16px; padding-bottom: 12px; }
+.as-welcome:is([data-fit="no-icon"], [data-fit="bare"]) .as-welcome-icon { display: none; }
+.as-welcome[data-fit="bare"] > p { display: none; }
 @media (max-width: 600px) {
   .as-starters { grid-template-columns: minmax(0, 1fr); }
   .as-starters li:last-child:nth-child(odd) { width: 100%; }

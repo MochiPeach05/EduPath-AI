@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import StudentAssistant, {
-  ANSWER_POLL_MS, AssistantView, DeleteConfirm, FALLBACK_SUGGESTIONS, OFFLINE_NOTICE, STARTER_QUESTIONS, assistantApi, assistantErrorMessage, newestFirst,
+  ANSWER_POLL_MS, AssistantView, DeleteConfirm, FALLBACK_SUGGESTIONS, OFFLINE_NOTICE, STARTER_QUESTIONS, assistantApi, assistantErrorMessage, fitWelcome, newestFirst,
   offeredQuestions, readSuggestions, threadAuthorTag, threadTimeLabel, watchAnswer,
   type AssistantViewProps,
 } from "./StudentAssistant";
@@ -169,6 +169,24 @@ describe("Trợ lý AI page", () => {
       .toContain('<p class="sr-only" role="status" aria-live="polite" aria-atomic="true"><span>Trợ lý đã trả lời xong câu hỏi của bạn.</span></p>');
     // The answer being written is not a live region.
     expect(conversation([question, message("a1", "assistant", "Bạn", { status: "processing" })])).not.toMatch(/aria-live="polite"[^>]*>[^<]*<span>Bạn/);
+  });
+});
+
+describe("the welcome in the chat", () => {
+  // The chat measures 360px; the welcome needs 400 with the AI icon, 352 without it and 300 without the lead sentence too.
+  const fits = (heights: Record<string, number>, clientHeight = 360) => {
+    const welcome = { dataset: {} as DOMStringMap } as HTMLElement;
+    const scroll = { clientHeight, get scrollHeight() { return heights[welcome.dataset.fit ?? "full"]; } } as unknown as HTMLElement;
+    return fitWelcome(welcome, scroll);
+  };
+  const needs = { full: 400, "no-icon": 352, bare: 300 };
+  it("keeps the AI icon whenever the chat holds it, and drops it, then the lead sentence, only to avoid a scrollbar", () => {
+    expect(fits(needs, 420)).toBe("full");
+    expect(fits(needs, 400)).toBe("full");
+    expect(fits(needs, 360)).toBe("no-icon");
+    expect(fits(needs, 320)).toBe("bare");
+    // Too short even for the questions alone: the chat scrolls, with the questions first.
+    expect(fits(needs, 200)).toBe("bare");
   });
 });
 

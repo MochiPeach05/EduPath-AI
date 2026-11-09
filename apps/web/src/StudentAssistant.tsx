@@ -576,8 +576,40 @@ function ThreadPicker(props: ListProps) {
   </div>;
 }
 
+/**
+ * How much of the welcome the chat holds without a scrollbar (user 2026-11-09: the AI icon had gone from a 1536×696 window
+ * that had room for it): all of it, else without the AI icon, else without the lead sentence too. Measured on the chat
+ * itself, so a short window and the notice that Trợ lý AI is paused both count, whatever the width makes the questions
+ * wrap to. Sets data-fit on the welcome ("full", "no-icon", "bare"; student-assistant.css hides by it).
+ */
+export function fitWelcome(welcome: HTMLElement, scroll: HTMLElement): string {
+  const overflows = () => scroll.scrollHeight > scroll.clientHeight + 1;
+  for (const fit of ["full", "no-icon", "bare"]) {
+    welcome.dataset.fit = fit;
+    if (!overflows()) break;
+  }
+  return welcome.dataset.fit ?? "full";
+}
+
 function Welcome({ onAsk, busy }: { onAsk: (question: string) => void; busy: boolean }) {
-  return <div className="as-welcome">
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    const welcome = ref.current;
+    const scroll = welcome?.closest<HTMLElement>(".as-scroll");
+    if (!welcome || !scroll) return;
+    const fit = () => { fitWelcome(welcome, scroll); };
+    fit();
+    // The chat's own size changes with the window and with the notice above it; the welcome's with the fonts.
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      observer = new ResizeObserver(fit);
+      observer.observe(scroll);
+    }
+    let live = true;
+    void document.fonts?.ready.then(() => { if (live) fit(); });
+    return () => { live = false; observer?.disconnect(); };
+  }, []);
+  return <div className="as-welcome" ref={ref}>
     <span className="as-welcome-icon" aria-hidden="true"><Icon name="spark" /></span>
     <h2>Chào bạn, hôm nay bạn muốn hỏi gì?</h2>
     <p>Trợ lý AI trả lời dựa trên hồ sơ, kết quả đánh giá năng lực và lộ trình học tập của bạn. Bạn có thể chọn một câu hỏi gợi ý hoặc tự nhập câu hỏi bên dưới.</p>
