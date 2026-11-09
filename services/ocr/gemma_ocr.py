@@ -1,9 +1,10 @@
 """Gemma 4 on Cloudflare Workers AI as the OCR of scanned VLU transcripts (user 2026-11-08: "chuyển ocr thành gemma luôn").
 
-A page without a usable text layer is rendered at 200 DPI in three overlapping horizontal strips. Gemma reads each strip
-into JSON items (term titles, course rows, summary boxes, section titles, the column header), all strips at once. The items
-then become the same eight-cell rows the text layer and PaddleOCR give, so test_ocr.parse_pages and every check after it
-(codes, scores, letters, the printed term GPA and credits against the rows) stay as they are.
+A page without a usable text layer is rendered at 200 DPI, cut down to its ruled table and cut into strips on the
+table's borders. Gemma reads each strip into JSON items (term titles, course rows, summary boxes, section titles, the
+column header), all strips at once; every summary box is then read a second time on its own and settled line by line
+(check_boxes). The items become the same eight-cell rows the text layer and PaddleOCR give, so test_ocr.parse_pages and
+every check after it (codes, scores, letters, the printed term GPA and credits against the rows) stay as they are.
 
 Runs on the API server (apps/api/src/student/text-layer.ts, worker.py --parse --gemma) with CLOUDFLARE_ACCOUNT_ID and
 CLOUDFLARE_API_TOKEN in its environment; GEMMA_OCR_URL / GEMMA_OCR_MODEL point it at another OpenAI-compatible server
@@ -85,6 +86,13 @@ Quy tắc:
 - Bỏ qua tiêu đề trang, thông tin sinh viên, chữ ký.
 - Không thêm dòng nào không có trong ảnh. Ảnh không có mục nào thì trả về {"items": []}.
 Chỉ trả về JSON {"items": [...]}."""
+# The second reading of a summary box, from the image of the box alone (check_boxes).
+BOX_PROMPT = """Ảnh là khối tổng kết một học kỳ trong bảng điểm sinh viên Trường Đại học Văn Lang, thường gồm hai ô đặt cạnh nhau. Chép MỌI dòng của CẢ HAI ô, ô bên trái trước, từ trên xuống, mỗi dòng một chuỗi "Nhãn: giá trị" đúng từng ký tự như in (bỏ dấu gạch đầu dòng).
+- Số giữ nguyên dấu chấm hoặc dấu phẩy như in. Giá trị bằng chữ (Xuất sắc, Giỏi, Khá, Trung bình, Yếu, Kém, KXL...) chép nguyên văn.
+- Dòng in nhãn mà không có giá trị thì ghi "Nhãn:" và để trống sau dấu hai chấm, không ghi null.
+- Không sửa, không đoán, không tự tính, không thêm dòng không có trong ảnh.
+Chỉ trả về JSON {"lines": [...]}."""
+BOX_SCHEMA = {'type': 'object', 'properties': {'lines': {'type': 'array', 'items': {'type': 'string'}}}, 'required': ['lines']}
 
 
 class GemmaOcrError(RuntimeError):
@@ -132,8 +140,9 @@ def deskew(image, limit=1.5, step=0.1):
 def table_image(page, dpi=DPI):
     """The page as an RGB array cut down to the ruled transcript table, so only the table (terms, course rows, summary
     boxes) ever leaves the server: no title, page header or footer, nor anything printed around the table; and the
-    table's horizontal borders in that array (where a strip may end without cutting a row). A scan is straightened
-    first, as for PaddleOCR. No table grid: the page is not sent."""
+    table's horizontal borders in that array (where a strip may end without cutting a row), the middles of its course
+    rows, summary boxes and titles, and the (top, bottom) of its summary boxes. A scan is straightened first, as for
+    PaddleOCR. No table grid: the page is not sent."""
     import numpy as np
     from ppocr_table import rectify, table_bands
     from test_ocr import is_scanned
@@ -159,12 +168,13 @@ def table_image(page, dpi=DPI):
     rows = [((band['top'] + band['bottom']) / 2 - top) for band in bands
             if len(band['cells']) == 8 and band['bottom'] - band['top'] < dpi * 0.75]
     # Tall bands: the summary boxes (two cells of four or five lines each), to check that both cells were read.
-    boxes = [((band['top'] + band['bottom']) / 2 - top) for band in bands if band['bottom'] - band['top'] >= dpi * 0.75]
+    spans = [(band['top'] - top, band['bottom'] - top) for band in bands if band['bottom'] - band['top'] >= dpi * 0.75]
+    boxes = [(upper + lower) / 2 for upper, lower in spans]
     # Low bands of one cell across the table: the term titles (and the "Điểm bảo lưu" title), so a title Gemma left out is
     # read again instead of guessed (user test 2026-11-08: a real transcript that skips summer terms put rows in the wrong term).
     titles = [((band['top'] + band['bottom']) / 2 - top) for band in bands
               if len(band['cells']) == 1 and band['bottom'] - band['top'] < dpi * 0.75]
-    return np.ascontiguousarray(image[top:bottom, left:right]), borders, rows, boxes, titles
+    return np.ascontiguousarray(image[top:bottom, left:right]), borders, rows, boxes, titles, spans
 
 
 def strip_cuts(height, borders, target):
@@ -183,22 +193,46 @@ def strip_cuts(height, borders, target):
     return cuts
 
 
-def strip_jobs(page, dpi=DPI, pixels=IMAGE_PIXELS):
-    """[(JPEG, eight-cell rows, summary boxes, term titles in it)] of the page's table (table_image) in strips cut on the table's
-    borders, each small enough (IMAGE_PIXELS with its white margin) that Gemma reads it at full resolution (quality 90).
-    The first strip of a page may hold the column header among its eight-cell rows."""
+def jpeg_bytes(image):
     import cv2
-    image, borders, rows, boxes, titles = table_image(page, dpi)
+    ok, jpeg = cv2.imencode('.jpg', cv2.cvtColor(image, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 90])
+    if not ok:
+        raise GemmaOcrError('image_failed')
+    return jpeg.tobytes()
+
+
+# The larger image of a summary box, for a third reading that is not the second one again (the same image at temperature
+# 0 gives the same answer); still under IMAGE_PIXELS for a box of the full table width.
+BOX_SCALE = 1.2
+
+
+def box_images(image, span, dpi=DPI):
+    """(JPEG of one summary box alone, JPEG of it BOX_SCALE times larger), each with a white margin."""
+    import cv2
+    top, bottom = span
+    margin = int(dpi * 0.03)
+    box = image[max(0, top - margin):min(image.shape[0], bottom + margin)]
+    pad = int(dpi * 0.1)
+    larger = cv2.resize(box, None, fx=BOX_SCALE, fy=BOX_SCALE, interpolation=cv2.INTER_CUBIC)
+    return tuple(jpeg_bytes(cv2.copyMakeBorder(picture, pad, pad, pad, pad, cv2.BORDER_CONSTANT, value=(255, 255, 255)))
+                 for picture in (box, larger))
+
+
+def strip_jobs(page, dpi=DPI, pixels=IMAGE_PIXELS):
+    """[(JPEG, eight-cell rows, summary boxes, term titles in it, [box_images of its summary boxes])] of the page's table
+    (table_image) in strips cut on the table's borders, each small enough (IMAGE_PIXELS with its white margin) that Gemma
+    reads it at full resolution (quality 90). The first strip of a page may hold the column header among its eight-cell
+    rows."""
+    import cv2
+    image, borders, rows, boxes, titles, spans = table_image(page, dpi)
     pad = int(dpi * 0.1)
     target = max(dpi * 0.5, pixels / image.shape[1] - 2 * pad)
     jobs = []
     for top, bottom in strip_cuts(image.shape[0], borders, target):
         strip = cv2.copyMakeBorder(image[top:bottom], pad, pad, 0, 0, cv2.BORDER_CONSTANT, value=(255, 255, 255))
-        ok, jpeg = cv2.imencode('.jpg', cv2.cvtColor(strip, cv2.COLOR_RGB2BGR), [cv2.IMWRITE_JPEG_QUALITY, 90])
-        if not ok:
-            raise GemmaOcrError('image_failed')
         count = lambda marks: sum(1 for y in marks if top <= y < bottom)  # noqa: E731
-        jobs.append((jpeg.tobytes(), count(rows), count(boxes), count(titles)))
+        crops = [box_images(image, span, dpi) for span in spans if top <= (span[0] + span[1]) / 2 < bottom]
+        jobs.append((jpeg_bytes(strip), count(rows), count(boxes), count(titles), crops))
     return jobs
 
 
@@ -216,23 +250,78 @@ RETRIES = 2
 BOX_LINES = 7
 
 
-def read_checked(read, jpeg, rows, first, boxes=0, titles=0):
+def read_checked(read, jpeg, rows, first, boxes=0, titles=0, crops=(), read_box=None):
     """Gemma's items for a strip, read again while they miss a course row (the first strip of a page may hold the
     column header, one eight-cell row that is no course) or a summary box came back with fewer than BOX_LINES known
     lines (user test 2026-11-08 on real transcripts: the left cell of a box was now and then left out). The answer with
-    the most course rows, then the most summary lines, is kept."""
+    the most course rows, then the most summary lines, is kept; its summary boxes are then checked against the box
+    images (crops) read on their own by read_box (check_boxes)."""
     best = None
     for _ in range(RETRIES + 1):
         items = read(jpeg)
         courses = sum(1 for item in items if item.get('kind') == 'course')
-        lines = sum(len(summary_values(item)) for item in items if item.get('kind') == 'summary')
+        lines = sum(len(summary_pairs(item)) for item in items if item.get('kind') == 'summary')
         heads = sum(1 for item in items if item.get('kind') in ('term', 'section'))
         score = (courses, min(heads, titles), lines)
         if best is None or score > best[0]:
             best = (score, items)
         if courses >= rows - (1 if first else 0) and heads >= titles and lines >= boxes * BOX_LINES:
             break
-    return best[1]
+    return check_boxes(best[1], crops, read_box) if crops and read_box else best[1]
+
+
+def canonical(value):
+    """A summary value as two readings are compared: no case, accents or spaces, a comma is a dot ('3,50' = '3.50')."""
+    return folded(value).replace(' ', '').replace(',', '.')
+
+
+def check_boxes(items, crops, read_box):
+    """A strip's items with each summary box read a second time from its image alone (crops: box_images, top to bottom)
+    and settled line by line: a value both readings agree on is kept (an empty value too); otherwise a third reading of
+    the larger image decides by majority, and with no majority the box's own reading is kept and the page says
+    summary_unsure. Boxes Gemma's strip reading does not pair one to one with the images are left as read and the page
+    says summary_unchecked. (User 2026-11-09: "Vẫn chưa 100% là vẫn nguy hiểm"; on a real transcript the box of the term
+    still running came back "null" where "KXL" is printed.)"""
+    groups, current = [], None
+    for index, item in enumerate(items):
+        if item.get('kind') == 'summary':
+            if current is None:
+                current = []
+                groups.append(current)
+            current.append(index)
+        else:
+            current = None
+    if len(groups) != len(crops):
+        return items + [{'kind': 'warning', 'text': 'summary_unchecked'}]
+    settled, warnings = {}, []
+    for group, (image, larger) in zip(groups, crops):
+        first = {}
+        for index in group:
+            for label, value in summary_pairs(items[index]).items():
+                if not first.get(label):
+                    first[label] = value
+        try:
+            second = summary_pairs(read_box(image))
+        except GemmaOcrError:
+            warnings.append('summary_unchecked')
+            continue
+        labels = [label for _, label in SUMMARY if label in first or label in second]
+        values = {label: second.get(label, '') for label in labels}
+        disputed = [label for label in labels if canonical(first.get(label, '')) != canonical(second.get(label, ''))]
+        if disputed:
+            try:
+                third = summary_pairs(read_box(larger))
+            except GemmaOcrError:
+                third = None
+            for label in disputed:
+                if third is not None and canonical(third.get(label, '')) == canonical(first.get(label, '')):
+                    values[label] = first.get(label, '')
+                elif third is None or canonical(third.get(label, '')) != canonical(second.get(label, '')):
+                    warnings.append('summary_unsure')
+        settled[group[0]] = {'kind': 'summary', 'lines': [f'{label}: {values[label]}' for label in labels]}
+        settled.update({index: None for index in group[1:]})
+    checked = [settled.get(index, item) if index in settled else item for index, item in enumerate(items)]
+    return [item for item in checked if item is not None] + [{'kind': 'warning', 'text': text} for text in dict.fromkeys(warnings)]
 
 
 def json_text(content):
@@ -247,19 +336,19 @@ def json_text(content):
     return text[start:end + 1]
 
 
-def read_strip(image_jpeg, endpoint=None):
-    """Gemma's items for one strip image. Busy, 5xx and network failures are asked again twice."""
+def ask(image_jpeg, prompt, schema, name, max_tokens, endpoint=None):
+    """Gemma's JSON answer about one image. Busy, 5xx and network failures are asked again (RETRY_DELAYS)."""
     url, model, headers = endpoint or settings()
     body = {
         'model': model,
         'messages': [{'role': 'user', 'content': [
-            {'type': 'text', 'text': PROMPT},
+            {'type': 'text', 'text': prompt},
             {'type': 'image_url', 'image_url': {'url': 'data:image/jpeg;base64,' + base64.b64encode(image_jpeg).decode(), 'detail': 'high'}},
         ]}],
-        'max_completion_tokens': 6144,
+        'max_completion_tokens': max_tokens,
         'temperature': 0,
         'chat_template_kwargs': {'enable_thinking': False},
-        'response_format': {'type': 'json_schema', 'json_schema': {'name': 'transcript_strip', 'schema': SCHEMA}},
+        'response_format': {'type': 'json_schema', 'json_schema': {'name': name, 'schema': schema}},
     }
     data = json.dumps(body).encode()
     for attempt in range(len(RETRY_DELAYS) + 1):
@@ -295,26 +384,45 @@ def read_strip(image_jpeg, endpoint=None):
         raise GemmaOcrError('truncated')
     content = (choice.get('message') or {}).get('content')
     try:
-        items = json.loads(json_text(content)).get('items')
-    except (ValueError, AttributeError):
+        answer = json.loads(json_text(content))
+    except ValueError:
         raise GemmaOcrError('not_json') from None
+    if not isinstance(answer, dict):
+        raise GemmaOcrError('not_json')
+    return answer
+
+
+def read_strip(image_jpeg, endpoint=None):
+    """Gemma's items for one strip image."""
+    items = ask(image_jpeg, PROMPT, SCHEMA, 'transcript_strip', 6144, endpoint).get('items')
     if not isinstance(items, list):
         raise GemmaOcrError('not_json')
     return [item for item in items if isinstance(item, dict)]
 
 
-def read_pages(document, indexes, reader=read_strip):
+def read_box(image_jpeg, endpoint=None):
+    """Gemma's summary item for the image of one summary box alone (the second and third readings of check_boxes)."""
+    lines = ask(image_jpeg, BOX_PROMPT, BOX_SCHEMA, 'summary_box', 1024, endpoint).get('lines')
+    if not isinstance(lines, list):
+        raise GemmaOcrError('not_json')
+    return {'kind': 'summary', 'lines': [line for line in lines if isinstance(line, str)]}
+
+
+def read_pages(document, indexes, reader=read_strip, box_reader=None):
     """{page index: [items of its strips, in order]} for the pages that need OCR, every strip read in parallel. A page
     without a table grid (a page of signatures, a blank last page) is not sent: its items are one warning,
     table_not_found, that marks the transcript for review (user test 2026-11-08: such a page made the whole transcript
-    fail). Only when no page has a table does the transcript fail."""
+    fail). Only when no page has a table does the transcript fail. Every summary box is read again on its own by
+    box_reader (read_box with Workers AI; none with another reader unless given)."""
     endpoint = settings() if reader is read_strip else None
     read = (lambda jpeg: reader(jpeg, endpoint)) if endpoint else reader
+    if box_reader is None and endpoint:
+        box_reader = lambda jpeg: read_box(jpeg, endpoint)  # noqa: E731
     jobs, skipped = [], []
     for index in indexes:
         try:
-            jobs.extend((index, jpeg, rows, number == 0, boxes, titles)
-                        for number, (jpeg, rows, boxes, titles) in enumerate(strip_jobs(document[index])))
+            jobs.extend((index, job[0], job[1], number == 0, job[2], job[3], job[4] if len(job) > 4 else [])
+                        for number, job in enumerate(strip_jobs(document[index])))
         except GemmaOcrError as error:
             if str(error) != 'table_not_found':
                 raise
@@ -322,7 +430,7 @@ def read_pages(document, indexes, reader=read_strip):
     if not jobs:
         raise GemmaOcrError('table_not_found')
     with ThreadPoolExecutor(max_workers=PARALLEL) as pool:
-        answers = list(pool.map(lambda job: read_checked(read, job[1], job[2], job[3], job[4], job[5]), jobs))
+        answers = list(pool.map(lambda job: read_checked(read, job[1], job[2], job[3], job[4], job[5], job[6], box_reader), jobs))
     pages = {index: [] for index in indexes}
     for index in skipped:
         pages[index].append({'kind': 'warning', 'text': 'table_not_found'})
@@ -372,9 +480,14 @@ def summary_label(raw):
     return LABELS[close[0]] if close else None
 
 
-def summary_values(item):
-    """{known label: printed value} of a summary item: its lines "Nhãn: giá trị" (a label Gemma wrote twice, "Nhãn: Nhãn:
-    giá trị", counts once), and the older keyed fields. Lines of no known label are left out (never guessed)."""
+# What Gemma writes for a printed label with no value ("Xếp loại học tập HK: null"); folded.
+EMPTY_WORDS = {'null', 'none', 'nan', 'n/a', 'trong', 'khong co'}
+
+
+def summary_pairs(item):
+    """{known label: printed value, '' for a label printed with no value} of a summary item: its lines "Nhãn: giá trị" (a
+    label Gemma wrote twice, "Nhãn: Nhãn: giá trị", counts once; "null" and the like are no value), and the older keyed
+    fields. Lines of no known label are left out (never guessed)."""
     values = {}
     fields = item.get('fields') if isinstance(item.get('fields'), dict) else {}
     pieces = [f'{label}: {fields.get(key)}' for key, label in SUMMARY if text(fields.get(key))]
@@ -390,9 +503,16 @@ def summary_values(item):
         again, colon2, rest = value.partition(':')
         if colon2 and summary_label(again) == known:
             value = rest.strip()
-        if value and known not in values:
+        if folded(value) in EMPTY_WORDS:
+            value = ''
+        if not values.get(known):
             values[known] = value
     return values
+
+
+def summary_values(item):
+    """{known label: printed value} of a summary item (summary_pairs without the labels printed with no value)."""
+    return {label: value for label, value in summary_pairs(item).items() if value}
 
 
 def next_term(term):

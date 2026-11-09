@@ -178,6 +178,83 @@ class RowBuilderTest(unittest.TestCase):
         self.assertEqual(len(calls), 2)
         self.assertEqual(items[0]['kind'], 'term')
 
+    def test_a_label_printed_without_a_value_is_read_but_has_no_value(self):
+        # The box of a term still running: labels with empty cells, which Gemma writes "null", "" or leaves bare.
+        item = {'kind': 'summary', 'lines': ['Số tín chỉ đạt học kỳ: null', 'Điểm TB học kỳ (Hệ 4):', 'Xếp loại học tập HK: KXL',
+                                             'Điểm rèn luyện học kỳ: None', 'Tổng số tín chỉ đăng ký: 18']}
+        self.assertEqual(gemma_ocr.summary_values(item), {'Xếp loại học tập HK': 'KXL', 'Tổng số tín chỉ đăng ký': '18'})
+        self.assertEqual(len(gemma_ocr.summary_pairs(item)), 5)
+        rows = gemma_ocr.RowBuilder().rows([TERM1, item])
+        _, summaries, _ = parse_pages([{'page': 1, 'method': 'gemma', 'warnings': [], 'rows': rows}], {})
+        semester = parse_semesters(summaries, [])[0]
+        self.assertEqual((semester['semester_rank'], semester.get('semester_credits_passed'), semester.get('conduct_score')), ('Không xếp loại', None, None))
+        self.assertEqual(semester['issues'], [])
+
+    def test_each_summary_box_is_read_again_alone_and_settled_by_majority(self):
+        strip = [TERM1, course('1', '71ITBS10103'),
+                 {'kind': 'summary', 'lines': ['Số tín chỉ đạt học kỳ: null', 'Xếp loại học tập HK: null', 'Điểm rèn luyện học kỳ: null']},
+                 {'kind': 'summary', 'lines': ['Tổng số tín chỉ đăng ký: 18', 'Điểm TB tích lũy (Hệ 4): 3,10']}]
+        box = {'kind': 'summary', 'lines': ['Số tín chỉ đạt học kỳ:', 'Xếp loại học tập HK: KXL', 'Điểm rèn luyện học kỳ:',
+                                            'Tổng số tín chỉ đăng ký: 18', 'Điểm TB tích lũy (Hệ 4): 3.10']}
+        reads = []
+        def read_box(jpeg):
+            reads.append(jpeg)
+            return box
+        items = gemma_ocr.check_boxes(strip, [(b'box', b'larger')], read_box)
+        # "KXL" against "null": the larger image decides (it says KXL); 3,10 and 3.10 are the same value.
+        self.assertEqual(reads, [b'box', b'larger'])
+        self.assertEqual([item['kind'] for item in items], ['term', 'course', 'summary'])
+        self.assertEqual(gemma_ocr.summary_values(items[2]), {'Xếp loại học tập HK': 'KXL', 'Tổng số tín chỉ đăng ký': '18',
+                                                              'Điểm TB tích lũy (Hệ 4)': '3.10'})
+        # Both readings agree: the box is read once more only.
+        reads.clear()
+        same = gemma_ocr.check_boxes([TERM1, box], [(b'box', b'larger')], read_box)
+        self.assertEqual(reads, [b'box'])
+        self.assertEqual(gemma_ocr.summary_values(same[1]), gemma_ocr.summary_values(box))
+
+    def test_a_summary_value_with_no_majority_keeps_the_box_reading_and_flags_the_page(self):
+        strip = [{'kind': 'summary', 'lines': ['Điểm TB học kỳ (Hệ 4): 3.18']}]
+        answers = {b'box': {'kind': 'summary', 'lines': ['Điểm TB học kỳ (Hệ 4): 3.16']},
+                   b'larger': {'kind': 'summary', 'lines': ['Điểm TB học kỳ (Hệ 4): 3.13']}}
+        items = gemma_ocr.check_boxes(strip, [(b'box', b'larger')], lambda jpeg: answers[jpeg])
+        self.assertEqual(gemma_ocr.summary_values(items[0]), {'Điểm TB học kỳ (Hệ 4)': '3.16'})
+        self.assertEqual(items[1], {'kind': 'warning', 'text': 'summary_unsure'})
+        # The strip and the larger image agree: their value wins over the box's.
+        answers[b'larger'] = strip[0]
+        items = gemma_ocr.check_boxes(strip, [(b'box', b'larger')], lambda jpeg: answers[jpeg])
+        self.assertEqual(items, [{'kind': 'summary', 'lines': ['Điểm TB học kỳ (Hệ 4): 3.18']}])
+
+    def test_boxes_that_do_not_pair_with_their_images_are_left_as_read_and_flagged(self):
+        strip = [TERM1, SUMMARY1, course('1', '71ITBS10103'), SUMMARY1_REST]
+        items = gemma_ocr.check_boxes(strip, [(b'box', b'larger')], lambda jpeg: self.fail('no box read expected'))
+        self.assertEqual(items, strip + [{'kind': 'warning', 'text': 'summary_unchecked'}])
+        builder = gemma_ocr.RowBuilder()
+        builder.rows(items)
+        self.assertIn('summary_unchecked', builder.page_warnings)
+        # A box reading that fails leaves that box as read, flagged, and never fails the transcript.
+        def fails(jpeg):
+            raise gemma_ocr.GemmaOcrError('not_json')
+        self.assertEqual(gemma_ocr.check_boxes([SUMMARY1], [(b'box', b'larger')], fails), [SUMMARY1, {'kind': 'warning', 'text': 'summary_unchecked'}])
+
+    def test_read_checked_sends_the_box_images_of_its_strip(self):
+        box = {'kind': 'summary', 'lines': ['Số tín chỉ đạt học kỳ: 6', 'Điểm TB học kỳ (Hệ 4): 3.50']}
+        items = gemma_ocr.read_checked(lambda jpeg: [TERM1, box], b'strip', rows=0, first=False, crops=[(b'box', b'larger')],
+                                       read_box=lambda jpeg: box)
+        self.assertEqual(gemma_ocr.summary_values(items[1]), gemma_ocr.summary_values(box))
+
+    def test_box_images_are_the_box_alone_and_a_larger_copy(self):
+        import cv2
+        import numpy as np
+        table = np.full((900, 1500, 3), 255, np.uint8)
+        cv2.putText(table, 'So tin chi dat hoc ky: 18', (40, 460), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 0), 2)
+        image, larger = gemma_ocr.box_images(table, (400, 560))
+        decode = lambda jpeg: cv2.imdecode(np.frombuffer(jpeg, np.uint8), cv2.IMREAD_COLOR)  # noqa: E731
+        small, big = decode(image), decode(larger)
+        self.assertEqual(small.shape[1], 1500 + 2 * 20)
+        self.assertEqual(small.shape[0], 160 + 2 * 6 + 2 * 20)
+        self.assertEqual(big.shape[0], round((160 + 2 * 6) * gemma_ocr.BOX_SCALE) + 2 * 20)
+        self.assertLess(big.shape[0] * big.shape[1], gemma_ocr.IMAGE_PIXELS)
+
     def test_reads_the_json_of_an_answer_in_a_fence_or_with_words_around(self):
         self.assertEqual(gemma_ocr.json_text('```json\n{"items": []}\n```'), '{"items": []}')
         self.assertEqual(gemma_ocr.json_text('Đây là kết quả: {"items": [1]} xong'), '{"items": [1]}')
