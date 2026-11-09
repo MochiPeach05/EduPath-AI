@@ -27,8 +27,6 @@
 .an-reach-muted { color: var(--cm-muted); }
 .an-counter { justify-self: end; color: var(--cm-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
 .an-form textarea { min-height: 140px; }
-.an-channels label.cm-check.an-off { color: var(--cm-muted); }
-.an-soon { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; background: var(--cm-warn-bg); color: var(--cm-warn); font-size: 11.5px; font-weight: 800; }
 
 /* The student's view */
 .an-preview { display: grid; gap: 12px; padding: 20px 22px; position: sticky; top: calc(var(--am-header-height, 80px) + 16px); }

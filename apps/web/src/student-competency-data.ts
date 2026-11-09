@@ -820,7 +820,7 @@ export function aiStateCopy(status: AiStatus, workerOnline: boolean, aiEnabled: 
   switch (status) {
     case "disabled": return aiEnabled
       ? { title: "Chưa có nhận xét cho lần đánh giá này", text: "Nhận xét AI vừa được bật. Bạn có thể tạo nhận xét cho kết quả hiện tại." }
-      : { title: "Nhận xét AI chưa được bật", text: "Kết quả bên dưới do hệ thống tính và đã đầy đủ. Khi máy AI của nhóm phát triển hoạt động, bạn có thể nhận thêm lời nhận xét." };
+      : { title: "Nhận xét AI chưa được bật", text: "Kết quả bên dưới do hệ thống tính và đã đầy đủ. Khi nhận xét AI được bật, bạn có thể nhận thêm lời nhận xét." };
     case "deferred": return { title: "Hàng đợi AI đang đầy", text: "Kết quả tính toán đã sẵn sàng. Sau ít phút, bấm “Tạo lại nhận xét” để xếp hàng lại." };
     case "queued": return workerOnline
       ? { title: "Đang xếp hàng tạo nhận xét", text: "AI suy luận trước khi viết nên nhận xét thường mất 1–3 phút. Bạn có thể xem kết quả bên dưới trong lúc chờ." }

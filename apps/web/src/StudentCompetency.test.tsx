@@ -638,7 +638,8 @@ describe("StudentCompetency — the older comment while a new one is prepared (u
     expect(html).toContain("Học phần DevOps căn bản (TST120): Học phần đo kỹ năng này.");
     // Its own date; the panel's footer stays the one of the current state.
     expect(html).toMatch(/<p class="scomp-ai-old-meta">Gemma 4 E4B có suy luận, chạy cục bộ · tạo lúc [^<]*2026\.<\/p>/);
-    expect(html).toContain("Mô hình Gemma 4 E4B chạy cục bộ trên máy của nhóm phát triển");
+    expect(html).toContain('<p class="scomp-ai-footer">Nhận xét do AI viết dựa trên kết quả đã tính');
+    expect(html).not.toContain("nhóm phát triển");
   });
   it("keeps the state box's actions right under it", () => {
     const failed = panel(page("failed"));

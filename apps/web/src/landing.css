@@ -751,24 +751,6 @@
   font-weight: 700;
 }
 
-.lp-preview-foot {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 10px 24px;
-  color: #68666c;
-  background: #fdfcfa;
-  border-top: 1px solid #f0ebe7;
-  font-size: 10px;
-}
-
-.lp-status-dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #cba66b;
-}
-
 .lp-semesters {
   display: flex;
   align-items: center;
@@ -930,26 +912,6 @@
   font-size: 11px;
   line-height: 1.9;
   margin: 0 0 18px;
-}
-
-.lp-journey small {
-  font-size: 10px;
-  color: #68666c;
-}
-
-.lp-journey .lp-step-live {
-  color: #536f57;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.lp-step-live::before {
-  content: "";
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #648d69;
 }
 
 .lp-campus-story {
@@ -1804,11 +1766,6 @@
     padding: 11px;
   }
 
-  .lp-preview-foot {
-    padding-inline: 17px;
-    font-size: 10px;
-  }
-
   .lp-semesters {
     gap: 7px;
   }
@@ -1849,10 +1806,6 @@
   }
 
   .lp-journey p {
-    font-size: 10px;
-  }
-
-  .lp-journey small {
     font-size: 10px;
   }
 

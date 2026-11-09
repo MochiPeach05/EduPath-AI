@@ -829,7 +829,7 @@ function AiPanel({ assessment, aiEnabled, workerOnline, busy, onRegenerate, onCa
       {pending && !isAdvisorView() && <button type="button" className="sr-secondary" disabled={busy} onClick={onCancel}>Hủy tạo nhận xét</button>}
     </div>}
     {!mapped && previous && <PreviousComment comment={previous} view={view} />}
-    <p className="scomp-ai-footer">{ai.status === "completed" ? `${modelLabel(ai.model)}${aiReasoned(result.meta.promptVersion) ? " có suy luận" : ""}, ${modelPlace(ai.model)} · tạo lúc ${formatDateTime(ai.completedAt)}. ` : "Mô hình Gemma 4 E4B chạy cục bộ trên máy của nhóm phát triển, suy luận trước khi viết. "}Nhận xét do AI viết dựa trên kết quả đã tính, có thể chưa chính xác — hãy đối chiếu số liệu và trao đổi với cố vấn học tập.</p>
+    <p className="scomp-ai-footer">{ai.status === "completed" ? `${modelLabel(ai.model)}${aiReasoned(result.meta.promptVersion) ? " có suy luận" : ""}, ${modelPlace(ai.model)} · tạo lúc ${formatDateTime(ai.completedAt)}. ` : ""}Nhận xét do AI viết dựa trên kết quả đã tính, có thể chưa chính xác — hãy đối chiếu số liệu và trao đổi với cố vấn học tập.</p>
   </section>;
 }
 

@@ -62,7 +62,8 @@ describe("compose page", () => {
     expect(html).toContain("0/120 ký tự");
     expect(html).toContain("0/1.000 ký tự");
     expect(html).toContain("Trong EduPath AI (chuông thông báo của sinh viên)");
-    expect(html).toContain('class="an-soon">Sắp có</span>');
+    expect(html).not.toContain("Sắp có");
+    expect(html).not.toContain("Email sinh viên");
     expect(html).toContain("Gửi thông báo");
     expect(html).toContain("Sinh viên sẽ thấy");
     expect(html).not.toContain("Bạn chỉ có quyền xem");

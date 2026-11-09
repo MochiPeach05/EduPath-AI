@@ -34,7 +34,7 @@ Mỗi chủ đề chỉ hiện một thông báo, bản mới nhất (`NOTIFICAT
 - Chọn đối tượng theo khóa và ngành (danh sách từ hồ sơ sinh viên), xem trước số người nhận, tiêu đề tối đa 120 ký tự, nội dung tối đa 1000 ký tự, trang liên quan.
 - Gửi: một giao dịch ghi thông báo của Khoa và thông báo cho từng sinh viên nhận (tài khoản sinh viên đang hoạt động, trừ hộp thư cán bộ).
 - Danh sách đã gửi có số đã đọc trên số nhận, sắp xếp theo cột; Thu hồi gỡ thông báo khỏi chuông của mọi sinh viên.
-- Kênh email: để sau (ô "Email sinh viên" trên trang hiện là "Sắp có").
+- Kênh email: để sau. Trang chỉ hiện kênh chuông trong EduPath AI; ô "Email sinh viên – Sắp có" đã bỏ ngày 09/11/2026 (người dùng: không để chữ "đang triển khai", "sắp có" trên web).
 
 ## Giao diện
 - Sinh viên: chuông trên thanh đầu trang (`StudentNotifications.tsx`): số chưa đọc, 5 thông báo mới nhất, "Xem tất cả" mở danh sách đầy đủ có lọc, chi tiết, đánh dấu, xóa và hoàn tác.

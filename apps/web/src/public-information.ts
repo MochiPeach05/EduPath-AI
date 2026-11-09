@@ -37,7 +37,7 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
       "Sau khi có bảng điểm, cột Kết quả trong chương trình và kế hoạch đào tạo giúp bạn nhận ra môn đã đạt hoặc chưa đạt. Trong phần điều kiện xét tốt nghiệp, bạn có thể xem tiến độ của từng nhóm và số tín chỉ đã đạt. Ở Định hướng nghề nghiệp, bạn có thể xem lĩnh vực và yêu cầu kỹ năng của từng vị trí nghề nghiệp, so sánh các vị trí nghề nghiệp và chọn vị trí nghề nghiệp mục tiêu.",
       "Trong Đánh giá năng lực, bạn xem được điểm từng kỹ năng và nhóm năng lực, mức phù hợp với vị trí nghề nghiệp mục tiêu; kỹ năng còn thiếu và học phần nên ưu tiên nằm ở trang Khoảng trống kỹ năng, kèm nhận xét do AI viết để tham khảo."
     ],
-    note: "Bạn nên bắt đầu ở Hồ sơ và bảng điểm, chọn vị trí nghề nghiệp mục tiêu ở Định hướng nghề nghiệp, rồi lần lượt xem Đánh giá năng lực, Khoảng trống kỹ năng và Lộ trình học tập. Chương trình đào tạo, Kế hoạch đào tạo và Điều kiện xét tốt nghiệp giúp bạn tra cứu thêm khi cần. Những mục đang được phát triển sẽ có thông báo ngay trên màn hình."
+    note: "Bạn nên bắt đầu ở Hồ sơ và bảng điểm, chọn vị trí nghề nghiệp mục tiêu ở Định hướng nghề nghiệp, rồi lần lượt xem Đánh giá năng lực, Khoảng trống kỹ năng và Lộ trình học tập. Chương trình đào tạo, Kế hoạch đào tạo và Điều kiện xét tốt nghiệp giúp bạn tra cứu thêm khi cần."
   },
   {
     question: "EduPath AI dùng AI vào việc gì?",
@@ -843,7 +843,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
             title: "Cung cấp dịch vụ",
             paragraphs: [
               "Khoa cố gắng duy trì EduPath AI ổn định, nhưng dịch vụ có thể tạm gián đoạn để bảo trì, nâng cấp hoặc khắc phục sự cố. Một số chức năng có thể được bổ sung, thay đổi hoặc ngừng cung cấp.",
-              "Nhận xét AI được tạo trên một máy tính riêng, nên có lúc bạn phải chờ hoặc tạm thời chưa có nhận xét; khi đó các kết quả do hệ thống tính vẫn hiển thị đầy đủ.",
+              "Nhận xét AI được tạo bằng mô hình chạy trên Cloudflare Workers AI; có lúc bạn phải chờ hoặc tạm thời chưa có nhận xét, khi đó các kết quả do hệ thống tính vẫn hiển thị đầy đủ.",
               "EduPath AI không phải nơi lưu trữ tài liệu lâu dài, vì vậy hãy tự giữ bản PDF bảng điểm gốc của bạn."
             ]
           },

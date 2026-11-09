@@ -36,8 +36,7 @@ const features = [
     number: "01",
     title: "Hiểu rõ năng lực của bạn",
     description:
-      "Kết nối kết quả học tập và kỹ năng cá nhân để nhận diện điểm mạnh, những khoảng trống và điều bạn cần tập trung tiếp theo.",
-    status: "Minh họa tính năng đang triển khai"
+      "Kết nối kết quả học tập và kỹ năng cá nhân để nhận diện điểm mạnh, những khoảng trống và điều bạn cần tập trung tiếp theo."
   },
   {
     id: "lo-trinh",
@@ -45,8 +44,7 @@ const features = [
     number: "02",
     title: "Lộ trình học tập có định hướng",
     description:
-      "Gợi ý môn học theo từng học kỳ, có xét đến chương trình đào tạo và môn tiên quyết để kế hoạch phù hợp với việc học tại trường.",
-    status: "Minh họa tính năng đang triển khai"
+      "Gợi ý môn học theo từng học kỳ, có xét đến chương trình đào tạo và môn tiên quyết để kế hoạch phù hợp với việc học tại trường."
   },
   {
     id: "nghe-nghiep",
@@ -54,8 +52,7 @@ const features = [
     number: "03",
     title: "Đến gần vị trí nghề nghiệp mong muốn",
     description:
-      "Đối chiếu kỹ năng hiện tại với yêu cầu của vị trí nghề nghiệp để xác định môn tự chọn, kỹ năng tự học và trải nghiệm cần bổ sung.",
-    status: "Minh họa tính năng đang triển khai"
+      "Đối chiếu kỹ năng hiện tại với yêu cầu của vị trí nghề nghiệp để xác định môn tự chọn, kỹ năng tự học và trải nghiệm cần bổ sung."
   }
 ];
 
@@ -185,9 +182,6 @@ function FeaturePreview({ selected, active }: { selected: number; active: boolea
           </div>
         </div>
       )}
-      <div className="lp-preview-foot">
-        <span className="lp-status-dot" /> {features[selected].status}
-      </div>
     </div>
   );
 }
@@ -392,8 +386,8 @@ export default function LandingPage() {
               </h2>
             </div>
             <p>
-              Chọn môn nào? Kỹ năng nào còn thiếu? Mình phù hợp với hướng đi nào? Đồ án EduPath AI
-              được xây dựng để giúp sinh viên trả lời những câu hỏi ấy sớm hơn, ngay từ năm 2–3.
+              Chọn môn nào? Kỹ năng nào còn thiếu? Mình phù hợp với hướng đi nào? EduPath AI được
+              xây dựng để giúp sinh viên trả lời những câu hỏi ấy sớm hơn, ngay từ năm 2–3.
             </p>
           </div>
           <div className="lp-principles">
@@ -501,28 +495,24 @@ export default function LandingPage() {
               {
                 icon: "shield" as const,
                 title: "Kết nối tài khoản",
-                description: "Sử dụng tài khoản Microsoft do Văn Lang cấp để truy cập hệ thống.",
-                tag: "Đã có thể sử dụng"
+                description: "Sử dụng tài khoản Microsoft do Văn Lang cấp để truy cập hệ thống."
               },
               {
                 icon: "chart" as const,
                 title: "Phác họa năng lực",
-                description: "Bổ sung bảng điểm, kỹ năng và mục tiêu để hiểu rõ điểm xuất phát.",
-                tag: "Đang triển khai"
+                description: "Bổ sung bảng điểm, kỹ năng và mục tiêu để hiểu rõ điểm xuất phát."
               },
               {
                 icon: "route" as const,
                 title: "Xây dựng lộ trình",
                 description:
-                  "Tham khảo gợi ý môn học và kỹ năng cần bổ sung theo định hướng đã chọn.",
-                tag: "Đang triển khai"
+                  "Tham khảo gợi ý môn học và kỹ năng cần bổ sung theo định hướng đã chọn."
               },
               {
                 icon: "target" as const,
                 title: "Theo dõi, điều chỉnh",
                 description:
-                  "Cập nhật tiến bộ qua từng học kỳ và điều chỉnh kế hoạch khi mục tiêu thay đổi.",
-                tag: "Đang triển khai"
+                  "Cập nhật tiến bộ qua từng học kỳ và điều chỉnh kế hoạch khi mục tiêu thay đổi."
               }
             ].map((step, index) => (
               <li key={step.title}>
@@ -532,7 +522,6 @@ export default function LandingPage() {
                 </div>
                 <h3>{step.title}</h3>
                 <p>{step.description}</p>
-                <small className={index === 0 ? "lp-step-live" : ""}>{step.tag}</small>
               </li>
             ))}
           </ol>
@@ -564,7 +553,7 @@ export default function LandingPage() {
               mở ra cơ hội cho ngày mai.
             </p>
             <a className="lp-text-link" href="#gioi-thieu">
-              Tìm hiểu về đồ án <Icon name="arrow" />
+              Tìm hiểu về EduPath AI <Icon name="arrow" />
             </a>
           </div>
         </section>

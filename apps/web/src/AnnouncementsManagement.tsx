@@ -254,7 +254,6 @@ function ComposeAnnouncement({ canManage, navigate }: { canManage: boolean; navi
             <fieldset className="an-channels">
               <legend>Kênh gửi</legend>
               <label className="cm-check"><input type="checkbox" checked disabled readOnly /> Trong EduPath AI (chuông thông báo của sinh viên)</label>
-              <label className="cm-check an-off"><input type="checkbox" disabled /> <span>Email sinh viên <span className="an-soon">Sắp có</span></span></label>
             </fieldset>
           </fieldset>
           {error && <p className="admin-error" role="alert">{error}</p>}
