@@ -277,6 +277,23 @@ Người dùng (30/10): "Trợ lý AI trả lời “2.45”" và "Học kỳ đ
 - Học kỳ trong dữ liệu Bảng điểm, facts và các đoạn KHĐT của chỉ mục viết "HK1 2023–2024 (năm thứ 1, học kỳ 1)" như các trang; câu hỏi viết kiểu cũ (HK231, "học kỳ 1 năm học …") vẫn được hiểu. Các đoạn KHĐT được worker embed lại tự động.
 - System prompt không đổi; worker không cần khởi động lại.
 
+## Khi đã đạt hết kỹ năng của nghề (assistant-v11, 9/11/2026)
+Người dùng (9/11) gửi ảnh: sinh viên đã đạt cả 4/4 kỹ năng của vị trí nghề nghiệp mục tiêu ("Rất phù hợp", kết quả Đánh giá năng lực ngay trước câu hỏi) hỏi "Mình nên tự học kỹ năng còn thiếu ở đâu?" và nhận "Hiện tại bạn chưa có kết quả Đánh giá năng lực mới nhất…", kèm tài liệu Machine learning và TCP/IP.
+- **Nguyên nhân.** Trợ lý vẫn đọc kết quả mới nhất. Khi không còn kỹ năng thiếu, nguồn kỹ năng liệt kê các kỹ năng đã đạt ("Đã đạt mức Khá: nâng lên mức Giỏi") ngay dưới tiêu đề "Kỹ năng của vị trí nghề nghiệp cần bổ sung:", và không câu nào nói là không còn thiếu kỹ năng. Gemma 4 26B trên Cloudflare (không thinking) hiểu thành chưa có kết quả, rồi trả lời theo ví dụ (c) của prompt. Tài liệu tự học chỉ được tra theo kỹ năng chưa đạt, nên khi đạt hết thì chỉ còn tài liệu do tìm kiếm chung đưa về.
+- **Sửa (chỉ dữ liệu, prompt hệ thống giữ nguyên; `facts.ts` `careerSkillLines`, `gapSkillNames`).**
+  - Nguồn kỹ năng ghi rõ "Kỹ năng của vị trí nghề nghiệp còn thiếu: không có. Theo kết quả Đánh giá năng lực của bạn, bạn đã đạt ngưỡng cả x/y kỹ năng…".
+  - Kỹ năng đã đạt nằm dưới tiêu đề riêng "Kỹ năng đã đạt, có thể học thêm để nâng lên mức cao hơn:", kể cả khi còn kỹ năng thiếu.
+  - Nguồn hồ sơ ghi "Bạn đã làm Đánh giá năng lực; kết quả mới nhất ngày …".
+  - Khi không còn kỹ năng thiếu, tài liệu tự học được tra theo các kỹ năng của nghề, điểm thấp nhất trước.
+- **Kiểm tra** trên sinh viên giả lập (schema e2e, kết quả viết lại thành 4/4 kỹ năng đạt), Gemma 4 26B trên Workers AI, không thinking:
+
+  | | Câu trả lời nói "chưa có kết quả / chưa có cơ sở" | Tài liệu |
+  | --- | --- | --- |
+  | Trước (assistant-v10) | 3/3 lần | TCP/IP |
+  | Sau (assistant-v11) | 0/3 lần; cả 3 lần nói "đã đạt ngưỡng cả 4/4 kỹ năng… không còn kỹ năng nào bị thiếu" | Thiết kế phần mềm, Cấu trúc dữ liệu |
+
+  Một sinh viên giả lập còn thiếu 2 kỹ năng vẫn được trả lời "bạn cần bổ sung thêm hai kỹ năng là REST API và LLM/NLP", kèm tài liệu REST API.
+
 ## Mã nguồn
 - **API** (`apps/api/src/assistant/`):
   - `protocol.ts` (giao thức worker), `intent.ts`, `facts.ts`, `transcript.ts` (nguồn Bảng điểm), `prompt.ts` (assistant-v7), `validate.ts` (kiểm tra câu trả lời, gộp số nguồn);

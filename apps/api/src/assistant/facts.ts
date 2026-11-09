@@ -10,7 +10,7 @@ import { formatScoreOf100, sanitizeText } from "../competency-assessment/ai/prom
 import { fold, specialtyLabel } from "../competency-assessment/specialty.js";
 import type { AssessmentResult, LevelCode, SkillResult, SpecialtyCode } from "../competency-assessment/types.js";
 import type { DatabasePool } from "../db/pool.js";
-import { buildRoadmapFacts, type RoadmapFacts } from "../roadmap/facts.js";
+import { buildRoadmapFacts, type RoadmapFacts, type RoadmapSkill } from "../roadmap/facts.js";
 import { newestAssessment, readNewestRoadmap, readRoadmapRelations, type RoadmapRow } from "../roadmap/jobs.js";
 import { roadmapDataSections } from "../roadmap/prompt.js";
 import { roadmapWindow } from "../roadmap/window.js";
@@ -79,6 +79,27 @@ function careerLines(result: AssessmentResult): string[] {
   if (!career) return ["Vị trí nghề nghiệp mục tiêu: chưa chọn (chọn ở trang Định hướng nghề nghiệp để mình so kỹ năng với vị trí nghề nghiệp)."];
   const fit = typeof career.fitScore === "number" ? `điểm phù hợp ${formatScoreOf100(career.fitScore)} (${career.fitLabel})` : `mức phù hợp: ${career.fitLabel}`;
   return [`Vị trí nghề nghiệp mục tiêu: ${career.nameVi}; ${fit}; ${career.summaryText}.`];
+}
+
+/**
+ * The target career's skills still missing, then the met ones worth raising, each under its own heading (assistant-v11,
+ * user 2026-11-09: a student who met 4/4 skills was told "Hiện tại bạn chưa có kết quả Đánh giá năng lực mới nhất": the
+ * met skills sat under "cần bổ sung" and no line said that none was missing). `lines` holds roadmapDataSections' line of
+ * each `skills` item, in the same order ("Không có." alone without any).
+ */
+export function careerSkillLines(result: AssessmentResult, skills: readonly Pick<RoadmapSkill, "kind">[], lines: readonly string[]): string[] {
+  const career = result.career;
+  if (!career) return [];
+  // The S01… keys of the roadmap prompt mean nothing to the student: the lines go without them.
+  const line = (index: number) => (lines[index] ?? "").replace(/^- \[S\d+\] /, "- ");
+  const missing = skills.flatMap((skill, index) => skill.kind === "deepen" ? [] : [line(index)]);
+  const raise = skills.flatMap((skill, index) => skill.kind === "deepen" ? [line(index)] : []);
+  const out = missing.length ? ["Kỹ năng của vị trí nghề nghiệp cần bổ sung:", ...missing]
+    : career.counts.total > 0
+      ? [`Kỹ năng của vị trí nghề nghiệp còn thiếu: không có. Theo kết quả Đánh giá năng lực của bạn, bạn đã đạt ngưỡng cả ${career.counts.met}/${career.counts.total} kỹ năng của vị trí nghề nghiệp này.`]
+      : ["Vị trí nghề nghiệp này chưa có kỹ năng yêu cầu nào."];
+  if (raise.length) out.push("Kỹ năng đã đạt, có thể học thêm để nâng lên mức cao hơn:", ...raise);
+  return out;
 }
 
 function overallLine(result: AssessmentResult): string {
@@ -174,14 +195,13 @@ export async function studentSources(db: Db, userId: string, question: string, i
   const sources: ContextSource[] = [
     {
       kind: "profile", title: "Hồ sơ học tập của bạn", link: "#profile",
-      text: clean([...sections.profile, sections.window.at(-1) ?? "", `Kết quả đánh giá năng lực mới nhất: ngày ${dateText(assessment.createdAt)}.`]),
+      // assistant-v11: said as a fact the answer cannot turn into "bạn chưa có kết quả" ("Kết quả … mới nhất: ngày …" before).
+      text: clean([...sections.profile, sections.window.at(-1) ?? "", `Bạn đã làm Đánh giá năng lực; kết quả mới nhất ngày ${dateText(assessment.createdAt)}.`]),
     },
     ...transcriptPart,
     {
       kind: "assessment", title: "Kỹ năng của vị trí nghề nghiệp mục tiêu (kết quả đánh giá năng lực)", link: "#skill-gap",
-      // The S01… keys of the roadmap prompt mean nothing to the student: the lines go without them.
-      text: clean([...careerLines(assessment.computed), overallLine(assessment.computed), "Kỹ năng của vị trí nghề nghiệp cần bổ sung:",
-        ...sections.skills.map((line) => line.replace(/^- \[S\d+\] /, "- "))]),
+      text: clean([...careerLines(assessment.computed), overallLine(assessment.computed), ...careerSkillLines(assessment.computed, facts.skills, sections.skills)]),
     },
     {
       kind: "roadmap", title: "Học phần đang học, cần học, cần học lại và có thể học cải thiện", link: "#roadmap",
@@ -202,11 +222,15 @@ export async function studentSources(db: Db, userId: string, question: string, i
   return { sources, gapSkills: gapSkillNames(assessment.computed) };
 }
 
-/** Names of the target career's skills still to build (gaps first): what the self-study resources are searched for. */
+/**
+ * Names of the target career's skills the self-study resources are looked up for: those still to build; with none left
+ * (assistant-v11), the met ones from the lowest score up, so a student who met them all gets resources for the career's
+ * own skills, not whatever the question's words find (TCP/IP and Machine learning for a web developer, 2026-11-09).
+ */
 export function gapSkillNames(result: AssessmentResult | null): string[] {
   if (!result?.career) return [];
-  return result.career.requirements
-    .filter((requirement) => requirement.status !== "met" && requirement.skillName)
-    .map((requirement) => requirement.skillName!)
-    .slice(0, 5);
+  const named = result.career.requirements.filter((requirement) => requirement.skillName);
+  const gaps = named.filter((requirement) => requirement.status !== "met");
+  const picked = gaps.length ? gaps : [...named].sort((a, b) => (a.score ?? 0) - (b.score ?? 0));
+  return picked.map((requirement) => requirement.skillName!).slice(0, 5);
 }

@@ -85,8 +85,14 @@ export const documentEmbeddingText = (title: string, text: string) => embeddingP
  * v10 (review 2026-11-04: AI texts dropped decimals, "69" for 69,9): the sources give 0–100 scores as the pages show them,
  * floored to the tenth with the scale ("72,3/100"; "72,37" before), the GPA with two decimals ("2,85/4"), course scores
  * "/10" (roadmap-v14 sections); rule 2 asks to keep the decimals.
+ * v11 (user 2026-11-09: a student who met 4/4 skills of the target career asked "Mình nên tự học kỹ năng còn thiếu ở đâu?"
+ * and was told "Hiện tại bạn chưa có kết quả Đánh giá năng lực mới nhất", with TCP/IP and Machine learning resources): the
+ * career source says when no skill is missing and lists the met skills to raise under their own heading (not under "cần
+ * bổ sung"), the profile says "Bạn đã làm Đánh giá năng lực; kết quả mới nhất ngày …", and with no gap left the career's
+ * met skills are the ones whose resources are looked up (facts.ts careerSkillLines, gapSkillNames). The system prompt is
+ * unchanged.
  */
-export const ASSISTANT_PROMPT_VERSION = "assistant-v10";
+export const ASSISTANT_PROMPT_VERSION = "assistant-v11";
 export const KNOWLEDGE_PROMPT_VERSION = "knowledge-v1";
 /** An answer takes well under a minute; a lost worker frees the job after this lease (the worker extends every 3 min). */
 export const ASSISTANT_LEASE_MINUTES = 5;

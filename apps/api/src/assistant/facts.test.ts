@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import type { AssessmentResult } from "../competency-assessment/types.js";
 import type { DatabasePool } from "../db/pool.js";
+import { MAX_ROADMAP_SKILLS } from "../roadmap/facts.js";
 import type { RoadmapRow } from "../roadmap/jobs.js";
 import { ROADMAP_ASSESSMENT, ROADMAP_NOW, syntheticRoadmapFacts, syntheticRoadmapResult, syntheticSurveyRow } from "../roadmap/test-fixture.js";
 import { TRANSCRIPT_POLICY_VERSION } from "../student/consent.js";
@@ -69,11 +71,11 @@ function transcriptData(): TranscriptData {
   };
 }
 
-function db(options: { assessment?: boolean; survey?: boolean; consent?: string | null; roadmap?: RoadmapRow | null; transcript?: TranscriptData | null } = {}) {
+function db(options: { assessment?: boolean; computed?: AssessmentResult; survey?: boolean; consent?: string | null; roadmap?: RoadmapRow | null; transcript?: TranscriptData | null } = {}) {
   const query = vi.fn(async (sql: string) => {
     const rows = (list: unknown[]) => ({ rowCount: list.length, rows: list });
     if (sql.includes("FROM stu_comp_assessments")) {
-      return rows(options.assessment === false ? [] : [{ id: ROADMAP_ASSESSMENT, createdAt: new Date("2026-10-24T01:00:00Z"), computed: syntheticRoadmapResult() }]);
+      return rows(options.assessment === false ? [] : [{ id: ROADMAP_ASSESSMENT, createdAt: new Date("2026-10-24T01:00:00Z"), computed: options.computed ?? syntheticRoadmapResult() }]);
     }
     if (sql.includes("FROM student_transcripts")) {
       return rows(options.transcript === null ? [] : [{ data: options.transcript ?? transcriptData(), updatedAt: new Date("2026-10-20T03:00:00Z") }]);
@@ -139,6 +141,44 @@ describe("assistant student sources", () => {
       "Học kỳ tới mình nên học gì?", ["roadmap"], ROADMAP_NOW);
     expect(context.sources.some((source) => source.title.startsWith("Khảo sát"))).toBe(false);
     expect(context.sources.find((source) => source.title === "Lộ trình AI đề xuất cho bạn")?.text).toContain("từ một kết quả đánh giá cũ hơn");
+  });
+
+  it("lists the career's missing skills under their heading and looks up resources for them only (assistant-v11)", async () => {
+    const result = syntheticRoadmapResult();
+    const missing = result.career!.requirements.filter((requirement) => requirement.status !== "met" && requirement.skillName);
+    expect(missing.length).toBeGreaterThan(0);
+    const context = await studentSources(db(), userId, "Mình nên tự học kỹ năng còn thiếu ở đâu?", ["gaps", "resources"], ROADMAP_NOW);
+    const text = context.sources.find((source) => source.kind === "assessment")!.text;
+    expect(text).toContain("Kỹ năng của vị trí nghề nghiệp cần bổ sung:");
+    expect(text).not.toContain("còn thiếu: không có");
+    expect(context.gapSkills).toEqual(missing.map((requirement) => requirement.skillName).slice(0, 5));
+    expect(context.sources[0]!.text).toContain("Bạn đã làm Đánh giá năng lực; kết quả mới nhất ngày 24/10/2026.");
+  });
+
+  it("says no skill is missing when every career skill is met, lists them to raise apart, with their resources (assistant-v11)", async () => {
+    // User 2026-11-09: a student who met 4/4 skills was told "Hiện tại bạn chưa có kết quả Đánh giá năng lực mới nhất" and
+    // given TCP/IP resources: the met skills sat under "cần bổ sung" and no line said that none was missing.
+    const result = structuredClone(syntheticRoadmapResult());
+    const career = result.career!;
+    career.requirements.forEach((requirement, index) => Object.assign(requirement, {
+      status: "met", statusLabel: "Đã đạt", score: 90 - index * 5, level: index ? "fair" : "good", levelLabel: index ? "Khá" : "Giỏi",
+      deficit: null, deficitBand: null, deficitBandLabel: null,
+    }));
+    const total = career.requirements.length;
+    career.counts = { total, met: total, below: 0, upcoming: 0, notStudied: 0, noData: 0, withData: total };
+    career.summaryText = `Đạt ${total}/${total} kỹ năng`;
+    result.selfStudy = [];
+    result.skillPlans = [];
+    const context = await studentSources(db({ computed: result }), userId, "Mình nên tự học kỹ năng còn thiếu ở đâu?", ["gaps", "resources"], ROADMAP_NOW);
+    const text = context.sources.find((source) => source.kind === "assessment")!.text;
+    expect(text).toContain(`Kỹ năng của vị trí nghề nghiệp còn thiếu: không có. Theo kết quả Đánh giá năng lực của bạn, bạn đã đạt ngưỡng cả ${total}/${total} kỹ năng của vị trí nghề nghiệp này.`);
+    expect(text).not.toContain("cần bổ sung");
+    const raise = text.slice(text.indexOf("Kỹ năng đã đạt, có thể học thêm để nâng lên mức cao hơn:")).split("\n").slice(1);
+    expect(raise).toHaveLength(Math.min(total, MAX_ROADMAP_SKILLS));
+    expect(raise.every((line) => /^- .+: Đã đạt mức (Khá|Giỏi): nâng lên mức (Giỏi|Xuất sắc)/.test(line))).toBe(true);
+    // The resources of the career's own skills, the lowest score first, instead of whatever the question's words find.
+    const named = career.requirements.filter((requirement) => requirement.skillName);
+    expect(context.gapSkills).toEqual([...named].sort((a, b) => a.score! - b.score!).map((requirement) => requirement.skillName).slice(0, 5));
   });
 
   it("says how to get results when the student has no assessment, and still gives the transcript", async () => {
