@@ -716,3 +716,12 @@ a {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* A page that failed to draw (page-errors.tsx): a plain card with "Tải lại trang" instead of a blank screen. */
+.page-error { display: grid; justify-items: start; gap: 10px; max-width: 640px; margin: 24px auto; padding: 24px 28px; border: 1px solid #f1c4cf; border-radius: 12px; background: #fff; color: #2b2f38; box-shadow: 0 8px 24px rgba(28, 32, 48, .06); }
+.page-error-whole { margin: 15vh auto; width: calc(100% - 32px); }
+.page-error h2 { margin: 0; font-size: 20px; line-height: 1.35; }
+.page-error p { margin: 0; color: #4d5260; font-size: 14px; line-height: 1.65; }
+.page-error-reload { min-height: 44px; margin-top: 6px; padding: 10px 18px; border: 0; border-radius: 8px; background: #b5193f; color: #fff; font: inherit; font-size: 14px; font-weight: 650; cursor: pointer; }
+.page-error-reload:hover { background: #961334; }
+.page-error-reload:focus-visible { outline: 2px solid #bb4160; outline-offset: 2px; }

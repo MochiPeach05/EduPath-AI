@@ -1,6 +1,6 @@
 import StudentPlans from "./StudentPlans";
 import StudentGraduation from "./StudentGraduation";
-import { Suspense, lazy, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { Suspense, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import EduPathBrand from "./EduPathBrand";
 import { layoutHeight } from "./page-scale";
 import StudentProfileEditor from "./StudentProfileEditor";
@@ -20,16 +20,18 @@ import type { AuthenticatedUser } from "./types";
 import { ADVISOR_BLOCKED_EVENT, ADVISOR_HOME, actingAsText, advisorBlockedMessage, stopActing } from "./advisor-view";
 import { ADVISOR_ERRORS } from "./advisor-types";
 import { nameInitials, personName as studentDisplayName } from "./person-name";
+import { PageErrorBoundary, lazyPage } from "./page-errors";
 import "./student-workspace.css";
 import "./student-header.css";
 import "./student-layout.css";
 import "./advisor-view.css";
 
-// The competency module is large and only needed on #competency and #skill-gap, so it loads on demand.
-const StudentCompetency = lazy(() => import("./StudentCompetency"));
-const StudentRoadmap = lazy(() => import("./StudentRoadmap"));
-const StudentCareerGuidance = lazy(() => import("./StudentCareerGuidance"));
-const StudentAssistant = lazy(() => import("./StudentAssistant"));
+// The competency module is large and only needed on #competency and #skill-gap, so it loads on demand. After a deploy
+// their old files are gone: lazyPage reloads the site once instead of leaving a blank screen (page-errors.tsx).
+const StudentCompetency = lazyPage(() => import("./StudentCompetency"));
+const StudentRoadmap = lazyPage(() => import("./StudentRoadmap"));
+const StudentCareerGuidance = lazyPage(() => import("./StudentCareerGuidance"));
+const StudentAssistant = lazyPage(() => import("./StudentAssistant"));
 
 const pages = [
   { id: "overview", label: "Tổng quan", icon: "home" },
@@ -387,12 +389,12 @@ export default function StudentWorkspace({ user, advisor = null }: { user: Authe
           </div>
           {/* Not on Trợ lý AI either: the chat fills the window under the heading. */}
           {!["overview", "profile", "competency", "skill-gap", "roadmap", "assistant"].includes(page) && reminder}
-          {page === "overview" ? <StudentOverview profile={profile} loading={loading} navigate={navigate} identity={
+          <PageErrorBoundary resetKey={page}>{page === "overview" ? <StudentOverview profile={profile} loading={loading} navigate={navigate} identity={
             <section className="so-student-strip" aria-label="Thông tin sinh viên">
               <div className="so-student-identity"><span className="sw-avatar sw-avatar-large">{avatar}</span><div><strong>{name}</strong><span>{email ?? "Chưa cập nhật email"}</span></div></div>
               <dl><div><dt>Mã sinh viên</dt><dd>{loading ? "Đang tải…" : profile?.studentCode ?? "Chưa cập nhật"}</dd></div><div><dt>Ngành</dt><dd>{loading ? "Đang tải…" : majorLabel(profile?.majorCode) ?? "Chưa cập nhật"}</dd></div><div><dt>Khóa · Lớp</dt><dd>{loading ? "Đang tải…" : [profile?.cohortCode, profile?.className].filter(Boolean).join(" · ") || "Chưa cập nhật"}</dd></div><div><dt>Năm nhập học</dt><dd>{loading ? "Đang tải…" : profile?.cohortYear ?? "Chưa cập nhật"}</dd></div></dl>
             </section>} />
-          : page === "profile" ? <ProfilePage profile={profile} card={profileCard} advisorView={advisor !== null} onSaved={() => setReload(n => n + 1)} /> : page === "curriculum" ? <StudentCurriculum /> : page === "plans" ? <StudentPlans /> : page === "graduation" ? <StudentGraduation /> : page === "roadmap" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">Đang tải lộ trình học tập…</p></section>}><StudentRoadmap notice={reminder} /></Suspense> : page === "career" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">Đang tải định hướng nghề nghiệp…</p></section>}><StudentCareerGuidance onProfileChanged={() => setReload(n => n + 1)} /></Suspense> : page === "competency" || page === "skill-gap" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">{page === "skill-gap" ? "Đang tải trang khoảng trống kỹ năng…" : "Đang tải trang đánh giá năng lực…"}</p></section>}><StudentCompetency key={page} profile={profile} view={page === "skill-gap" ? "gap" : "competency"} notice={reminder} /></Suspense> : page === "assistant" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">Đang tải Trợ lý AI…</p></section>}><StudentAssistant /></Suspense> : null}
+          : page === "profile" ? <ProfilePage profile={profile} card={profileCard} advisorView={advisor !== null} onSaved={() => setReload(n => n + 1)} /> : page === "curriculum" ? <StudentCurriculum /> : page === "plans" ? <StudentPlans /> : page === "graduation" ? <StudentGraduation /> : page === "roadmap" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">Đang tải lộ trình học tập…</p></section>}><StudentRoadmap notice={reminder} /></Suspense> : page === "career" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">Đang tải định hướng nghề nghiệp…</p></section>}><StudentCareerGuidance onProfileChanged={() => setReload(n => n + 1)} /></Suspense> : page === "competency" || page === "skill-gap" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">{page === "skill-gap" ? "Đang tải trang khoảng trống kỹ năng…" : "Đang tải trang đánh giá năng lực…"}</p></section>}><StudentCompetency key={page} profile={profile} view={page === "skill-gap" ? "gap" : "competency"} notice={reminder} /></Suspense> : page === "assistant" ? <Suspense fallback={<section className="sw-panel" aria-busy="true"><p role="status">Đang tải Trợ lý AI…</p></section>}><StudentAssistant /></Suspense> : null}</PageErrorBoundary>
           <footer className="sw-footer">
             <nav className="sw-footer-links" aria-label="Liên kết cuối trang">
               {publicInformationLinks.map(link => <a key={link.href} href={link.href} target="_blank" rel="noreferrer">{link.label}<span className="sr-only"> (mở trong tab mới)</span></a>)}
