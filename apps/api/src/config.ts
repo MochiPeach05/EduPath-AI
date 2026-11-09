@@ -78,7 +78,7 @@ export interface AiProviderConfig {
   concurrency: number;
   /** AI_THINKING=on: jobs that ask for Gemma's thinking get it on Cloudflare too (off by default, cloudflare.ts). */
   thinking: boolean;
-  /** AI_DAILY_NEURONS: neurons a UTC day may spend on Workers AI (default 9000, under the free 10,000); null = no limit ("off"). */
+  /** AI_DAILY_NEURONS: neurons the last 24 hours may spend on Workers AI (default 9000, under the free 10,000); null = no limit ("off"). */
   dailyNeurons: number | null;
 }
 

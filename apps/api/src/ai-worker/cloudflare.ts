@@ -547,7 +547,8 @@ export function createCloudflareHealth(runtime: Pick<CloudflareRuntime, "account
   let checkedAt = Number.NEGATIVE_INFINITY;
   const info: OllamaModelInfo = { version: CLOUDFLARE_VERSION, digest: runtime.model };
   return async (): Promise<OllamaModelInfo> => {
-    // The day's neurons nearly spent (budget.ts): no new job until the next UTC day; queued jobs wait instead of failing.
+    // The last 24 hours' neurons nearly spent, or Workers AI answered 4006 within the hour (budget.ts): no new job until
+    // there is room again; queued jobs wait instead of failing.
     if (deps.budget && !(await deps.budget.allows())) throw new AiWorkerError("ollama_unavailable", "daily_budget");
     if (now() - checkedAt < HEALTH_TTL_MS) return info;
     const name = runtime.model.split("/").at(-1) ?? runtime.model;

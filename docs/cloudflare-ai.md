@@ -75,6 +75,25 @@ Các bản sửa từ lần thử này:
 - Lỗi 500 được thử lại sau 3, 10 rồi 30 giây.
 - Ngoài kiểm tra số dòng môn, mỗi dải còn được kiểm tra số tiêu đề học kỳ (dòng một ô) và số dòng của khối tổng kết (dòng cao; ít nhất 7 dòng mỗi khối). Thiếu thì đọc lại, vì tiêu đề bị sót sẽ bị đoán là học kỳ kế tiếp, mà sinh viên thường bỏ học kỳ hè.
 
+## Khối tổng kết: đọc hai lần (9/11)
+
+Đo lại theo từng ô giá trị (nhãn in mà không có giá trị thì không tính là sót), trên 4 bảng điểm thật của bộ thử: 397 giá trị in, 396 đúng (99,7%), 1 sót. Con số 93–98% ở trên đếm cả các dòng in không có giá trị, như "Điểm rèn luyện học kỳ" của học kỳ hè. Ô sót thuộc học kỳ đang học: bảng in "Xếp loại học tập HK: KXL", các ô khác để trống, nhưng Gemma ghi "null" cho cả khối.
+
+Cách sửa (`check_boxes`):
+- "null", "None" và các chữ tương tự được hiểu là ô trống, không còn bị báo là giá trị sai.
+- Mỗi khối tổng kết được cắt riêng (`box_images`) rồi đọc lần thứ hai bằng câu lệnh riêng (`BOX_PROMPT`). Dòng nào hai lần đọc giống nhau thì giữ. Dòng nào khác nhau thì đọc lần thứ ba bằng ảnh phóng to 1,2 lần và lấy theo đa số.
+- Không có đa số: giữ kết quả của lần đọc riêng, trang có cảnh báo `summary_unsure`.
+- Lần đọc riêng bị lỗi, hoặc số khối Gemma đọc được không khớp số ảnh khối: giữ nguyên như đã đọc, trang có cảnh báo `summary_unchecked`. Lỗi ở lần đọc riêng không làm hỏng cả bảng điểm.
+- Chi phí thêm khoảng 10 neuron mỗi khối, tức khoảng 100–150 neuron mỗi bảng điểm.
+
+Thử trên các bảng điểm sinh viên đã import (9/11, theo yêu cầu của người dùng): PDF lấy từ database và chỉ nằm trong bộ nhớ, gửi lên tài khoản phụ, chỉ in số đếm.
+- Database có 18 bảng điểm: 15 PDF có lớp chữ, 3 bản scan. Dữ liệu đã lưu khớp với bộ đọc lớp chữ hiện tại. Riêng 1 bảng import ngày 18/10 thiếu một ô "KXL", vì bộ đọc lúc đó chưa biết chữ này.
+- Ép Gemma đọc 2 PDF có lớp chữ, lấy lớp chữ làm đáp án: dòng môn đúng hoàn toàn 51/51 và 56/56; khối tổng kết đúng 102/102 và 110/110 giá trị, gồm cả ô KXL.
+- 3 bản scan, so với kết quả PaddleOCR đã lưu:
+  - khối tổng kết khớp 118/118, 102/102 và 118/118 giá trị;
+  - dòng môn khớp 64/64, 80/80 và 58/60. Ở file cuối có 2 mã môn khác PaddleOCR, chưa rõ bên nào đúng.
+- 1 PDF có lớp chữ không đọc xong: Workers AI trả lỗi 500 cho một dải cả 4 lần thử.
+
 ## Thử trên tài khoản phụ (8/11)
 
 Các lần thử dùng tài khoản Cloudflare phụ (`CLOUDFLARE_TEST_ACCOUNT_ID`, `CLOUDFLARE_TEST_API_TOKEN` trong `apps/api/.env`), không bao giờ dùng tài khoản của web. Với sinh viên giả của schema e2e:
@@ -86,13 +105,15 @@ Các lần thử dùng tài khoản Cloudflare phụ (`CLOUDFLARE_TEST_ACCOUNT_I
   - PDF có lớp chữ: đọc xong sau 3 giây (8 học kỳ, 44 môn);
   - cùng bảng điểm ở dạng scan: Gemma đọc xong sau 33 giây, cũng 8 học kỳ và 44 môn.
 
-## Ngân sách neuron mỗi ngày (`ai-worker/budget.ts`, migration 059)
+## Ngân sách neuron 24 giờ (`ai-worker/budget.ts`, migration 060)
 
 Ngày 9/11: tài khoản miễn phí đã dùng 11.060 neuron trong ngày 8/11 vẫn bị lỗi 4006 ("used up your daily free allocation") sau mốc 00:00 UTC, dù trang quản lý ghi 0/10k. Đây là lỗi đã biết của Cloudflare với tài khoản miễn phí từng vượt 10.000 neuron; Cloudflare Community có nhiều báo cáo kẹt từ 5 đến hơn 10 tiếng. Vì vậy server không để tài khoản vượt mức:
-- Mỗi lần gọi chat, embedding hay đọc bản scan bằng Gemma đều cộng số neuron vào bảng `ai_daily_usage` (theo ngày UTC). Số lấy từ `usage.neurons` mà Workers AI trả về; nếu không có thì tính từ số token theo giá (Gemma 4 26B: 0,10 và 0,30 USD mỗi triệu token; BGE-M3: 0,0118 USD; 1.000 neuron = 0,011 USD).
-- Giới hạn mặc định 9.000/ngày (`AI_DAILY_NEURONS`; `off` là không giới hạn, dành cho gói trả phí). Mỗi việc mới cần dư ít nhất 600 neuron.
-- Khi chạm mức: worker báo `daily_budget` và ngừng nhận việc. Các việc AI nằm chờ trong hàng đợi tới 00:00 UTC (7h sáng ở Việt Nam) rồi chạy tiếp. Bảng điểm scan kết thúc bằng `ocr_busy` mà không gửi ảnh đi.
-- Thiếu bảng `ai_daily_usage` (schema thử) thì đếm trong bộ nhớ.
+- Nhiều khả năng Cloudflare tính 10.000 neuron miễn phí theo 24 giờ trượt, không xóa về 0 lúc 00:00 UTC (tài liệu của Cloudflare chỉ ghi "mỗi ngày"). Bằng chứng ngày 9/11: tài khoản thử báo 4006 lúc 05:45 UTC khi mới dùng khoảng 4.300 neuron từ 00:00 UTC, cộng khoảng 5.000 neuron đã dùng tối hôm trước thì vừa chạm 10.000. Vì vậy từ migration 060 server đếm theo giờ và cộng 24 giờ gần nhất.
+- Mỗi lần gọi chat, embedding hay đọc bản scan bằng Gemma đều cộng số neuron vào giờ hiện tại trong bảng `ai_usage_hours`. Số lấy từ `usage.neurons` mà Workers AI trả về; nếu không có thì tính từ số token theo giá (Gemma 4 26B: 0,10 và 0,30 USD mỗi triệu token; BGE-M3: 0,0118 USD; 1.000 neuron = 0,011 USD).
+- Giới hạn mặc định 9.000 neuron trong 24 giờ gần nhất (`AI_DAILY_NEURONS`; `off` là không giới hạn, dành cho gói trả phí). Mỗi việc mới cần dư ít nhất 600 neuron.
+- Khi chạm mức: worker báo `daily_budget` và ngừng nhận việc. Các việc AI nằm chờ trong hàng đợi và chạy tiếp khi neuron của các giờ cũ ra khỏi khung 24 giờ. Bảng điểm scan kết thúc bằng `ocr_busy` mà không gửi ảnh đi.
+- Nếu Workers AI vẫn trả 4006 (neuron dùng ở nơi khác, hoặc Cloudflare đếm khác), server ghi `ai_quota_block` và ngừng mọi lệnh gọi Workers AI trong 1 giờ thay vì gọi lại liên tục. Worker AI và bộ đọc bảng điểm dùng chung khóa này.
+- Thiếu hai bảng này (schema thử) thì mỗi tiến trình đếm trong bộ nhớ.
 
 ## Cấu hình (`apps/api/.env`, Render → Environment)
 
@@ -107,4 +128,4 @@ Giá trị sai không làm sập trang. `aiProviderConfig` đọc lỏng; `serve
 
 - `apps/api`: `ai-worker/cloudflare.test.ts`, `ai-worker/cloud.test.ts`, `student/text-layer.test.ts`.
 - `services/ocr`: `python -m unittest test_gemma_ocr`.
-- Đánh giá trên bảng điểm giả theo đúng mẫu VLU: lấy bảng của PDF thật trên máy, thay mọi điểm và số tổng kết bằng số ngẫu nhiên, xóa chữ ngoài bảng. Chạy trong thư mục tạm, không commit. Không gửi bảng điểm thật nào lên Cloudflare để thử.
+- Đánh giá trên bảng điểm giả theo đúng mẫu VLU: lấy bảng của PDF thật trên máy, thay mọi điểm và số tổng kết bằng số ngẫu nhiên, xóa chữ ngoài bảng. Chạy trong thư mục tạm, không commit. Bảng điểm thật chỉ được gửi lên tài khoản phụ khi người dùng yêu cầu (8/11: thư mục thử; 9/11: bảng điểm trong database). Khi đó chỉ gửi phần bảng đã che và chỉ in số đếm.

@@ -5,7 +5,7 @@ import type { DatabasePool } from "../db/pool.js";
 import { TRANSCRIPT_POLICY_VERSION } from "./consent.js";
 import { createStudentDataRouter } from "./router.js";
 import {
-  createTextLayerReader, gemmaNeurons, gemmaOutcome, startTextLayerReader, textLayerOutcome, textLayerPython, type TextLayerJobs, type TextLayerOutcome, type TextLayerReader,
+  createTextLayerReader, gemmaNeurons, gemmaOutcome, gemmaQuotaRefused, startTextLayerReader, textLayerOutcome, textLayerPython, type TextLayerJobs, type TextLayerOutcome, type TextLayerReader,
 } from "./text-layer.js";
 import { createTranscriptWorkerRouter } from "./transcript-jobs.js";
 
@@ -59,6 +59,10 @@ describe("the text-layer reader's answers", () => {
     expect(gemmaNeurons({ error: "ocr_busy", usage: { neurons: 40 } })).toBe(40);
     expect(gemmaNeurons({ result: { ocr_settings: null } })).toBe(0);
     expect(gemmaNeurons(null)).toBe(0);
+    // A 4006 answer blocks every Workers AI call for a while; other failures do not.
+    expect(gemmaQuotaRefused({ error: "ocr_busy", reason: "daily_limit", usage: { neurons: 40 } })).toBe(true);
+    expect(gemmaQuotaRefused({ error: "ocr_busy", reason: "http_503" })).toBe(false);
+    expect(gemmaQuotaRefused(null)).toBe(false);
   });
 
   it("refuses the PC worker once Gemma reads the scans on the server, and only then", async () => {

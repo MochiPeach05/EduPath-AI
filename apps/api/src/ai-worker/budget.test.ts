@@ -1,45 +1,89 @@
 import { describe, expect, it } from "vitest";
-import { chatNeurons, createNeuronBudget, embedNeurons, NEURONS_PER_TOKEN, UNLIMITED_BUDGET, utcDay } from "./budget.js";
+import { BLOCK_MS, chatNeurons, createNeuronBudget, embedNeurons, hourOf, NEURONS_PER_TOKEN, UNLIMITED_BUDGET } from "./budget.js";
 
-// The day's neuron budget of Workers AI (user 2026-11-09: a free account over 10,000 neurons stayed blocked after the reset).
-describe("the day's neuron budget", () => {
-  it("lets work start while the day's neurons plus a job's reserve stay under the limit, and starts again the next UTC day", async () => {
-    let now = new Date("2026-11-09T22:00:00Z");
+/** A stand-in for ai_usage_hours and ai_quota_block (the SQL of budget.ts, by its first words). */
+function fakeTables() {
+  const hours = new Map<number, number>();
+  let blockedUntil: Date | null = null;
+  const db = {
+    query: async (sql: string, params: unknown[] = []) => {
+      if (sql.startsWith("SELECT hour")) {
+        const after = (params[0] as Date).getTime();
+        return { rows: [...hours].filter(([hour]) => hour > after).map(([hour, neurons]) => ({ hour: new Date(hour), neurons })) } as never;
+      }
+      if (sql.startsWith("SELECT blocked_until")) return { rows: blockedUntil ? [{ blocked_until: blockedUntil }] : [] } as never;
+      if (sql.includes("INSERT INTO ai_usage_hours")) {
+        const hour = (params[0] as Date).getTime();
+        hours.set(hour, (hours.get(hour) ?? 0) + Number(params[1]));
+        return { rows: [{ neurons: hours.get(hour) }] } as never;
+      }
+      if (sql.includes("INSERT INTO ai_quota_block")) {
+        const until = params[0] as Date;
+        if (!blockedUntil || until > blockedUntil) blockedUntil = until;
+        return { rows: [] } as never;
+      }
+      throw new Error(`unexpected SQL: ${sql.slice(0, 40)}`);
+    },
+  };
+  return { db, hours };
+}
+
+// The neuron budget of Workers AI over the last 24 hours (user 2026-11-09: a free account answered 4006 after 4,300
+// neurons since 00:00 UTC, with 5,000 more the evening before).
+describe("the neuron budget over the last 24 hours", () => {
+  it("counts what the evening before spent after 00:00 UTC, and frees it once it is more than a day old", async () => {
+    let now = new Date("2026-11-08T16:00:00Z");
     const budget = createNeuronBudget({ limit: 1_000, now: () => now });
+    await budget.spend(600);
+    // 00:00 UTC (07:00 in Vietnam) is no reset: the evening's 600 still count.
+    now = new Date("2026-11-09T05:00:00Z");
     expect(await budget.allows(300)).toBe(true);
-    await budget.spend(650);
-    expect(await budget.allows(300)).toBe(true);
-    await budget.spend(100);
+    await budget.spend(200);
     expect(await budget.allows(300)).toBe(false);
-    // 00:00 UTC (07:00 in Vietnam): a new day.
-    now = new Date("2026-11-10T00:00:01Z");
+    // A whole day after the evening's hour ended, only the morning's 200 are left.
+    now = new Date("2026-11-09T17:00:01Z");
     expect(await budget.allows(300)).toBe(true);
-    expect(utcDay(now)).toBe("2026-11-10");
+    expect(await budget.allows(800)).toBe(true);
+    expect(await budget.allows(801)).toBe(false);
+    expect(hourOf(new Date("2026-11-09T05:59:59Z")).toISOString()).toBe("2026-11-09T05:00:00.000Z");
   });
 
-  it("adds every spend to ai_daily_usage and reads what other processes spent", async () => {
-    const rows = new Map<string, number>();
-    const db = {
-      query: async (sql: string, params: unknown[] = []) => {
-        const day = String(params[0]);
-        if (sql.startsWith("SELECT")) return { rows: rows.has(day) ? [{ neurons: rows.get(day) }] : [] } as never;
-        rows.set(day, (rows.get(day) ?? 0) + Number(params[1]));
-        return { rows: [{ neurons: rows.get(day) }] } as never;
-      },
-    };
+  it("adds every spend to its hour in ai_usage_hours and reads what the other process spent", async () => {
+    const { db, hours } = fakeTables();
     let clock = new Date("2026-11-09T10:00:00Z");
     const worker = createNeuronBudget({ limit: 1_000, db, now: () => clock, refreshMs: 1_000 });
     const reader = createNeuronBudget({ limit: 1_000, db, now: () => clock, refreshMs: 1_000 });
     await worker.spend(400);
     await reader.spend(300);
-    expect(rows.get("2026-11-09")).toBe(700);
-    clock = new Date("2026-11-09T10:00:05Z");
-    // The worker sees the reader's 300 once it reads the table again.
-    expect(await worker.allows(301)).toBe(false);
-    expect(await worker.allows(300)).toBe(true);
+    expect(hours.get(Date.parse("2026-11-09T10:00:00Z"))).toBe(700);
+    clock = new Date("2026-11-09T11:30:05Z");
+    await reader.spend(50);
+    expect(hours.get(Date.parse("2026-11-09T11:00:00Z"))).toBe(50);
+    // The worker sees the reader's 350 once it reads the table again.
+    expect(await worker.allows(251)).toBe(false);
+    expect(await worker.allows(250)).toBe(true);
   });
 
-  it("counts in memory when the table is missing, and never stops anything without a limit", async () => {
+  it("stops every Workers AI call of both processes for an hour after a 4006 answer, whatever the count says", async () => {
+    const { db } = fakeTables();
+    let clock = new Date("2026-11-09T05:45:00Z");
+    const warnings: string[] = [];
+    const worker = createNeuronBudget({ limit: 9_000, db, now: () => clock, refreshMs: 1_000, log: { warn: (message: string) => warnings.push(message) } });
+    const reader = createNeuronBudget({ limit: null, db, now: () => clock, refreshMs: 1_000 });
+    expect(await reader.allows()).toBe(true);
+    await worker.block("cloudflare_daily_limit");
+    expect(await worker.allows()).toBe(false);
+    clock = new Date(clock.getTime() + 5_000);
+    // The reader learns of it from ai_quota_block, even without a limit of its own.
+    expect(await reader.allows()).toBe(false);
+    clock = new Date(Date.parse("2026-11-09T05:45:00Z") + BLOCK_MS + 1_000);
+    expect(await worker.allows()).toBe(true);
+    expect(await reader.allows()).toBe(true);
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain("cloudflare_daily_limit");
+  });
+
+  it("counts in memory when the tables are missing, and never stops anything without a limit or a block", async () => {
     const warnings: string[] = [];
     const broken = { query: async () => { throw Object.assign(new Error("relation does not exist"), { code: "42P01" }); } };
     const budget = createNeuronBudget({ limit: 500, db: broken, log: { warn: (message: string) => warnings.push(message) } });
@@ -49,6 +93,8 @@ describe("the day's neuron budget", () => {
     const unlimited = createNeuronBudget({ limit: null });
     await unlimited.spend(1e9);
     expect(await unlimited.allows(1e9)).toBe(true);
+    expect(await UNLIMITED_BUDGET.allows()).toBe(true);
+    await UNLIMITED_BUDGET.block("x");
     expect(await UNLIMITED_BUDGET.allows()).toBe(true);
   });
 

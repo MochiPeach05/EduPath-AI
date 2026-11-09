@@ -89,6 +89,12 @@ export function gemmaNeurons(value: unknown): number {
   return Number.isFinite(neurons) && neurons > 0 ? neurons : 0;
 }
 
+/** Whether Workers AI refused a Gemma OCR run for the free neurons (4006, gemma_ocr daily_limit): then no Workers AI call
+ * from this server for a while (ai-worker/budget.ts block). */
+export function gemmaQuotaRefused(data: unknown): boolean {
+  return (data as { reason?: unknown } | null)?.reason === "daily_limit";
+}
+
 export function pythonTextLayerRunner(python: string, timeoutMs = 120_000, gemma: GemmaOcr | null = null, gemmaTimeoutMs = 600_000,
   budget: NeuronBudget | null = null): TextLayerRunner {
   return async (pdf) => {
@@ -104,7 +110,8 @@ export function pythonTextLayerRunner(python: string, timeoutMs = 120_000, gemma
         if ((await parse("--text-only", timeoutMs)) === 0) outcome = textLayerOutcome(JSON.parse(await readFile(output, "utf8")));
       } catch { outcome = { kind: "fallback" }; }
       if (!gemma || outcome.kind === "result" || outcome.kind === "error") return outcome;
-      // The day's neurons nearly spent (ai-worker/budget.ts): the scan is not sent; the student tries again later.
+      // The last 24 hours' neurons nearly spent, or Workers AI refused within the hour (ai-worker/budget.ts): the scan is
+      // not sent; the student tries again later.
       if (budget && !(await budget.allows(JOB_RESERVE))) return { kind: "error", code: "ocr_busy" };
       await rm(output, { force: true });
       const code = await parse("--gemma", gemmaTimeoutMs, { CLOUDFLARE_ACCOUNT_ID: gemma.accountId, CLOUDFLARE_API_TOKEN: gemma.apiToken });
@@ -112,6 +119,7 @@ export function pythonTextLayerRunner(python: string, timeoutMs = 120_000, gemma
       if (code !== 0) return { kind: "error", code: "ocr_failed" };
       const answer: unknown = JSON.parse(await readFile(output, "utf8"));
       await budget?.spend(gemmaNeurons(answer));
+      if (gemmaQuotaRefused(answer)) await budget?.block("ocr_daily_limit");
       return gemmaOutcome(answer);
     } catch {
       return gemma ? { kind: "error", code: "ocr_failed" } : { kind: "fallback" };

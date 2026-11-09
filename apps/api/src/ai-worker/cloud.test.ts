@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { startCloudAiWorker } from "./cloud.js";
+import { cloudModelPort, startCloudAiWorker } from "./cloud.js";
+import { createNeuronBudget } from "./budget.js";
 import { CLOUDFLARE_CHAT_MODEL } from "./cloudflare.js";
 import type { FetchLike } from "./ollama.js";
 import { aiProviderConfig } from "../config.js";
@@ -44,6 +45,22 @@ describe("the AI worker inside the API on Cloudflare Workers AI", () => {
     await worker.done;
     const complete = posted.find((item) => item.path.endsWith(`/${JOB_ID}/complete`))!;
     expect(complete.body).toMatchObject({ leaseToken: LEASE, model: CLOUDFLARE_CHAT_MODEL, digest: CLOUDFLARE_CHAT_MODEL, ollamaVersion: "cloudflare-workers-ai", output: answer });
+  });
+});
+
+describe("a 4006 answer on Cloudflare", () => {
+  it("blocks the budget, so the health check stops taking jobs instead of each job asking Workers AI again", async () => {
+    const fetch: FetchLike = async (url) => url.includes("/models/search")
+      ? json({ success: true, result: [{ name: CLOUDFLARE_CHAT_MODEL }] })
+      : json({ errors: [{ code: 4006, message: "you have used up your daily free allocation of 10,000 neurons" }] }, 429);
+    const budget = createNeuronBudget({ limit: 9_000, log: { warn: () => undefined } });
+    const runtime = { accountId: "0".repeat(32), apiToken: "t".repeat(30), model: CLOUDFLARE_CHAT_MODEL, timeoutMs: 60_000 };
+    const port = cloudModelPort(runtime, fetch, budget);
+    await expect(port.modelInfo()).resolves.toMatchObject({ digest: CLOUDFLARE_CHAT_MODEL });
+    const job = { system: "Hệ thống", user: "Dữ liệu", schema: { type: "object" }, options: { num_predict: 64 } };
+    await expect(port.chat(job as never, new AbortController().signal, () => undefined)).rejects.toMatchObject({ detail: "cloudflare_daily_limit" });
+    expect(await budget.allows()).toBe(false);
+    await expect(port.modelInfo()).rejects.toMatchObject({ code: "ollama_unavailable", detail: "daily_budget" });
   });
 });
 

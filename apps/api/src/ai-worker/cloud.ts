@@ -5,7 +5,7 @@
 import { createWorkerClient } from "./client.js";
 import { UNLIMITED_BUDGET, type NeuronBudget } from "./budget.js";
 import { CLOUDFLARE_CHAT_MODEL, cloudflareChat, cloudflareEmbed, cloudflareEmbeddingInfo, createCloudflareHealth, type CloudflareRuntime } from "./cloudflare.js";
-import type { FetchLike } from "./ollama.js";
+import { AiWorkerError, type FetchLike } from "./ollama.js";
 import { errorFields, runWorker, type LogFields, type OllamaPort, type WorkerLogger } from "./worker.js";
 
 export interface CloudWorkerOptions {
@@ -28,14 +28,23 @@ export interface CloudWorkerOptions {
   apiFetch?: FetchLike;
 }
 
-/** The worker's model port on Workers AI: Gemma for chat, BGE-M3 for embeddings, one health check for every loop. */
+/** The worker's model port on Workers AI: Gemma for chat, BGE-M3 for embeddings, one health check for every loop. A 4006
+ * answer (the free neurons used up) blocks the budget, so the health check stops the loops instead of each job asking again. */
 export function cloudModelPort(runtime: CloudflareRuntime, fetchImpl?: FetchLike, budget: NeuronBudget = UNLIMITED_BUDGET): OllamaPort {
   const deps = { ...(fetchImpl ? { fetch: fetchImpl } : {}), onNeurons: (neurons: number) => void budget.spend(neurons) };
   const health = createCloudflareHealth(runtime, { ...(fetchImpl ? { fetch: fetchImpl } : {}), budget });
+  const blocking = async <T>(work: Promise<T>): Promise<T> => {
+    try {
+      return await work;
+    } catch (error) {
+      if (error instanceof AiWorkerError && error.detail === "cloudflare_daily_limit") await budget.block("cloudflare_daily_limit");
+      throw error;
+    }
+  };
   return {
-    chat: (job, signal, onContent) => cloudflareChat(runtime, job, { ...deps, onContent }, signal),
+    chat: (job, signal, onContent) => blocking(cloudflareChat(runtime, job, { ...deps, onContent }, signal)),
     modelInfo: health,
-    embed: (spec, signal) => cloudflareEmbed(runtime, spec, deps, signal),
+    embed: (spec, signal) => blocking(cloudflareEmbed(runtime, spec, deps, signal)),
     embeddingModelInfo: async (model) => cloudflareEmbeddingInfo(model)
   };
 }
