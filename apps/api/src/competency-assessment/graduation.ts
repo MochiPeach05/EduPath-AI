@@ -398,7 +398,7 @@ export function assessGraduationGpa(
     if (!countsInGpa(record, conditionCodes)) continue;
     const best = gpaAttempt(record, scale);
     if (!best) continue; // Registrations without grades do not enter the GPA.
-    // VT (vắng thi) and CT (cấm thi) print no score and count 0, like the transcript's own semester GPA.
+    // VT, CT and DC print no score and count 0, like the transcript's own semester GPA.
     const value = NO_SCORE_LETTERS.includes(best.letter ?? "") && best.score4 === null && best.score10 === null ? 0 : scale === 4 ? best.score4 : best.score10;
     if (!numericIn(value, scale)) return unknown(`Chưa có đủ điểm hệ ${scale} hoặc tín chỉ của môn ${record.code} để tính điểm trung bình.`);
     if (best.credits === 0) continue;

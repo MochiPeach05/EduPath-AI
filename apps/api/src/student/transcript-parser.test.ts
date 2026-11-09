@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { COURSE_CODE_PATTERN, parsePages, reviewWarning, withoutSettledReviews, type TranscriptCourse, type TranscriptData } from "./transcript-parser.js";
+import { COURSE_CODE_PATTERN, NO_SCORE_LETTERS, parsePages, reviewWarning, withoutSettledReviews, type TranscriptCourse, type TranscriptData } from "./transcript-parser.js";
 
 // Synthetic text items laid out like the VLU transcript (612×792 points); no real transcript.
 const item = (text: string, x: number, y: number) => ({ text, x, y, width: text.length * 3.5 });
@@ -50,6 +50,15 @@ describe("native transcript parser", () => {
     expect(barred).toMatchObject({ score10: null, score4: null, letter: "CT", result: "Không đạt" });
     expect(barred).not.toHaveProperty("review");
     expect(barred).not.toHaveProperty("printed");
+  });
+
+  it("reads DC the same way, its mark kept as printed (user 2026-11-09)", () => {
+    const items = [...header, term("Năm học 2023-2024 - HK1", 120),
+      ...row(140, 1, "71ENG210023", "Anh văn 2 (AV2)", 3, "DC", "DC", "DC", "Không đạt")];
+    const [mark] = parsePages([{ page: 1, items }]).sections[0]!.courses;
+    expect(mark).toMatchObject({ score10: null, score4: null, letter: "DC", result: "Không đạt" });
+    expect(mark).not.toHaveProperty("review");
+    expect(NO_SCORE_LETTERS).toContain("DC");
   });
 
   it("keeps rows before any term heading in a section of their own, and refuses a page without course rows", () => {
@@ -110,5 +119,14 @@ describe("withoutSettledReviews", () => {
     expect(read.sections[0]!.courses[0]).not.toHaveProperty("printed");
     expect(read.sections[0]!.courses[1]).toMatchObject({ review: barred.review, printed: { score10: "CT", score4: "2,5x" } });
     expect(read.warnings).toEqual(["Bảng điểm do sinh viên tải lên; chưa được nhà trường xác minh.", reviewWarning(1)]);
+  });
+
+  it("drops the marks of a DC row stored before DC was known (2026-11-09), as for CT", () => {
+    const mark = { score10: null, score4: null, letter: "DC", result: "Không đạt", printed: { score10: "DC", score4: "DC" },
+      review: ["invalid_score_10", "invalid_score_4", "unrecognized_letter_grade"] };
+    const read = withoutSettledReviews(data([course(1, mark)], 1));
+    expect(read.sections[0]!.courses[0]).toMatchObject({ letter: "DC", score10: null, score4: null, result: "Không đạt" });
+    expect(read.sections[0]!.courses[0]).not.toHaveProperty("review");
+    expect(read.warnings).toEqual(["Bảng điểm do sinh viên tải lên; chưa được nhà trường xác minh."]);
   });
 });

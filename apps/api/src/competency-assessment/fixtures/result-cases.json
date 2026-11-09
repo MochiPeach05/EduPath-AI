@@ -1,7 +1,7 @@
 {
   "description": "Shared cases for deciding one transcript attempt's result. Used by apps/web/src/transcript-results.ts tests and the API competency-assessment course-state tests so both sides agree. A printed result text always wins; only when it is empty is the official letter grade used (inferred=true). MT is an exemption and counts as passed by the existing rule (not inferred). VT (vắng thi, absent from the exam) and CT (cấm thi, barred from the exam) are failing letters printed without a score.",
   "passLetters": ["A+", "A", "B+", "B", "C+", "C", "D+", "D"],
-  "failLetters": ["F", "VT", "CT"],
+  "failLetters": ["F", "VT", "CT", "DC"],
   "cases": [
     { "name": "printed Đạt", "result": "Đạt", "letter": "B", "expected": "pass", "inferred": false },
     { "name": "printed check mark", "result": "✓", "letter": "A", "expected": "pass", "inferred": false },
@@ -18,6 +18,8 @@
     { "name": "printed cross, absent VT", "result": "✗", "letter": "VT", "expected": "fail", "inferred": false },
     { "name": "empty result, barred CT", "result": null, "letter": "CT", "expected": "fail", "inferred": true },
     { "name": "printed Không đạt, barred CT", "result": "Không đạt", "letter": "CT", "expected": "fail", "inferred": false },
+    { "name": "empty result, DC", "result": null, "letter": "DC", "expected": "fail", "inferred": true },
+    { "name": "printed Không đạt, DC", "result": "Không đạt", "letter": "DC", "expected": "fail", "inferred": false },
     { "name": "blank string result, letter C", "result": "   ", "letter": "C", "expected": "pass", "inferred": true },
     { "name": "no result and no letter", "result": null, "letter": null, "expected": "unknown", "inferred": false }
   ]

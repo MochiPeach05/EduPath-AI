@@ -49,7 +49,7 @@ export type RoadmapChoice = {
   label: string; source: "next" | "late"; termCode: string | null; need: string; options: RoadmapOption[]; thisTerm?: boolean;
   thesis: { thesis: RoadmapOption | null; topics: RoadmapOption[]; way?: ThesisWay | null; reason?: string | null } | null;
 };
-/** F/VT/CT: must be taken again; D, D+: worth improving (user, 2026-10-24), never an English course (Anh văn, user 2026-10-24). */
+/** F/VT/CT/DC: must be taken again; D, D+: worth improving (user, 2026-10-24), never an English course (Anh văn, user 2026-10-24). */
 export type RoadmapImprove = { code: string; name: string; credits: number; letter: string; score10: number | null; action: "retake" | "improve"; careerSkills: string[] };
 /** A skill of the target career to build up: a gap, one only self-study can cover, or a met one worth deepening. key: S01… (the prompt's key). */
 export type RoadmapSkill = {

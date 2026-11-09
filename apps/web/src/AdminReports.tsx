@@ -592,7 +592,7 @@ export function RiskView({ data, level, setLevel, page, setPage, sortHeader, exp
   const counts = data.counts.all;
   return <div className="rp-stack">
     <Coverage head={data} />
-    <Card id="rp-risk-reasons" title="Lý do" sub="Một sinh viên có thể có nhiều lý do. Nguy cơ: môn bắt buộc chưa đạt (F, VT, CT), không kịp tín chỉ, GPA dưới ngưỡng. Cần chú ý: trễ môn so với KHĐT, thiếu tín chỉ tự chọn."
+    <Card id="rp-risk-reasons" title="Lý do" sub="Một sinh viên có thể có nhiều lý do. Nguy cơ: môn bắt buộc chưa đạt (F, VT, CT, DC), không kịp tín chỉ, GPA dưới ngưỡng. Cần chú ý: trễ môn so với KHĐT, thiếu tín chỉ tự chọn."
       actions={<ModeSwitch value={mode} onChange={setMode} label="lý do cần chú ý" />}>
       {mode === "all" ? <><Legend items={[["Nguy cơ", STATUS_COLORS.bad], ["Cần chú ý", STATUS_COLORS.warn]]} label="Mức" /><HBarList rows={reasonRows} label="Số sinh viên theo lý do, toàn khóa" labelWidth={200} /></>
         : <CohortMatrix rows={matrix} cohorts={cohortsOf(data.reasons)} label="Số sinh viên theo lý do và từng khóa" rowHeader="Lý do" />}

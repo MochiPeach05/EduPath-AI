@@ -21,8 +21,16 @@ export type CourseOutcome = {
 
 /** Passing letter grades; the OCR pipeline uses the same set (services/ocr/test_ocr.py PASS_LETTERS). */
 export const PASS_LETTERS: readonly string[] = ["A+", "A", "B+", "B", "C+", "C", "D+", "D"];
-/** Failing letter grades: F, VT (vắng thi, absent) and CT (cấm thi, barred; 2026-10-26), the last two printed without a score. */
-export const FAIL_LETTERS: readonly string[] = ["F", "VT", "CT"];
+/**
+ * Marks printed in the score columns too, a fail without a score: VT (vắng thi), CT (cấm thi, 2026-10-26) and DC (user
+ * 2026-11-09: a fail like the others, shown as printed, its meaning not written).
+ */
+export const NO_SCORE_LETTERS: readonly string[] = ["VT", "CT", "DC"];
+/** Failing letter grades: F and the marks without a score. */
+export const FAIL_LETTERS: readonly string[] = ["F", ...NO_SCORE_LETTERS];
+/** A row of a mark without a score (VT, CT, DC): its score cells show the mark, as the transcript prints them. */
+export const isNoScoreMark = (course: { letter: string | null; score10: number | null; score4: number | null }) =>
+  NO_SCORE_LETTERS.includes(course.letter?.trim().toUpperCase() ?? "") && course.score10 === null && course.score4 === null;
 export const isFailLetter = (letter: string | null | undefined) => FAIL_LETTERS.includes(letter?.trim().toUpperCase() ?? "");
 
 /**

@@ -80,7 +80,7 @@ PROMPT = """Ảnh là một dải ngang của bảng điểm sinh viên Trườn
 - kind "section": tiêu đề một phần khác của bảng, ví dụ "Điểm bảo lưu"; ghi vào text.
 - kind "header": CHỈ dòng tên các cột (STT, Mã môn học, Tên môn học...); ghi các tên cột vào text. Không bao giờ chép dòng môn học vào header: mỗi dòng môn học là một mục "course" riêng.
 Quy tắc:
-- Chép đúng từng ký tự như in: mã học phần, tên học phần, điểm (giữ dấu chấm hoặc dấu phẩy như in), điểm chữ (A+, A, B+, B, C+, C, D+, D, F, VT, CT, MT...).
+- Chép đúng từng ký tự như in: mã học phần, tên học phần, điểm (giữ dấu chấm hoặc dấu phẩy như in), điểm chữ (A+, A, B+, B, C+, C, D+, D, F, VT, CT, DC, MT...).
 - Không sửa, không đoán, không tự tính. Ô trống hoặc không đọc rõ thì để null.
 - Ảnh được cắt đúng theo đường kẻ của bảng nên không có dòng nào bị cắt: chép MỌI dòng, kể cả dòng đầu tiên và dòng cuối cùng của ảnh.
 - Bỏ qua tiêu đề trang, thông tin sinh viên, chữ ký.

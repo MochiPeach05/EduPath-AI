@@ -255,6 +255,19 @@ class RowBuilderTest(unittest.TestCase):
         self.assertEqual(big.shape[0], round((160 + 2 * 6) * gemma_ocr.BOX_SCALE) + 2 * 20)
         self.assertLess(big.shape[0] * big.shape[1], gemma_ocr.IMAGE_PIXELS)
 
+    def test_a_dc_row_is_a_fail_without_a_score_like_vt_and_ct(self):
+        # User 2026-11-09: DC counts as a fail, the transcript keeps the mark; 0 in the printed term GPA like F.
+        rows = gemma_ocr.RowBuilder().rows([TERM1, course('1', '71ENG210023', score10='DC', score4='DC', letter='DC', result='failed'),
+                                            course('2', '71ITBS10103', score10='7.2', score4='2.88', letter='B'),
+                                            {'kind': 'summary', 'lines': ['Số tín chỉ đạt học kỳ: 3', 'Điểm TB học kỳ (Hệ 4): 1.44']}])
+        courses, summaries, _ = parse_pages([{'page': 1, 'method': 'gemma', 'warnings': [], 'rows': rows}], {})
+        mark = courses[0]
+        self.assertEqual((mark['letter_grade'], mark['score_10'], mark['score_4'], mark['result']), ('DC', None, None, 'failed'))
+        self.assertEqual(mark['issues'], [])
+        semester = parse_semesters(summaries, courses)[0]
+        self.assertEqual(semester['computed_from_courses']['semester_gpa_4'], 1.44)
+        self.assertEqual(semester['issues'], [])
+
     def test_reads_the_json_of_an_answer_in_a_fence_or_with_words_around(self):
         self.assertEqual(gemma_ocr.json_text('```json\n{"items": []}\n```'), '{"items": []}')
         self.assertEqual(gemma_ocr.json_text('Đây là kết quả: {"items": [1]} xong'), '{"items": [1]}')

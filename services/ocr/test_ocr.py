@@ -30,9 +30,10 @@ DEFAULT_REC_MODEL = ROOT / 'models/f3'
 DEFAULT_DPI = {'ppocr': 150, 'vl': 300, 'gemma': 200}
 DEFAULT_DET_MODEL = 'PP-OCRv5_server_det'
 PASS_LETTERS = {'A+', 'A', 'B+', 'B', 'C+', 'C', 'D+', 'D'}
-# VT (vắng thi, absent from the exam) and CT (cấm thi, barred from the exam; user 2026-10-26) are printed in the score
-# and letter columns alike: a failed attempt without a score (it counts 0 in the printed semester GPA, like F).
-NO_SCORE_LETTERS = {'VT', 'CT'}
+# VT (vắng thi, absent from the exam), CT (cấm thi, barred from the exam; user 2026-10-26) and DC (user 2026-11-09: a
+# fail like the others, kept as printed, its meaning not written) are printed in the score and letter columns alike: a
+# failed attempt without a score (it counts 0 in the printed semester GPA, like F).
+NO_SCORE_LETTERS = {'VT', 'CT', 'DC'}
 FAIL_LETTERS = {'F'} | NO_SCORE_LETTERS
 LETTERS = PASS_LETTERS | FAIL_LETTERS | {'MT'}
 RESULT_MARKS = {'✓': 'passed', '✗': 'failed'}  # written into the result cell by ppocr_table.result_mark

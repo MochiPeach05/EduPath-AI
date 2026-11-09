@@ -20,12 +20,14 @@ export type TranscriptSection = { id: string; academicYear: string | null; semes
 /** Rows found before any term heading (2026-10-23): kept in their own section instead of refusing the transcript. */
 export const UNKNOWN_TERM_SECTION = { id: "unknown", academicYear: null, semester: null, label: "Chưa rõ học kỳ" } as const;
 /**
- * "VT" (vắng thi, absent from the exam) and "CT" (cấm thi, barred from the exam; user 2026-10-26: "CT … là chữ cấm thi
- * cũng là không đạt") are printed in the score and letter columns alike: a failed attempt without a score, 0 in the GPA.
+ * "VT" (vắng thi, absent from the exam), "CT" (cấm thi, barred from the exam; user 2026-10-26: "CT … là chữ cấm thi
+ * cũng là không đạt") and "DC" (user 2026-11-09: "tính chung với rớt là được rồi … ở bảng điểm vẫn giữ nguyên chữ DC";
+ * its meaning is not written anywhere, at the user's request) are printed in the score and letter columns alike: a failed
+ * attempt without a score, 0 in the GPA.
  */
-export const NO_SCORE_LETTERS: readonly string[] = ["VT", "CT"];
-/** The letter marks the pages know (pass, fail, VT absent, CT barred, MT exempt); another printed mark is kept and marked for review. */
-export const KNOWN_LETTER = /^(A\+?|B\+?|C\+?|D\+?|F|MT|VT|CT)$/;
+export const NO_SCORE_LETTERS: readonly string[] = ["VT", "CT", "DC"];
+/** The letter marks the pages know (pass, fail, VT, CT and DC without a score, MT exempt); another printed mark is kept and marked for review. */
+export const KNOWN_LETTER = /^(A\+?|B\+?|C\+?|D\+?|F|MT|VT|CT|DC)$/;
 /** One warning for the rows marked for review, shown with the transcript. */
 export const reviewWarning = (rows: number) =>
   `Có ${rows} dòng có mã môn, ký hiệu hoặc ô khác dạng thường gặp. Hệ thống vẫn lưu đúng như in trên PDF và đánh dấu các dòng này; hãy đối chiếu với PDF gốc.`;
@@ -42,8 +44,8 @@ export const isSettledResultConflict = (course: { result: string | null; score10
   /^đạt\b/.test((course.result ?? "").normalize("NFC").trim().toLowerCase()) && course.score10 !== null && course.score10 >= OLD_PASS_SCORE_10;
 
 /**
- * A VT/CT row stored before CT was known (2026-10-26): no score, and the mark (or nothing) in its printed score cells,
- * which were read as "not a number" and the mark as unknown.
+ * A VT/CT/DC row stored before its mark was known (CT 2026-10-26, DC 2026-11-09): no score, and the mark (or nothing) in
+ * its printed score cells, which were read as "not a number" and the mark as unknown.
  */
 const isNoScoreRow = (course: TranscriptCourse) => course.letter !== null && NO_SCORE_LETTERS.includes(course.letter)
   && course.score10 === null && course.score4 === null
@@ -52,7 +54,7 @@ const NO_SCORE_REVIEW = ["invalid_score_10", "invalid_score_4", "incomplete_scor
 
 /**
  * A stored transcript read as if uploaded now: without the review marks that are not errors (Đạt with 4,0 or more,
- * isSettledResultConflict; a VT/CT row, isNoScoreRow, whose printed mark goes too), its review warning recounted.
+ * isSettledResultConflict; a VT/CT/DC row, isNoScoreRow, whose printed mark goes too), its review warning recounted.
  */
 export function withoutSettledReviews(data: TranscriptData): TranscriptData {
   let changed = false;
@@ -218,7 +220,7 @@ export function parsePages(pages: Page[]): TranscriptData {
       const wholeCredits = typeof credits === "number" && Number.isInteger(credits);
       if (!wholeCredits) { review.push(credits === null ? "missing_credits" : "invalid_credits"); printed.credits = cells[3]!; }
       const letter = cells[6] || null;
-      // "VT" (vắng thi) and "CT" (cấm thi) fill the score columns too: a failed attempt without a score.
+      // VT, CT and DC fill the score columns too: a failed attempt without a score.
       const noScore = letter !== null && NO_SCORE_LETTERS.includes(letter), blank = (cell: string) => noScore && (cell === "" || cell === letter);
       const score = (cell: string, max: number, field: "score10" | "score4") => {
         if (blank(cell)) return null;

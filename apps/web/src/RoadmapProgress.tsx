@@ -142,7 +142,7 @@ export function RoadmapLegend() {
     [{ kind: "done" }, "Đã hoàn thành", "Học phần hoặc yêu cầu đã đạt bằng kết quả đã có. Giống nhau ở chế độ Chính thức và Theo kế hoạch."],
     [{ kind: "needed" }, "Còn thiếu", "Chính thức: chưa học hoặc chưa đăng ký, chưa tới học kỳ dự kiến. Theo kế hoạch: còn chưa có trong kế hoạch của bạn."],
     [{ kind: "needed", tone: "overdue" }, "Trễ kế hoạch đào tạo", "Học phần bắt buộc đã tới hoặc qua học kỳ dự kiến của kế hoạch đào tạo mà bạn chưa học, chưa đăng ký."],
-    [{ kind: "needed", tone: "failed" }, "Chưa đạt", "Học phần chưa đạt (F, VT, CT), cần học lại. Chỉ trạng thái này dùng màu đỏ."],
+    [{ kind: "needed", tone: "failed" }, "Chưa đạt", "Học phần chưa đạt (F, VT, CT, DC), cần học lại. Chỉ trạng thái này dùng màu đỏ."],
     [{ kind: "running" }, "Đang học", "Học phần bạn đang học trong học kỳ này (đã đăng ký, chưa có điểm). Ở một yêu cầu: sẽ đủ khi bạn học đạt các học phần đang học."],
     [{ kind: "planned" }, "Đã lên kế hoạch", "Học phần đã có trong kế hoạch; sẽ được tính khi bạn học đạt. Ở một yêu cầu: sẽ đủ khi bạn học đạt kế hoạch. Chỉ thấy ở chế độ Theo kế hoạch."],
     [{ kind: "remaining", count: 3 }, "Số còn thiếu", "Số học phần (hoặc số tín chỉ với nhóm tự chọn) còn thiếu để đủ yêu cầu."],

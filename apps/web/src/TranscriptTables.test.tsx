@@ -83,6 +83,20 @@ describe("TranscriptTables", () => {
     expect(plain).not.toContain("sr-other-specialty");
   });
 
+  it("shows a DC row as printed: the mark in its score columns, a fail, nothing to check (2026-11-09)", () => {
+    const transcript = { ...history(), sections: [term("2023-2024", "HK01", [
+      row(1, { code: "71ENG210023", name: "Anh văn 2 (AV2)", credits: 3, score10: null, score4: null, letter: "DC", result: "Không đạt" }),
+      row(2, { code: "71ITBS10103", name: "Nhập môn công nghệ thông tin", credits: 3, score10: 7.2, score4: 2.88, letter: "B", result: "Đạt" }),
+    ], "2.07")] };
+    const html = render(transcript);
+    const dc = html.slice(html.indexOf("Anh văn 2 (AV2)"), html.indexOf("</tr>", html.indexOf("Anh văn 2 (AV2)")));
+    expect(dc).toContain("<td>DC</td><td>DC</td>");
+    expect(dc).toContain('class="sr-grade-fail">DC</span>');
+    expect(dc).toContain("Không đạt");
+    expect(dc).not.toContain("Cần kiểm tra");
+    expect(html).not.toContain("dòng cần kiểm tra");
+  });
+
   it("draws each term as the student page does: filters, the eight columns, results and the printed summaries", () => {
     const html = render(data());
     expect(html).toContain("Tất cả học kỳ");

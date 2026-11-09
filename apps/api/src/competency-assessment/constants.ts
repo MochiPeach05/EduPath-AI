@@ -197,7 +197,7 @@ export const MAX_RELATED_SKILLS = 3;
 /** Same pass letters as the OCR pipeline (services/ocr/test_ocr.py PASS_LETTERS). */
 export const PASS_LETTERS: readonly string[] = ["A+", "A", "B+", "B", "C+", "C", "D+", "D"];
 /**
- * "VT" (vắng thi) and "CT" (cấm thi, 2026-10-26) are printed in the score and letter columns alike: a failed attempt
+ * "VT" (vắng thi), "CT" (cấm thi, 2026-10-26) and "DC" (2026-11-09) are printed in the score and letter columns alike: a failed attempt
  * without a score, worth 0 in the printed semester GPA like an F (transcript-parser NO_SCORE_LETTERS, services/ocr).
  */
 export const FAIL_LETTERS: readonly string[] = ["F", ...NO_SCORE_LETTERS];

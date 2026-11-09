@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Transcript } from "./StudentTranscript";
 import {
-  FAIL_LETTERS, PASS_LETTERS, attemptOutcome, isFailLetter, isRowWarning, reviewLabels, transcriptCreditCheck, transcriptOutcomes, transcriptResults,
+  FAIL_LETTERS, PASS_LETTERS, attemptOutcome, isFailLetter, isNoScoreMark, isRowWarning, reviewLabels, transcriptCreditCheck, transcriptOutcomes, transcriptResults,
 } from "./transcript-results";
 
 type Attempt = { code: string; result: string | null; letter?: string | null; score10?: number | null };
@@ -127,6 +127,11 @@ describe("letter grade fallback for blank result cells", () => {
     // CT (cấm thi, 2026-10-26) the same way.
     expect(attemptOutcome({ code: "X", result: null, letter: "CT", score10: null })).toEqual({ status: "fail", inferred: true, exempt: false });
     expect(["CT", " ct "].map(isFailLetter)).toEqual([true, true]);
+    // DC (2026-11-09) too: a fail printed without a score, its score cells showing the mark.
+    expect(attemptOutcome({ code: "X", result: null, letter: "DC", score10: null })).toEqual({ status: "fail", inferred: true, exempt: false });
+    expect(["DC", " dc "].map(isFailLetter)).toEqual([true, true]);
+    expect(isNoScoreMark({ letter: "DC", score10: null, score4: null })).toBe(true);
+    expect(isNoScoreMark({ letter: "F", score10: null, score4: null })).toBe(false);
     expect(["D", "MT", null].map(isFailLetter)).toEqual([false, false, false]);
   });
 

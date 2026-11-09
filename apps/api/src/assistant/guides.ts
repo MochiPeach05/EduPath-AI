@@ -98,7 +98,7 @@ export function portalGuides(): PortalGuide[] {
       "- Dấu ✓ màu xanh: môn đã đạt theo bảng điểm bạn tải lên.",
       "- Dấu ✗ màu đỏ: môn đã có kết quả nhưng chưa đạt.",
       "- Ô trống hoặc dấu gạch (—): môn chưa có trong bảng điểm; điều này không có nghĩa là bạn đã học và trượt môn đó.",
-      "Kết quả in trên bảng điểm luôn được dùng trước. Điểm chữ MT (miễn thi) được tính là đạt, kể cả khi không có điểm hệ 10 hay hệ 4. VT (vắng thi) và CT (cấm thi) là chưa đạt, không có điểm. Môn học nhiều lần chỉ cần một lần đạt hoặc được miễn thi là được đánh dấu đạt.",
+      "Kết quả in trên bảng điểm luôn được dùng trước. Điểm chữ MT (miễn thi) được tính là đạt, kể cả khi không có điểm hệ 10 hay hệ 4. VT (vắng thi), CT (cấm thi) và DC là chưa đạt, không có điểm. Môn học nhiều lần chỉ cần một lần đạt hoặc được miễn thi là được đánh dấu đạt.",
       "Nếu ô Kết quả trong PDF để trống, EduPath AI suy ra kết quả từ điểm chữ: từ A+ đến D là đạt, F là chưa đạt; những môn này có ghi chú kết quả được suy ra từ điểm chữ.",
       "Nếu kết quả khác với dự kiến, hãy kiểm tra mã học phần và bảo đảm bảng điểm đã cập nhật đủ các học kỳ, gồm cả phần điểm bảo lưu.",
     ]],
@@ -151,7 +151,7 @@ export function portalGuides(): PortalGuide[] {
     ]],
     ["lo-trinh-ai", "Lộ trình AI đề xuất", "#roadmap", [
       "Tab Lộ trình AI đề xuất trong trang Lộ trình học tập: EduPath AI soạn lộ trình cho học kỳ tới như một cố vấn học tập. Cần có kết quả Đánh giá năng lực và Khảo sát định hướng đã hoàn thành.",
-      "Lộ trình gồm Lời khuyên của cố vấn AI, Môn bạn cần học, Môn học bạn cần học lại và cải thiện (học lại: học phần chưa đạt F, VT, CT; học cải thiện: học phần đã đạt điểm D, D+ nếu bạn muốn nâng điểm), Kỹ năng, kiến thức nên bổ sung (vì sao cần, cách học) và Kế hoạch theo từng tháng của học kỳ. Danh sách học phần và kỹ năng do hệ thống tính từ kết quả đánh giá mới nhất; AI chọn ưu tiên và viết lời khuyên. Các học phần AI chọn được thêm vào Kế hoạch học kỳ một lần để bạn tự điều chỉnh.",
+      "Lộ trình gồm Lời khuyên của cố vấn AI, Môn bạn cần học, Môn học bạn cần học lại và cải thiện (học lại: học phần chưa đạt F, VT, CT, DC; học cải thiện: học phần đã đạt điểm D, D+ nếu bạn muốn nâng điểm), Kỹ năng, kiến thức nên bổ sung (vì sao cần, cách học) và Kế hoạch theo từng tháng của học kỳ. Danh sách học phần và kỹ năng do hệ thống tính từ kết quả đánh giá mới nhất; AI chọn ưu tiên và viết lời khuyên. Các học phần AI chọn được thêm vào Kế hoạch học kỳ một lần để bạn tự điều chỉnh.",
       `Lịch học kỳ dự kiến mà lộ trình dùng: ${termCalendarText()}.`,
       "Bấm Tạo lộ trình, hoặc Tạo lại khi kết quả đánh giá đã đổi hay lộ trình đã hết thời gian. Mỗi tài khoản giữ tối đa 5 lộ trình gần nhất; lộ trình bị xóa cùng kết quả đánh giá tạo ra nó.",
       "Lộ trình chỉ để tham khảo: hãy trao đổi với cố vấn học tập và xem lịch đăng ký học phần của trường trước khi đăng ký.",

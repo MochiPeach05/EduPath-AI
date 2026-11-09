@@ -47,6 +47,9 @@ const isGraded = (course: TranscriptCourse) =>
   course.score10 !== null || course.score4 !== null || Boolean(course.letter?.trim()) || Boolean(course.result?.trim());
 const outcomeOf = (course: TranscriptCourse): Outcome => (isGraded(course) ? attemptOutcome(course.result, course.letter).outcome : "pending");
 const letterOf = (course: TranscriptCourse) => course.letter?.trim().toUpperCase() ?? "";
+/** What the assistant may say a mark without a score is: DC only "không đạt" (user 2026-11-09, its meaning unsaid). */
+const NO_SCORE_TEXT: Record<string, string> = { VT: "vắng thi", CT: "cấm thi", DC: "không đạt" };
+const noScoreText = (letter: string) => NO_SCORE_TEXT[letter] ?? "không đạt";
 const isNoScore = (course: TranscriptCourse) => NO_SCORE_LETTERS.includes(letterOf(course)) && course.score10 === null && course.score4 === null;
 
 /** A course name for matching, without its (*) mark, marks and punctuation; numbers kept ("Anh văn 1" is not "Anh văn 2"). */
@@ -124,12 +127,12 @@ const where = (section: TranscriptSection) => (termCode(section) ? termName(sect
 const credits = (course: TranscriptCourse) =>
   `${course.printed?.credits !== undefined ? sanitizeText(course.printed.credits, 10) || "?" : formatNumber(course.credits)} TC${course.conditional ? ", môn điều kiện" : ""}`;
 
-/** The scores of a row as printed: "8,6 điểm hệ 10, 3,7 hệ 4, điểm chữ A"; VT and CT without a score; MT. */
+/** The scores of a row as printed: "8,6 điểm hệ 10, 3,7 hệ 4, điểm chữ A"; VT, CT and DC without a score; MT. */
 function gradeText(course: TranscriptCourse): string {
   if (!isGraded(course)) return "đang học, chưa có điểm";
   const letter = letterOf(course);
   if (letter === "MT") return "MT (miễn thi, công nhận)";
-  if (isNoScore(course)) return `${letter} (${letter === "VT" ? "vắng thi" : "cấm thi"}, không có điểm)`;
+  if (isNoScore(course)) return `${letter} (${noScoreText(letter)}, không có điểm)`;
   // A printed score keeps its digits but takes the decimal comma of the pages (assistant-v7: it answered "2.45").
   const score10 = course.score10 !== null ? formatNumber(course.score10) : course.printed?.score10 ? decimalComma(sanitizeText(course.printed.score10, 10)) : "";
   const score4 = course.score4 !== null ? formatNumber(course.score4) : course.printed?.score4 ? decimalComma(sanitizeText(course.printed.score4, 10)) : "";
@@ -163,7 +166,7 @@ function attemptText(row: Row): string {
   let text: string;
   if (outcome === "pending") text = "đang học";
   else if (letter === "MT") text = "MT (miễn thi, công nhận)";
-  else if (isNoScore(course)) text = `${letter} (${letter === "VT" ? "vắng thi" : "cấm thi"})`;
+  else if (isNoScore(course)) text = `${letter} (${noScoreText(letter)})`;
   else {
     const mark = letter ? sanitizeText(letter, 8) : outcome === "pass" ? "Đạt" : outcome === "fail" ? "Không đạt" : "chưa rõ kết quả";
     text = `${outcome === "pass" && letter ? "đạt " : ""}${mark}${score ? ` (${score})` : ""}`;

@@ -110,7 +110,7 @@ export async function riskWorkbook(rows: readonly ReportRow[], scoped: readonly 
   ], [...split.byCohort.map((entry) => [entry.cohort, entry.total, entry.risk, ...entry.kinds]), ["Toàn khóa", split.all.total, split.all.risk, ...split.all.kinds]]);
   notes(workbook, "Thống kê sinh viên có nguy cơ chậm tiến độ (AD-REPORT-05)", filters, scopeOf(scoped), now, [
     "Đúng các mục \"Cảnh báo chậm tiến độ\" sinh viên thấy trên trang Tổng quan của mình; hệ thống tự tính, không dùng AI; chỉ để tham khảo, không thay cảnh báo học vụ.",
-    "Nguy cơ: môn bắt buộc chưa đạt (F, VT, CT) chưa xếp học lại, không kịp tín chỉ, GPA tích lũy dưới mức tối thiểu của tiêu chuẩn xét tốt nghiệp. Cần chú ý: môn trễ so với kế hoạch, nhóm tự chọn còn thiếu tín chỉ, môn chưa đạt đã xếp học lại.",
+    "Nguy cơ: môn bắt buộc chưa đạt (F, VT, CT, DC) chưa xếp học lại, không kịp tín chỉ, GPA tích lũy dưới mức tối thiểu của tiêu chuẩn xét tốt nghiệp. Cần chú ý: môn trễ so với kế hoạch, nhóm tự chọn còn thiếu tín chỉ, môn chưa đạt đã xếp học lại.",
   ]);
   return buffer(workbook);
 }
