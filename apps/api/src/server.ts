@@ -65,7 +65,7 @@ async function startServer(): Promise<void> {
         apiToken: config.ai.cloudflare.apiToken,
         concurrency: config.ai.concurrency,
         thinking: config.ai.thinking,
-        budget: createNeuronBudget({ limit: config.ai.dailyNeurons, db: databasePool })
+        budget: createNeuronBudget({ limit: config.ai.dailyNeurons, account: config.ai.cloudflare.accountId, db: databasePool })
       });
     });
 

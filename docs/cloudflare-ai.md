@@ -105,7 +105,7 @@ Các lần thử dùng tài khoản Cloudflare phụ (`CLOUDFLARE_TEST_ACCOUNT_I
   - PDF có lớp chữ: đọc xong sau 3 giây (8 học kỳ, 44 môn);
   - cùng bảng điểm ở dạng scan: Gemma đọc xong sau 33 giây, cũng 8 học kỳ và 44 môn.
 
-## Ngân sách neuron 24 giờ (`ai-worker/budget.ts`, migration 060)
+## Ngân sách neuron 24 giờ (`ai-worker/budget.ts`, migration 060, theo tài khoản từ 061)
 
 Ngày 9/11: tài khoản miễn phí đã dùng 11.060 neuron trong ngày 8/11 vẫn bị lỗi 4006 ("used up your daily free allocation") sau mốc 00:00 UTC, dù trang quản lý ghi 0/10k. Đây là lỗi đã biết của Cloudflare với tài khoản miễn phí từng vượt 10.000 neuron; Cloudflare Community có nhiều báo cáo kẹt từ 5 đến hơn 10 tiếng. Vì vậy server không để tài khoản vượt mức:
 - Nhiều khả năng Cloudflare tính 10.000 neuron miễn phí theo 24 giờ trượt, không xóa về 0 lúc 00:00 UTC (tài liệu của Cloudflare chỉ ghi "mỗi ngày"). Bằng chứng ngày 9/11: tài khoản thử báo 4006 lúc 05:45 UTC khi mới dùng khoảng 4.300 neuron từ 00:00 UTC, cộng khoảng 5.000 neuron đã dùng tối hôm trước thì vừa chạm 10.000. Vì vậy từ migration 060 server đếm theo giờ và cộng 24 giờ gần nhất.
@@ -113,6 +113,7 @@ Ngày 9/11: tài khoản miễn phí đã dùng 11.060 neuron trong ngày 8/11 v
 - Giới hạn mặc định 9.000 neuron trong 24 giờ gần nhất (`AI_DAILY_NEURONS`; `off` là không giới hạn, dành cho gói trả phí). Mỗi việc mới cần dư ít nhất 600 neuron.
 - Khi chạm mức: worker báo `daily_budget` và ngừng nhận việc. Các việc AI nằm chờ trong hàng đợi và chạy tiếp khi neuron của các giờ cũ ra khỏi khung 24 giờ. Bảng điểm scan kết thúc bằng `ocr_busy` mà không gửi ảnh đi.
 - Nếu Workers AI vẫn trả 4006 (neuron dùng ở nơi khác, hoặc Cloudflare đếm khác), server ghi `ai_quota_block` và ngừng mọi lệnh gọi Workers AI trong 1 giờ thay vì gọi lại liên tục. Worker AI và bộ đọc bảng điểm dùng chung khóa này.
+- Từ migration 061 (9/11, người dùng: "Tôi đã đổi key rồi nhưng sao nó k chạy nhỉ"), cả bộ đếm lẫn khóa đều tính riêng cho từng tài khoản Cloudflare. Bảng chỉ lưu 16 ký tự đầu của SHA-256 mã tài khoản, không lưu mã. Vì vậy khi đổi key trên Render sang tài khoản khác, web chạy ngay với bộ đếm trống, không bị khóa hay lượt dùng của tài khoản cũ cản. Xóa dòng `ai_quota_block` của một tài khoản thì khóa của tài khoản đó được gỡ trong vòng 30 giây, không cần khởi động lại.
 - Thiếu hai bảng này (schema thử) thì mỗi tiến trình đếm trong bộ nhớ.
 
 ## Cấu hình (`apps/api/.env`, Render → Environment)

@@ -7,6 +7,10 @@
 // reserve stay under the limit. A 4006 answer all the same (neurons spent elsewhere, or counted differently) stops every
 // Workers AI call of this server for BLOCK_MS (ai_quota_block) instead of asking again and again. The AI worker and the
 // transcript reader share both through the tables; without them (a test schema) each counts in memory.
+// Both are kept per Cloudflare account (migration 061; user 2026-11-09: "Tôi đã đổi key rồi nhưng sao nó k chạy nhỉ"): new
+// keys on Render start with no stop and an empty count, and deleting the account's ai_quota_block row lifts its stop within
+// refreshMs, without a restart.
+import { createHash } from "node:crypto";
 import type { DatabasePool } from "../db/pool.js";
 
 /** Workers AI prices in neurons per token (2026-11-08: Gemma 4 26B $0.10 / $0.30 per M tokens, BGE-M3 $0.0118; 1,000 neurons = $0.011). */
@@ -38,13 +42,18 @@ export interface NeuronBudget {
 /** The start of the (UTC) hour of `time`: the key of its row in ai_usage_hours. */
 export const hourOf = (time: Date) => new Date(Math.floor(time.getTime() / HOUR_MS) * HOUR_MS);
 
+/** The account as the tables name it: the first 16 hex characters of the SHA-256 of its id ("none" without one). */
+export const accountTag = (accountId: string | null | undefined) =>
+  accountId ? createHash("sha256").update(accountId.trim().toLowerCase()).digest("hex").slice(0, 16) : "none";
+
 type Queryable = Pick<DatabasePool, "query">;
 
 /**
  * The budget over ai_usage_hours and ai_quota_block. Both are read again at most every `refreshMs` (other processes, such
  * as the transcript reader, add to them too) and every spend and block is written at once.
  */
-export function createNeuronBudget(options: { limit: number | null; db?: Queryable | null | undefined; now?: () => Date; refreshMs?: number; log?: Pick<Console, "warn"> }): NeuronBudget {
+export function createNeuronBudget(options: { limit: number | null; account?: string | null; db?: Queryable | null | undefined; now?: () => Date; refreshMs?: number; log?: Pick<Console, "warn"> }): NeuronBudget {
+  const account = accountTag(options.account);
   const now = () => (options.now ?? (() => new Date()))().getTime();
   const refreshMs = options.refreshMs ?? 30_000;
   const log = options.log ?? console;
@@ -71,13 +80,15 @@ export function createNeuronBudget(options: { limit: number | null; db?: Queryab
   const refresh = async () => {
     if (tablesMissing || now() - readAt < refreshMs) return;
     try {
-      const usage = await options.db!.query<{ hour: Date | string; neurons: number }>("SELECT hour, neurons FROM ai_usage_hours WHERE hour > $1", [new Date(oldest())]);
+      const usage = await options.db!.query<{ hour: Date | string; neurons: number }>(
+        "SELECT hour, neurons FROM ai_usage_hours WHERE account=$1 AND hour > $2", [account, new Date(oldest())]);
       for (const row of usage.rows) {
         const hour = new Date(row.hour).getTime();
         hours.set(hour, Math.max(hours.get(hour) ?? 0, Number(row.neurons)));
       }
-      const block = await options.db!.query<{ blocked_until: Date | string }>("SELECT blocked_until FROM ai_quota_block");
-      if (block.rows[0]) blockedUntil = Math.max(blockedUntil, new Date(block.rows[0].blocked_until).getTime());
+      // The table decides: a stop this process wrote is there, and a row deleted by hand lifts the stop.
+      const block = await options.db!.query<{ blocked_until: Date | string }>("SELECT blocked_until FROM ai_quota_block WHERE account=$1", [account]);
+      blockedUntil = block.rows[0] ? new Date(block.rows[0].blocked_until).getTime() : 0;
       readAt = now();
     } catch {
       missing();
@@ -98,9 +109,9 @@ export function createNeuronBudget(options: { limit: number | null; db?: Queryab
       if (tablesMissing) return;
       try {
         const result = await options.db!.query<{ neurons: number }>(
-          `INSERT INTO ai_usage_hours(hour,neurons,requests,updated_at) VALUES($1,$2,1,now())
-           ON CONFLICT(hour) DO UPDATE SET neurons=ai_usage_hours.neurons+EXCLUDED.neurons,requests=ai_usage_hours.requests+1,updated_at=now()
-           RETURNING neurons`, [hour, neurons]);
+          `INSERT INTO ai_usage_hours(account,hour,neurons,requests,updated_at) VALUES($1,$2,$3,1,now())
+           ON CONFLICT(account,hour) DO UPDATE SET neurons=ai_usage_hours.neurons+EXCLUDED.neurons,requests=ai_usage_hours.requests+1,updated_at=now()
+           RETURNING neurons`, [account, hour, neurons]);
         hours.set(key, Math.max(hours.get(key) ?? 0, Number(result.rows[0]?.neurons ?? 0)));
       } catch {
         missing();
@@ -113,9 +124,9 @@ export function createNeuronBudget(options: { limit: number | null; db?: Queryab
       if (tablesMissing) return;
       try {
         await options.db!.query(
-          `INSERT INTO ai_quota_block(id,blocked_until,reason,updated_at) VALUES(true,$1,$2,now())
-           ON CONFLICT(id) DO UPDATE SET blocked_until=GREATEST(ai_quota_block.blocked_until,EXCLUDED.blocked_until),reason=EXCLUDED.reason,updated_at=now()`,
-          [new Date(until), reason.slice(0, 60) || "4006"]);
+          `INSERT INTO ai_quota_block(account,blocked_until,reason,updated_at) VALUES($1,$2,$3,now())
+           ON CONFLICT(account) DO UPDATE SET blocked_until=GREATEST(ai_quota_block.blocked_until,EXCLUDED.blocked_until),reason=EXCLUDED.reason,updated_at=now()`,
+          [account, new Date(until), reason.slice(0, 60) || "4006"]);
       } catch {
         missing();
       }

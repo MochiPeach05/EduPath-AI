@@ -102,8 +102,8 @@ export function createApp({
   const textLayer = startTextLayerReader(config.ocrWorkerKey ? textLayerPython() : null,
     config.ocrWorkerKey && databasePool ? postgresTextLayerJobs(databasePool, { afterTranscriptImport }) : null, {
       gemma: gemmaOcr,
-      // Scans count against the same day's neurons as the AI jobs (ai-worker/budget.ts, migration 059).
-      budget: gemmaOcr ? createNeuronBudget({ limit: config.ai?.dailyNeurons ?? null, db: databasePool }) : null,
+      // Scans count against the same account's neurons as the AI jobs (ai-worker/budget.ts, migration 061).
+      budget: gemmaOcr ? createNeuronBudget({ limit: config.ai?.dailyNeurons ?? null, account: gemmaOcr.accountId, db: databasePool }) : null,
     });
   app.use("/api/worker/transcripts", createTranscriptWorkerRouter(databasePool,config.ocrWorkerKey, {
     afterTranscriptImport, refuseWorker: () => gemmaOcr !== null && textLayer.status() === "ready" }));
