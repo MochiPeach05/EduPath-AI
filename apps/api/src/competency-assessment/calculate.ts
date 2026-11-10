@@ -244,9 +244,16 @@ export const assessWithoutHistory = (inputs: AssessmentInputs): Omit<AssessmentR
 /**
  * The career part of the assessment (§7.5, §7.6) for each given career, the same inputs otherwise, without the history
  * ("Định hướng nghề nghiệp" compares every career of the catalog the way Khoảng trống kỹ năng shows the target one).
+ * One run of the engine for all of them: each equals assessWithoutHistory({ ...inputs, career }).career (2026-11-10: one
+ * run per career took most of the 3–7 s of GET /api/student/career-guidance on Render).
  */
 export function careerFitsFor(inputs: AssessmentInputs, careers: readonly CareerInput[]): CareerResult[] {
-  return careers.map((career) => assess({ ...inputs, career }).career!);
+  return assessAll(inputs, careers).careerFits;
+}
+
+/** assessWithoutHistory(inputs) and careerFitsFor(inputs, careers) from the same single run. */
+export function assessWithCareerFits(inputs: AssessmentInputs, careers: readonly CareerInput[]): { assessment: Omit<AssessmentResult, "history">; careerFits: CareerResult[] } {
+  return assessAll(inputs, careers);
 }
 
 type Assessment = Omit<AssessmentResult, "history">;
@@ -304,6 +311,11 @@ function competencyHistory(inputs: AssessmentInputs, latest: Assessment): Histor
 
 /** The whole calculation except the history, which reruns it on shorter transcripts. */
 function assess(inputs: AssessmentInputs): Assessment {
+  return assessAll(inputs, []).assessment;
+}
+
+/** assess, plus the career part (step 7) of each of otherCareers on the same run (careerFitsFor). */
+function assessAll(inputs: AssessmentInputs, otherCareers: readonly CareerInput[]): { assessment: Assessment; careerFits: CareerResult[] } {
   const warnings: AssessmentWarning[] = [];
   const warn = (code: AssessmentWarning["code"], message: string, consequence: string, details: string[] = []) =>
     warnings.push({ code, message, consequence, details });
@@ -511,16 +523,22 @@ function assess(inputs: AssessmentInputs): Assessment {
   work.sort((a, b) => groupOrder.findIndex((group) => group.id === a.groupId) - groupOrder.findIndex((group) => group.id === b.groupId) ||
     compareText(a.name, b.name) || compareCode(a.skillId, b.skillId));
   const career = inputs.career;
-  const careerOnly = new Map<string, string>();
-  for (const requirement of career?.requirements ?? []) {
-    if (requirement.skillId && requirement.skillName && !linksBySkill.has(requirement.skillId)) careerOnly.set(requirement.skillId, requirement.skillName);
-  }
-  const careerOnlyOrdered = [...careerOnly].sort(([idA, nameA], [idB, nameB]) => compareText(nameA, nameB) || compareCode(idA, idB));
-  const keyWidth = Math.max(2, String(work.length + careerOnlyOrdered.length).length);
-  const makeKey = (index: number) => `S${String(index + 1).padStart(keyWidth, "0")}`;
-  work.forEach((skill, index) => { skill.key = makeKey(index); });
-  const skillKeyById = new Map<string, string>(work.map((skill) => [skill.skillId, skill.key]));
-  careerOnlyOrdered.forEach(([skillId], index) => skillKeyById.set(skillId, makeKey(work.length + index)));
+  // The skills only a career requires (no course measures them) take the keys after the measured ones, and their number
+  // sets the width of every key: each career has its own keys (the target career here, each one of careerFitsFor in step 7).
+  const careerKeys = (target: CareerInput | null) => {
+    const careerOnly = new Map<string, string>();
+    for (const requirement of target?.requirements ?? []) {
+      if (requirement.skillId && requirement.skillName && !linksBySkill.has(requirement.skillId)) careerOnly.set(requirement.skillId, requirement.skillName);
+    }
+    const careerOnlyOrdered = [...careerOnly].sort(([idA, nameA], [idB, nameB]) => compareText(nameA, nameB) || compareCode(idA, idB));
+    const keyWidth = Math.max(2, String(work.length + careerOnlyOrdered.length).length);
+    const makeKey = (index: number) => `S${String(index + 1).padStart(keyWidth, "0")}`;
+    const skillKeyById = new Map<string, string>(work.map((skill, index) => [skill.skillId, makeKey(index)]));
+    careerOnlyOrdered.forEach(([skillId], index) => skillKeyById.set(skillId, makeKey(work.length + index)));
+    return { careerOnlyOrdered, skillKeyById };
+  };
+  const { careerOnlyOrdered, skillKeyById } = careerKeys(career);
+  work.forEach((skill) => { skill.key = skillKeyById.get(skill.skillId)!; });
   const careerSkillIds = new Set((career?.requirements ?? []).map((requirement) => requirement.skillId).filter((id): id is string => Boolean(id)));
 
   const evidenceRows = (skill: SkillWork): SkillEvidenceRow[] => {
@@ -680,15 +698,18 @@ function assess(inputs: AssessmentInputs): Assessment {
 
   /* ---- 7. career gaps and fit (§7.5, §7.6) ---- */
   const workById = new Map(work.map((skill) => [skill.skillId, skill]));
-  let careerResult: CareerResult | null = null;
-  const selfStudy: SelfStudyItem[] = [];
-  if (career) {
-    const rows: CareerRequirementResult[] = career.requirements.map((requirement) => {
+  /**
+   * The career part of one career with its own skill keys (careerKeys): the target career, and each career of careerFitsFor
+   * on the same run (Định hướng nghề nghiệp; nothing before this step depends on the career but the keys).
+   */
+  const careerPart = (target: CareerInput, keyOf: ReadonlyMap<string, string>): { result: CareerResult; selfStudy: SelfStudyItem[] } => {
+    const selfStudy: SelfStudyItem[] = [];
+    const rows: CareerRequirementResult[] = target.requirements.map((requirement) => {
       const isRequired = requirement.isRequired;
       const threshold = isRequired ? CAREER_THRESHOLDS.required : CAREER_THRESHOLDS.preferred;
       const coefficient = isRequired ? CAREER_COEFFICIENTS.required : CAREER_COEFFICIENTS.preferred;
       const skill = requirement.skillId ? workById.get(requirement.skillId) : undefined;
-      const skillKey = requirement.skillId && requirement.skillName ? skillKeyById.get(requirement.skillId) ?? null : null;
+      const skillKey = requirement.skillId && requirement.skillName ? keyOf.get(requirement.skillId) ?? null : null;
       const base = {
         requirementId: requirement.id, title: requirement.title, skillId: requirement.skillId, skillKey,
         skillName: skill?.name ?? requirement.skillName, groupKey: skill ? groupKey.get(skill.groupId)! : null,
@@ -769,8 +790,8 @@ function assess(inputs: AssessmentInputs): Assessment {
       total: rows.length, met: count("met"), below: count("below"), upcoming: count("upcoming"), notStudied: count("not_studied"),
       noData: count("no_data"), withData: rows.length - count("no_data"),
     };
-    careerResult = {
-      id: career.id, code: career.code, nameVi: career.nameVi, nameEn: career.nameEn, deleted: career.deleted, requirements: rows, counts,
+    const result: CareerResult = {
+      id: target.id, code: target.code, nameVi: target.nameVi, nameEn: target.nameEn, deleted: target.deleted, requirements: rows, counts,
       // v17: only the non-zero counts, "Cần tự học" apart, like the page's careerSummaryText; "x/y kỹ năng có điểm".
       summaryText: careerSummaryOf(rows), dataText: careerDataTextOf(rows),
       fit, fitScore, fitCode, fitLabel: FIT_LABELS[fitCode], dataShare,
@@ -778,11 +799,21 @@ function assess(inputs: AssessmentInputs): Assessment {
         ? floorScore(snapScore(scoredRows.reduce((sum, row) => sum + row.coefficient * workById.get(row.skillId!)!.score!, 0) / meanCoefficient)) : null,
       weightedMeanCount: scoredRows.length,
     };
+    return { result, selfStudy };
+  };
+  let careerResult: CareerResult | null = null;
+  const selfStudy: SelfStudyItem[] = [];
+  if (career) {
+    const part = careerPart(career, skillKeyById);
+    careerResult = part.result;
+    selfStudy.push(...part.selfStudy);
     if (career.deleted) {
       warn("career_deleted", `Nghề mục tiêu ${career.code} – ${career.nameVi} hiện không còn trong danh mục nghề.`,
         "Mức phù hợp nghề chỉ để tham khảo; hãy chọn lại nghề mục tiêu trong hồ sơ.");
     }
   }
+  // careerFitsFor: every other career on this run, each with its own keys; nothing else of the result reads them.
+  const careerFits = otherCareers.map((other) => careerPart(other, careerKeys(other).skillKeyById).result);
 
   // Required first, then by key; one item per skill.
   selfStudy.sort((a, b) => Number(b.isRequired) - Number(a.isRequired) || compareCode(a.skillKey, b.skillKey));
@@ -968,7 +999,7 @@ function assess(inputs: AssessmentInputs): Assessment {
     plannedTerm: row.plannedTerm, plannedTermSource: row.plannedTermSource, ...(row.filledBy ? { filledBy: row.filledBy } : {}),
   }));
   const standardMeta = graduationStandard;
-  return {
+  return { careerFits, assessment: {
     meta: {
       calcVersion: CALC_VERSION, promptVersion: inputs.promptVersion ?? null, transcriptVersion: inputs.transcript.version,
       cohortCode: inputs.student.cohortCode,
@@ -1002,5 +1033,5 @@ function assess(inputs: AssessmentInputs): Assessment {
     graduation,
     warnings,
     specialtySuggestion: specialty ? null : suggestSpecialty(counts),
-  };
+  } };
 }

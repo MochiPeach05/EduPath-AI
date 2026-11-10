@@ -4,6 +4,7 @@ import { courseKey, isPassedState, transcriptCourses, uniqueCurriculumCourses } 
 import { classifyCurriculumSpecialty, specialtyCounts, suggestSpecialty } from "../competency-assessment/specialty.js";
 import type { CurriculumCourseInput, GraduationStandardInput, SpecialtyCode } from "../competency-assessment/types.js";
 import type { DatabasePool } from "../db/pool.js";
+import { PROFILE_SQL, TRANSCRIPT_SQL } from "../db/student-rows.js";
 import type { TranscriptData } from "../student/transcript-parser.js";
 import { GRADUATION_ADVICE_PROMPT_VERSION } from "./advice/prompt.js";
 import { convertibleCourses, type ConvertibleCourses } from "./convertible.js";
@@ -97,15 +98,13 @@ function specialtySuggestionFor(courses: readonly CurriculumCourseInput[], trans
  * (loadStudentGraduation); no row locks are taken.
  */
 export async function readStudentGraduation(db: Db, userId: string): Promise<StudentGraduation> {
-  const profileRow = (await db.query<{ cohort_code: string | null; specialty: string | null; major_code: string | null }>(
-    "SELECT cohort_code,specialty,major_code FROM student_profiles WHERE user_id=$1", [userId])).rows[0];
+  const profileRow = (await db.query<{ cohort_code: string | null; specialty: string | null; major_code: string | null }>(PROFILE_SQL, [userId])).rows[0];
   const profile: StudentGraduationProfile = {
     cohortCode: normalizeCohortCode(profileRow?.cohort_code), specialty: profileSpecialty(profileRow?.specialty),
     majorCode: profileRow?.major_code?.trim() || null,
   };
   const { resolution, standard } = await resolveStudentStandard(db, profile);
-  const transcriptRow = (await db.query<{ version: string; data: TranscriptData; updated_at: Date | string }>(
-    "SELECT version,parsed_data AS data,updated_at FROM student_transcripts WHERE user_id=$1", [userId])).rows[0];
+  const transcriptRow = (await db.query<{ version: string; data: TranscriptData; updated_at: Date | string }>(TRANSCRIPT_SQL, [userId])).rows[0];
   const transcript = transcriptRow
     ? { version: transcriptRow.version, updatedAt: new Date(transcriptRow.updated_at).toISOString(), data: transcriptRow.data }
     : null;

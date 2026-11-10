@@ -10,7 +10,7 @@
 // portal the role 'advisor' only reads what its rows of the function list show (advisorReadOnly). Since the user's
 // "Quản lý sinh viên" (2026-11-03: AD-AST-01…09 are "QTV & CVHT"), admins and Ban chủ nhiệm khoa (canManageAdvisors) work
 // the same way in the page of ANY student, not only of the classes they advise; the student is told who did it (actorKind).
-import type { Request, RequestHandler } from "express";
+import type { Request, RequestHandler, Response } from "express";
 import type { DatabasePool } from "../db/pool.js";
 import { canManageAdvisors, type AuthenticatedUser } from "../auth/types.js";
 import { canUseStudentPortal } from "../auth/security.js";
@@ -56,6 +56,16 @@ declare global {
 /** The student a /api/student request is about: the signed-in student, or the student an advisor works for in this tab. */
 export function studentUser(request: Request): AuthenticatedUser {
   return request.advisorActing?.student.user ?? request.session.user!;
+}
+
+/**
+ * Whether this request's /api check (app.ts: authActivity, which also checks the tenant, the auth version and the role)
+ * already found the account of studentUser(request) active: the student's own session. A router need not ask again then
+ * (one round trip to the database less, 2026-11-10); for an advisor acting for a student it still asks.
+ */
+export function studentAccountChecked(request: Request, response: Response): boolean {
+  const own = request.session.user;
+  return !request.advisorActing && own !== undefined && response.locals.checkedAccount === own;
 }
 
 /** The advisor doing this /api/student request for a student, or null when the student does it themself. */

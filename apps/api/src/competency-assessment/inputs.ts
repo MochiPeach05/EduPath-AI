@@ -1,5 +1,6 @@
 import type { PoolClient } from "pg";
 import type { DatabasePool } from "../db/pool.js";
+import { PROFILE_SQL, TRANSCRIPT_SQL } from "../db/student-rows.js";
 import { normalizeCohortCode, profileSpecialty, resolveCohortStandard } from "../graduation/resolve.js";
 import { identity as planIdentity, type PlanData } from "../plans/model.js";
 import type { TranscriptData } from "../student/transcript-parser.js";
@@ -34,10 +35,10 @@ const num = (value: unknown) => value === null || value === undefined ? null : N
  */
 export async function readAssessmentInputs(db: Db, userId: string,
   options: { promptVersion?: string; careerOptional?: boolean; weightsOptional?: boolean } = {}): Promise<AssessmentInputs> {
+  // The texts Xét tốt nghiệp and Lộ trình học tập read these rows with too (db/student-rows.ts).
   const student = await db.query<{ cohort_code: string | null; specialty: string | null; career_position_id: string | null; major_code: string | null }>(
-    "SELECT cohort_code,specialty,career_position_id,major_code FROM student_profiles WHERE user_id=$1", [userId]);
-  const transcript = await db.query<{ version: string; data: TranscriptData }>(
-    "SELECT version,parsed_data AS data FROM student_transcripts WHERE user_id=$1", [userId]);
+    PROFILE_SQL, [userId]);
+  const transcript = await db.query<{ version: string; data: TranscriptData }>(TRANSCRIPT_SQL, [userId]);
   if (!transcript.rows[0]) throw new AssessmentError("transcript_required", 409);
   const profile = student.rows[0];
   const cohortCode = normalizeCohortCode(profile?.cohort_code);

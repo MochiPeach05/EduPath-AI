@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { calculateAssessment } from "../competency-assessment/calculate.js";
 import { syntheticCareer, syntheticInputs } from "../competency-assessment/fixtures/synthetic-k29.js";
 import type { DatabasePool } from "../db/pool.js";
+import { createReferenceCache, type ReferenceCache } from "../db/reference-cache.js";
 import { syntheticSurveyRow } from "../roadmap/test-fixture.js";
 import { TRANSCRIPT_POLICY_VERSION } from "../student/consent.js";
 import { interestMatch } from "./interests.js";
@@ -80,7 +81,7 @@ describe("GET /api/student/career-guidance", () => {
   /** survey: a complete Khảo sát định hướng (survey-v3), an older partial one (survey-v2: the field only) or none; consent: its policy version. */
   /** withdrawn: the competency assessment consent was withdrawn ("Xóa kết quả đánh giá") and not given again. */
   type Setup = { transcript?: boolean; survey?: "complete" | "partial" | null; consent?: string | null; stored?: { career: unknown; created_at: Date } | null; withdrawn?: boolean };
-  function setup(rows: Setup = {}) {
+  function setup(rows: Setup = {}, reference?: ReferenceCache) {
     const survey = rows.survey === undefined ? "complete" : rows.survey;
     const consent = rows.consent === undefined ? TRANSCRIPT_POLICY_VERSION : rows.consent;
     const query = vi.fn(async (sql: string) => {
@@ -110,9 +111,31 @@ describe("GET /api/student/career-guidance", () => {
     const pool = { query, connect: vi.fn(async () => ({ query, release: vi.fn() })) } as unknown as DatabasePool;
     const app = express();
     app.use((req, _res, next) => { Object.assign(req, { session: { user: { userId: "student-id", tenantId: "tenant-id", role: "student" } } }); next(); });
-    app.use("/guidance", createCareerGuidanceRouter(pool));
+    app.use("/guidance", createCareerGuidanceRouter(pool, reference ? { reference } : {}));
     return Object.assign(app, { query });
   }
+
+  // 2026-11-10: the catalog and the faculty's configuration come from the shared reference cache; the student's rows never.
+  it("reads the career catalog once for many requests, the student's own rows every time, and the catalog again after a write", async () => {
+    const reference = createReferenceCache();
+    const rows: Setup = {};
+    const app = setup(rows, reference);
+    const catalogReads = () => app.query.mock.calls.filter(([sql]) => /FROM career_positions c JOIN career_fields f|^SELECT code,name FROM career_fields/.test(String(sql))).length;
+    const surveyReads = () => app.query.mock.calls.filter(([sql]) => String(sql).includes("FROM stu_profile_surveys")).length;
+    const first = await request(app).get("/guidance").expect(200);
+    expect(catalogReads()).toBe(2);
+    const createdAt = new Date("2026-11-10T08:00:00Z");
+    rows.stored = { career: { id: "c2", nameVi: "Kỹ sư dữ liệu", requirements: [] }, created_at: createdAt };
+    const second = await request(app).get("/guidance").expect(200);
+    expect(catalogReads()).toBe(2);
+    expect(surveyReads()).toBe(2);
+    expect(second.body).toEqual({ ...first.body, gapCareerId: "c2", gapCareerName: "Kỹ sư dữ liệu", gapAssessedAt: createdAt.toISOString() });
+    // The same answer as without the cache.
+    expect((await request(setup(rows)).get("/guidance").expect(200)).body).toEqual(second.body);
+    reference.invalidate();
+    await request(app).get("/guidance").expect(200);
+    expect(catalogReads()).toBe(4);
+  });
 
   it("computes no fit after the student deleted the assessment results and withdrew the consent", async () => {
     const app = setup({ transcript: true, withdrawn: true });

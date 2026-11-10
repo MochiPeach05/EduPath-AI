@@ -12,6 +12,7 @@ import type {
 } from "./auth/types.js";
 import type { UserRepository } from "./users/user-repository.js";
 import { MemoryUserRepository } from "./users/memory-user-repository.js";
+import type { DatabasePool } from "./db/pool.js";
 
 const clientId = "11111111-1111-4111-8111-111111111111";
 const tenantId = "22222222-2222-4222-8222-222222222222";
@@ -466,5 +467,28 @@ describe("Microsoft authentication routes", () => {
 
     const me = await agent.get("/api/auth/me").expect(200);
     expect(me.body).toEqual({ authenticated: false });
+  });
+});
+
+describe("the reference rows the student pages share (db/reference-cache.ts, 2026-11-10)", () => {
+  it("are read once for many requests, and again after any write request to the admin API", async () => {
+    const query = vi.fn(async (sql: string) => (sql.startsWith("SELECT id FROM users") ? { rowCount: 1, rows: [{ id: "u" }] } : { rowCount: 0, rows: [] }));
+    const pool = { query, connect: vi.fn(async () => ({ query, release: vi.fn() })) } as unknown as DatabasePool;
+    const authClient = new FakeMicrosoftAuthClient();
+    const agent = request.agent(createApp({ config, microsoftAuthClient: authClient, userRepository: new FakeUserRepository(), databasePool: pool }));
+    await login(agent, authClient);
+    const catalogReads = () => query.mock.calls.filter(([sql]) => String(sql).includes("FROM career_positions c JOIN career_fields f")).length;
+    await agent.get("/api/student/career-guidance").expect(200);
+    await agent.get("/api/student/career-guidance").expect(200);
+    expect(catalogReads()).toBe(1);
+    // Any write to the admin API empties it, even one refused (a student session here).
+    const write = await agent.post("/api/admin/careers").send({});
+    expect(write.status).toBeGreaterThanOrEqual(400);
+    await agent.get("/api/student/career-guidance").expect(200);
+    expect(catalogReads()).toBe(2);
+    // A read of the admin API does not.
+    await agent.get("/api/admin/careers");
+    await agent.get("/api/student/career-guidance").expect(200);
+    expect(catalogReads()).toBe(2);
   });
 });

@@ -2,22 +2,27 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import type { DatabasePool } from "../db/pool.js";
+import { createReferenceCache, type ReferenceCache } from "../db/reference-cache.js";
 import { createOverviewRouter } from "./router.js";
 
 // GET /api/student/overview for a synthetic student with nothing done yet: every read answers no rows.
 const NOW = new Date("2026-10-30T03:00:00Z");
 
-function setup(options: { pool?: boolean; user?: boolean } = {}) {
+function setup(options: { pool?: boolean; user?: boolean; checked?: boolean; acting?: boolean; reference?: ReferenceCache } = {}) {
   const client = { query: vi.fn(async (_sql: string) => ({ rowCount: 0, rows: [] as unknown[] })), release: vi.fn() };
   const query = vi.fn(async (sql: string) => (sql.startsWith("SELECT id FROM users") ? { rowCount: 1, rows: [{ id: "student-id" }] } : { rowCount: 0, rows: [] }));
   const pool = { query, connect: vi.fn(async () => client) } as unknown as DatabasePool;
   const app = express();
-  app.use((req, _res, next) => {
-    Object.assign(req, { session: options.user === false ? {} : { user: { userId: "student-id", tenantId: "tenant-id", role: "student" } } });
+  app.use((req, res, next) => {
+    const user = { userId: "student-id", tenantId: "tenant-id", role: "student" };
+    Object.assign(req, { session: options.user === false ? {} : { user } });
+    // app.ts: the /api check found the session's account active; an advisor acting for a student is another account.
+    if (options.checked) res.locals.checkedAccount = user;
+    if (options.acting) Object.assign(req, { advisorActing: { advisor: { userId: "advisor-id" }, student: { user: { userId: "student-2", tenantId: "tenant-id", role: "student" } } } });
     next();
   });
-  app.use("/overview", createOverviewRouter(options.pool === false ? undefined : pool, { now: () => NOW }));
-  return { app, client };
+  app.use("/overview", createOverviewRouter(options.pool === false ? undefined : pool, { now: () => NOW, ...(options.reference ? { reference: options.reference } : {}) }));
+  return { app, client, query };
 }
 
 describe("GET /api/student/overview", () => {
@@ -47,5 +52,30 @@ describe("GET /api/student/overview", () => {
     expect(client.query.mock.calls[0]?.[0]).toBe("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
     expect(client.query.mock.calls.at(-1)?.[0]).toBe("COMMIT");
     expect(client.release).toHaveBeenCalledOnce();
+  });
+
+  // 2026-11-10: one round trip less a request.
+  it("asks the database whether the account is active only when the /api check of the request did not", async () => {
+    const accountReads = (query: ReturnType<typeof setup>["query"]) => query.mock.calls.filter(([sql]) => String(sql).startsWith("SELECT id FROM users")).length;
+    const checked = setup({ checked: true });
+    await request(checked.app).get("/overview").expect(200);
+    expect(accountReads(checked.query)).toBe(0);
+    const unchecked = setup();
+    await request(unchecked.app).get("/overview").expect(200);
+    expect(accountReads(unchecked.query)).toBe(1);
+    // An advisor acting for a student: the student account was not the one checked.
+    const acting = setup({ checked: true, acting: true });
+    await request(acting.app).get("/overview").expect(200);
+    expect(accountReads(acting.query)).toBe(1);
+  });
+
+  it("gives the same answer with the reference cache, the student rows read in the snapshot every time", async () => {
+    const plain = setup();
+    const cached = setup({ reference: createReferenceCache() });
+    const expected = (await request(plain.app).get("/overview").expect(200)).body;
+    expect((await request(cached.app).get("/overview").expect(200)).body).toEqual(expected);
+    expect((await request(cached.app).get("/overview").expect(200)).body).toEqual(expected);
+    const studentReads = cached.client.query.mock.calls.filter(([sql]) => String(sql).includes("FROM student_profiles")).length;
+    expect(studentReads).toBeGreaterThanOrEqual(2);
   });
 });

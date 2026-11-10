@@ -1,4 +1,5 @@
 import type { PoolClient } from "pg";
+import { PROFILE_SQL, TRANSCRIPT_SQL } from "../db/student-rows.js";
 import {
   courseKey, curriculumTermCode, deriveElectiveGroups, electiveCodeOf, isConditionOnly, physicalEducationFills, studyTermCode, uniqueCurriculumCourses,
   withPhysicalEducationFills, type TranscriptCourseRecord,
@@ -306,14 +307,14 @@ function groupBy<T>(items: readonly T[], keyOf: (item: T) => string): Map<string
 
 /** Reads everything the page needs for one student with plain SELECTs (the caller holds a snapshot). */
 export async function readStudyPlanFacts(db: Db, userId: string, now = new Date()): Promise<StudyPlanFacts> {
-  const profileRow = (await db.query<{ cohort_code: string | null; specialty: string | null; major_code: string | null }>(
-    "SELECT cohort_code,specialty,major_code FROM student_profiles WHERE user_id=$1", [userId])).rows[0];
+  // The texts of the competency inputs and Xét tốt nghiệp (db/student-rows.ts): read once in the snapshot of Tổng quan.
+  const profileRow = (await db.query<{ cohort_code: string | null; specialty: string | null; major_code: string | null }>(PROFILE_SQL, [userId])).rows[0];
   const cohortCode = normalizeCohortCode(profileRow?.cohort_code);
   const specialty = profileSpecialty(profileRow?.specialty);
   // The CTĐT, KHĐT and standard of the student's major (052; user, 2026-10-27).
   const majorCode = profileRow?.major_code?.trim() || null, major = majorIdentity(majorCode);
   const ownPlan = (row: PlanOffering) => normalizeCohortCode(row.cohort_code) === cohortCode && (!major || row.major_key === major);
-  const transcript = (await db.query<{ data: TranscriptData }>("SELECT parsed_data AS data FROM student_transcripts WHERE user_id=$1", [userId])).rows[0]?.data ?? null;
+  const transcript = (await db.query<{ data: TranscriptData }>(TRANSCRIPT_SQL, [userId])).rows[0]?.data ?? null;
   const filedCurriculum = cohortCode ? await readCurriculum(db, cohortCode, major) : null;
   // The CTĐT as the student reads it, with the real codes of its courses (curricula/real-codes.ts, user 2026-11-10: "dùng luôn
   // mã thực tế"; HTTT K29 71ISGR40203 → 71ITIS30503); graduation reads it as filed (curriculumCourses below).

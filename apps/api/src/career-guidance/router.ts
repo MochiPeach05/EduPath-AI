@@ -6,13 +6,14 @@
 import { Router, type ErrorRequestHandler } from "express";
 import type { PoolClient } from "pg";
 import { z } from "zod";
-import { assessWithoutHistory, careerFitsFor } from "../competency-assessment/calculate.js";
+import { assessWithCareerFits } from "../competency-assessment/calculate.js";
 import { courseKey, uniqueCurriculumCourses } from "../competency-assessment/course-state.js";
 import { AssessmentError, readAssessmentInputs } from "../competency-assessment/inputs.js";
 import type { AssessmentInputs, AssessmentResult, CareerInput, CareerRequirementResult, CareerResult, FitCode, GapStatus } from "../competency-assessment/types.js";
 import type { DatabasePool } from "../db/pool.js";
+import { snapshotReads, type ReferenceCache } from "../db/reference-cache.js";
 import { requireAuthentication } from "../middleware/authorization.js";
-import { studentUser } from "../advisors/access.js";
+import { studentAccountChecked, studentUser } from "../advisors/access.js";
 import { consentWithdrawn } from "../student/consent.js";
 import { readSurvey, surveyUsable, type StudentSurvey } from "../student/survey.js";
 import { interestMatch, type InterestMatch } from "./interests.js";
@@ -93,10 +94,12 @@ const requirementsOf = (career: CatalogRow, fit: CareerResult | null, courseName
 /** The careers, best fit first (no fit last, then by name), each with its fit, requirements and survey matches. */
 export function guidanceCareers(catalog: CatalogRow[], inputs: AssessmentInputs | null, targetId: string | null,
   survey: { field: string | null; tech: readonly string[] }): GuidanceCareer[] {
-  const fits = inputs ? careerFitsFor(inputs, catalog) : [];
+  // One run of the engine: the fit of every career, and the skills' evidence (it does not depend on the career), which gives
+  // every requirement its courses.
+  const run = inputs ? assessWithCareerFits(inputs, catalog) : null;
+  const fits = run?.careerFits ?? [];
   const courseNames = new Map(uniqueCurriculumCourses(inputs?.curriculum.courses ?? []).map((course) => [courseKey(course.code), course.name]));
-  // The skills' evidence does not depend on the career: one run gives every requirement its courses.
-  const sources = inputs ? scoreSourcesBySkill(assessWithoutHistory(inputs)) : new Map<string, GuidanceSource[]>();
+  const sources = run ? scoreSourcesBySkill(run.assessment) : new Map<string, GuidanceSource[]>();
   const careers = catalog.map((career, index): GuidanceCareer => {
     const fit = fits[index] ?? null;
     return {
@@ -133,76 +136,87 @@ export function sameAsStored(stored: CareerResult | null, live: GuidanceCareer):
   return Boolean(stored && stored.id === live.id && key(stored.requirements) === key(live.requirements));
 }
 
-export function createCareerGuidanceRouter(pool: DatabasePool | undefined) {
+export function createCareerGuidanceRouter(pool: DatabasePool | undefined, options: { reference?: ReferenceCache } = {}) {
   const router = Router();
   router.use(requireAuthentication);
   router.use(async (req, res, next) => {
     res.setHeader("Cache-Control", "no-store");
     if (!pool) { res.status(503).json({ error: "database_required" }); return; }
     const user = studentUser(req);
-    const active = await pool.query("SELECT id FROM users WHERE id=$1 AND entra_tenant_id=$2 AND is_active", [user.userId, user.tenantId]);
-    if (!active.rowCount) { res.status(403).json({ error: "account_unavailable" }); return; }
+    if (!studentAccountChecked(req, res)) {
+      const active = await pool.query("SELECT id FROM users WHERE id=$1 AND entra_tenant_id=$2 AND is_active", [user.userId, user.tenantId]);
+      if (!active.rowCount) { res.status(403).json({ error: "account_unavailable" }); return; }
+    }
     next();
   });
 
   router.get("/", async (req, res) => {
     z.object({}).strict().parse(req.query);
     const userId = studentUser(req).userId;
+    // The CTĐT, standards, skill configuration and careers come from the shared reference cache (db/reference-cache.ts,
+    // 2026-11-10: 29 round trips to the database a request); its reader is taken before the snapshot starts.
+    const reader = options.reference?.reader();
     const client = await pool!.connect();
+    let read;
     try {
       await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+      const db = snapshotReads(client, reader);
       let inputs: AssessmentInputs | null = null;
       let blocked: string | null = null;
       // "Xóa kết quả đánh giá" withdrew the consent to assess the competencies: no fit is computed from the transcript until
       // the student assesses again and agrees again (user 2026-10-29: "Khi người dùng đã xóa kết quả năng lực cũ thì nó nên
       // ghi rõ đây là kết quả cũ hoặc là xóa luôn chứ"). A student who never assessed still sees the fits to choose a career.
-      if (await consentWithdrawn(client, userId, "competency_assessment")) blocked = "assessment_withdrawn";
+      if (await consentWithdrawn(db, userId, "competency_assessment")) blocked = "assessment_withdrawn";
       else {
         try {
-          inputs = await readAssessmentInputs(client, userId, { careerOptional: true });
+          inputs = await readAssessmentInputs(db, userId, { careerOptional: true });
         } catch (error) {
           if (!(error instanceof AssessmentError)) throw error;
           blocked = error.code;
         }
       }
-      const catalog = await readCareerCatalog(client);
-      const fields = await client.query<{ code: string; name: string }>(
+      const catalog = await readCareerCatalog(db);
+      const fields = await db.query<{ code: string; name: string }>(
         "SELECT code,name FROM career_fields WHERE deleted_at IS NULL ORDER BY code::bigint,id");
-      const profile = await client.query<{ career_position_id: string | null }>("SELECT career_position_id FROM student_profiles WHERE user_id=$1", [userId]);
-      const targetId = profile.rows[0]?.career_position_id ?? null;
+      // The inputs carry the profile's target career, read in this snapshot.
+      const targetId = inputs ? inputs.student.careerPositionId : (await db.query<{ career_position_id: string | null }>(
+        "SELECT career_position_id FROM student_profiles WHERE user_id=$1", [userId])).rows[0]?.career_position_id ?? null;
       // A soft-deleted target is not in the catalog; Khoảng trống kỹ năng still shows it ("không còn trong danh mục").
       const deletedTarget = targetId && !catalog.some((career) => career.id === targetId)
-        ? (await client.query<{ name_vi: string }>("SELECT name_vi FROM career_positions WHERE id=$1", [targetId])).rows[0]?.name_vi ?? null : null;
+        ? (await db.query<{ name_vi: string }>("SELECT name_vi FROM career_positions WHERE id=$1", [targetId])).rows[0]?.name_vi ?? null : null;
       // What Khoảng trống kỹ năng shows: the target career of the latest stored assessment.
-      const stored = await client.query<{ career: CareerResult | null; created_at: Date }>(
+      const stored = await db.query<{ career: CareerResult | null; created_at: Date }>(
         "SELECT computed->'career' AS career,created_at FROM stu_comp_assessments WHERE user_id=$1 ORDER BY created_at DESC,id DESC LIMIT 1", [userId]);
-      const survey = await readSurvey(client, userId);
-      const usable = await surveyUsable(client, userId, survey);
+      const survey = await readSurvey(db, userId);
+      const usable = await surveyUsable(db, userId, survey);
       await client.query("COMMIT");
-      const answers = surveyAnswers(survey, usable);
-      const careers = guidanceCareers(catalog, inputs, targetId, answers);
-      const target = careers.find((career) => career.isTarget);
-      const gapCareer = stored.rows[0]?.career ?? null;
-      res.json({
-        blocked,
-        targetCareerId: targetId,
-        deletedTargetName: deletedTarget,
-        // false when Khoảng trống kỹ năng shows another career, or other statuses or scores for the target career (an older assessment).
-        gapCurrent: Boolean(target?.fit && sameAsStored(gapCareer, target)),
-        gapAssessedAt: stored.rows[0]?.created_at ?? null,
-        // The career Khoảng trống kỹ năng shows (the latest assessment's), so the page can say it is another one.
-        gapCareerId: gapCareer?.id ?? null,
-        gapCareerName: gapCareer?.nameVi ?? null,
-        surveyDone: answers.done,
-        fields: fields.rows.filter((field) => catalog.some((career) => career.category === field.code)),
-        careers,
-      });
+      read = { inputs, blocked, catalog, fields: fields.rows, targetId, deletedTarget, stored: stored.rows[0] ?? null, survey, usable };
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       throw error;
     } finally {
       client.release();
     }
+    // Computed with the connection back in the pool: several pages at once no longer hold every connection meanwhile.
+    const { inputs, blocked, catalog, fields, targetId, deletedTarget, stored, survey, usable } = read;
+    const answers = surveyAnswers(survey, usable);
+    const careers = guidanceCareers(catalog, inputs, targetId, answers);
+    const target = careers.find((career) => career.isTarget);
+    const gapCareer = stored?.career ?? null;
+    res.json({
+      blocked,
+      targetCareerId: targetId,
+      deletedTargetName: deletedTarget,
+      // false when Khoảng trống kỹ năng shows another career, or other statuses or scores for the target career (an older assessment).
+      gapCurrent: Boolean(target?.fit && sameAsStored(gapCareer, target)),
+      gapAssessedAt: stored?.created_at ?? null,
+      // The career Khoảng trống kỹ năng shows (the latest assessment's), so the page can say it is another one.
+      gapCareerId: gapCareer?.id ?? null,
+      gapCareerName: gapCareer?.nameVi ?? null,
+      surveyDone: answers.done,
+      fields: fields.filter((field) => catalog.some((career) => career.category === field.code)),
+      careers,
+    });
   });
 
   const errors: ErrorRequestHandler = (error, _req, res, next) => {

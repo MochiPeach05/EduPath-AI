@@ -15,6 +15,7 @@ import session from "express-session";
 import type { Store } from "express-session";
 import helmet from "helmet";
 import type { DatabasePool } from "./db/pool.js";
+import { createReferenceCache } from "./db/reference-cache.js";
 import { createStudentDataRouter } from "./student/router.js";
 import { createRoadmapRouter } from "./roadmap/router.js";
 import { createAssistantRouter } from "./assistant/router.js";
@@ -154,6 +155,8 @@ export function createApp({
       response.status(401).json({ error: "authentication_required" });
       return;
     }
+    // The session's account was just found active in its tenant: a router may skip asking again (studentAccountChecked).
+    if (authActivity && user) response.locals.checkedAccount = user;
     next();
   });
 
@@ -206,6 +209,10 @@ export function createApp({
     response.json({ authenticated: true, user: request.session.user });
   });
 
+  // The reference rows (CTĐT, KHĐT, standards, skill configuration, careers) the student pages share between requests
+  // (db/reference-cache.ts): only the admin API writes them, so every admin write request empties the cache.
+  const referenceCache = createReferenceCache();
+  app.use("/api/admin", referenceCache.invalidateOnWrite);
   // Cố vấn học tập (role 'advisor') only reads the admin portal; it must run before the log and the admin routers.
   app.use("/api/admin", advisorReadOnly);
   // Nhật ký thao tác (AD-REPORT-11): every successful admin change is logged; it must run before the admin routers.
@@ -231,9 +238,9 @@ export function createApp({
   // "Trợ lý AI" (STU-CHAT-01..05): answers come from the local AI worker too, so questions are queued only with AI_WORKER_KEY.
   app.use("/api/student/assistant", createAssistantRouter(databasePool, config.webOrigin, { enabled: Boolean(config.aiWorkerKey) }));
   // "Định hướng nghề nghiệp": every catalog career against the student's competencies and survey (read only, no AI).
-  app.use("/api/student/career-guidance", createCareerGuidanceRouter(databasePool));
+  app.use("/api/student/career-guidance", createCareerGuidanceRouter(databasePool, { reference: referenceCache }));
   // Tổng quan (STU-PROG-01…03): the student dashboard in one read-only snapshot, warnings included.
-  app.use("/api/student/overview", createOverviewRouter(databasePool));
+  app.use("/api/student/overview", createOverviewRouter(databasePool, { reference: referenceCache }));
   // The bell of the student portal (STU-PROG-04…09) and the faculty's announcements to it (AD-NOTI-01/02).
   app.use("/api/student/notifications", createStudentNotificationsRouter(databasePool, config.webOrigin));
   app.use("/api/admin/announcements", createAnnouncementsRouter(databasePool, config.webOrigin, { staffEmailDomains: config.staffEmailDomains }));
