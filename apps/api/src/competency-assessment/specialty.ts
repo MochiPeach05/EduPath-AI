@@ -32,12 +32,14 @@ export const SPECIALTIES: readonly SpecialtyInfo[] = [
   // K28 and earlier (2026-10-23): no program code and no courses of its own; the student takes the
   // cohort's general standard (the "không chuyên ngành" files) and its course list.
   { code: "KCN", label: "Không theo chuyên ngành", major: CNTT_MAJOR, programCode: "", curriculumName: "", planSectionLabel: "", cohorts: { to: 28 } },
-  // The other majors (2026-10-27), named by their CTĐT (curriculumName); no graduation standard yet ("Chuẩn xét tốt
-  // nghiệp tôi sẽ bổ sung sau"). The label carries the major (user 2026-11-05: "Thêm ngành trong phần chuyên ngành").
-  { code: "HTTT_CDS", label: "Hệ thống thông tin – Chuyển đổi số", major: "7480104", exact: true, programCode: "", curriculumName: "httt chuyen doi so", planSectionLabel: "Chuyên ngành HTTT Chuyển đổi số" },
+  // The other majors (2026-10-27), named by their CTĐT (curriculumName). The label carries the major (user 2026-11-05:
+  // "Thêm ngành trong phần chuyên ngành"). Program codes as the Faculty's K29 standards write them (2026-11-10):
+  // 7480104-01 HTTT chuyển đổi số, 7480102-02 An ninh mạng. HTTT Địa lý and IoT have no standard yet, so no known code:
+  // their standards are read by the specialty they name (standardSpecialty).
+  { code: "HTTT_CDS", label: "Hệ thống thông tin – Chuyển đổi số", major: "7480104", exact: true, programCode: "7480104-01", curriculumName: "httt chuyen doi so", planSectionLabel: "Chuyên ngành HTTT Chuyển đổi số" },
   { code: "HTTT_GIS", label: "Hệ thống thông tin – Địa lý", major: "7480104", exact: true, programCode: "", curriculumName: "httt dia ly", planSectionLabel: "Chuyên ngành HTTT Địa lý" },
   { code: "MMT_IOT", label: "Mạng máy tính – IoT", major: "7480102", exact: true, programCode: "", curriculumName: "iot", planSectionLabel: "Chuyên ngành IoT" },
-  { code: "MMT_ANM", label: "Mạng máy tính – An ninh mạng", major: "7480102", exact: true, programCode: "", curriculumName: "an ninh mang", planSectionLabel: "Chuyên ngành An ninh mạng" },
+  { code: "MMT_ANM", label: "Mạng máy tính – An ninh mạng", major: "7480102", exact: true, programCode: "7480102-02", curriculumName: "an ninh mang", planSectionLabel: "Chuyên ngành An ninh mạng" },
 ];
 
 export const isSpecialtyCode = (value: unknown): value is SpecialtyCode =>
@@ -98,12 +100,27 @@ function specialtyAtStart(text: string): SpecialtyCode | null {
   return match?.code ?? null;
 }
 
-/** Specialty of a graduation standard: a code (7480201-01 is ANM, K27 only), "other" for an unknown program code, or null for a general standard. */
+/** A specialty's program code ("7480104-01") anywhere in a text. */
+const PROGRAM_CODE = /(?<!\d)(\d{7}-\d{2})(?!\d)/g;
+/** Folded words of a name, punctuation dropped: "Hệ thống thông tin – Chuyển đổi số" → "he thong thong tin chuyen doi so". */
+const nameWords = (value: string) => fold(value).replace(/[^a-z0-9]+/g, " ").trim();
+
+/**
+ * Specialty of a graduation standard: by its program code (7480201-03 is CNPM; 7480201-01 is ANM, K27 only); a code no
+ * specialty has yet (a new specialty standard of a major) by the specialty its "Chuyên ngành" names, CTĐT name or label,
+ * among the specialties of that code's major ("Hệ thống thông tin địa lý (7480104-02)" is HTTT_GIS); "other" when no
+ * single specialty is named; null for a general standard (no program code).
+ */
 export function standardSpecialty(data: { specialty: string; classBlock: string; standardCode: string }): SpecialtyCode | "other" | null {
   const text = `${data.specialty} ${data.classBlock} ${data.standardCode}`;
-  const codes = [...text.matchAll(/(?<!\d)(\d{7}-\d{2})(?!\d)/g)].map((match) => match[1]!);
+  const codes = [...text.matchAll(PROGRAM_CODE)].map((match) => match[1]!);
   if (!codes.length) return null;
-  return SPECIALTIES.find((item) => item.programCode && codes.includes(item.programCode))?.code ?? "other";
+  const byCode = SPECIALTIES.find((item) => item.programCode && codes.includes(item.programCode));
+  if (byCode) return byCode.code;
+  const name = ` ${nameWords(data.specialty.replace(PROGRAM_CODE, " "))} `;
+  const named = SPECIALTIES.filter((item) => item.curriculumName && codes.some((code) => code.startsWith(`${item.major}-`))
+    && [item.curriculumName, item.label].some((value) => name.includes(` ${nameWords(value)} `)));
+  return named.length === 1 ? named[0]!.code : "other";
 }
 
 /**

@@ -13,10 +13,10 @@ describe("specialty mapping (spec §4)", () => {
       ["TTNT", "Trí tuệ nhân tạo", "7480201-04", "tri tue nhan tao", "Chuyên ngành Trí tuệ Nhân tạo"],
       ["ANM", "An ninh Mạng và IoTs", "7480201-01", "an ninh mang va iot", "Chuyên ngành An ninh Mạng và IoT"],
       ["KCN", "Không theo chuyên ngành", "", "", ""],
-      ["HTTT_CDS", "Hệ thống thông tin – Chuyển đổi số", "", "httt chuyen doi so", "Chuyên ngành HTTT Chuyển đổi số"],
+      ["HTTT_CDS", "Hệ thống thông tin – Chuyển đổi số", "7480104-01", "httt chuyen doi so", "Chuyên ngành HTTT Chuyển đổi số"],
       ["HTTT_GIS", "Hệ thống thông tin – Địa lý", "", "httt dia ly", "Chuyên ngành HTTT Địa lý"],
       ["MMT_IOT", "Mạng máy tính – IoT", "", "iot", "Chuyên ngành IoT"],
-      ["MMT_ANM", "Mạng máy tính – An ninh mạng", "", "an ninh mang", "Chuyên ngành An ninh mạng"],
+      ["MMT_ANM", "Mạng máy tính – An ninh mạng", "7480102-02", "an ninh mang", "Chuyên ngành An ninh mạng"],
     ]);
     expect(SPECIALTIES.filter((item) => specialtyHasCourses(item.code)).map((item) => item.code))
       .toEqual(["CNPM", "CNDL", "TTNT", "ANM", "HTTT_CDS", "HTTT_GIS", "MMT_IOT", "MMT_ANM"]);
@@ -107,6 +107,22 @@ describe("graduation standard resolution", () => {
     expect(standardSpecialty({ standardCode: "71K27CNTT_7480201-01_TN04", classBlock: "71K27CNTT_7480201-01", specialty: "An ninh Mạng và IoTs (7480201-01)" })).toBe("ANM");
     expect(standardSpecialty({ standardCode: "71K27CNTT_7480201-09_TN04", classBlock: "71K27CNTT_7480201-09", specialty: "Chuyên ngành khác (7480201-09)" })).toBe("other");
     expect(standardSpecialty(general.data)).toBeNull();
+  });
+
+  // 2026-11-10: the K29 standards of HTTT and MMT&TTDL as the Faculty published them; later ones by the specialty they name.
+  it("reads the specialty of an HTTT or MMT&TTDL standard by its code, else by the specialty it names in its major", () => {
+    expect(standardSpecialty({ standardCode: "71K29HTTT_7480104-01_TN04", classBlock: "71K29HTTT_7480104-01", specialty: "Hệ thống thông tin chuyển đổi số (7480104-01)" })).toBe("HTTT_CDS");
+    expect(standardSpecialty({ standardCode: "71K29TTDL_7480102-02_TN04", classBlock: "71K29TTDL_7480102-02", specialty: "An ninh mạng (7480102-02)" })).toBe("MMT_ANM");
+    const named = (specialty: string, code: string) => standardSpecialty({ standardCode: `71K31X_${code}_TN04`, classBlock: `71K31X_${code}`, specialty: `${specialty} (${code})` });
+    expect(named("Hệ thống thông tin địa lý", "7480104-02")).toBe("HTTT_GIS");
+    expect(named("HTTT Địa lý", "7480104-03")).toBe("HTTT_GIS");
+    expect(named("Internet vạn vật (IoT)", "7480102-01")).toBe("MMT_IOT");
+    expect(named("Mạng máy tính – IoT", "7480102-05")).toBe("MMT_IOT");
+    // Only the specialties of the code's major, and only one of them.
+    expect(named("Hệ thống thông tin địa lý", "7480102-01")).toBe("other");
+    expect(named("An ninh mạng và IoT", "7480102-01")).toBe("other");
+    expect(named("Thương mại điện tử", "7480104-02")).toBe("other");
+    expect(named("Công nghệ phần mềm", "7480201-05")).toBe("CNPM");
   });
 
   it("matches the student's specialty and never guesses one for K29 without a specialty", () => {

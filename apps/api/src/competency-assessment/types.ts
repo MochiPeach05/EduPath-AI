@@ -110,8 +110,9 @@ export type WeightsInput = {
 
 /**
  * How the DB layer resolved the graduation standard (active, same cohort, current revision):
- * - "specialty": matched the student's specialty by program code (data.specialty/classBlock);
- * - "general": specialty unset and exactly one general standard (no 7480201-0x code);
+ * - "specialty": matched the student's specialty by program code (data.specialty/classBlock/standardCode), or by the
+ *   specialty a standard names when its code is not known yet (standardSpecialty);
+ * - "general": specialty unset and exactly one general standard (no program code such as 7480201-03 or 7480104-01);
  * - "specialty_unset": specialty unset and no single general standard (K29) — not blocking;
  * - "not_found": no standard for the cohort/specialty;
  * - "ambiguous": several standards match.

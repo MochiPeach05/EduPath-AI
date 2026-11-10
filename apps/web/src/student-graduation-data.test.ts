@@ -205,7 +205,9 @@ describe("standard", () => {
     expect(missing.title).toBe("Chưa có tiêu chuẩn xét tốt nghiệp cho khóa K29");
     expect(missing.action).toBeNull();
     const missingSpecialty = unresolvedCopy({ ...base, profile: { cohortCode: "K29", specialty: "TTNT" }, resolution: "not_found" });
-    expect(missingSpecialty.text).toContain("chuyên ngành Trí tuệ nhân tạo");
+    // The cohort may have standards of other specialties (2026-11-10): the title names the specialty, not the cohort.
+    expect(missingSpecialty.title).toBe("Chưa có tiêu chuẩn xét tốt nghiệp cho chuyên ngành của bạn");
+    expect(missingSpecialty.text).toContain("cho chuyên ngành Trí tuệ nhân tạo của khóa K29");
     expect(missingSpecialty.action?.href).toBe("#profile");
     const ambiguous = unresolvedCopy({ ...base, profile: { cohortCode: "K29", specialty: "CNPM" }, resolution: "ambiguous" });
     expect(ambiguous.title).toBe("Có nhiều tiêu chuẩn cùng phù hợp với bạn");

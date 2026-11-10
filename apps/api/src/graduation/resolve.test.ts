@@ -30,7 +30,8 @@ describe("profile values", () => {
     for (const blank of [null, undefined, "", "   "]) expect(normalizeCohortCode(blank)).toBeNull();
     expect(profileSpecialty("CNDL")).toBe("CNDL");
     for (const other of ["cnpm", "Công nghệ phần mềm", null, 3]) expect(profileSpecialty(other)).toBeNull();
-    expect(standardIdentity({ specialty: "a", classBlock: "b", standardCode: "c" })).toEqual({ specialty: "a", classBlock: "b", standardCode: "c" });
+    expect(standardIdentity({ specialty: "a", classBlock: "b", standardCode: "c" })).toEqual({ specialty: "a", classBlock: "b", standardCode: "c", major: "" });
+    expect(standardIdentity({ specialty: "a", classBlock: "b", standardCode: "c", major: "Hệ thống thông tin (7480104)" }).major).toBe("Hệ thống thông tin (7480104)");
   });
 });
 
@@ -95,5 +96,55 @@ describe("standards of a major", () => {
     expect((await resolveCohortStandard(db, "K29", "CNPM", "7480201")).standard?.id).toBe("std-cnpm");
     expect(await resolveCohortStandard(db, "K29", "CNPM", "7480104")).toEqual({ resolution: "not_found", standard: null });
     expect((await resolveStudentStandard(db, { cohortCode: "K29", specialty: "CNPM", majorCode: null })).standard?.id).toBe("std-cnpm");
+  });
+});
+
+// 2026-11-10 (user: "Đã có xét tốt nghiệp chuyên ngành Hệ thống thông tin – Chuyển đổi số mà sao đây lại báo là không có"):
+// the K29 standards of the other majors, with the codes, names and fields the Faculty's workbooks give them.
+describe("standards of the HTTT and MMT&TTDL specialties", () => {
+  const cds = standard("std-httt-cds", "K29", {
+    name: "71K29HTTT_7480104-01_TN04 - K29HTTT_hệ thống thông tin (HTTT chuyển đổi số)", standardCode: "71K29HTTT_7480104-01_TN04",
+    classBlock: "71K29HTTT_7480104-01", major: "Hệ thống thông tin (7480104)", specialty: "Hệ thống thông tin chuyển đổi số (7480104-01)",
+  });
+  const anm = standard("std-mmt-anm", "K29", {
+    name: "71K29TTDL_7480102-02_TN04 - K29TTDL_MMT&TTDL (An ninh mạng)", standardCode: "71K29TTDL_7480102-02_TN04",
+    classBlock: "71K29TTDL_7480102-02", major: "Mạng máy tính và truyền thông dữ liệu (7480102)", specialty: "An ninh mạng (7480102-02)",
+  });
+  const k29 = [cnpm, cndl, cds, anm];
+  const own = async (specialty: Parameters<typeof resolveStudentStandard>[1]["specialty"], majorCode: string | null, rows = k29) =>
+    resolveStudentStandard(fakeDb(rows), { cohortCode: "K29", specialty, majorCode });
+
+  it("gives each specialty of HTTT and MMT&TTDL its own published standard", async () => {
+    expect(await own("HTTT_CDS", "7480104")).toMatchObject({ resolution: "specialty", standard: { id: "std-httt-cds" } });
+    expect(await own("MMT_ANM", "7480102")).toMatchObject({ resolution: "specialty", standard: { id: "std-mmt-anm" } });
+  });
+
+  it("never gives a specialty another specialty's or another major's standard", async () => {
+    expect(await own("HTTT_GIS", "7480104")).toEqual({ resolution: "not_found", standard: null });
+    expect(await own("MMT_IOT", "7480102")).toEqual({ resolution: "not_found", standard: null });
+    expect(await own(null, "7480104")).toEqual({ resolution: "specialty_unset", standard: null });
+    expect(await own("CNPM", "7480201")).toMatchObject({ resolution: "specialty", standard: { id: "std-cnpm" } });
+    expect(await own(null, "7480201")).toEqual({ resolution: "specialty_unset", standard: null });
+    expect(await own("HTTT_CDS", "7480104", [cnpm, cndl])).toEqual({ resolution: "not_found", standard: null });
+  });
+
+  it("reads a later standard by the specialty it names when its program code is not known yet", async () => {
+    const gis = standard("std-httt-gis", "K31", { standardCode: "71K31HTTT_7480104-02_TN04", classBlock: "71K31HTTT_7480104-02", specialty: "Hệ thống thông tin địa lý (7480104-02)" });
+    const iot = standard("std-mmt-iot", "K31", { standardCode: "71K31TTDL_7480102-01_TN04", classBlock: "71K31TTDL_7480102-01", specialty: "Internet vạn vật (IoT) (7480102-01)" });
+    const db = fakeDb([gis, iot]);
+    expect(await resolveCohortStandard(db, "K31", "HTTT_GIS", "7480104")).toMatchObject({ resolution: "specialty", standard: { id: "std-httt-gis" } });
+    expect(await resolveCohortStandard(db, "K31", "HTTT_CDS", "7480104")).toEqual({ resolution: "not_found", standard: null });
+    expect(await resolveCohortStandard(db, "K31", "MMT_IOT", "7480102")).toMatchObject({ resolution: "specialty", standard: { id: "std-mmt-iot" } });
+    expect(await resolveCohortStandard(db, "K31", "MMT_ANM", "7480102")).toEqual({ resolution: "not_found", standard: null });
+  });
+
+  it("reads the major of a general standard from its Ngành đào tạo, the MMT&TTDL class block 'TTDL' too", async () => {
+    const mmtGeneral = standard("std-mmt", "K29", { standardCode: "71K29TTDL_TN04", classBlock: "71K29TTDL", major: "Mạng máy tính và truyền thông dữ liệu (7480102)" });
+    expect(standardMajor(standardIdentity(mmtGeneral.data as GraduationData))).toBe("7480102");
+    expect(standardMajor({ specialty: "", classBlock: "71K29TTDL", standardCode: "71K29TTDL_TN04" })).toBe("7480102");
+    expect(standardMajor(standardIdentity(cds.data as GraduationData))).toBe("7480104");
+    // A CNTT student without a specialty never takes the general standard of MMT&TTDL; its own students do.
+    expect(await own(null, "7480201", [cnpm, cndl, mmtGeneral])).toEqual({ resolution: "specialty_unset", standard: null });
+    expect(await own("MMT_IOT", "7480102", [cnpm, mmtGeneral, anm])).toMatchObject({ resolution: "general", standard: { id: "std-mmt" } });
   });
 });

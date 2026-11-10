@@ -283,10 +283,11 @@ export function unresolvedCopy(data: Pick<StudentGraduationResponse, "profile" |
         suggestion: null, action: null,
       };
     default:
+      // With a specialty the standard missing is the specialty's: the cohort may have standards of other specialties.
       return specialty
         ? {
-          title: `Chưa có tiêu chuẩn xét tốt nghiệp cho khóa ${cohort ?? "của bạn"}`,
-          text: `Khoa chưa công bố tiêu chuẩn xét tốt nghiệp đang áp dụng cho khóa ${cohort ?? "của bạn"}, chuyên ngành ${specialty}. Hãy quay lại sau, hoặc kiểm tra lại chuyên ngành trong hồ sơ nếu chưa đúng.`,
+          title: "Chưa có tiêu chuẩn xét tốt nghiệp cho chuyên ngành của bạn",
+          text: `Khoa chưa công bố tiêu chuẩn xét tốt nghiệp cho chuyên ngành ${specialty} của khóa ${cohort ?? "bạn"}. Hãy quay lại sau, hoặc kiểm tra lại chuyên ngành trong hồ sơ nếu chưa đúng.`,
           suggestion: null, action: { label: "Kiểm tra chuyên ngành", href: "#profile" },
         }
         : {

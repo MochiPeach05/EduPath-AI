@@ -20,21 +20,26 @@ export const normalizeCohortCode = (value: string | null | undefined): string | 
 /** student_profiles.specialty when it is a known code, else null ("Chưa xác định"). */
 export const profileSpecialty = (value: unknown): SpecialtyCode | null => (isSpecialtyCode(value) ? value : null);
 
-/** The full identity used to match a standard to a specialty (program code in specialty, classBlock or standardCode). */
-export const standardIdentity = (data: Pick<GraduationData, "specialty" | "classBlock" | "standardCode">) => ({
-  specialty: data.specialty ?? "", classBlock: data.classBlock ?? "", standardCode: data.standardCode ?? "",
+/**
+ * The full identity used to match a standard to a specialty (program code in specialty, classBlock or standardCode) and
+ * to its major (also the "Ngành đào tạo" it names).
+ */
+export const standardIdentity = (data: Pick<GraduationData, "specialty" | "classBlock" | "standardCode"> & { major?: string | null }) => ({
+  specialty: data.specialty ?? "", classBlock: data.classBlock ?? "", standardCode: data.standardCode ?? "", major: data.major ?? "",
 });
 
 /**
- * The major a graduation standard is for (2026-10-27): the programme of its code ("71K29CNTT_7480201-03" → 7480201), else
- * HTTT or MMT named in it, else Công nghệ thông tin, the major of every standard before the other majors came.
+ * The major a graduation standard is for (2026-10-27): the programme of its specialty code ("71K29CNTT_7480201-03" →
+ * 7480201), else the code of its "Ngành đào tạo" ("Mạng máy tính và truyền thông dữ liệu (7480102)", a general standard;
+ * 2026-11-10), else HTTT or MMT/TTDL named in it (the Faculty writes MMT&TTDL classes "71K29TTDL"), else Công nghệ thông
+ * tin, the major of every standard before the other majors came.
  */
-export function standardMajor(identity: { specialty: string; classBlock: string; standardCode: string }): string {
+export function standardMajor(identity: { specialty: string; classBlock: string; standardCode: string; major?: string }): string {
   const text = `${identity.specialty} ${identity.classBlock} ${identity.standardCode}`;
-  const programme = /(?<!\d)(\d{7})-\d{2}(?!\d)/.exec(text)?.[1];
+  const programme = /(?<!\d)(\d{7})-\d{2}(?!\d)/.exec(text)?.[1] ?? /(?<!\d)(\d{7})(?![\d-])/.exec(identity.major ?? "")?.[1];
   if (programme) return programme;
   if (/HTTT/i.test(text)) return "7480104";
-  if (/MMT/i.test(text)) return "7480102";
+  if (/MMT|TTDL/i.test(text)) return "7480102";
   return CNTT_MAJOR;
 }
 
