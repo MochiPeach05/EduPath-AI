@@ -1,6 +1,7 @@
 import type { PoolClient } from "pg";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { claimRoadmap, completeRoadmap, createRoadmap, createRoadmapExpiry, expireRoadmaps, extendRoadmap, retryInput, RoadmapError, ROADMAP_RETRY_CODE, type RoadmapRow } from "./jobs.js";
+import { claimRoadmap, completeRoadmap, createRoadmap, createRoadmapExpiry, expireRoadmaps, extendRoadmap, readRoadmapRelations, retryInput, RoadmapError, ROADMAP_RETRY_CODE, type RoadmapRow } from "./jobs.js";
+import type { AssessmentResult as RoadmapRelationResult } from "../competency-assessment/types.js";
 import { TRANSCRIPT_POLICY_VERSION } from "../student/consent.js";
 import { surveyFacts } from "../student/survey.js";
 import { buildRoadmapInput, ROADMAP_PROMPT_VERSION } from "./prompt.js";
@@ -252,5 +253,35 @@ describe("worker side", () => {
       expect(expired.update()).toBeUndefined();
     }
     expect(await completeRoadmap(workerClient(null).client, ROADMAP, success(output))).toBe("missing");
+  });
+});
+
+describe("readRoadmapRelations with the real codes of the graduation standard (comp-calc-v22, user 2026-11-10)", () => {
+  // Catalog data only (ngành HTTT K29): the CTĐT file writes Chuyên đề Thương mại điện tử 71ISGR40203 and Đại số tuyến tính
+  // và ứng dụng 71ITMA10203, the standard 71ITIS30503 and 71MATL10053.
+  const revisionId = "88888888-8888-4888-8888-888888888888";
+  const course = (code: string, name: string) => ({ id: code, groupId: "g", code, name, credits: 3, conditionOnly: false, sourceRow: 1 });
+  const query = vi.fn(async (sql: string) => {
+    const rows = (list: unknown[]) => ({ rowCount: list.length, rows: list });
+    if (sql.includes("FROM curriculum_relations")) return rows([{ courseCode: "71ISGR40203", kind: "prerequisite", targetCodes: ["71ITMA10203"] }]);
+    if (sql.includes("FROM curricula c JOIN curriculum_courses cc")) return rows([
+      { revision_id: revisionId, cohort_code: "K29", identity_key: "he thong thong tin:K29", code: "71ISGR40203", name: "Chuyên đề Thương mại điện tử", credits: "3" },
+      { revision_id: revisionId, cohort_code: "K29", identity_key: "he thong thong tin:K29", code: "71ITMA10203", name: "Đại số tuyến tính và ứng dụng", credits: "3" },
+    ]);
+    if (sql.includes("FROM graduation_standards g")) return rows([{ cohort_code: "K29", data: {
+      specialty: "", classBlock: "71K29HTTT", standardCode: "71K29HTTT_TN04", major: "Hệ thống thông tin (7480104)",
+      courses: [course("71ITIS30503", "Chuyên đề Thương Mại điện tử"), course("71MATL10053", "Đại số tuyến tính và ứng dụng")],
+    } }]);
+    return rows([]);
+  });
+  const result = (calcVersion: string) => ({ meta: { calcVersion, curriculum: { revisionId } } }) as unknown as Pick<RoadmapRelationResult, "meta">;
+
+  it("reads them so for a result that reads the real codes, and as filed for an older one", async () => {
+    expect(await readRoadmapRelations({ query } as never, result("comp-calc-v22"))).toEqual([
+      { courseCode: "71ITIS30503", kind: "prerequisite", targetCodes: ["71MATL10053"] },
+    ]);
+    expect(await readRoadmapRelations({ query } as never, result("comp-calc-v21"))).toEqual([
+      { courseCode: "71ISGR40203", kind: "prerequisite", targetCodes: ["71ITMA10203"] },
+    ]);
   });
 });

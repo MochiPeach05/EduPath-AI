@@ -114,6 +114,9 @@ type SetupOptions = {
   curriculumDetailRows?: unknown[];
   /** Acting mode: the student another account works for (X-Advisor-Student, advisors/access.ts). */
   acting?: AuthenticatedUser;
+  /** The courses of the plan's CTĐT ({ cohort_code, code, name, credits }) and the active standards, for the real codes. */
+  planCurriculumCourses?: unknown[];
+  standards?: unknown[];
 };
 
 /** The rows of an identity major:cohort for the cohort $1 and the major $2 of majorCondition (null: any). */
@@ -144,6 +147,9 @@ function setup(options: SetupOptions = {}) {
         rows: profileCohort ? [{ cohort_code: profileCohort, major_code: profileMajor }] : [],
       };
     }
+    // The CTĐT a plan is read from (it also names its identity): before the own-CTĐT query below.
+    if (sql.includes('SELECT c.id,r.data,c.cohort_code AS "cohortCode"'))
+      return { rowCount: curriculumDetailRows.length, rows: curriculumDetailRows };
     if (sql.includes('c.identity_key AS "identityKey"')) {
       const rows = ofCohortAndMajor(curricula, params);
       return { rowCount: rows.length, rows };
@@ -155,8 +161,9 @@ function setup(options: SetupOptions = {}) {
     }
     if (sql.includes("SELECT c.id,r.version,r.data"))
       return { rowCount: detailRows.length, rows: detailRows };
-    if (sql.includes("SELECT c.id,r.data FROM curricula c"))
-      return { rowCount: curriculumDetailRows.length, rows: curriculumDetailRows };
+    if (sql.includes("FROM curricula c JOIN curriculum_courses cc"))
+      return { rowCount: (options.planCurriculumCourses ?? []).length, rows: options.planCurriculumCourses ?? [] };
+    if (sql.includes("FROM graduation_standards g")) return { rowCount: (options.standards ?? []).length, rows: options.standards ?? [] };
     if (sql.includes("r.data->'courses' AS courses FROM curricula c"))
       return { rowCount: curriculumRows.length, rows: curriculumRows };
     throw new Error(`Unexpected query: ${sql}`);
@@ -270,7 +277,8 @@ describe("student plans API", () => {
   });
 
   it("serves the plan read from the student's own CTĐT, and 404 for another one or once the CTĐT is closed", async () => {
-    const { app } = setup({ profileCohort: "K27", curricula: k27Curricula, curriculumDetailRows: [{ id: k27CurriculumId, data: k27Data() }] });
+    const { app } = setup({ profileCohort: "K27", curricula: k27Curricula,
+      curriculumDetailRows: [{ id: k27CurriculumId, data: k27Data(), cohortCode: "K27", identityKey: "information technology:K27" }] });
     const response = await request(app).get(`/plans/ctdt-${k27CurriculumId}`).expect(200);
     expect(response.body).toMatchObject({ id: `ctdt-${k27CurriculumId}`, fromCurriculum: true, cohortCode: "K27", unplacedCount: 1,
       terms: [{ code: "HK221" }, { code: "HK222" }], physicalEducationGroups: { TC002: [], TC102: ["71PEKC10062"] } });
@@ -279,6 +287,23 @@ describe("student plans API", () => {
     expect((await request(app).get(`/plans/ctdt-${k29CurriculumId}`).expect(404)).body).toEqual({ error: "plan_unavailable" });
     await request(setup({ profileCohort: "K27", curricula: [] }).app).get(`/plans/ctdt-${k27CurriculumId}`).expect(404);
     await request(setup().app).get("/plans/ctdt-not-a-uuid").expect(400);
+  });
+
+  // User 2026-11-10: "dùng luôn mã thực tế" (curricula/real-codes.ts): the rows under the standard's code, never the file's.
+  it("serves the rows of a KHĐT and of a plan read from the CTĐT under the real codes only", async () => {
+    const standard = (cohort: string, name: string) => ({ cohort_code: cohort, data: { specialty: "", classBlock: "", standardCode: "", major: "",
+      courses: [{ code: "71MATL10053", name, credits: 3 }] } });
+    const { app } = setup({ planCurriculumCourses: [{ cohort_code: "K29", code: "71IT000001", name: "Introduction to Computing", credits: "3" }],
+      standards: [standard("K29", "Introduction to Computing")] });
+    const khdt = (await request(app).get(`/plans/${planId}`).expect(200)).body;
+    expect(khdt.items[0].code).toBe("71MATL10053");
+    expect(JSON.stringify(khdt)).not.toContain("71IT000001");
+    const fromCtdt = setup({ profileCohort: "K27", curricula: k27Curricula, standards: [standard("K27", "Course 71IT000001")],
+      curriculumDetailRows: [{ id: k27CurriculumId, data: k27Data(), cohortCode: "K27", identityKey: "information technology:K27" }] });
+    const read = (await request(fromCtdt.app).get(`/plans/ctdt-${k27CurriculumId}`).expect(200)).body;
+    expect(read.items.map((item: { code: string }) => item.code)).toEqual(["71MATL10053", "71PEKC10062"]);
+    // (The fixture's name "Course 71IT000001" keeps the text; no code field does.)
+    expect(JSON.stringify(read)).not.toContain('"71IT000001"');
   });
 
   it("refuses another cohort's KHĐT, even an active one, without reading it", async () => {

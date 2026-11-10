@@ -106,6 +106,8 @@ type SetupOptions = {
   detailRows?: unknown[];
   /** Acting mode: the student another account works for (X-Advisor-Student, advisors/access.ts). */
   acting?: AuthenticatedUser;
+  /** Active graduation standards ({ cohort_code, data }), read for the real codes (real-codes.ts). */
+  standards?: unknown[];
 };
 
 function setup(options: SetupOptions = {}) {
@@ -130,6 +132,7 @@ function setup(options: SetupOptions = {}) {
       return { rowCount: rows.length, rows };
     }
     if (sql.includes("SELECT c.id,r.version,r.data")) return { rowCount: detailRows.length, rows: detailRows };
+    if (sql.includes("FROM graduation_standards g")) return { rowCount: (options.standards ?? []).length, rows: options.standards ?? [] };
     throw new Error(`Unexpected query: ${sql}`);
   });
   const app = express();
@@ -280,6 +283,20 @@ describe("student curriculum API", () => {
     }
     // Without a CTĐT of their own a student opens none.
     await request(setup({ profileCohort: "K32" }).app).get(`/curricula/${curriculumId}`).expect(404);
+  });
+
+  // User 2026-11-10: "dùng luôn mã thực tế" (real-codes.ts): the graduation standard's code, never the file's.
+  it("serves a course the file writes under another code under the standard's real code only", async () => {
+    const standard = { cohort_code: "K29", data: { specialty: "", classBlock: "", standardCode: "", major: "Công nghệ thông tin (7480201)",
+      courses: [{ code: "71MATL10053", name: "Introduction to Computing", credits: 3 }] } };
+    const { app, query } = setup({ standards: [standard] });
+    const response = await request(app).get(`/curricula/${curriculumId}`).expect(200);
+    expect(response.body.courses[0]).toMatchObject({ code: "71MATL10053", conditions: [{ kind: "prerequisite", targetCodes: ["71IT000002"] }] });
+    expect(response.body.electives[0].courseCodes).toEqual(["71MATL10053"]);
+    expect(JSON.stringify(response.body)).not.toContain("71IT000001");
+    expect(query.mock.calls.find(([sql]) => String(sql).includes("FROM graduation_standards g"))?.[1]).toEqual([["K29"]]);
+    // Without a standard naming it otherwise the file's code stays.
+    expect((await request(setup().app).get(`/curricula/${curriculumId}`).expect(200)).body.courses[0].code).toBe("71IT000001");
   });
 
   it("rejects historical revision queries instead of exposing an older revision", async () => {

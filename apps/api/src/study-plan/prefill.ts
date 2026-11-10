@@ -68,10 +68,11 @@ export type AiSuggestion = { code: string; term: string };
  * They start from the registration term the roadmap prepares (the plan's next term, at least the term after the current
  * one); a course the training plans do not open then goes to the next term within a year they open it in (or, failing
  * that, open it in that semester of other years). A chuyên đề of the thesis group brings the other one along (both or the
- * thesis, never a mix).
+ * thesis, never a mix). realCodes (StudyPlanFacts): a roadmap made before 2026-11-10 may name a course by its CTĐT file's
+ * code, read as the real one.
  */
 export async function readAiPlan(db: Db, userId: string, context: Pick<StudyPlanContext, "courses" | "currentTerm" | "offeringUntil"> & Partial<Pick<StudyPlanContext, "thesis">>,
-  appliedRoadmapId: string | null): Promise<{ proposal: AiProposal | null; suggestions: AiSuggestion[]; roadmapId: string | null }> {
+  appliedRoadmapId: string | null, realCodes: ReadonlyMap<string, string> = new Map()): Promise<{ proposal: AiProposal | null; suggestions: AiSuggestion[]; roadmapId: string | null }> {
   const row = (await db.query<{ id: string; facts: RoadmapFacts; output: RoadmapOutput | null; completed_at: Date | string }>(
     `SELECT id,facts,ai_output AS output,completed_at FROM stu_roadmaps WHERE user_id=$1 AND status='completed'
      ORDER BY completed_at DESC,id DESC LIMIT 1`, [userId])).rows[0];
@@ -80,6 +81,7 @@ export async function readAiPlan(db: Db, userId: string, context: Pick<StudyPlan
   const first = nextTerm(context.currentTerm);
   const term = facts.nextTerm && termIndex(facts.nextTerm) >= termIndex(first) ? facts.nextTerm : first;
   const byCode = new Map(context.courses.map((course) => [course.code, course]));
+  const real = (code: string) => realCodes.get(code.trim().toUpperCase()) ?? code;
   // The term a plan opens it in, else one of the semester plans open it in, else the first term it may go to (from).
   const placeOf = (course: Pick<StudyPlanCourse, "offeredTerms" | "everyTerm">, from = term) => {
     const candidates = [from, nextTerm(from), nextTerm(nextTerm(from))];
@@ -88,19 +90,19 @@ export async function readAiPlan(db: Db, userId: string, context: Pick<StudyPlan
   };
   const suggestions: AiSuggestion[] = [];
   for (const item of row.output.improve ?? []) {
-    const course = byCode.get(item.code);
+    const course = byCode.get(real(item.code));
     if (course?.applicable && course.state === "passed" && !suggestions.some((entry) => entry.code === course.code)) suggestions.push({ code: course.code, term: placeOf(course) });
   }
   if (row.id === appliedRoadmapId) return { proposal: null, suggestions, roadmapId: row.id };
-  const running = new Set((facts.study ?? []).filter((item) => item.source === "running").map((item) => item.code));
-  const picked = [...(row.output.study ?? []).map((item) => item.code).filter((code) => !running.has(code)), ...(row.output.improve ?? []).map((item) => item.code)];
+  const running = new Set((facts.study ?? []).filter((item) => item.source === "running").map((item) => real(item.code)));
+  const picked = [...(row.output.study ?? []).map((item) => real(item.code)).filter((code) => !running.has(code)), ...(row.output.improve ?? []).map((item) => real(item.code))];
   // The thesis group goes one way, the one the system advises by the GPA (user 2026-11-03, "TB tích lũy từ 2,80"): a roadmap
   // made before roadmap-v13 may have picked the other.
   const thesis = context.thesis ?? null;
   const advised = thesis?.way === "thesis" ? [thesis.thesis] : thesis?.way === "replacement" ? thesis.replacements : null;
   const excluded = new Set(thesis && advised ? [thesis.thesis, ...thesis.replacements, ...thesis.others].filter((code) => !advised.includes(code)) : []);
   if (thesis?.way !== "thesis") for (const choice of facts.choices ?? []) {
-    const topics = choice.thesis?.topics.map((item) => item.code) ?? [];
+    const topics = choice.thesis?.topics.map((item) => real(item.code)) ?? [];
     if (topics.some((code) => picked.includes(code))) picked.push(...topics);
   }
   const chosen: StudyPlanCourse[] = [];

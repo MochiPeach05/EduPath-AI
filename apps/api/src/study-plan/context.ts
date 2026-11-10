@@ -1,8 +1,9 @@
 import type { PoolClient } from "pg";
 import {
-  courseKey, curriculumTermCode, electiveCodeOf, isConditionOnly, physicalEducationFills, studyTermCode, uniqueCurriculumCourses, withPhysicalEducationFills,
-  type TranscriptCourseRecord,
+  courseKey, curriculumTermCode, deriveElectiveGroups, electiveCodeOf, isConditionOnly, physicalEducationFills, studyTermCode, uniqueCurriculumCourses,
+  withPhysicalEducationFills, type TranscriptCourseRecord,
 } from "../competency-assessment/course-state.js";
+import { curriculumWithRealCodes, readRealCodes } from "../curricula/real-codes.js";
 import { CONDITION_ONLY_BLOCK } from "../competency-assessment/constants.js";
 import { assessGraduationGpa, assessGraduationStandard, graduationCodeAliases, graduationInputs } from "../competency-assessment/graduation.js";
 import { choiceRule } from "../competency-assessment/plan-progress.js";
@@ -190,17 +191,23 @@ export type StudyPlanFacts = {
   context: StudyPlanContext;
   standard: GraduationStandardInput | null;
   transcript: TranscriptData | null;
+  /** The CTĐT as filed (graduation reads it so): its codes, not the real ones of `context.courses`. */
   curriculumCourses: CurriculumCourseInput[];
+  /**
+   * CTĐT code → real code of the courses `context.courses` reads under the graduation standard's code (curricula/real-codes.ts);
+   * a saved plan or an AI roadmap of before 2026-11-10 may name the file's code. Absent or empty: none.
+   */
+  realCodes?: ReadonlyMap<string, string>;
 };
 
 const EMPTY_TRANSCRIPT: TranscriptData = { schemaVersion: 1, parserVersion: "vlu-native-1", pageCount: 0, courseCount: 0, sections: [], warnings: [] };
 
 /** The single active CTĐT of the cohort and major (current revision), or null when there is none or several. */
-async function readCurriculum(db: Db, cohortCode: string, major: string | null): Promise<CurriculumData | null> {
-  const rows = (await db.query<{ data: CurriculumData }>(
-    `SELECT r.data FROM curricula c JOIN curriculum_revisions r ON r.id=c.current_revision
+async function readCurriculum(db: Db, cohortCode: string, major: string | null): Promise<{ data: CurriculumData; identityKey: string } | null> {
+  const rows = (await db.query<{ data: CurriculumData; identity_key: string }>(
+    `SELECT r.data,c.identity_key FROM curricula c JOIN curriculum_revisions r ON r.id=c.current_revision
      WHERE c.is_active AND c.cohort_code=$1 AND ${majorCondition("c", 2)} ORDER BY c.id`, [cohortCode, major])).rows;
-  return rows.length === 1 ? rows[0]!.data : null;
+  return rows.length === 1 ? { data: rows[0]!.data, identityKey: rows[0]!.identity_key ?? "" } : null;
 }
 
 type PlanOffering = { cohort_code: string; major_key?: string; code: string; name: string; term_code: string; section_label?: string | null };
@@ -306,7 +313,12 @@ export async function readStudyPlanFacts(db: Db, userId: string, now = new Date(
   const majorCode = profileRow?.major_code?.trim() || null, major = majorIdentity(majorCode);
   const ownPlan = (row: PlanOffering) => normalizeCohortCode(row.cohort_code) === cohortCode && (!major || row.major_key === major);
   const transcript = (await db.query<{ data: TranscriptData }>("SELECT parsed_data AS data FROM student_transcripts WHERE user_id=$1", [userId])).rows[0]?.data ?? null;
-  const curriculum = cohortCode ? await readCurriculum(db, cohortCode, major) : null;
+  const filedCurriculum = cohortCode ? await readCurriculum(db, cohortCode, major) : null;
+  // The CTĐT as the student reads it, with the real codes of its courses (curricula/real-codes.ts, user 2026-11-10: "dùng luôn
+  // mã thực tế"; HTTT K29 71ISGR40203 → 71ITIS30503); graduation reads it as filed (curriculumCourses below).
+  const realCodes = filedCurriculum && cohortCode
+    ? await readRealCodes(db, { cohortCode, identityKey: filedCurriculum.identityKey, courses: filedCurriculum.data.courses }) : new Map<string, string>();
+  const curriculum = filedCurriculum ? curriculumWithRealCodes(filedCurriculum.data, realCodes) : null;
   const { standard } = await resolveStudentStandard(db, { cohortCode, specialty, majorCode });
   const offerings = await readPlanOfferings(db);
   const curriculumClasses = await readCurriculumClasses(db);
@@ -314,7 +326,7 @@ export async function readStudyPlanFacts(db: Db, userId: string, now = new Date(
   // The CTĐT's intake year, else the cohort's as the student identity reads it (K29 → 2023).
   const admissionYear = curriculum?.admissionYear ?? (Number.isInteger(cohortNumber) ? cohortNumber + 1994 : null);
   const sourceCourses = uniqueCurriculumCourses(curriculum?.courses ?? []);
-  const curriculumCourses: CurriculumCourseInput[] = sourceCourses.map((course) => ({
+  const curriculumCourses: CurriculumCourseInput[] = uniqueCurriculumCourses(filedCurriculum?.data.courses ?? []).map((course) => ({
     code: course.code, name: course.name, credits: course.credits, type: course.type, block: course.block,
     specialty: course.specialty, semester: course.semester, studyYear: course.studyYear,
   }));
@@ -369,13 +381,15 @@ export async function readStudyPlanFacts(db: Db, userId: string, now = new Date(
   // same-name course of another cohort ("học trả nợ với khóa sau").
   const { aliases, transfers } = graduationCodeAliases(standard?.data ?? null, readTranscript, new Set(curriculumCourses.map((course) => courseKey(course.code))));
   const printedCodes = new Set(readTranscript.sections.flatMap((section) => section.courses.map((course) => courseKey(course.code ?? ""))));
+  // A course read under its real code that the transcript prints under the CTĐT file's code is that very course, never another.
+  const fileCodeOf = new Map(sourceCourses.flatMap((course) => (course.fileCode ? [[courseKey(course.code), courseKey(course.fileCode)] as const] : [])));
   const equivalentOf = (code: string) => transfers.find((transfer) => courseKey(transfer.code) === code)?.viaCode
-    ?? [...aliases].find(([printed, main]) => main === code && printed !== code && printedCodes.has(printed))?.[0] ?? null;
+    ?? [...aliases].find(([printed, main]) => main === code && printed !== code && printed !== fileCodeOf.get(code) && printedCodes.has(printed))?.[0] ?? null;
   // The CTĐT's numbered GDTC courses the student's PE electives fill (course-state.ts physicalEducationFills, comp-calc-v21, as
   // the competency engine reads them). The graduation check keeps inputs.records; a 71PE record there that only stands for a
   // passed GDTC course (graduationInputs `substitutes`) is no elective the student took.
   const substituted = new Set((inputs.substitutes ?? []).map((substitute) => substitute.code));
-  const physicalEducation = physicalEducationFills(curriculumCourses, new Map([...inputs.records].filter(([code]) => !substituted.has(code))));
+  const physicalEducation = physicalEducationFills(sourceCourses, new Map([...inputs.records].filter(([code]) => !substituted.has(code))));
   const courseRecords = withPhysicalEducationFills(inputs.records, physicalEducation);
   const filledBy = new Map(physicalEducation.map((fill) => [fill.code, fill.viaCode]));
   const printedName = (code: string) => readTranscript.sections.flatMap((section) => section.courses)
@@ -470,6 +484,8 @@ export async function readStudyPlanFacts(db: Db, userId: string, now = new Date(
     }))
     .sort((a, b) => (a.term ?? "").localeCompare(b.term ?? "") || a.code.localeCompare(b.code));
 
+  // The CTĐT's elective groups as the student reads them (real codes); graduation's own (inputs.electives) are the file's.
+  const electives = deriveElectiveGroups(sourceCourses);
   const standardTerms = [...new Set(courses.map((course) => course.standardTerm).filter((term): term is string => term !== null))]
     .sort((a, b) => termIndex(a) - termIndex(b));
   const totalCredits = curriculum?.totalCredits ?? null;
@@ -480,7 +496,7 @@ export async function readStudyPlanFacts(db: Db, userId: string, now = new Date(
       curriculum: curriculum ? { name: curriculum.name, totalCredits } : null,
       hasTranscript: Boolean(transcript), currentTerm: laterTerm(calendarTermCode(now), studyTerm), studyTerm, admissionYear, standardTerms,
       limits: creditLimits(totalCredits, standardTerms.length), courses,
-      electiveGroups: inputs.electives.map((group) => ({
+      electiveGroups: electives.map((group) => ({
         code: group.code, requiredCredits: group.requiredCredits, courseCodes: group.courseCodes, planChoice: choices.get(group.code) ?? null,
       })),
       offeringUntil: termsOf(offerings).at(-1) ?? null,
@@ -488,8 +504,8 @@ export async function readStudyPlanFacts(db: Db, userId: string, now = new Date(
       thesis: planThesis(courses, graduation
         ? graduation.groups.filter((group) => group.kind === "elective" && group.unit === "TC")
           .map((group) => ({ label: group.label, required: group.required, courseCodes: group.courseCodes, passed: group.status === "pass" }))
-        : inputs.electives.map((group) => ({ label: `Nhóm tự chọn ${group.code}`, required: group.requiredCredits, courseCodes: group.courseCodes })), gpa),
+        : electives.map((group) => ({ label: `Nhóm tự chọn ${group.code}`, required: group.requiredCredits, courseCodes: group.courseCodes })), gpa),
     },
-    standard, transcript, curriculumCourses,
+    standard, transcript, curriculumCourses, realCodes,
   };
 }

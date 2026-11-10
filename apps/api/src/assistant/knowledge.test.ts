@@ -352,6 +352,39 @@ describe("learning resources", () => {
   });
 });
 
+describe("the real codes of the graduation standard (curricula/real-codes.ts, user 2026-11-10: \"dùng luôn mã thực tế\")", () => {
+  // K31's file writes Lập trình ứng dụng web under a code students never register; its standard and the transcripts use
+  // 71ITSE99903 (synthetic codes). K30 lists the course under 71ITSE30503 and keeps it.
+  const REAL = "71ITSE99903";
+  const source = catalog({
+    realCodes: [{ revisionId: REV31, code: "71ITSE30503", realCode: REAL }],
+    // As COURSE_SKILLS_SQL reads it: the row keyed by the real code, with the skills of that code's course.
+    courseSkills: catalog().courseSkills.map((row) => (row.revisionId === REV31 && row.code === "71ITSE30503"
+      ? { ...row, code: REAL, courseId: "course-web-real", skills: [{ skillId: WEB, skillName: "Lập trình web", weight: 1 }] } : row)),
+    plans: catalog().plans.map((plan) => ({ ...plan, curriculumRevisionId: REV31 })),
+  });
+  const chunks = knowledgeChunksFrom(source);
+
+  it("writes the course under the real code in its course chunk, with the skills of that code's course", () => {
+    const real = linesOf(chunkOf(chunks, "course", REAL));
+    expect(real).toContain("Có trong chương trình đào tạo: Công nghệ thông tin K31.");
+    expect(real).toContain("Kỹ năng rèn luyện (trọng số do Khoa cấu hình): Lập trình web 100%.");
+    // The file's code stays only for the CTĐT that really uses it (K30).
+    expect(linesOf(chunkOf(chunks, "course", "71ITSE30503"))).toContain("Có trong chương trình đào tạo: Công nghệ thông tin K30.");
+  });
+
+  it("names only the real code in the CTĐT and its KHĐT", () => {
+    const k31Text = chunks.filter((chunk) => (chunk.sourceKind === "curriculum" && chunk.sourceKey === k31.id) || chunk.sourceKind === "plan")
+      .map((chunk) => chunk.content).join(" ");
+    expect(k31Text).toContain(REAL);
+    expect(k31Text).not.toContain("71ITSE30503");
+  });
+
+  it("changes nothing without real codes", () => {
+    expect(knowledgeChunksFrom(catalog({ realCodes: [] }))).toEqual(knowledgeChunksFrom(catalog()));
+  });
+});
+
 /* ------------------------------------------------------------------------ */
 /* Database side */
 
@@ -361,6 +394,8 @@ function fakeDb(source: KnowledgeCatalog, stored: Stored[] = []) {
   const rows = (list: readonly unknown[]) => ({ rowCount: list.length, rows: [...list] });
   const query = vi.fn(async (sql: string, params?: unknown[]) => {
     if (sql.includes("FROM curricula c JOIN curriculum_revisions")) return rows(source.curricula);
+    // The CTĐT rows of curricula/real-codes.ts (no standard here: no real code).
+    if (sql.includes("FROM curricula c JOIN curriculum_courses cc")) return rows([]);
     if (sql.includes("FROM curricula cu JOIN curriculum_courses")) return rows(source.courseSkills);
     if (sql.includes("FROM career_skills k")) return rows(source.skills);
     if (sql.includes("FROM career_positions c")) return rows(source.careers);
@@ -393,6 +428,10 @@ describe("buildKnowledgeChunks and refreshKnowledge", () => {
     expect(sql).toContain("WHERE p.is_active");
     expect(sql).toContain("WHERE g.is_active");
     expect(sql).toContain("x-'sourceCells'");
+    // Each CTĐT row of a real code reads that code's course (curricula/real-codes.ts), as the assessment does.
+    expect(sql).toContain("COALESCE(rc.real_code,upper(btrim(cc.code))) AS code");
+    expect(sql).toContain("cfg.course_id=COALESCE(rc.course_id,cc.course_id)");
+    expect(calls().find(([text]) => text.includes("FROM curricula cu JOIN curriculum_courses"))![1]).toEqual(["[]"]);
   });
 
   it("inserts new chunks, rewrites changed ones and deletes rows no longer produced", async () => {

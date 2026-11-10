@@ -5,6 +5,7 @@ import { requireAuthentication } from "../middleware/authorization.js";
 import { studentUser } from "../advisors/access.js";
 import type { CurriculumData } from "../curricula/model.js";
 import { readOwnProgramProfile, resolveOwnCurriculum, resolveOwnPlan } from "../curricula/own-program.js";
+import { curriculumWithRealCodes, planWithRealCodes, readPlanRealCodes, readRealCodes } from "../curricula/real-codes.js";
 import { curriculumIdOf, curriculumPlan, physicalEducationGroupsOf } from "./from-curriculum.js";
 import { identity, type PlanData } from "./model.js";
 
@@ -115,9 +116,9 @@ export function createStudentPlansRouter(pool: DatabasePool | undefined) {
       return;
     }
     if (curriculumId !== null) {
-      const found = await pool!.query<{ id: string; data: CurriculumData }>(
-        `SELECT c.id,r.data FROM curricula c JOIN curriculum_revisions r ON r.id=c.current_revision
-         WHERE c.id=$1 AND c.is_active`,
+      const found = await pool!.query<{ id: string; data: CurriculumData; cohortCode: string; identityKey: string }>(
+        `SELECT c.id,r.data,c.cohort_code AS "cohortCode",c.identity_key AS "identityKey" FROM curricula c
+         JOIN curriculum_revisions r ON r.id=c.current_revision WHERE c.id=$1 AND c.is_active`,
         [curriculumId],
       );
       const curriculum = found.rows[0];
@@ -125,8 +126,11 @@ export function createStudentPlansRouter(pool: DatabasePool | undefined) {
         res.status(404).json({ error: "plan_unavailable" });
         return;
       }
-      res.json({ id: req.params.id, version: 0, fromCurriculum: true, ...curriculumPlan(curriculum.data),
-        physicalEducationGroups: physicalEducationGroupsOf(curriculum.data.courses) });
+      // The CTĐT with the real codes of its courses (curricula/real-codes.ts, user 2026-11-10): students read only those.
+      const data = curriculumWithRealCodes(curriculum.data,
+        await readRealCodes(pool!, { cohortCode: curriculum.cohortCode, identityKey: curriculum.identityKey, courses: curriculum.data.courses }));
+      res.json({ id: req.params.id, version: 0, fromCurriculum: true, ...curriculumPlan(data),
+        physicalEducationGroups: physicalEducationGroupsOf(data.courses) });
       return;
     }
     const id = req.params.id;
@@ -150,11 +154,14 @@ export function createStudentPlansRouter(pool: DatabasePool | undefined) {
        WHERE c.identity_key=$1 AND c.is_active`,
       [identity(current.data)],
     );
-    const physicalEducationGroups = physicalEducationGroupsOf(curriculum.rows[0]?.courses ?? []);
+    // The real codes of the plan's CTĐT (curricula/real-codes.ts, user 2026-11-10): its rows are served under those only.
+    const realCodes = await readPlanRealCodes(pool!, identity(current.data));
+    const physicalEducationGroups = physicalEducationGroupsOf((curriculum.rows[0]?.courses ?? [])
+      .map((course) => ({ ...course, code: realCodes.get(course.code.trim().toUpperCase()) ?? course.code })));
     res.json({
       id: current.id,
       version: current.version,
-      ...studentPlanData(current.data),
+      ...studentPlanData(planWithRealCodes(current.data, realCodes)),
       physicalEducationGroups,
     });
   });

@@ -21,6 +21,7 @@ import { choiceCreditRange, choiceLabel, choiceRule, physicalEducationSlot, shor
 import { fold, specialtyLabel } from "../competency-assessment/specialty.js";
 import type { AssessmentInputs, AssessmentResult, CareerRequirementResult, CourseFact, PlanProgressResult } from "../competency-assessment/types.js";
 import { MAJORS } from "../curricula/majors.js";
+import { studyPlanWithRealCodes } from "../curricula/real-codes.js";
 import { normalizeCohortCode, profileSpecialty } from "../graduation/resolve.js";
 import { readStudentGraduation, type StudentGraduation } from "../graduation/student-graduation.js";
 import type { PlanData } from "../plans/model.js";
@@ -740,7 +741,11 @@ export async function readOverview(db: PoolClient, userId: string, now: Date = n
   }
   const graduationData = await readStudentGraduation(db, userId);
   const graduation = graduationOverview(graduationData);
-  const saved = await readSavedPlan(db, userId);
+  // The engine reads the CTĐT with the real codes (curricula/real-codes.ts); a plan saved before 2026-11-10 may name such a
+  // course by the file's code.
+  const fileCodes = Object.entries(inputs?.curriculum.fileCodes ?? {});
+  const savedPlan = await readSavedPlan(db, userId);
+  const saved = savedPlan && fileCodes.length ? studyPlanWithRealCodes(savedPlan, new Map(fileCodes.map(([real, file]) => [file, real]))) : savedPlan;
   const printedCredits = transcript ? printedCumulativeCredits(transcript) : null;
   const totalCredits = graduationData.evaluation?.credits?.required ?? inputs?.plan.revision?.data.totalCredits ?? null;
   // "Học kỳ này": the courses registered in the term being studied; "Đang học" and its term in the progress card count them.

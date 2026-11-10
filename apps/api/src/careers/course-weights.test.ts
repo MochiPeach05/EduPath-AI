@@ -82,7 +82,7 @@ describe("career requirement course-weight read API", () => {
     const response = await request(app).get(endpoint()).expect(200);
     expect(response.body).toEqual({ careerPositionId: careerId, revisions, revisionId: k29RevisionId, items: k29Weights });
     expect(query).toHaveBeenCalledWith(expect.stringContaining("FROM career_requirements r JOIN career_skills s"),
-      [careerId, k29RevisionId]);
+      [careerId, k29RevisionId, "[]"]);
   });
 
   it("denies anonymous and student callers before database access", async () => {
@@ -120,7 +120,7 @@ describe("career requirement course-weight read API", () => {
     expect(response.body.revisionId).toBe(k30RevisionId);
     expect(response.body.items).toEqual([]);
     expect(query).toHaveBeenCalledWith(expect.stringContaining("FROM career_requirements r JOIN career_skills s"),
-      [careerId, k30RevisionId]);
+      [careerId, k30RevisionId, "[]"]);
   });
 
   it("returns an empty result when no curricula exist and does not query course links", async () => {
@@ -141,7 +141,13 @@ describe("career requirement course-weight read API", () => {
     expect(sql).toContain("JOIN ad_comp_course_links l ON l.skill_id=s.id AND l.weight>0");
     expect(sql).toContain("JOIN ad_comp_course_configs cfg ON cfg.id=l.config_id AND cfg.status='active'");
     expect(sql).toContain("WHERE r.career_position_id=$1 AND r.deleted_at IS NULL");
-    // A course has one configuration for every cohort (migration 038): the revision only picks its rows.
-    expect(sql).toContain("JOIN curriculum_courses cc ON cc.course_id=cfg.course_id AND cc.revision_id=$2");
+    // A course has one configuration for every cohort (migration 038): the revision only picks its rows. A row read under
+    // the real code of the graduation standard counts with that code's course and shows that code (curricula/real-codes.ts).
+    expect(sql).toContain("JOIN curriculum_courses cc ON cc.revision_id=$2 LEFT JOIN jsonb_to_recordset($3::jsonb) AS rc");
+    expect(sql).toContain("cfg.course_id=COALESCE(rc.course_id,cc.course_id)");
+    expect(sql).toContain("COALESCE(rc.real_code,cc.code) AS \"courseCode\"");
+    const revisions = query.mock.calls.find(([text]) => text.includes("FROM curricula c JOIN curriculum_revisions r"))!;
+    expect(revisions[0].replace(/\s+/g, " ")).toContain("cfg.course_id=COALESCE(rc.course_id,cc.course_id) AND cfg.status='active'");
+    expect(revisions[1]).toEqual(["[]"]);
   });
 });

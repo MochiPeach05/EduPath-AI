@@ -62,6 +62,11 @@ export type CurriculumInput = {
   courses: CurriculumCourseInput[];
   /** curriculum_relations of the current revision. */
   relations: CurriculumRelationInput[];
+  /**
+   * Real code → the CTĐT file's code, for each course read with the graduation standard's code (curricula/real-codes.ts,
+   * comp-calc-v22): `courses`, `relations`, the weights and the plan carry the real code; graduation reads the file's codes.
+   */
+  fileCodes?: Record<string, string>;
 };
 
 /** One ad_comp_course_links row (weight > 0) of an ACTIVE config in the weights revision (ORDER BY course_code, skill_id). */

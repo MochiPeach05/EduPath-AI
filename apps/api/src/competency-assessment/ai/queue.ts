@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import type { DatabasePool } from "../../db/pool.js";
+import { readStudentRealCodes } from "../../curricula/real-codes.js";
 import type { AssessmentResult } from "../types.js";
 import { COMPETENCY_AI_QUEUE_LOCK } from "../repository.js";
 import { buildAiInput } from "./prompt.js";
@@ -57,17 +58,22 @@ async function othersPending(client: PoolClient, userId: string): Promise<number
 
 /**
  * The courses of the student's saved Kế hoạch học kỳ (stu_study_plans), by code: the comment names the term the student
- * chose for a course (comp-v13). Empty without a saved plan or with one the page could not have saved.
+ * chose for a course (comp-v13). Empty without a saved plan or with one the page could not have saved. A plan saved before
+ * 2026-11-10 may name a course by its CTĐT file's code: it is read as the real one, the engine's (curricula/real-codes.ts).
  */
 export async function plannedTermsOf(client: Pick<PoolClient, "query">, userId: string): Promise<Map<string, string>> {
   const result = await client.query<{ data: unknown }>("SELECT data FROM stu_study_plans WHERE user_id=$1", [userId]);
   const terms = (result.rows[0]?.data as { terms?: unknown } | undefined)?.terms;
   const planned = new Map<string, string>();
   if (!Array.isArray(terms)) return planned;
+  const realCodes = await readStudentRealCodes(client, userId);
   for (const term of terms as { code?: unknown; courses?: unknown }[]) {
     if (typeof term?.code !== "string" || !Array.isArray(term.courses)) continue;
     for (const course of term.courses as { code?: unknown }[]) {
-      if (typeof course?.code === "string" && !planned.has(course.code.toUpperCase())) planned.set(course.code.toUpperCase(), term.code);
+      if (typeof course?.code !== "string") continue;
+      const code = course.code.toUpperCase();
+      const real = (realCodes.get(code.trim()) ?? code).toUpperCase();
+      if (!planned.has(real)) planned.set(real, term.code);
     }
   }
   return planned;

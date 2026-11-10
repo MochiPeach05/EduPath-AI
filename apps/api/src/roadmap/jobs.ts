@@ -13,6 +13,7 @@ import {
   type WorkerCompletion,
 } from "../competency-assessment/ai/worker-protocol.js";
 import type { AssessmentResult } from "../competency-assessment/types.js";
+import { readRealCourseRows, realCodesOfRows } from "../curricula/real-codes.js";
 import type { DatabasePool } from "../db/pool.js";
 import { readSurvey, surveyFacts, surveyUsable } from "../student/survey.js";
 import { buildRoadmapFacts, type RoadmapFacts, type RoadmapRelation } from "./facts.js";
@@ -106,16 +107,24 @@ export async function newestAssessment(db: Db, userId: string): Promise<{ id: st
   return result.rows[0] ?? null;
 }
 
+/** A result of comp-calc-v22 on reads its CTĐT with the real codes of the graduation standard (curricula/real-codes.ts). */
+const readsRealCodes = (calcVersion: string | undefined) => Number(/^comp-calc-v(\d+)$/.exec(calcVersion ?? "")?.[1]) >= 22;
+
 /**
  * The tiên quyết and học trước of the CTĐT revision an assessment read (roadmap-v15, user 2026-11-08): what the roadmap's
- * facts check each course against (facts.ts waitsFor). None for a result without its revision, or a revision gone.
+ * facts check each course against (facts.ts waitsFor). None for a result without its revision, or a revision gone. A
+ * result that reads the real codes (comp-calc-v22) reads its relations with them too; an older one keeps the file's.
  */
 export async function readRoadmapRelations(db: Db, result: Pick<AssessmentResult, "meta">): Promise<RoadmapRelation[]> {
   const revisionId = result.meta?.curriculum?.revisionId;
   if (!revisionId) return [];
-  return (await db.query<RoadmapRelation>(
+  const relations = (await db.query<RoadmapRelation>(
     `SELECT course_code AS "courseCode",kind,target_codes AS "targetCodes" FROM curriculum_relations
      WHERE revision_id=$1 ORDER BY course_code,kind`, [revisionId])).rows;
+  if (!relations.length || !readsRealCodes(result.meta?.calcVersion)) return relations;
+  const codes = realCodesOfRows(await readRealCourseRows(db, [revisionId]));
+  const real = (code: string) => codes.get(code.trim().toUpperCase()) ?? code;
+  return codes.size ? relations.map((relation) => ({ ...relation, courseCode: real(relation.courseCode), targetCodes: relation.targetCodes.map(real) })) : relations;
 }
 
 /* ------------------------------------------------------------------------ */

@@ -473,3 +473,44 @@ describe("planning", () => {
     expect(creditProgress(context(), withOther)).toEqual({ done: 6, running: 3, planned: 6, plannedOther: 3, total: 30 });
   });
 });
+
+describe("Theo dõi tiến độ counts every group as Xét tốt nghiệp (production report 2026-11-10, K29 HTTT)", () => {
+  // A K29 HTTT student saw "Nhóm tự chọn TC209: 6/9 TC" here and 9/9 on Xét tốt nghiệp: the CTĐT file writes Chuyên đề
+  // Thương mại điện tử 71ISGR40203 and Đại số tuyến tính và ứng dụng 71ITMA10203, the standard and the transcript
+  // 71ITIS30503 and 71MATL10053. The API now sends those courses under the standard's real codes (curricula/real-codes.ts),
+  // so each code of a standard group has its row. Synthetic states only.
+  const real = context({
+    cohortCode: "K29", specialty: null, specialtyLabel: null,
+    courses: [
+      course("71MATL10053", { name: "Đại số tuyến tính và ứng dụng", state: "passed", grade: "B", takenTerm: "HK231" }),
+      course("71ITBS10103", { name: "Nhập môn Công nghệ thông tin", state: "passed", grade: "A", takenTerm: "HK231" }),
+      course("71ITIS30403", { kind: "elective", group: "TC209", type: "TC209", state: "passed", grade: "B" }),
+      course("71ITIS30503", { name: "Chuyên đề Thương mại điện tử", kind: "elective", group: "TC209", type: "TC209", state: "passed", grade: "B+" }),
+      course("71ITIS30603", { kind: "elective", group: "TC209", type: "TC209", state: "passed", grade: "A" }),
+      course("71ITIS30703", { kind: "elective", group: "TC209", type: "TC209" }),
+    ],
+    graduation: {
+      standardName: "Tiêu chuẩn K29 HTTT", credits: { completed: 15, required: 120, source: "printed" },
+      groups: [
+        { label: "Học phần bắt buộc", kind: "mandatory", unit: "môn", required: 2, passed: 2, status: "pass", courseCodes: ["71MATL10053", "71ITBS10103"] },
+        { label: "Nhóm tự chọn TC209", kind: "elective", unit: "TC", required: 9, passed: 9, status: "pass",
+          courseCodes: ["71ITIS30403", "71ITIS30503", "71ITIS30603", "71ITIS30703"] },
+      ],
+    },
+  });
+
+  it("finds a row for every code of every group, and counts what the graduation evaluation counts", () => {
+    const audit = auditGroups(real, plan, "official");
+    expect(audit.map((group) => [group.label, group.done, group.required, group.rows.length])).toEqual(
+      real.graduation!.groups.map((group) => [group.label, group.passed, group.required, group.courseCodes.length]));
+    expect(audit.map(groupCountText)).toEqual(["Đã đủ 2 môn", "Đã đủ 9 TC"]);
+  });
+
+  it("was 6/9 TC (and 1/2 môn) while the rows carried the file's codes", () => {
+    const filed: Record<string, string> = { "71ITIS30503": "71ISGR40203", "71MATL10053": "71ITMA10203" };
+    const before = context({ ...real, courses: real.courses.map((item) => ({ ...item, code: filed[item.code] ?? item.code })) });
+    const [mandatory, tc209] = auditGroups(before, plan, "official");
+    expect([mandatory!.done, tc209!.done]).toEqual([1, 6]);
+    expect(groupCountText(tc209!)).toBe("6/9 TC · còn thiếu 3 TC");
+  });
+});

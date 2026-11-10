@@ -1,6 +1,15 @@
 export interface CurriculumCourse {
   position: number;
   code: string;
+  /**
+   * The code the graduation standard of the cohort and major gives a course the file writes under another code (API
+   * curricula/real-codes.ts withRealCodeField, user 2026-11-10: "dùng luôn mã thực tế"; HTTT K29 71ITMA10203 →
+   * 71MATL10053): what students and every other page read (`realCode ?? code`). Absent when the codes agree. The admin
+   * detail shows it with "Mã trong tệp CTĐT: <code>" beside it; the row is still edited by `code`, the file's code, and
+   * `realCode` is never sent back. The student CTĐT/KHĐT API serves the real code as `code` itself (curricula/student-router.ts,
+   * plans/student-router.ts); those pages also read a `realCode` when one is sent (student-curriculum-types.ts).
+   */
+  realCode?: string;
   name: string;
   englishName: string;
   description?: string;

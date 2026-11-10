@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { AuthenticatedUser } from "../auth/types.js";
 import { syntheticCurriculum, syntheticPlan, syntheticStandards, syntheticStudentTerms, syntheticTranscript } from "../competency-assessment/fixtures/synthetic-k29.js";
 import type { DatabasePool } from "../db/pool.js";
-import { opensEveryTerm, planChoices, readStudyPlanFacts, type StudyPlanCourse } from "./context.js";
+import { opensEveryTerm, planChoices, readStudyPlanFacts, type StudyPlanContext, type StudyPlanCourse } from "./context.js";
 import { calendarTermCode, creditLimits, nextTerm, studyPlanSchema, termIndex, termLabel, type StudyPlanData } from "./model.js";
 import { prefillPlan, readAiPlan, readAiProposal } from "./prefill.js";
 import { plannedTranscript, projectGraduation } from "./projection.js";
@@ -33,17 +33,23 @@ type Roadmap = { id: string; facts: unknown; output: unknown; completed_at: Date
 type Offering = { cohort_code: string; code: string; name: string; term_code: string; section_label: string | null };
 type CurriculumClass = { cohort_code: string; major_key: string; admission_year: number | null; code: string; name: string; study_year: number | null; semester: number | null };
 type Options = { specialty?: string | null; standards?: boolean; transcript?: boolean; active?: boolean; roadmap?: Roadmap; offerings?: Offering[];
+  /** false: the standards come without their cohort, so curricula/real-codes.ts finds none (the CTĐT read as filed, before 2026-11-10). */
+  realCodes?: boolean;
+  /** Changes the synthetic transcript (a code printed otherwise). */
+  transcriptData?: (data: ReturnType<typeof syntheticTranscript>) => ReturnType<typeof syntheticTranscript>;
   curriculumClasses?: CurriculumClass[];
   curriculum?: (data: ReturnType<typeof curriculumData>) => ReturnType<typeof curriculumData> };
 function fakeDb(options: Options = {}) {
   const saved: { version: string; data: unknown; updated_at: Date }[] = [];
-  const standards = options.standards === false ? [] : syntheticStandards().map((item) => ({ id: item.id, revision_id: item.revisionId, version: item.version, data: item.data }));
+  const standards = options.standards === false ? [] : syntheticStandards().map((item) => ({ id: item.id, revision_id: item.revisionId, version: item.version, data: item.data,
+    ...(options.realCodes === false ? {} : { cohort_code: "K29" }) }));
   const rows = (list: unknown[]) => ({ rowCount: list.length, rows: list });
   const query = vi.fn(async (sql: string, params: unknown[] = []) => {
     if (/^(BEGIN|COMMIT|ROLLBACK)/.test(sql)) return rows([]);
     if (sql.includes("SELECT id FROM users")) return options.active === false ? rows([]) : rows([{ id: studentId }]);
     if (sql.includes("FROM student_profiles")) return rows([{ cohort_code: "K29", specialty: options.specialty === undefined ? "CNPM" : options.specialty }]);
-    if (sql.includes("FROM student_transcripts")) return rows(options.transcript === false ? [] : [{ data: syntheticTranscript(syntheticStudentTerms()) }]);
+    if (sql.includes("FROM student_transcripts")) return rows(options.transcript === false ? []
+      : [{ data: (options.transcriptData ?? ((data) => data))(syntheticTranscript(syntheticStudentTerms())) }]);
     if (sql.includes("JOIN curriculum_courses cc")) return rows(options.curriculumClasses ?? []);
     if (sql.includes("FROM curricula")) return rows(params[0] === "K29" ? [{ data: (options.curriculum ?? ((data) => data))(curriculumData()) }] : []);
     if (sql.includes("FROM graduation_standards")) return rows(standards);
@@ -268,6 +274,67 @@ describe("PE electives filling the numbered GDTC courses of the CTĐT (comp-calc
   });
 });
 
+describe("the real codes of the graduation standard (user 2026-11-10: \"dùng luôn mã thực tế\")", () => {
+  // The CTĐT file writes two courses under codes students never register, the standard and the transcript use the real ones
+  // (ngành HTTT K29: Chuyên đề Thương mại điện tử 71ISGR40203 for 71ITIS30503 in TC209, Đại số tuyến tính và ứng dụng
+  // 71ITMA10203 for 71MATL10053, a mandatory course). Here: Phân tích thiết kế hệ thống (TC209) and Trí tuệ nhân tạo.
+  const paperCodes: Record<string, string> = { "71ITIS30303": "71ISPP40303", "71ITAI40103": "71ITPP10203" };
+  const onPaper = (data: ReturnType<typeof curriculumData>) => {
+    const paper = (code: string) => paperCodes[code] ?? code;
+    return { ...data, courses: data.courses.map((course) => ({ ...course, code: paper(course.code) })),
+      relations: data.relations.map((relation) => ({ ...relation, courseCode: paper(relation.courseCode), targetCodes: relation.targetCodes.map(paper) })) };
+  };
+  /**
+   * Theo dõi tiến độ's count of each group of the standard (web study-plan-data.ts auditGroups, official view): the group's codes
+   * found among the course rows, the passed ones in the group's unit; and how many of its codes have no row.
+   */
+  const shown = (context: StudyPlanContext) => {
+    const byCode = new Map(context.courses.map((course) => [course.code, course]));
+    return context.graduation!.groups.map((group) => {
+      const rows = group.courseCodes.map((code) => byCode.get(code)).filter((course): course is StudyPlanCourse => Boolean(course));
+      const done = rows.filter((course) => course.state === "passed" || course.state === "exempt").reduce((sum, course) => sum + (group.unit === "TC" ? course.credits : 1), 0);
+      return { label: group.label, done, required: group.required, missingRows: group.courseCodes.length - rows.length };
+    });
+  };
+  const graduation = (context: StudyPlanContext) => context.graduation!.groups.map((group) => ({ label: group.label, done: group.passed, required: group.required, missingRows: 0 }));
+
+  it("reads each such course under its real code, so every group of Theo dõi tiến độ counts what Xét tốt nghiệp counts", async () => {
+    const { context } = await facts({ curriculum: onPaper });
+    expect(shown(context)).toEqual(graduation(context));
+    const byCode = new Map(context.courses.map((course) => [course.code, course]));
+    expect(byCode.get("71ITIS30303")).toMatchObject({ name: "Phân tích thiết kế hệ thống", state: "passed", grade: "B", group: "TC309", onlyInStandard: false });
+    expect(byCode.get("71ITAI40103")).toMatchObject({ state: "passed", grade: "D+", kind: "mandatory", onlyInStandard: false });
+    // The paper codes are nowhere: no row, no course counted toward nothing.
+    expect(context.courses.map((course) => course.code)).not.toEqual(expect.arrayContaining(["71ISPP40303"]));
+    expect(context.courses.some((course) => Object.values(paperCodes).includes(course.code))).toBe(false);
+    expect(context.unmatched.map((course) => course.code)).not.toContain("71ITIS30303");
+  });
+
+  it("was off before: the courses of the paper codes had no row in the standard's groups (TC209 6/9 TC beside 9/9)", async () => {
+    const { context } = await facts({ curriculum: onPaper, realCodes: false });
+    const before = shown(context);
+    expect(before).not.toEqual(graduation(context));
+    expect(before.find((group) => group.label === "Nhóm tự chọn TC209")).toMatchObject({ done: 3, required: 6, missingRows: 1 });
+    expect(graduation(context).find((group) => group.label === "Nhóm tự chọn TC209")).toMatchObject({ done: 6 });
+  });
+
+  it("keeps graduation as it is: the standard's groups, credits and GPA read the CTĐT as filed", async () => {
+    const real = (await facts({ curriculum: onPaper })).context, filed = (await facts({ curriculum: onPaper, realCodes: false })).context;
+    expect(real.graduation).toEqual(filed.graduation);
+    expect(real.gpa).toEqual(filed.gpa);
+  });
+
+  it("reads a transcript that prints the file's code as that course, under the real code, never through another", async () => {
+    const printedOnPaper = (data: ReturnType<typeof syntheticTranscript>) => ({ ...data, sections: data.sections.map((section) => ({
+      ...section, courses: section.courses.map((course) => (course.code === "71ITIS30303" ? { ...course, code: "71ISPP40303", name: "Phân tích thiết kế hệ thống" } : course)) })) });
+    const { context } = await facts({ curriculum: onPaper, transcriptData: printedOnPaper });
+    expect(context.courses.find((course) => course.code === "71ITIS30303")).toMatchObject({ state: "passed", grade: "B", equivalent: null });
+    expect(context.courses.some((course) => course.code === "71ISPP40303")).toBe(false);
+    expect(context.unmatched.map((course) => course.code)).not.toContain("71ISPP40303");
+    expect(shown(context)).toEqual(graduation(context));
+  });
+});
+
 describe("where the plan starts", () => {
   it("fills the mandatory courses still ahead in the terms of the cohort's training plan, never a late one", async () => {
     const { context } = await facts();
@@ -424,6 +491,18 @@ describe("study plan API", () => {
     await request(app).put("/plan").set("Origin", origin).send({ version: null, data: plan }).expect(409, { error: "plan_changed" });
     await request(app).put("/plan").set("Origin", origin).send({ version: first.body.plan.version, data: plan }).expect(200);
     await request(app).put("/plan").set("Origin", origin).send({ version: null, data: { ...plan, terms: [plan.terms[0], plan.terms[0]] } }).expect(400, { error: "invalid_plan" });
+  });
+
+  it("reads a plan saved with a CTĐT file's code under the real code of the standard (2026-11-10)", async () => {
+    // The file writes Phân tích thiết kế hệ thống under a code students never register; the standard and the transcript use
+    // 71ITIS30303. A plan saved before the page read the real codes names the file's code: it comes back under the real one.
+    const { app } = setup({ curriculum: (data) => ({ ...data, courses: data.courses.map((course) => (course.code === "71ITIS30303" ? { ...course, code: "71ISPP40303" } : course)) }) });
+    const old = { schemaVersion: 1, terms: [{ code: "HK262", courses: [{ code: "71ISPP40303" }, { code: "71ITIN40304" }] }] };
+    await request(app).put("/plan").set("Origin", origin).send({ version: null, data: old }).expect(200);
+    const response = await request(app).get("/plan").expect(200);
+    expect(response.body.plan.data.terms).toEqual([{ code: "HK262", courses: [{ code: "71ITIS30303" }, { code: "71ITIN40304" }] }]);
+    expect(response.body.context.courses.map((course: { code: string }) => course.code)).toContain("71ITIS30303");
+    expect(response.body.context.courses.map((course: { code: string }) => course.code)).not.toContain("71ISPP40303");
   });
 
   it("deletes the saved plan with its version only", async () => {

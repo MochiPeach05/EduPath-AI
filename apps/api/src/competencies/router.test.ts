@@ -158,6 +158,20 @@ describe("competency administration API", () => {
       specialty: "", cohorts: ["K29", "K30"], configId: null, status: "missing", version: null, mergedFrom: [], skillCount: 0, totalWeight: 0 }] });
   });
 
+  it("counts a CTĐT row under the shared course of its real code (Khóa áp dụng, user 2026-11-10)", async () => {
+    const { app, query } = setup();
+    await request(app).get("/competencies/courses?cohort=K29").expect(200);
+    await request(app).get("/competencies/cohorts").expect(200);
+    // curricula/real-codes.ts gives each CTĐT row whose file code students never register the course of the standard's code:
+    // its cohort is one of that course's "Khóa áp dụng", the file's code keeps only the cohorts whose CTĐT really uses it.
+    const list = query.mock.calls.find(([sql]) => String(sql).startsWith("WITH occ AS"))!;
+    expect(String(list[0])).toContain("SELECT COALESCE(rc.course_id,cc.course_id) AS course_id");
+    expect(String(list[0])).toContain("LEFT JOIN jsonb_to_recordset($3::jsonb) AS rc");
+    expect(list[1]).toEqual(["K29", null, "[]"]);
+    const cohorts = query.mock.calls.find(([sql]) => String(sql).includes(`AS "courseCount"`))!;
+    expect(String(cohorts[0])).toContain("count(DISTINCT COALESCE(rc.course_id,cc.course_id))");
+  });
+
   it("prevents active allocations from using inactive groups and blocks group deactivation while in use", async () => {
     const disabled = setup({ inactiveGroup: true });
     const allocation = await request(disabled.app).put(coursePath).set("Origin", origin).set("x-version", "new").send(activeData).expect(409);

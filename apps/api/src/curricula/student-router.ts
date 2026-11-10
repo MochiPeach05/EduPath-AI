@@ -5,6 +5,7 @@ import { requireAuthentication } from "../middleware/authorization.js";
 import { studentUser } from "../advisors/access.js";
 import type { CurriculumData } from "./model.js";
 import { readOwnProgramProfile, resolveOwnCurriculum } from "./own-program.js";
+import { curriculumWithRealCodes, readRealCodes } from "./real-codes.js";
 
 /** One element per distinct key, the first one kept, in order. */
 function uniqueBy<T>(items: readonly T[], key: (item: T) => string): T[] {
@@ -119,8 +120,8 @@ export function createStudentCurriculaRouter(pool: DatabasePool | undefined) {
   router.get("/:id", async (req, res) => {
     const id = z.uuid().parse(req.params.id);
     z.object({}).strict().parse(req.query);
-    const own = await resolveOwnCurriculum(pool!, await readOwnProgramProfile(pool!, studentUser(req).userId));
-    if (own.curriculum?.id !== id) {
+    const { curriculum: own } = await resolveOwnCurriculum(pool!, await readOwnProgramProfile(pool!, studentUser(req).userId));
+    if (own?.id !== id) {
       res.status(404).json({ error: "curriculum_unavailable" });
       return;
     }
@@ -138,10 +139,13 @@ export function createStudentCurriculaRouter(pool: DatabasePool | undefined) {
       res.status(404).json({ error: "curriculum_unavailable" });
       return;
     }
+    // The real codes (real-codes.ts, user 2026-11-10: "dùng luôn mã thực tế"): a course the file writes under another code
+    // than the graduation standard's is served under the real one only, in the conditions, groups and texts too.
+    const realCodes = await readRealCodes(pool!, { cohortCode: own.cohortCode, identityKey: own.identityKey, courses: current.data.courses });
     res.json({
       id: current.id,
       version: current.version,
-      ...studentCurriculumData(current.data),
+      ...studentCurriculumData(curriculumWithRealCodes(current.data, realCodes)),
     });
   });
   const errors: ErrorRequestHandler = (error, _req, res, next) => {

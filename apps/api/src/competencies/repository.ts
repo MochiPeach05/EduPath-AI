@@ -4,6 +4,7 @@ import type { AuthenticatedUser } from "../auth/types.js";
 import type { DatabasePool } from "../db/pool.js";
 import { access, fold, lockSkillCatalog } from "../careers/shared.js";
 import { refreshCareerSkills } from "../careers/requirements.js";
+import { readRealCourseRows, realCourseJoin } from "../curricula/real-codes.js";
 import { CompetencyError, validateWeights, WEIGHT_TOLERANCE } from "./model.js";
 
 type Database = DatabasePool | PoolClient;
@@ -22,6 +23,9 @@ type CourseRow = { id: string; code: string; name: string; credits: number; type
   cohorts: string[]; configId: string | null; status: CourseStatus; version: string | null; note: string;
   mergedFrom: string[]; skillCount: number; totalWeight: number };
 type Warning = { code: string; message: string; courseCode?: string };
+
+/** The CTĐT rows read under a real code with the shared course they count for (curricula/real-codes.ts), for realCourseJoin. */
+const realRowsJson = async (db: Database) => JSON.stringify(await readRealCourseRows(db));
 
 /** The profile cs belongs to the group: its first group (ad_comp_skills.group_id) or another one (migration 040). */
 const inGroup = (group: string) => `(cs.group_id=${group} OR EXISTS(SELECT 1 FROM ad_comp_skill_groups m WHERE m.skill_id=cs.skill_id AND m.group_id=${group}))`;
@@ -179,13 +183,16 @@ export class CompetencyRepository {
     return result.rows[0]!;
   }
 
-  /** The courses of the newest CTĐT revisions that link the skill (the scope of "Cấu hình môn học"). */
+  /**
+   * The courses of the newest CTĐT revisions that link the skill (the scope of "Cấu hình môn học"); a CTĐT row read under the
+   * real code of the graduation standard counts for that code's course (realCourseJoin).
+   */
   private async contributions(db: Database, id: string) {
     const result = await db.query(`SELECT * FROM (SELECT c.id AS "courseId",c.code AS "courseCode",c.name AS "courseName",
- (SELECT array_agg(DISTINCT cu.cohort_code ORDER BY cu.cohort_code) FROM curriculum_courses cc
- JOIN curricula cu ON cu.current_revision=cc.revision_id WHERE cc.course_id=c.id) AS cohorts,l.weight::float8 AS weight,cfg.status
+ (SELECT array_agg(DISTINCT cu.cohort_code ORDER BY cu.cohort_code) FROM curriculum_courses cc ${realCourseJoin(2)}
+ JOIN curricula cu ON cu.current_revision=cc.revision_id WHERE COALESCE(rc.course_id,cc.course_id)=c.id) AS cohorts,l.weight::float8 AS weight,cfg.status
  FROM ad_comp_course_links l JOIN ad_comp_course_configs cfg ON cfg.id=l.config_id JOIN ad_comp_courses c ON c.id=cfg.course_id
- WHERE l.skill_id=$1) x WHERE cohorts IS NOT NULL ORDER BY "courseCode","courseName","courseId"`, [id]);
+ WHERE l.skill_id=$1) x WHERE cohorts IS NOT NULL ORDER BY "courseCode","courseName","courseId"`, [id, await realRowsJson(db)]);
     return result.rows;
   }
 
@@ -312,11 +319,11 @@ export class CompetencyRepository {
     });
   }
 
-  /** Cohorts of the filter, newest first, with the number of courses of their current curricula. */
+  /** Cohorts of the filter, newest first, with the number of courses of their current curricula (real codes, courseRows). */
   async cohorts() {
     return (await this.pool.query<{ cohortCode: string; courseCount: number }>(`SELECT cu.cohort_code AS "cohortCode",
- count(DISTINCT cc.course_id)::int AS "courseCount" FROM curricula cu JOIN curriculum_courses cc ON cc.revision_id=cu.current_revision
- GROUP BY cu.cohort_code ORDER BY ${cohortOrder("cu.cohort_code")}`)).rows;
+ count(DISTINCT COALESCE(rc.course_id,cc.course_id))::int AS "courseCount" FROM curricula cu JOIN curriculum_courses cc ON cc.revision_id=cu.current_revision
+ ${realCourseJoin(1)} GROUP BY cu.cohort_code ORDER BY ${cohortOrder("cu.cohort_code")}`, [await realRowsJson(this.pool)])).rows;
   }
 
   /**
@@ -325,10 +332,14 @@ export class CompetencyRepository {
    * newest revisions, a cohort = the courses of its newest revisions. A course that only an older
    * revision has is not listed (migration 039 archives its configuration). Type, block and specialty
    * come from the filtered cohort, otherwise from the newest cohort that has the course.
+   * A CTĐT row the file writes under a code students never register counts for the shared course of the graduation
+   * standard's real code (curricula/real-codes.ts, user 2026-11-10: K29 HTTT's 71ITMA10203 is 71MATL10053, with that
+   * course's configuration): its cohort is one of that course's "Khóa áp dụng", and the file's code keeps only the cohorts
+   * whose CTĐT really uses it (none: not listed). No configuration is added, copied or merged.
    */
   private async courseRows(db: Database, cohort: string, id: string | null = null): Promise<CourseRow[]> {
-    const result = await db.query<CourseRow>(`WITH occ AS (SELECT cc.course_id,cc.position,cc.course_type,cc.block,cc.specialty,
- cu.cohort_code,cu.id AS curriculum_id FROM curriculum_courses cc JOIN curricula cu ON cu.current_revision=cc.revision_id),
+    const result = await db.query<CourseRow>(`WITH occ AS (SELECT COALESCE(rc.course_id,cc.course_id) AS course_id,cc.position,cc.course_type,cc.block,cc.specialty,
+ cu.cohort_code,cu.id AS curriculum_id FROM curriculum_courses cc ${realCourseJoin(3)} JOIN curricula cu ON cu.current_revision=cc.revision_id),
  shown AS (SELECT DISTINCT ON (course_id) course_id,position,course_type,block,specialty FROM occ
  WHERE ($1='' OR cohort_code=$1) AND ($2::uuid IS NULL OR course_id=$2)
  ORDER BY course_id,${cohortOrder("cohort_code")},curriculum_id)
@@ -339,7 +350,7 @@ export class CompetencyRepository {
  (SELECT count(*)::int FROM ad_comp_course_links l WHERE l.config_id=cfg.id) AS "skillCount",
  COALESCE((SELECT sum(l.weight)::float8 FROM ad_comp_course_links l WHERE l.config_id=cfg.id),0) AS "totalWeight"
  FROM ad_comp_courses c JOIN shown s ON s.course_id=c.id LEFT JOIN ad_comp_course_configs cfg ON cfg.course_id=c.id
- ORDER BY ${cohort ? "s.position," : ""}c.code,c.name,c.id`, [cohort, id]);
+ ORDER BY ${cohort ? "s.position," : ""}c.code,c.name,c.id`, [cohort, id, await realRowsJson(db)]);
     return result.rows;
   }
 

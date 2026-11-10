@@ -99,7 +99,14 @@ import type { Confidence, FitCode, GapStatus } from "./types.js";
  * physicalEducationFills). The course reads that elective's state, grade and term (CourseFact.filledBy), counts as a
  * condition (GDTC), is no longer late, and the elective leaves the courses outside the CTĐT. Graduation is unchanged.
  */
-export const CALC_VERSION = "comp-calc-v21";
+/**
+ * v22 (user 2026-11-10, "dùng luôn mã thực tế"): a CTĐT course the file writes under a code students never register takes the
+ * code of the graduation standard of its cohort and major (curricula/real-codes.ts: same name and credits, one such course,
+ * the standards agree; ngành HTTT K29 71ITMA10203 → 71MATL10053, 71ISGR40203 → 71ITIS30503). Its state, grade and plan term
+ * come from the transcript under that code, its skills from that course's configuration (Cấu hình môn học), and the
+ * transcript's course no longer stands outside the CTĐT. Graduation reads the CTĐT as filed and is unchanged.
+ */
+export const CALC_VERSION = "comp-calc-v22";
 /**
  * The graduation evaluation uses no skill level, so it keeps the version of its last change:
  * comp-calc-v10 changed only levels and must not re-date every student's graduation advice.

@@ -5,6 +5,7 @@ import { z } from "zod";
 import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
 import { studentUser } from "../advisors/access.js";
+import { studyPlanWithRealCodes } from "../curricula/real-codes.js";
 import { readStudyPlanFacts, type StudyPlanFacts } from "./context.js";
 import { studyPlanSchema, type StudyPlanData } from "./model.js";
 import { prefillPlan, readAiPlan } from "./prefill.js";
@@ -46,9 +47,11 @@ async function readSaved(db: Pick<PoolClient, "query">, userId: string, lock = f
  * roadmap (aiRoadmapId: the page reads the plan again only when Lộ trình AI đề xuất shows a newer one), and the
  * projection of the plan in use.
  */
-async function view(db: Pick<PoolClient, "query">, userId: string, facts: StudyPlanFacts, plan: Saved | null) {
+async function view(db: Pick<PoolClient, "query">, userId: string, facts: StudyPlanFacts, saved: Saved | null) {
+  // A plan saved before 2026-11-10 may name a course by its CTĐT file's code: the page lists it by the real one (real-codes.ts).
+  const plan = saved && facts.realCodes?.size ? { ...saved, data: studyPlanWithRealCodes(saved.data, facts.realCodes) } : saved;
   const suggested = plan ? null : prefillPlan(facts.context);
-  const ai = await readAiPlan(db, userId, facts.context, plan?.data.roadmapId ?? null);
+  const ai = await readAiPlan(db, userId, facts.context, plan?.data.roadmapId ?? null, facts.realCodes);
   return {
     context: facts.context,
     plan,

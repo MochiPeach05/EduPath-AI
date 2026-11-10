@@ -3,6 +3,7 @@ import { Router } from "express";
 import { z } from "zod";
 import type { PoolClient } from "pg";
 import type { DatabasePool } from "../db/pool.js";
+import { readRealCourseRows, realCourseJoin } from "../curricula/real-codes.js";
 import { access, CareerError, fold, lockSkillCatalog } from "./shared.js";
 import { LONG_DESCRIPTION_MAX_WORDS, limitedText } from "../word-limits.js";
 
@@ -74,30 +75,34 @@ export function createCareerRequirementsRouter(pool: DatabasePool) {
     const career = await pool.query(`SELECT c.id FROM career_positions c JOIN career_fields f ON f.code=c.category
       WHERE c.id=$1 AND c.deleted_at IS NULL AND f.deleted_at IS NULL`, [query.careerPositionId]);
     if (!career.rowCount) throw new CareerError("career_not_found", 404);
+    // A row read under the real code of the graduation standard counts with that code's course, as in the assessment
+    // (curricula/real-codes.ts, competency-assessment/inputs.ts).
+    const real = JSON.stringify(await readRealCourseRows(pool));
     const revisions = await pool.query<{
       revisionId: string; cohortCode: string; name: string; version: number;
       isCurrent: boolean; isActive: boolean; activeCount: number;
     }>(`SELECT r.id AS "revisionId",c.cohort_code AS "cohortCode",r.data->>'name' AS name,r.version,
       c.current_revision=r.id AS "isCurrent",c.is_active AS "isActive",
-      (SELECT count(*)::int FROM curriculum_courses cc JOIN ad_comp_course_configs cfg ON cfg.course_id=cc.course_id AND cfg.status='active'
+      (SELECT count(*)::int FROM curriculum_courses cc ${realCourseJoin(1)}
+        JOIN ad_comp_course_configs cfg ON cfg.course_id=COALESCE(rc.course_id,cc.course_id) AND cfg.status='active'
         WHERE cc.revision_id=r.id) AS "activeCount"
       FROM curricula c JOIN curriculum_revisions r ON r.curriculum_id=c.id
-      ORDER BY c.cohort_code DESC,r.version DESC,c.id`);
+      ORDER BY c.cohort_code DESC,r.version DESC,c.id`, [real]);
     // Choose a visible default only; an explicitly requested revision never falls back to another cohort.
     const selected = query.revisionId ? revisions.rows.find(row => row.revisionId === query.revisionId)
       : revisions.rows.find(row => row.isActive && row.isCurrent && row.activeCount > 0)
         ?? revisions.rows.find(row => row.isActive && row.isCurrent) ?? revisions.rows[0];
     if (query.revisionId && !selected) throw new CareerError("curriculum_revision_not_found", 404);
     const links = selected ? await pool.query(`SELECT DISTINCT s.id AS "skillId",cs.scope,
-      cc.code AS "courseCode",cc.name AS "courseName",l.weight::float8 AS weight
+      COALESCE(rc.real_code,cc.code) AS "courseCode",cc.name AS "courseName",l.weight::float8 AS weight
       FROM career_requirements r JOIN career_skills s ON s.id=r.skill_id AND s.deleted_at IS NULL
       JOIN ad_comp_skills cs ON cs.skill_id=s.id AND cs.deleted_at IS NULL AND cs.is_active
       JOIN ad_comp_groups g ON g.id=cs.group_id AND g.is_active
       JOIN ad_comp_course_links l ON l.skill_id=s.id AND l.weight>0
       JOIN ad_comp_course_configs cfg ON cfg.id=l.config_id AND cfg.status='active'
-      JOIN curriculum_courses cc ON cc.course_id=cfg.course_id AND cc.revision_id=$2
-      WHERE r.career_position_id=$1 AND r.deleted_at IS NULL ORDER BY cc.code,s.id`,
-    [query.careerPositionId, selected.revisionId]) : { rows: [] };
+      JOIN curriculum_courses cc ON cc.revision_id=$2 ${realCourseJoin(3)}
+      WHERE r.career_position_id=$1 AND r.deleted_at IS NULL AND cfg.course_id=COALESCE(rc.course_id,cc.course_id) ORDER BY 3,s.id`,
+    [query.careerPositionId, selected.revisionId, real]) : { rows: [] };
     res.json({ careerPositionId: query.careerPositionId, revisions: revisions.rows,
       revisionId: selected?.revisionId ?? null, items: links.rows });
   });

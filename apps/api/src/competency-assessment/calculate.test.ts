@@ -990,7 +990,7 @@ describe("PE electives filling the numbered GDTC courses of the CTĐT (comp-calc
     // Graduation, the GPA and the credit check do not change (graduation.ts keeps its own rule).
     expect(result.graduation).toEqual(unfilled.graduation);
     expect(result.transcript.creditCheck).toEqual(unfilled.transcript.creditCheck);
-    expect(result.meta.calcVersion).toBe("comp-calc-v21");
+    expect(result.meta.calcVersion).toBe(CALC_VERSION);
   });
 
   it("makes GDTC 2 'Đang học' with an elective being studied; a failed elective fills nothing", () => {
@@ -1022,6 +1022,42 @@ describe("PE electives filling the numbered GDTC courses of the CTĐT (comp-calc
     const result = calculateAssessment(syntheticInputs());
     expect(result.courses.filter((item) => item.filledBy)).toEqual([]);
     expect(course(result, "71PEKC10062")).toMatchObject({ state: "passed", letter: "A", conditionOnly: true });
+  });
+});
+
+describe("the real codes of the graduation standard (comp-calc-v22, user 2026-11-10: \"dùng luôn mã thực tế\")", () => {
+  // The CTĐT file writes Lập trình ứng dụng Web under a code students never register (71ITPP99903, like HTTT K29's 71ITMA10203);
+  // the standard and the transcript use 71ITSE30503. inputs.ts reads the CTĐT with the real code and keeps the file's (fileCodes).
+  const paper = "71ITPP99903";
+  const swap = (code: string) => (code === "71ITSE30503" ? paper : code);
+  const asFiled = (): AssessmentInputs => {
+    const inputs = syntheticInputs();
+    const plan = inputs.plan.revision!;
+    return { ...inputs,
+      curriculum: { ...inputs.curriculum, courses: inputs.curriculum.courses.map((course) => ({ ...course, code: swap(course.code) })),
+        relations: inputs.curriculum.relations.map((relation) => ({ ...relation, courseCode: swap(relation.courseCode), targetCodes: relation.targetCodes.map(swap) })) },
+      weights: { ...inputs.weights, links: inputs.weights.links.map((link) => ({ ...link, courseCode: swap(link.courseCode) })) },
+      plan: { resolution: "found", revision: { ...plan, data: { ...plan.data, items: plan.data.items.map((item) => ({ ...item, code: swap(item.code) })) } } },
+    };
+  };
+  const withRealCode = (): AssessmentInputs => {
+    const inputs = syntheticInputs();
+    return { ...inputs, curriculum: { ...inputs.curriculum, fileCodes: { "71ITSE30503": paper } } };
+  };
+
+  it("reads the course under the real code with the transcript's state; graduation reads the CTĐT as filed and does not change", () => {
+    const filed = calculateAssessment(asFiled()), real = calculateAssessment(withRealCode());
+    // As filed: "Chưa học", and the course the student passed stands outside the CTĐT.
+    expect(filed.courses.find((course) => course.code === paper)).toMatchObject({ state: "not_taken" });
+    expect(filed.transcript.notInCurriculum.map((course) => course.code)).toContain("71ITSE30503");
+    // With the real code: the transcript's state, grade and term; never outside the CTĐT; scored like any course.
+    expect(real.courses.find((course) => course.code === "71ITSE30503")).toMatchObject({ state: "passed", letter: "B", score10: 7.2, term: "HK241" });
+    expect(real.courses.some((course) => course.code === paper)).toBe(false);
+    expect(real.transcript.notInCurriculum.map((course) => course.code)).not.toContain("71ITSE30503");
+    expect(byName(real, "Phát triển web")).toMatchObject({ status: "scored" });
+    // Graduation reads the CTĐT as filed both ways: the same groups, credits and GPA.
+    expect(real.graduation).toEqual(filed.graduation);
+    expect(real.meta.calcVersion).toBe("comp-calc-v22");
   });
 });
 

@@ -23,6 +23,8 @@ const standardData = (specialty: string, classBlock: string) => ({
 type Tables = {
   profile: Record<string, unknown> | null; transcript: boolean; curricula: number; weights: boolean;
   specialty: string | null; plans: { linked: boolean; major: string }[]; career: boolean;
+  /** The CTĐT writes Đại số tuyến tính và ứng dụng under a paper code (71ITMA10203), its standard under the real one (71MATL10053). */
+  paper?: boolean;
 };
 
 function fakeDb(overrides: Partial<Tables> = {}) {
@@ -34,6 +36,12 @@ function fakeDb(overrides: Partial<Tables> = {}) {
     if (/^(BEGIN|COMMIT|ROLLBACK)/.test(sql)) return rows([]);
     if (sql.includes("FROM student_profiles")) return rows(t.profile ? [t.profile] : []);
     if (sql.includes("FROM student_transcripts")) return rows(t.transcript ? [{ version: "v1", data: transcriptData }] : []);
+    // The CTĐT rows read with their real codes (curricula/real-codes.ts), the standards and shared courses they need.
+    if (sql.includes("cc.code,cc.name,cc.credits")) return rows(t.paper ? [{ revision_id: currentRevision, cohort_code: "K29", identity_key: "cong nghe thong tin:K29",
+      code: "71ITMA10203", name: "Đại số tuyến tính và ứng dụng", credits: "3" }] : []);
+    if (sql.includes("SELECT g.cohort_code,r.data")) return rows(t.paper ? [{ cohort_code: "K29", data: { ...standardData("Công nghệ dữ liệu", "7480201-02"),
+      courses: [{ id: "x1", groupId: "g", code: "71MATL10053", name: "Đại số tuyến tính và ứng dụng", credits: 3, conditionOnly: false, sourceRow: 1 }] } }] : []);
+    if (sql.includes("FROM ad_comp_courses")) return rows([{ id: "course-real", code: "71MATL10053", name: "Đại số tuyến tính và ứng dụng", credits: 3 }]);
     if (sql.includes("FROM curricula")) return rows(Array.from({ length: t.curricula }, (_, i) => ({
       id: i ? `other-${i}` : curriculumId, identity_key: "cong nghe thong tin:K29", revision_id: currentRevision, version: 3, name: "CTĐT K29", admission_year: 2023,
     })));
@@ -43,8 +51,11 @@ function fakeDb(overrides: Partial<Tables> = {}) {
     if (sql.includes("FROM curriculum_courses")) return rows([
       { code: "71ITBS10103", name: "Nhập môn Công nghệ thông tin", credits: "3", type: "BB", block: "Kiến thức cơ sở khối ngành", specialty: "", semester: 1, study_year: 1 },
       { code: "71PEKC10062", name: "Cờ vua", credits: "2", type: "TC002 (2TC)", block: "Giáo dục thể chất và giáo dục quốc phòng", specialty: "", semester: 2, study_year: 1 },
+      ...t.paper ? [{ code: "71ITMA10203", name: "Đại số tuyến tính và ứng dụng", credits: "3", type: "BB", block: "", specialty: "", semester: 1, study_year: 1 }] : [],
     ]);
-    if (sql.includes("FROM curriculum_relations")) return rows([{ course_code: "71ITBS10103", kind: "prior", raw: "", target_codes: [], unresolved_codes: [], review_required: false }]);
+    if (sql.includes("FROM curriculum_relations")) return rows([t.paper
+      ? { course_code: "71ITBS10103", kind: "prior", raw: "71ITMA10203", target_codes: ["71ITMA10203"], unresolved_codes: [], review_required: false }
+      : { course_code: "71ITBS10103", kind: "prior", raw: "", target_codes: [], unresolved_codes: [], review_required: false }]);
     if (sql.includes("FROM ad_comp_skills")) return rows([{ skill_id: "k1", name: "Lập trình", description: "", scope: "Phạm vi", group_id: "g1" }]);
     if (sql.includes("FROM ad_comp_groups")) return rows([{ id: "g1", name: "Chuyên môn" }]);
     if (sql.includes("FROM graduation_standards")) return rows([
@@ -52,7 +63,8 @@ function fakeDb(overrides: Partial<Tables> = {}) {
       { id: "std-cndl", revision_id: "r2", version: 4, data: standardData("Công nghệ dữ liệu", "7480201-02") },
     ]);
     if (sql.includes("FROM training_plans")) return rows(t.plans.map((plan, i) => ({
-      id: `plan-${i}`, revision_id: `pr-${i}`, version: 1, linked: plan.linked, data: { major: plan.major, cohortCode: "K29", admissionYear: 2023, sections: [], items: [], terms: [] },
+      id: `plan-${i}`, revision_id: `pr-${i}`, version: 1, linked: plan.linked, data: { major: plan.major, cohortCode: "K29", admissionYear: 2023, sections: [], terms: [],
+        items: t.paper ? [{ code: "71ITMA10203", name: "Đại số tuyến tính và ứng dụng", prerequisite: "", prior: "71ITMA10203" }] : [] },
     })));
     if (sql.includes("FROM career_positions")) return rows(t.career ? [{ id: "p1", code: "NN009", name_vi: "Kỹ sư dữ liệu", name_en: "Data Engineer", version: "pv", deleted: false }] : []);
     if (sql.includes("FROM career_requirements")) return rows([{ id: "req1", skill_id: "k1", skill_name: "Lập trình", title: "Lập trình", is_required: true }]);
@@ -91,8 +103,9 @@ describe("readAssessmentInputs", () => {
       expect(sql).toMatch(/ORDER BY/);
     // The weights are those of the shared courses of the current revision (migration 038).
     const weightLinks = db.query.mock.calls.find(([sql]) => String(sql).includes("JOIN ad_comp_course_links"));
-    expect(String(weightLinks?.[0])).toContain("cfg.course_id=cc.course_id AND cfg.status='active'");
-    expect(weightLinks?.[1]).toEqual([currentRevision]);
+    expect(String(weightLinks?.[0])).toContain("cfg.course_id=COALESCE(rc.course_id,cc.course_id) AND cfg.status='active'");
+    expect(weightLinks?.[1]).toEqual([currentRevision, "[]"]);
+    expect(inputs.curriculum.fileCodes).toBeUndefined();
     // Interests and career goals never leave the profile table.
     expect(calls.find((sql) => sql.includes("FROM student_profiles"))).not.toMatch(/interests|career_goal|full_name|student_code/);
     const catalog = db.query.mock.calls.find(([sql]) => String(sql).includes("course_catalog"));
@@ -141,6 +154,21 @@ describe("readAssessmentInputs", () => {
     const unknown = fakeDb();
     await readAssessmentInputs(unknown, userId);
     expect(unknown.query.mock.calls.find(([sql]) => String(sql).includes("FROM curricula"))![1]).toEqual(["K29", null]);
+  });
+});
+
+describe("readAssessmentInputs with the real codes of the standard (comp-calc-v22, user 2026-11-10)", () => {
+  it("reads the CTĐT's paper code as the standard's real code, its weights from that course; graduation keeps the file's code", async () => {
+    const db = fakeDb({ paper: true });
+    const inputs = await readAssessmentInputs(db, userId);
+    expect(inputs.curriculum.courses.map((course) => course.code)).toEqual(["71ITBS10103", "71PEKC10062", "71MATL10053"]);
+    expect(inputs.curriculum.fileCodes).toEqual({ "71MATL10053": "71ITMA10203" });
+    expect(inputs.curriculum.relations).toEqual([expect.objectContaining({ courseCode: "71ITBS10103", raw: "71MATL10053", targetCodes: ["71MATL10053"] })]);
+    expect(inputs.plan.revision?.data.items).toEqual([expect.objectContaining({ code: "71MATL10053", prior: "71MATL10053" })]);
+    // The row counts under the shared course of the real code (its existing configuration), keyed by the real code.
+    const weightLinks = db.query.mock.calls.find(([sql]) => String(sql).includes("JOIN ad_comp_course_links"))!;
+    expect(String(weightLinks[0])).toContain("COALESCE(rc.real_code,cc.code) AS course_code");
+    expect(JSON.parse(String(weightLinks[1]![1]))).toEqual([{ revision_id: currentRevision, code: "71ITMA10203", real_code: "71MATL10053", course_id: "course-real" }]);
   });
 });
 

@@ -10,12 +10,16 @@
 // revision), applied course configurations (status 'active', links with a weight, skills and groups in use, as the
 // competency assessment reads them), live careers, career fields and skills. Course descriptions are written only when
 // the CTĐT has one (none does yet); nothing is invented.
+// 2026-11-10 ("dùng luôn mã thực tế"): a CTĐT course the file writes under a code students never register is written under
+// the graduation standard's real code (curricula/real-codes.ts), in its CTĐT, its KHĐT and its course chunk, with the
+// skills of that code's course, as the competency assessment reads it.
 import { createHash, randomUUID } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { z } from "zod";
 import { CAREER_THRESHOLDS, LEVEL_THRESHOLDS } from "../competency-assessment/constants.js";
 import { fold } from "../competency-assessment/specialty.js";
 import { fullMajorName, majorKey, MAJORS } from "../curricula/majors.js";
+import { readRealCourseRows, realCodesInText, realCourseJoin } from "../curricula/real-codes.js";
 import type { DatabasePool } from "../db/pool.js";
 import { termName } from "../term-name.js";
 import { portalGuides } from "./guides.js";
@@ -189,7 +193,10 @@ export type CareerRow = {
   requirements: { title: string; description: string; isRequired: boolean; skillId: string | null; skillName: string | null }[];
 };
 export type FieldRow = { code: string; name: string; description: string };
-export type PlanRow = { id: string; cohortCode: string; data: Record<string, unknown> };
+/** curriculumRevisionId: the current revision of the active CTĐT of the plan's identity (major:cohort), whose real codes it reads. */
+export type PlanRow = { id: string; cohortCode: string; data: Record<string, unknown>; curriculumRevisionId?: string | null };
+/** A course of a current CTĐT revision read under the graduation standard's real code (curricula/real-codes.ts). */
+export type RealCodeRow = { revisionId: string; code: string; realCode: string };
 export type StandardRow = { id: string; cohortCode: string; data: Record<string, unknown> };
 export type LearningResource = {
   title: string; url: string; provider: string | null; type: string | null; language: string | null; level: string | null; free: boolean | null; note: string | null;
@@ -198,6 +205,8 @@ export type LearningResources = { checkedAt: string | null; skills: { skill: str
 export type KnowledgeCatalog = {
   curricula: CurriculumRow[]; courseSkills: CourseSkillRow[]; skills: SkillRow[]; careers: CareerRow[]; fields: FieldRow[];
   plans: PlanRow[]; standards: StandardRow[]; resources: LearningResources | null;
+  /** The real codes of the CTĐT courses (absent: none); courseSkills are already keyed by them. */
+  realCodes?: RealCodeRow[];
 };
 
 /** The current revision of every active CTĐT, its courses without the workbook cells. */
@@ -211,16 +220,18 @@ const CURRICULA_SQL = `SELECT c.id,r.id AS "revisionId",c.cohort_code AS "cohort
 /**
  * Per code of a current revision, the applied configuration of its shared course: curriculum_courses.course_id already
  * follows merged courses (ad_comp_course_aliases), and only links the assessment counts are kept (weight > 0, live active
- * skill whose first group is active).
+ * skill whose first group is active). A row read under a real code ($1, readRealCourseRows) is keyed by that code and
+ * reads that code's course, as the assessment does.
  */
-const COURSE_SKILLS_SQL = `SELECT cc.revision_id AS "revisionId",upper(btrim(cc.code)) AS code,cc.course_id AS "courseId",
+const COURSE_SKILLS_SQL = `SELECT cc.revision_id AS "revisionId",COALESCE(rc.real_code,upper(btrim(cc.code))) AS code,
+    COALESCE(rc.course_id,cc.course_id) AS "courseId",
     COALESCE((SELECT jsonb_agg(jsonb_build_object('skillId',l.skill_id,'skillName',k.name,'weight',l.weight::float8) ORDER BY l.weight DESC,k.name,l.skill_id)
       FROM ad_comp_course_configs cfg JOIN ad_comp_course_links l ON l.config_id=cfg.id AND l.weight>0
       JOIN ad_comp_skills s ON s.skill_id=l.skill_id AND s.is_active AND s.deleted_at IS NULL
       JOIN career_skills k ON k.id=s.skill_id AND k.deleted_at IS NULL
       JOIN ad_comp_groups g ON g.id=s.group_id AND g.is_active
-      WHERE cfg.course_id=cc.course_id AND cfg.status='active'),'[]'::jsonb) AS skills
-  FROM curricula cu JOIN curriculum_courses cc ON cc.revision_id=cu.current_revision
+      WHERE cfg.course_id=COALESCE(rc.course_id,cc.course_id) AND cfg.status='active'),'[]'::jsonb) AS skills
+  FROM curricula cu JOIN curriculum_courses cc ON cc.revision_id=cu.current_revision ${realCourseJoin(1)}
   WHERE cu.is_active ORDER BY 2,1`;
 /** Live catalog skills; the competency profile (scope, groups) only while the assessment uses it. */
 const SKILLS_SQL = `SELECT k.id,k.name,k.description,(s.skill_id IS NOT NULL) AS "hasProfile",COALESCE(s.scope,'') AS scope,
@@ -242,7 +253,8 @@ const PLANS_SQL = `SELECT p.id,p.cohort_code AS "cohortCode",
     jsonb_build_object('name',r.data->'name','major',r.data->'major','totalCredits',r.data->'totalCredits',
       'terms',COALESCE(r.data->'terms','[]'::jsonb),'sections',COALESCE(r.data->'sections','[]'::jsonb),
       'items',COALESCE((SELECT jsonb_agg(x-'sourceCells'-'sourceRow'-'sourceSheet'-'hours' ORDER BY n)
-        FROM jsonb_array_elements(r.data->'items') WITH ORDINALITY AS e(x,n)),'[]'::jsonb)) AS data
+        FROM jsonb_array_elements(r.data->'items') WITH ORDINALITY AS e(x,n)),'[]'::jsonb)) AS data,
+    (SELECT c.current_revision FROM curricula c WHERE c.is_active AND c.identity_key=p.identity_key ORDER BY c.id LIMIT 1) AS "curriculumRevisionId"
   FROM training_plans p JOIN training_plan_revisions r ON r.id=p.current_revision
   WHERE p.is_active ORDER BY p.cohort_code,p.identity_key,p.id`;
 /** Standards without the import's own notes (sourceNotes: which workbook columns were ignored). */
@@ -292,14 +304,18 @@ export async function readLearningResources(file: string | URL = LEARNING_RESOUR
 /** Every catalog the index is built from, read one query after another (a background job, gentle on the pool). */
 export async function readKnowledgeCatalog(db: Db, options: KnowledgeOptions = {}): Promise<KnowledgeCatalog> {
   const curricula = (await db.query<CurriculumRow>(CURRICULA_SQL)).rows;
-  const courseSkills = (await db.query<CourseSkillRow>(COURSE_SKILLS_SQL)).rows;
+  const real = await readRealCourseRows(db, curricula.map((row) => row.revisionId));
+  const courseSkills = (await db.query<CourseSkillRow>(COURSE_SKILLS_SQL, [JSON.stringify(real)])).rows;
   const skills = (await db.query<SkillRow>(SKILLS_SQL)).rows;
   const careers = (await db.query<CareerRow>(CAREERS_SQL)).rows;
   const fields = (await db.query<FieldRow>(FIELDS_SQL)).rows;
   const plans = (await db.query<PlanRow>(PLANS_SQL)).rows;
   const standards = (await db.query<StandardRow>(STANDARDS_SQL)).rows;
   const resources = await readLearningResources(options.resourcesFile ?? LEARNING_RESOURCES_FILE);
-  return { curricula, courseSkills, skills, careers, fields, plans, standards, resources };
+  return {
+    curricula, courseSkills, skills, careers, fields, plans, standards, resources,
+    ...(real.length ? { realCodes: real.map((row) => ({ revisionId: row.revision_id, code: row.code, realCode: row.real_code })) } : {}),
+  };
 }
 
 /* ------------------------------------------------------------------------ */
@@ -320,12 +336,14 @@ type Program = {
   quotas: Map<string, number | null>;
 };
 
-function readProgram(row: CurriculumRow): Program {
+/** A CTĐT as indexed; realCodes: its codes read under the graduation standard's real code (file code → real code). */
+function readProgram(row: CurriculumRow, realCodes: ReadonlyMap<string, string> = new Map()): Program {
   const data = recordOf(row.data);
+  const real = (code: string) => realCodes.get(code) ?? code;
   const courses = arrayOf(data.courses).map((value): CourseData => {
     const item = recordOf(value);
     return {
-      code: codeKey(item.code), name: clean(item.name, 300), englishName: clean(item.englishName, 300), description: clean(item.description, 500),
+      code: real(codeKey(item.code)), name: clean(item.name, 300), englishName: clean(item.englishName, 300), description: clean(item.description, 500),
       credits: toNumber(item.credits), type: clean(item.type, 60), block: clean(item.block, 300), specialty: clean(item.specialty, 200),
       semester: toInteger(item.semester), studyYear: toInteger(item.studyYear), groupId: clean(item.groupId, 100),
     };
@@ -334,7 +352,7 @@ function readProgram(row: CurriculumRow): Program {
   for (const course of courses) if (!names.has(course.code)) names.set(course.code, course.name);
   const electives = arrayOf(data.electives).map((value) => {
     const item = recordOf(value);
-    return { code: codeKey(item.code), requiredCredits: toNumber(item.requiredCredits), courseCodes: arrayOf(item.courseCodes).map(codeKey).filter(Boolean) };
+    return { code: codeKey(item.code), requiredCredits: toNumber(item.requiredCredits), courseCodes: arrayOf(item.courseCodes).map(codeKey).filter(Boolean).map(real) };
   }).filter((elective) => elective.code);
   return {
     id: row.id, revisionId: row.revisionId, cohort: clean(row.cohortCode, 20).toUpperCase(), major: majorInfo(data.major), name: clean(data.name, 300),
@@ -347,8 +365,9 @@ function readProgram(row: CurriculumRow): Program {
     relations: arrayOf(data.relations).map((value): RelationData => {
       const item = recordOf(value);
       return {
-        courseCode: codeKey(item.courseCode), kind: item.kind === "prerequisite" ? "prerequisite" : "prior", raw: clean(item.raw, 300),
-        targetCodes: arrayOf(item.targetCodes).map(codeKey).filter(Boolean), reviewRequired: item.reviewRequired === true,
+        courseCode: real(codeKey(item.courseCode)), kind: item.kind === "prerequisite" ? "prerequisite" : "prior",
+        raw: realCodesInText(clean(item.raw, 300), realCodes),
+        targetCodes: arrayOf(item.targetCodes).map(codeKey).filter(Boolean).map(real), reviewRequired: item.reviewRequired === true,
       };
     }).filter((relation) => relation.courseCode),
     courses, names,
@@ -574,7 +593,8 @@ function fieldChunks(field: FieldRow, careers: readonly CareerRow[]): KnowledgeC
 /* ------------------------------------------------------------------------ */
 /* KHĐT chunks */
 
-function planChunks(row: PlanRow): KnowledgeChunkInput[] {
+/** A KHĐT's chunks; realCodes: those of its CTĐT (file code → real code). */
+function planChunks(row: PlanRow, realCodes: ReadonlyMap<string, string> = new Map()): KnowledgeChunkInput[] {
   const data = recordOf(row.data);
   const major = majorInfo(data.major);
   const cohort = clean(row.cohortCode, 20).toUpperCase();
@@ -590,8 +610,9 @@ function planChunks(row: PlanRow): KnowledgeChunkInput[] {
   }));
   const items = arrayOf(data.items).map((value) => {
     const item = recordOf(value);
+    const code = codeKey(item.code);
     return {
-      code: codeKey(item.code), name: clean(item.name, 300), credits: toNumber(item.credits), type: clean(item.type, 60),
+      code: realCodes.get(code) ?? code, name: clean(item.name, 300), credits: toNumber(item.credits), type: clean(item.type, 60),
       termCode: clean(item.termCode, 20).toUpperCase(), sectionId: clean(item.sectionId, 100),
     };
   }).filter((item) => item.name);
@@ -747,7 +768,9 @@ function resourceChunks(resources: LearningResources): KnowledgeChunkInput[] {
 
 /** Every chunk of the catalogs (pure: readKnowledgeCatalog reads them), in KNOWLEDGE_SOURCE_KINDS order; a repeated key keeps its first chunk. */
 export function knowledgeChunksFrom(catalog: KnowledgeCatalog): KnowledgeChunkInput[] {
-  const programs = catalog.curricula.map(readProgram).sort(programOrder);
+  const realCodes = new Map<string, Map<string, string>>();
+  for (const row of catalog.realCodes ?? []) realCodes.set(row.revisionId, (realCodes.get(row.revisionId) ?? new Map()).set(codeKey(row.code), codeKey(row.realCode)));
+  const programs = catalog.curricula.map((row) => readProgram(row, realCodes.get(row.revisionId))).sort(programOrder);
   const skillsOf = new Map(catalog.courseSkills.map((row) => [`${row.revisionId}|${codeKey(row.code)}`, { ...row, skills: arrayOf(row.skills) as CourseSkillRow["skills"] }]));
 
   // Courses: every code of the current revisions, with each row that lists it (a code can repeat in other groups).
@@ -788,7 +811,7 @@ export function knowledgeChunksFrom(catalog: KnowledgeCatalog): KnowledgeChunkIn
     ...skills,
     ...courses,
     ...programs.flatMap(curriculumChunks),
-    ...catalog.plans.flatMap(planChunks),
+    ...catalog.plans.flatMap((row) => planChunks(row, realCodes.get(row.curriculumRevisionId ?? ""))),
     ...catalog.standards.flatMap(graduationChunks),
     ...(catalog.resources ? resourceChunks(catalog.resources) : []),
   ].filter((chunk) => chunk.sourceKey && chunk.content);

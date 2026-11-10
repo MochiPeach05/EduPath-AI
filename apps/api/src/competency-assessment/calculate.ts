@@ -8,7 +8,7 @@ import {
   MAX_SKILL_PLANS, MAX_SUPPORT_COURSES, MIN_WEIGHTED_COURSE_SHARE, SCOPE_MAX_LENGTH,
 } from "./constants.js";
 import {
-  academicSections, conditionOnlyCodes, courseKey, creditCrossCheck, currentTermCode, curriculumTermCode, studyTermCode, deriveElectiveGroups,
+  academicSections, conditionOnlyCodes, courseKey, creditCrossCheck, currentTermCode, curriculumCreditMap, curriculumTermCode, studyTermCode, deriveElectiveGroups,
   electiveCodeOf, hasScore, isAttemptedState, isConditionOnly, isPassedState, isStudiedState, physicalEducationFills, termCode, type TranscriptCourseRecord,
   transcriptCourses, uniqueCurriculumCourses, withPhysicalEducationFills,
 } from "./course-state.js";
@@ -316,13 +316,18 @@ function assess(inputs: AssessmentInputs): Assessment {
   /* ---- 1. one shared per-course state table (§7.1, §7.2) ---- */
   const curriculumCourses = uniqueCurriculumCourses(inputs.curriculum.courses);
   const curriculumCodes = new Set(curriculumCourses.map((course) => courseKey(course.code)));
+  // v22: the CTĐT is read with the real codes (inputs.ts, curricula/real-codes.ts); graduation reads it as filed, so its
+  // results do not change: the file's codes of those courses (fileCodes).
+  const filedCourses = inputs.curriculum.fileCodes
+    ? curriculumCourses.map((course) => ({ ...course, code: inputs.curriculum.fileCodes![courseKey(course.code)] ?? course.code })) : curriculumCourses;
+  const filedCodes = new Set(filedCourses.map((course) => courseKey(course.code)));
   const electives = deriveElectiveGroups(curriculumCourses);
   const quotas = electiveQuotas(electives, standardData);
   const conditionCodes = conditionOnlyCodes(standardData, curriculumCourses);
   // The graduation check's code aliases (§7.9): the standard's other codes of a course (K26 "DIT0091 / 71ITDS30103") and
   // same-name retakes under another code. Since v17 the competency table reads them too (competencyAliases), so a course
   // passed with a later cohort counts for its CTĐT course everywhere on the page, not only for graduation.
-  const { aliases: codeAliases, transfers } = graduationCodeAliases(standardData, transcript, curriculumCodes);
+  const { aliases: codeAliases, transfers } = graduationCodeAliases(standardData, transcript, filedCodes);
   const transcriptRecords = transcriptCourses(transcript, competencyAliases(codeAliases, standardData, curriculumCourses, transcript, curriculumCodes));
   // v21: a PE elective the CTĐT does not list fills one of its numbered GDTC courses (ngành HTTT K29 lists "Giáo dục thể chất
   // (1)", "(2)" while its students take Bóng chuyền, Cờ vua …). The course table, the plan progress and the transcript summary
@@ -821,11 +826,13 @@ function assess(inputs: AssessmentInputs): Assessment {
 
   /* ---- 10. graduation (§7.9): the graduation page's engine, inputs built like graduationInputs() ---- */
   const curriculumCredits = new Map([...table.values()].map((row) => [row.code, row.credits]));
-  // Every alias of the standard (step 1), those between two CTĐT codes too: the graduation page's inputs exactly.
+  // Every alias of the standard (step 1), those between two CTĐT codes too, and the CTĐT as filed: the graduation page's inputs exactly.
   const graduation = assessGraduation({
     resolution: inputs.graduation.resolution, standard: graduationStandard, transcript, transfers,
     records: transcriptCourses(transcript, codeAliases),
-    programCredits: programCreditMap(standardData, curriculumCredits), electives, conditionCodes,
+    programCredits: programCreditMap(standardData, curriculumCreditMap(filedCourses)),
+    ...(filedCourses === curriculumCourses ? { electives, conditionCodes }
+      : { electives: deriveElectiveGroups(filedCourses), conditionCodes: conditionOnlyCodes(standardData, filedCourses) }),
   });
 
   /* ---- 11. transcript summary and warnings (§5, §7.10) ---- */

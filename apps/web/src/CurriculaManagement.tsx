@@ -24,7 +24,7 @@ const date = (s: string) => formatVnDateTime(s);
 // The columns the course tables sort by (table-sort.tsx): BB / TC as text (BB, BBKTL, TC, TC1, TC2…), Năm · HK as
 // year then term (Năm 2 · HK 1 → 21); a course without a year comes last.
 const courseSort: Record<string, SortRule<CurriculumCourse>> = {
-  code: { value: (c) => c.code },
+  code: { value: (c) => c.realCode ?? c.code },
   name: { value: (c) => c.name },
   credits: { value: (c) => c.credits, by: "number" },
   type: { value: (c) => c.type },
@@ -935,7 +935,7 @@ function Courses({
   const rows = data.courses.filter(
     (c) =>
       (!filters.q ||
-        `${c.code} ${c.name} ${c.englishName}`
+        `${c.code} ${c.realCode ?? ""} ${c.name} ${c.englishName}`
           .toLocaleLowerCase("vi")
           .includes(filters.q.toLocaleLowerCase("vi"))) &&
       (!filters.block || c.groupId === filters.block) &&
@@ -1089,7 +1089,7 @@ function Courses({
                       <Fragment key={`${c.code}-${c.position}-${c.sourceRow}`}>
                         <tr>
                           <td className="cm-stt">{stt.get(c)}</td>
-                          <td>{c.code}</td>
+                          <td>{c.realCode ?? c.code}{c.realCode && <small className="cm-file-code">Mã trong tệp CTĐT: {c.code}</small>}</td>
                           <td>
                             <strong>{c.name}</strong>
                             <small>{c.englishName}</small>
@@ -1475,11 +1475,13 @@ function CourseDialog({
     if (busy || !editing || !canManage || credits.trim() === "") return;
     setBusy(true);
     setError("");
-    const { position, sourceRow, sourceSheet, sourceCells, ...change } = form;
+    // realCode is the API's reading of the standard (never saved): the row is edited by its file code.
+    const { position, sourceRow, sourceSheet, sourceCells, realCode, ...change } = form;
     void position;
     void sourceRow;
     void sourceSheet;
     void sourceCells;
+    void realCode;
     change.credits = Number(credits);
     try {
       await request(
@@ -1676,7 +1678,14 @@ function CourseDialog({
               {fields.map(([key, label]) => (
                 <div key={key}>
                   <span>{label}</span>
-                  <strong>{course[key] || "Chưa xác định"}</strong>
+                  {key === "code" && course.realCode ? (
+                    <strong>
+                      {course.realCode}
+                      <small className="cm-file-code">Mã trong tệp CTĐT: {course.code}</small>
+                    </strong>
+                  ) : (
+                    <strong>{course[key] || "Chưa xác định"}</strong>
+                  )}
                 </div>
               ))}
               <div>

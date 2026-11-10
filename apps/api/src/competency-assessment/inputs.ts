@@ -7,6 +7,7 @@ import { courseKey, transcriptCourses } from "./course-state.js";
 import { physicalEducationGroupsFor } from "./plan-progress.js";
 import { SCOPE_MAX_LENGTH } from "./constants.js";
 import { majorCondition, majorIdentity } from "../curricula/majors.js";
+import { planWithRealCodes, readRealCourseRows, realCodesInText, realCodesOfRows, realCourseJoin } from "../curricula/real-codes.js";
 import type {
   AssessmentInputs, CareerInput, CurriculumCourseInput, CurriculumRelationInput,
   PlanResolution, PlanRevisionInput, WeightsInput,
@@ -60,13 +61,19 @@ export async function readAssessmentInputs(db: Db, userId: string,
   const relations = await db.query<{ course_code: string; kind: "prerequisite" | "prior"; raw: string; target_codes: string[]; unresolved_codes: string[]; review_required: boolean }>(
     `SELECT course_code,kind,raw,target_codes,unresolved_codes,review_required FROM curriculum_relations
      WHERE revision_id=$1 ORDER BY course_code,kind`, [curriculumRow.revision_id]);
+  // The real codes of the CTĐT (curricula/real-codes.ts, comp-calc-v22): its courses, relations, weights and training plan are
+  // read with the graduation standard's code of a course the file writes under another one (HTTT K29 71ITMA10203 → 71MATL10053);
+  // fileCodes keeps the file's codes for graduation, which reads the CTĐT as filed.
+  const realRows = await readRealCourseRows(db, [curriculumRow.revision_id]);
+  const realCodes = realCodesOfRows(realRows);
+  const real = (code: string) => realCodes.get(courseKey(code)) ?? code;
   const curriculumCourses: CurriculumCourseInput[] = courses.rows.map((row) => ({
-    code: row.code, name: row.name, credits: Number(row.credits), type: row.type, block: row.block,
+    code: real(row.code), name: row.name, credits: Number(row.credits), type: row.type, block: row.block,
     specialty: row.specialty, semester: row.semester, studyYear: row.study_year,
   }));
   const curriculumRelations: CurriculumRelationInput[] = relations.rows.map((row) => ({
-    courseCode: row.course_code, kind: row.kind, raw: row.raw, targetCodes: row.target_codes,
-    unresolvedCodes: row.unresolved_codes, reviewRequired: row.review_required,
+    courseCode: real(row.course_code), kind: row.kind, raw: realCodesInText(row.raw, realCodes), targetCodes: row.target_codes.map(real),
+    unresolvedCodes: row.unresolved_codes.map(real), reviewRequired: row.review_required,
   }));
   const admissionYear = num(curriculumRow.admission_year);
 
@@ -74,17 +81,19 @@ export async function readAssessmentInputs(db: Db, userId: string,
    * Weights (§2.3): the applied configurations of the shared courses ("môn học", migration 038) of
    * the current revision, matched to its rows by course; a course has one configuration for every cohort.
    */
+  // A row with a real code counts under the shared course of that code (readRealCourseRows): its configuration is the one used.
   const weightState = await db.query<{ active_count: number; max_updated: Date | string | null }>(
     `SELECT count(*)::int AS active_count,max(cfg.updated_at) AS max_updated
-     FROM curriculum_courses cc JOIN ad_comp_course_configs cfg ON cfg.course_id=cc.course_id AND cfg.status='active'
-     WHERE cc.revision_id=$1`, [curriculumRow.revision_id]);
+     FROM curriculum_courses cc ${realCourseJoin(2)}
+     JOIN ad_comp_course_configs cfg ON cfg.course_id=COALESCE(rc.course_id,cc.course_id) AND cfg.status='active'
+     WHERE cc.revision_id=$1`, [curriculumRow.revision_id, JSON.stringify(realRows)]);
   const weightRow = weightState.rows[0];
   if (!weightRow?.active_count && !options.weightsOptional) throw new AssessmentError("competency_weights_unavailable", 409);
   const links = await db.query<{ course_code: string; skill_id: string; weight: string | number }>(
-    `SELECT cc.code AS course_code,l.skill_id,l.weight FROM curriculum_courses cc
-     JOIN ad_comp_course_configs cfg ON cfg.course_id=cc.course_id AND cfg.status='active'
+    `SELECT COALESCE(rc.real_code,cc.code) AS course_code,l.skill_id,l.weight FROM curriculum_courses cc ${realCourseJoin(2)}
+     JOIN ad_comp_course_configs cfg ON cfg.course_id=COALESCE(rc.course_id,cc.course_id) AND cfg.status='active'
      JOIN ad_comp_course_links l ON l.config_id=cfg.id
-     WHERE cc.revision_id=$1 AND l.weight>0 ORDER BY cc.code,l.skill_id`, [curriculumRow.revision_id]);
+     WHERE cc.revision_id=$1 AND l.weight>0 ORDER BY 1,l.skill_id`, [curriculumRow.revision_id, JSON.stringify(realRows)]);
   // A skill's other groups (migration 040) count only while they are active.
   const skills = await db.query<{ skill_id: string; name: string; description: string; scope: string; group_id: string; other_group_ids?: string[] }>(
     `SELECT s.skill_id,k.name,k.description,left(s.scope,$1) AS scope,s.group_id,
@@ -119,7 +128,7 @@ export async function readAssessmentInputs(db: Db, userId: string,
   const planResolution: PlanResolution = !plans.rowCount ? "not_found" : planRows.length === 1 ? "found" : "ambiguous";
   const planRow = planResolution === "found" ? planRows[0]! : null;
   const planRevision: PlanRevisionInput | null = planRow ? {
-    id: planRow.id, revisionId: planRow.revision_id, version: planRow.version, data: planRow.data,
+    id: planRow.id, revisionId: planRow.revision_id, version: planRow.version, data: planWithRealCodes(planRow.data, realCodes),
     physicalEducationGroups: physicalEducationGroupsFor(curriculumCourses),
   } : null;
 
@@ -161,6 +170,7 @@ export async function readAssessmentInputs(db: Db, userId: string,
       id: curriculumRow.id, revisionId: curriculumRow.revision_id, version: curriculumRow.version,
       name: curriculumRow.name ?? "", admissionYear: admissionYear !== null && Number.isFinite(admissionYear) ? admissionYear : null,
       courses: curriculumCourses, relations: curriculumRelations,
+      ...(realCodes.size ? { fileCodes: Object.fromEntries([...realCodes].map(([file, code]) => [code, file])) } : {}),
     },
     weights,
     graduation: { resolution: resolved.resolution, standard: resolved.standard },

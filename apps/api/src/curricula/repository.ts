@@ -6,6 +6,7 @@ import { adminRoles, type AuthenticatedUser } from "../auth/types.js";
 import { CurriculumError, rebuild, type CurriculumData } from "./model.js";
 import { byOrder, byText, orderBy, type OwnOrder, type SortDirection } from "../admin/table-sort.js";
 import { notifyCatalogUpdate } from "../notifications/catalog.js";
+import { readRealCodes, withRealCodeField } from "./real-codes.js";
 
 // The columns the list sorts by (web CurriculaManagement.tsx, admin/table-sort.ts): Khóa K9 before K29, Phiên bản by
 // number then the last update, Trạng thái Đang mở first.
@@ -64,7 +65,8 @@ export class CurriculumRepository {
   }
   async detail(id: string, revision?: string) {
     const result = await this.pool.query(
-      `SELECT ${columns} FROM curricula c JOIN curriculum_revisions r ON r.curriculum_id=c.id AND r.id=COALESCE($2::uuid,c.current_revision) WHERE c.id=$1`,
+      `SELECT ${columns},c.cohort_code AS "cohortCode",c.identity_key AS "identityKey" FROM curricula c
+       JOIN curriculum_revisions r ON r.curriculum_id=c.id AND r.id=COALESCE($2::uuid,c.current_revision) WHERE c.id=$1`,
       [id, revision ?? null],
     );
     if (!result.rowCount) throw new CurriculumError("not_found", 404);
@@ -76,12 +78,18 @@ export class CurriculumRepository {
       `SELECT action,created_at AS "createdAt" FROM curriculum_events WHERE curriculum_id=$1 ORDER BY id DESC LIMIT 50`,
       [id],
     );
-    const data = result.rows[0]!.data as CurriculumData;
+    const { cohortCode, identityKey, ...row } = result.rows[0]! as { cohortCode: string; identityKey: string; data: CurriculumData };
+    const data = row.data;
     const parents = parentGroupIds(data.groups);
+    // The code students and the other pages read for a course the file writes under another one (real-codes.ts, user
+    // 2026-11-10): `realCode`, shown with the file's code beside it ("Mã trong tệp CTĐT"); the row keeps the file's code,
+    // by which it is edited.
+    const realCodes = await readRealCodes(this.pool, { cohortCode, identityKey, courses: data.courses });
     return {
-      ...result.rows[0],
+      ...row,
       data: {
         ...data,
+        courses: withRealCodeField(data.courses, realCodes),
         groups: data.groups.map((group) => ({
           ...group,
           isHeading: parents.has(group.id),
