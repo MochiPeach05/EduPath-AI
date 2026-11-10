@@ -829,7 +829,7 @@ function AiPanel({ assessment, aiEnabled, workerOnline, busy, onRegenerate, onCa
       {pending && !isAdvisorView() && <button type="button" className="sr-secondary" disabled={busy} onClick={onCancel}>Hủy tạo nhận xét</button>}
     </div>}
     {!mapped && previous && <PreviousComment comment={previous} view={view} />}
-    <p className="scomp-ai-footer">{ai.status === "completed" ? `${modelLabel(ai.model)}${aiReasoned(result.meta.promptVersion) ? " có suy luận" : ""}, ${modelPlace(ai.model)} · tạo lúc ${formatDateTime(ai.completedAt)}. ` : ""}Nhận xét do AI viết dựa trên kết quả đã tính, có thể chưa chính xác — hãy đối chiếu số liệu và trao đổi với cố vấn học tập.</p>
+    <p className="scomp-ai-footer">{ai.status === "completed" ? `${modelLabel(ai.model)}${aiReasoned(result.meta.promptVersion, ai.model) ? " có suy luận" : ""}, ${modelPlace(ai.model)} · tạo lúc ${formatDateTime(ai.completedAt)}. ` : ""}Nhận xét do AI viết dựa trên kết quả đã tính, có thể chưa chính xác — hãy đối chiếu số liệu và trao đổi với cố vấn học tập.</p>
   </section>;
 }
 
@@ -883,7 +883,7 @@ function PreviousComment({ comment, view }: { comment: PreviousAiComment; view: 
   return <div className="scomp-ai-previous scomp-ai-dimmed">
     <p className="scomp-ai-old">{PREVIOUS_COMMENT_NOTE}</p>
     {view === "gap" ? <AiGapContent output={mapped} hasCareer={Boolean(comment.context.career)} careerKeys={careerKeys} /> : <AiContent output={mapped} />}
-    <p className="scomp-ai-old-meta">{modelLabel(comment.model)}{aiReasoned(comment.promptVersion) ? " có suy luận" : ""}, {modelPlace(comment.model)} · tạo lúc {formatDateTime(comment.completedAt)}.</p>
+    <p className="scomp-ai-old-meta">{modelLabel(comment.model)}{aiReasoned(comment.promptVersion, comment.model) ? " có suy luận" : ""}, {modelPlace(comment.model)} · tạo lúc {formatDateTime(comment.completedAt)}.</p>
   </div>;
 }
 

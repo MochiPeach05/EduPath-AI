@@ -122,8 +122,8 @@ describe("buildAiInput", () => {
   };
 
   it("uses the spec system prompt verbatim plus the output description", () => {
-    expect(PROMPT_VERSION).toBe("comp-v14");
-    expect(input.promptVersion).toBe("comp-v14");
+    expect(PROMPT_VERSION).toBe("comp-v15");
+    expect(input.promptVersion).toBe("comp-v15");
     expect(input.think).toBe(true);
     expect(input.system).toBe(SYSTEM_PROMPT);
     expect(input.system.startsWith("Bạn là cố vấn học tập của EduPath AI, đồng hành cùng sinh viên ngành Công nghệ Thông tin, Trường Đại học Văn Lang.\n")).toBe(true);
@@ -153,7 +153,9 @@ describe("buildAiInput", () => {
     expect(system).toContain('11. Nếu học phần "chưa đủ điều kiện", nói rõ cần đạt học phần tiên quyết nào trước.');
     expect(system).toContain('Học phần đã đạt thì nói "học cải thiện" hoặc "ôn lại", không nói "học mới".');
     expect(system).toContain("12. Khi sinh viên đã chọn nghề mục tiêu, improvements và nextSteps chỉ nói về kỹ năng của nghề đó (mục [4] và [6]). Không khuyên học lại, học cải thiện hay ôn lại cho kỹ năng không thuộc nghề mục tiêu (ví dụ kỹ năng mạng khi nghề là kỹ sư phần mềm).");
-    expect(system).toContain("13. Khi mọi kỹ năng của nghề đã đạt ngưỡng: khuyên nâng các kỹ năng nghề chưa đạt mức Giỏi bằng học phần trong mục [6], hoặc một sản phẩm, dự án cụ thể gắn với nghề khi không còn học phần.");
+    // comp-v15 (user 2026-11-10): never "nothing left to learn"; with every career skill met, a way on beyond the program.
+    expect(system).toContain("13. Không bao giờ viết rằng sinh viên đã đủ, đã hoàn thiện hay không cần học thêm gì. Khi mọi kỹ năng của nghề đã đạt ngưỡng, vẫn luôn mở hướng học tiếp");
+    expect(system).toContain("nextSteps có ít nhất một việc tự học ngoài chương trình gắn với kỹ năng của nghề");
     expect(system).toContain("14. groupInsights cho nhóm dưới mức Khá: nêu tên 1–2 kỹ năng thấp nhất của nhóm; nếu kỹ năng đó không thuộc nghề mục tiêu thì nói rõ là ngoài yêu cầu của nghề và không đề xuất học lại hay học cải thiện;");
     expect(system).toContain("15. Không nhận xét về điều kiện xét tốt nghiệp (trang Điều kiện xét tốt nghiệp đã có kết quả và lời khuyên riêng); progress chỉ nói về tiến độ so với kế hoạch đào tạo.");
     expect(system).toContain("- summary: 2–3 câu tổng quan, tối đa 600 ký tự; nếu đã chọn nghề, nêu tình trạng so với nghề mục tiêu;");
@@ -559,5 +561,39 @@ describe("buildPromptContext", () => {
     const input = buildAiInput(syntheticResult({ career: false }));
     expect(buildPromptContext(syntheticResult({ career: false })).gapSkills).toEqual([]);
     expect(input.user).toContain("Bạn chưa chọn nghề mục tiêu.");
+  });
+});
+
+describe("a student who met every career skill (comp-v15)", () => {
+  // User 2026-11-10: "Nhận xét không bao giờ nhận xét bạn đã đủ tất cả mà không cần học gì mà vẫn phải khuyến khích sinh
+  // viên học thêm": sections [5], [6] and [7] all said "không có", and the comment only praised the fit.
+  it("says nothing is missing, lists the met skills with a way on and counts the Bắt buộc and Ưu tiên ones", () => {
+    const result = syntheticResult();
+    const career = result.career!;
+    career.requirements.forEach((requirement, index) => Object.assign(requirement, {
+      status: "met", statusLabel: "Đạt", score: index % 2 ? 91 : 86.5, level: index % 2 ? "excellent" : "proficient", levelLabel: index % 2 ? "Xuất sắc" : "Giỏi",
+      deficit: null, deficitBand: null, deficitBandLabel: null, noDataReason: null,
+    }));
+    const total = career.requirements.length;
+    career.counts = { total, met: total, below: 0, upcoming: 0, notStudied: 0, noData: 0, withData: total };
+    result.skillPlans = [];
+    result.selfStudy = [];
+    const { user } = buildAiInput(result);
+    expect(user).toContain(`Không có kỹ năng nào của nghề mục tiêu còn thiếu: bạn đã đạt ngưỡng cả ${total}/${total} kỹ năng. Hướng học tiếp ở mục [6].`);
+    expect(user).toContain("Kỹ năng của nghề mục tiêu đã đạt, vẫn học tiếp");
+    const onward = user.split("\n").filter((line) => /^- S\d+ .+ \((Giỏi|Xuất sắc), điểm [\d,]+\/100\): /.test(line));
+    expect(onward.length).toBe(career.requirements.filter((requirement) => requirement.skillKey).length);
+    expect(onward.filter((line) => line.endsWith("nâng lên mức Xuất sắc")).length).toBeGreaterThan(0);
+    expect(onward.filter((line) => line.endsWith("mở rộng sang kiến thức nâng cao ngoài chương trình")).length).toBeGreaterThan(0);
+    expect(user).not.toContain("Không có kỹ năng nào của nghề mục tiêu cần cải thiện hoặc nâng lên.");
+    const required = career.requirements.filter((requirement) => requirement.isRequired).length;
+    expect(user).toContain(`Tính chất: ${required} kỹ năng Bắt buộc, ${total - required} kỹ năng Ưu tiên`);
+  });
+
+  it("keeps a comment with gaps on its gaps: no way-on list", () => {
+    const { user } = buildAiInput(syntheticResult());
+    expect(user).not.toContain("vẫn học tiếp");
+    expect(user).not.toContain("còn thiếu: bạn đã đạt ngưỡng cả");
+    expect(user).toMatch(/Tính chất: \d+ kỹ năng Bắt buộc/);
   });
 });

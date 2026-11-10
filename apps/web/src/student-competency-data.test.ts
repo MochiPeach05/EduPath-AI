@@ -4,7 +4,7 @@ import {
   careerDataText, careerSummaryText, choiceLabel, courseTermText, formatDifference, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isOverdue, isPreconditionError, PRIORITY_LABELS, levelStep, mapAiOutput, missingRequirements, missingRequirementsMessage, modelLabel, needsSelfStudy, nextCourseCount, nextTermOf, plannedCourseNote, plansFor, relatedSkillNames, shownScore, skillGroupKeys,
   scoreDifference, shouldPoll, sortRequirements, studyTermOf, termLabel, upcomingText, CHART_LEVELS, EMPTY_SKILL_FILTERS, LEVEL_COLUMNS,
   careerThresholdsLine, chartLevelLabel, currentImprovements, LEVEL_SCALE, levelOfScore, withCurrentLevels,
-  careerRaise, careerSkillKeys, hasCompetencyContent, hasGapContent, normalizePreviousComment, ownComment, previousComment,
+  careerRaise, careerSkillKeys, hasCompetencyContent, hasGapContent, normalizePreviousComment, ownComment, previousComment, aiReasoned,
 } from "./student-competency-data";
 import { fixtureAiOutput, fixtureAssessment, fixtureResult } from "./student-competency.fixture";
 import type { AiCommentContext, CareerRequirementResult, PreviousAiComment } from "./competency-assessment-types";
@@ -662,5 +662,16 @@ describe("overall method", () => {
     expect(lateBeforeStudyTerm("comp-calc-v18")).toBe(false);
     expect(lateBeforeStudyTerm("comp-calc-v9")).toBe(false);
     expect(lateBeforeStudyTerm(undefined)).toBe(true);
+  });
+});
+
+describe("the AI comment footer's \"có suy luận\"", () => {
+  // User 2026-11-10 ("kiểm tra luôn các nhận xét AI khác"): Workers AI runs without thinking (AI_THINKING off), yet the
+  // footer said "Gemma 4 26B có suy luận" for every comp-v7+ comment.
+  it("says it only for a comp-v7+ comment of the PC's model, never for a Workers AI one", () => {
+    expect(aiReasoned("comp-v14", "gemma4:e4b")).toBe(true);
+    expect(aiReasoned("comp-v14")).toBe(true);
+    expect(aiReasoned("comp-v6", "gemma4:e4b")).toBe(false);
+    expect(aiReasoned("comp-v15", "@cf/google/gemma-4-26b-a4b-it")).toBe(false);
   });
 });

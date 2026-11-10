@@ -23,8 +23,11 @@ import { buildGraduationAdviceSchema, GRADUATION_ADVICE_LIMITS as L } from "./sc
  * v5 (review 2026-11-04: AI texts dropped decimals): the GPA, its minimum and shortfall with two decimals and the scale like
  * the page ("2,85/4", "yêu cầu tối thiểu 2,00/4", "còn thiếu 0,15 điểm"), course scores "1,5/4"; rule 1 asks to copy decimals,
  * and an item with a number that lost them is dropped (validate.ts, truncatedNumber).
+ * v6 (user 2026-11-10: "Nhận xét không bao giờ nhận xét bạn đã đủ tất cả mà không cần học gì mà vẫn phải khuyến khích sinh
+ * viên học thêm kiến thức từ bên ngoài, tự học … kiểm tra luôn các nhận xét AI khác"): with every condition met the advice
+ * no longer only congratulates; it still encourages learning beyond the program, with one such step in nextSteps.
  */
-export const GRADUATION_ADVICE_PROMPT_VERSION = "grad-advice-v5";
+export const GRADUATION_ADVICE_PROMPT_VERSION = "grad-advice-v6";
 
 /** Ollama options sent with every job (worker adds think/stream/truncate/keep_alive/model). num_ctx must stay 16384. */
 export const GRADUATION_ADVICE_OPTIONS = { num_ctx: 16384, num_predict: 2048, temperature: 0.3, top_p: 0.95, top_k: 64 } as const;
@@ -78,7 +81,8 @@ Nội dung lời khuyên:
 - Điểm trung bình tích lũy chưa đạt: gợi ý học cải thiện hoặc học lại các học phần ở mục [6].
 - Học phần đang học: nhắc bạn hoàn thành tốt để được tính vào kết quả.
 - Có cảnh báo dữ liệu: nói ngắn gọn cảnh báo đó ảnh hưởng thế nào và gợi ý kiểm tra lại bảng điểm.
-- Mọi điều kiện đều đạt: chúc mừng ngắn gọn và nhắc theo dõi thông báo chính thức của nhà trường.
+- Mọi điều kiện đều đạt: chúc mừng ngắn gọn, nhắc theo dõi thông báo chính thức của nhà trường, và vẫn khuyến khích học tiếp: hoàn thành tốt các học phần đang học (nếu có), tự học kiến thức nâng cao ngoài chương trình và làm một dự án thực tế gắn với nghề nghiệp bạn hướng tới (không bịa tên khóa học, chứng chỉ hay đường link); nextSteps có ít nhất một việc tự học như vậy.
+- Không bao giờ viết rằng bạn đã đủ mọi thứ hay không cần học thêm gì.
 
 Văn phong:
 - Tiếng Việt tự nhiên, ấm áp, rõ ràng; gọi sinh viên là "bạn".

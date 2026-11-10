@@ -42,7 +42,7 @@ describe("createCompetencyAiQueue", () => {
     const aiInput = JSON.parse(params[3] as string);
     expect(Object.keys(aiInput).sort()).toEqual(["checks", "options", "promptVersion", "schema", "system", "think", "user"]);
     expect(aiInput.think).toBe(true);
-    expect(aiInput.promptVersion).toBe("comp-v14");
+    expect(aiInput.promptVersion).toBe("comp-v15");
     // No saved Kế hoạch học kỳ: the comment uses the training plan's terms.
     expect(query.mock.calls.find(([s]) => s.startsWith("SELECT data FROM stu_study_plans"))![1]).toEqual([USER]);
     const last = query.mock.calls.at(-1)!;

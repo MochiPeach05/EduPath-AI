@@ -147,6 +147,12 @@ Xóa hoặc thay bảng điểm (kể cả qua OCR) xóa toàn bộ kết quả 
 - Trước khi lưu `ai_output`, server (`ai/key-cleanup.ts`) gỡ khóa S…/G… khỏi văn bản: khóa đứng cạnh chính tên của nó bị bỏ cùng dấu nối ("API (S12)" → "API", "(API - S12)" → "(API)", "S12 - API" → "API"), khóa trong ngoặc ở chỗ khác bị bỏ, khóa trần được thay bằng tên. Trang web chạy cùng quy tắc (`cleanKeyText`) cho các nhận xét lưu trước comp-v3.
 - Server kiểm tra lại đầu ra: schema Zod strict, danh sách khóa và mã cho phép, không URL/email/HTML, mọi con số trong văn bản phải có trong khối dữ liệu. Sai → `invalid_ai_output`, không hiển thị. Mục lặp lại (cùng nhóm, cùng kỹ năng, cùng học phần trong một mục) không còn làm hỏng cả nhận xét: server giữ mục đầu, bỏ mục sau (comp-v7; trước đó trả `duplicate`).
 
+- `comp-v15` (10/11/2026; người dùng: "Nhận xét không bao giờ nhận xét bạn đã đủ tất cả mà không cần học gì mà vẫn phải khuyến khích sinh viên học thêm kiến thức từ bên ngoài, tự học"): sinh viên đạt mọi kỹ năng của nghề ở mức Giỏi hoặc Xuất sắc trước đây chỉ nhận lời khen, vì mục [5], [6], [7] đều ghi "không có".
+  - Mục [5] ghi "Không có kỹ năng nào của nghề mục tiêu còn thiếu: bạn đã đạt ngưỡng cả x/y kỹ năng"; mục [6] liệt kê các kỹ năng nghề đã đạt kèm hướng học tiếp ("nâng lên mức Xuất sắc" hoặc "mở rộng sang kiến thức nâng cao ngoài chương trình"), chỉ khi đã đạt hết; mục [4] đếm số kỹ năng Bắt buộc và Ưu tiên (Gemma 26B từng gọi 4 kỹ năng Ưu tiên là "Bắt buộc").
+  - Nguyên tắc 13: không bao giờ viết sinh viên đã đủ, không cần học thêm; careerFit và summary kết bằng hướng học tiếp, nextSteps có ít nhất một việc tự học ngoài chương trình.
+  - Thử trên sinh viên giả lập (Gemma 4 26B, Workers AI, không thinking): trước 0/2 lần careerFit có hướng học tiếp; sau 2/2 lần cả careerFit và summary có, nextSteps có 3–4 việc tự học hoặc dự án.
+  - Chân nhận xét không còn ghi "có suy luận" cho mô hình chạy trên Cloudflare (`aiReasoned` trên web), vì ở đó thinking tắt trừ khi `AI_THINKING=on`.
+
 ### Giao thức worker (`/api/worker/competency-assessments`)
 
 Xác thực `Authorization: Bearer <AI_WORKER_KEY>` (SHA-256 + `timingSafeEqual`) trước khi đọc body; body tối đa 512 kB.

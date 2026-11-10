@@ -850,8 +850,13 @@ export function currentImprovements(result: Pick<AssessmentResult, "highlights" 
   return result.highlights.improvements.filter((key) => below.has(key));
 }
 
-/** Comments written with Gemma's thinking mode: prompt comp-v7 and later. */
-export function aiReasoned(promptVersion: string | null | undefined): boolean {
+/**
+ * Comments written with Gemma's thinking mode: prompt comp-v7 and later on the PC's Ollama. Not on Workers AI (model
+ * "@cf/…"): thinking is off there unless AI_THINKING=on (cloudflare.ts, 2026-11-08), so the footer no longer says "có
+ * suy luận" for a comment that did not reason (user 2026-11-10: "kiểm tra luôn các nhận xét AI khác").
+ */
+export function aiReasoned(promptVersion: string | null | undefined, model?: string | null): boolean {
+  if (/^@cf\//.test(model ?? "")) return false;
   const match = /^comp-v(\d+)$/.exec(promptVersion ?? "");
   return Boolean(match && Number(match[1]) >= 7);
 }

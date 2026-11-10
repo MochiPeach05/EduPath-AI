@@ -43,8 +43,15 @@ import { numberFactsOf, type CommentChecks, type NamedScore, type NumberFacts } 
  * comp-v14 (review 2026-11-04: comments wrote "69" for 69,9 and "64" for 64,8): every number as the pages show it since
  * 2026-10-30, with its scale: 0–100 scores floored to the tenth ("69,9/100"), course scores "8,5/10", shortfalls "thiếu 19,5
  * điểm"; rule 1 asks to copy decimals, and a number that lost them is asked again, then dropped (validate.ts truncated_number).
+ * comp-v15 (user 2026-11-10: "Nhận xét không bao giờ nhận xét bạn đã đủ tất cả mà không cần học gì mà vẫn phải khuyến khích
+ * sinh viên học thêm kiến thức từ bên ngoài, tự học"): a student who met every career skill at Giỏi or Xuất sắc got only
+ * "Bạn cực kỳ phù hợp…", because sections [5], [6] and [7] all said "không có". Section [5] now says no career skill is
+ * missing, section [6] lists the met career skills that are no improvement with how to go on (one level up, or advanced
+ * knowledge beyond the program for Xuất sắc), and rule 13 never lets a comment say nothing is left to learn: careerFit ends
+ * with that way on, summary says it briefly, nextSteps hold at least one self-study step beyond the program. Section [4]
+ * counts the Bắt buộc and Ưu tiên skills (the comments called four Ưu tiên skills "Bắt buộc").
  */
-export const PROMPT_VERSION = "comp-v14";
+export const PROMPT_VERSION = "comp-v15";
 
 /** Gemma reasons before it writes the comment; the worker sends it to Ollama as think:true. */
 const AI_THINK = true;
@@ -216,6 +223,9 @@ const plannedText = (code: string, term: string | null | undefined, plan: TermPl
   return mine ? `sắp học vào ${termNameOf(mine)}` : "sắp học, chưa xếp lịch";
 };
 
+/** Levels from the lowest up, as the pages name them (comp-v15 section [6] "nâng lên mức …"). */
+const LEVEL_LADDER = ["Yếu", "Trung bình", "Khá", "Giỏi", "Xuất sắc"];
+
 const SYSTEM_PROMPT_BASE = `Bạn là cố vấn học tập của EduPath AI, đồng hành cùng sinh viên ngành Công nghệ Thông tin, Trường Đại học Văn Lang.
 Hệ thống đã tính sẵn mọi con số từ bảng điểm, trọng số học phần, chương trình đào tạo, kế hoạch đào tạo, tiêu chuẩn xét tốt nghiệp và yêu cầu của nghề mục tiêu. Việc của bạn là đọc kết quả đó, chọn và xếp ưu tiên trong các danh sách được cung cấp, rồi viết nhận xét, giải thích, lời khuyên dành riêng cho sinh viên này.
 
@@ -234,7 +244,7 @@ Lời khuyên cụ thể (bắt buộc):
 10. Mỗi mục improvements và mỗi bước nextSteps phải nêu tên một học phần cụ thể (học mới, học lại, học cải thiện hoặc ôn lại nội dung của học phần đã học) lấy từ danh sách gợi ý của đúng kỹ năng đó; chỉ khi kỹ năng không có học phần nào mới gợi ý tự học kèm một sản phẩm cụ thể để kiểm chứng.
 11. Nếu học phần "chưa đủ điều kiện", nói rõ cần đạt học phần tiên quyết nào trước. Học phần "chưa đạt" thì nói "học lại". Học phần đã đạt thì nói "học cải thiện" hoặc "ôn lại", không nói "học mới".
 12. Khi sinh viên đã chọn nghề mục tiêu, improvements và nextSteps chỉ nói về kỹ năng của nghề đó (mục [4] và [6]). Không khuyên học lại, học cải thiện hay ôn lại cho kỹ năng không thuộc nghề mục tiêu (ví dụ kỹ năng mạng khi nghề là kỹ sư phần mềm).
-13. Khi mọi kỹ năng của nghề đã đạt ngưỡng: khuyên nâng các kỹ năng nghề chưa đạt mức Giỏi bằng học phần trong mục [6], hoặc một sản phẩm, dự án cụ thể gắn với nghề khi không còn học phần.
+13. Không bao giờ viết rằng sinh viên đã đủ, đã hoàn thiện hay không cần học thêm gì. Khi mọi kỹ năng của nghề đã đạt ngưỡng, vẫn luôn mở hướng học tiếp: kỹ năng nghề chưa đạt mức Giỏi thì nâng bằng học phần trong mục [6], hoặc một sản phẩm, dự án cụ thể gắn với nghề khi không còn học phần; kỹ năng ở dòng "vẫn học tiếp" của mục [6] thì khuyến khích tự học kiến thức nâng cao ngoài chương trình và làm một sản phẩm, dự án cụ thể gắn với nghề để chứng minh. careerFit kết thúc bằng hướng học tiếp đó, summary nhắc ngắn gọn, và nextSteps có ít nhất một việc tự học ngoài chương trình gắn với kỹ năng của nghề.
 14. groupInsights cho nhóm dưới mức Khá: nêu tên 1–2 kỹ năng thấp nhất của nhóm; nếu kỹ năng đó không thuộc nghề mục tiêu thì nói rõ là ngoài yêu cầu của nghề và không đề xuất học lại hay học cải thiện; nếu thuộc nghề mục tiêu, hoặc sinh viên chưa chọn nghề, thì nêu học phần nên làm.
 15. Không nhận xét về điều kiện xét tốt nghiệp (trang Điều kiện xét tốt nghiệp đã có kết quả và lời khuyên riêng); progress chỉ nói về tiến độ so với kế hoạch đào tạo.
 16. Trang in tên kỹ năng làm tiêu đề của mỗi mục strengths, improvements và gaps, nên mỗi mục chỉ nói về đúng kỹ năng đó: nhắc tên kỹ năng, hoặc tên học phần minh chứng hay học phần gợi ý của chính kỹ năng đó; không mô tả một kỹ năng khác trong mục này. Một kỹ năng đã là điểm mạnh thì không nêu ở improvements.
@@ -249,11 +259,11 @@ Văn phong:
 Chỉ trả về một đối tượng JSON đúng cấu trúc được mô tả bên dưới, không thêm bất kỳ văn bản nào bên ngoài JSON.`;
 
 const OUTPUT_DESCRIPTION = `Cấu trúc JSON (giới hạn tính theo số ký tự):
-- summary: 2–3 câu tổng quan, tối đa ${L.summary} ký tự; nếu đã chọn nghề, nêu tình trạng so với nghề mục tiêu; không lặp chi tiết sẽ nói ở careerFit, gaps hay nextSteps.
+- summary: 2–3 câu tổng quan, tối đa ${L.summary} ký tự; nếu đã chọn nghề, nêu tình trạng so với nghề mục tiêu; khi mọi kỹ năng của nghề đã đạt ngưỡng, câu cuối khuyến khích học tiếp ngoài chương trình (nguyên tắc 13); không lặp chi tiết sẽ nói ở careerFit, gaps hay nextSteps.
 - groupInsights: tối đa ${L.groupInsights} mục { groupKey: khóa nhóm G…, comment: tối đa ${L.groupComment} ký tự } cho các nhóm năng lực đáng chú ý; nhóm dưới mức Khá thì nêu tên kỹ năng ở dòng "kỹ năng thấp nhất của nhóm" (mục [2]); kỹ năng thuộc nghề mục tiêu (hoặc khi chưa chọn nghề) thì nêu học phần nên làm, kỹ năng ngoài nghề mục tiêu thì chỉ nói là ngoài yêu cầu của nghề.
 - strengths: tối đa ${L.strengths} mục { skillKey: khóa kỹ năng S…, comment: tối đa ${L.skillComment} ký tự } về điểm mạnh, ưu tiên kỹ năng của nghề mục tiêu; chỉ chọn kỹ năng ở dòng "Có thể nêu là điểm mạnh" của mục [3]; minh chứng chỉ là học phần đã học, không lấy học phần đang học hay sắp học.
 - improvements: tối đa ${L.improvements} mục { skillKey, priority: "high" (cần làm sớm) | "medium" (nên làm) | "low" (có thể để sau), courses: tối đa ${L.improvementCourses} mục { courseCode: mã trong danh sách của đúng kỹ năng đó ở mục [6], reason: tối đa ${L.courseReason} ký tự, chỉ dựa trên dòng của học phần đó (học mới, học lại hay học cải thiện, điều kiện, học kỳ) }, comment: tối đa ${L.skillComment} ký tự, nói rõ bạn nên làm gì với học phần đã chọn } về kỹ năng nên cải thiện hoặc nâng lên; chỉ chọn kỹ năng ở dòng "Có thể nêu là cần cải thiện" của mục [3] (khi đã chọn nghề, đó chỉ là kỹ năng của nghề: dưới ngưỡng, hoặc đã đạt ngưỡng nhưng chưa đạt mức Giỏi); kỹ năng không có học phần thì để courses rỗng và gợi ý tự học hoặc một sản phẩm, dự án cụ thể để kiểm chứng.
-- careerFit: { comment: tối đa ${L.careerFit} ký tự } về mức phù hợp với nghề mục tiêu; chép đúng tính chất Bắt buộc hay Ưu tiên của từng kỹ năng như mục [4]; chỉ nêu mức phù hợp bằng chữ, không đưa ra chỉ số hay phần trăm phù hợp; nếu chưa chọn nghề, nói ngắn gọn và gợi ý chọn nghề.
+- careerFit: { comment: tối đa ${L.careerFit} ký tự } về mức phù hợp với nghề mục tiêu; chép đúng tính chất Bắt buộc hay Ưu tiên của từng kỹ năng như mục [4]; chỉ nêu mức phù hợp bằng chữ, không đưa ra chỉ số hay phần trăm phù hợp; khi mọi kỹ năng của nghề đã đạt ngưỡng, câu cuối nêu hướng học tiếp theo nguyên tắc 13; nếu chưa chọn nghề, nói ngắn gọn và gợi ý chọn nghề.
 - gaps: tối đa ${L.gaps} mục, chỉ cho kỹ năng trong mục "Ứng viên khoảng trống": { skillKey, priority, explanation: tối đa ${L.gapExplanation} ký tự, courses: tối đa ${L.gapCourses} mục { courseCode: mã trong danh sách của đúng kỹ năng đó, reason: tối đa ${L.courseReason} ký tự, chỉ dựa trên dòng của học phần đó trong mục [5] (học mới, học lại hay học cải thiện, điều kiện, học kỳ) }, selfStudy: tối đa ${L.selfStudy} gợi ý tự học, mỗi gợi ý tối đa ${L.selfStudyItem} ký tự }.
 - progress: tối đa ${L.progress} ký tự, chỉ về tiến độ so với kế hoạch đào tạo (mục [8]); không nhận xét về xét tốt nghiệp.
 - nextSteps: từ ${L.nextStepsMin} đến ${L.nextStepsMax} việc nên làm ngay, mỗi việc tối đa ${L.nextStep} ký tự; mỗi việc gắn với một học phần cụ thể ở mục [5] hoặc [6], hoặc một sản phẩm tự học khi kỹ năng không có học phần; khi đã chọn nghề, chỉ về kỹ năng của nghề.
@@ -628,6 +638,10 @@ function renderDataBlock(result: AssessmentResult, context: PromptContext = buil
     // Only the label: the raw fit index invites "Phù hợp 72%"-style numbers (spec §11 "Không làm").
     // The 2026-10-21 scale, also for a result stored with the earlier labels (regenerated comments).
     push(`Mức phù hợp: ${FIT_LABELS[fitCodeOf(fitScoreOf(career.requirements), fitDataShareOf(career.requirements))]}`);
+    // comp-v15: the kinds counted, so a comment never calls Ưu tiên skills "Bắt buộc" (Gemma 26B did, 3 runs of 4).
+    const required = career.requirements.filter((req) => req.isRequired).length;
+    const preferred = career.requirements.length - required;
+    push(`Tính chất: ${[required ? `${required} kỹ năng Bắt buộc` : "không có kỹ năng Bắt buộc", preferred ? `${preferred} kỹ năng Ưu tiên` : "không có kỹ năng Ưu tiên"].join(", ")}`);
     for (const req of career.requirements) {
       const name = req.skillKey ? `${req.skillKey} ${skillName(req.skillKey)}` : sanitizeText(req.skillName ?? req.title);
       const title = req.skillName && sanitizeText(req.title) !== sanitizeText(req.skillName) ? ` (yêu cầu: ${sanitizeText(req.title)})` : "";
@@ -649,7 +663,10 @@ function renderDataBlock(result: AssessmentResult, context: PromptContext = buil
   }
 
   push("", "[5. ỨNG VIÊN KHOẢNG TRỐNG VÀ HỌC PHẦN GỢI Ý] (chỉ chọn học phần trong danh sách của đúng kỹ năng)");
-  if (!context.gapSkills.length) push("Không có kỹ năng nào cần bổ sung.");
+  const allMet = Boolean(career && career.counts.total > 0 && career.counts.met === career.counts.total);
+  if (!context.gapSkills.length) push(allMet
+    ? `Không có kỹ năng nào của nghề mục tiêu còn thiếu: bạn đã đạt ngưỡng cả ${career!.counts.met}/${career!.counts.total} kỹ năng. Hướng học tiếp ở mục [6].`
+    : "Không có kỹ năng nào cần bổ sung.");
   const gapCourses = careerGapCourses(result);
   for (const gap of context.gapSkills) {
     push(`${gap.key} ${skillName(gap.key)}:`);
@@ -661,7 +678,11 @@ function renderDataBlock(result: AssessmentResult, context: PromptContext = buil
   push("", career
     ? "[6. KỸ NĂNG CỦA NGHỀ MỤC TIÊU CẦN CẢI THIỆN HOẶC NÂNG LÊN VÀ HỌC PHẦN GỢI Ý] (dùng cho improvements; chỉ chọn học phần trong danh sách của đúng kỹ năng)"
     : "[6. KỸ NĂNG DƯỚI MỨC KHÁ VÀ HỌC PHẦN GỢI Ý] (dùng cho improvements; chỉ chọn học phần trong danh sách của đúng kỹ năng)");
-  if (!context.improvementKeys.length) push(career ? "Không có kỹ năng nào của nghề mục tiêu cần cải thiện hoặc nâng lên." : "Không có kỹ năng nào cần cải thiện.");
+  // comp-v15: with every career skill met, those that are no improvement still have a way on (rule 13), never "nothing
+  // to learn". With gaps left the comment stays on them.
+  const onward = !allMet ? [] : (career?.requirements ?? []).filter((req) => req.skillKey && req.status === "met" && req.score !== null && !context.improvementKeys.includes(req.skillKey));
+  if (!context.improvementKeys.length) push(!career ? "Không có kỹ năng nào cần cải thiện."
+    : onward.length ? "Không có kỹ năng nào của nghề mục tiêu cần đưa vào improvements." : "Không có kỹ năng nào của nghề mục tiêu cần cải thiện hoặc nâng lên.");
   const options = improvementCourses(result);
   const allowed = new Map(context.improvementSkills.map((item) => [item.key, item.courseCodes]));
   const deepen = new Set((promptPlans(result) ?? []).filter((plan) => purposeOf(plan) === "deepen").map((plan) => plan.skillKey));
@@ -679,6 +700,15 @@ function renderDataBlock(result: AssessmentResult, context: PromptContext = buil
       : deepen.has(key)
         ? "  (không còn học phần phù hợp; gợi ý một sản phẩm hoặc dự án cụ thể gắn với nghề mục tiêu để kiểm chứng)"
         : "  (không có học phần phù hợp; gợi ý tự học kèm sản phẩm kiểm chứng)");
+  }
+
+  if (onward.length) {
+    push("Kỹ năng của nghề mục tiêu đã đạt, vẫn học tiếp (không đưa vào improvements; nêu ở careerFit, summary và nextSteps: tự học kiến thức nâng cao ngoài chương trình, làm một sản phẩm hoặc dự án gắn với nghề):");
+    for (const req of onward) {
+      const level = req.levelLabel ?? "";
+      const next = LEVEL_LADDER[LEVEL_LADDER.indexOf(level) + 1];
+      push(`- ${req.skillKey} ${skillName(req.skillKey!)} (${level ? `${sanitizeText(level, 20)}, ` : ""}điểm ${formatScoreOf100(req.score!)}): ${next ? `nâng lên mức ${next}` : "mở rộng sang kiến thức nâng cao ngoài chương trình"}`);
+    }
   }
 
   push("", "[7. KỸ NĂNG CẦN TỰ HỌC (chương trình đào tạo chưa đo hoặc không còn học phần phù hợp)]");

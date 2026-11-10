@@ -36,9 +36,12 @@ describe("buildGraduationAdviceInput", () => {
   const graduation = syntheticGraduation();
   const input = buildGraduationAdviceInput(graduation);
 
-  it("uses the grad-advice-v5 prompt and the fixed Ollama options (num_ctx 16384)", () => {
-    expect(input.promptVersion).toBe("grad-advice-v5");
-    expect(GRADUATION_ADVICE_PROMPT_VERSION).toBe("grad-advice-v5");
+  it("uses the grad-advice-v6 prompt and the fixed Ollama options (num_ctx 16384)", () => {
+    expect(input.promptVersion).toBe("grad-advice-v6");
+    expect(GRADUATION_ADVICE_PROMPT_VERSION).toBe("grad-advice-v6");
+    // grad-advice-v6 (user 2026-11-10): every condition met still means learning on, never "nothing left to learn".
+    expect(input.system).toContain("vẫn khuyến khích học tiếp");
+    expect(input.system).toContain("Không bao giờ viết rằng bạn đã đủ mọi thứ hay không cần học thêm gì.");
     // grad-advice-v5 (review 2026-11-04): decimals are copied, never cut.
     expect(input.system).toContain('chép đúng từng chữ số như trong dữ liệu, giữ nguyên phần thập phân sau dấu phẩy, không bỏ số lẻ (dữ liệu ghi "2,85/4" thì viết 2,85, không viết 2,8 hay 3)');
     expect(input.options).toEqual({ num_ctx: 16384, num_predict: 2048, temperature: 0.3, top_p: 0.95, top_k: 64 });
