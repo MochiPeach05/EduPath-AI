@@ -44,7 +44,8 @@
   white-space: nowrap;
 }
 
-.sw-advisor-blocked {
+/* Two classes, so .sw-shell p (margin: 0) does not take the gap and the centring away. */
+.sw-advisor-banner .sw-advisor-blocked {
   max-width: 1400px;
   margin: 8px auto 0;
   color: #8f2a1d;
@@ -60,6 +61,143 @@
   .sw-advisor-close {
     width: 100%;
     justify-content: center;
+  }
+}
+
+/* On screen the strip stays under the sticky header while the page scrolls, on every page and for every staff role
+   (user 2026-11-10: "cố định lướt xuống không mất"). Its height is set for each width (--sw-advisor-height: whole lines
+   of text, the button, the refusal line when there is one) instead of following its words, so the page below can keep
+   clear of it without a script: inside .sw-body --sw-header-height counts the strip too, and the drawer, the side panel
+   of Lộ trình học tập, the scroll-margin-top of the sections opened by a link and the height of Trợ lý AI already go by
+   that. It is drawn over the page (whose docks and tooltips reach z-index 5) and under the drawer's backdrop (9) and the
+   header (11) with its menus; the dialogs are in the top layer. Paper keeps the whole strip in its place. */
+@media screen {
+  .sw-workspace:has(> .sw-advisor-banner) {
+    --sw-topbar-height: var(--sw-header-height, 92px);
+    --sw-advisor-pad: 8px;
+    --sw-advisor-line: 19.5px;
+    --sw-advisor-lines: 3;
+    --sw-advisor-button-row: 0px;
+    --sw-advisor-alert: 0px;
+    --sw-advisor-body: calc(var(--sw-advisor-lines) * var(--sw-advisor-line) + var(--sw-advisor-button-row));
+    --sw-advisor-height: calc(var(--sw-advisor-body) + var(--sw-advisor-alert) + 2 * var(--sw-advisor-pad) + 1px);
+  }
+
+  .sw-workspace:has(> .sw-advisor-banner .sw-advisor-blocked) {
+    --sw-advisor-alert: calc(4px + var(--sw-advisor-line));
+  }
+
+  .sw-workspace:has(> .sw-advisor-banner) > .sw-body {
+    --sw-header-height: calc(var(--sw-topbar-height) + var(--sw-advisor-height));
+  }
+
+  .sw-advisor-banner {
+    position: sticky;
+    top: var(--sw-topbar-height);
+    z-index: 8;
+    height: var(--sw-advisor-height);
+    padding-block: var(--sw-advisor-pad);
+  }
+
+  .sw-advisor-banner-inner {
+    height: var(--sw-advisor-body);
+  }
+
+  /* Whole lines only: a longer text ends in "…" instead of growing the strip. */
+  .sw-advisor-text {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: var(--sw-advisor-lines);
+    overflow: hidden;
+    line-height: var(--sw-advisor-line);
+  }
+
+  /* The two refusals (advisor-types.ts) fit one line from 320px. */
+  .sw-advisor-banner .sw-advisor-blocked {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+    overflow: hidden;
+    margin-top: 4px;
+    line-height: var(--sw-advisor-line);
+  }
+}
+
+/* Below the desktop width the strip keeps to whose page it is and the way out: what may be done there (the sentence after
+   the bold one) is out of sight, though screen readers still read it. With the paragraph at font-size 0 its own line
+   height would make each line taller than --sw-advisor-line, so only the bold sentence sets the lines. */
+@media screen and (max-width: 1199.98px) {
+  .sw-workspace:has(> .sw-advisor-banner) {
+    --sw-advisor-lines: 2;
+  }
+
+  .sw-advisor-banner-inner {
+    flex-wrap: nowrap;
+  }
+
+  .sw-advisor-text {
+    font-size: 0;
+    line-height: 0;
+  }
+
+  .sw-advisor-text > strong {
+    font-size: 13px;
+    line-height: var(--sw-advisor-line);
+  }
+
+  /* Three classes: over the shared button size of ui-controls.css (:root :is(.sw-outline, …)). */
+  .sw-advisor-banner .sw-outline.sw-advisor-close {
+    --ep-button-height: 36px;
+    width: auto;
+    padding: 6px 12px;
+  }
+}
+
+/* Tablets: the bold sentence takes up to three lines beside the button. */
+@media screen and (max-width: 899.98px) {
+  .sw-workspace:has(> .sw-advisor-banner) {
+    --sw-advisor-lines: 3;
+  }
+}
+
+/* Phones: no icon, the sentence across the whole width and the button under it. */
+@media screen and (max-width: 600px) {
+  .sw-workspace:has(> .sw-advisor-banner) {
+    --sw-advisor-pad: 6px;
+    --sw-advisor-line: 18px;
+    --sw-advisor-lines: 2;
+    /* The 6px gap and the 32px button. */
+    --sw-advisor-button-row: 38px;
+  }
+
+  .sw-advisor-banner-inner {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto 32px;
+    align-content: center;
+    gap: 6px;
+  }
+
+  .sw-advisor-icon {
+    display: none;
+  }
+
+  .sw-advisor-text > strong,
+  .sw-advisor-banner .sw-advisor-blocked {
+    font-size: 12.5px;
+  }
+
+  .sw-advisor-banner .sw-outline.sw-advisor-close {
+    --ep-button-height: 32px;
+    justify-self: start;
+    padding: 4px 12px;
+    font-size: 12.5px;
+  }
+}
+
+@media screen and (max-width: 480px) {
+  .sw-workspace:has(> .sw-advisor-banner) {
+    --sw-advisor-lines: 3;
   }
 }
 

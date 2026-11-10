@@ -195,7 +195,8 @@
 .scomp-page .scomp-course-reason { font-size: 14px; line-height: 1.6; }
 
 /* Skill details */
-.scomp-page .scomp-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; }
+/* A chart mark scrolls here (#scomp-skill-list): clear of the sticky header, and of the staff strip under it. */
+.scomp-page .scomp-filters { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 16px; scroll-margin-top: calc(var(--sw-header-height, 64px) + 16px); }
 .scomp-page .scomp-filters label:not(.scomp-toggle) { display: grid; gap: 4px; color: var(--sw-muted); font-size: 12px; font-weight: 600; }
 .scomp-page .scomp-filters select,
 .scomp-page .scomp-filters input[type="search"] { min-height: 38px; padding: 6px 10px; border: 1px solid #cfd6df; border-radius: 6px; background: #fff; color: var(--sw-ink); font-size: 13px; }

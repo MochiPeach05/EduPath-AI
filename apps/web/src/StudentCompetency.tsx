@@ -259,12 +259,15 @@ function segmentNote(segment: LevelSegment): string {
 }
 /** The tooltip box opens toward the middle of the plot so it never leaves the card. */
 const tipSide = (segment: LevelSegment) => (segment.start + segment.end) / 2 < 0.35 ? "start" : (segment.start + segment.end) / 2 > 0.65 ? "end" : "middle";
-/** Opens the tooltip below the mark when there is no room above it (under the sticky header) and more room below. */
+/**
+ * Opens the tooltip below the mark when there is no room above it (under the sticky header, and under the strip stuck
+ * below it when staff work in the student's page, advisor-view.css) and more room below.
+ */
 function placeTip(button: HTMLElement) {
   const tip = button.querySelector<HTMLElement>(".scomp-tip");
   if (!tip) return;
   const bar = button.getBoundingClientRect(), height = tip.getBoundingClientRect().height;
-  const top = document.querySelector(".sw-topbar")?.getBoundingClientRect().bottom ?? 0;
+  const top = (document.querySelector(".sw-advisor-banner") ?? document.querySelector(".sw-topbar"))?.getBoundingClientRect().bottom ?? 0;
   const above = bar.top - top, below = window.innerHeight - bar.bottom;
   button.dataset.tip = above < height + 12 && below > above ? "below" : "above";
 }
