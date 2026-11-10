@@ -135,7 +135,9 @@ describe("Kế hoạch học kỳ", () => {
       terms: [{ code: "HK261", courses: [] }, { code: "HK262", courses: [{ code: "C" }, { code: "D" }, { code: "PE" }] }] });
     expect(html).toContain("Đã thêm 2 học phần do lộ trình AI đề xuất (lộ trình soạn lúc 17:00 24/10/2026): Môn C (C) và Môn D (D).");
     expect(html).toContain("Ẩn thông báo");
-    expect(html).toContain("8 TC · vượt mức tối đa 7 TC");
+    // The credits alone (user 2026-11-10), even over the old maximum of 7 TC.
+    expect(html).toContain('<span class="rm-load rm-load-ok">8 TC</span>');
+    expect(html).not.toContain("vượt mức");
     // A planner check is a warning (amber !), not a failure.
     expect(html).not.toContain("rm-mark-not-counted");
     expect(html).toContain("gồm 2 TC môn điều kiện");
@@ -143,13 +145,13 @@ describe("Kế hoạch học kỳ", () => {
     expect(html).not.toContain("Kế hoạch chưa có học phần nào.");
   });
 
-  it("says the credit limits and that a summer term needs no minimum (QA 2026-11-04)", () => {
+  it("says each term's credits only, no limits, no warning and no exemption (user 2026-11-10)", () => {
     const html = planner({ schemaVersion: 1, terms: [{ code: "HK261", courses: [] }, { code: "HK262", courses: [{ code: "C" }, { code: "D" }] },
       { code: "HK263", courses: [{ code: "PE" }] }, { code: "HK271", courses: [{ code: "C2" }] }] });
-    expect(html).toContain("Số tín chỉ mỗi học kỳ: tối thiểu 4 TC, tối đa 7 TC, tính cả môn điều kiện. Học kỳ hè (HK3) không yêu cầu số tín chỉ tối thiểu");
-    // HK263 holds 2 TC: no warning, and the reason under its credits.
-    expect(html).toMatch(/aria-label="HK3 2026–2027".*?2 TC<\/span>.*?Học kỳ hè: không yêu cầu tối thiểu 4 TC/);
-    expect(html).not.toContain("dưới mức tối thiểu");
+    expect(html).toMatch(/aria-label="HK3 2026–2027".*?<span class="rm-load rm-load-ok">2 TC<\/span>/);
+    for (const gone of ["Số tín chỉ mỗi học kỳ", "tối thiểu", "tối đa", "dưới mức", "vượt mức", "không yêu cầu", "rm-limits", "rm-load-under", "rm-load-over"]) {
+      expect(html).not.toContain(gone);
+    }
   });
 
   it("lists the AI's courses it moves after their tiên quyết, from and to (user 2026-11-08)", () => {

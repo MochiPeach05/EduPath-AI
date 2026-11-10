@@ -2,7 +2,7 @@ import { useMemo, useRef, useState, type DragEvent } from "react";
 import { Icon } from "./student-icons";
 import { Mark } from "./RoadmapProgress";
 import {
-  MAX_TERMS, aiAddedText, aiCleanedText, classesText, exemptText, formatNumber, limitsText, moveCourse, nextTerm, nextTermOffer, offeredSemesters, ownRelations, planIssues,
+  MAX_TERMS, aiAddedText, aiCleanedText, classesText, formatNumber, moveCourse, nextTerm, nextTermOffer, offeredSemesters, ownRelations, planIssues,
   plannedTerms, poolSections, proposalAddedText, runningIn, searchCourses, termLabel, termLoad, termLoadText, thesisCleanedText, thesisHint, type AiSuggestion,
   type PlanIssue, type PlanOrigin, type PlanProposal, type StudyPlanContext, type StudyPlanCourse, type StudyPlanData,
 } from "./study-plan-data";
@@ -10,7 +10,8 @@ import {
 // "Kế hoạch học kỳ" of #roadmap (user 2026-10-24, after Stellic's planner; it starts from the training plan, and the AI
 // roadmap's proposal once the student applies it, study-plan/prefill.ts): the terms ahead,
 // the courses still needed on the right ("Danh sách chờ") or found by search, placed by drag and drop or "Thêm vào";
-// missing prerequisites and courses no training plan opens in that term are flagged. No weekly schedule. Every course says
+// missing prerequisites and courses no training plan opens in that term are flagged. No weekly schedule. Each term says
+// its credits only, no minimum or maximum (user 2026-11-10: "chỉ cần ghi số tín chỉ đăng ký ở kì đó thôi là được"). Every course says
 // whether the training plans open it next term and in which semester they usually do (user 2026-11-03); the AI's
 // improvements are only suggested, and another specialty's course is never listed, only found by search and marked.
 // Opening the page changes and saves nothing (user 2026-11-04: "Hỏi trước, bấm mới lưu"): what it would change is
@@ -190,12 +191,10 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
       <p>Kế hoạch chưa có học phần nào.{readOnly ? "" : <> Học phần bắt buộc chỉ được điền sẵn khi còn ở phía trước theo kế hoạch đào tạo (học phần đã trễ không được điền), và học phần lộ trình AI đề xuất được đưa ra để bạn bấm Áp dụng khi bạn có lộ trình AI. Hãy tạo lộ trình ở mục Lộ trình AI đề xuất, hoặc tự thêm học phần từ Danh sách chờ.</>}</p>
       <button type="button" className="sw-outline" onClick={onOpenAi}>Mở Lộ trình AI đề xuất</button>
     </div>}
-    {context.limits && <p className="rm-limits">{limitsText(context.limits)}</p>}
     <div className="rm-planner">
       <div className="rm-terms">
         {plan.terms.map((term) => {
           const load = termLoad(context, plan, term.code);
-          const exempt = exemptText(load, context.limits);
           const running = runningIn(context, term.code).filter((course) => !placed.has(course.code));
           const current = term.code === context.currentTerm;
           return <section key={term.code} className={`rm-term${over === term.code ? " is-over" : ""}`} aria-label={termLabel(term.code)}
@@ -203,10 +202,9 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
             <header className="rm-term-head">
               <h3>{termLabel(term.code)}{current && <span className="rm-tag rm-tag-running">Học kỳ hiện tại</span>}</h3>
               <div className="rm-load-box">
-                <span className={`rm-load rm-load-${load.status}`}>{termLoadText(load, context.limits)}</span>
+                <span className={`rm-load${load.credits > 0 ? " rm-load-ok" : ""}`}>{termLoadText(load)}</span>
                 {load.conditional > 0 && <small className="rm-load-note" title="Môn điều kiện: Giáo dục thể chất, Giáo dục quốc phòng; không tính vào tín chỉ tích lũy.">
                   gồm {formatNumber(load.conditional)} TC môn điều kiện</small>}
-                {exempt && <small className="rm-load-note">{exempt}</small>}
               </div>
             </header>
             <ul className="rm-term-courses">

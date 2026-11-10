@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  aiAddedText, aiCleanedText, applyProposal, auditGroups, auditNote, classesText, cleanAiAdded, cleanThesisWay, creditProgress, declineProposal, exemptText, groupCountText,
-  limitsText, moveCourse, neededTone, nextTermOffer, offering, orderAiAdded, ownRelations, planChoiceText, planIssues, planProposal, poolSections, proposalAddedText,
+  aiAddedText, aiCleanedText, applyProposal, auditGroups, auditNote, classesText, cleanAiAdded, cleanThesisWay, creditProgress, declineProposal, groupCountText,
+  moveCourse, neededTone, nextTermOffer, offering, orderAiAdded, ownRelations, planChoiceText, planIssues, planProposal, poolSections, proposalAddedText,
   proposalSummaryText, searchCourses, termLabel, termLoad, termLoadText, thesisCleanedText, thesisHint, thesisLeftOut, withTerms, type AiProposal,
   type StudyPlanContext, type StudyPlanCourse, type StudyPlanData, type StudyPlanThesis,
 } from "./study-plan-data";
@@ -191,36 +191,17 @@ describe("planning", () => {
     expect(offering({ offeredTerms: [] }, "HK271", "HK262")).toBe("ok");
   });
 
-  it("weighs each term against the credit limits", () => {
-    expect(termLoad(context(), plan, "HK262")).toEqual({ credits: 6, conditional: 0, status: "ok" });
-    expect(termLoad(context(), plan, "HK261")).toEqual({ credits: 3, conditional: 0, status: "under" });
-    expect(termLoad(context(), plan, "HK263").status).toBe("empty");
+  it("counts each term's credits and says them alone, never a minimum or a maximum (user 2026-11-10)", () => {
+    expect(termLoad(context(), plan, "HK262")).toEqual({ credits: 6, conditional: 0 });
+    expect(termLoad(context(), plan, "HK261")).toEqual({ credits: 3, conditional: 0 });
+    expect(termLoad(context(), plan, "HK263")).toEqual({ credits: 0, conditional: 0 });
     // A physical education course (môn điều kiện) raises the term's total too.
     const withSport = context({ courses: [...context().courses, course("PE1", { credits: 2, conditional: true, group: "TC102" })] });
     expect(termLoad(withSport, { schemaVersion: 1, terms: [{ code: "HK262", courses: [{ code: "C" }, { code: "D" }, { code: "PE1" }] }] }, "HK262"))
-      .toEqual({ credits: 8, conditional: 2, status: "over" });
-    // The label says which limit, in words.
-    const limits = context().limits;
-    expect([termLoadText({ credits: 8, status: "over" }, limits), termLoadText({ credits: 3, status: "under" }, limits), termLoadText({ credits: 6, status: "ok" }, limits)])
-      .toEqual(["8 TC · vượt mức tối đa 7 TC", "3 TC · dưới mức tối thiểu 4 TC", "6 TC"]);
-  });
-
-  it("says why a summer term or the last term below the minimum is not flagged (QA 2026-11-04)", () => {
-    const light: StudyPlanData = { schemaVersion: 1, terms: [{ code: "HK262", courses: [{ code: "C" }] }, { code: "HK263", courses: [{ code: "D" }] }, { code: "HK271", courses: [{ code: "E" }] }] };
-    const limits = context().limits;
-    // HK262 (3 TC) is a main term with courses after it: below the minimum. HK263 is a summer term, HK271 the last one.
-    expect(termLoad(context(), light, "HK262")).toEqual({ credits: 3, conditional: 0, status: "under" });
-    expect(termLoad(context(), light, "HK263")).toEqual({ credits: 3, conditional: 0, status: "ok", exempt: "summer" });
-    expect(termLoad(context(), light, "HK271")).toEqual({ credits: 3, conditional: 0, status: "ok", exempt: "last" });
-    expect(exemptText(termLoad(context(), light, "HK263"), limits)).toBe("Học kỳ hè: không yêu cầu tối thiểu 4 TC");
-    expect(exemptText(termLoad(context(), light, "HK271"), limits)).toBe("Học kỳ cuối của kế hoạch: không yêu cầu tối thiểu 4 TC");
-    expect(exemptText(termLoad(context(), light, "HK262"), limits)).toBeNull();
-    // Over the maximum is flagged in a summer term too; enough credits need no note.
-    const heavy: StudyPlanData = { schemaVersion: 1, terms: [{ code: "HK263", courses: [{ code: "C" }, { code: "D" }, { code: "E" }] }] };
-    expect(termLoad(context(), heavy, "HK263")).toEqual({ credits: 9, conditional: 0, status: "over" });
-    expect(termLoad(context(), plan, "HK262").exempt).toBeUndefined();
-    expect(limitsText(limits!)).toBe("Số tín chỉ mỗi học kỳ: tối thiểu 4 TC, tối đa 7 TC, tính cả môn điều kiện. "
-      + "Học kỳ hè (HK3) không yêu cầu số tín chỉ tối thiểu; học kỳ cuối cùng có học phần trong kế hoạch cũng vậy.");
+      .toEqual({ credits: 8, conditional: 2 });
+    // Over the old maximum (7 TC), below the old minimum (4 TC), an empty term: the credits only.
+    expect([termLoadText({ credits: 8 }), termLoadText({ credits: 3 }), termLoadText({ credits: 0 }), termLoadText({ credits: 1.5 })])
+      .toEqual(["8 TC", "3 TC", "0 TC", "1,5 TC"]);
   });
 
   it("lists the AI roadmap's improvements as a suggestion, never another specialty's or a planned one (user 2026-11-03)", () => {

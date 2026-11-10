@@ -401,18 +401,15 @@ export const plannedTerms = (plan: StudyPlanData) =>
 export const runningIn = (context: Pick<StudyPlanContext, "courses">, term: string) =>
   context.courses.filter((course) => course.state === "in_progress" && course.inProgressTerm === term);
 
+/** conditional: the part of credits from GDTC/GDQP (môn điều kiện). */
+export type TermLoad = { credits: number; conditional: number };
 /**
- * conditional: the part of credits from GDTC/GDQP (môn điều kiện); exempt: why a term below the minimum is not flagged
- * (summer: a summer term; last: the last term with courses).
+ * Credits of a term (planned + being studied). GDTC/GDQP count too (user 2026-10-24: a Futsal course of TC102 must raise
+ * the term's total): they stay out of accumulated credits but are registered and studied that term. The page says the
+ * credits only (user 2026-11-10: "xóa mấy cái thông báo này luôn nha chỉ cần ghi số tín chỉ đăng ký ở kì đó thôi"): no
+ * minimum or maximum per term is shown any more; the API keeps the limits (context.limits) for the AI roadmap.
  */
-export type TermLoad = { credits: number; conditional: number; status: "over" | "under" | "ok" | "empty"; exempt?: "summer" | "last" };
-/**
- * Credits of a term (planned + being studied) against the limits. GDTC/GDQP count too (user 2026-10-24: a Futsal course
- * of TC102 must raise the term's total): they stay out of accumulated credits but are registered and studied that term.
- * Below the minimum only warns in HK1/HK2 and not in the last term with courses (TT 08/2021 sets the minimum for main
- * terms; the last term may be light): such a term says why (exempt, exemptText).
- */
-export function termLoad(context: Pick<StudyPlanContext, "courses" | "limits">, plan: StudyPlanData, term: string): TermLoad {
+export function termLoad(context: Pick<StudyPlanContext, "courses">, plan: StudyPlanData, term: string): TermLoad {
   const byCode = new Map(context.courses.map((course) => [course.code, course]));
   const placed = plannedTerms(plan);
   const courses = [...(plan.terms.find((item) => item.code === term)?.courses.map((course) => byCode.get(course.code.toUpperCase()))
@@ -420,34 +417,11 @@ export function termLoad(context: Pick<StudyPlanContext, "courses" | "limits">, 
     ...runningIn(context, term).filter((course) => !placed.has(course.code))];
   const credits = courses.reduce((sum, course) => sum + course.credits, 0);
   const conditional = courses.reduce((sum, course) => sum + (course.conditional ? course.credits : 0), 0);
-  if (!courses.length) return { credits, conditional, status: "empty" };
-  const limits = context.limits;
-  const lastWithCourses = [...plan.terms].reverse().find((item) => item.courses.length)?.code === term;
-  const summer = term.endsWith("3");
-  const below = Boolean(limits && credits < limits.min && credits <= limits.max);
-  if (limits && credits > limits.max) return { credits, conditional, status: "over" };
-  if (below && (summer || lastWithCourses)) return { credits, conditional, status: "ok", exempt: summer ? "summer" : "last" };
-  return { credits, conditional, status: below ? "under" : "ok" };
+  return { credits, conditional };
 }
 
-/** The credit limits of a term in words, with the terms that need no minimum (shown above the terms of Kế hoạch học kỳ). */
-export const limitsText = (limits: NonNullable<StudyPlanContext["limits"]>) =>
-  `Số tín chỉ mỗi học kỳ: tối thiểu ${formatNumber(limits.min)} TC, tối đa ${formatNumber(limits.max)} TC, tính cả môn điều kiện. `
-  + "Học kỳ hè (HK3) không yêu cầu số tín chỉ tối thiểu; học kỳ cuối cùng có học phần trong kế hoạch cũng vậy.";
-
-/** Under a term below the minimum that is not flagged: "Học kỳ hè: không yêu cầu tối thiểu 9 TC". */
-export function exemptText(load: Pick<TermLoad, "exempt">, limits: StudyPlanContext["limits"]): string | null {
-  if (!load.exempt || !limits) return null;
-  return `${load.exempt === "summer" ? "Học kỳ hè" : "Học kỳ cuối của kế hoạch"}: không yêu cầu tối thiểu ${formatNumber(limits.min)} TC`;
-}
-
-/** "21 TC · vượt mức tối đa 18 TC", "6 TC · dưới mức tối thiểu 9 TC", "12 TC". */
-export function termLoadText(load: Pick<TermLoad, "credits" | "status">, limits: StudyPlanContext["limits"]): string {
-  const credits = `${formatNumber(load.credits)} TC`;
-  if (load.status === "over" && limits) return `${credits} · vượt mức tối đa ${formatNumber(limits.max)} TC`;
-  if (load.status === "under" && limits) return `${credits} · dưới mức tối thiểu ${formatNumber(limits.min)} TC`;
-  return credits;
-}
+/** "12 TC", "0 TC": the credits of a term, nothing more (user 2026-11-10). */
+export const termLoadText = (load: Pick<TermLoad, "credits">) => `${formatNumber(load.credits)} TC`;
 
 /**
  * The codes of a course's relation (tiên quyết, học trước) that apply: for a course of the student's program, never

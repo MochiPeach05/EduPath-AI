@@ -45,7 +45,6 @@
 .ov-page h2 { margin: 0; font-size: var(--ov-fs-title); font-weight: 800; letter-spacing: -0.005em; text-wrap: balance; }
 .ov-sub { margin: 2px 0 0; color: var(--sw-muted); font-size: var(--ov-fs-small); }
 .ov-note { margin: 0; color: var(--sw-muted); font-size: var(--ov-fs-small); }
-.ov-note-warn { color: var(--ov-warn); }
 
 /* Chips */
 .ov-chip { display: inline-flex; align-items: center; white-space: nowrap; padding: 2px 9px; border-radius: 999px; background: #eef0f4; color: var(--sw-muted); font-size: var(--ov-fs-label); font-weight: 700; line-height: 1.6; }
@@ -214,7 +213,6 @@
 /* The saved Kế hoạch học kỳ of the roadmap's term, in the planner's words */
 .ov-load { display: grid; gap: 4px; padding-top: 10px; border-top: 1px solid #f0f2f5; }
 .ov-load-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 10px; font-size: var(--ov-fs-text); }
-.ov-load small { color: var(--sw-muted); font-size: var(--ov-fs-label); }
 
 /* Quick question */
 .ov-ask { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; }

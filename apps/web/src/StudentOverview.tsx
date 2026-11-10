@@ -243,15 +243,10 @@ export const reasonTone = (reason: string): Tone =>
 
 type RoadmapInfo = NonNullable<OverviewResponse["roadmap"]>;
 /**
- * The saved Kế hoạch học kỳ of the roadmap's term in the planner's words (study-plan-data.ts termLoadText): "20 TC · vượt
- * mức tối đa 18 TC" in amber, "6 TC · dưới mức tối thiểu 9 TC", else just the credits.
+ * The saved Kế hoạch học kỳ of the roadmap's term: its credits only, as in the planner (user 2026-11-10: "chỉ cần ghi số
+ * tín chỉ đăng ký ở kì đó thôi là được"), no minimum or maximum.
  */
-export function planLoadText(plan: NonNullable<RoadmapInfo["plan"]>, limits: RoadmapInfo["limits"]): { text: string; meaning: Meaning } {
-  const credits = `${plan.credits} TC`;
-  if (plan.status === "over" && limits) return { text: `${credits} · vượt mức tối đa ${limits.max} TC`, meaning: "warn" };
-  if (plan.status === "under" && limits) return { text: `${credits} · dưới mức tối thiểu ${limits.min} TC`, meaning: "warn" };
-  return { text: credits, meaning: "none" };
-}
+export const planLoadText = (plan: Pick<NonNullable<RoadmapInfo["plan"]>, "credits">) => `${plan.credits} TC`;
 /** "Lập trình ứng dụng Web (B), Thiết kế giao diện (B+) và 1 môn khác": the courses a score comes from. */
 export function evidenceText(courses: readonly { name: string; letter: string | null }[], shown = 2): string {
   const named = courses.slice(0, shown).map((course) => (course.letter ? `${course.name} (${course.letter})` : course.name)).join(", ");
@@ -549,7 +544,7 @@ function NowCard({ data, openTranscript }: { data: OverviewResponse; openTranscr
 /**
  * "Học kỳ tới · theo Lộ trình AI": the AI roadmap's courses for the next term, named by their source because Đánh giá
  * năng lực lists the next term of the training plan (user 2026-10-30: "Nên đặt tên phân biệt hai cái"). The saved Kế
- * hoạch học kỳ of that term is checked against the planner's limits in the planner's words; the green "20/16 TC" bar is
+ * hoạch học kỳ of that term says its credits only, as the planner does (user 2026-11-10); the green "20/16 TC" bar is
  * gone ("Tổng quan ghi 20/16 TC … planner báo vượt tối đa 18 TC").
  */
 function NextCard({ data, navigate }: { data: OverviewResponse; navigate: Navigate }) {
@@ -557,12 +552,9 @@ function NextCard({ data, navigate }: { data: OverviewResponse; navigate: Naviga
   const next = data.terms.next;
   const sub = roadmap?.term?.label ?? (next ? `${next.label} · ${shortDate(next.start)} – ${shortDate(next.end)}` : "Học kỳ tới");
   const credits = roadmap?.courses.reduce((sum, course) => sum + course.credits, 0) ?? 0;
-  const limits = roadmap?.limits ?? null;
-  const aiOver = limits !== null && credits > limits.max;
   const chip = !roadmap ? null : roadmap.status === "completed" ? (roadmap.courses.length ? <Chip tone="ai">{roadmap.courses.length} môn · {credits} TC</Chip> : null)
     : roadmap.status === "pending" ? <Chip tone="ai">Đang soạn</Chip> : <Chip meaning="warn">Chưa soạn được</Chip>;
   const plan = roadmap?.plan && roadmap.plan.status !== "empty" ? roadmap.plan : null;
-  const load = plan ? planLoadText(plan, limits) : null;
   let body: ReactNode;
   if (!roadmap || roadmap.status !== "completed") {
     const text = roadmap?.status === "pending" ? "EduPath AI đang soạn lộ trình cho học kỳ tới, bạn quay lại sau ít phút nhé."
@@ -594,13 +586,10 @@ function NextCard({ data, navigate }: { data: OverviewResponse; navigate: Naviga
           does not teach, so the two never read as a contradiction (user 2026-10-30). */}
       {roadmap.skills.length > 0 && <div className="ov-tags"><span className="ov-sub">Lộ trình AI gợi ý luyện thêm:</span>{roadmap.skills.map((skill) => <Chip key={skill}>{skill}</Chip>)}</div>}
       {roadmap.firstMonth && <div className="ov-month"><b>{roadmap.firstMonth.label}:</b> {roadmap.firstMonth.text}</div>}
-      {plan && load ? <div className="ov-load">
-        <div className="ov-load-top"><span>Kế hoạch học kỳ của bạn</span><Chip meaning={load.meaning}>{load.text}</Chip></div>
-        {limits && <small>Mức cho phép: {limits.min}–{limits.max} TC mỗi học kỳ, như trong Kế hoạch học kỳ.</small>}
+      {plan ? <div className="ov-load">
+        <div className="ov-load-top"><span>Kế hoạch học kỳ của bạn</span><Chip meaning="none">{planLoadText(plan)}</Chip></div>
       </div>
-        : credits > 0 && <p className={`ov-note${aiOver ? " ov-note-warn" : ""}`}>{aiOver
-          ? `Lộ trình đề xuất ${credits} TC, vượt mức tối đa ${limits!.max} TC mỗi học kỳ. Khi xếp vào Kế hoạch học kỳ, bạn giữ lại các môn cần nhất.`
-          : "Bạn chưa xếp các môn này vào Kế hoạch học kỳ."}</p>}
+        : credits > 0 && <p className="ov-note">Bạn chưa xếp các môn này vào Kế hoạch học kỳ.</p>}
       <button type="button" className="sw-text-link ov-foot-link" onClick={() => navigate("roadmap")}>Mở Lộ trình AI đề xuất <Icon name="arrow" /></button>
     </>;
   }

@@ -120,12 +120,8 @@ describe("Tổng quan helpers", () => {
     expect([reasonTone("Học lại"), reasonTone("Trễ kế hoạch"), reasonTone("Tự chọn TC309"), reasonTone("Theo kế hoạch")]).toEqual(["risk", "warn", "ai", ""]);
   });
 
-  it("say a saved term's credits in the planner's words and name the courses a score comes from", () => {
-    const limits = { min: 9, max: 18 };
-    expect(planLoadText({ credits: 20, status: "over" }, limits)).toEqual({ text: "20 TC · vượt mức tối đa 18 TC", meaning: "warn" });
-    expect(planLoadText({ credits: 6, status: "under" }, limits)).toEqual({ text: "6 TC · dưới mức tối thiểu 9 TC", meaning: "warn" });
-    expect(planLoadText({ credits: 15, status: "ok" }, limits)).toEqual({ text: "15 TC", meaning: "none" });
-    expect(planLoadText({ credits: 20, status: "over" }, null)).toEqual({ text: "20 TC", meaning: "none" });
+  it("say a saved term's credits only, as the planner does (user 2026-11-10), and name the courses a score comes from", () => {
+    expect([planLoadText({ credits: 20 }), planLoadText({ credits: 6 }), planLoadText({ credits: 15 })]).toEqual(["20 TC", "6 TC", "15 TC"]);
     const courses = [{ name: "Lập trình ứng dụng Web", letter: "B+" }, { name: "Thiết kế web", letter: "A" }, { name: "Đồ án web", letter: null }];
     expect(evidenceText(courses)).toBe("Lập trình ứng dụng Web (B+), Thiết kế web (A) và 1 môn khác");
     expect(evidenceText(courses.slice(2))).toBe("Đồ án web");
@@ -187,7 +183,8 @@ describe("Tổng quan dashboard", () => {
     expect(plain).toContain("Kỹ thuật lập trình đang học lại · 3 TC Rèn luyện: Lập trình cơ bản");
     expect(plain).toContain("Phát triển ứng dụng di động · 3 TC Học lại");
     expect(plain).toContain("Tháng 12/2026: Ôn lại Java");
-    expect(plain).toContain("Kế hoạch học kỳ của bạn 20 TC · vượt mức tối đa 18 TC Mức cho phép: 9–18 TC mỗi học kỳ, như trong Kế hoạch học kỳ.");
+    expect(plain).toContain("Kế hoạch học kỳ của bạn 20 TC Mở Lộ trình AI đề xuất");
+    for (const gone of ["vượt mức", "dưới mức", "Mức cho phép"]) expect(plain).not.toContain(gone);
     expect(plain).toContain("Lộ trình AI gợi ý luyện thêm: TypeScript");
     expect(plain).not.toContain("Kỹ năng nên tự học");
     expect(plain).toContain("2 môn · 6 TC");
@@ -220,10 +217,12 @@ describe("Tổng quan dashboard", () => {
     expect(plain).not.toContain("Lập trình cơ bản 71,3 Minh chứng");
   });
 
-  it("checks the AI roadmap's credits against the limit when the plan has no such term yet", () => {
+  it("asks to place the AI roadmap's courses when the plan has no such term yet, without any limit (user 2026-11-10)", () => {
     const roadmap = full.roadmap!;
     const heavy = { ...roadmap, plan: null, limits: { min: 9, max: 5 } };
-    expect(text(dashboard({ ...full, roadmap: heavy }))).toContain("Lộ trình đề xuất 6 TC, vượt mức tối đa 5 TC mỗi học kỳ.");
+    const plain = text(dashboard({ ...full, roadmap: heavy }));
+    expect(plain).toContain("Bạn chưa xếp các môn này vào Kế hoạch học kỳ.");
+    expect(plain).not.toContain("vượt mức");
     expect(text(dashboard({ ...full, roadmap: { ...roadmap, plan: null } }))).toContain("Bạn chưa xếp các môn này vào Kế hoạch học kỳ.");
     expect(text(dashboard({ ...full, roadmap: { ...roadmap, plan: { credits: 0, status: "empty" } } }))).toContain("Bạn chưa xếp các môn này vào Kế hoạch học kỳ.");
   });
