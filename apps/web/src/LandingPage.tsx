@@ -307,10 +307,10 @@ export default function LandingPage() {
             </div>
             <div className="lp-hero-visual">
               <div className="lp-campus-frame">
-                {/* The photo covers a frame 355–490px tall, so it is drawn about 530–690px wide (80% of that from
-                    1200px, styles.css): the 800px or the 1200px WebP by screen density (public/ASSETS.md). */}
+                {/* The photo covers a frame 355–490px tall, so it is drawn about 530–690px wide (the page is at 100%,
+                    styles.css): the 800px or the 1200px WebP by screen density (public/ASSETS.md). */}
                 <picture>
-                  <source type="image/webp" srcSet={campusWebp} sizes="(min-width: 1200px) 560px, 690px" />
+                  <source type="image/webp" srcSet={campusWebp} sizes="690px" />
                   <img
                     className="lp-campus-image"
                     src="/vlu-campus.jpg"

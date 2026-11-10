@@ -1,5 +1,7 @@
-/* On desktop (from 1240px, where the header nav fits) the logo column stays reserved even when the sidebar is closed,
-   so content stays put. Narrower screens give the content the full width and overlay the drawer (see below). */
+/* On wide screens (from 1900px, where the page still has about 1300px between the two columns) the logo column stays
+   reserved even when the sidebar is closed, so content stays put. Narrower screens give the content the whole width, up
+   to 1400px in the middle, and overlay the drawer (see below): at 100% (styles.css, user 2026-11-10) the two 298px
+   columns would leave a 1536px screen 925px of content, its cards one or two to a row. */
 html:has(.sw-shell) {
   scrollbar-gutter: stable;
 }
@@ -112,8 +114,8 @@ html:has(.sw-shell) {
   }
 }
 
-/* Balance the reserved sidebar space with an equal right margin on desktop. */
-@media (min-width: 1240px) {
+/* Balance the reserved sidebar space with an equal right margin on wide screens. */
+@media (min-width: 1900px) {
   .sw-body {
     grid-template-columns: var(--sw-rail-width) minmax(0, 1fr) var(--sw-rail-width);
   }
@@ -123,15 +125,18 @@ html:has(.sw-shell) {
   }
 }
 
-/* Below 1240px the header nav is hidden and the drawer is the menu: it overlays the page instead of squeezing the
-   content, and no column is kept for it while it is closed. */
-@media (max-width: 1239.98px) {
+/* Below 1900px the drawer overlays the page instead of squeezing the content, and no column is kept for it while it is
+   closed; below 1260px it is the menu, the header nav being hidden (student-header.css). */
+@media (max-width: 1899.98px) {
   .sw-body {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .sw-body-content {
     grid-column: 1;
+    width: 100%;
+    max-width: 1400px;
+    justify-self: center;
   }
 
   .sw-main {

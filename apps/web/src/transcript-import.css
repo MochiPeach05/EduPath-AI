@@ -2,7 +2,8 @@
  * Import of "Bảng điểm của tôi" on Hồ sơ và bảng điểm (user 2026-11-04: students who filled in the profile did not see
  * where the transcript goes). No transcript yet: a large drop zone at the top of the section. A transcript: a bar at the
  * top with the last update, the file, "Cập nhật bảng điểm" and "Xóa bảng điểm". Both take a dropped PDF.
- * Widths follow the section (the ti-import container), never the screen: from 1200px the page is drawn at zoom .8.
+ * Widths follow the section (the ti-import container), never the screen: a screen width says little about the room
+ * the section has.
  * Red stays for the primary button, the drop highlight and errors.
  * `.sw-shell p` (student-workspace.css) resets the margins of every paragraph, hence two classes on the paragraph rules.
  */

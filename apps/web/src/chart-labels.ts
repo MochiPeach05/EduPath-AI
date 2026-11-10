@@ -1,7 +1,10 @@
 // Axis labels of the SVG charts (Tổng quan's GPA chart, the admin reports' line chart) that never draw over each other
 // (user 2026-11-04: "Lỗi chữ đè lên nhau"). Pure.
 
-/** The axis labels' font size in px: 12px, a little larger with the page's font-size-adjust. */
+/**
+ * The axis labels' font size in px: 12px, a little larger with the admin portal's font-size-adjust (styles.css). The
+ * student pages, at 100% without it, draw them at 12px: estimated wider than they are, so never over each other.
+ */
 export const AXIS_FONT = 12.8;
 
 /**

@@ -178,6 +178,17 @@ describe("Tổng quan dashboard", () => {
     expect(plain).toContain("Điểm TB học tập 2,62");
   });
 
+  it("keeps the chart's end labels 16px apart and above the term labels, even when the three averages meet at the bottom", () => {
+    const series = full.transcript!.series.map((point, i, all) => i === all.length - 1 ? { ...point, termGpa4: 1.5, studyGpa4: 1.51, cumulativeGpa4: 1.52 } : point);
+    const html = dashboard({ ...full, transcript: { ...full.transcript!, series } });
+    const ends = [...html.matchAll(/<text x="[\d.]+" y="([\d.]+)" class="ov-end-label/g)].map((match) => Number(match[1]));
+    expect(ends).toHaveLength(3);
+    for (let i = 1; i < ends.length; i++) expect(ends[i]! - ends[i - 1]!).toBeGreaterThanOrEqual(16);
+    // 1,50 is the bottom of the scale: the plot ends at 186 (230 high, 44 below it for the term and year labels), and a
+    // label's baseline sits 4px under its line.
+    expect(Math.max(...ends)).toBeLessThanOrEqual(186 + 4);
+  });
+
   it("lists this term's courses, the AI roadmap's choices and the warnings with their actions", () => {
     const plain = text(dashboard(full));
     expect(plain).toContain("Kỹ thuật lập trình đang học lại · 3 TC Rèn luyện: Lập trình cơ bản");

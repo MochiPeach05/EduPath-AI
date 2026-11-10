@@ -466,11 +466,15 @@ function GpaChart({ data, openTranscript }: { data: OverviewResponse; openTransc
   const study = (point: typeof series[number]) => point.studyGpa4;
   const term = (point: typeof series[number]) => point.termGpa4;
   const lastCum = series[last]!.cumulativeGpa4, lastTerm = series[last]!.termGpa4;
-  // End labels of the last term, top to bottom, at least 14px apart so they never overlap.
+  // End labels of the last term, top to bottom, at least 16px apart so they never overlap: 13px text whose Vietnamese marks
+  // reach above and below the letters ("học kỳ" over "tích lũy" touched at 14px).
   const endLabels = ([["cum", series[last]!.cumulativeGpa4, "tích lũy"], ["study", series[last]!.studyGpa4, "học tập"], ["term", lastTerm, "học kỳ"]] as const)
     .flatMap(([key, value, word]) => value === null ? [] : [{ key, value, word, at: y(value) }])
     .sort((a, b) => a.at - b.at);
-  endLabels.forEach((label, i) => { if (i > 0) label.at = Math.max(label.at, endLabels[i - 1]!.at + 14); });
+  endLabels.forEach((label, i) => { if (i > 0) label.at = Math.max(label.at, endLabels[i - 1]!.at + 16); });
+  // Pushed below the plot, they would run into the term labels of the axis: the whole stack moves up instead.
+  const below = (endLabels.at(-1)?.at ?? 0) - (H - B);
+  if (below > 0) endLabels.forEach((label) => { label.at -= below; });
   const step = (W - L - R) / Math.max(last, 1);
   const groups = termGroups(series.map((point) => ({ term: point.term, state: "done" as const, passedCredits: 0, plannedCredits: 0, courses: [] })));
   let index = 0;

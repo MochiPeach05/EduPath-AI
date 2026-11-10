@@ -1,8 +1,8 @@
 /* Hồ sơ và bảng điểm: the four steps of the profile (StudentProfileSteps.tsx), under the page title. The items of the
    Tổng quan gate on a white panel, not its red banner: a green check when a step is done, the first missing step in the
    portal's action red as the next one, with its action; the others keep the gate's number and hint. All four done: one
-   quiet line of green checks. Laid out by its own width (container sps), never the screen's: the desktop page is drawn
-   with CSS zoom (styles.css). Text 12px and up. */
+   quiet line of green checks. Laid out by its own width (container sps), never the screen's: the screen width says
+   little about the room the page content has. Text 12px and up. */
 .sw-shell .sps {
   grid-column: 1 / -1;
   container: sps / inline-size;

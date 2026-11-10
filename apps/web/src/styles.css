@@ -8,14 +8,18 @@
   text-rendering: optimizeLegibility;
 
   /*
-    Desktop scale (user 2026-11-03, after 75% since 7d635e8, 86.25% in df8d75c
-    and a short try at 100% in 143fd35): from 1200px the page is drawn at 80%
-    with CSS `zoom` ("100% nó lớn quá ta giảm về lại 80% đi"), its text a little
-    larger than the rest ("cho kích thước chữ to thêm 1 xíu nhé"):
-    font-size-adjust sets the x-height of Manrope (0.54 of the em) to 0.57 and
-    of the Newsreader headings (0.46) to 0.48, about 6% bigger glyphs with no
-    box changed. Phones and small laptops keep their natural size and text.
-    The student header nav needs the width it gets from 1240px.
+    Page scale. The landing page, the public pages and the student portal
+    (also when staff open a student's page) are drawn at their natural size,
+    100%, at every width (user 2026-11-10: "Tăng kích thước của trang chủ,
+    trang sinh viên lên 100% … nó đang nhỏ quá qua nhận xét của nhiều người").
+
+    The admin portal (/quantri, html[data-ep-scale="admin"] set by main.tsx,
+    page-scale.ts) keeps the desktop scale of 2026-11-03 ("Còn trang của quản
+    trị viên giữ nguyên"; after 75% since 7d635e8, 86.25% in df8d75c and a
+    short try at 100% in 143fd35): from 1200px it is drawn at 80% with CSS
+    `zoom`, its text a little larger than the rest: font-size-adjust sets the
+    x-height of Manrope (0.54 of the em) to 0.57 and of the Newsreader headings
+    (0.46) to 0.48, about 6% bigger glyphs with no box changed.
 
     `zoom` multiplies used lengths, and viewport units are no exception: 100dvh
     inside a zoomed box only covers 80% of the screen. Full-viewport lengths are
@@ -31,7 +35,7 @@
 }
 
 @media (min-width: 1200px) {
-  :root {
+  :root[data-ep-scale="admin"] {
     --ep-zoom: .8;
     --ep-vh: calc(1dvh / .8);
     --ep-vw: calc(1vw / .8);
@@ -39,7 +43,7 @@
     --ep-serif-adjust: 0.48;
   }
 
-  body {
+  :root[data-ep-scale="admin"] body {
     zoom: var(--ep-zoom);
   }
 }

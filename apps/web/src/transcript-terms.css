@@ -1,7 +1,7 @@
 /* "Bảng điểm của tôi" folded by term (TranscriptTables.tsx, 2026-11-04), on the student page and in the admin portal's
    student details. Each header is one button that says what its term holds; the newest term with results and the term
    being studied start open. The narrow layout follows the width of the tables (container query), not the screen: the
-   desktop page is zoomed (styles.css). Red is only for "chưa đạt" (display-format.css meaning classes). */
+   admin portal is zoomed on desktops (styles.css). Red is only for "chưa đạt" (display-format.css meaning classes). */
 .tt-terms {
   container: tt-terms / inline-size;
   margin-bottom: 14px;

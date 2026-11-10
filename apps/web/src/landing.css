@@ -941,7 +941,8 @@
   justify-content: center;
   align-items: flex-start;
   padding: 56px clamp(35px, 5.5vw, 85px);
-  /* Match the right edge of the centered 1240px section container, including under the desktop zoom (styles.css). */
+  /* Match the right edge of the centered 1240px section container (the page is drawn at 100% since 2026-11-10,
+     styles.css). */
   box-sizing: border-box;
   min-width: 0;
   width: min(620px, calc(100% - 48px));

@@ -5,9 +5,9 @@
   scroll-margin-top: calc(var(--sw-header-height, 72px) + 16px);
 }
 
-/* The summary and the form follow the card's own width, not the screen's: from 1200px the page is drawn at 80%
-   (styles.css), so a screen width says little about the room the card has. The width keeps the card from shrinking
-   to nothing should a layout ever size it by its content (which a size container does not have). */
+/* The summary and the form follow the card's own width, not the screen's: a screen width says little about the room
+   the card has (the page's columns, the drawer). The width keeps the card from shrinking to nothing should a layout
+   ever size it by its content (which a size container does not have). */
 .ps-survey {
   container: ps-survey / inline-size;
   width: 100%;
