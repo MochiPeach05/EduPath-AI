@@ -24,7 +24,9 @@ import { Icon } from "./student-icons";
 import {
   courseResult,
   courseResultDisplay,
+  filledResult,
   graduationCourseAliases,
+  physicalEducationFills,
   transcriptCourseStates,
   type CourseResultView,
 } from "./student-plan-results";
@@ -201,7 +203,10 @@ function CurriculumContent({
       (!filters.semester || String(c.semester) === filters.semester) &&
       (!filters.year || String(c.studyYear) === filters.year),
   );
-  const result = (c: StudentCourse) => courseResult(c.code, states, aliases);
+  // The PE electives a CTĐT without them fills its "Giáo dục thể chất (1)", "(2)" with (ngành HTTT K29, 2026-11-10).
+  const fills = physicalEducationFills(data.courses, new Set(data.courses.map((c) => c.code.trim().toUpperCase())),
+    transcript.data?.transcript?.data.sections ?? [], states);
+  const result = (c: StudentCourse) => filledResult(c.code, states, fills) ?? courseResult(c.code, states, aliases);
   const showsInferred = courses.some((c) => result(c)?.inferred);
   const groups = new Map(data.groups.map((g) => [g.id, g.label]));
   // Quotas of the student's own standard apply to the CTĐT of the same cohort only.

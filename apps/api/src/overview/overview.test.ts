@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import { assessWithoutHistory, calculateAssessment } from "../competency-assessment/calculate.js";
 import { studyTermCode } from "../competency-assessment/course-state.js";
 import { syntheticInputs, syntheticStudentTerms, syntheticTranscript, type TranscriptTerm } from "../competency-assessment/fixtures/synthetic-k29.js";
-import type { CourseFact } from "../competency-assessment/types.js";
+import { physicalEducationGroupsFor } from "../competency-assessment/plan-progress.js";
+import type { AssessmentInputs, CourseFact } from "../competency-assessment/types.js";
 import { evaluateGraduation } from "../graduation/evaluation.js";
 import type { PlanItem } from "../plans/model.js";
 import type { RoadmapRow } from "../roadmap/jobs.js";
@@ -190,6 +191,30 @@ describe("progressOverview", () => {
       ["HK241", ["X2|passed|Đạt", "X1|failed|đã chọn môn khác"]],
       ["HK243", ["|late|chưa chọn, trễ so với kế hoạch"]],
     ]);
+  });
+});
+
+describe("progressOverview, GDTC courses filled by PE electives (comp-calc-v21, user 2026-11-10)", () => {
+  // A CTĐT like ngành HTTT K29 (and CNTT K27/K28): "Giáo dục thể chất (1)", "(2)", no PE elective; a training plan whose rows
+  // carry those names (K28's KHĐT). The synthetic student passed Cờ vua (HK232) and Bóng bàn (HK233).
+  const withGdtc = (names: [string, string]): AssessmentInputs => {
+    const inputs = syntheticInputs();
+    const courses = [...inputs.curriculum.courses.filter((course) => !course.code.startsWith("71PE")),
+      { code: "DGT0010", name: names[0], credits: 0, type: "BB", block: "", specialty: "", semester: 2, studyYear: 1 },
+      { code: "DGT0020", name: names[1], credits: 0, type: "BB", block: "", specialty: "", semester: 3, studyYear: 1 }];
+    const revision = inputs.plan.revision!;
+    const items = revision.data.items.map((item) => (item.code === "DGT0010" ? { ...item, name: "Giáo dục thể chất (1)" } : item.code === "DGT0020" ? { ...item, name: "Giáo dục thể chất (2)" } : item));
+    return { ...inputs, curriculum: { ...inputs.curriculum, courses },
+      plan: { resolution: "found", revision: { ...revision, data: { ...revision.data, items }, physicalEducationGroups: physicalEducationGroupsFor(courses) } } };
+  };
+  const lateCodes = (inputs: AssessmentInputs) => progressOverview({
+    engine: assessWithoutHistory(inputs), plan: inputs.plan.revision!.data, studyTerm: studyTermCode(inputs.transcript.data), totalCredits: 126, printedCredits: 27,
+  }).late.map((course) => course.code);
+
+  it("never warns about a GDTC course a PE elective fills (Cảnh báo chậm tiến độ)", () => {
+    expect(lateCodes(withGdtc(["Giáo dục thể chất (1)", "Giáo dục thể chất (2)"])).filter((code) => code.startsWith("DGT"))).toEqual([]);
+    // Nothing filled (names that are not numbered): both were late, as before.
+    expect(lateCodes(withGdtc(["Giáo dục thể chất A", "Giáo dục thể chất B"]))).toEqual(expect.arrayContaining(["DGT0010", "DGT0020"]));
   });
 });
 

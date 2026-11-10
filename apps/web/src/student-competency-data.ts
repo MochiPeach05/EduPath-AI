@@ -6,6 +6,7 @@ import type {
 } from "./competency-assessment-types";
 import { meaningOf, scoreText, termName, type Meaning } from "./display-format";
 import { ADVISOR_ERRORS } from "./advisor-types";
+import { physicalEducationNumber } from "./student-plan-results";
 
 export const COMPETENCY_API = "/api/student/competency-assessments";
 
@@ -272,6 +273,20 @@ export function thesisByGpa(calcVersion: string | null | undefined): boolean {
 export function lateBeforeStudyTerm(calcVersion: string | null | undefined): boolean {
   const version = Number(/^comp-calc-v(\d+)$/.exec(calcVersion ?? "")?.[1]);
   return !Number.isFinite(version) || version >= 19;
+}
+
+/**
+ * comp-calc-v21 (user 2026-11-10): a PE elective the CTĐT does not list fills its numbered GDTC course ("Giáo dục thể chất (1)",
+ * ngành HTTT K29). A result stored before that has such a course not passed and PE electives outside the CTĐT, not failed, asks
+ * for Đánh giá lại: the names of those electives, else null.
+ */
+export function physicalEducationOutdated(result: Pick<AssessmentResult, "meta" | "courses" | "transcript">): string[] | null {
+  const version = Number(/^comp-calc-v(\d+)$/.exec(result.meta?.calcVersion ?? "")?.[1]);
+  if (!Number.isFinite(version) || version >= 21) return null;
+  const open = (result.courses ?? []).some((course) => physicalEducationNumber(course.name) !== null && course.state !== "passed" && course.state !== "exempt");
+  const electives = (result.transcript?.notInCurriculum ?? []).filter((course) => /^71PE/i.test(course.code) && course.state !== "failed")
+    .map((course) => course.name?.trim() || course.code);
+  return open && electives.length ? electives : null;
 }
 
 /** comp-calc-v13 (2026-10-24): the plan progress counts from the term being studied; earlier results from the latest graded term. */

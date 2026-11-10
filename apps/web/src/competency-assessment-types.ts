@@ -180,6 +180,8 @@ export type CourseFact = {
   /** First KHĐT term, else the CTĐT year/semester, else null ("chưa xếp lịch"). */
   plannedTerm: string | null;
   plannedTermSource: "plan" | "curriculum" | null;
+  /** A numbered GDTC course filled by this PE elective (comp-calc-v21; API CourseFact.filledBy); absent otherwise and before v21. */
+  filledBy?: { code: string; name: string | null };
 };
 
 /** One linked course of a skill; course details are in AssessmentResult.courses by code. */

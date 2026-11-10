@@ -4,6 +4,8 @@ import {
   calculateAssessment, careerDataTextOf, careerSummaryOf, compareSkills, confidenceOf, deficitBand, fitCredit, floorScore, levelOf, snapScore, termParts,
 } from "./calculate.js";
 import { CALC_VERSION, fitCodeOf, fitDataShareOf, fitScoreOf, MAX_SKILL_PLANS } from "./constants.js";
+import { physicalEducationGroupsFor } from "./plan-progress.js";
+import { registeredCourses } from "../overview/overview.js";
 import {
   SKILL, syntheticCareer, syntheticInputs, syntheticStudentTerms, syntheticTranscript, type SyntheticOptions, type TranscriptRow, type TranscriptTerm,
 } from "./fixtures/synthetic-k29.js";
@@ -950,6 +952,76 @@ describe("audit of the competency pages (comp-calc-v17)", () => {
     // HK241: Lập trình ứng dụng Web and two courses of "Chọn 2 trong 2": 3 courses, 2 entries.
     expect(progress).toMatchObject({ currentTerm: "HK233", nextTerm: "HK241", nextCount: 3, nextCredits: 9 });
     expect(progress.next.map((entry) => (entry.kind === "course" ? entry.code : entry.label))).toEqual(["71ITSE30503", "Chọn 2 trong 2 môn sau"]);
+  });
+});
+
+describe("PE electives filling the numbered GDTC courses of the CTĐT (comp-calc-v21, user 2026-11-10)", () => {
+  // Ngành HTTT K29: the CTĐT lists "Giáo dục thể chất (1)", "(2)" (DGT0010, DGT0020: BB, 0 TC) and no PE elective, while its
+  // students take the PE electives of the standard's groups. The synthetic student passed Cờ vua (71PEKC10062, HK232, A) and
+  // Bóng bàn (71PETT10012, HK233, B), which the synthetic standard lists in its TC102 groups.
+  const htttLike = (inputs: AssessmentInputs, names = ["Giáo dục thể chất (1)", "Giáo dục thể chất (2)"]): AssessmentInputs => {
+    const courses = [
+      ...inputs.curriculum.courses.filter((course) => !course.code.startsWith("71PE")),
+      { code: "DGT0010", name: names[0]!, credits: 0, type: "BB", block: "", specialty: "", semester: 2, studyYear: 1 },
+      { code: "DGT0020", name: names[1]!, credits: 0, type: "BB", block: "", specialty: "", semester: 3, studyYear: 1 },
+    ];
+    const plan = inputs.plan.resolution === "found"
+      ? { resolution: "found" as const, revision: { ...inputs.plan.revision, physicalEducationGroups: physicalEducationGroupsFor(courses) } } : inputs.plan;
+    return { ...inputs, curriculum: { ...inputs.curriculum, courses }, plan,
+      catalogNames: { "71PEKC10062": "Cờ vua", "71PETT10012": "Bóng bàn", "71PEVB10022": "Bóng chuyền" } };
+  };
+  const course = (result: AssessmentResult, code: string) => result.courses.find((item) => item.code === code);
+  const outside = (result: AssessmentResult) => result.transcript.notInCurriculum.map((item) => item.code);
+  const lateSlots = (result: AssessmentResult) => result.progress!.late.filter((entry) => entry.kind === "physical_education").map((entry) => entry.kind === "physical_education" && entry.label);
+
+  it("fills GDTC 1 and 2 with the passed electives in term order, takes them out of the courses outside the CTĐT and keeps them off the late list", () => {
+    const result = calculateAssessment(htttLike(syntheticInputs()));
+    expect(course(result, "DGT0010")).toMatchObject({ state: "passed", letter: "A", score10: 9, term: "HK232", conditionOnly: true, filledBy: { code: "71PEKC10062", name: "Cờ vua" } });
+    expect(course(result, "DGT0020")).toMatchObject({ state: "passed", letter: "B", score10: 7, term: "HK233", conditionOnly: true, filledBy: { code: "71PETT10012", name: "Bóng bàn" } });
+    expect(outside(result)).not.toContain("71PEKC10062");
+    expect(outside(result)).not.toContain("71PETT10012");
+    expect(lateSlots(result)).toEqual([]);
+    // Without numbered names nothing is filled: the electives stay outside the CTĐT and the plan's GDTC 1 and 2 are late.
+    const unfilled = calculateAssessment(htttLike(syntheticInputs(), ["Giáo dục thể chất A", "Giáo dục thể chất B"]));
+    expect(course(unfilled, "DGT0010")).toMatchObject({ state: "not_taken", conditionOnly: false });
+    expect(course(unfilled, "DGT0010")?.filledBy).toBeUndefined();
+    expect(outside(unfilled)).toEqual(expect.arrayContaining(["71PEKC10062", "71PETT10012"]));
+    expect(lateSlots(unfilled)).toEqual(["GDTC 1", "GDTC 2"]);
+    // Graduation, the GPA and the credit check do not change (graduation.ts keeps its own rule).
+    expect(result.graduation).toEqual(unfilled.graduation);
+    expect(result.transcript.creditCheck).toEqual(unfilled.transcript.creditCheck);
+    expect(result.meta.calcVersion).toBe("comp-calc-v21");
+  });
+
+  it("makes GDTC 2 'Đang học' with an elective being studied; a failed elective fills nothing", () => {
+    // Bóng bàn failed in HK233; Bóng chuyền registered in HK251, the term being studied.
+    const terms = withRows(6, [["71PEVB10022", 2]]).map((term) => ({
+      ...term, rows: term.rows.map((row): TranscriptRow => (row[0] === "71PETT10012" ? ["71PETT10012", 2, 3, 0, "F"] : row)),
+    }));
+    const result = calculateAssessment(htttLike(syntheticInputs({ terms })));
+    expect(course(result, "DGT0010")).toMatchObject({ state: "passed", filledBy: { code: "71PEKC10062" } });
+    expect(course(result, "DGT0020")).toMatchObject({ state: "in_progress", term: "HK251", filledBy: { code: "71PEVB10022", name: "Bóng chuyền" } });
+    expect(result.transcript.notInCurriculum.filter((item) => item.code.startsWith("71PE"))).toEqual([
+      { code: "71PETT10012", name: "Bóng bàn", credits: 2, letter: "F", state: "failed" },
+    ]);
+    expect(lateSlots(result)).toEqual([]);
+    // Tổng quan's "Học kỳ này" lists the elective registered, a condition.
+    expect(registeredCourses(result)).toContainEqual({ code: "71PEVB10022", name: "Bóng chuyền", credits: 0, retake: false, conditionOnly: true });
+  });
+
+  it("keeps a GDTC course the student passed under its own code, and fills the next one", () => {
+    const result = calculateAssessment(htttLike(syntheticInputs({ terms: withRows(2, [["DGT0010", 0, 8, 3.5, "B+"]]) })));
+    expect(course(result, "DGT0010")).toMatchObject({ state: "passed", letter: "B+", conditionOnly: false });
+    expect(course(result, "DGT0010")?.filledBy).toBeUndefined();
+    expect(course(result, "DGT0020")).toMatchObject({ state: "passed", letter: "A", filledBy: { code: "71PEKC10062" } });
+    // Bóng bàn fills nothing more: it stays outside the CTĐT as before.
+    expect(outside(result)).toContain("71PETT10012");
+  });
+
+  it("changes nothing for a CTĐT that lists the PE electives itself", () => {
+    const result = calculateAssessment(syntheticInputs());
+    expect(result.courses.filter((item) => item.filledBy)).toEqual([]);
+    expect(course(result, "71PEKC10062")).toMatchObject({ state: "passed", letter: "A", conditionOnly: true });
   });
 });
 

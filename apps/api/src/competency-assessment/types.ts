@@ -356,6 +356,12 @@ export type CourseFact = {
   /** First KHĐT term, else the CTĐT year/semester, else null ("chưa xếp lịch"). */
   plannedTerm: string | null;
   plannedTermSource: "plan" | "curriculum" | null;
+  /**
+   * A numbered GDTC course ("Giáo dục thể chất (1)") filled by a PE elective the CTĐT does not list (course-state.ts
+   * physicalEducationFills, comp-calc-v21): that elective's code and catalog name; its attempts give the state, grade and term.
+   * Absent otherwise, and in results stored before v21.
+   */
+  filledBy?: { code: string; name: string | null };
 };
 
 /** One linked course of a skill; course details are in AssessmentResult.courses by code. */

@@ -93,7 +93,13 @@ import type { Confidence, FitCode, GapStatus } from "./types.js";
  * comp-calc-v20 (user 2026-11-05: "người ta học đúng kế hoạch mà"): a plan choice of a CTĐT elective group is met once the
  * group's credits are reached; a plan can list more choices of a group than its credits (plan-progress.ts).
  */
-export const CALC_VERSION = "comp-calc-v20";
+/**
+ * v21 (user 2026-11-10, "thể chất thì duyệt"): a PE elective 71PE… the CTĐT does not list fills one of its numbered GDTC
+ * courses ("Giáo dục thể chất (1)", "(2)"; ngành HTTT K29) not passed under its own code, in term order (course-state.ts
+ * physicalEducationFills). The course reads that elective's state, grade and term (CourseFact.filledBy), counts as a
+ * condition (GDTC), is no longer late, and the elective leaves the courses outside the CTĐT. Graduation is unchanged.
+ */
+export const CALC_VERSION = "comp-calc-v21";
 /**
  * The graduation evaluation uses no skill level, so it keeps the version of its last change:
  * comp-calc-v10 changed only levels and must not re-date every student's graduation advice.

@@ -381,8 +381,10 @@ export function planTermsView(plan: Pick<PlanData, "items" | "sections" | "terms
  */
 export function registeredCourses(engine: Engine, conditionCodes: ReadonlySet<string> = new Set()): Omit<OverviewRunningCourse, "skills">[] {
   const condition = (code: string) => isConditionOnly(code, conditionCodes) || CONDITION_PLAN_CODE.test(code.trim());
+  // A GDTC course filled by a PE elective being studied (comp-calc-v21) is listed as that elective, the course registered.
   const inCurriculum = engine.courses.filter((course) => course.state === "in_progress")
-    .map((course) => ({ code: course.code, name: course.name, credits: course.credits, retake: course.attempts > 1, conditionOnly: course.conditionOnly || condition(course.code) }));
+    .map((course) => ({ code: course.filledBy?.code ?? course.code, name: course.filledBy?.name ?? course.name, credits: course.credits, retake: course.attempts > 1,
+      conditionOnly: course.conditionOnly || condition(course.code) }));
   const outside = engine.transcript.notInCurriculum.filter((course) => course.state === "in_progress")
     .map((course) => ({ code: course.code, name: course.name ?? course.code, credits: course.credits, retake: false, conditionOnly: condition(course.code) }));
   return [...inCurriculum, ...outside].sort((a, b) => a.name.localeCompare(b.name, "vi"));

@@ -233,6 +233,41 @@ describe("study plan context", () => {
   });
 });
 
+describe("PE electives filling the numbered GDTC courses of the CTĐT (comp-calc-v21, user 2026-11-10)", () => {
+  // Ngành HTTT K29: "Giáo dục thể chất (1)", "(2)" in the CTĐT, no PE elective; the student passed Cờ vua (HK232) and Bóng bàn (HK233).
+  const htttLike = (names = ["Giáo dục thể chất (1)", "Giáo dục thể chất (2)"]) => (data: ReturnType<typeof curriculumData>) => {
+    const base = data.courses.find((course) => course.code === "71ITBS10103")!;
+    return { ...data, relations: data.relations.filter((relation) => !relation.courseCode.startsWith("71PE")), courses: [
+      ...data.courses.filter((course) => !course.code.startsWith("71PE")),
+      { ...base, code: "DGT0010", name: names[0]!, credits: 0, type: "BB", block: "", specialty: "", semester: 2, studyYear: 1 },
+      { ...base, code: "DGT0020", name: names[1]!, credits: 0, type: "BB", block: "", specialty: "", semester: 3, studyYear: 1 },
+    ] };
+  };
+
+  it("shows each GDTC course with the elective that fills it, never among the courses no requirement counts", async () => {
+    const { context } = await facts({ standards: false, curriculum: htttLike() });
+    const byCode = new Map(context.courses.map((course) => [course.code, course]));
+    expect(byCode.get("DGT0010")).toMatchObject({ state: "passed", grade: "A", takenTerm: "HK232", attempts: 1, conditional: true, equivalent: null,
+      filledBy: { code: "71PEKC10062", name: "Học phần tổng hợp" } });
+    expect(byCode.get("DGT0020")).toMatchObject({ state: "passed", grade: "B", takenTerm: "HK233", filledBy: { code: "71PETT10012" } });
+    expect(context.unmatched.map((course) => course.code).filter((code) => code.startsWith("71PE"))).toEqual([]);
+    // Without numbered names the GDTC courses read "Chưa học" and the electives count toward nothing, as before.
+    const before = (await facts({ standards: false, curriculum: htttLike(["Giáo dục thể chất A", "Giáo dục thể chất B"]) })).context;
+    expect(before.courses.find((course) => course.code === "DGT0010")).toMatchObject({ state: "not_taken", conditional: false });
+    expect(before.unmatched.map((course) => course.code)).toEqual(expect.arrayContaining(["71PEKC10062", "71PETT10012"]));
+  });
+
+  it("keeps the graduation standard's groups, credits and GPA as they were", async () => {
+    const filled = (await facts({ curriculum: htttLike() })).context;
+    const unfilled = (await facts({ curriculum: htttLike(["Giáo dục thể chất A", "Giáo dục thể chất B"]) })).context;
+    expect(filled.courses.find((course) => course.code === "DGT0010")?.filledBy?.code).toBe("71PEKC10062");
+    expect(filled.graduation).toEqual(unfilled.graduation);
+    expect(filled.gpa).toEqual(unfilled.gpa);
+    // The standard's TC102 electives still count there, with their own codes.
+    expect(filled.courses.find((course) => course.code === "71PEKC10062")).toMatchObject({ state: "passed", onlyInStandard: true });
+  });
+});
+
 describe("where the plan starts", () => {
   it("fills the mandatory courses still ahead in the terms of the cohort's training plan, never a late one", async () => {
     const { context } = await facts();

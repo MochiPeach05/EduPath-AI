@@ -9,7 +9,7 @@ import { useLiveData } from "./use-live-data";
 import type { Transcript } from "./StudentTranscript";
 import { INFERRED_RESULT_NOTE } from "./transcript-results";
 import {
-  graduationCourseAliases, physicalEducationProgress, planTermCredits, studentPlanOutcome, transcriptCourseStates,
+  graduationCourseAliases, physicalEducationFills, physicalEducationProgress, planTermCredits, studentPlanOutcome, transcriptCourseStates,
 } from "./student-plan-results";
 import "./student-curriculum.css";
 import "./student-plans.css";
@@ -161,7 +161,10 @@ function PlanContents({ id }: { id: string }) {
     [...(data.physicalEducationGroups?.TC002 ?? []), ...(data.physicalEducationGroups?.TC102 ?? [])],
     states,
   );
-  const outcome = (item: Detail["items"][number]) => studentPlanOutcome(item, states, physicalEducation, aliases);
+  // A CTĐT without PE electives (ngành HTTT K29: "Giáo dục thể chất (1)", "(2)"): the electives taken fill those rows (2026-11-10).
+  const fills = physicalEducation.groups ? new Map() : physicalEducationFills(data.items,
+    new Set(data.items.map((item) => item.code.trim().toUpperCase())), transcript.data?.transcript?.data.sections ?? [], states);
+  const outcome = (item: Detail["items"][number]) => studentPlanOutcome(item, states, physicalEducation, aliases, fills);
   const sectionIds = new Set(data.sections.map((section) => section.id));
   const rows = data.items.filter(
     (item) =>

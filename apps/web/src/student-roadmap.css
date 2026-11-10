@@ -183,6 +183,7 @@
 .rm-row-code { color: var(--sw-muted); font-size: 12px; }
 .rm-row-name { min-width: 0; overflow-wrap: anywhere; }
 .rm-row-name small { color: var(--sw-muted); }
+.rm-row-name .rm-row-taken { display: block; margin-top: 2px; font-size: 12px; }
 .rm-row-credits { color: #4a5465; text-align: right; }
 .rm-row-note { color: var(--sw-muted); font-size: 12px; }
 .rm-row-done .rm-row-note { color: #2e7d32; }

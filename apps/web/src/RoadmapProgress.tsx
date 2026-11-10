@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { programName } from "./display-format";
 import {
-  auditGroups, auditNote, courseList, creditProgress, formatNumber, groupCountText, neededTone, planChoiceText, proposalSummaryText, termLabel, unmatchedNote,
+  auditGroups, auditNote, courseList, creditProgress, filledByText, formatNumber, groupCountText, neededTone, planChoiceText, proposalSummaryText, termLabel, unmatchedNote,
   type AuditMark, type AuditView, type NeededTone, type PlanOrigin, type PlanProposal, type StudyPlanContext, type StudyPlanData, type StudyPlanProjection,
 } from "./study-plan-data";
 
@@ -112,10 +112,11 @@ export function RoadmapTrack({ context, plan, projection, origin = null, proposa
           : "Chương trình đào tạo không ghi số tín chỉ cần chọn của nhóm này, và kế hoạch đào tạo của khóa không có quy định “Chọn … trong …” cho nhóm. Hãy hỏi cố vấn học tập."}</p>}
         <ul className="rm-req-rows">{group.rows.map((row) => {
           const tone = row.mark === "needed" ? neededTone(row.course, context.currentTerm) : undefined;
+          const taken = filledByText(row.course);
           return <li key={row.course.code} className={`rm-req-row rm-row-${row.mark}${tone ? ` rm-needed-${tone}` : ""}`}>
             <Mark kind={row.mark} tone={tone} />
             <span className="rm-row-code">{row.course.code}</span>
-            <span className="rm-row-name">{row.course.name}{row.course.attempts > 1 && <> <Mark kind="retake" /></>}{row.course.equivalent && <> <Mark kind="equivalent" /><small> qua {row.course.equivalent}</small></>}</span>
+            <span className="rm-row-name">{row.course.name}{row.course.attempts > 1 && <> <Mark kind="retake" /></>}{row.course.equivalent && <> <Mark kind="equivalent" /><small> qua {row.course.equivalent}</small></>}{taken && <small className="rm-row-taken">{taken}</small>}</span>
             <span className="rm-row-credits">{formatNumber(row.course.credits)} TC</span>
             <span className="rm-row-note">{auditNote(row, context.currentTerm)}</span>
           </li>;

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  courseResult, courseResultDisplay, graduationCourseAliases, physicalEducationProgress, planTermCredits, studentPlanOutcome,
-  transcriptCourseStates, type CourseResultView,
+  courseResult, courseResultDisplay, filledResult, graduationCourseAliases, physicalEducationFills, physicalEducationNumber, physicalEducationProgress,
+  planTermCredits, studentPlanOutcome, transcriptCourseStates, type CourseResultView,
 } from "./student-plan-results";
 import type { GraduationEvaluation } from "./student-graduation-types";
 
@@ -137,5 +137,59 @@ describe("plan rows", () => {
       .toEqual({ credits: 6, partial: false });
     expect(planTermCredits([row("DIT0410", 6, "TC", "section-107")], new Set(["section-107"]))).toBeNull();
     expect(planTermCredits([row("DIT0410", null)], new Set())).toBeNull();
+  });
+});
+
+describe("PE electives filling the numbered GDTC courses (ngành HTTT K29, 2026-11-10; API physicalEducationFills)", () => {
+  // The CTĐT lists "Giáo dục thể chất (1)" and "(2)" (DGT0010, DGT0020) and no PE elective.
+  const rows = [{ code: "71ITBS10103", name: "Nhập môn ngành" }, { code: "DGT0010", name: "Giáo dục thể chất (1)" }, { code: "DGT0020", name: "Giáo dục thể chất (2)" }];
+  const listed = new Set(rows.map((row) => row.code));
+  type Course = Row & { name: string };
+  const section = (academicYear: string | null, semester: string | null, courses: Course[]) => ({ academicYear, semester, courses });
+  const sections = [
+    section("2024-2025", "HK01", [{ code: "71PEKC10062", name: "Cờ vua", result: passed, letter: "B" }, { code: "71PEBB10032", name: "Bóng rổ", result: failed, letter: "F" }]),
+    section("2023-2024", "HK03", [{ code: "71PEVB10022", name: "Bóng chuyền", result: passed, letter: "A" }]),
+    section("2025-2026", "HK01", [{ code: "71PETT10012", name: "Bóng bàn", result: null, letter: null }]),
+  ];
+  const shown = (code: string, fills: ReturnType<typeof physicalEducationFills>, map: ReturnType<typeof transcriptCourseStates>) => display(filledResult(code, map, fills));
+
+  it("reads the number of a numbered GDTC course like the API", () => {
+    expect(["Giáo dục thể chất (1)", "Giáo dục thể chất 2 (*)", "GDTC 1", "GDTC2"].map(physicalEducationNumber)).toEqual([1, 2, 1, 2]);
+    expect(["Giáo dục thể chất", "Bóng chuyền", "Giáo dục quốc phòng (1)"].map(physicalEducationNumber)).toEqual([null, null, null]);
+  });
+
+  it("fills GDTC 1 with the earliest passed elective and GDTC 2 with the next, and names the course taken", () => {
+    const map = transcriptCourseStates(sections);
+    const fills = physicalEducationFills(rows, listed, sections, map);
+    expect([...fills].map(([code, fill]) => [code, fill.code])).toEqual([["DGT0010", "71PEVB10022"], ["DGT0020", "71PEKC10062"]]);
+    expect(shown("DGT0010", fills, map)).toBe("✓ Đã đạt | Đã học: Bóng chuyền (71PEVB10022)");
+    expect(shown("DGT0020", fills, map)).toBe("✓ Đã đạt | Đã học: Cờ vua (71PEKC10062)");
+    expect(filledResult("71ITBS10103", map, fills)).toBeUndefined();
+  });
+
+  it("makes GDTC 2 'Đang học' with an elective registered; a failed elective fills nothing", () => {
+    const one = [sections[1]!, section("2024-2025", "HK01", [{ code: "71PEBB10032", name: "Bóng rổ", result: failed, letter: "F" }]), sections[2]!];
+    const map = transcriptCourseStates(one);
+    const fills = physicalEducationFills(rows, listed, one, map);
+    expect([...fills].map(([code, fill]) => [code, fill.code])).toEqual([["DGT0010", "71PEVB10022"], ["DGT0020", "71PETT10012"]]);
+    expect(shown("DGT0020", fills, map)).toBe("◐ Đang học | Đang học: Bóng bàn (71PETT10012)");
+  });
+
+  it("keeps a GDTC course passed under its own code, and changes nothing for a CTĐT that lists its PE electives", () => {
+    const own = [section("2023-2024", "HK02", [{ code: "DGT0010", name: "Giáo dục thể chất (1)", result: passed, letter: "B+" }]), ...sections];
+    const map = transcriptCourseStates(own);
+    const fills = physicalEducationFills(rows, listed, own, map);
+    expect([...fills].map(([code, fill]) => [code, fill.code])).toEqual([["DGT0020", "71PEVB10022"]]);
+    const cntt = [{ code: "71PEVB10022", name: "Bóng chuyền" }, { code: "71PEKC10062", name: "Cờ vua" }];
+    expect(physicalEducationFills(cntt, new Set(cntt.map((row) => row.code)), sections, transcriptCourseStates(sections)).size).toBe(0);
+  });
+
+  it("shows the plan row of a GDTC course through its elective (Kế hoạch đào tạo read from the CTĐT)", () => {
+    const map = transcriptCourseStates(sections);
+    const fills = physicalEducationFills(rows, listed, sections, map);
+    const none = physicalEducationProgress([], map);
+    expect(display(studentPlanOutcome({ code: "DGT0010", name: "Giáo dục thể chất (1)" }, map, none, [], fills))).toBe("✓ Đã đạt | Đã học: Bóng chuyền (71PEVB10022)");
+    // Without fills the row has no result, as before.
+    expect(studentPlanOutcome({ code: "DGT0010", name: "Giáo dục thể chất (1)" }, map, none)).toBeUndefined();
   });
 });

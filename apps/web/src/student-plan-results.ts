@@ -16,6 +16,8 @@ export type CourseAlias = { code: string; viaCode: string; transfer: boolean };
 export type CourseResultView = CourseStateEntry & {
   /** The result is the one of this other code (a retake with a later cohort when `transfer`). */
   via: { code: string; transfer: boolean } | null;
+  /** A numbered GDTC course filled by this PE elective (physicalEducationFills): the result is that elective's. */
+  filledBy?: { code: string; name: string };
 };
 
 const key = (code: string) => code.trim().toUpperCase();
@@ -87,8 +89,99 @@ export function courseResultDisplay(view: CourseResultView): CourseResultDisplay
     return { glyph: "⇄", label: "Đã học trả nợ", tone: "info", notes: [`Đã học trả nợ (mã ${view.via.code}) — cần chuyển điểm`, ...inferred] };
   }
   const { glyph, label, tone } = COURSE_STATES[view.state];
-  const written = view.state === "passed" || view.state === "failed" ? [] : [label];
-  return { glyph, label, tone, notes: [...written, ...(view.via ? [`học với mã ${view.via.code}`] : []), ...inferred] };
+  const taken = view.filledBy ? filledByNote(view.filledBy, view.state) : null;
+  // A GDTC course being studied through its elective says so once: "Đang học: Cờ vua (71PEKC10062)".
+  const written = view.state === "passed" || view.state === "failed" || (taken && view.state === "in_progress") ? [] : [label];
+  return { glyph, label, tone, notes: [...written, ...(view.via ? [`học với mã ${view.via.code}`] : []), ...(taken ? [taken] : []), ...inferred] };
+}
+
+/* ------------------------------------------------- GDTC filled by PE */
+
+/** "Giáo dục thể chất (1)", "Giáo dục thể chất 2 (*)", "GDTC 1": the number of a numbered GDTC course, else null (API physicalEducationNumber). */
+export function physicalEducationNumber(name: string): number | null {
+  const folded = name.normalize("NFD").replace(/\p{M}/gu, "").replace(/đ/gi, "d").toLowerCase().replace(/\s+/g, " ").trim();
+  const match = /^(?:giao duc the chat|gdtc)\s*\(?\s*(\d+)\s*\)?(?:\s*\(\s*\*\s*\))?$/.exec(folded);
+  return match ? Number(match[1]) : null;
+}
+
+/** A numbered GDTC course's elective: its code, its printed name and the state of its attempts. */
+export type PhysicalEducationFill = { code: string; name: string; entry: CourseStateEntry };
+
+type FillSection = { academicYear?: string | null; semester?: string | null; courses: readonly (ResultCourse & { name?: string | null })[] };
+
+/** "2023-2024" + "HK03" → "HK233"; "" without a term ("Điểm bảo lưu"), which comes first. */
+function sectionTerm(section: FillSection): string {
+  const year = /^(\d{4})\s*-\s*\d{4}$/.exec(section.academicYear?.trim() ?? "");
+  const semester = Number(/(\d+)/.exec(section.semester ?? "")?.[1]);
+  return year && semester >= 1 && semester <= 3 ? `HK${year[1]!.slice(2)}${semester}` : "";
+}
+
+const compareText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+/**
+ * The PE electives that fill the numbered GDTC courses of the programme a page lists, as the API decides them (course-state.ts
+ * physicalEducationFills, comp-calc-v21; user 2026-11-10): each PE elective 71PE… of the transcript the programme does not
+ * list (`listed`), passed (MT too), then graded with an unreadable result, then being studied, the earliest term first, fills
+ * one numbered course ("Giáo dục thể chất (1)", "(2)" …, in number order) not passed under its own code; a failed one fills
+ * nothing. The map is keyed by the GDTC course's code.
+ */
+export function physicalEducationFills(
+  rows: readonly { code: string; name: string }[],
+  listed: ReadonlySet<string>,
+  sections: readonly FillSection[],
+  states: ReadonlyMap<string, CourseStateEntry>,
+): Map<string, PhysicalEducationFill> {
+  const seen = new Set<string>();
+  const slots = rows.map((row) => ({ code: key(row.code), number: physicalEducationNumber(row.name) }))
+    .filter((slot): slot is { code: string; number: number } => {
+      if (!slot.code || slot.number === null || seen.has(slot.code)) return false;
+      seen.add(slot.code);
+      const own = states.get(slot.code)?.state;
+      return !own || !isPassed(own);
+    })
+    .sort((a, b) => a.number - b.number || compareText(a.code, b.code));
+  const fills = new Map<string, PhysicalEducationFill>();
+  if (!slots.length) return fills;
+  const terms = new Map<string, string[]>(), names = new Map<string, string>();
+  for (const section of sections) for (const course of section.courses) {
+    const code = key(course.code);
+    const entry = states.get(code);
+    if (!/^71PE/.test(code) || listed.has(code) || !entry || entry.state === "failed") continue;
+    if (!names.has(code) && course.name?.trim()) names.set(code, course.name.trim());
+    // The attempts that decide the state: a pass (or MT), a grade without a readable result, a registration.
+    const status = attemptOutcome(course).status;
+    const deciding = isPassed(entry.state) ? status === "pass" : entry.state === "graded_unknown" ? status === "unknown" : status === "pending";
+    if (deciding) terms.set(code, [...(terms.get(code) ?? []), sectionTerm(section)]);
+  }
+  const rank = (state: CourseResultState) => (isPassed(state) ? 0 : state === "graded_unknown" ? 1 : 2);
+  const electives = [...terms].map(([code, list]) => ({ code, term: [...list].sort(compareText)[0]!, entry: states.get(code)! }))
+    .sort((a, b) => rank(a.entry.state) - rank(b.entry.state) || compareText(a.term, b.term) || compareText(a.code, b.code));
+  slots.slice(0, electives.length).forEach((slot, index) => {
+    const elective = electives[index]!;
+    fills.set(slot.code, { code: elective.code, name: names.get(elective.code) ?? elective.code, entry: elective.entry });
+  });
+  return fills;
+}
+
+/** The state rank of transcriptCourseStates: MT > passed > graded without a readable result > registered > failed. */
+const STATE_RANK: Record<CourseResultState, number> = { exempt: 4, passed: 3, graded_unknown: 2, in_progress: 1, failed: 0 };
+
+/**
+ * The result of a GDTC course its elective fills: its own attempts and the elective's decided as one course (the better
+ * state), with the elective named. Undefined for a course nothing fills.
+ */
+export function filledResult(code: string, states: ReadonlyMap<string, CourseStateEntry>, fills: ReadonlyMap<string, PhysicalEducationFill>): CourseResultView | undefined {
+  const fill = fills.get(key(code));
+  if (!fill) return undefined;
+  const own = states.get(key(code));
+  const entry = own && STATE_RANK[own.state] > STATE_RANK[fill.entry.state] ? own : fill.entry;
+  return { ...entry, via: null, filledBy: { code: fill.code, name: fill.name } };
+}
+
+/** "Đã học: Bóng chuyền (71PEVB10022)", "Đang học: Cờ vua (71PEKC10062)": the line under a filled GDTC course (study-plan-data filledByText). */
+export function filledByNote(taken: { code: string; name: string }, state: CourseResultState): string {
+  const name = taken.name.trim() && taken.name.trim() !== taken.code ? `${taken.name.trim()} (${taken.code})` : taken.code;
+  return `${state === "in_progress" ? "Đang học" : "Đã học"}: ${name}`;
 }
 
 /* ----------------------------------------------------------------- #plans */
@@ -138,7 +231,10 @@ export function studentPlanOutcome(
   states: ReadonlyMap<string, CourseStateEntry>,
   physicalEducation: PhysicalEducationProgress,
   aliases: readonly CourseAlias[] = [],
+  fills: ReadonlyMap<string, PhysicalEducationFill> = new Map(),
 ): CourseResultView | undefined {
+  const filled = item.code.trim() ? filledResult(item.code, states, fills) : undefined;
+  if (filled) return filled;
   const own = item.code.trim() ? courseResult(item.code, states, aliases) : undefined;
   const slot = physicalEducationSlot(item.name);
   if (!slot || (own && !physicalEducation.groups)) return own;

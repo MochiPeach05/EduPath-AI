@@ -9,8 +9,8 @@ import {
 } from "./constants.js";
 import {
   academicSections, conditionOnlyCodes, courseKey, creditCrossCheck, currentTermCode, curriculumTermCode, studyTermCode, deriveElectiveGroups,
-  electiveCodeOf, hasScore, isAttemptedState, isConditionOnly, isPassedState, isStudiedState, termCode, type TranscriptCourseRecord,
-  transcriptCourses, uniqueCurriculumCourses,
+  electiveCodeOf, hasScore, isAttemptedState, isConditionOnly, isPassedState, isStudiedState, physicalEducationFills, termCode, type TranscriptCourseRecord,
+  transcriptCourses, uniqueCurriculumCourses, withPhysicalEducationFills,
 } from "./course-state.js";
 import { assessGraduation, assessGraduationGpa, electiveQuotas, graduationCodeAliases, programCreditMap } from "./graduation.js";
 import { physicalEducationGroupsFor, planProgress, type PlanCourseInfo } from "./plan-progress.js";
@@ -166,6 +166,8 @@ type Row = {
   conditionOnly: boolean;
   record: TranscriptCourseRecord | null;
   state: CourseState;
+  /** The PE elective that fills this numbered GDTC course (physicalEducationFills, v21), else null. */
+  filledBy: { code: string; name: string | null } | null;
   applicable: boolean;
   plannedTerm: string | null;
   plannedTermSource: "plan" | "curriculum" | null;
@@ -321,7 +323,13 @@ function assess(inputs: AssessmentInputs): Assessment {
   // same-name retakes under another code. Since v17 the competency table reads them too (competencyAliases), so a course
   // passed with a later cohort counts for its CTĐT course everywhere on the page, not only for graduation.
   const { aliases: codeAliases, transfers } = graduationCodeAliases(standardData, transcript, curriculumCodes);
-  const records = transcriptCourses(transcript, competencyAliases(codeAliases, standardData, curriculumCourses, transcript, curriculumCodes));
+  const transcriptRecords = transcriptCourses(transcript, competencyAliases(codeAliases, standardData, curriculumCourses, transcript, curriculumCodes));
+  // v21: a PE elective the CTĐT does not list fills one of its numbered GDTC courses (ngành HTTT K29 lists "Giáo dục thể chất
+  // (1)", "(2)" while its students take Bóng chuyền, Cờ vua …). The course table, the plan progress and the transcript summary
+  // read the filled records; the GPA and the credit check keep transcriptRecords, so neither changes.
+  const physicalEducation = physicalEducationFills(curriculumCourses, transcriptRecords);
+  const records = withPhysicalEducationFills(transcriptRecords, physicalEducation);
+  const filledBy = new Map(physicalEducation.map((fill) => [fill.code, fill.viaCode]));
   const currentTerm = currentTermCode(transcript);
   // The term being studied (v13): the plan progress and "sắp học" count from it, the results end at currentTerm.
   const studyTerm = studyTermCode(transcript);
@@ -348,11 +356,13 @@ function assess(inputs: AssessmentInputs): Assessment {
     const plannedFromCurriculum = curriculumTermCode(admissionYear, course.studyYear, course.semester);
     const selected = record?.selected ?? null;
     const credits = Number.isFinite(course.credits) && course.credits > 0 ? course.credits : 0;
-    const conditionOnly = isConditionOnly(code, conditionCodes);
+    const via = filledBy.get(code) ?? null;
+    // A GDTC course filled by a PE elective is a condition like that elective: no GPA, no credit total, never improved (v21).
+    const conditionOnly = isConditionOnly(code, conditionCodes) || via !== null;
     table.set(code, {
       code, name: course.name, credits, weightCredits: credits > 0 ? credits : conditionOnly ? CONDITION_NOMINAL_CREDITS : 0, type: course.type,
       specialty: specialtyClass, electiveCode: electiveCodeOf(course.type), conditionOnly,
-      record, state,
+      record, state, filledBy: via ? { code: via, name: inputs.catalogNames?.[via] ?? null } : null,
       applicable: specialtyClass.kind === "common" || specialtyClass.code === specialty || standardCodes.has(code) || isAttemptedState(state),
       plannedTerm: plannedFromPlan ?? plannedFromCurriculum,
       plannedTermSource: plannedFromPlan ? "plan" : plannedFromCurriculum ? "curriculum" : null,
@@ -394,7 +404,7 @@ function assess(inputs: AssessmentInputs): Assessment {
   // Chuyên đề tốt nghiệp 1 and 2 below it; without a GPA the thesis first (v7). The courses of the other way that are
   // not passed are never suggested, and never "Sắp học" unless in progress (the set keeps its v7 name; it may hold the
   // thesis since v18).
-  const thesisGpa = assessGraduationGpa(standardData ?? { minimumGpa: 0, gpaScale: 4 }, transcript, records, conditionCodes);
+  const thesisGpa = assessGraduationGpa(standardData ?? { minimumGpa: 0, gpaScale: 4 }, transcript, transcriptRecords, conditionCodes);
   const excludedThesisReplacements = new Set<string>();
   const started = (row: Row) => row.state !== "not_in_curriculum" && startsReplacementPath(row.state);
   for (const elective of electives) {
@@ -820,7 +830,7 @@ function assess(inputs: AssessmentInputs): Assessment {
 
   /* ---- 11. transcript summary and warnings (§5, §7.10) ---- */
   const recordList = [...records.values()];
-  const creditCheck = creditCrossCheck(transcript, records, curriculumCredits, conditionCodes);
+  const creditCheck = creditCrossCheck(transcript, transcriptRecords, curriculumCredits, conditionCodes);
   const inferredCount = recordList.filter((record) => record.inferred).length;
   const needsReview = Boolean(transcript.ocr?.needsReview);
   const transcriptSummary = {
@@ -942,7 +952,7 @@ function assess(inputs: AssessmentInputs): Assessment {
     specialty: row.specialty.kind === "specialty" ? row.specialty.code : null, electiveGroup: row.electiveCode,
     conditionOnly: row.conditionOnly, applicable: row.applicable, state: row.state, outcome: row.outcome, inferred: row.inferred,
     score10: row.score10, letter: row.letter, attempts: row.attempts, term: row.attemptTerm,
-    plannedTerm: row.plannedTerm, plannedTermSource: row.plannedTermSource,
+    plannedTerm: row.plannedTerm, plannedTermSource: row.plannedTermSource, ...(row.filledBy ? { filledBy: row.filledBy } : {}),
   }));
   const standardMeta = graduationStandard;
   return {

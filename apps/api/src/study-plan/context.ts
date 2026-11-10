@@ -1,5 +1,8 @@
 import type { PoolClient } from "pg";
-import { courseKey, curriculumTermCode, electiveCodeOf, isConditionOnly, studyTermCode, uniqueCurriculumCourses } from "../competency-assessment/course-state.js";
+import {
+  courseKey, curriculumTermCode, electiveCodeOf, isConditionOnly, physicalEducationFills, studyTermCode, uniqueCurriculumCourses, withPhysicalEducationFills,
+  type TranscriptCourseRecord,
+} from "../competency-assessment/course-state.js";
 import { CONDITION_ONLY_BLOCK } from "../competency-assessment/constants.js";
 import { assessGraduationGpa, assessGraduationStandard, graduationCodeAliases, graduationInputs } from "../competency-assessment/graduation.js";
 import { choiceRule } from "../competency-assessment/plan-progress.js";
@@ -77,6 +80,11 @@ export type StudyPlanCourse = {
   attempts: number;
   /** The other code the course is counted through: an older code of the standard, or a same-name course of another cohort. */
   equivalent: string | null;
+  /**
+   * The PE elective that fills this numbered GDTC course of the CTĐT, its code and name as printed (course-state.ts
+   * physicalEducationFills, as the competency engine reads it): the state, grade and term above are that elective's. Absent otherwise.
+   */
+  filledBy?: { code: string; name: string };
 };
 
 /**
@@ -363,27 +371,38 @@ export async function readStudyPlanFacts(db: Db, userId: string, now = new Date(
   const printedCodes = new Set(readTranscript.sections.flatMap((section) => section.courses.map((course) => courseKey(course.code ?? ""))));
   const equivalentOf = (code: string) => transfers.find((transfer) => courseKey(transfer.code) === code)?.viaCode
     ?? [...aliases].find(([printed, main]) => main === code && printed !== code && printedCodes.has(printed))?.[0] ?? null;
-  const audit = (code: string) => {
-    const record = inputs.records.get(code);
+  // The CTĐT's numbered GDTC courses the student's PE electives fill (course-state.ts physicalEducationFills, comp-calc-v21, as
+  // the competency engine reads them). The graduation check keeps inputs.records; a 71PE record there that only stands for a
+  // passed GDTC course (graduationInputs `substitutes`) is no elective the student took.
+  const substituted = new Set((inputs.substitutes ?? []).map((substitute) => substitute.code));
+  const physicalEducation = physicalEducationFills(curriculumCourses, new Map([...inputs.records].filter(([code]) => !substituted.has(code))));
+  const courseRecords = withPhysicalEducationFills(inputs.records, physicalEducation);
+  const filledBy = new Map(physicalEducation.map((fill) => [fill.code, fill.viaCode]));
+  const printedName = (code: string) => readTranscript.sections.flatMap((section) => section.courses)
+    .find((course) => courseKey(course.code ?? "") === code && course.name?.trim())?.name.trim() ?? code;
+  const audit = (code: string, records: ReadonlyMap<string, TranscriptCourseRecord> = inputs.records) => {
+    const record = records.get(code);
     return { grade: record?.selected.letter ?? null, takenTerm: record?.selected.termCode ?? null, attempts: record?.attempts.length ?? 0, equivalent: equivalentOf(code) };
   };
 
   const courses: StudyPlanCourse[] = sourceCourses.map((course) => {
     const code = courseKey(course.code);
-    const record = inputs.records.get(code);
+    const record = courseRecords.get(code);
     const group = electiveCodeOf(course.type);
     const specialtyClass = classifyCurriculumSpecialty(course.specialty, cohortCode);
     const ownSpecialty = specialtyClass.kind === "common" || !specialty || specialtyClass.code === specialty || standardCodes.has(code);
     const running = record?.attempts.filter((attempt) => !attempt.graded && attempt.termCode).map((attempt) => attempt.termCode!) ?? [];
+    const via = filledBy.get(code);
     return {
       code, name: course.name, credits: course.credits, type: course.type, kind: group ? "elective" : "mandatory", group,
-      conditional: isConditionOnly(code, inputs.conditionCodes) || fold(course.block).includes(CONDITION_ONLY_BLOCK) || course.name.includes("*"),
+      conditional: isConditionOnly(code, inputs.conditionCodes) || fold(course.block).includes(CONDITION_ONLY_BLOCK) || course.name.includes("*") || via !== undefined,
       applicable: ownSpecialty, specialtyName: specialtyClass.kind === "specialty" ? course.specialty : null,
       standardTerm: curriculumTermCode(admissionYear, course.studyYear, course.semester),
       prerequisites: relationsOf(code, "prerequisite"), prior: relationsOf(code, "prior"),
       state: record?.state ?? "not_taken",
       inProgressTerm: record?.state === "in_progress" && running.length ? running.sort((a, b) => termIndex(b) - termIndex(a))[0]! : null,
-      onlyInStandard: false, ...planTerms(code, course.name), ...audit(code),
+      onlyInStandard: false, ...planTerms(code, course.name), ...audit(code, courseRecords),
+      ...(via ? { filledBy: { code: via, name: printedName(via) } } : {}),
     };
   });
   // The standard can require a course the CTĐT does not list; a same-name CTĐT course is the same course (9a0e8b1).
@@ -441,8 +460,10 @@ export async function readStudyPlanFacts(db: Db, userId: string, now = new Date(
     const code = aliases.get(courseKey(course.code ?? "")) ?? courseKey(course.code ?? "");
     if (code && course.name?.trim() && !printedNames.has(code)) printedNames.set(code, course.name.trim());
   }
+  // A PE elective that fills a numbered GDTC course of the CTĐT counts for it (shown on that course's row).
+  const filling = new Set(physicalEducation.map((fill) => fill.viaCode));
   const unmatched: StudyPlanUnmatched[] = [...inputs.records.values()]
-    .filter((record) => !counted.has(record.code))
+    .filter((record) => !counted.has(record.code) && !filling.has(record.code))
     .map((record) => ({
       code: record.code, name: courses.find((course) => course.code === record.code)?.name ?? printedNames.get(record.code) ?? record.code,
       credits: record.selected.credits, state: record.state, grade: record.selected.letter, term: record.selected.termCode,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, confidentStrengths, countAxis, dataUsedLine, displayLevel, FIT_SCALE, fitLabelOf, fitLevelOf, fitDataShareOf, fitScoreOf, fitStep, gapHistory, levelChart, levelSummary, levelText, overallIsPooled, thesisByGpa, lateBeforeStudyTerm, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
+  aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, confidentStrengths, countAxis, dataUsedLine, displayLevel, FIT_SCALE, fitLabelOf, fitLevelOf, fitDataShareOf, fitScoreOf, fitStep, gapHistory, levelChart, levelSummary, levelText, overallIsPooled, thesisByGpa, lateBeforeStudyTerm, physicalEducationOutdated, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
   careerDataText, careerSummaryText, choiceLabel, courseTermText, formatDifference, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isOverdue, isPreconditionError, PRIORITY_LABELS, levelStep, mapAiOutput, missingRequirements, missingRequirementsMessage, modelLabel, needsSelfStudy, nextCourseCount, nextTermOf, plannedCourseNote, plansFor, relatedSkillNames, shownScore, skillGroupKeys,
   scoreDifference, shouldPoll, sortRequirements, studyTermOf, termLabel, upcomingText, CHART_LEVELS, EMPTY_SKILL_FILTERS, LEVEL_COLUMNS,
   careerThresholdsLine, chartLevelLabel, currentImprovements, LEVEL_SCALE, levelOfScore, withCurrentLevels,
@@ -662,6 +662,18 @@ describe("overall method", () => {
     expect(lateBeforeStudyTerm("comp-calc-v18")).toBe(false);
     expect(lateBeforeStudyTerm("comp-calc-v9")).toBe(false);
     expect(lateBeforeStudyTerm(undefined)).toBe(true);
+  });
+  it("asks for Đánh giá lại a result of before comp-calc-v21 whose GDTC course a PE elective outside the CTĐT now fills", () => {
+    const base = fixtureResult;
+    const gdtc = { ...base.courses[0]!, code: "DGT0010", name: "Giáo dục thể chất (1)", state: "not_taken" as const, letter: null, score10: null };
+    const result = { ...base, meta: { ...base.meta, calcVersion: "comp-calc-v20" }, courses: [...base.courses, gdtc],
+      transcript: { ...base.transcript, notInCurriculum: [...base.transcript.notInCurriculum,
+        { code: "71PEVB10022", name: "Bóng chuyền", credits: 2, letter: "A", state: "passed" as const },
+        { code: "71PEBB10032", name: "Bóng rổ", credits: 2, letter: "F", state: "failed" as const }] } };
+    expect(physicalEducationOutdated(result)).toEqual(["Bóng chuyền"]);
+    expect(physicalEducationOutdated({ ...result, meta: { ...result.meta, calcVersion: "comp-calc-v21" } })).toBeNull();
+    expect(physicalEducationOutdated({ ...result, courses: base.courses })).toBeNull();
+    expect(physicalEducationOutdated(base)).toBeNull();
   });
 });
 

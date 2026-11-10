@@ -163,6 +163,16 @@ export function courseState(attempts: readonly Attempt[]): TranscriptCourseState
   return "failed";
 }
 
+/** One course's record from its attempts: the selected attempt, the state and whether a letter-grade inference decides it. */
+function courseRecord(code: string, list: Attempt[]): TranscriptCourseRecord {
+  const selected = selectAttempt(list);
+  const state = courseState(list);
+  // Inferred only when no printed result confirms the same outcome.
+  const deciding = state === "passed" ? list.filter((attempt) => attempt.outcome === "pass")
+    : state === "failed" ? list.filter((attempt) => attempt.outcome === "fail") : [];
+  return { code, attempts: list, selected, state, inferred: deciding.length > 0 && deciding.every((attempt) => attempt.inferred) };
+}
+
 /** Groups every attempt by code (including "Điểm bảo lưu") and decides one state per course. */
 export function transcriptCourses(data: TranscriptData, aliases?: ReadonlyMap<string, string>): Map<string, TranscriptCourseRecord> {
   const attempts = new Map<string, Attempt[]>();
@@ -186,15 +196,79 @@ export function transcriptCourses(data: TranscriptData, aliases?: ReadonlyMap<st
     }
   }
   const records = new Map<string, TranscriptCourseRecord>();
-  for (const [code, list] of attempts) {
-    const selected = selectAttempt(list);
-    const state = courseState(list);
-    // Inferred only when no printed result confirms the same outcome.
-    const deciding = state === "passed" ? list.filter((attempt) => attempt.outcome === "pass")
-      : state === "failed" ? list.filter((attempt) => attempt.outcome === "fail") : [];
-    records.set(code, { code, attempts: list, selected, state, inferred: deciding.length > 0 && deciding.every((attempt) => attempt.inferred) });
-  }
+  for (const [code, list] of attempts) records.set(code, courseRecord(code, list));
   return records;
+}
+
+/** A PE elective code (Giáo dục thể chất: Bóng chuyền 71PEVB10022, Cờ vua 71PEKC10062 …). */
+const PHYSICAL_EDUCATION_CODE = /^71PE/;
+/** A numbered GDTC course of a CTĐT, folded: "Giáo dục thể chất (1)", "Giáo dục thể chất 2 (*)", "GDTC 1". */
+const NUMBERED_PHYSICAL_EDUCATION = /^(?:giao duc the chat|gdtc)\s*\(?\s*(\d+)\s*\)?(?:\s*\(\s*\*\s*\))?$/;
+
+/** The n of a numbered GDTC course ("Giáo dục thể chất (1)" → 1, "GDTC 2" → 2), else null. */
+export function physicalEducationNumber(name: string): number | null {
+  const match = NUMBERED_PHYSICAL_EDUCATION.exec(fold(name));
+  return match ? Number(match[1]) : null;
+}
+
+/** A numbered GDTC course of the student's own CTĐT (`code`) and the PE elective of the transcript that fills it (`viaCode`). */
+export type PhysicalEducationFill = { code: string; viaCode: string };
+
+const compareText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+/** The earliest term of the attempts that decide a record's state; "" for "Điểm bảo lưu" (no term), which comes first. */
+function decidingTerm(record: TranscriptCourseRecord): string {
+  const deciding = record.attempts.filter((attempt) => (record.state === "in_progress" ? !attempt.graded
+    : record.state === "graded_unknown" ? attempt.graded && attempt.outcome === "unknown" : attempt.exempt || attempt.outcome === "pass"));
+  return deciding.map((attempt) => attempt.termCode ?? "").sort(compareText)[0] ?? "";
+}
+
+/**
+ * The PE electives that fill the numbered GDTC courses of a CTĐT (comp-calc-v21; user 2026-11-10, "thể chất thì duyệt"). Some
+ * CTĐT revisions (ngành Hệ thống thông tin K29, DGT0010/DGT0020) list "Giáo dục thể chất (1)", "(2)" as required courses
+ * while the students take PE electives 71PE… (Bóng chuyền 71PEVB10022, Cờ vua 71PEKC10062), the courses of the graduation
+ * standard's PE groups (TC002/TC102) as in every other cohort. Each PE elective the CTĐT does not list fills one numbered
+ * course not passed under its own code, in order: the passed ones (MT too) by term (the earliest fills GDTC 1, the next GDTC
+ * 2, …; "Điểm bảo lưu" first, then by code), then one graded with an unreadable result, then one being studied (its course
+ * reads "Đang học"); each elective once. A failed one fills nothing; a course passed under its own code keeps its result.
+ * Only the CTĐT views read it (the competency engine's course table and plan progress, Lộ trình học tập); graduation never
+ * does and keeps its own rule the other way round (graduation.ts graduationCodeAliases, `substitutes`).
+ */
+export function physicalEducationFills(
+  courses: readonly Pick<CurriculumCourseInput, "code" | "name">[],
+  records: ReadonlyMap<string, TranscriptCourseRecord>,
+): PhysicalEducationFill[] {
+  const slots = uniqueCurriculumCourses(courses)
+    .map((course) => ({ code: courseKey(course.code), number: physicalEducationNumber(course.name) }))
+    .filter((slot): slot is { code: string; number: number } => slot.number !== null && !isPassedState(records.get(slot.code)?.state ?? "not_taken"))
+    .sort((a, b) => a.number - b.number || compareText(a.code, b.code));
+  if (!slots.length) return [];
+  const listed = new Set(courses.map((course) => courseKey(course.code)));
+  const rank = (state: CourseState) => (isPassedState(state) ? 0 : state === "graded_unknown" ? 1 : 2);
+  const electives = [...records.values()]
+    .filter((record) => PHYSICAL_EDUCATION_CODE.test(record.code) && !listed.has(record.code) && record.state !== "failed")
+    .map((record) => ({ code: record.code, rank: rank(record.state), term: decidingTerm(record) }))
+    .sort((a, b) => a.rank - b.rank || compareText(a.term, b.term) || compareText(a.code, b.code));
+  return slots.slice(0, electives.length).map((slot, index) => ({ code: slot.code, viaCode: electives[index]!.code }));
+}
+
+/**
+ * The records with the fills applied (physicalEducationFills): a numbered GDTC course holds its own attempts and those of the
+ * PE elective that fills it, decided like one course; the elective has no record of its own any more, so it is listed nowhere
+ * else (not "Học phần không được tính", not outside the CTĐT). The records given are left as they are.
+ */
+export function withPhysicalEducationFills(
+  records: ReadonlyMap<string, TranscriptCourseRecord>,
+  fills: readonly PhysicalEducationFill[],
+): Map<string, TranscriptCourseRecord> {
+  const result = new Map(records);
+  for (const fill of fills) {
+    const via = records.get(fill.viaCode);
+    if (!via) continue;
+    result.delete(fill.viaCode);
+    result.set(fill.code, courseRecord(fill.code, [...(records.get(fill.code)?.attempts ?? []), ...via.attempts.map((attempt) => ({ ...attempt, code: fill.code }))]));
+  }
+  return result;
 }
 
 export type ElectiveGroup = {

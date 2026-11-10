@@ -30,7 +30,23 @@ export type StudyPlanCourse = {
   everyTerm?: boolean; grade: string | null; takenTerm: string | null; attempts: number; equivalent: string | null;
   /** The classes of every cohort from the term of today on (API StudyPlanClass, 2026-11-08); absent before. */
   classes?: StudyPlanClass[];
+  /**
+   * The PE elective that fills this numbered GDTC course of the CTĐT (API course-state.ts physicalEducationFills, 2026-11-10):
+   * the state, grade and term are that elective's. Absent otherwise.
+   */
+  filledBy?: { code: string; name: string } | null;
 };
+
+/**
+ * The line under a GDTC course filled by a PE elective, what the student took (user 2026-11-10: the row simply shows the
+ * course taken): "Đã học: Bóng chuyền (71PEVB10022)", "Đang học: Cờ vua (71PEKC10062)". Null for any other course.
+ */
+export function filledByText(course: Pick<StudyPlanCourse, "filledBy" | "state">): string | null {
+  const taken = course.filledBy;
+  if (!taken) return null;
+  const name = taken.name.trim() && taken.name.trim() !== taken.code ? `${taken.name.trim()} (${taken.code})` : taken.code;
+  return `${course.state === "in_progress" ? "Đang học" : "Đã học"}: ${name}`;
+}
 /**
  * A class: the term a cohort studies the course in, by its training plan ("plan") or, for a cohort without one, its CTĐT
  * ("curriculum"). major: the short name of another major ("HTTT"), null for the student's own.

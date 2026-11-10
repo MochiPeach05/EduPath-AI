@@ -4,8 +4,8 @@ import type { TranscriptData } from "../student/transcript-parser.js";
 import { FAIL_LETTERS, PASS_LETTERS } from "./constants.js";
 import {
   attemptOutcome, conditionOnlyCodes, courseState, creditCrossCheck, currentTermCode, curriculumCreditMap, curriculumTermCode, deriveElectiveGroups,
-  electiveCodeOf, estimateProgramCredits, isConditionOnly, printedCumulativeCredits, selectAttempt, studyTermCode, termCode, transcriptCourses,
-  uniqueCurriculumCourses,
+  electiveCodeOf, estimateProgramCredits, isConditionOnly, physicalEducationFills, physicalEducationNumber, printedCumulativeCredits, selectAttempt,
+  studyTermCode, termCode, transcriptCourses, uniqueCurriculumCourses, withPhysicalEducationFills,
 } from "./course-state.js";
 
 type ResultCase = { name: string; result: string | null; letter: string | null; expected: "pass" | "fail" | "unknown"; inferred: boolean };
@@ -268,5 +268,66 @@ describe("program credit estimate (E4)", () => {
     ];
     expect(uniqueCurriculumCourses(courses).map((course) => course.code)).toEqual([" 71itbs10103 ", "71ITSE30103"]);
     expect(Object.fromEntries(curriculumCreditMap(courses))).toEqual({ "71ITBS10103": 3, "71ITSE30103": 0 });
+  });
+});
+
+describe("PE electives filling the numbered GDTC courses of a CTĐT (comp-calc-v21, user 2026-11-10)", () => {
+  // Ngành HTTT K29: the CTĐT lists "Giáo dục thể chất (1)" and "(2)" (DGT0010, DGT0020, 0 TC), the students take PE electives.
+  const htttK29 = [
+    { code: "71ITBS10103", name: "Nhập môn ngành" }, { code: "DGT0010", name: "Giáo dục thể chất (1)" }, { code: "DGT0020", name: "Giáo dục thể chất (2)" },
+  ];
+  const registered = { score10: null, score4: null, letter: null };
+  const transcriptOf = () => transcript([
+    { year: "2024-2025", semester: "HK01", rows: [{ code: "71PEKC10062", credits: 2, letter: "B" }, { code: "71PEBB10032", credits: 2, score10: 3, score4: 0, letter: "F" }] },
+    { year: "2023-2024", semester: "HK03", rows: [{ code: "71PEVB10022", credits: 2, score10: 8.6, score4: 3.7, letter: "A" }] },
+    { year: "2025-2026", semester: "HK01", rows: [{ code: "71PETT10012", credits: 2, ...registered }] },
+  ]);
+
+  it("reads the number of a numbered GDTC course, never another course", () => {
+    expect(["Giáo dục thể chất (1)", "Giáo dục thể chất 2 (*)", "GDTC 1", "GDTC2", " giáo  dục thể chất(3) "].map(physicalEducationNumber)).toEqual([1, 2, 1, 2, 3]);
+    expect(["Giáo dục thể chất", "Bóng chuyền", "Giáo dục thể chất 1 - Bóng chuyền", "Giáo dục quốc phòng (1)"].map(physicalEducationNumber)).toEqual([null, null, null, null]);
+  });
+
+  it("fills GDTC 1 with the earliest passed elective and GDTC 2 with the next; a failed one fills nothing, one in progress comes last", () => {
+    const records = transcriptCourses(transcriptOf());
+    // Bóng chuyền HK233 before Cờ vua HK241; Bóng rổ failed; Bóng bàn registered only.
+    expect(physicalEducationFills(htttK29, records)).toEqual([{ code: "DGT0010", viaCode: "71PEVB10022" }, { code: "DGT0020", viaCode: "71PEKC10062" }]);
+    // With one passed elective, the one being studied fills GDTC 2: "Đang học".
+    const one = transcriptCourses(transcript([
+      { year: "2023-2024", semester: "HK03", rows: [{ code: "71PEVB10022", credits: 2, letter: "A" }, { code: "71PEBB10032", credits: 2, score10: 3, score4: 0, letter: "F" }] },
+      { year: "2025-2026", semester: "HK01", rows: [{ code: "71PETT10012", credits: 2, ...registered }] },
+    ]));
+    const fills = physicalEducationFills(htttK29, one);
+    expect(fills).toEqual([{ code: "DGT0010", viaCode: "71PEVB10022" }, { code: "DGT0020", viaCode: "71PETT10012" }]);
+    const filled = withPhysicalEducationFills(one, fills);
+    expect(filled.get("DGT0010")).toMatchObject({ code: "DGT0010", state: "passed", selected: { code: "DGT0010", letter: "A", termCode: "HK233" } });
+    expect(filled.get("DGT0020")).toMatchObject({ state: "in_progress", attempts: [{ termCode: "HK251", graded: false }] });
+    // The electives are counted on their GDTC course only; the failed one stays as it was; the records given are untouched.
+    expect([...filled.keys()].sort()).toEqual(["71PEBB10032", "DGT0010", "DGT0020"]);
+    expect(one.has("71PEVB10022") && !one.has("DGT0010")).toBe(true);
+  });
+
+  it("leaves a GDTC course passed under its own code, and fills the next one", () => {
+    const data = transcriptOf();
+    data.sections[1]!.courses.push({ ordinal: 9, code: "DGT0010", name: "Giáo dục thể chất (1)", credits: 0, score10: 7, score4: 3, letter: "B", result: null, conditional: false, sourcePage: 1 });
+    const records = transcriptCourses(data);
+    expect(physicalEducationFills(htttK29, records)).toEqual([{ code: "DGT0020", viaCode: "71PEVB10022" }]);
+    // A failed own attempt does not stop the fill: the course holds both attempts and reads passed.
+    const failed = transcriptCourses(transcript([
+      { year: "2023-2024", semester: "HK02", rows: [{ code: "DGT0010", credits: 0, score10: 2, score4: 0, letter: "F" }] },
+      { year: "2023-2024", semester: "HK03", rows: [{ code: "71PEVB10022", credits: 2, letter: "A" }] },
+    ]));
+    const merged = withPhysicalEducationFills(failed, physicalEducationFills(htttK29, failed)).get("DGT0010");
+    expect(merged).toMatchObject({ state: "passed", attempts: [{ letter: "F" }, { letter: "A", code: "DGT0010" }], selected: { letter: "A" } });
+  });
+
+  it("changes nothing for a CTĐT that lists the PE electives itself (K29–K31 CNTT: TC002/TC102), nor without a numbered course", () => {
+    const records = transcriptCourses(transcriptOf());
+    const cntt = [{ code: "71PEVB10022", name: "Bóng chuyền" }, { code: "71PEKC10062", name: "Cờ vua" }, { code: "71NAD110013", name: "GDQP1" }];
+    expect(physicalEducationFills(cntt, records)).toEqual([]);
+    // Both kinds listed: only an elective the CTĐT does not list fills a numbered course.
+    expect(physicalEducationFills([...htttK29, { code: "71PEVB10022", name: "Bóng chuyền" }], records))
+      .toEqual([{ code: "DGT0010", viaCode: "71PEKC10062" }, { code: "DGT0020", viaCode: "71PETT10012" }]);
+    expect(withPhysicalEducationFills(records, [])).toEqual(records);
   });
 });

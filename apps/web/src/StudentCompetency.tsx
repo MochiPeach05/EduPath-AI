@@ -7,7 +7,7 @@ import { specialtyLabel, type AiStatus, type AssessmentResult, type AssessmentSt
 import {
   CHART_LEVELS, COMPETENCY_API, CONFIDENCE_LABELS, COURSE_STATE_LABELS, EMPTY_SKILL_FILTERS, FIT_LABELS, FIT_SCALE, LEVEL_COLUMNS, LEVEL_LABELS, LEVEL_SCALE, LEVEL_THRESHOLDS, PRECONDITION_COPY, PRIORITY_LABELS, UNSCORED_STATES,
   aiErrorMessage, aiReasoned, aiStateCopy, bucketSkills, canRegenerate, careerDataText, careerSkillKeys, careerThresholdsLine, chartLevelLabel, choiceLabel, confidentStrengths, courseTermText, currentImprovements, courseStanding, dataUsedLine, displayLevel, eligibilityDisplay, errorMessage, filterSkills, fitLevelOf, fitScoreOf, fitStep, formatDateTime,
-  careerSummaryText, formatDifference, formatNumber, formatPercent, formatScore, gapHistory, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isOverdue, isPreconditionError, levelChart, levelSentence, levelStep, nextCourseCount, nextTermOf, noCreditSkill, overallIsPooled, overdueText, countsFromStudyTerm, thesisByGpa, lateBeforeStudyTerm, levelSummary, levelText, mapAiOutput, missingRequirements, skillGroupKeys, missingRequirementsMessage, modelLabel, modelPlace, needsSelfStudy,
+  careerSummaryText, formatDifference, formatNumber, formatPercent, formatScore, gapHistory, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isOverdue, isPreconditionError, levelChart, levelSentence, levelStep, nextCourseCount, nextTermOf, noCreditSkill, overallIsPooled, overdueText, countsFromStudyTerm, thesisByGpa, lateBeforeStudyTerm, physicalEducationOutdated, levelSummary, levelText, mapAiOutput, missingRequirements, skillGroupKeys, missingRequirementsMessage, modelLabel, modelPlace, needsSelfStudy,
   plannedCourseNote, plansFor, relatedSkillNames, scoreDifference, shouldPoll, skillName, sortRequirements, studyTermOf, upcomingText, withCurrentLevels, type ChartLevel, type DisplayLevel, type FitLevel, type LevelBar, type LevelSegment, type MappedAiOutput, type PreconditionError, type SkillFilters, type StatusTone,
   fitMeaning, historyTermName, levelMeaning, noGapText, scoreSources, scoreSourcesText,
   careerRaise, hasCompetencyContent, hasGapContent, normalizePreviousComment, ownComment, previousComment, PREVIOUS_COMMENT_NOTE,
@@ -1049,6 +1049,7 @@ export default function StudentCompetency({ profile, view = "competency", notice
 
   // Stored scores are read on the current level scale (comp-calc-v10), older results included.
   const result = useMemo(() => (assessment ? withCurrentLevels(assessment.result) : null), [assessment]);
+  const peOutdated = result ? physicalEducationOutdated(result) : null;
   const mapped = useMemo(() => assessment && result && assessment.ai.status === "completed" ? mapAiOutput(assessment.ai.output, result) : null, [assessment, result]);
   // The result was computed for meta.specialty / meta.career; say so when the profile changed since.
   // profile.specialty is undefined only while an older API is serving: skip that comparison then.
@@ -1073,6 +1074,7 @@ export default function StudentCompetency({ profile, view = "competency", notice
       {profileChanged && <p className="scomp-meta">Hồ sơ đã thay đổi sau lần đánh giá này. Bấm “Đánh giá lại” để cập nhật kết quả.</p>}
       {result && !thesisByGpa(result.meta.calcVersion) && <p className="scomp-meta">Kết quả này được tính trước khi hệ thống chọn giữa Đồ án tốt nghiệp và Chuyên đề tốt nghiệp theo điểm TB tích lũy (từ 2,80 đề xuất làm đồ án tốt nghiệp). Bấm “Đánh giá lại” để cập nhật gợi ý học phần.</p>}
       {result && view === "competency" && !lateBeforeStudyTerm(result.meta.calcVersion) && <p className="scomp-meta">Kết quả này được tính trước khi hệ thống sửa cách tính tiến độ: môn của học kỳ đang học không còn bị tính là chậm, tín chỉ môn điều kiện (GDTC, GDQP) không được cộng, và nhóm tự chọn ghi đúng số tín chỉ còn thiếu. Bấm “Đánh giá lại” để cập nhật.</p>}
+      {result && peOutdated && <p className="scomp-meta">Kết quả này được tính trước khi hệ thống ghi nhận học phần giáo dục thể chất bạn đã học ({peOutdated.join(", ")}) cho các học phần Giáo dục thể chất trong chương trình đào tạo. Bấm “Đánh giá lại” để cập nhật.</p>}
       {assessment && <p className="scomp-data-line">{dataUsedLine(assessment)}</p>}
       <p className="scomp-live" role="status" aria-live="polite" aria-atomic="true">{announcement}</p>
       {error && <div className="sr-error" role="alert">{error}</div>}
