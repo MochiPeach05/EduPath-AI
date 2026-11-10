@@ -9,6 +9,7 @@ import {
 import { meaningClass } from "./display-format";
 import { fitMeaning } from "./student-competency-data";
 import { isAdvisorView } from "./advisor-view";
+import { ActingConfirmDialog, goalsConfirm } from "./acting-confirm";
 import "./career-guidance.css";
 
 // "Định hướng nghề nghiệp" (#career, user 2026-10-24: "làm theo ý bạn muốn nhưng vẫn phải phù hợp với đề tài"): the
@@ -20,6 +21,8 @@ import "./career-guidance.css";
 // and the survey matches side by side, then every career folded.
 // One term for a career of the catalog, "vị trí nghề nghiệp" ("vị trí" once named in the same place), since 2026-10-31 (advisor:
 // "Thống nhất thuật ngữ 'Vị trí nghề nghiệp' trên toàn hệ thống").
+// A cố vấn học tập or a Khoa admin working in the student's page chooses the target too, after a confirmation (user
+// 2026-11-10, policy 2026-11-10; acting-confirm.tsx); the API logs it and tells the student (advisors/access.ts).
 
 /** link: the text asks to re-assess, so the notice links to Đánh giá năng lực. */
 type Notice = { tone: "success" | "error"; text: string; link?: boolean } | null;
@@ -122,7 +125,7 @@ function TopPick({ career, scored, saving, onDetail, onChoose }: { career: Guida
       </ul>
       <div className="cg-top-actions">
         {career.isTarget ? <TargetTag action />
-          : isAdvisorView() ? null : <button type="button" className="sw-primary" disabled={saving} onClick={onChoose}><Icon name="check" />{saving ? "Đang lưu…" : "Chọn làm vị trí nghề nghiệp mục tiêu"}</button>}
+          : <button type="button" className="sw-primary" disabled={saving} onClick={onChoose}><Icon name="check" />{saving ? "Đang lưu…" : "Chọn làm vị trí nghề nghiệp mục tiêu"}</button>}
         <button type="button" className="sr-secondary" onClick={onDetail} aria-label={`Xem chi tiết ${career.nameVi}`}><Icon name="eye" />Xem chi tiết</button>
       </div>
     </div>
@@ -210,7 +213,7 @@ function DetailDialog({ career, saving, compared, compareFull, onCompare, onChoo
       <div className="cg-dialog-actions">
         <CompareButton career={career} compared={compared} full={compareFull} long onToggle={onCompare} />
         {career.isTarget ? <TargetTag action />
-          : isAdvisorView() ? null : <button type="button" className="sw-primary" disabled={saving} onClick={onChoose}><Icon name="check" />{saving ? "Đang lưu…" : "Chọn làm vị trí nghề nghiệp mục tiêu"}</button>}
+          : <button type="button" className="sw-primary" disabled={saving} onClick={onChoose}><Icon name="check" />{saving ? "Đang lưu…" : "Chọn làm vị trí nghề nghiệp mục tiêu"}</button>}
       </div>
     </footer>
   </dialog>;
@@ -327,6 +330,9 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
       : { tone: "success", text: `Đã chọn ${career.nameVi} làm vị trí nghề nghiệp mục tiêu. Bấm Đánh giá lại ở trang Đánh giá năng lực để cập nhật Khoảng trống kỹ năng và Lộ trình học tập theo vị trí mới.`, link: true });
     setSaving(null);
   }, [onProfileChanged]);
+  // Working for the student, the choice is confirmed first; the student chooses at once.
+  const [confirming, setConfirming] = useState<GuidanceCareer | null>(null);
+  const pick = useCallback((career: GuidanceCareer) => { if (isAdvisorView()) setConfirming(career); else void choose(career); }, [choose]);
 
   // The chosen row's button gives way to "Vị trí nghề nghiệp mục tiêu": keyboard focus goes to the notice instead of the page top.
   useEffect(() => {
@@ -388,7 +394,7 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
 
     {!data.blocked && <>
       <div className="cg-level"><h3 id="cg-best-title">{heading.title}</h3><p>{heading.note}</p></div>
-      {picks.top ? <TopPick career={picks.top} scored={picks.scored} saving={saving === picks.top.id} onDetail={openDetail(picks.top)} onChoose={() => void choose(picks.top!)} />
+      {picks.top ? <TopPick career={picks.top} scored={picks.scored} saving={saving === picks.top.id} onDetail={openDetail(picks.top)} onChoose={() => pick(picks.top!)} />
         : <p className="cg-empty">Chưa đủ dữ liệu để gợi ý: các kỹ năng của các vị trí nghề nghiệp chưa được đo bằng học phần bạn đã học.</p>}
 
       <div className="cg-level"><h3>Các lựa chọn khác</h3><p>Không lặp lại vị trí đã hiện ở trên.</p></div>
@@ -455,8 +461,10 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
     </div>}
 
     {detail && <DetailDialog career={detail} saving={saving === detail.id} compared={compare.includes(detail.id)} compareFull={compareFull}
-      onCompare={toggle(detail)} onChoose={() => void choose(detail)} onClose={() => setDetailId(null)} />}
+      onCompare={toggle(detail)} onChoose={() => pick(detail)} onClose={() => setDetailId(null)} />}
     {compareOpen && <CompareDialog careers={compared} onRemove={removeCompared}
       onClear={() => { setCompare([]); setCompareOpen(false); }} onClose={() => setCompareOpen(false)} />}
+    {confirming && <ActingConfirmDialog {...goalsConfirm({ career: confirming.nameVi }, "Chọn làm mục tiêu")} onClose={() => setConfirming(null)}
+      onConfirm={() => { setConfirming(null); void choose(confirming); }} />}
   </div>;
 }

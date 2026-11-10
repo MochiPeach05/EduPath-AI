@@ -5,12 +5,16 @@ import StudentCareerExplorer from "./StudentCareerExplorer";
 import { specialtiesFor, specialtyLabel } from "./competency-assessment-types";
 import { PROFILE_SECTIONS } from "./student-overview-data";
 import { isAdvisorView } from "./advisor-view";
+import { ActingConfirmDialog, goalsConfirm } from "./acting-confirm";
 import "./student-records.css";
 // "Sở thích" (technologies and free-time interests) moved into Khảo sát định hướng on 2026-10-24 (StudentProfileSurvey).
 // "Mục tiêu học tập" (was "Thông tin cá nhân"): the career and the specialty, changed in one place (user 2026-11-03: "chỉ có
 // ấn vào chỉnh sửa mới cho sửa Chọn vị trí nghề nghiệp mục tiêu luôn đi chia ra 2 lối quá"): "Chỉnh sửa thông tin" opens the
 // form, where Khám phá vị trí nghề nghiệp picks the career into the draft; "Lưu thay đổi" saves the career and the specialty
 // together and Hủy drops both. Outside the form the eye icon only shows the chosen career's requirements.
+// A cố vấn học tập or a Khoa admin working in the student's page changes them the same way (user 2026-11-10: "có thể sửa
+// chuyên ngành và nghề nghiệp của sinh viên luôn", policy 2026-11-10), after a confirmation (acting-confirm.tsx); the API
+// logs it and tells the student (advisors/access.ts).
 type EditableStudentProfile = {
   /** The programme of the MSSV (052): the specialties offered are those of this major. */
   majorCode?: string | null;
@@ -22,7 +26,8 @@ type EditableStudentProfile = {
   cohortCode?: string | null;
 };
 type ProfileChanges = { careerPositionId?: string | null; specialty?: string | null };
-async function updateProfile(input: ProfileChanges) {
+/** advisorView: the words of a refusal speak of the student, not of the reader. */
+async function updateProfile(input: ProfileChanges, advisorView = false) {
   const res = await fetch("/api/student/profile", {
     method: "PATCH",
     credentials: "include",
@@ -36,7 +41,7 @@ async function updateProfile(input: ProfileChanges) {
       body.error === "career_unavailable"
         ? "Vị trí nghề nghiệp này vừa bị xóa khỏi danh mục. Hãy chọn vị trí nghề nghiệp khác."
         : body.error === "specialty_unavailable"
-          ? "Chuyên ngành này không áp dụng cho khóa của bạn. Hãy chọn chuyên ngành khác."
+          ? `Chuyên ngành này không áp dụng cho khóa của ${advisorView ? "sinh viên" : "bạn"}. Hãy chọn chuyên ngành khác.`
         : res.status === 401
           ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
           : res.status === 400
@@ -68,8 +73,9 @@ export default function StudentProfileEditor({
   useEffect(() => setSaved(null), [profile]);
   const shown: EditableStudentProfile = saved ? { ...profile, ...saved } : profile;
   const supportsSpecialty = profile.specialty !== undefined;
-  // A cố vấn học tập sees the goals; the student alone chooses them (policy 2026-11-03).
+  // A cố vấn học tập or a Khoa admin in the student's page: confirms before saving (policy 2026-11-10).
   const advisorView = isAdvisorView();
+  const [confirming, setConfirming] = useState<ProfileChanges | null>(null);
   // Keyboard focus after the next render, since the button that was used is gone by then (Chỉnh sửa, Hủy, Lưu).
   const editButton = useRef<HTMLButtonElement>(null);
   const form = useRef<HTMLFormElement>(null);
@@ -99,19 +105,14 @@ export default function StudentProfileEditor({
     setExplorer(null);
     setError("");
   };
-  const save = async (event: FormEvent) => {
-    event.preventDefault();
+  const send = async (changes: ProfileChanges) => {
     setBusy(true);
     setError("");
     setMessage("");
     try {
-      // Sent only when changed: "absent" keeps the stored value.
-      const changes: ProfileChanges = {};
-      if (draft.careerPositionId !== (shown.careerPositionId ?? "")) changes.careerPositionId = draft.careerPositionId || null;
-      if (supportsSpecialty && draft.specialty !== (shown.specialty ?? "")) changes.specialty = draft.specialty || null;
-      await updateProfile(changes);
+      await updateProfile(changes, advisorView);
       setSaved((current) => ({ ...current, ...changes, ...("careerPositionId" in changes ? { careerPosition: draftCareer } : {}) }));
-      setMessage("Đã cập nhật mục tiêu học tập.");
+      setMessage(advisorView ? "Đã cập nhật mục tiêu học tập của sinh viên." : "Đã cập nhật mục tiêu học tập.");
       stopEditing();
       onSaved();
     } catch (e) {
@@ -120,11 +121,27 @@ export default function StudentProfileEditor({
       setBusy(false);
     }
   };
+  const save = (event: FormEvent) => {
+    event.preventDefault();
+    // Sent only when changed: "absent" keeps the stored value.
+    const changes: ProfileChanges = {};
+    if (draft.careerPositionId !== (shown.careerPositionId ?? "")) changes.careerPositionId = draft.careerPositionId || null;
+    if (supportsSpecialty && draft.specialty !== (shown.specialty ?? "")) changes.specialty = draft.specialty || null;
+    if (!advisorView) { void send(changes); return; }
+    // Working for the student: what changes is confirmed first; with nothing changed nothing is sent (the API takes only
+    // the specialty and the career, advisors/access.ts).
+    if (Object.keys(changes).length) setConfirming(changes);
+    else { setError(""); stopEditing(); }
+  };
+  const confirmText = confirming && goalsConfirm({
+    ...("specialty" in confirming ? { specialty: confirming.specialty ? specialtyLabel(confirming.specialty) : null } : {}),
+    ...("careerPositionId" in confirming ? { career: confirming.careerPositionId ? draftCareer?.nameVi ?? "vị trí đã chọn" : null } : {}),
+  });
   return (
     <section className="sw-panel sr-editor" id={PROFILE_SECTIONS.goals} aria-labelledby="sr-goals-title">
       <div className="sw-section-heading">
         <h2 id="sr-goals-title" tabIndex={-1}>Mục tiêu học tập</h2>
-        {!editing && !advisorView && (
+        {!editing && (
           <button ref={editButton} type="button" className="sw-text-link" onClick={startEditing}>
             <Icon name="edit" />
             Chỉnh sửa thông tin
@@ -142,7 +159,7 @@ export default function StudentProfileEditor({
         </p>
       )}
       {editing ? (
-        <form ref={form} onSubmit={(e) => void save(e)}>
+        <form ref={form} onSubmit={save}>
           <fieldset disabled={busy} className="sr-form-fields">
             <div className="sr-wide sr-career-target">
               <strong>Vị trí nghề nghiệp mục tiêu</strong>
@@ -162,7 +179,7 @@ export default function StudentProfileEditor({
                 {specialtiesFor(profile.cohortCode, profile.majorCode).map((item) => <option key={item.code} value={item.code}>{item.label}</option>)}
                 <option value="">Chưa xác định</option>
               </select>
-              <small id="sr-specialty-hint">Cùng với khóa, dùng để chọn tiêu chuẩn xét tốt nghiệp của bạn và học phần chuyên ngành khi đánh giá năng lực.</small>
+              <small id="sr-specialty-hint">Cùng với khóa, dùng để chọn tiêu chuẩn xét tốt nghiệp của {advisorView ? "sinh viên" : "bạn"} và học phần chuyên ngành khi đánh giá năng lực.</small>
               {!draft.specialty && <small id="sr-specialty-warning" className="sr-field-warning">Cần chọn chuyên ngành để dùng Đánh giá năng lực.</small>}
             </label>}
           </fieldset>
@@ -211,8 +228,9 @@ export default function StudentProfileEditor({
           </div>}
         </dl>
       )}
-      {advisorView && <p className="sw-advisor-note">Sinh viên tự chọn chuyên ngành và vị trí nghề nghiệp mục tiêu; bạn chỉ xem.</p>}
       {explorer && <StudentCareerExplorer mode={explorer.mode} selectedId={shown.careerPositionId ?? ""} initialCareerId={explorer.initialCareerId} onSelect={pickCareer} onClose={() => setExplorer(null)} />}
+      {confirming && confirmText && <ActingConfirmDialog {...confirmText} onClose={() => setConfirming(null)}
+        onConfirm={() => { setConfirming(null); void send(confirming); }} />}
     </section>
   );
 }

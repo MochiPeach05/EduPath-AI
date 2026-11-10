@@ -49,6 +49,8 @@ function setup(user: AuthenticatedUser | null, row: Record<string, unknown> | nu
     return { rowCount: 0, rows: [] };
   });
   const app = express();
+  // As in app.ts, the JSON body is read before advisorActing (the profile rules look at its fields).
+  app.use(express.json());
   app.use(((req, _res, next) => { req.session = { user: user ?? undefined } as typeof req.session; next(); }) as RequestHandler);
   app.use("/api/student", advisorActing({ query } as never, staffDomains, createStudentViews()));
   const who: RequestHandler = (req, res) => {
@@ -163,6 +165,41 @@ describe("a cố vấn học tập in a student's page (advisorActing)", () => {
     expect(notification[8]).toMatch(new RegExp(`^advisor:transcript:${ADVISOR_ID}:\\d{4}-\\d{2}-\\d{2}$`));
   });
 
+  it("changes the specialty and the target vị trí nghề nghiệp for the student, logged and told (user 2026-11-10)", async () => {
+    const CAREER = "5d6e7f80-9a1b-4c2d-8e3f-4a5b6c7d8e9f";
+    const cases = [
+      [{ specialty: "CNPM" }, "Đổi chuyên ngành thay sinh viên", "Cố vấn học tập đã đổi chuyên ngành thay bạn", "#profile", "specialty"],
+      [{ careerPositionId: CAREER }, "Đổi vị trí nghề nghiệp mục tiêu thay sinh viên", "Cố vấn học tập đã đổi vị trí nghề nghiệp mục tiêu thay bạn", "#career", "career"],
+      [{ careerPositionId: null, specialty: null }, "Đổi chuyên ngành và vị trí nghề nghiệp mục tiêu thay sinh viên",
+        "Cố vấn học tập đã đổi chuyên ngành và vị trí nghề nghiệp mục tiêu thay bạn", "#profile", "goals"],
+    ] as const;
+    for (const [body, action, title, link, key] of cases) {
+      const { app, writes } = setup(advisor);
+      const answer = await request(app).patch("/api/student/profile").set("X-Advisor-Student", STUDENT_ID).send(body).expect(200);
+      expect(answer.body).toMatchObject({ student: STUDENT_ID, advisor: ADVISOR_ID });
+      await vi.waitFor(() => expect(writes).toHaveLength(2));
+      expect(writes.find((write) => write.table === "audit")!.values.slice(5, 11)).toEqual([action,
+        "2374802010994 – Sinh viên Thử nghiệm (lớp 71K29CNTT99)", "student", STUDENT_ID, "PATCH", "/api/student/profile"]);
+      const notification = writes.find((write) => write.table === "notification")!.values;
+      expect(notification.slice(1, 5)).toEqual([STUDENT_ID, "khoa", "advisor_action", title]);
+      expect(notification[5]).toBe(`ThS. Nguyễn Văn Cố Vấn (cố vấn học tập của lớp bạn) ${title.replace("Cố vấn học tập ", "")} trên EduPath AI. `
+        + "Bạn xem lại lựa chọn này; nếu chưa đúng ý, bạn vẫn tự đổi lại được như thường.");
+      expect(notification[6]).toBe(link);
+      expect(notification[8]).toMatch(new RegExp(`^advisor:${key}:${ADVISOR_ID}:\\d{4}-\\d{2}-\\d{2}$`));
+    }
+  });
+
+  it.each([
+    ["no field", {}], ["the survey's old interests", { interests: "Lập trình" }], ["the term", { currentSemester: 2 }],
+    ["the specialty with the class", { specialty: "CNPM", className: "71K29CNTT01" }], ["the interest lists", { careerPositionId: null, interestTech: [], interestHobbies: [] }],
+  ])("keeps the rest of the profile the student's: %s", async (_what, body) => {
+    const { app, writes } = setup(advisor);
+    expect((await request(app).patch("/api/student/profile").set("X-Advisor-Student", STUDENT_ID).send(body).expect(403)).body)
+      .toEqual({ error: "advisor_action_not_allowed" });
+    await settle();
+    expect(writes).toEqual([]);
+  });
+
   it("writes nothing when the action fails", async () => {
     const { app, writes } = setup(advisor, advisedRow, 409);
     await request(app).post("/api/student/transcript").set("X-Advisor-Student", STUDENT_ID).expect(409);
@@ -184,6 +221,11 @@ describe("a cố vấn học tập in a student's page (advisorActing)", () => {
 
   it("matches only the listed paths", () => {
     expect(actingAction("POST", "/transcript")?.key).toBe("transcript");
+    expect(actingAction("PATCH", "/profile")).toBeNull();
+    expect(actingAction("PATCH", "/profile", { specialty: "CNPM" })?.key).toBe("specialty");
+    expect(actingAction("PATCH", "/profile", { specialty: null, careerPositionId: null })?.key).toBe("goals");
+    expect(actingAction("PATCH", "/profile", ["specialty"])).toBeNull();
+    expect(actingAction("PATCH", "/profile", { specialty: "CNPM", interests: null })).toBeNull();
     expect(actingAction("POST", "/transcript/")).toBeNull();
     expect(actingAction("DELETE", "/transcript")).toBeNull();
     expect(actingAction("POST", "/assistant/threads")?.did).toBe("đã hỏi Trợ lý AI");
@@ -244,7 +286,7 @@ describe("a quản trị viên or Ban chủ nhiệm khoa in a student's page (QT
   it("holds an admin to the same actions as an advisor", async () => {
     const { app, writes } = setup(qtv, null, 200, anyRow);
     expect((await request(app).get("/api/student/notifications").set("X-Advisor-Student", STUDENT_ID).expect(403)).body).toEqual({ error: "advisor_action_not_allowed" });
-    expect((await request(app).patch("/api/student/profile").set("X-Advisor-Student", STUDENT_ID).expect(403)).body).toEqual({ error: "advisor_action_not_allowed" });
+    expect((await request(app).patch("/api/student/profile").set("X-Advisor-Student", STUDENT_ID).send({ currentSemester: 2 }).expect(403)).body).toEqual({ error: "advisor_action_not_allowed" });
     expect((await request(app).delete("/api/student/transcript").set("X-Advisor-Student", STUDENT_ID).expect(403)).body).toEqual({ error: "advisor_action_not_allowed" });
     await settle();
     expect(writes).toEqual([]);
@@ -261,6 +303,17 @@ describe("a quản trị viên or Ban chủ nhiệm khoa in a student's page (QT
     expect(notification[4]).toBe("Quản trị viên của Khoa đã import bảng điểm thay bạn");
     expect(String(notification[5])).toContain("Trần Thị Quản Trị (quản trị viên của Khoa) đã import bảng điểm thay bạn trên EduPath AI.");
     expect(notification[8]).toMatch(new RegExp(`^advisor:transcript:${ADMIN_ID}:\\d{4}-\\d{2}-\\d{2}$`));
+  });
+
+  it("lets an admin change the target vị trí nghề nghiệp and tells the student a quản trị viên of the Khoa did it", async () => {
+    const { app, writes } = setup(qtv, null, 200, anyRow);
+    await request(app).patch("/api/student/profile").set("X-Advisor-Student", STUDENT_ID).send({ careerPositionId: STUDENT_ID }).expect(200);
+    await vi.waitFor(() => expect(writes).toHaveLength(2));
+    expect(writes.find((write) => write.table === "audit")!.values.slice(1, 6)).toEqual([ADMIN_ID, "Trần Thị Quản Trị", "admin", "advisor",
+      "Đổi vị trí nghề nghiệp mục tiêu thay sinh viên"]);
+    const notification = writes.find((write) => write.table === "notification")!.values;
+    expect(notification[4]).toBe("Quản trị viên của Khoa đã đổi vị trí nghề nghiệp mục tiêu thay bạn");
+    expect(String(notification[5])).toMatch(/^Trần Thị Quản Trị \(quản trị viên của Khoa\) đã đổi vị trí nghề nghiệp mục tiêu thay bạn trên EduPath AI\./);
   });
 
   it("names an admin who advises the student's class as the class's cố vấn học tập", async () => {

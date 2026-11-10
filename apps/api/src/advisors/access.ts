@@ -2,8 +2,9 @@
 // the page of a student of a class they advise in a tab of its own: that tab's web code sends X-Advisor-Student with every
 // /api/student request (apps/web/src/advisor-view.ts), and advisorActing checks on each request that the signed-in
 // admin-portal account still advises the student's class. The student routers read the student through studentUser().
-// Only what the policy lets an advisor do for the student passes (ACTING_ACTIONS: import the transcript, the competency
-// assessment and its AI comment, the AI roadmap, the graduation advice, Trợ lý AI), even without the student's consent
+// Only what the policy lets an advisor do for the student passes (ACTING_ACTIONS: import the transcript, the specialty and
+// the target vị trí nghề nghiệp (policy 2026-11-10), the competency assessment and its AI comment, the AI roadmap, the
+// graduation advice, Trợ lý AI), even without the student's consent
 // (user: "Cho làm, báo sinh viên"); no consent is recorded in the student's name. Each such action is logged (kind
 // 'advisor') and told to the student by a notification. Reads pass, except the student's own notifications. In the admin
 // portal the role 'advisor' only reads what its rows of the function list show (advisorReadOnly). Since the user's
@@ -135,12 +136,28 @@ export async function advisedStudent(db: Db, account: Pick<AuthenticatedUser, "u
 
 /**
  * What an advisor may do in a student's page (user, 2026-11-03: import bảng điểm, đánh giá năng lực, Lộ trình AI, Trợ lý
- * AI). action names the row of the log; did, link and key make the student's notification ("Cố vấn học tập đã import bảng
- * điểm thay bạn"), at most one per advisor, key and day. Paths are under /api/student.
+ * AI; 2026-11-10: the specialty and the target vị trí nghề nghiệp too). action names the row of the log; did, link and key
+ * make the student's notification ("Cố vấn học tập đã import bảng điểm thay bạn"), at most one per advisor, key and day;
+ * after is its last sentence when the usual one does not fit. fields: the request's JSON body must have exactly these
+ * fields (the other fields of the same route stay the student's). Paths are under /api/student.
  */
-export type ActingAction = { method: "POST" | "PUT" | "PATCH" | "DELETE"; path: RegExp; action: string; did?: string; link?: string; key?: string; log?: false };
+export type ActingAction = {
+  method: "POST" | "PUT" | "PATCH" | "DELETE"; path: RegExp; action: string; did?: string; link?: string; key?: string; log?: false;
+  fields?: readonly string[]; after?: string;
+};
+/** The last sentence of the notification of a changed specialty or target: the student changes it back as before. */
+const GOALS_AFTER = "Bạn xem lại lựa chọn này; nếu chưa đúng ý, bạn vẫn tự đổi lại được như thường.";
 export const ACTING_ACTIONS: readonly ActingAction[] = [
   { method: "POST", path: /^\/transcript$/, action: "Import bảng điểm thay sinh viên", did: "đã import bảng điểm", link: "#profile", key: "transcript" },
+  // Mục tiêu học tập (user 2026-11-10: "có thể sửa chuyên ngành và nghề nghiệp của sinh viên luôn"): the specialty, the
+  // target vị trí nghề nghiệp or both, as the student changes them (Hồ sơ và bảng điểm, Định hướng nghề nghiệp), with the
+  // same checks of PATCH /profile; its other fields are refused.
+  { method: "PATCH", path: /^\/profile$/, fields: ["specialty"], action: "Đổi chuyên ngành thay sinh viên", did: "đã đổi chuyên ngành",
+    link: "#profile", key: "specialty", after: GOALS_AFTER },
+  { method: "PATCH", path: /^\/profile$/, fields: ["careerPositionId"], action: "Đổi vị trí nghề nghiệp mục tiêu thay sinh viên",
+    did: "đã đổi vị trí nghề nghiệp mục tiêu", link: "#career", key: "career", after: GOALS_AFTER },
+  { method: "PATCH", path: /^\/profile$/, fields: ["careerPositionId", "specialty"], action: "Đổi chuyên ngành và vị trí nghề nghiệp mục tiêu thay sinh viên",
+    did: "đã đổi chuyên ngành và vị trí nghề nghiệp mục tiêu", link: "#profile", key: "goals", after: GOALS_AFTER },
   { method: "DELETE", path: /^\/transcript\/job$/, action: "Hủy lần import bảng điểm đang chạy" },
   { method: "POST", path: /^\/competency-assessments$/, action: "Đánh giá năng lực thay sinh viên", did: "đã chạy Đánh giá năng lực", link: "#competency", key: "assessment" },
   { method: "POST", path: /^\/competency-assessments\/[^/]+\/ai$/, action: "Tạo lại nhận xét năng lực thay sinh viên" },
@@ -156,8 +173,15 @@ export const ACTING_ACTIONS: readonly ActingAction[] = [
 /** Reads an advisor does not get: the student's own notifications (the bell). */
 export const ACTING_CLOSED_READS: readonly RegExp[] = [/^\/notifications(\/|$)/];
 
-export function actingAction(method: string, path: string): ActingAction | null {
-  return ACTING_ACTIONS.find((rule) => rule.method === method && rule.path.test(path)) ?? null;
+/** The fields of a JSON object body; null for no body or anything else. */
+const bodyFields = (body: unknown): string[] | null =>
+  body !== null && typeof body === "object" && !Array.isArray(body) ? Object.keys(body) : null;
+
+/** The rule that lets an advisor send this request for the student, or null. body: the parsed JSON body. */
+export function actingAction(method: string, path: string, body?: unknown): ActingAction | null {
+  const fields = bodyFields(body);
+  return ACTING_ACTIONS.find((rule) => rule.method === method && rule.path.test(path) && (!rule.fields
+    || (fields !== null && fields.length === rule.fields.length && rule.fields.every((field) => fields.includes(field))))) ?? null;
 }
 
 /** The day in Vietnam ("2026-11-03"), for the one-notification-a-day key. */
@@ -209,7 +233,7 @@ export function advisorActing(db: Db | undefined, staffEmailDomains: ReadonlySet
       const student = await advisedStudent(db, user, target);
       if (!student) { response.status(403).json({ error: "advisor_student_forbidden" }); return; }
       const read = request.method === "GET" || request.method === "HEAD";
-      const action = read ? null : actingAction(request.method, request.path);
+      const action = read ? null : actingAction(request.method, request.path, request.body);
       if (read ? ACTING_CLOSED_READS.some((rule) => rule.test(request.path)) : !action) {
         response.status(403).json({ error: "advisor_action_not_allowed" }); return;
       }
@@ -235,7 +259,7 @@ export function advisorActing(db: Db | undefined, staffEmailDomains: ReadonlySet
           });
           if (action.did && action.link && action.key) {
             void notifySafely(db, student.user.userId,
-              advisorAction(student.actorName, action.did, action.link, vietnamDay(), `${action.key}:${user.userId}`, student.actorKind));
+              advisorAction(student.actorName, action.did, action.link, vietnamDay(), `${action.key}:${user.userId}`, student.actorKind, action.after));
           }
         });
       }

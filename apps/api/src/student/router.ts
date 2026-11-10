@@ -37,6 +37,8 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
     next();
   });
 
+  // A cố vấn học tập or a Khoa admin working in the student's page sends only specialty and/or careerPositionId here,
+  // checked the same way (advisors/access.ts ACTING_ACTIONS, policy 2026-11-10); the other fields stay the student's.
   router.patch("/profile", async (req, res) => {
     const input = z.object({
       className: z.string().trim().max(32).regex(/^[\p{L}\p{N} _.-]*$/u).nullable().optional(),

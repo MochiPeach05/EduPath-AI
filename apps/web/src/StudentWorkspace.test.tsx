@@ -145,7 +145,7 @@ describe("a cố vấn học tập's tab (AD-AST-05…08)", () => {
   it("says whose page it is and what the advisor may do, with the way out instead of logging out", () => {
     const html = render("#overview", advisor);
     expect(html).toContain("với tư cách cố vấn học tập (Cố vấn Thử nghiệm).");
-    expect(html).toContain("Bạn làm thay được: import bảng điểm, Đánh giá năng lực, Lộ trình AI, lời khuyên xét tốt nghiệp và Trợ lý AI.");
+    expect(html).toContain("Bạn làm thay được: import bảng điểm, chọn chuyên ngành và vị trí nghề nghiệp mục tiêu, Đánh giá năng lực, Lộ trình AI, lời khuyên xét tốt nghiệp và Trợ lý AI.");
     expect(html).toContain("Đóng trang sinh viên");
     expect(html).toContain('aria-label="Chế độ làm việc với trang sinh viên"');
   });

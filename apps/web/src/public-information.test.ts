@@ -83,6 +83,20 @@ describe("public policy, terms and FAQ", () => {
     for (const use of ["Đánh giá năng lực", "Lộ trình AI", "Lời khuyên từ EduPath AI"]) expect(ai).toContain(use);
   });
 
+  it("says the cố vấn học tập and the Khoa's staff may choose the specialty and the target for the student (policy 2026-11-10)", () => {
+    expect(policyUpdatedAt).toBe("10/11/2026");
+    for (const text of [...policyBlocks, ...faqBlocks]) expect(text).not.toMatch(/không chọn chuyên ngành/);
+    const faq = frequentlyAskedQuestions.find((item) => item.question === "Cố vấn học tập và cán bộ Khoa có thể làm thay tôi những gì?");
+    expect(faq?.answer.join(" ")).toContain("làm thay bạn: import bảng điểm, chọn chuyên ngành và vị trí nghề nghiệp mục tiêu,");
+    expect(faq?.answer.join(" ")).toContain("không sửa Kế hoạch học kỳ thay bạn");
+    const sharing = policyBlocks.find((text) => text.startsWith("Cố vấn học tập được Khoa phân công cho lớp của bạn xem được toàn bộ trang EduPath AI của bạn:"));
+    expect(sharing).toContain("Cố vấn có thể làm thay bạn: import bảng điểm, chọn chuyên ngành và vị trí nghề nghiệp mục tiêu,");
+    expect(sharing).toContain("không xóa dữ liệu và không sửa kế hoạch học kỳ thay bạn.");
+    const update = policyBlocks.filter((text) => text.startsWith("Bản cập nhật ngày 10/11/2026"));
+    expect(update).toHaveLength(1);
+    expect(update[0]).toContain("chọn chuyên ngành và vị trí nghề nghiệp mục tiêu thay bạn");
+  });
+
   it("renders the support e-mail in FAQ answers as a link", () => {
     const faq = frequentlyAskedQuestions.find((item) => item.note?.includes(supportEmail));
     expect(faq).toBeDefined();

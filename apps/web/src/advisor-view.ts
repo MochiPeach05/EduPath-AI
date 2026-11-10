@@ -3,8 +3,9 @@
 // student in sessionStorage (one tab, one student, so two students in two tabs never mix), and every /api/student request
 // of the tab carries X-Advisor-Student, which the API checks on each request against the advisor's classes, or lets pass
 // for an admin or Ban chủ nhiệm khoa (apps/api/src/advisors/access.ts). The pages read
-// isAdvisorView() to hide what an advisor cannot do for the student (the survey, consent, deletions, the student's own
-// choices, the bell); a refusal of the API all the same is announced with ADVISOR_BLOCKED_EVENT.
+// isAdvisorView() to hide what an advisor cannot do for the student (the survey, consent, deletions, Kế hoạch học kỳ,
+// the bell; since policy 2026-11-10 the specialty and the target vị trí nghề nghiệp are chosen for the student, after a
+// confirmation); a refusal of the API all the same is announced with ADVISOR_BLOCKED_EVENT.
 import { ADVISOR_ERRORS, ADVISOR_STUDENT_HEADER, ADVISOR_STUDENT_PARAM } from "./advisor-types";
 
 /** sessionStorage key of the student this tab works for. */

@@ -3,7 +3,6 @@ import { useLiveData } from "./use-live-data";
 import { useLiveFilters } from "./use-live-filters";
 import { careerFailures, type Career, type CareerField, type StudentCareerDetail } from "./career-types";
 import { Icon } from "./ui-icon";
-import { isAdvisorView } from "./advisor-view";
 import "./student-careers.css";
 
 const endpoint = "/api/student/careers";
@@ -24,12 +23,13 @@ function useCareerData<T>(url: string) {
 /**
  * Khám phá vị trí nghề nghiệp. pick: opened from "Chỉnh sửa thông tin" of Mục tiêu học tập, a career is chosen into the form
  * (saved there with "Lưu thay đổi"); view: opened from the eye icon, the careers and their requirements only (user
- * 2026-11-03: one way to change the goals). selectedId: the saved target career.
+ * 2026-11-03: one way to change the goals). selectedId: the saved target career. A cố vấn học tập or a Khoa admin in the
+ * student's page picks the same way (policy 2026-11-10).
  */
 export default function StudentCareerExplorer({ mode = "pick", selectedId, initialCareerId, onSelect, onClose }: {
   mode?: "pick" | "view"; selectedId: string; initialCareerId?: string; onSelect: (career: CareerChoice) => Promise<void>; onClose: () => void;
 }) {
-  const canChoose = mode === "pick" && !isAdvisorView();
+  const canChoose = mode === "pick";
   const dialog = useRef<HTMLDialogElement>(null);
   const savingRef = useRef(false);
   const [saving, setSaving] = useState(false);

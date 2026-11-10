@@ -17,10 +17,12 @@ import type { DatabasePool } from "../db/pool.js";
 // may import the transcript, run the competency assessment and the AI roadmap, ask Trợ lý AI for them (advisors/access.ts).
 // 2026-11-08 (user: "điền vào .env dùm và triển khai luôn"): the AI models and the reading of scanned transcripts run on
 // Cloudflare Workers AI (Gemma 4 26B, BGE-M3) instead of a PC of the team; only the transcript table of a scan is sent.
+// 2026-11-10 (user: "cố vấn học tập và quản trị viên có thể sửa chuyên ngành và nghề nghiệp của sinh viên luôn"): they may
+// also choose the student's specialty and target vị trí nghề nghiệp, logged and told to the student (advisors/access.ts).
 // Must equal `policyVersion` in apps/web/src/public-information.ts (checked by consent.test.ts).
-export const TRANSCRIPT_POLICY_VERSION = "2026-11-08";
+export const TRANSCRIPT_POLICY_VERSION = "2026-11-10";
 /**
- * The oldest policy version whose consents still count, so 2026-10-26, 2026-10-28, 2026-10-29, 2026-10-31, 2026-11-03 and 2026-11-08 ask no one again (user,
+ * The oldest policy version whose consents still count, so 2026-10-26, 2026-10-28, 2026-10-29, 2026-10-31, 2026-11-03, 2026-11-08 and 2026-11-10 ask no one again (user,
  * 2026-10-26: "không để lại ghi chú gì hết"); new consents are recorded under TRANSCRIPT_POLICY_VERSION. Must equal
  * `consentValidSince` in apps/web/src/public-information.ts (checked by consent.test.ts).
  */

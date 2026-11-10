@@ -6,11 +6,13 @@ Người dùng (03/11/2026): "Giờ làm phần nhóm chức năng quản lý c�
 - "Cố vấn học tập": chức năng của CVHT với lớp mình phụ trách.
 
 Ba quyết định của người dùng:
-- CVHT được làm thay sinh viên: import bảng điểm; đánh giá năng lực (gồm đánh giá lại và nhận xét AI); Lộ trình AI và lời khuyên xét tốt nghiệp; hỏi Trợ lý AI. CVHT không chọn chuyên ngành, vị trí nghề nghiệp mục tiêu và không sửa Kế hoạch học kỳ thay sinh viên.
+- CVHT được làm thay sinh viên: import bảng điểm; đánh giá năng lực (gồm đánh giá lại và nhận xét AI); Lộ trình AI và lời khuyên xét tốt nghiệp; hỏi Trợ lý AI. CVHT không chọn chuyên ngành, vị trí nghề nghiệp mục tiêu (đổi ngày 10/11/2026, xem bên dưới) và không sửa Kế hoạch học kỳ thay sinh viên.
 - Sinh viên chưa đồng ý thì CVHT vẫn làm thay được ("Cho làm, báo sinh viên"). Hệ thống không ghi là sinh viên đã đồng ý, mà ghi nhật ký và gửi thông báo vào chuông của sinh viên.
 - Chính sách bảo mật cập nhật luôn, không hỏi lại sinh viên (bản 2026-11-03).
 
 Cùng ngày, người dùng gộp hai trang của CVHT thành "Quản lý sinh viên" và mở cho quản trị viên: "Cái mục quyền cố vấn sửa lại thành quản lý sinh viên … ấn xem chi tiết từng sinh viên … là quản trị viên có giao diện của sinh viên bên trang sinh viên luôn, quản trị viên có thể import bảng điểm và chạy suy luận AI, hỏi đáp ở phần trợ lý AI". Tác nhân của AD-AST-01…09 nay là "QTV & CVHT". Chính sách vẫn là bản 2026-11-03, không hỏi lại sinh viên.
+
+Ngày 10/11/2026, người dùng đổi phần chuyên ngành và vị trí nghề nghiệp của quyết định đầu: "Sửa lại quyền của cố vấn học tập và quản trị viên có thể sửa chuyên ngành và nghề nghiệp của sinh viên luôn là giống như toàn quyền bên trang sinh viên luôn á." Từ đó CVHT, quản trị viên và Ban chủ nhiệm khoa (cùng mọi tài khoản cổng quản trị được gán lớp, với sinh viên lớp đó) chọn được chuyên ngành và vị trí nghề nghiệp mục tiêu thay sinh viên, như sinh viên tự làm. Khảo sát định hướng, đồng ý, xóa dữ liệu, Kế hoạch học kỳ và thông báo vẫn là của sinh viên. Chính sách bản 2026-11-10, không hỏi lại sinh viên (`CONSENT_VALID_SINCE` giữ 2026-10-25).
 
 ## Trang Quản lý sinh viên (AD-AST-01…09)
 - **Đường dẫn:** `/quantri/quan-ly-sinh-vien`, trong nhóm "Cố vấn học tập" của thanh bên, sau trang Cố vấn. Hai đường dẫn cũ `/quantri/lop-phu-trach` và `/quantri/quyen-co-van` mở trang này (`adminPathAliases`).
@@ -63,6 +65,7 @@ Hợp đồng dữ liệu: `apps/web/src/advisor-types.ts`.
 - **Kiểm tra ở API:** `advisorActing` kiểm tra ở từng request rằng tài khoản vẫn phụ trách lớp của sinh viên, hoặc là quản trị viên, Ban chủ nhiệm khoa (khi đó mọi sinh viên đều được). Các router sinh viên đọc sinh viên qua `studentUser(req)`.
 - **Việc được làm thay** (`ACTING_ACTIONS`):
   - Import bảng điểm, hủy lần import đang chạy;
+  - Chuyên ngành và vị trí nghề nghiệp mục tiêu (từ 10/11/2026): `PATCH /profile` với đúng trường `specialty`, `careerPositionId` hoặc cả hai (`fields` của quy tắc); thân yêu cầu có trường khác hay không có trường nào đều bị từ chối. Router kiểm tra như khi sinh viên tự đổi (chuyên ngành thuộc ngành và khóa, vị trí còn trong danh mục). Nhật ký ghi "Đổi chuyên ngành thay sinh viên", "Đổi vị trí nghề nghiệp mục tiêu thay sinh viên" hoặc "Đổi chuyên ngành và vị trí nghề nghiệp mục tiêu thay sinh viên"; thông báo "… đã đổi chuyên ngành thay bạn" (khóa `specialty`, `career`, `goals`) kết thúc bằng câu sinh viên vẫn tự đổi lại được. Kết quả đánh giá đã có giữ nguyên; trang Đánh giá năng lực nhắc Đánh giá lại như khi sinh viên tự đổi;
   - Đánh giá năng lực và tạo lại nhận xét AI;
   - Lộ trình AI;
   - Lời khuyên xét tốt nghiệp: `ensure` do trang tự gọi, không ghi nhật ký; `retry`;
@@ -74,8 +77,8 @@ Hợp đồng dữ liệu: `apps/web/src/advisor-types.ts`.
   - Lộ trình AI vẫn cần Khảo sát định hướng do chính sinh viên làm và đồng ý.
 - **Trợ lý AI:** người mở trang chỉ thấy cuộc trò chuyện mình tạo. Sinh viên thấy tất cả: cuộc trò chuyện của CVHT có thẻ "Cố vấn học tập tạo", của quản trị viên hay Ban chủ nhiệm khoa có thẻ "Cán bộ Khoa tạo" (`createdByRole`).
 - **Ghi lại và thông báo:** mỗi việc làm thay ghi một dòng nhật ký (loại `advisor`, hiện là "Làm thay sinh viên" ở trang Nhật ký; tên sinh viên, không có dữ liệu) và gửi thông báo cho sinh viên, tối đa một thông báo cho mỗi người, mỗi việc, mỗi ngày.
-- **Mở trang sinh viên (QA 7/11/2026):** mọi lần đọc dữ liệu sinh viên qua `X-Advisor-Student` đều ghi một dòng "Mở trang sinh viên" vào nhật ký. Mỗi tài khoản với mỗi sinh viên chỉ ghi một lần trong 30 phút (`studentViews` trong `advisors/access.ts`), nên mở thẳng `/dashboard?sv=…` hay gọi API cũng đều được ghi. Khi làm thay sinh viên, nút Đánh giá năng lực, Đánh giá lại và Tạo lộ trình hỏi xác nhận trước (`acting-confirm.tsx`). Thanh thông báo hiện mã lớp chuẩn (`classCode`).
-- **Giao diện của thẻ:** có dải "Bạn đang xem trang của … với tư cách cố vấn học tập" (hoặc "quản trị viên", "Ban chủ nhiệm khoa", theo vai trò của tài khoản) kèm nút "Đóng trang sinh viên", nút này quay về Quản lý sinh viên. Chuông và nút đăng xuất bị ẩn, cùng các nút không được dùng khi làm thay: lưu hoặc xóa khảo sát, chọn mục tiêu, xóa dữ liệu, sửa Kế hoạch học kỳ, hỏi đồng ý. Các dòng ghi chú của thẻ nói với người đang xem ("bạn chỉ xem").
+- **Mở trang sinh viên (QA 7/11/2026):** mọi lần đọc dữ liệu sinh viên qua `X-Advisor-Student` đều ghi một dòng "Mở trang sinh viên" vào nhật ký. Mỗi tài khoản với mỗi sinh viên chỉ ghi một lần trong 30 phút (`studentViews` trong `advisors/access.ts`), nên mở thẳng `/dashboard?sv=…` hay gọi API cũng đều được ghi. Khi làm thay sinh viên, nút Đánh giá năng lực, Đánh giá lại và Tạo lộ trình hỏi xác nhận trước (`acting-confirm.tsx`); từ 10/11/2026 cả Lưu thay đổi ở Mục tiêu học tập và Chọn làm vị trí nghề nghiệp mục tiêu ở Định hướng nghề nghiệp (`goalsConfirm`). Thanh thông báo hiện mã lớp chuẩn (`classCode`).
+- **Giao diện của thẻ:** có dải "Bạn đang xem trang của … với tư cách cố vấn học tập" (hoặc "quản trị viên", "Ban chủ nhiệm khoa", theo vai trò của tài khoản) kèm nút "Đóng trang sinh viên", nút này quay về Quản lý sinh viên. Chuông và nút đăng xuất bị ẩn, cùng các nút không được dùng khi làm thay: lưu hoặc xóa khảo sát, xóa dữ liệu, sửa Kế hoạch học kỳ, hỏi đồng ý. Từ 10/11/2026, Chỉnh sửa thông tin ở Mục tiêu học tập (cả Khám phá vị trí nghề nghiệp trong đó) và Chọn làm vị trí nghề nghiệp mục tiêu dùng được như ở trang của sinh viên; thanh Hồ sơ của sinh viên lấy bảng điểm, chuyên ngành, vị trí nghề nghiệp làm bước tiếp theo, không lấy khảo sát. Các dòng ghi chú của thẻ nói với người đang xem ("bạn chỉ xem").
 
 ## Kiểm thử (03/11/2026)
 - **Tự động:** API 1620 test, web 604 test.

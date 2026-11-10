@@ -1,8 +1,9 @@
 // What a cố vấn học tập may see and do (AD-AST-09, "Xem danh sách các thao tác được cấp quyền cho cố vấn học tập"; user
-// 2026-11-03). The page Quyền cố vấn shows this list as it is; the checks themselves live in access.ts (ACTING_ACTIONS,
-// advisorReadOnly) and in the routers, and the privacy policy of 2026-11-03 says the same in its own words. Since the
-// user's "Quản lý sinh viên" (2026-11-03: AD-AST "QTV & CVHT") the same rules hold for admins and Ban chủ nhiệm khoa, for
-// every student instead of the advisor's own classes.
+// 2026-11-03; the specialty and the target vị trí nghề nghiệp since 2026-11-10). The page Quyền cố vấn shows this list as
+// it is; the checks themselves live in access.ts (ACTING_ACTIONS, advisorReadOnly) and in the routers, and the privacy
+// policy (2026-11-03, 2026-11-10) says the same in its own words. Since the user's "Quản lý sinh viên" (2026-11-03: AD-AST
+// "QTV & CVHT") the same rules hold for admins and Ban chủ nhiệm khoa, for every student instead of the advisor's own
+// classes.
 
 export type AdvisorPermissionItem = { label: string; detail: string };
 export type AdvisorPermissions = {
@@ -26,6 +27,7 @@ export const ADVISOR_PERMISSIONS: AdvisorPermissions = {
   ],
   act: [
     { label: "Import bảng điểm", detail: "Tải bảng điểm PDF lên thay sinh viên, kể cả khi sinh viên chưa import lần nào." },
+    { label: "Chuyên ngành và vị trí nghề nghiệp mục tiêu", detail: "Chọn hoặc đổi chuyên ngành và vị trí nghề nghiệp mục tiêu của sinh viên ở Mục tiêu học tập (Hồ sơ và bảng điểm) hoặc trang Định hướng nghề nghiệp, như sinh viên tự làm (từ 10/11/2026)." },
     { label: "Đánh giá năng lực", detail: "Chạy và đánh giá lại năng lực, tạo lại nhận xét AI, khi sinh viên đã có bảng điểm, chuyên ngành và vị trí nghề nghiệp mục tiêu; không chạy lại khi sinh viên đã tự xóa kết quả đánh giá." },
     { label: "Lộ trình AI", detail: "Tạo Lộ trình AI cho học kỳ tới, khi sinh viên đã làm Khảo sát định hướng." },
     { label: "Lời khuyên xét tốt nghiệp", detail: "Xem và tạo lại lời khuyên của AI ở trang Xét tốt nghiệp." },
@@ -36,12 +38,12 @@ export const ADVISOR_PERMISSIONS: AdvisorPermissions = {
     { label: "Đồng ý chính sách", detail: "Không đồng ý hay rút đồng ý thay sinh viên." },
     { label: "Xóa dữ liệu", detail: "Không xóa bảng điểm, kết quả đánh giá, lộ trình hay cuộc trò chuyện của sinh viên." },
     { label: "Thông báo của sinh viên", detail: "Không xem, đánh dấu đã đọc hay xóa thông báo trong chuông của sinh viên." },
-    { label: "Lựa chọn của sinh viên", detail: "Không chọn chuyên ngành, vị trí nghề nghiệp mục tiêu, không sửa Kế hoạch học kỳ." },
+    { label: "Kế hoạch học kỳ", detail: "Không sửa Kế hoạch học kỳ của sinh viên." },
     { label: "Trang quản trị", detail: "Vai trò Cố vấn học tập chỉ xem: không thêm, sửa, xóa, import dữ liệu hay tải tệp Excel nguồn, không chạy AI đề xuất liên kết kỹ năng; không xem Tài khoản và Thông báo." },
   ],
   notes: [
     "Mỗi việc làm thay được ghi vào Nhật ký thao tác (người làm, việc đã làm, sinh viên).",
-    "Sinh viên nhận thông báo trong chuông khi cố vấn học tập hoặc quản trị viên của Khoa import bảng điểm, chạy Đánh giá năng lực, tạo Lộ trình AI hay hỏi Trợ lý AI thay mình.",
+    "Sinh viên nhận thông báo trong chuông khi cố vấn học tập hoặc quản trị viên của Khoa import bảng điểm, đổi chuyên ngành hay vị trí nghề nghiệp mục tiêu, chạy Đánh giá năng lực, tạo Lộ trình AI hay hỏi Trợ lý AI thay mình.",
     "Cố vấn học tập chỉ mở được trang của sinh viên thuộc lớp mình đang phụ trách (khi Khoa đổi phân công, quyền đi theo lớp); quản trị viên và Ban chủ nhiệm khoa mở được trang của mọi sinh viên.",
   ],
 };

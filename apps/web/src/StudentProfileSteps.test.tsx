@@ -97,22 +97,25 @@ describe("the steps of Hồ sơ và bảng điểm", () => {
   });
 
   it("never ask a cố vấn học tập to do what only the student may do", () => {
-    // Nothing done: the advisor may import the transcript (AD-AST-07), the rest is the student's.
+    // Nothing done: the advisor may import the transcript (AD-AST-07) and, since 2026-11-10, choose the specialty and the
+    // target for the student; the survey is the student's.
     const steps = profileSteps(empty, true);
     expect(steps.map((step) => step.state)).toEqual(["next", "todo", "todo", "todo"]);
     expect(steps.map((step) => step.action)).toEqual(["Import bảng điểm", null, null, null]);
-    expect(steps.slice(1).map((step) => step.note)).toEqual(["Sinh viên chưa chọn", "Sinh viên chưa chọn", "Sinh viên chưa làm"]);
+    expect(steps.slice(1).map((step) => step.note)).toEqual([...requiredProfileItems(empty, false).slice(1, 3).map((item) => item.hint), "Sinh viên chưa làm"]);
     const html = render(empty, true);
     expect(html).toContain("Hồ sơ của sinh viên");
-    expect(html).toContain("Bạn import được bảng điểm thay sinh viên. Các mục khác do sinh viên tự làm.");
-    for (const studentOnly of ["Chọn chuyên ngành", "Chọn vị trí nghề nghiệp", "Làm khảo sát", "Cập nhật khảo sát", "Chọn trong Mục tiêu học tập", "cho bạn"]) {
-      expect(html).not.toContain(studentOnly);
-    }
-    // The transcript there: no next step at all, only what the student has not done.
+    expect(html).toContain("Bạn import được bảng điểm, chọn chuyên ngành và vị trí nghề nghiệp mục tiêu thay sinh viên. Khảo sát định hướng do sinh viên tự làm.");
+    for (const studentOnly of ["Làm khảo sát", "Cập nhật khảo sát", "cho bạn", "của bạn", "Sinh viên chưa chọn"]) expect(html).not.toContain(studentOnly);
+    // The transcript there: the specialty, then the target are the next steps, never the survey.
     const imported = { ...empty, hasTranscript: true, surveyUpdatedAt: "2026-10-20T00:00:00Z" };
-    expect(states(imported, true)).toEqual(["done", "todo", "todo", "todo"]);
-    expect(profileSteps(imported, true)[3]!.note).toBe("Sinh viên chưa làm xong");
-    expect(render(imported, true)).not.toContain("aria-current");
+    expect(states(imported, true)).toEqual(["done", "next", "todo", "todo"]);
+    expect(profileSteps(imported, true)[1]!.action).toBe("Chọn chuyên ngành");
+    expect(profileSteps({ ...imported, specialty: "CNPM" }, true).map((step) => step.action)).toEqual([null, null, "Chọn vị trí nghề nghiệp", null]);
+    const chosen = { ...imported, specialty: "CNPM", careerPositionId: "00000000-0000-4000-8000-0000000000c1" };
+    expect(states(chosen, true)).toEqual(["done", "done", "done", "todo"]);
+    expect(profileSteps(chosen, true)[3]!.note).toBe("Sinh viên chưa làm xong");
+    expect(render(chosen, true)).not.toContain("aria-current");
     expect(render(complete, true)).toContain("Hồ sơ đã đủ 4/4");
   });
 

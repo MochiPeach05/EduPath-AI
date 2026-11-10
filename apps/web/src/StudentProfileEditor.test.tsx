@@ -30,13 +30,21 @@ describe("Mục tiêu học tập", () => {
 describe("Mục tiêu học tập in a cố vấn học tập's tab", () => {
   afterEach(() => stopActing());
 
-  it("shows the goals with no way to change them", () => {
+  it("lets the advisor change the goals for the student, as the student does (user 2026-11-10)", () => {
     installAdvisorFetch("00000000-0000-4000-8000-0000000e2e05");
     const html = render({ careerPositionId: "c1", careerPosition: { id: "c1", nameVi: "Kỹ sư phần mềm", nameEn: "Software Engineer", deletedAt: null }, specialty: "CNPM", cohortCode: "K29" });
     expect(html).toContain("Kỹ sư phần mềm — Software Engineer");
-    expect(html).toContain("Sinh viên tự chọn chuyên ngành và vị trí nghề nghiệp mục tiêu; bạn chỉ xem.");
-    expect(html).not.toContain("Chỉnh sửa thông tin");
+    expect(html).toContain("Chỉnh sửa thông tin");
+    expect(html).not.toContain("bạn chỉ xem");
+    expect(html).not.toContain("Sinh viên tự chọn chuyên ngành");
+    // The career is still chosen inside the form, never by a second button beside it.
     expect(html).not.toContain(">Chọn vị trí nghề nghiệp mục tiêu</button>");
+  });
+
+  it("picks a career in Khám phá vị trí nghề nghiệp for the student", () => {
+    installAdvisorFetch("00000000-0000-4000-8000-0000000e2e05");
+    const html = renderToStaticMarkup(createElement(StudentCareerExplorer, { mode: "pick", selectedId: "", onSelect: async () => {}, onClose: () => {} }));
+    expect(html).toContain("Chọn vị trí nghề nghiệp này</button>");
   });
 
   it("offers the changes again in the student's own tab, through Chỉnh sửa thông tin only (user 2026-11-03)", () => {

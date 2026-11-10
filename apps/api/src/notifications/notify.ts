@@ -153,12 +153,16 @@ export const catalogUpdated = (what: string): NotificationInput => ({
   link: "#competency",
 });
 
+/** The last sentence of an advisor's notification, unless the action gives its own (access.ts ACTING_ACTIONS `after`). */
+const ADVISOR_ACTION_AFTER = "Bạn xem lại kết quả; nếu không muốn giữ, bạn vẫn xóa được như thường.";
+
 /**
  * What a cố vấn học tập, or a quản trị viên of the Khoa (actor "admin", user 2026-11-03: AD-AST "QTV & CVHT"), did in the
  * student's page (AD-AST-07, 08; policy 2026-11-03): one notification per person, action and day (source key: the caller's
  * key names the person), so a busy afternoon does not fill the bell.
  */
-export function advisorAction(actorName: string, did: string, link: string, day: string, key: string, actor: "advisor" | "admin" = "advisor"): NotificationInput {
+export function advisorAction(actorName: string, did: string, link: string, day: string, key: string, actor: "advisor" | "admin" = "advisor",
+  after = ADVISOR_ACTION_AFTER): NotificationInput {
   const role = actor === "admin" ? "quản trị viên của Khoa" : "cố vấn học tập của lớp bạn";
   // An admin's account may be named "MSSV - Họ tên - Lớp": only the name, as the admin portal shows it (QA 2026-11-04).
   const name = personName(actorName);
@@ -166,7 +170,7 @@ export function advisorAction(actorName: string, did: string, link: string, day:
   const who = name ? `${name} (${role})` : `${role.charAt(0).toUpperCase()}${role.slice(1)}`;
   return {
     type: "khoa", kind: "advisor_action", title: `${actor === "admin" ? "Quản trị viên của Khoa" : "Cố vấn học tập"} ${did} thay bạn`,
-    body: `${who} ${did} thay bạn trên EduPath AI. Bạn xem lại kết quả; nếu không muốn giữ, bạn vẫn xóa được như thường.`,
+    body: `${who} ${did} thay bạn trên EduPath AI. ${after}`,
     link, sourceKey: `advisor:${key}:${day}`,
   };
 }

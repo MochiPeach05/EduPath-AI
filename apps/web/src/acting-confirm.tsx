@@ -1,6 +1,6 @@
 // A cố vấn học tập or a Khoa admin working in a student's page confirms an action that replaces the student's results
-// and tells the student in the bell (QA 2026-11-07: "Đánh giá lại chạy ngay khi bấm … bấm nhầm là có hậu quả").
-// The student, in their own page, is not asked.
+// or choices and tells the student in the bell (QA 2026-11-07: "Đánh giá lại chạy ngay khi bấm … bấm nhầm là có hậu
+// quả"; the specialty and the target vị trí nghề nghiệp since 2026-11-10). The student, in their own page, is not asked.
 import { useLayoutEffect, useRef, type SyntheticEvent } from "react";
 import "./student-records.css";
 
@@ -31,6 +31,25 @@ export const assessmentConfirm = (replace: boolean) => replace
     text: "Kết quả Đánh giá năng lực hiện tại của sinh viên sẽ được thay bằng kết quả mới, tính từ bảng điểm và hồ sơ hiện tại; nhận xét AI sẽ được viết lại. Sinh viên sẽ nhận thông báo trong chuông." }
   : { title: "Đánh giá năng lực thay sinh viên", confirm: "Đánh giá năng lực",
     text: "EduPath AI sẽ tính kết quả Đánh giá năng lực cho sinh viên từ bảng điểm và hồ sơ hiện tại. Sinh viên sẽ nhận thông báo trong chuông." };
+
+/**
+ * The words of the confirmation for the specialty and the target vị trí nghề nghiệp chosen for the student (user
+ * 2026-11-10, policy 2026-11-10): what each becomes (null: none any more), left out when it does not change. confirm is
+ * the label of the button.
+ */
+export function goalsConfirm({ specialty, career }: { specialty?: string | null; career?: string | null }, confirm = "Lưu thay đổi") {
+  const both = specialty !== undefined && career !== undefined;
+  const changes = [
+    specialty === undefined ? null : specialty ? `Chuyên ngành của sinh viên sẽ là ${specialty}.` : "Sinh viên sẽ chưa có chuyên ngành (Chưa xác định).",
+    career === undefined ? null : career ? `Vị trí nghề nghiệp mục tiêu của sinh viên sẽ là ${career}.` : "Sinh viên sẽ không còn vị trí nghề nghiệp mục tiêu.",
+  ].filter(Boolean);
+  return {
+    title: both ? "Đổi chuyên ngành và vị trí nghề nghiệp mục tiêu thay sinh viên"
+      : specialty !== undefined ? "Đổi chuyên ngành thay sinh viên" : "Đổi vị trí nghề nghiệp mục tiêu thay sinh viên",
+    confirm,
+    text: `${changes.join(" ")} Kết quả Đánh giá năng lực đã có chỉ cập nhật theo lựa chọn mới khi đánh giá lại. Sinh viên sẽ nhận thông báo trong chuông.`,
+  };
+}
 
 /** The words of the confirmation for Lộ trình AI (replace: the student already has a roadmap). */
 export const roadmapConfirm = (replace: boolean) => ({
