@@ -3,7 +3,7 @@
    surfaces; status colours only with a label; the GPA chart's two series are a validated pair (CVD ΔE 9.5).
    Type scale (user 2026-10-30: "80/213 đoạn chữ nhỏ hơn 13px, 12 cỡ chữ khác nhau … chữ thường 14px, chú thích tối
    thiểu 12px"): 12 labels and chips, 13 secondary lines, 14 running text, 15 titles (the portal's .sw-shell h2), 20 figures,
-   24 key figures, in CSS px (drawn at 100% since 2026-11-10, styles.css).
+   24 key figures, in CSS px (the portal is drawn at 90% from 1200px, styles.css).
    Red is only for something not passed (a failed course, a GPA under the minimum); late and unmet are amber. */
 .ov-page {
   --ov-ai: #1c4182;

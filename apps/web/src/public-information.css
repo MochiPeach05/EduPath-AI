@@ -70,7 +70,16 @@
 .pi-policy-help { margin: 8px 0 0; color: #6b6264; font-size: 15px; line-height: 1.8; }
 .pi-policy-help a { color: var(--pi-red); font-weight: 700; }
 .pi-policy-help a:hover { text-decoration: underline; }
-.pi-page-policy section[id], .pi-page-policy .pi-policy-menu-group[id] { scroll-margin-top: 124px; }
+/* Clear of the sticky header, 92px at 100% above content drawn at 80% from 1200px (styles.css): 124px on screen. */
+.pi-page-policy section[id], .pi-page-policy .pi-policy-menu-group[id] { scroll-margin-top: calc(124px / var(--ep-zoom)); }
+
+/* From 1200px the content is drawn at 80% under a header as large as the landing page's (styles.css, user 2026-11-10):
+   the header's row takes the width the content's container has on screen, so the logo and the button line up with
+   the page below them. */
+@media (min-width: 1200px) {
+  :root[data-ep-scale="info"] .pi-header .pi-container { width: min(calc(1600px * .8), calc(100% - 96px * .8)); }
+  :root[data-ep-scale="info"] .pi-header .pi-policy-container { width: min(calc(1800px * .8), calc(100% - 96px * .8)); }
+}
 
 @media (max-width: 1150px) {
   .pi-header-inner { gap: 20px; }

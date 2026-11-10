@@ -1,6 +1,6 @@
 import { isAdminPortalPath } from "./admin-navigation";
 
-type AppRoute = "landing" | "policy" | "faq" | "login" | "authenticated" | "admin" | "notFound";
+export type AppRoute = "landing" | "policy" | "faq" | "login" | "authenticated" | "admin" | "notFound";
 
 /**
  * The page an address opens. Every address the app answers is listed here (the API answers the others with 404,

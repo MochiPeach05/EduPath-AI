@@ -1309,8 +1309,8 @@
 }
 
 /* The gate follows the width of the page content, not of the screen: under the old desktop zoom a 1300–1500px screen
-   left it as little room as a tablet does, and its four steps were squeezed to a word per line; at 100% (styles.css,
-   2026-11-10) a 1200–1280px laptop gives it about 1140–1220px. */
+   left it as little room as a tablet does, and its four steps were squeezed to a word per line; at 90% (styles.css,
+   2026-11-10) a 1200–1280px laptop gives it about 1270–1350px. */
 @container student-content (max-width: 1180px) {
   .so-gate {
     grid-template-columns: auto minmax(0, 1fr);

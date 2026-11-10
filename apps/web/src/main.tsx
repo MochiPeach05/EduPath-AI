@@ -10,10 +10,9 @@ import "./display-format.css";
 const root = document.getElementById("root");
 if (!root) throw new Error("Root element was not found");
 
-// The admin portal keeps its 80% desktop scale, every other page is drawn at 100% (styles.css): marked before the first
-// paint, and again should Back or Forward move the tab to the other portal without loading the page.
+// Each page's scale (page-scale.ts, styles.css) by its address, before the first paint; the pages that a session check
+// may swap (Đăng nhập, the student portal) set their own with usePageScale.
 syncPageScale();
-window.addEventListener("popstate", () => syncPageScale());
 
 createRoot(root).render(
   <StrictMode>

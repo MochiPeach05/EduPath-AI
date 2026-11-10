@@ -1,10 +1,10 @@
 /* "Trợ lý AI" (StudentAssistant.tsx): the conversations on the left, the chat on the right; below 900px a selector above
    the chat. The chat fills the window under the page heading and scrolls on its own. The assistant wears the AI blue of
    Lộ trình AI (student-roadmap.css); the student's questions the portal's soft red.
-   At 100% (styles.css, user 2026-11-10) a 1536×696 window leaves the chat about 440px under the heading (it ends some 10px
-   above the window's edge), the welcome without its icon and lead sentence still clear of a scrollbar, and the strip of
-   a staff member's view (advisor-view.css) takes some more: the chat may get as short as 320px rather than reach below
-   the window (the welcome drops its icon, then its lead sentence, by fitWelcome). */
+   Drawn at 90% from 1200px (styles.css, user 2026-11-10), a 1536×696 window leaves the chat about 520px under the heading
+   (470 on screen; it ends some 10px above the window's edge), the welcome without its icon clear of a scrollbar; at 100%
+   below 1200px, and with the strip of a staff member's view (advisor-view.css), there is less: the chat may get as short
+   as 320px rather than reach below the window (the welcome drops its icon, then its lead sentence, by fitWelcome). */
 .as-page {
   --as-ai: #1c4182;
   --as-ai-soft: #e6eef9;

@@ -6,6 +6,7 @@ import NotFoundPage from "./NotFoundPage";
 import EduPathBrand from "./EduPathBrand";
 import AdminPortal from "./AdminPortal";
 import { isAdminArea, resolveAppRoute, safeReturnTo } from "./routing";
+import { usePageScale } from "./page-scale";
 import { canAccessAdmin, type AuthResponse } from "./types";
 import StudentWorkspace from "./StudentWorkspace";
 import { installAdvisorFetch, stopActing, takeAdvisorStudentFromUrl } from "./advisor-view";
@@ -89,6 +90,8 @@ function LocationIcon() {
 }
 
 function LoginPage({ error, portalRestricted }: { error: string | null; portalRestricted: boolean }) {
+  // 80% from 1200px (user 2026-11-10), also where /dashboard finds no session.
+  usePageScale("login");
   return (
     <div className="auth-shell">
       <header className="login-header">
@@ -244,6 +247,8 @@ function LoginPage({ error, portalRestricted }: { error: string | null; portalRe
 // Admin-portal roles and staff mailboxes keep a valid session for the admin
 // portal, so the student workspace shows them the way back instead of any data.
 function StaffPortalNotice() {
+  // A sign-in card like Đăng nhập, drawn at its scale.
+  usePageScale("login");
   const [busy, setBusy] = useState(false);
   useEffect(() => { document.title = "Cổng quản lý học tập · EduPath AI"; }, []);
   return (

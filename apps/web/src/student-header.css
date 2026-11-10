@@ -237,11 +237,11 @@
   color: #d8dce6;
 }
 
-/* The page is drawn at 100% (styles.css, user 2026-11-10), where the seven nav items need about 1500px beside the logo
-   and the tools: below 1520px they sit closer together (about 1340px); below 1360px (a 1280px laptop) closer still, beside
-   a slightly smaller logo, with the "?" button's Hướng dẫn in the account menu as on phones (about 1230px); below 1260px
-   the drawer behind the menu button is the navigation, as on phones. */
-@media (max-width: 1519.98px) {
+/* From 1200px the portal is drawn at 90% (styles.css, user 2026-11-10), where the seven nav items need about 1390px of
+   screen beside the logo and the tools: below 1440px they sit closer together (about 1255px); below 1280px closer still,
+   beside a slightly smaller logo, with the "?" button's Hướng dẫn in the account menu as on phones (about 1160px). Below
+   1200px, at 100%, the drawer behind the menu button is the navigation, as on phones. */
+@media (max-width: 1439.98px) {
   .sw-header-nav {
     gap: 4px;
   }
@@ -251,7 +251,7 @@
   }
 }
 
-@media (min-width: 1260px) and (max-width: 1359.98px) {
+@media (min-width: 1200px) and (max-width: 1279.98px) {
   .sw-shell {
     --sw-brand-width: 190px;
   }
@@ -273,7 +273,7 @@
   }
 }
 
-@media (max-width: 1259.98px) {
+@media (max-width: 1199.98px) {
   .sw-header-nav {
     display: none;
   }

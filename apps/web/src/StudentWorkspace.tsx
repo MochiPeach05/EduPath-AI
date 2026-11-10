@@ -2,7 +2,7 @@ import StudentPlans from "./StudentPlans";
 import StudentGraduation from "./StudentGraduation";
 import { Suspense, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import EduPathBrand from "./EduPathBrand";
-import { layoutHeight } from "./page-scale";
+import { layoutHeight, usePageScale } from "./page-scale";
 import StudentProfileEditor from "./StudentProfileEditor";
 import StudentProfileSteps, { onTranscriptUpdated } from "./StudentProfileSteps";
 import StudentProfileSurvey from "./StudentProfileSurvey";
@@ -52,9 +52,9 @@ type Page = StudentPage;
 const navPageIds = new Set<Page>(["overview", "competency", "skill-gap", "career", "roadmap", "assistant", "graduation"]);
 const navPages = pages.filter(p => navPageIds.has(p.id));
 const accountPages = pages.filter(p => !navPageIds.has(p.id));
-// Below 1900px (page at 100%, styles.css; student-layout.css) the drawer overlays the page instead of keeping a column of its
-// own; below 1260px the header nav does not fit and the drawer is the menu (student-header.css).
-const overlayDrawerQuery = "(max-width: 1899.98px)";
+// Below 1820px (page at 90% from 1200px, styles.css; student-layout.css) the drawer overlays the page instead of keeping a
+// column of its own; below 1200px the header nav does not fit and the drawer is the menu (student-header.css).
+const overlayDrawerQuery = "(max-width: 1819.98px)";
 type Profile = StudentProfile;
 type Panel = "notifications" | "help" | "account";
 type ShellError = { kind: "session" | "profile" | "logout"; message: string };
@@ -134,6 +134,8 @@ export function ProfilePage({ profile, card, advisorView, onSaved }: {
  * advisor-view.ts); user is then that account and the page shows the student of GET /api/student/profile.
  */
 export default function StudentWorkspace({ user, advisor = null }: { user: AuthenticatedUser; advisor?: { name: string; role?: string } | null }) {
+  // 90% from 1200px (user 2026-11-10), also after /login or /auth/callback and in a staff member's view of the student.
+  usePageScale("student");
   const [page, setPage] = useState<Page>(() => pageFromHash(window.location.hash) ?? "overview");
   // The page on screen, for the hashchange listener (which outlives renders).
   const pageRef = useRef(page);

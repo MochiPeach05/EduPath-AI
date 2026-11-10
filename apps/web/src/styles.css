@@ -8,23 +8,28 @@
   text-rendering: optimizeLegibility;
 
   /*
-    Page scale. The landing page, the public pages and the student portal
-    (also when staff open a student's page) are drawn at their natural size,
-    100%, at every width (user 2026-11-10: "Tăng kích thước của trang chủ,
-    trang sinh viên lên 100% … nó đang nhỏ quá qua nhận xét của nhiều người").
-
-    The admin portal (/quantri, html[data-ep-scale="admin"] set by main.tsx,
-    page-scale.ts) keeps the desktop scale of 2026-11-03 ("Còn trang của quản
-    trị viên giữ nguyên"; after 75% since 7d635e8, 86.25% in df8d75c and a
-    short try at 100% in 143fd35): from 1200px it is drawn at 80% with CSS
-    `zoom`, its text a little larger than the rest: font-size-adjust sets the
-    x-height of Manrope (0.54 of the em) to 0.57 and of the Newsreader headings
-    (0.46) to 0.48, about 6% bigger glyphs with no box changed.
+    Page scale (user 2026-11-10: "trang chủ vẫn 100% trang login 80% trang sau
+    khi sinh viên đăng nhập 90% Chính sách & Điều khoản và Câu hỏi thường gặp
+    là 80% nhưng header và footer to bằng trang chủ luôn"; "Còn trang của quản
+    trị viên giữ nguyên"). From 1200px, by html[data-ep-scale] (main.tsx and
+    usePageScale, page-scale.ts):
+    - admin (the admin portal) and login (Đăng nhập): 80%, as every page was
+      from 2026-11-03 (after 75% since 7d635e8, 86.25% in df8d75c and a short
+      try at 100% in 143fd35);
+    - student (the student portal, also when staff open a student's page): 90%;
+    - info (Chính sách & Điều khoản, Câu hỏi thường gặp): the content at 80%,
+      its header and footer at 100% like the landing page's;
+    - no mark (the landing page, Không tìm thấy trang): 100%.
+    A scaled page keeps its text a little larger than the rest (2026-11-03: "cho
+    kích thước chữ to thêm 1 xíu nhé"): font-size-adjust sets the x-height of
+    Manrope (0.54 of the em) to 0.57 and of the Newsreader headings (0.46) to
+    0.48, about 6% bigger glyphs with no box changed. Phones and small laptops
+    keep their natural size and text.
 
     `zoom` multiplies used lengths, and viewport units are no exception: 100dvh
-    inside a zoomed box only covers 80% of the screen. Full-viewport lengths are
-    therefore written as `calc(100 * var(--ep-vh))`, which divides the factor
-    back out and is correct whether or not the scale is active.
+    inside a box zoomed to 80% only covers 80% of the screen. Full-viewport
+    lengths are therefore written as `calc(100 * var(--ep-vh))`, which divides
+    the factor back out and is correct whether or not a scale is active.
   */
   --ep-zoom: 1;
   --ep-vh: 1dvh;
@@ -35,7 +40,8 @@
 }
 
 @media (min-width: 1200px) {
-  :root[data-ep-scale="admin"] {
+  :root[data-ep-scale="admin"],
+  :root[data-ep-scale="login"] {
     --ep-zoom: .8;
     --ep-vh: calc(1dvh / .8);
     --ep-vw: calc(1vw / .8);
@@ -43,8 +49,27 @@
     --ep-serif-adjust: 0.48;
   }
 
-  :root[data-ep-scale="admin"] body {
+  :root[data-ep-scale="student"] {
+    --ep-zoom: .9;
+    --ep-vh: calc(1dvh / .9);
+    --ep-vw: calc(1vw / .9);
+    --ep-text-adjust: 0.57;
+    --ep-serif-adjust: 0.48;
+  }
+
+  :root:is([data-ep-scale="admin"], [data-ep-scale="login"], [data-ep-scale="student"]) body {
     zoom: var(--ep-zoom);
+  }
+
+  /* Only the content is zoomed: what it inherits from the unscaled page is set again for it. */
+  :root[data-ep-scale="info"] .pi-page > main {
+    --ep-zoom: .8;
+    --ep-vh: calc(1dvh / .8);
+    --ep-vw: calc(1vw / .8);
+    --ep-text-adjust: 0.57;
+    --ep-serif-adjust: 0.48;
+    zoom: var(--ep-zoom);
+    font-size-adjust: var(--ep-text-adjust);
   }
 }
 
