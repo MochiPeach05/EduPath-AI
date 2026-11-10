@@ -163,6 +163,11 @@ export type StudentGraduationResponse = {
   specialtySuggestion: StudentGraduationSpecialtySuggestion | null;
   /** Passed mandatory courses of another specialty, counted nowhere (API graduation/convertible.ts); absent on older APIs. */
   convertible?: import("./convertible-courses").ConvertibleCourses | null;
+  /**
+   * The thesis group's courses the student placed in Kế hoạch học kỳ themselves (API StudentGraduation.thesisPlan): the way
+   * they chose, which the suggestion follows over the recommended one (user 2026-11-10); absent on older APIs.
+   */
+  thesisPlan?: string[];
 };
 
 /* ------------------------------------------- /api/student/graduation/advice */

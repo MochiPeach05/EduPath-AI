@@ -46,16 +46,23 @@ function ClassLine({ course, term, context }: { course: StudyPlanCourse; term: s
   return text ? <small className="rm-class">Học cùng {text}</small> : null;
 }
 
-function CourseFacts({ course, names, byCode, context }: { course: StudyPlanCourse; names: ReadonlyMap<string, string>; byCode: ReadonlyMap<string, StudyPlanCourse>; context: StudyPlanContext }) {
+/**
+ * The thesis group's line on a course (thesisHint, user 2026-11-10): a suggestion or "chỉ cần một phương án", never a
+ * warning, so it reads as information beside the course.
+ */
+function ThesisLine({ text }: { text: string | null }) {
+  return text ? <small className="rm-class rm-thesis">{text}</small> : null;
+}
+
+function CourseFacts({ course, names, byCode, context, plan }: { course: StudyPlanCourse; names: ReadonlyMap<string, string>; byCode: ReadonlyMap<string, StudyPlanCourse>; context: StudyPlanContext; plan: StudyPlanData }) {
   const prerequisites = ownRelations(course, course.prerequisites, byCode);
   const facts = [`${formatNumber(course.credits)} TC`,
     prerequisites.length ? `Tiên quyết: ${prerequisites.map((code) => names.get(code) ?? code).join(", ")}` : null,
     course.state === "failed" ? `Chưa đạt${course.grade ? ` (${course.grade})` : ""}: học lại` : null,
     course.state === "passed" ? `Đã đạt${course.grade ? ` (${course.grade})` : ""}: học cải thiện nếu muốn nâng điểm` : null,
     course.applicable ? null : "Môn khác chuyên ngành: không tính cho chuyên ngành của bạn"].filter(Boolean);
-  const hint = thesisHint(context, course.code);
   return <><small className="rm-course-facts">{facts.join(" · ")}</small><OfferLine course={course} context={context} />
-    {hint && <small className="rm-issue"><Mark kind="warning" /> {hint}</small>}</>;
+    <ThesisLine text={thesisHint(context, plan, course.code)} /></>;
 }
 
 /** The width below which student-roadmap.css stacks Danh sách chờ under the terms. */
@@ -79,7 +86,7 @@ function ProposalBox({ context, proposal, names, onApply, onDecline }: {
       <ul>{proposal.moved.map((move) => <li key={move.code}><strong>{names.get(move.code) ?? move.code}</strong> ({move.code}): {termLabel(move.from)} → {termLabel(move.to)}</li>)}</ul>
     </div>}
     {proposal.aiRemoved.length > 0 && <p>{aiCleanedText(context, proposal.aiRemoved, true)}</p>}
-    {proposal.thesisRemoved.length > 0 && <p>{thesisCleanedText(context, proposal.thesisRemoved, true)}</p>}
+    {proposal.thesisRemoved.length > 0 && <p>{thesisCleanedText(context, proposal.plan, proposal.thesisRemoved, true)}</p>}
     <div className="rm-actions">
       <button type="button" className="sw-primary" onClick={onApply}>Áp dụng</button>
       <button type="button" className="sw-outline" onClick={onDecline}>Bỏ qua</button>
@@ -91,8 +98,9 @@ function ProposalBox({ context, proposal, names, onApply, onDecline }: {
  * readOnly: a cố vấn học tập's or the Khoa's view of the student's plan (advisor-view.ts) until they choose Sửa kế hoạch
  * (onEdit, user 2026-11-10): the terms as they are, nothing to move, add or apply. suggestions: the AI roadmap's improvements (Danh sách chờ, never added); proposal: what the page proposes to
  * change (onApply: Áp dụng; onDecline: Bỏ qua; declined: the student declined one on this visit); cleaned: what an older AI
- * roadmap had added and the student took out on this visit (cleanAiAdded); thesisCleaned: the thesis group's other way
- * taken out on this visit (cleanThesisWay, user 2026-11-03).
+ * roadmap had added and the student took out on this visit (cleanAiAdded); thesisCleaned: what an AI roadmap had added of
+ * the thesis group off the way the plan follows, taken out on this visit (cleanThesisWay; never a course the student
+ * placed, user 2026-11-10).
  */
 export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, origin, onOpenAi, readOnly = false, onEdit, suggestions = [], cleaned = [], thesisCleaned = [],
   proposal = null, onApply, onDecline, declined = false }: {
@@ -152,7 +160,7 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
     <div>
       <strong>{course.name}</strong>
       <span className="rm-course-code">{course.code}</span>
-      <CourseFacts course={course} names={names} byCode={byCode} context={context} />
+      <CourseFacts course={course} names={names} byCode={byCode} context={context} plan={plan} />
     </div>
     <button type="button" className="rm-add" onClick={() => move(course.code, targetTerm)} aria-label={`Thêm ${course.name} vào ${termLabel(targetTerm)}`}>
       <Icon name="plus" />Thêm
@@ -185,7 +193,7 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
     </div>}
     {thesisCleaned.length > 0 && <div className="rm-origin rm-origin-ai" role="status">
       <Mark kind="warning" />
-      <p>{thesisCleanedText(context, thesisCleaned)}</p>
+      <p>{thesisCleanedText(context, plan, thesisCleaned)}</p>
     </div>}
     {!plannedCount && context.curriculum && <div className="rm-origin rm-origin-empty">
       <p>Kế hoạch chưa có học phần nào.{readOnly ? "" : <> Học phần bắt buộc chỉ được điền sẵn khi còn ở phía trước theo kế hoạch đào tạo (học phần đã trễ không được điền), và học phần lộ trình AI đề xuất được đưa ra để bạn bấm Áp dụng khi bạn có lộ trình AI. Hãy tạo lộ trình ở mục Lộ trình AI đề xuất, hoặc tự thêm học phần từ Danh sách chờ.</>}</p>
@@ -215,8 +223,7 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
               {term.courses.map((item) => {
                 const course = byCode.get(item.code.toUpperCase());
                 const problems = course ? [...issueTexts(issues.get(course.code), course, term.code, names),
-                  ...(course.applicable ? [] : ["Môn khác chuyên ngành: không tính cho chuyên ngành của bạn"]),
-                  ...[thesisHint(context, course.code)].filter((text): text is string => Boolean(text))] : ["Học phần không còn trong chương trình đào tạo"];
+                  ...(course.applicable ? [] : ["Môn khác chuyên ngành: không tính cho chuyên ngành của bạn"])] : ["Học phần không còn trong chương trình đào tạo"];
                 return <li key={item.code} className={`rm-term-course${problems.length ? " has-issue" : ""}`} {...dragProps(item.code)}>
                   <Mark kind="planned" />
                   <div>
@@ -224,6 +231,7 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
                     {course && <small className="rm-course-facts">{formatNumber(course.credits)} TC{course.state === "failed" ? " · học lại" : ""}{course.state === "passed" ? ` · học cải thiện${course.grade ? ` (đã đạt ${course.grade})` : ""}` : ""}{course.conditional ? " · môn điều kiện" : ""}</small>}
                     {course && <ClassLine course={course} term={term.code} context={context} />}
                     {course && <OfferLine course={course} context={context} classes={false} />}
+                    {course && <ThesisLine text={thesisHint(context, plan, course.code)} />}
                     {problems.map((text) => <small key={text} className="rm-issue"><Mark kind="warning" /> {text}</small>)}
                   </div>
                   {!readOnly && <div className="rm-term-actions">

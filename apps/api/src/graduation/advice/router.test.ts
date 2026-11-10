@@ -5,7 +5,7 @@ import type { AuthenticatedUser } from "../../auth/types.js";
 import type { DatabasePool } from "../../db/pool.js";
 import type { StudentGraduation } from "../student-graduation.js";
 import type { GraduationAdviceRow } from "./jobs.js";
-import { createGraduationAdviceRouter } from "./router.js";
+import { createGraduationAdviceRouter, shownAdviceOutput } from "./router.js";
 import { syntheticGraduation, unevaluatedGraduation } from "./test-fixture.js";
 
 // Synthetic K29 data only (fixtures/synthetic-k29.json); no real student record.
@@ -159,6 +159,27 @@ describe("GET /", () => {
     expect(offline.body.worker).toEqual({ online: false, supportsAdvice: false });
     const never = await request(setup({ worker: null }).app).get("/advice").expect(200);
     expect(never.body.worker).toEqual({ online: false, supportsAdvice: false });
+  });
+});
+
+describe("an advice written while its data gave the GPA behind the thesis way (grad-advice-v4 to v6)", () => {
+  const output = {
+    summary: "Bạn còn thiếu Nhóm tự chọn TC306. Vì điểm TB tích lũy của bạn là 2,76, dưới 2,80, hệ thống đề xuất học Chuyên đề Tốt nghiệp 1 và 2.",
+    advice: [
+      { focus: "G5", label: "Nhóm tự chọn TC306", text: "Điểm trung bình tích lũy 2,76 nên bạn học Chuyên đề Tốt nghiệp 1 và Chuyên đề Tốt nghiệp 2 thay cho đồ án tốt nghiệp." },
+      { focus: "GPA", label: "Điểm trung bình tích lũy", text: "Điểm trung bình tích lũy của bạn là 2,76/4, đạt yêu cầu tối thiểu 2,00/4." },
+    ],
+    nextSteps: ["Đăng ký Chuyên đề Tốt nghiệp 1 vì điểm TB tích lũy dưới 2,80.", "Hoàn thành Kiểm thử phần mềm."],
+  };
+  it("is shown without the sentences explaining the way by the GPA (user 2026-11-10); a newer one as written", () => {
+    expect(shownAdviceOutput(output, "grad-advice-v6")).toEqual({
+      summary: "Bạn còn thiếu Nhóm tự chọn TC306.",
+      advice: [output.advice[1]],
+      nextSteps: ["Hoàn thành Kiểm thử phần mềm."],
+    });
+    expect(shownAdviceOutput(output, "grad-advice-v4")!.nextSteps).toEqual(["Hoàn thành Kiểm thử phần mềm."]);
+    for (const version of ["grad-advice-v7", "grad-advice-v3", null]) expect(shownAdviceOutput(output, version)).toBe(output);
+    expect(shownAdviceOutput(null, "grad-advice-v6")).toBeNull();
   });
 });
 

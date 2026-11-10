@@ -1,7 +1,8 @@
 // A stored roadmap as the page shows it: the facts the system computed (always) merged with what the AI wrote (once
 // completed). Items the AI picked come first, in its order, with its advice; the other facts follow without advice, so
 // nothing the system found is hidden when the model leaves it out. Pure.
-import type { RoadmapChoice, RoadmapCourse, RoadmapImprove, RoadmapSkill } from "./facts.js";
+import { withoutThesisGpaReason } from "../graduation/thesis.js";
+import type { RoadmapChoice, RoadmapCourse, RoadmapFacts, RoadmapImprove, RoadmapSkill } from "./facts.js";
 import type { RoadmapRow, RoadmapStatus } from "./jobs.js";
 import type { RoadmapWindow } from "./window.js";
 
@@ -36,7 +37,8 @@ export type RoadmapView = {
   /** Key advice points (roadmap-v3), empty before. */
   advice: string[];
   study: RoadmapStudyView[];
-  choices: RoadmapChoice[];
+  /** The choices without their thesis group's facts (the page never shows them; an older roadmap holds a GPA reason there). */
+  choices: Omit<RoadmapChoice, "thesis">[];
   improve: RoadmapImproveView[];
   skills: RoadmapSkillView[];
   months: RoadmapMonthView[];
@@ -44,10 +46,36 @@ export type RoadmapView = {
 
 const iso = (value: Date | string | null) => (value === null ? null : new Date(value).toISOString());
 
+/**
+ * A roadmap written while its data gave the GPA behind the thesis group's way (roadmap-v13 to v15: the facts kept that
+ * reason): its text is shown without the sentences explaining the way by the GPA (user 2026-11-10, the rule is an internal
+ * setting; graduation/thesis.ts withoutThesisGpaReason). Newer roadmaps hold no reason and are shown as written.
+ */
+export const explainedThesisByGpa = (facts: Pick<RoadmapFacts, "choices">): boolean =>
+  (facts.choices ?? []).some((choice) => Boolean(choice.thesis?.reason));
+
+/** The AI's output as shown: for such a roadmap, without those sentences (an item left empty is dropped). */
+export function shownRoadmapOutput(row: Pick<RoadmapRow, "facts" | "output">): RoadmapRow["output"] {
+  const output = row.output;
+  if (!output || !explainedThesisByGpa(row.facts)) return output;
+  const text = (value: string) => withoutThesisGpaReason(value) ?? "";
+  const texts = (values: readonly string[]) => values.map(text).filter(Boolean);
+  const optional = (value: string | null) => (value === null ? null : withoutThesisGpaReason(value));
+  return {
+    ...output,
+    summary: text(output.summary),
+    ...(output.advice ? { advice: texts(output.advice) } : {}),
+    study: output.study.map((item) => ({ ...item, advice: text(item.advice) })),
+    improve: output.improve.map((item) => ({ ...item, advice: text(item.advice) })),
+    skills: output.skills.map((item) => ({ ...item, why: text(item.why), steps: texts(item.steps), outcome: optional(item.outcome) })),
+    months: output.months.map((item) => ({ ...item, focus: optional(item.focus), tasks: texts(item.tasks) })),
+  };
+}
+
 /** `today` is "YYYY-MM-DD" in Vietnam time (the window's own calendar). */
 export function presentRoadmap(row: RoadmapRow, today: string): RoadmapView {
   const { facts } = row;
-  const output = row.status === "completed" ? row.output : null;
+  const output = row.status === "completed" ? shownRoadmapOutput(row) : null;
 
   const study: RoadmapStudyView[] = [];
   const own = new Map(facts.study.map((item) => [item.code, item]));
@@ -94,10 +122,10 @@ export function presentRoadmap(row: RoadmapRow, today: string): RoadmapView {
     ended: facts.window.end < today,
     careerName: facts.careerName,
     specialtyLabel: facts.specialtyLabel,
-    summary: output?.summary ?? null,
+    summary: output?.summary || null,
     advice: output?.advice ?? [],
     study,
-    choices: facts.choices,
+    choices: facts.choices.map(({ thesis: _thesis, ...choice }) => choice),
     improve,
     skills,
     months,

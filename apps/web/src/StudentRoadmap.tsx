@@ -78,7 +78,8 @@ async function call<T>(init: RequestInit = {}): Promise<T> {
  * loaded at (a plan changed meanwhile in another tab or device answers plan_changed). Opening the page changes and saves
  * nothing (user 2026-11-04: "Hỏi trước, bấm mới lưu"): a student without a plan sees the training plan's mandatory courses,
  * saved at the first edit; what the page would change (the newest AI roadmap's courses, what an AI roadmap of before
- * 2026-11-03 added and the plan must not hold, the thesis group's way the system does not advise) is proposed
+ * 2026-11-03 added and the plan must not hold, what an AI roadmap added of the thesis group off the way the plan follows:
+ * the student's choice, else the recommendation; never a course the student placed, user 2026-11-10) is proposed
  * (planProposal), applied and saved by Áp dụng or declined by Bỏ qua, which saves only what keeps the proposal from coming
  * back (declineProposal). editable: false while a cố vấn học tập or the Khoa only looks at the plan, which proposes
  * nothing then. The plan is read again only when Lộ trình AI đề xuất shows a completed roadmap the loaded data does not know

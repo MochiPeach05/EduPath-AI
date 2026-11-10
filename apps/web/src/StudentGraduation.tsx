@@ -242,17 +242,21 @@ function Suggestions({ items }: { items: SuggestionItem[] }) {
       <p className="sg-todo-text">{item.text}</p>
       {item.coursesLabel && <p className="sg-todo-label">{item.coursesLabel}</p>}
       {item.courses.length > 0 && <CourseBullets courses={item.courses} />}
-      {item.note && <p className="sg-todo-note">{item.note}</p>}
+      {/* The thesis group's other way ("Hoặc … nếu bạn chọn phương án này") right under the recommended one, then the note. */}
       {item.alternative && <>
         <p className="sg-todo-label">{item.alternative.label}:</p>
         <CourseBullets courses={item.alternative.courses} />
       </>}
+      {item.note && <p className="sg-todo-note">{item.note}</p>}
     </li>)}</ol>
   </div>;
 }
 
-/** convertible: the reminder about another specialty's passed mandatory courses (convertibleText), shown with the data notes. */
-function EvaluationResult({ evaluation, advice, convertible }: { evaluation: GraduationEvaluation; advice: AdviceState; convertible: string | null }) {
+/**
+ * convertible: the reminder about another specialty's passed mandatory courses (convertibleText), shown with the data notes;
+ * thesisPlan: the thesis group's courses the student placed in Kế hoạch học kỳ (the way they chose).
+ */
+function EvaluationResult({ evaluation, advice, convertible, thesisPlan }: { evaluation: GraduationEvaluation; advice: AdviceState; convertible: string | null; thesisPlan: readonly string[] }) {
   const verdict = verdictHeadline(evaluation);
   const items = conditionItems(evaluation);
   const unknown = items.filter((item) => item.status === "unknown");
@@ -264,7 +268,7 @@ function EvaluationResult({ evaluation, advice, convertible }: { evaluation: Gra
       <ConditionList tone="fail" glyph="✗" title="Chưa đạt" items={items.filter((item) => item.status === "fail")} empty="Không có điều kiện nào chưa đạt." />
     </div>
     {unknown.length > 0 && <ConditionList tone="unknown" glyph="?" title="Chưa xác định" items={unknown} />}
-    <Suggestions items={suggestionItems(evaluation)} />
+    <Suggestions items={suggestionItems(evaluation, thesisPlan)} />
     {warnings.length > 0 && <ul className="sg-warnings" aria-label="Lưu ý về dữ liệu">{warnings.map((warning) => <li key={warning.code}>
       <span aria-hidden="true">!</span><span>{warning.text}</span>
     </li>)}</ul>}
@@ -286,7 +290,7 @@ function ResultSection({ data, advice }: { data: StudentGraduationResponse; advi
       <h2 id="sg-result-title" className="sg-title">Kết quả xét tốt nghiệp tính đến thời điểm hiện tại</h2>
       {evaluation && <p className="sg-meta">{asOfLine(evaluation)}</p>}
     </div>
-    {evaluation ? <EvaluationResult evaluation={evaluation} advice={advice} convertible={convertible} /> : <div className="sg-empty-state">
+    {evaluation ? <EvaluationResult evaluation={evaluation} advice={advice} convertible={convertible} thesisPlan={data.thesisPlan ?? []} /> : <div className="sg-empty-state">
       <span className="sg-empty-icon" aria-hidden="true"><Icon name="document" /></span>
       <h3>Chưa có bảng điểm để đối chiếu</h3>
       <p>Hãy import bảng điểm PDF xuất từ cổng đào tạo tại mục Hồ sơ và bảng điểm. Kết quả xét tốt nghiệp sẽ được tính ngay sau khi import.</p>

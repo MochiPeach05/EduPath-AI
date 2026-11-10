@@ -8,6 +8,7 @@ import { physicalEducationGroupsFor } from "./plan-progress.js";
 import { SCOPE_MAX_LENGTH } from "./constants.js";
 import { majorCondition, majorIdentity } from "../curricula/majors.js";
 import { planWithRealCodes, readRealCourseRows, realCodesInText, realCodesOfRows, realCourseJoin } from "../curricula/real-codes.js";
+import { readOwnPlannedCodes } from "../study-plan/own-plan.js";
 import type {
   AssessmentInputs, CareerInput, CurriculumCourseInput, CurriculumRelationInput,
   PlanResolution, PlanRevisionInput, WeightsInput,
@@ -163,6 +164,9 @@ export async function readAssessmentInputs(db: Db, userId: string,
     for (const row of catalog.rows) catalogNames[courseKey(row.code)] = row.name;
   }
 
+  /* The courses the student placed in Kế hoạch học kỳ themselves: the way of the thesis group they chose (comp-calc-v23). */
+  const plannedCourses = [...await readOwnPlannedCodes(db, userId, realCodes)].sort();
+
   return {
     student: { cohortCode, specialty, careerPositionId: profile?.career_position_id ?? null },
     transcript: { version: transcript.rows[0].version, data: transcript.rows[0].data },
@@ -177,6 +181,7 @@ export async function readAssessmentInputs(db: Db, userId: string,
     plan: { resolution: planResolution, revision: planRevision },
     career,
     catalogNames,
+    ...(plannedCourses.length ? { plannedCourses } : {}),
     ...(options.promptVersion ? { promptVersion: options.promptVersion } : {}),
   };
 }

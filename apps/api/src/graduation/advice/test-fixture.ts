@@ -62,6 +62,8 @@ type SyntheticGraduationOptions = {
   terms?: TranscriptTerm[];
   /** Edits the CNPM standard's data (gpaScale already defaulted to 4). */
   standard?: (data: GraduationData) => GraduationData;
+  /** The thesis group's courses the student placed in Kế hoạch học kỳ (StudentGraduation.thesisPlan); none by default. */
+  thesisPlan?: string[];
 };
 
 /** The evaluated graduation page of the synthetic CNPM student (default terms: groups, credits fail; GPA passes). */
@@ -75,9 +77,11 @@ export function syntheticGraduation(options: SyntheticGraduationOptions = {}): E
   };
   const evaluation = evaluateGraduation({ standard, transcript, curriculumCourses: syntheticCurriculum().courses });
   const profile: StudentGraduation["profile"] = { cohortCode: "K29", specialty: "CNPM", majorCode: "7480201" };
+  const thesisPlan = options.thesisPlan ?? [];
   return {
     profile, resolution: "specialty", standard, transcript: { version: transcript.version, updatedAt: transcript.updatedAt },
-    evaluation, fingerprint: graduationFingerprint({ profile, standard, evaluation }), specialtySuggestion: null, convertible: null,
+    evaluation, fingerprint: graduationFingerprint({ profile, standard, evaluation, thesisPlan }), specialtySuggestion: null, convertible: null,
+    thesisPlan,
   };
 }
 

@@ -27,7 +27,8 @@ const inputs = { transcript: { version: transcriptVersion } } as unknown as Asse
 
 /** An assessment's own result; only `previous` reads it (the other routes return `result`). */
 type Row = { id: string; user_id: string; ai_status: string; created_at: string; computed?: AssessmentResult };
-type State = { active: boolean; transcript: string | null; recentPrecheck: boolean; recentInTx: boolean; rows: Row[]; consent: string | null; withdrawn: boolean };
+/** studyPlan: the saved Kế hoạch học kỳ (stu_study_plans.data); none by default. */
+type State = { active: boolean; transcript: string | null; recentPrecheck: boolean; recentInTx: boolean; rows: Row[]; consent: string | null; withdrawn: boolean; studyPlan?: unknown };
 /** The student's cố vấn học tập working in the student's page (advisors/access.ts sets it on the request). */
 const advisor = { ...student, userId: "88888888-8888-4888-8888-888888888888", name: "Cố vấn", email: "co.van@vlu.edu.vn", role: "advisor" } satisfies AuthenticatedUser;
 
@@ -43,7 +44,7 @@ function setup(options: { state?: Partial<State>; aiQueue?: CompetencyAiQueueHoo
   };
   let inserted: string | undefined;
   const stored = (row: Row) => ({
-    id: row.id, created_at: row.created_at, meta: result.meta, computed: result, ai_status: row.ai_status,
+    id: row.id, created_at: row.created_at, meta: result.meta, computed: row.computed ?? result, ai_status: row.ai_status,
     ai_error_code: null, ai_model: null, ai_completed_at: null, ai_output: row.ai_status === "completed" ? { summary: "x" } : null,
   });
   const own = (params: unknown[]) => state.rows.filter((row) => row.user_id === params[1] && row.id === params[0]);
@@ -84,6 +85,7 @@ function setup(options: { state?: Partial<State>; aiQueue?: CompetencyAiQueueHoo
     if (sql.startsWith("SELECT id,created_at")) {
       const rows = state.rows.filter((row) => row.user_id === params[0]).slice(0, 1).map(stored); return { rowCount: rows.length, rows };
     }
+    if (sql.includes("FROM stu_study_plans")) return { rowCount: state.studyPlan ? 1 : 0, rows: state.studyPlan ? [{ data: state.studyPlan }] : [] };
     if (sql.startsWith("SELECT id,ai_status,ai_error_code")) {
       const rows = state.rows.filter((row) => row.user_id === params[0]).slice(0, 1).map((row) => ({ id: row.id, ai_status: row.ai_status, ai_error_code: null }));
       return { rowCount: rows.length, rows };
@@ -287,6 +289,22 @@ describe("GET /latest and /latest/status", () => {
     const t = setup({ state: { rows: [{ id: olderId, user_id: studentId, ai_status: "completed", created_at: "2026-10-10T02:00:00.000Z" }] } });
     const response = await request(t.app).get("/assessments/latest").expect(200);
     expect(response.body.assessment.ai.output).toEqual({ summary: "x" });
+  });
+});
+
+describe("GET /latest thesisPlanOutdated (comp-calc-v23, user 2026-11-10)", () => {
+  const computed = { ...result, excludedThesisReplacements: ["71ITGR40203", "71ITGR40206"] } as unknown as AssessmentResult;
+  const rows = [{ id: latestId, user_id: studentId, ai_status: "failed", created_at: "2026-10-11T02:00:00.000Z", computed }];
+  const plan = (...codes: string[]) => ({ schemaVersion: 1, terms: [{ code: "HK262", courses: codes.map((code) => ({ code })) }] });
+  it("names the thesis group's courses the student placed that the stored result leaves out, so the page asks for Đánh giá lại", async () => {
+    const response = await request(setup({ state: { rows, studyPlan: plan("71ITGR40206", "71ITIN40304") } }).app).get("/assessments/latest").expect(200);
+    expect(response.body.thesisPlanOutdated).toEqual(["71ITGR40206"]);
+  });
+  it("is absent when the plan holds nothing the result leaves out, or there is no plan", async () => {
+    for (const studyPlan of [plan("71ITIN40304"), undefined]) {
+      const response = await request(setup({ state: { rows, studyPlan } }).app).get("/assessments/latest").expect(200);
+      expect(response.body).not.toHaveProperty("thesisPlanOutdated");
+    }
   });
 });
 

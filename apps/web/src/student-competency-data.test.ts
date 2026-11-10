@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, confidentStrengths, countAxis, dataUsedLine, displayLevel, FIT_SCALE, fitLabelOf, fitLevelOf, fitDataShareOf, fitScoreOf, fitStep, gapHistory, levelChart, levelSummary, levelText, overallIsPooled, thesisByGpa, lateBeforeStudyTerm, physicalEducationOutdated, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
+  aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, confidentStrengths, countAxis, dataUsedLine, displayLevel, FIT_SCALE, fitLabelOf, fitLevelOf, fitDataShareOf, fitScoreOf, fitStep, gapHistory, levelChart, levelSummary, levelText, overallIsPooled, thesisWayAdvised, thesisPlanOutdatedText, lateBeforeStudyTerm, physicalEducationOutdated, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
   careerDataText, careerSummaryText, choiceLabel, courseTermText, formatDifference, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isOverdue, isPreconditionError, PRIORITY_LABELS, levelStep, mapAiOutput, missingRequirements, missingRequirementsMessage, modelLabel, needsSelfStudy, nextCourseCount, nextTermOf, plannedCourseNote, plansFor, relatedSkillNames, shownScore, skillGroupKeys,
   scoreDifference, shouldPoll, sortRequirements, studyTermOf, termLabel, upcomingText, CHART_LEVELS, EMPTY_SKILL_FILTERS, LEVEL_COLUMNS,
   careerThresholdsLine, chartLevelLabel, currentImprovements, LEVEL_SCALE, levelOfScore, withCurrentLevels,
@@ -651,10 +651,17 @@ describe("overall method", () => {
     expect(overallIsPooled("comp-calc-v11")).toBe(false);
     expect(overallIsPooled("comp-calc-v9")).toBe(false);
   });
-  it("tells a result with the thesis way by GPA (comp-calc-v18) from older ones, which ask for Đánh giá lại", () => {
-    expect(thesisByGpa("comp-calc-v18")).toBe(true);
-    expect(thesisByGpa("comp-calc-v17")).toBe(false);
-    expect(thesisByGpa(null)).toBe(true);
+  it("tells a result that follows one thesis way (comp-calc-v18) from older ones, which ask for Đánh giá lại", () => {
+    expect(thesisWayAdvised("comp-calc-v18")).toBe(true);
+    expect(thesisWayAdvised("comp-calc-v17")).toBe(false);
+    expect(thesisWayAdvised(null)).toBe(true);
+  });
+  it("names the thesis group's courses the student placed that the stored result leaves out (comp-calc-v23), never the GPA", () => {
+    const result = { courses: [{ code: "71ITGR40206", name: "Đồ án Tốt nghiệp" }, { code: "71ITGR40203", name: "Chuyên đề Tốt nghiệp 1" }] } as never;
+    expect(thesisPlanOutdatedText(result, ["71itgr40206"])).toBe("Kế hoạch học kỳ của bạn có Đồ án Tốt nghiệp, nhưng kết quả này được tính trước lựa chọn đó. Bấm “Đánh giá lại” để gợi ý học phần theo phương án bạn chọn.");
+    expect(thesisPlanOutdatedText(result, ["71ITGR40203", "71ITXX"])).toBe("Kế hoạch học kỳ của bạn có Chuyên đề Tốt nghiệp 1 và 71ITXX, nhưng kết quả này được tính trước lựa chọn đó. Bấm “Đánh giá lại” để gợi ý học phần theo phương án bạn chọn.");
+    expect(thesisPlanOutdatedText(result, [])).toBeNull();
+    expect(thesisPlanOutdatedText(result, undefined)).toBeNull();
   });
   it("tells a result whose late courses are only those before the term being studied (comp-calc-v19) from older ones", () => {
     expect(lateBeforeStudyTerm("comp-calc-v19")).toBe(true);

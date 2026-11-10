@@ -52,6 +52,8 @@ export type GraduationAdviceRow = {
   model: string | null;
   standardVersion: number;
   output: GraduationAdviceOutput | null;
+  /** The prompt the advice was written with (null: unknown); router.ts shows older ones without their GPA reasons. */
+  promptVersion?: string | null;
   /** Created within ADVICE_INSERT_INTERVAL_SECONDS (database clock). */
   recent: boolean;
   /** Finished (or last changed) at least ADVICE_AUTO_RETRY_SECONDS ago (database clock). */
@@ -87,7 +89,7 @@ export type AdviceOutcome =
   | { kind: "stored"; row: GraduationAdviceRow; created: boolean; graduation: EvaluatedGraduation };
 
 const rowColumns = `id,fingerprint,status,error_code AS "errorCode",created_at AS "createdAt",completed_at AS "completedAt",
-  ai_model AS model,standard_version AS "standardVersion",ai_output AS output,
+  ai_model AS model,standard_version AS "standardVersion",ai_output AS output,prompt_version AS "promptVersion",
   created_at>now()-make_interval(secs => $2) AS recent,
   COALESCE(completed_at,updated_at)<=now()-make_interval(secs => $3) AS "retryDue"`;
 

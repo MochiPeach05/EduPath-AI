@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
-  aiAddedText, aiCleanedText, applyProposal, auditGroups, auditNote, classesText, cleanAiAdded, cleanThesisWay, creditProgress, declineProposal, groupCountText,
-  moveCourse, neededTone, nextTermOffer, offering, orderAiAdded, ownRelations, planChoiceText, planIssues, planProposal, poolSections, proposalAddedText,
-  proposalSummaryText, searchCourses, termLabel, termLoad, termLoadText, thesisCleanedText, thesisHint, thesisLeftOut, withTerms, type AiProposal,
+  aiAddedText, aiCleanedText, applyProposal, auditGroups, auditNote, classesText, cleanAiAdded, cleanThesisWay, creditProgress, declineProposal, followedThesisWay, groupCountText,
+  moveCourse, neededTone, nextTermOffer, offering, orderAiAdded, ownPlanned, ownRelations, planChoiceText, planIssues, planProposal, poolSections, proposalAddedText,
+  proposalSummaryText, searchCourses, termLabel, termLoad, termLoadText, thesisChoice, thesisCleanedText, thesisHint, thesisLeftOut, withTerms, type AiProposal,
   type StudyPlanContext, type StudyPlanCourse, type StudyPlanData, type StudyPlanThesis,
 } from "./study-plan-data";
 
@@ -268,7 +268,7 @@ describe("planning", () => {
     expect(cleanAiAdded(ctx, plan)).toEqual({ plan, removed: [] });
   });
 
-  describe("the thesis group (user 2026-11-03: Đồ án tốt nghiệp from a cumulative GPA of 2,80, Chuyên đề tốt nghiệp 1 and 2 below it)", () => {
+  describe("the thesis group (user 2026-11-03; 2026-11-10: the system recommends a way, never by the GPA, and the student chooses)", () => {
     const thesisCourses = [
       course("G6", { kind: "elective", credits: 6, name: "Đồ án Tốt nghiệp" }),
       course("T1", { kind: "elective", name: "Chuyên đề Tốt nghiệp 1" }),
@@ -276,54 +276,99 @@ describe("planning", () => {
       course("O1", { kind: "elective", name: "Quản lý dự án" }),
     ];
     const way = (extra: Partial<StudyPlanThesis>): StudyPlanThesis => ({
-      group: "Nhóm tự chọn TC307", thesis: "G6", replacements: ["T1", "T2"], others: ["O1"], path: "not_started", way: null, reason: null, ...extra,
+      group: "Nhóm tự chọn TC307", thesis: "G6", replacements: ["T1", "T2"], others: ["O1"], path: "not_started", way: null, ...extra,
     });
     const withThesis = (thesis: StudyPlanThesis | null) => context({
       courses: [...context().courses, ...thesisCourses], thesis,
       graduation: { ...context().graduation!, groups: [...context().graduation!.groups,
         { label: "Nhóm tự chọn TC307", kind: "elective", unit: "TC", required: 6, passed: 0, status: "fail", courseCodes: ["G6", "T1", "T2", "O1"] }] },
     });
-    const high = withThesis(way({ way: "thesis", reason: "điểm TB tích lũy 3,10, từ 2,80 trở lên" }));
-    const low = withThesis(way({ way: "replacement", reason: "điểm TB tích lũy 2,45, dưới 2,80" }));
-    const group = (ctx: StudyPlanContext) => poolSections(ctx, { schemaVersion: 1, terms: [] }).find((section) => section.title === "Nhóm tự chọn TC307")?.courses.map((item) => item.code);
+    const high = withThesis(way({ way: "thesis" }));
+    const low = withThesis(way({ way: "replacement" }));
+    const empty: StudyPlanData = { schemaVersion: 1, terms: [] };
+    const planned = (...codes: string[]): StudyPlanData => ({ schemaVersion: 1, terms: [{ code: "HK262", courses: codes.map((code) => ({ code })) }] });
+    const added = (plan: StudyPlanData, codes: string[]): StudyPlanData => ({ ...plan, roadmapId: "r1",
+      aiAdded: { completedAt: "2026-11-03T07:24:00.000Z", term: "HK262", codes, addedAt: "2026-11-03T07:30:00.000Z" } });
+    const group = (ctx: StudyPlanContext, plan = empty) => poolSections(ctx, plan).find((section) => section.title === "Nhóm tự chọn TC307")?.courses.map((item) => item.code);
 
-    it("offers only the advised way in Danh sách chờ; search still finds the other way, marked", () => {
-      expect(group(withThesis(way({})))).toEqual(["G6", "T1", "T2", "O1"]);
-      expect(group(high)).toEqual(["G6"]);
-      expect(group(low)).toEqual(["T1", "T2"]);
-      expect([...thesisLeftOut(high)]).toEqual(["T1", "T2", "O1"]);
-      expect([...thesisLeftOut(low)]).toEqual(["G6", "O1"]);
-      expect(searchCourses(high, "chuyen de").map((item) => item.code)).toEqual(["T1", "T2"]);
-      expect(thesisHint(high, "T1")).toBe("Không cần học phần này: hệ thống đề xuất làm Đồ án Tốt nghiệp (điểm TB tích lũy 3,10, từ 2,80 trở lên).");
-      expect(thesisHint(high, "G6")).toBeNull();
-      expect(thesisHint(low, "G6")).toBe("Không cần học phần này: hệ thống đề xuất học Chuyên đề Tốt nghiệp 1 và Chuyên đề Tốt nghiệp 2 thay cho Đồ án Tốt nghiệp (điểm TB tích lũy 2,45, dưới 2,80).");
-      expect(thesisHint(withThesis(way({})), "T1")).toBeNull();
-      const started = withThesis(way({ path: "replacement", way: "replacement" }));
-      expect(thesisHint(started, "G6")).toBe("Không cần học phần này: bạn đã học theo phương án học phần thay thế Đồ án Tốt nghiệp (Chuyên đề Tốt nghiệp 1 và Chuyên đề Tốt nghiệp 2).");
+    it("reads the student's choice from the transcript and their own courses, never the AI's, and follows it over the recommendation", () => {
+      expect(thesisChoice(low, empty)).toBeNull();
+      expect(followedThesisWay(low, empty)).toBe("replacement");
+      expect(thesisChoice(low, planned("g6"))).toBe("thesis");
+      expect(followedThesisWay(low, planned("G6"))).toBe("thesis");
+      expect(thesisChoice(high, planned("O1"))).toBe("replacement");
+      expect(thesisChoice(high, planned("G6", "T2"))).toBe("both");
+      expect(followedThesisWay(high, planned("G6", "T2"))).toBeNull();
+      // What an AI roadmap added is its suggestion, unless the student kept it (Bỏ qua).
+      expect(thesisChoice(low, added(planned("G6"), ["G6"]))).toBeNull();
+      expect(thesisChoice(low, { ...added(planned("G6"), ["G6"]), kept: ["G6"] })).toBe("thesis");
+      expect([...ownPlanned({ ...added(planned("G6", "T1"), ["T1"]) })]).toEqual(["G6"]);
+      expect(thesisChoice(withThesis(way({ path: "replacement", way: "replacement" })), planned("G6"))).toBe("both");
     });
 
-    it("takes the other way out of the plan when the AI added it or both ways are planned, never what the student chose alone", () => {
-      // Both ways planned (successive AI roadmaps): the other way goes, with a note naming it.
+    it("lists both ways in Danh sách chờ until the student chooses, the recommended one first, then only the way chosen", () => {
+      expect(group(withThesis(way({})))).toEqual(["G6", "T1", "T2", "O1"]);
+      expect(group(high)).toEqual(["G6", "T1", "T2"]);
+      expect(group(low)).toEqual(["T1", "T2", "G6"]);
+      expect([...thesisLeftOut(high)]).toEqual(["O1"]);
+      // Chuyên đề Tốt nghiệp 1 placed: the chuyên đề way, Đồ án tốt nghiệp out of the list (search still finds it).
+      expect(group(high, planned("T1"))).toEqual(["T2"]);
+      expect([...thesisLeftOut(high, planned("T1"))].sort()).toEqual(["G6", "O1"]);
+      expect(searchCourses(high, "do an tot").map((item) => item.code)).toEqual(["G6"]);
+      expect(group(low, planned("G6"))).toBeUndefined();
+    });
+
+    it("says the recommendation as a suggestion, never the GPA, and never calls a course the student placed unnecessary", () => {
+      expect(thesisHint(low, empty, "T1")).toBe("Đề xuất cho nhóm tự chọn TC307: học Chuyên đề Tốt nghiệp 1 và Chuyên đề Tốt nghiệp 2.");
+      expect(thesisHint(low, empty, "G6")).toBe("Phương án khác cho nhóm tự chọn TC307, nếu bạn chọn; đề xuất: học Chuyên đề Tốt nghiệp 1 và Chuyên đề Tốt nghiệp 2.");
+      expect(thesisHint(high, empty, "T2")).toBe("Phương án khác cho nhóm tự chọn TC307, nếu bạn chọn; đề xuất: làm Đồ án Tốt nghiệp.");
+      expect(thesisHint(high, empty, "O1")).toBe("Học phần này không thuộc phương án đề xuất cho nhóm tự chọn TC307 (làm Đồ án Tốt nghiệp).");
+      // Đồ án tốt nghiệp placed by a student the system recommends the chuyên đề for: their choice, no line on it.
+      expect(thesisHint(low, planned("G6"), "G6")).toBeNull();
+      expect(thesisHint(low, planned("G6"), "T1")).toBe("Bạn đã chọn làm Đồ án Tốt nghiệp cho nhóm tự chọn TC307; chỉ cần một phương án.");
+      // Both ways planned: kept, and said neutrally that one is enough.
+      const both = "Chỉ cần một phương án cho nhóm tự chọn TC307: làm Đồ án Tốt nghiệp, hoặc học Chuyên đề Tốt nghiệp 1 và Chuyên đề Tốt nghiệp 2.";
+      expect(thesisHint(high, planned("G6", "T1"), "G6")).toBe(both);
+      expect(thesisHint(high, planned("G6", "T1"), "T2")).toBe(both);
+      // A path the transcript shows is the student's choice too.
+      const started = withThesis(way({ path: "replacement", way: "replacement" }));
+      expect(thesisHint(started, empty, "G6")).toBe("Bạn đã chọn học Chuyên đề Tốt nghiệp 1 và Chuyên đề Tốt nghiệp 2 cho nhóm tự chọn TC307; chỉ cần một phương án.");
+      expect(thesisHint(withThesis(way({})), empty, "T1")).toBeNull();
+      expect(thesisHint(high, empty, "C")).toBeNull();
+      // No line names a GPA, a threshold, or calls a course unnecessary.
+      for (const ctx of [high, low, started]) for (const plan of [empty, planned("G6"), planned("T1"), planned("G6", "T1")]) for (const code of ["G6", "T1", "T2", "O1"]) {
+        expect(thesisHint(ctx, plan, code) ?? "").not.toMatch(/2,8|điểm|Không cần/);
+      }
+    });
+
+    it("never takes out a course the student placed; only what an AI roadmap added off the way the plan follows", () => {
+      // Both ways placed by the student: nothing goes (user 2026-11-10), whatever the recommendation.
       const mixed: StudyPlanData = { schemaVersion: 1, terms: [{ code: "HK262", courses: [{ code: "C" }, { code: "T1" }] }, { code: "HK263", courses: [{ code: "G6" }, { code: "T2" }] }] };
-      const highClean = cleanThesisWay(high, mixed);
-      expect(highClean.removed).toEqual(["T1", "T2"]);
-      expect(highClean.plan.terms.map((term) => term.courses.map((item) => item.code))).toEqual([["C"], ["G6"]]);
-      expect(thesisCleanedText(high, highClean.removed)).toBe("Đã bỏ khỏi kế hoạch Chuyên đề Tốt nghiệp 1 (T1) và Chuyên đề Tốt nghiệp 2 (T2) vì hệ thống đề xuất làm Đồ án Tốt nghiệp (điểm TB tích lũy 3,10, từ 2,80 trở lên); kế hoạch chỉ giữ một phương án cho nhóm tự chọn TC307.");
-      expect(cleanThesisWay(low, mixed).removed).toEqual(["G6"]);
-      // The other way alone: kept when the student planned it, taken out when the AI added it.
-      const alone: StudyPlanData = { schemaVersion: 1, terms: [{ code: "HK262", courses: [{ code: "T1" }, { code: "T2" }] }] };
-      expect(cleanThesisWay(high, alone)).toEqual({ plan: alone, removed: [] });
-      const byAi: StudyPlanData = { ...alone, roadmapId: "r1", aiAdded: { completedAt: "2026-11-03T07:24:00.000Z", term: "HK262", codes: ["T1", "T2"], addedAt: "2026-11-03T07:30:00.000Z" } };
+      expect(cleanThesisWay(high, mixed)).toEqual({ plan: mixed, removed: [] });
+      expect(cleanThesisWay(low, mixed)).toEqual({ plan: mixed, removed: [] });
+      // The other way the student placed alone stays.
+      expect(cleanThesisWay(low, planned("G6"))).toEqual({ plan: planned("G6"), removed: [] });
+      expect(cleanThesisWay(high, planned("T1", "T2"))).toEqual({ plan: planned("T1", "T2"), removed: [] });
+      // What the AI roadmap added off the recommended way (a roadmap before roadmap-v13) is proposed out, said without the GPA.
+      const byAi = added(planned("T1", "T2"), ["T1", "T2"]);
       const aiClean = cleanThesisWay(high, byAi);
       expect(aiClean.removed).toEqual(["T1", "T2"]);
       expect(aiClean.plan.aiAdded!.codes).toEqual([]);
-      // The advised way already being studied counts as planned: the thesis in progress sends the chuyên đề out.
+      expect(thesisCleanedText(high, aiClean.plan, aiClean.removed)).toBe("Đã bỏ khỏi kế hoạch Chuyên đề Tốt nghiệp 1 (T1) và Chuyên đề Tốt nghiệp 2 (T2) do lộ trình AI thêm trước đây: hệ thống đề xuất làm Đồ án Tốt nghiệp cho nhóm tự chọn TC307, chỉ cần một phương án. Bạn vẫn có thể tự thêm lại các học phần này nếu muốn chọn chúng.");
+      expect(cleanThesisWay(low, byAi).removed).toEqual([]);
+      // The AI's chuyên đề beside the student's own Đồ án tốt nghiệp: proposed out, for the student's choice.
+      const chose = added({ schemaVersion: 1, terms: [{ code: "HK262", courses: [{ code: "T1" }, { code: "T2" }, { code: "G6" }] }] }, ["T1", "T2"]);
+      const chosen = cleanThesisWay(low, chose);
+      expect(chosen.removed).toEqual(["T1", "T2"]);
+      expect(thesisCleanedText(low, chosen.plan, chosen.removed, true)).toBe("Bỏ khỏi kế hoạch Chuyên đề Tốt nghiệp 1 (T1) và Chuyên đề Tốt nghiệp 2 (T2) do lộ trình AI thêm trước đây: bạn đã chọn làm Đồ án Tốt nghiệp cho nhóm tự chọn TC307, chỉ cần một phương án.");
+      // Kept by the student (Bỏ qua): theirs now, both ways stay.
+      expect(cleanThesisWay(low, { ...chose, kept: ["T1", "T2"] }).removed).toEqual([]);
+      // The thesis being written: the AI's chuyên đề go.
       const writing = context({ ...high, courses: high.courses.map((item) => (item.code === "G6" ? { ...item, state: "in_progress" as const, inProgressTerm: "HK261" } : item)),
         thesis: way({ path: "thesis_in_progress", way: "thesis" }) });
-      expect(cleanThesisWay(writing, alone).removed).toEqual(["T1", "T2"]);
-      expect(thesisCleanedText(writing, ["T1"])).toBe("Đã bỏ khỏi kế hoạch Chuyên đề Tốt nghiệp 1 (T1) vì bạn đang làm Đồ án Tốt nghiệp; kế hoạch chỉ giữ một phương án cho nhóm tự chọn TC307.");
-      // No way (no cumulative GPA) or no thesis group: nothing changes.
-      expect(cleanThesisWay(withThesis(way({})), mixed)).toEqual({ plan: mixed, removed: [] });
+      expect(cleanThesisWay(writing, byAi).removed).toEqual(["T1", "T2"]);
+      // No recommendation and no choice, or no thesis group: nothing changes.
+      expect(cleanThesisWay(withThesis(way({})), byAi)).toEqual({ plan: byAi, removed: [] });
       expect(cleanThesisWay(withThesis(null), mixed)).toEqual({ plan: mixed, removed: [] });
     });
   });
@@ -423,29 +468,29 @@ describe("planning", () => {
       ];
       const high = context({
         courses: [...context().courses, ...thesisCourses],
-        thesis: { group: "Nhóm tự chọn TC307", thesis: "G6", replacements: ["T1", "T2"], others: [], path: "not_started", way: "thesis", reason: "điểm TB tích lũy 3,10, từ 2,80 trở lên" },
+        thesis: { group: "Nhóm tự chọn TC307", thesis: "G6", replacements: ["T1", "T2"], others: [], path: "not_started", way: "thesis" },
       });
 
-      it("lists the other way of a plan holding both, and keeps it when the student declines", () => {
+      it("keeps both ways of a plan the student filled and proposes nothing, saying one is enough (user 2026-11-10)", () => {
         const both = withTerms(high, { schemaVersion: 1, terms: [{ code: "HK262", courses: [{ code: "G6" }, { code: "T1" }, { code: "T2" }] }] });
-        const proposed = planProposal(high, both, null, now)!;
-        expect([proposed.thesisRemoved, proposed.keepable]).toEqual([["T1", "T2"], ["T1", "T2"]]);
-        expect(thesisCleanedText(high, proposed.thesisRemoved, true)).toBe("Bỏ khỏi kế hoạch Chuyên đề Tốt nghiệp 1 (T1) và Chuyên đề Tốt nghiệp 2 (T2) vì hệ thống đề xuất làm Đồ án Tốt nghiệp (điểm TB tích lũy 3,10, từ 2,80 trở lên); kế hoạch chỉ giữ một phương án cho nhóm tự chọn TC307.");
-        const kept = declineProposal(both, proposed);
-        expect(planProposal(high, kept, null, now)).toBeNull();
-        expect(cleanThesisWay(high, kept).removed).toEqual([]);
+        expect(planProposal(high, both, null, now)).toBeNull();
+        expect(thesisHint(high, both, "T1")).toMatch(/^Chỉ cần một phương án cho nhóm tự chọn TC307/);
       });
 
-      it("takes the other way out only with the AI's thesis, so declining that proposal keeps nothing", () => {
-        // The student planned the chuyên đề alone; the AI roadmap proposes the thesis the GPA advises.
+      it("never adds the AI's thesis beside the chuyên đề the student chose, and proposes the AI's chuyên đề out beside their Đồ án", () => {
+        // The student planned the chuyên đề themselves; an AI roadmap proposes Đồ án (the recommended way): the student's way wins.
         const alone = withTerms(high, { schemaVersion: 1, terms: [{ code: "HK262", courses: [{ code: "T1" }, { code: "T2" }] }] });
         const thesis: AiProposal = { ...proposal, courses: [{ code: "G6", term: "HK263" }] };
-        const proposed = planProposal(high, alone, thesis, now)!;
-        expect(proposed.added).toEqual([{ code: "G6", term: "HK263" }]);
-        expect([proposed.thesisRemoved, proposed.keepable]).toEqual([["T1", "T2"], []]);
-        const declined = declineProposal(alone, proposed);
-        expect(declined).toEqual({ ...alone, roadmapId });
-        expect(planProposal(high, declined, thesis, now)).toBeNull();
+        expect(planProposal(high, alone, thesis, now)).toBeNull();
+        // An older roadmap's chuyên đề beside the student's own Đồ án: proposed out (Áp dụng), kept by Bỏ qua.
+        const mixed = withTerms(high, { schemaVersion: 1, roadmapId: "r1", aiAdded: { completedAt: "2026-11-03T07:24:00.000Z", term: "HK262", codes: ["T1", "T2"], addedAt: "2026-11-03T07:30:00.000Z" },
+          terms: [{ code: "HK262", courses: [{ code: "T1" }, { code: "T2" }] }, { code: "HK263", courses: [{ code: "G6" }] }] });
+        const proposed = planProposal(high, mixed, null, now)!;
+        expect([proposed.thesisRemoved, proposed.keepable]).toEqual([["T1", "T2"], ["T1", "T2"]]);
+        expect(thesisCleanedText(high, proposed.plan, proposed.thesisRemoved, true)).toBe("Bỏ khỏi kế hoạch Chuyên đề Tốt nghiệp 1 (T1) và Chuyên đề Tốt nghiệp 2 (T2) do lộ trình AI thêm trước đây: bạn đã chọn làm Đồ án Tốt nghiệp cho nhóm tự chọn TC307, chỉ cần một phương án.");
+        const kept = declineProposal(mixed, proposed);
+        expect(planProposal(high, kept, null, now)).toBeNull();
+        expect(cleanThesisWay(high, kept).removed).toEqual([]);
       });
     });
   });

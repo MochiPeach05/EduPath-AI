@@ -228,7 +228,7 @@ describe("StudentGraduation result", () => {
     expect(visible.match(/Điện toán đám mây3 TC◐ Đang học/g)).toHaveLength(1);
     expect(html).toContain("Kết quả xét tốt nghiệp chính thức do nhà trường công bố.");
   });
-  it("recommends the graduation thesis first and lists the replacement courses as a fallback", () => {
+  it("recommends a way of the thesis group without the GPA, lists the other one, and follows the student's plan (user 2026-11-10)", () => {
     const thesisCourses = [
       row("71ITGR40203", "Chuyên đề Tốt nghiệp 1", "TC306", "not_taken"),
       row("71ITGR40206", "Đồ án Tốt nghiệp", "TC306", "not_taken", { credits: 6 }),
@@ -236,11 +236,18 @@ describe("StudentGraduation result", () => {
     ];
     const base = evaluation("pass");
     const thesisGroup: GraduationGroupEvaluation = { ...base.groups[1]!, required: 6, lower: 0, upper: 0, remaining: 6, status: "fail", passedCount: 0, courses: thesisCourses };
-    // Cumulative GPA 3,12, from 2,80: the thesis alone (user 2026-11-03, "TB tích lũy từ 2,80").
+    // Cumulative GPA 3,12: the thesis is recommended, as a recommendation only, and the chuyên đề stay listed.
     const html = render(ready(graduation({ evaluation: { ...base, status: "fail", groupStatus: "fail", groups: [base.groups[0]!, thesisGroup, base.groups[2]!] } })));
-    expect(html).toContain("Đăng ký Đồ án Tốt nghiệp (6 TC) để hoàn thành nhóm tự chọn TC306: điểm TB tích lũy của bạn 3,12, từ 2,80 trở lên, nên hệ thống đề xuất làm đồ án tốt nghiệp; một học phần đủ 6 tín chỉ của nhóm.");
+    expect(html).toContain("Đề xuất: đăng ký Đồ án Tốt nghiệp (6 TC) để hoàn thành nhóm tự chọn TC306; một học phần đủ 6 tín chỉ của nhóm.");
+    expect(text(html)).toContain("Hoặc học Chuyên đề Tốt nghiệp 1 và Chuyên đề Tốt nghiệp 2 nếu bạn chọn phương án này:71ITGR40203Chuyên đề Tốt nghiệp 1");
+    expect(text(html)).not.toMatch(/2,80|dưới 2,8|từ 2,8|vì điểm|điểm TB tích lũy của bạn/);
     expect(html).not.toContain("Phương án thay thế");
     expect(html).not.toContain("Chọn học thêm ít nhất 6 tín chỉ trong nhóm tự chọn TC306");
+    // The student placed Chuyên đề Tốt nghiệp 1 in Kế hoạch học kỳ: that way, as chosen, Đồ án tốt nghiệp still an option.
+    const chosen = text(render(ready(graduation({ thesisPlan: ["71ITGR40203"],
+      evaluation: { ...base, status: "fail", groupStatus: "fail", groups: [base.groups[0]!, thesisGroup, base.groups[2]!] } }))));
+    expect(chosen).toContain("Học Chuyên đề Tốt nghiệp 1 và Chuyên đề Tốt nghiệp 2 để hoàn thành nhóm tự chọn TC306 như bạn đã chọn trong Kế hoạch học kỳ.");
+    expect(chosen).toContain("Hoặc làm Đồ án Tốt nghiệp (6 TC) nếu bạn chọn phương án này:71ITGR40206Đồ án Tốt nghiệp");
     // Without a cumulative GPA: the thesis first and the replacement courses as a fallback.
     const unknown = { ...base.gpa, actual: null, status: "unknown" as const, source: null };
     const fallback = render(ready(graduation({ evaluation: { ...base, gpa: unknown, status: "fail", groupStatus: "fail", groups: [base.groups[0]!, thesisGroup, base.groups[2]!] } })));

@@ -13,7 +13,7 @@ import type { CourseState, CurriculumCourseInput, GraduationStandardInput, Speci
 import type { CurriculumData } from "../curricula/model.js";
 import { majorCondition, majorIdentity, majorShortName } from "../curricula/majors.js";
 import { normalizeCohortCode, profileSpecialty, resolveStudentStandard } from "../graduation/resolve.js";
-import { replacementPath, startsReplacementPath, THESIS_NAME_PATTERN, thesisWay, thesisWayReason, type ThesisPath, type ThesisWay } from "../graduation/thesis.js";
+import { replacementPath, startsReplacementPath, THESIS_NAME_PATTERN, thesisWay, type ThesisPath, type ThesisWay } from "../graduation/thesis.js";
 import type { TranscriptData } from "../student/transcript-parser.js";
 import { calendarTermCode, creditLimits, termIndex } from "./model.js";
 
@@ -148,18 +148,19 @@ export type StudyPlanContext = {
   gpa: { actual: number | null; required: number | null; scale: 4 | 10 };
   /** Courses of the transcript no requirement counts (another specialty's course, a course outside the program). */
   unmatched: StudyPlanUnmatched[];
-  /** The thesis group still open and the way the system advises for it (planThesis), or null. */
+  /** The thesis group still open and the way the system recommends for it (planThesis), or null. */
   thesis: StudyPlanThesis | null;
 };
 
 /**
- * The elective group a thesis course completes alone (graduation/thesis.ts) and the way to advise (user 2026-11-03: the
- * thesis from a cumulative GPA of 2,80, the replacement courses, Chuyên đề tốt nghiệp 1 and 2, below it; a path already
- * taken stays). replacements: the replacement path; others: the group's other courses, offered by neither way.
+ * The elective group a thesis course completes alone (graduation/thesis.ts) and the way the system recommends for it
+ * (thesisWay: a path already taken stays, else an internal rule, user 2026-11-03; never explained to the student since
+ * 2026-11-10, so no reason is sent). The page follows the way the student chose in the plan over it (web study-plan-data.ts
+ * thesisChoice). replacements: the replacement path; others: the group's other courses, offered by neither way.
  */
 export type StudyPlanThesis = {
   group: string; thesis: string; replacements: string[]; others: string[];
-  path: ThesisPath; way: ThesisWay | null; reason: string | null;
+  path: ThesisPath; way: ThesisWay | null;
 };
 
 /** The first elective group (in order) whose quota one thesis course completes, unless that thesis is passed. */
@@ -180,7 +181,7 @@ export function planThesis(courses: readonly Pick<StudyPlanCourse, "code" | "nam
     return {
       group: group.label, thesis: thesis.code, replacements: replacements.map((course) => course.code),
       others: rest.filter((course) => !replacements.includes(course)).map((course) => course.code),
-      path, way: thesisWay(path, gpa), reason: thesisWayReason(path, gpa),
+      path, way: thesisWay(path, gpa),
     };
   }
   return null;

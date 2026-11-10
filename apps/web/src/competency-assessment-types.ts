@@ -582,6 +582,11 @@ export type LatestAssessmentResponse = {
   consentVersion?: string | null;
   /** While the newest comment is not ready: the newest completed comment of an older assessment (missing on an older API). */
   previous?: PreviousAiComment | null;
+  /**
+   * The thesis group's courses the student placed in Kế hoạch học kỳ that this result leaves out (computed before that
+   * choice, comp-calc-v23); absent when there is none.
+   */
+  thesisPlanOutdated?: string[];
 };
 /** GET /api/student/competency-assessments/latest/status */
 export type AssessmentStatusResponse = { id: string | null; aiStatus: AiStatus | null; aiErrorCode: string | null; workerOnline: boolean };

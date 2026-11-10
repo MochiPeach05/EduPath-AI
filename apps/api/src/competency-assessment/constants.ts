@@ -106,7 +106,15 @@ import type { Confidence, FitCode, GapStatus } from "./types.js";
  * come from the transcript under that code, its skills from that course's configuration (Cấu hình môn học), and the
  * transcript's course no longer stands outside the CTĐT. Graduation reads the CTĐT as filed and is unchanged.
  */
-export const CALC_VERSION = "comp-calc-v22";
+/**
+ * v23 (user 2026-11-10: "vẫn có giữ lại môn đồ án tốt nghiệp do sinh viên chọn hết mà"): the thesis group follows the way the
+ * student chose, the transcript's path and the courses they placed in Kế hoạch học kỳ themselves (inputs.plannedCourses,
+ * graduation/thesis.ts thesisChoice), over the way the system recommends (thesisWay, the GPA rule of v18, now an internal
+ * setting). While the student holds both ways neither is left out; a course the student placed or started never is.
+ * Stored results change only with "Đánh giá lại"; Đánh giá năng lực says so when the plan holds a course the stored result
+ * leaves out (router.ts thesisPlanOutdated). Tổng quan computes the engine live and always reads v23.
+ */
+export const CALC_VERSION = "comp-calc-v23";
 /**
  * The graduation evaluation uses no skill level, so it keeps the version of its last change:
  * comp-calc-v10 changed only levels and must not re-date every student's graduation advice.

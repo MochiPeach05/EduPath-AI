@@ -15,6 +15,7 @@ import {
 import type { AssessmentResult } from "../competency-assessment/types.js";
 import { readRealCourseRows, realCodesOfRows } from "../curricula/real-codes.js";
 import type { DatabasePool } from "../db/pool.js";
+import { readOwnPlannedCodes } from "../study-plan/own-plan.js";
 import { readSurvey, surveyFacts, surveyUsable } from "../student/survey.js";
 import { buildRoadmapFacts, type RoadmapFacts, type RoadmapRelation } from "./facts.js";
 import { sanitizeText } from "../competency-assessment/ai/prompt.js";
@@ -200,7 +201,9 @@ export async function createRoadmap(client: PoolClient, userId: string, options:
   await client.query(`UPDATE stu_roadmaps SET status='cancelled',ai_input=NULL,lease_token=NULL,lease_until=NULL,completed_at=now(),updated_at=now()
     WHERE user_id=$1 AND status IN ${PENDING}`, [userId]);
   const window = roadmapWindow(options.now ?? new Date());
-  const facts = buildRoadmapFacts(assessment.id, assessment.computed, window, await readRoadmapRelations(client, assessment.computed));
+  // roadmap-v16: the thesis group follows the way the student chose in Kế hoạch học kỳ (user 2026-11-10).
+  const facts = buildRoadmapFacts(assessment.id, assessment.computed, window, await readRoadmapRelations(client, assessment.computed),
+    await readOwnPlannedCodes(client, userId));
   const aiInput = buildRoadmapInput(facts, surveyFacts(survey));
   const id = randomUUID();
   const inserted = await client.query<{ createdAt: Date | string }>(

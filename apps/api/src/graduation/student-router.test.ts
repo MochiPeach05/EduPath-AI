@@ -34,6 +34,8 @@ type SetupOptions = {
   transcript?: boolean;
   /** Overrides of the CNPM standard's data. */
   cnpmData?: Partial<GraduationData>;
+  /** The saved Kế hoạch học kỳ (stu_study_plans.data); none by default. */
+  studyPlan?: unknown;
 };
 
 function setup(options: SetupOptions = {}) {
@@ -64,6 +66,7 @@ function setup(options: SetupOptions = {}) {
         specialty: course.specialty, semester: course.semester, study_year: course.studyYear,
       })));
     }
+    if (sql.includes("FROM stu_study_plans")) return rows(options.studyPlan ? [{ data: options.studyPlan }] : []);
     throw new Error(`Unexpected query: ${sql}`);
   });
   const release = vi.fn();
@@ -136,7 +139,7 @@ describe("GET /api/student/graduation", () => {
     const { app, release } = setup();
     const response = await request(app).get("/graduation").expect(200);
     expect(response.headers["cache-control"]).toBe("no-store");
-    expect(Object.keys(response.body).sort()).toEqual(["convertible", "evaluation", "profile", "resolution", "specialtySuggestion", "standard", "transcript"]);
+    expect(Object.keys(response.body).sort()).toEqual(["convertible", "evaluation", "profile", "resolution", "specialtySuggestion", "standard", "thesisPlan", "transcript"]);
     expect(response.body).toMatchObject({
       profile: { cohortCode: "K29", specialty: "CNPM" },
       resolution: "specialty",
@@ -178,7 +181,20 @@ describe("GET /api/student/graduation", () => {
       specialtySuggestion: { code: "CNPM", label: "Công nghệ phần mềm", count: 1 },
       // No specialty: nothing is "another specialty" yet (convertible.ts).
       convertible: null,
+      thesisPlan: [],
     });
+  });
+
+  it("returns the thesis group's courses the student placed in Kế hoạch học kỳ themselves (user 2026-11-10), never the AI's", async () => {
+    const studyPlan = {
+      schemaVersion: 1,
+      aiAdded: { completedAt: "2026-11-01T00:00:00.000Z", term: "HK262", codes: ["71ITGR40203"], addedAt: "2026-11-01T00:00:00.000Z" },
+      terms: [{ code: "HK262", courses: [{ code: "71ITGR40206" }, { code: "71ITGR40203" }, { code: "71ITIN40304" }] }],
+    };
+    const response = await request(setup({ studyPlan }).app).get("/graduation").expect(200);
+    // Đồ án Tốt nghiệp is the student's own; Chuyên đề Tốt nghiệp 1 the AI added; the internship is of another group.
+    expect(response.body.thesisPlan).toEqual(["71ITGR40206"]);
+    expect((await request(setup().app).get("/graduation").expect(200)).body.thesisPlan).toEqual([]);
   });
 
   it("is cohort_unknown when the account has no cohort and reads no standard", async () => {

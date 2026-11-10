@@ -12,8 +12,10 @@ import type { AssessmentResult, LevelCode, SkillResult, SpecialtyCode } from "..
 import type { DatabasePool } from "../db/pool.js";
 import { buildRoadmapFacts, type RoadmapFacts, type RoadmapSkill } from "../roadmap/facts.js";
 import { newestAssessment, readNewestRoadmap, readRoadmapRelations, type RoadmapRow } from "../roadmap/jobs.js";
+import { shownRoadmapOutput } from "../roadmap/present.js";
 import { roadmapDataSections } from "../roadmap/prompt.js";
 import { roadmapWindow } from "../roadmap/window.js";
+import { readOwnPlannedCodes } from "../study-plan/own-plan.js";
 import { readSurvey, surveyFacts, surveyUsable } from "../student/survey.js";
 import { withoutSettledReviews, type TranscriptData } from "../student/transcript-parser.js";
 import type { AssistantIntent } from "./intent.js";
@@ -127,9 +129,12 @@ export function skillLevelLines(result: AssessmentResult, question: string): str
   return [...picked.values()].map((skill) => `- ${skill.name}${skill.careerSkill ? " (kỹ năng của vị trí nghề nghiệp mục tiêu)" : ""}: ${skillLevel(skill)}`);
 }
 
-/** The newest AI roadmap as the student page shows it: names instead of codes and keys. */
+/**
+ * The newest AI roadmap as the student page shows it: names instead of codes and keys, and for a roadmap written while its
+ * data gave the GPA behind the thesis way, without the sentences explaining the way by it (assistant-v12, present.ts).
+ */
 export function aiRoadmapLines(row: RoadmapRow, newestAssessmentId: string): string[] {
-  const output = row.output;
+  const output = shownRoadmapOutput(row);
   if (!output) return [];
   const facts: RoadmapFacts = row.facts;
   const names = new Map<string, string>();
@@ -139,15 +144,15 @@ export function aiRoadmapLines(row: RoadmapRow, newestAssessmentId: string): str
   const skillNames = new Map(facts.skills.map((skill) => [skill.key, skill.name]));
   const course = (code: string) => `${names.get(code) ?? code} (${code})`;
   const lines = [`Lộ trình cho ${facts.window.term ? termName(facts.window.term) : "học kỳ tới"}, tạo ngày ${dateText(row.createdAt)}${row.assessmentId === newestAssessmentId ? "" : " từ một kết quả đánh giá cũ hơn"}.`];
-  lines.push(`Nhận định: ${output.summary}`);
+  if (output.summary) lines.push(`Nhận định: ${output.summary}`);
   for (const advice of output.advice ?? []) lines.push(`- Lời khuyên: ${advice}`);
-  for (const item of output.study) lines.push(`- Nên học ${course(item.code)}: ${item.advice}`);
+  for (const item of output.study) lines.push(`- Nên học ${course(item.code)}${item.advice ? `: ${item.advice}` : ""}`);
   // A course not passed is "học lại", a passed one "học cải thiện" (user 2026-10-31: "Phải phân biệt học lại (chưa đạt) với học cải thiện").
   const actions = new Map(facts.improve.map((item) => [item.code, item.action]));
   for (const item of output.improve) {
-    lines.push(`- ${actions.get(item.code) === "retake" ? "Nên học lại" : "Có thể học cải thiện"} ${course(item.code)}: ${item.advice}`);
+    lines.push(`- ${actions.get(item.code) === "retake" ? "Nên học lại" : "Có thể học cải thiện"} ${course(item.code)}${item.advice ? `: ${item.advice}` : ""}`);
   }
-  for (const item of output.skills) lines.push(`- Nên tự học kỹ năng ${skillNames.get(item.key) ?? item.key}: ${item.why}`);
+  for (const item of output.skills) lines.push(`- Nên tự học kỹ năng ${skillNames.get(item.key) ?? item.key}${item.why ? `: ${item.why}` : ""}`);
   return lines;
 }
 
@@ -184,7 +189,9 @@ export async function studentSources(db: Db, userId: string, question: string, i
   const transcriptPart = transcript ? [transcriptSource(transcript, question, intents)] : [];
   if (!assessment) return { sources: [await profileOnly(db, userId, transcript !== null), ...transcriptPart], gapSkills: [] };
   const wants = (...names: AssistantIntent[]) => names.some((name) => intents.includes(name));
-  const facts = buildRoadmapFacts(assessment.id, assessment.computed, roadmapWindow(now), await readRoadmapRelations(db, assessment.computed));
+  // assistant-v12: the thesis group follows the way the student chose in Kế hoạch học kỳ, as Lộ trình AI does (roadmap-v16).
+  const facts = buildRoadmapFacts(assessment.id, assessment.computed, roadmapWindow(now), await readRoadmapRelations(db, assessment.computed),
+    await readOwnPlannedCodes(db, userId));
   let survey = null;
   if (wants("roadmap", "resources")) {
     const row = await readSurvey(db, userId);

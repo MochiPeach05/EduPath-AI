@@ -36,9 +36,15 @@ describe("buildGraduationAdviceInput", () => {
   const graduation = syntheticGraduation();
   const input = buildGraduationAdviceInput(graduation);
 
-  it("uses the grad-advice-v6 prompt and the fixed Ollama options (num_ctx 16384)", () => {
-    expect(input.promptVersion).toBe("grad-advice-v6");
-    expect(GRADUATION_ADVICE_PROMPT_VERSION).toBe("grad-advice-v6");
+  it("uses the grad-advice-v7 prompt and the fixed Ollama options (num_ctx 16384)", () => {
+    expect(input.promptVersion).toBe("grad-advice-v7");
+    expect(GRADUATION_ADVICE_PROMPT_VERSION).toBe("grad-advice-v7");
+    // grad-advice-v7 (user 2026-11-10): the thesis way is a recommendation, never explained by the GPA or a threshold, and the
+    // student's own choice is respected.
+    expect(input.system).not.toMatch(/2,80|dưới 2,8|từ 2,8|theo điểm trung bình tích lũy \(/);
+    expect(input.system).toContain("không giải thích phương án bằng điểm trung bình tích lũy hay bất kỳ ngưỡng điểm nào");
+    expect(input.system).toContain("Dữ liệu ghi bạn đã chọn một phương án trong kế hoạch học kỳ: tôn trọng lựa chọn đó");
+    expect(input.system).toContain("chỉ cần một phương án để đủ tín chỉ của nhóm và bạn tự chọn phương án phù hợp");
     // grad-advice-v6 (user 2026-11-10): every condition met still means learning on, never "nothing left to learn".
     expect(input.system).toContain("vẫn khuyến khích học tiếp");
     expect(input.system).toContain("Không bao giờ viết rằng bạn đã đủ mọi thứ hay không cần học thêm gì.");
@@ -110,9 +116,13 @@ describe("buildGraduationAdviceInput", () => {
       "[G1] Học phần bắt buộc: các học phần bắt buộc chưa đạt",
       "- 71ITSE41203 Kiểm thử phần mềm (3 TC): đang học",
       "- 71ITIN40304 Đồ án thực tập (4 TC): chưa học",
-      // The cumulative GPA 2,85 is from 2,80 (grad-advice-v4): the thesis alone.
-      "[G5] Nhóm tự chọn TC306: hệ thống đề xuất làm đồ án tốt nghiệp (điểm TB tích lũy 2,85, từ 2,80 trở lên)",
+      // The way the system recommends (the thesis at a cumulative GPA of 2,85), never why (grad-advice-v7), and the other way
+      // still open: the synthetic group has one Chuyên đề Tốt nghiệp only, so both its replacement courses.
+      "[G5] Nhóm tự chọn TC306: hệ thống đề xuất làm đồ án tốt nghiệp",
       "- 71ITGR40206 Đồ án Tốt nghiệp (6 TC): chưa học — một học phần đủ số tín chỉ của nhóm",
+      "- phương án khác (bạn vẫn có thể chọn): học các học phần sau cho đủ 6 TC:",
+      "  - 71ITGR40203 Chuyên đề Tốt nghiệp 1 (3 TC): chưa học",
+      "  - 71ITIS30403 Quản lý và phát triển các hệ thống thông tin (3 TC): chưa học",
     ]);
     expect(section(input.user, "5. HỌC PHẦN ĐANG HỌC").slice(1)).toEqual([
       "- 71ITSE41203 Kiểm thử phần mềm (3 TC), thuộc [G1], học kỳ 1 năm học 2025–2026",
@@ -256,17 +266,69 @@ describe("the thesis option of Nhóm tự chọn TC306 in section [4]", () => {
     return groupBlock(buildGraduationAdviceInput({ ...facts, evaluation: { ...facts.evaluation, gpa: { ...facts.evaluation.gpa, actual } } }).user, "G5");
   };
 
-  it("advises the thesis from a cumulative GPA of 2,80 and the two chuyên đề below it (grad-advice-v4, user 2026-11-03)", () => {
+  /** The G5 block with the cumulative GPA set and the thesis group's courses the student placed in Kế hoạch học kỳ. */
+  const g5Plan = (actual: number, thesisPlan: string[], terms: Parameters<typeof termsWithRows>[0] = {}) => {
+    const facts = syntheticGraduation({ standard: k29, terms: termsWithRows(terms), thesisPlan });
+    return groupBlock(buildGraduationAdviceInput({ ...facts, evaluation: { ...facts.evaluation, gpa: { ...facts.evaluation.gpa, actual } } }).user, "G5");
+  };
+
+  it("recommends the thesis from a cumulative GPA of 2,80 and the two chuyên đề below it, never saying why, the other way still open (grad-advice-v7)", () => {
     expect(g5Gpa(2.8)).toEqual([
-      "[G5] Nhóm tự chọn TC306: hệ thống đề xuất làm đồ án tốt nghiệp (điểm TB tích lũy 2,80, từ 2,80 trở lên)",
+      "[G5] Nhóm tự chọn TC306: hệ thống đề xuất làm đồ án tốt nghiệp",
       "- 71ITGR40206 Đồ án Tốt nghiệp (6 TC): chưa học — một học phần đủ số tín chỉ của nhóm",
+      "- phương án khác (bạn vẫn có thể chọn): học các học phần sau cho đủ 6 TC:",
+      "  - 71ITGR40203 Chuyên đề Tốt nghiệp 1 (3 TC): chưa học",
+      "  - 71ITGR40303 Chuyên đề Tốt nghiệp 2 (3 TC): chưa học",
     ]);
     // Only Chuyên đề tốt nghiệp 1 and 2 replace the thesis (user: "Chuyển đề tốt nghiệp 1, 2 là môn học thay thế đồ án tốt nghiệp thôi").
     expect(g5Gpa(2.79)).toEqual([
-      "[G5] Nhóm tự chọn TC306: hệ thống đề xuất học các học phần thay thế đồ án tốt nghiệp (điểm TB tích lũy 2,79, dưới 2,80)",
+      "[G5] Nhóm tự chọn TC306: hệ thống đề xuất học các học phần thay thế đồ án tốt nghiệp",
       "- học các học phần sau cho đủ 6 TC:",
       "  - 71ITGR40203 Chuyên đề Tốt nghiệp 1 (3 TC): chưa học",
       "  - 71ITGR40303 Chuyên đề Tốt nghiệp 2 (3 TC): chưa học",
+      "- phương án khác (bạn vẫn có thể chọn): 71ITGR40206 Đồ án Tốt nghiệp (6 TC): chưa học — một học phần đủ số tín chỉ của nhóm",
+    ]);
+    // The data block never names the threshold, nor the GPA as the reason (its own [GPA] line keeps the GPA).
+    for (const actual of [2.8, 2.79, 3.4, 2.1]) {
+      const facts = syntheticGraduation({ standard: k29 });
+      const user = buildGraduationAdviceInput({ ...facts, evaluation: { ...facts.evaluation, gpa: { ...facts.evaluation.gpa, actual } } }).user;
+      expect(user).not.toMatch(/dưới 2,80|từ 2,80|2,80 trở lên|điểm TB tích lũy|vì điểm/);
+      if (actual !== 2.8) expect(user).not.toContain("2,80");
+    }
+  });
+
+  it("follows the way the student placed in Kế hoạch học kỳ over the recommended one (grad-advice-v7, user 2026-11-10)", () => {
+    // Below 2,80 the replacement courses are recommended; the student placed Đồ án tốt nghiệp: the student's choice.
+    expect(g5Plan(2.79, ["71ITGR40206"])).toEqual([
+      "[G5] Nhóm tự chọn TC306: bạn đã chọn làm đồ án tốt nghiệp trong kế hoạch học kỳ",
+      "- 71ITGR40206 Đồ án Tốt nghiệp (6 TC): chưa học — một học phần đủ số tín chỉ của nhóm",
+      "- phương án khác (bạn vẫn có thể chọn): học các học phần sau cho đủ 6 TC:",
+      "  - 71ITGR40203 Chuyên đề Tốt nghiệp 1 (3 TC): chưa học",
+      "  - 71ITGR40303 Chuyên đề Tốt nghiệp 2 (3 TC): chưa học",
+    ]);
+    // From 2,80 the thesis is recommended; the student placed Chuyên đề Tốt nghiệp 2.
+    expect(g5Plan(3.1, ["71ITGR40303"])).toEqual([
+      "[G5] Nhóm tự chọn TC306: bạn đã chọn học các học phần thay thế đồ án tốt nghiệp trong kế hoạch học kỳ",
+      "- học các học phần sau cho đủ 6 TC:",
+      "  - 71ITGR40303 Chuyên đề Tốt nghiệp 2 (3 TC): chưa học",
+      "  - 71ITGR40203 Chuyên đề Tốt nghiệp 1 (3 TC): chưa học",
+      "- phương án khác (bạn vẫn có thể chọn): 71ITGR40206 Đồ án Tốt nghiệp (6 TC): chưa học — một học phần đủ số tín chỉ của nhóm",
+    ]);
+    // Both ways placed: both kept, one is enough, the student chooses; the recommendation named without a reason.
+    expect(g5Plan(2.79, ["71ITGR40206", "71ITGR40203"])).toEqual([
+      "[G5] Nhóm tự chọn TC306: kế hoạch học kỳ của bạn có cả đồ án tốt nghiệp và học phần thay thế; chỉ cần một phương án để đủ tín chỉ của nhóm, bạn tự chọn phương án",
+      "- phương án làm đồ án tốt nghiệp: 71ITGR40206 Đồ án Tốt nghiệp (6 TC): chưa học — một học phần đủ số tín chỉ của nhóm",
+      "- phương án học phần thay thế: học các học phần sau cho đủ 6 TC:",
+      "  - 71ITGR40203 Chuyên đề Tốt nghiệp 1 (3 TC): chưa học",
+      "  - 71ITGR40303 Chuyên đề Tốt nghiệp 2 (3 TC): chưa học",
+      "- hệ thống đề xuất: học các học phần thay thế đồ án tốt nghiệp",
+    ]);
+    // On the replacement path already, Đồ án tốt nghiệp placed too is named, with one way enough.
+    expect(g5Plan(3.1, ["71ITGR40206"], { "2024-2025 HK03": [["71ITGR40203", 3, 8, 3.5, "B+"]] }).slice(0, 4)).toEqual([
+      "[G5] Nhóm tự chọn TC306: bạn đã bắt đầu phương án học phần thay thế đồ án tốt nghiệp",
+      "- học phần thay thế đã học hoặc đang học:",
+      "  - 71ITGR40203 Chuyên đề Tốt nghiệp 1 (3 TC): đạt",
+      "- kế hoạch học kỳ của bạn cũng có 71ITGR40206 Đồ án Tốt nghiệp (6 TC): chưa học; chỉ cần một phương án để đủ tín chỉ của nhóm",
     ]);
   });
 
@@ -294,8 +356,11 @@ describe("the thesis option of Nhóm tự chọn TC306 in section [4]", () => {
       ["71ITIS30403", "Quản lý và phát triển các hệ thống thông tin", 3],
     ], "Nhóm tự chọn TC306_Tự chọn tốt nghiệp");
     expect(g5({}, k28)).toEqual([
-      "[G5] Nhóm tự chọn TC306 – Tự chọn tốt nghiệp: hệ thống đề xuất làm khóa luận tốt nghiệp (điểm TB tích lũy 2,85, từ 2,80 trở lên)",
+      "[G5] Nhóm tự chọn TC306 – Tự chọn tốt nghiệp: hệ thống đề xuất làm khóa luận tốt nghiệp",
       "- 71ITGR40106 Khóa luận tốt nghiệp (6 TC): chưa học — một học phần đủ số tín chỉ của nhóm",
+      "- phương án khác (bạn vẫn có thể chọn): học các học phần sau cho đủ 6 TC:",
+      "  - 71ITGR40203 Chuyên đề Tốt nghiệp 1 (3 TC): chưa học",
+      "  - 71ITGR40303 Chuyên đề Tốt nghiệp 2 (3 TC): chưa học",
     ]);
     expect(g5Gpa(null, {}, k28).slice(0, 3)).toEqual([
       "[G5] Nhóm tự chọn TC306 – Tự chọn tốt nghiệp: khóa luận tốt nghiệp hoặc học phần thay thế",
@@ -439,6 +504,7 @@ describe("the advice input never carries the student's identity", () => {
           specialty: course.specialty, semester: course.semester, study_year: course.studyYear,
         })));
       }
+      if (sql.includes("FROM stu_study_plans")) return rows([]);
       throw new Error(`unexpected query: ${sql}`);
     });
     const loaded = await readStudentGraduation({ query } as never, "11111111-1111-4111-8111-111111111111");

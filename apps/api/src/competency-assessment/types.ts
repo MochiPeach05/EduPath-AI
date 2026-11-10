@@ -210,6 +210,11 @@ export type AssessmentInputs = {
   career: CareerInput | null;
   /** Optional course_catalog names for transcript codes outside the curriculum. */
   catalogNames?: Record<string, string>;
+  /**
+   * The courses the student placed in Kế hoạch học kỳ themselves (study-plan/own-plan.ts ownPlannedCodes, real codes): the way
+   * of a thesis group they chose there wins over the recommended one (comp-calc-v23). Absent: none.
+   */
+  plannedCourses?: string[];
   /** Optional prompt version label copied into meta. */
   promptVersion?: string;
 };
@@ -755,10 +760,12 @@ export type AssessmentResult = {
    */
   skillPlans: SkillPlan[];
   /**
-   * Courses of a thesis elective group off the way the system advises (graduation/thesis.ts thesisWay): the other courses
-   * while the thesis is advised, the thesis and the courses beside Chuyên đề tốt nghiệp 1 and 2 while those are (comp-calc-v18,
-   * cumulative GPA 2,80; a course already started never). Left out of every course suggestion and of "Sắp học"; sorted by
-   * code, empty when there is none (comp-calc-v7; absent before).
+   * Courses of a thesis elective group off the way it follows: the way the student chose (the transcript's path, their own
+   * courses of the group in Kế hoạch học kỳ, comp-calc-v23), else the way the system recommends (graduation/thesis.ts
+   * thesisWay, comp-calc-v18): the other courses while the thesis is followed, the thesis and the courses beside Chuyên đề
+   * tốt nghiệp 1 and 2 while those are; while the student holds both ways only the courses of neither; a course the student
+   * started or placed never. Left out of every course suggestion and of "Sắp học"; sorted by code, empty when there is none
+   * (comp-calc-v7; absent before).
    */
   excludedThesisReplacements: string[];
   progress: PlanProgressResult | null;

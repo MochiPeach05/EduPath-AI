@@ -6,6 +6,7 @@ import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
 import { actingAdvisor, studentUser } from "../advisors/access.js";
 import { activeConsentVersion, consentWithdrawn, isValidConsent, recordConsent, TRANSCRIPT_POLICY_VERSION, withdrawConsent } from "../student/consent.js";
+import { readOwnPlannedCodes } from "../study-plan/own-plan.js";
 import { calculateAssessment } from "./calculate.js";
 import { AssessmentError, loadAssessmentInputs } from "./inputs.js";
 import {
@@ -119,13 +120,17 @@ export function createCompetencyAssessmentRouter(
   // asks again on a shared browser, after a withdrawal elsewhere, or after a policy change.
   // previous: while the newest comment is not ready (queued, being written, failed, cancelled…), the newest completed
   // comment of an older assessment with its own key names; the page shows it dimmed, like Xét tốt nghiệp's advice.
+  // thesisPlanOutdated (comp-calc-v23, only when there is one): the courses of a thesis group the student placed in Kế hoạch
+  // học kỳ themselves that the stored result leaves out (computed before that choice); the page asks for Đánh giá lại.
   router.get("/latest", async (req, res) => {
     const userId = studentUser(req).userId;
     const consentVersion = await activeConsentVersion(pool!, userId, "competency_assessment");
     const assessment = await latestAssessment(pool!, userId);
     const ready = assessment?.ai.status === "completed" && assessment.ai.output !== null;
     const previous = assessment && !ready ? await previousAiComment(pool!, userId, assessment.id) : null;
-    res.json({ assessment, aiEnabled, workerOnline: await workerOnline(), consentVersion, previous });
+    const excluded = new Set((assessment?.result?.excludedThesisReplacements ?? []).map((code) => code.trim().toUpperCase()));
+    const outdated = excluded.size ? [...await readOwnPlannedCodes(pool!, userId)].filter((code) => excluded.has(code)).sort() : [];
+    res.json({ assessment, aiEnabled, workerOnline: await workerOnline(), consentVersion, previous, ...(outdated.length ? { thesisPlanOutdated: outdated } : {}) });
   });
 
   router.get("/latest/status", async (req, res) => {

@@ -1,5 +1,6 @@
 import type { PoolClient } from "pg";
 import { isPassedState } from "../competency-assessment/course-state.js";
+import { followedThesisWay, thesisChoice } from "../graduation/thesis.js";
 import type { RoadmapFacts } from "../roadmap/facts.js";
 import type { RoadmapOutput } from "../roadmap/validate.js";
 import type { StudyPlanContext, StudyPlanCourse } from "./context.js";
@@ -69,10 +70,11 @@ export type AiSuggestion = { code: string; term: string };
  * one); a course the training plans do not open then goes to the next term within a year they open it in (or, failing
  * that, open it in that semester of other years). A chuyên đề of the thesis group brings the other one along (both or the
  * thesis, never a mix). realCodes (StudyPlanFacts): a roadmap made before 2026-11-10 may name a course by its CTĐT file's
- * code, read as the real one.
+ * code, read as the real one. ownPlanned: the courses the student placed in the plan themselves (own-plan.ts
+ * ownPlannedCodes), whose way of the thesis group wins over the one the system recommends.
  */
 export async function readAiPlan(db: Db, userId: string, context: Pick<StudyPlanContext, "courses" | "currentTerm" | "offeringUntil"> & Partial<Pick<StudyPlanContext, "thesis">>,
-  appliedRoadmapId: string | null, realCodes: ReadonlyMap<string, string> = new Map()): Promise<{ proposal: AiProposal | null; suggestions: AiSuggestion[]; roadmapId: string | null }> {
+  appliedRoadmapId: string | null, realCodes: ReadonlyMap<string, string> = new Map(), ownPlanned: ReadonlySet<string> = new Set()): Promise<{ proposal: AiProposal | null; suggestions: AiSuggestion[]; roadmapId: string | null }> {
   const row = (await db.query<{ id: string; facts: RoadmapFacts; output: RoadmapOutput | null; completed_at: Date | string }>(
     `SELECT id,facts,ai_output AS output,completed_at FROM stu_roadmaps WHERE user_id=$1 AND status='completed'
      ORDER BY completed_at DESC,id DESC LIMIT 1`, [userId])).rows[0];
@@ -96,12 +98,17 @@ export async function readAiPlan(db: Db, userId: string, context: Pick<StudyPlan
   if (row.id === appliedRoadmapId) return { proposal: null, suggestions, roadmapId: row.id };
   const running = new Set((facts.study ?? []).filter((item) => item.source === "running").map((item) => real(item.code)));
   const picked = [...(row.output.study ?? []).map((item) => real(item.code)).filter((code) => !running.has(code)), ...(row.output.improve ?? []).map((item) => real(item.code))];
-  // The thesis group goes one way, the one the system advises by the GPA (user 2026-11-03, "TB tích lũy từ 2,80"): a roadmap
-  // made before roadmap-v13 may have picked the other.
+  // The thesis group goes one way (user 2026-11-03): the one the student chose, by the transcript or their own courses in
+  // the plan (user 2026-11-10: the student's choice wins), else the one the system recommends. A course of the other way
+  // is never proposed (a roadmap made before roadmap-v13 may have picked it), and while the student holds both ways the AI
+  // adds nothing of the group: the student decides.
   const thesis = context.thesis ?? null;
-  const advised = thesis?.way === "thesis" ? [thesis.thesis] : thesis?.way === "replacement" ? thesis.replacements : null;
-  const excluded = new Set(thesis && advised ? [thesis.thesis, ...thesis.replacements, ...thesis.others].filter((code) => !advised.includes(code)) : []);
-  if (thesis?.way !== "thesis") for (const choice of facts.choices ?? []) {
+  const members = thesis ? [thesis.thesis, ...thesis.replacements, ...thesis.others] : [];
+  const thesisChosen = thesis ? thesisChoice(thesis.path, thesis.thesis, [...thesis.replacements, ...thesis.others], ownPlanned) : null;
+  const way = followedThesisWay(thesisChosen, thesis?.way ?? null);
+  const advised = way === "thesis" ? [thesis!.thesis] : way === "replacement" ? thesis!.replacements : null;
+  const excluded = new Set(thesisChosen === "both" ? members : advised ? members.filter((code) => !advised.includes(code)) : []);
+  if (way !== "thesis" && thesisChosen !== "both") for (const choice of facts.choices ?? []) {
     const topics = choice.thesis?.topics.map((item) => real(item.code)) ?? [];
     if (topics.some((code) => picked.includes(code))) picked.push(...topics);
   }

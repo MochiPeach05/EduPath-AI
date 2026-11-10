@@ -22,6 +22,8 @@ type Tables = {
   curricula: number;
   /** curriculum_courses rows of the CTĐT's current revision. */
   curriculumCourses: CurriculumCourseInput[];
+  /** The saved Kế hoạch học kỳ (stu_study_plans.data); none by default. */
+  studyPlan?: unknown;
 };
 
 function fakeDb(overrides: Partial<Tables> = {}) {
@@ -44,6 +46,7 @@ function fakeDb(overrides: Partial<Tables> = {}) {
         specialty: course.specialty, semester: course.semester, study_year: course.studyYear,
       })));
     }
+    if (sql.includes("FROM stu_study_plans")) return rows(t.studyPlan ? [{ data: t.studyPlan }] : []);
     throw new Error(`unexpected query: ${sql}`);
   });
   // A client for the code under test that keeps the mock's API for the assertions.
@@ -70,7 +73,9 @@ describe("readStudentGraduation", () => {
     expect(loaded.specialtySuggestion).toBeNull();
     const calls = db.sql();
     expect(calls.some((sql) => /FOR (UPDATE|SHARE|NO KEY|KEY)/i.test(sql))).toBe(false);
-    for (const sql of calls.filter((text) => !/FROM (student_profiles|student_transcripts) WHERE/.test(text))) expect(sql).toMatch(/ORDER BY/);
+    for (const sql of calls.filter((text) => !/FROM (student_profiles|student_transcripts|stu_study_plans) WHERE/.test(text))) expect(sql).toMatch(/ORDER BY/);
+    // No saved plan: nothing chosen in Kế hoạch học kỳ.
+    expect(loaded.thesisPlan).toEqual([]);
     // Interests, career goals and identity never leave the profile table.
     expect(calls.find((sql) => sql.includes("FROM student_profiles"))).not.toMatch(/interests|career_goal|full_name|student_code|class_name/);
     expect(db.query.mock.calls.find(([sql]) => String(sql).includes("FROM curriculum_courses"))?.[1]).toEqual(["rev-0"]);
@@ -173,6 +178,25 @@ describe("fingerprint", () => {
     expect(passed.fingerprint).not.toBe(base.fingerprint);
   });
 
+  it("reads the thesis group's courses the student placed in Kế hoạch học kỳ, and re-writes the advice only when that choice changes (grad-advice-v7)", async () => {
+    const plan = (codes: string[], aiAdded: string[] = []) => ({
+      schemaVersion: 1, terms: [{ code: "HK262", courses: codes.map((code) => ({ code })) }],
+      ...(aiAdded.length ? { aiAdded: { completedAt: "2026-11-01T00:00:00.000Z", term: "HK262", codes: aiAdded, addedAt: "2026-11-01T00:00:00.000Z" } } : {}),
+    });
+    const base = await readStudentGraduation(fakeDb(), userId);
+    const thesis = await readStudentGraduation(fakeDb({ studyPlan: plan(["71itgr40206", "71ITIN40304"]) }), userId);
+    // Đồ án Tốt nghiệp (thesis group TC306/TC406), not the internship of another group.
+    expect(thesis.thesisPlan).toEqual(["71ITGR40206"]);
+    expect(thesis.fingerprint).not.toBe(base.fingerprint);
+    expect(graduationFingerprintFacts({ profile: thesis.profile, standard: thesis.standard!, evaluation: thesis.evaluation!, thesisPlan: thesis.thesisPlan }).thesisPlan).toEqual(["71ITGR40206"]);
+    // Another group's course, or a chuyên đề the AI roadmap added, is no choice of the student: the same advice stays current.
+    for (const other of [plan(["71ITIN40304"]), plan(["71ITGR40203"], ["71ITGR40203"])]) {
+      const loaded = await readStudentGraduation(fakeDb({ studyPlan: other }), userId);
+      expect(loaded.thesisPlan).toEqual([]);
+      expect(loaded.fingerprint).toBe(base.fingerprint);
+    }
+  });
+
   it("changes with each AI-relevant fact on its own", async () => {
     const base = await readStudentGraduation(fakeDb(), userId);
     const input = { profile: base.profile, standard: base.standard!, evaluation: base.evaluation! };
@@ -221,7 +245,7 @@ describe("fingerprint", () => {
     const input = { profile: base.profile, standard: base.standard!, evaluation: base.evaluation! };
     const facts = graduationFingerprintFacts(input);
     expect(facts).toMatchObject({ v: 2, promptVersion: GRADUATION_ADVICE_PROMPT_VERSION });
-    expect(GRADUATION_ADVICE_PROMPT_VERSION).toBe("grad-advice-v6");
+    expect(GRADUATION_ADVICE_PROMPT_VERSION).toBe("grad-advice-v7");
     const hash = (value: unknown) => createHash("sha256").update(canonicalJson(value)).digest("hex");
     expect(hash(facts)).toBe(base.fingerprint);
     expect(hash({ ...facts, promptVersion: "grad-advice-v1" })).not.toBe(base.fingerprint);

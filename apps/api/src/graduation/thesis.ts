@@ -46,9 +46,13 @@ export function thesisOption(group: GraduationGroupEvaluation): ThesisOption | n
 export const TOPIC_NAME_PATTERN = /\bchuyen de tot nghiep\b/;
 
 /**
- * Cumulative GPA (4-point scale, as the transcript prints it) from which the thesis is advised; below it, the replacement
- * courses (user 2026-11-03: "Chuyển đề tốt nghiệp 1, 2 là môn học thay thế đồ án tốt nghiệp thôi … điểm của sinh viên mà
- * ổn thì đề xuất làm đồ án tốt nghiệp còn thấp thì làm 2 môn thay thế đó", "TB tích lũy từ 2,80").
+ * Cumulative GPA (4-point scale, as the transcript prints it) from which the thesis is recommended; below it, the
+ * replacement courses (user 2026-11-03: "Chuyển đề tốt nghiệp 1, 2 là môn học thay thế đồ án tốt nghiệp thôi … điểm của sinh
+ * viên mà ổn thì đề xuất làm đồ án tốt nghiệp còn thấp thì làm 2 môn thay thế đó", "TB tích lũy từ 2,80"). An internal
+ * setting since 2026-11-10 (user: "cái này như kiểu là cài đặt ngầm trong hệ thống vậy thôi sẽ hiện ra như kiểu đề xuất tất
+ * nhiên và vẫn có giữ lại môn đồ án tốt nghiệp do sinh viên chọn hết mà"): it only picks the way the pages recommend. No
+ * student-facing text, AI prompt or data block states it, the GPA as the reason, or "vì điểm…"; the other way stays an
+ * option, and the way the student chose (thesisChoice) always wins over it.
  */
 export const THESIS_MIN_GPA = 2.8;
 /** thesis: the thesis course alone; replacement: the replacement courses (the chuyên đề courses when the group has them). */
@@ -56,9 +60,10 @@ export type ThesisWay = "thesis" | "replacement";
 export type ThesisGpa = { actual: number | null; scale: number } | null | undefined;
 
 /**
- * The way to advise for a thesis group: a path already taken stays (the thesis in progress; a replacement passed, exempt,
- * in progress or graded); otherwise the cumulative GPA decides, the thesis from THESIS_MIN_GPA and the replacement
- * courses below it. Null when the GPA is unknown or not on the 4-point scale (the thesis stays the main option then).
+ * The way the system recommends for a thesis group: a path already taken stays (the thesis in progress; a replacement
+ * passed, exempt, in progress or graded); otherwise the cumulative GPA decides, the thesis from THESIS_MIN_GPA and the
+ * replacement courses below it (an internal setting, never explained to the student). Null when the GPA is unknown or not
+ * on the 4-point scale (the thesis stays the main option then).
  */
 export function thesisWay(path: ThesisPath, gpa: ThesisGpa): ThesisWay | null {
   if (path === "thesis_in_progress") return "thesis";
@@ -67,12 +72,53 @@ export function thesisWay(path: ThesisPath, gpa: ThesisGpa): ThesisWay | null {
   return gpa.actual >= THESIS_MIN_GPA - 1e-9 ? "thesis" : "replacement";
 }
 
-const gpaText = (value: number) => value.toFixed(2).replace(".", ",");
-/** "điểm TB tích lũy 3,10, từ 2,80 trở lên" or "điểm TB tích lũy 2,45, dưới 2,80": why the GPA chose the way (null otherwise). */
-export function thesisWayReason(path: ThesisPath, gpa: ThesisGpa): string | null {
-  const way = path === "not_started" ? thesisWay(path, gpa) : null;
-  if (!way || !gpa || gpa.actual === null) return null;
-  return `điểm TB tích lũy ${gpaText(gpa.actual)}, ${way === "thesis" ? `từ ${gpaText(THESIS_MIN_GPA)} trở lên` : `dưới ${gpaText(THESIS_MIN_GPA)}`}`;
+/** One way, or "both" when the student holds the thesis and a replacement course at once (null: no way yet). */
+export type ThesisChoice = ThesisWay | "both" | null;
+
+const codeKey = (code: string) => code.trim().toUpperCase();
+
+/**
+ * The way the student chose for a thesis group (user 2026-11-10: "vẫn có giữ lại môn đồ án tốt nghiệp do sinh viên chọn hết
+ * mà"): what the transcript shows (path: the thesis in progress; another course of the group passed, exempt, in progress or
+ * graded) together with the courses the student placed in Kế hoạch học kỳ themselves (study-plan/own-plan.ts
+ * ownPlannedCodes). One way → that way; the thesis and another course of the group → "both"; nothing → null.
+ */
+export function thesisChoice(path: ThesisPath, thesisCode: string, otherCodes: readonly string[], planned: ReadonlySet<string>): ThesisChoice {
+  const placed = new Set([...planned].map(codeKey));
+  const thesis = path === "thesis_in_progress" || placed.has(codeKey(thesisCode));
+  const replacement = path === "replacement" || otherCodes.some((code) => placed.has(codeKey(code)));
+  return thesis && replacement ? "both" : thesis ? "thesis" : replacement ? "replacement" : null;
+}
+
+/**
+ * The way the pages follow for a thesis group: the student's choice when it is one way (it always wins over the
+ * recommendation), else the way the system recommends (thesisWay). Null while the student holds both ways (they keep both,
+ * and only hear that one way is enough) or when nothing is recommended.
+ */
+export function followedThesisWay(choice: ThesisChoice, recommended: ThesisWay | null): ThesisWay | null {
+  if (choice === "both") return null;
+  return choice ?? recommended;
+}
+
+/** "dưới 2,80", "từ 2,80 trở lên", "ngưỡng 2,8": the threshold the rule of 2026-11-03 named (THESIS_MIN_GPA). */
+const THRESHOLD_TEXT = /(?:dưới|từ|trên|ngưỡng|mức|đạt)\s+(?:mức\s+|ngưỡng\s+)?2[,.]80?(?![\d,.]*\d)|2[,.]80?\s*(?:\/\s*4\s*)?trở lên/u;
+const THESIS_TEXT = /(?:đồ án|khóa luận|khoá luận|chuyên đề) tốt nghiệp|học phần thay thế/u;
+const GPA_TEXT = /điểm (?:trung bình|tb)|(?<![a-z])gpa(?![a-z])|đtb/u;
+
+/**
+ * A text an AI wrote while its data gave the GPA behind the thesis way (roadmap-v13 to v15, grad-advice-v4 to v6, before
+ * the rule became an internal setting on 2026-11-10), without the sentences that explain the way by it: a sentence naming
+ * the threshold ("dưới 2,80", "từ 2,80 trở lên"), or the thesis group's courses together with the GPA ("Với điểm trung bình
+ * tích lũy 2,45, bạn nên học Chuyên đề tốt nghiệp…"). Null when nothing is left. Newer outputs are never filtered: their
+ * data has no such reason.
+ */
+export function withoutThesisGpaReason(text: string): string | null {
+  const kept = text.split(/(?<=[.!?…])\s+/u).filter((sentence) => {
+    const plain = sentence.normalize("NFC").toLocaleLowerCase("vi");
+    return !THRESHOLD_TEXT.test(plain) && !(THESIS_TEXT.test(plain) && GPA_TEXT.test(plain));
+  });
+  const joined = kept.join(" ").trim();
+  return joined || null;
 }
 
 /**

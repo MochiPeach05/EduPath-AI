@@ -8,7 +8,7 @@ import { shortfallText } from "../competency-assessment/plan-progress.js";
 import { fold } from "../competency-assessment/specialty.js";
 import { blockedUntilStudied } from "../curricula/course-rules.js";
 import type { AssessmentResult, CourseFact, CourseState, GapStatus, PlanCourseRef } from "../competency-assessment/types.js";
-import { THESIS_NAME_PATTERN, TOPIC_NAME_PATTERN, thesisWay, thesisWayReason, type ThesisPath, type ThesisWay } from "../graduation/thesis.js";
+import { followedThesisWay, THESIS_NAME_PATTERN, thesisChoice, TOPIC_NAME_PATTERN, thesisWay, type ThesisChoice, type ThesisPath, type ThesisWay } from "../graduation/thesis.js";
 import type { RoadmapWindow } from "./window.js";
 
 /**
@@ -39,15 +39,18 @@ export type RoadmapOption = { code: string; name: string; credits: number | null
  * A choice of the training plan ("chọn n TC trong …") still open. The thesis group (TC406, user 2026-10-24: "chuyên đề 1
  * + chuyên đề 2 hoặc đồ án tốt nghiệp chớ ta") is done one way only: the thesis alone, or both "Chuyên đề tốt nghiệp"
  * courses; its other courses are never offered, and once a chuyên đề is under way only the other one is. Since roadmap-v13
- * the system picks the way (graduation/thesis.ts thesisWay, user 2026-11-03: the thesis from a cumulative GPA of 2,80, the
- * two chuyên đề below it) and offers only that one; way and reason are null while the GPA is unknown (both ways then).
+ * one way is offered: since roadmap-v16 (user 2026-11-10: "vẫn có giữ lại môn đồ án tốt nghiệp do sinh viên chọn hết mà")
+ * the way the student chose (chosen: the transcript's path and their own courses of the group in Kế hoạch học kỳ,
+ * graduation/thesis.ts thesisChoice), else the way the system recommends (thesisWay, an internal rule that is never
+ * explained); both ways while the student holds both (chosen "both") or nothing is recommended (way null). reason: only in
+ * roadmaps made before roadmap-v16 (the GPA behind the recommendation), never shown or sent again.
  * need: what is still missing in the unit of the requirement (plan-progress.ts shortfallText): "6 TC" for an elective group
  * of credits, "1 học phần (3 TC)" for a "Chọn k" choice, "1 học phần" for a GDTC slot; roadmaps made before comp-calc-v19
  * stored "n môn" or, for a credit group, its course count as "n TC".
  */
 export type RoadmapChoice = {
   label: string; source: "next" | "late"; termCode: string | null; need: string; options: RoadmapOption[]; thisTerm?: boolean;
-  thesis: { thesis: RoadmapOption | null; topics: RoadmapOption[]; way?: ThesisWay | null; reason?: string | null } | null;
+  thesis: { thesis: RoadmapOption | null; topics: RoadmapOption[]; way?: ThesisWay | null; path?: ThesisPath; chosen?: ThesisChoice; reason?: string | null } | null;
 };
 /** F/VT/CT/DC: must be taken again; D, D+: worth improving (user, 2026-10-24), never an English course (Anh văn, user 2026-10-24). */
 export type RoadmapImprove = { code: string; name: string; credits: number; letter: string; score10: number | null; action: "retake" | "improve"; careerSkills: string[] };
@@ -114,9 +117,11 @@ const STATUS_ORDER: Record<string, number> = { below: 0, not_studied: 1, no_data
 
 /**
  * relations: the tiên quyết and học trước of the CTĐT revision the assessment read (none: nothing waits, as before
- * roadmap-v15).
+ * roadmap-v15). ownPlanned: the courses the student placed in Kế hoạch học kỳ themselves (study-plan/own-plan.ts), the way
+ * of the thesis group they chose (roadmap-v16).
  */
-export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult, window: RoadmapWindow, relations: readonly RoadmapRelation[] = []): RoadmapFacts {
+export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult, window: RoadmapWindow, relations: readonly RoadmapRelation[] = [],
+  ownPlanned: ReadonlySet<string> = new Set()): RoadmapFacts {
   // Stored results of older calc versions may lack a list: read every list defensively.
   const course = new Map((result.courses ?? []).map((item) => [item.code, item]));
   const factOf = new Map((result.courses ?? []).map((item) => [courseKey(item.code), item]));
@@ -183,7 +188,7 @@ export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult
   // A choice never offers a course that needs another one studied first which the student has not taken yet
   // (curricula/course-rules.ts, user 2026-11-04: Cờ vua nâng cao after Cờ vua), nor, outside the thesis group, one whose
   // tiên quyết or học trước the CTĐT names is not done (roadmap-v15); one being studied is done by the next term. The
-  // thesis group keeps the way the system advises (roadmap-v13) as it was.
+  // thesis group keeps the way it follows (roadmap-v13, v16) as it was.
   const studiedNames = (result.courses ?? []).filter((item) => item.state !== "not_taken").map((item) => item.name);
   const offered = (all: readonly PlanCourseRef[]): Pick<RoadmapChoice, "options" | "thesis"> => {
     const options = all.filter((option) => ownProgram(option.code) && !blockedUntilStudied(option.name, studiedNames));
@@ -195,16 +200,19 @@ export function buildRoadmapFacts(assessmentId: string, result: AssessmentResult
     // A chuyên đề under way (or passed) is the chuyên đề path: only the other one is left.
     const started = topics.some((option) => option.state !== "not_taken" && option.state !== "failed" && option.state !== "not_in_curriculum");
     const path: ThesisPath = thesis.state === "in_progress" ? "thesis_in_progress" : started ? "replacement" : "not_started";
-    // The way the system advises (user 2026-11-03): the thesis from a cumulative GPA of 2,80, the two chuyên đề below it.
-    const way = thesisWay(path, gpa);
-    const reason = thesisWayReason(path, gpa);
-    if (way === "thesis" && open(thesis)) return { options: [plain(thesis)], thesis: { thesis: plain(thesis), topics: [], way, reason } };
+    // roadmap-v16 (user 2026-11-10): the way the student chose (this path, their own courses of the group in the plan) wins
+    // over the way the system recommends (thesisWay, an internal rule); while they hold both ways, both are offered.
+    const chosen = thesisChoice(path, thesis.code, options.filter((option) => option !== thesis).map((option) => option.code), ownPlanned);
+    const way = followedThesisWay(chosen, thesisWay(path, gpa));
+    const mark = { path, chosen };
+    if (way === "thesis" && open(thesis)) return { options: [plain(thesis)], thesis: { thesis: plain(thesis), topics: [], way, ...mark } };
     if (way === "replacement" && topics.length) {
       const left = topics.filter(open).map(plain);
-      return { options: left, thesis: { thesis: null, topics: left, way, reason } };
+      return { options: left, thesis: { thesis: null, topics: left, way, ...mark } };
     }
-    const left = started ? topics.filter(open) : [...(open(thesis) ? [thesis] : []), ...topics.filter(open)];
-    return { options: left.map(plain), thesis: { thesis: started || !open(thesis) ? null : plain(thesis), topics: topics.filter(open).map(plain), way: null, reason: null } };
+    const withThesis = open(thesis) && (!started || chosen === "both");
+    const left = [...(withThesis ? [thesis] : []), ...topics.filter(open)];
+    return { options: left.map(plain), thesis: { thesis: withThesis ? plain(thesis) : null, topics: topics.filter(open).map(plain), way: null, ...mark } };
   };
   // Before comp-calc-v13 the plan counted from the latest graded term, so its "next term" was the term being studied:
   // the courses it plans there and the student did not register are late, and the term after it is the next one.

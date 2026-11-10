@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { GradCourseState, GraduationCourseRow, GraduationGroupEvaluation } from "./evaluation.js";
-import { startsReplacementPath, thesisNoun, thesisOption } from "./thesis.js";
+import { followedThesisWay, startsReplacementPath, thesisChoice, thesisNoun, thesisOption, thesisWay, withoutThesisGpaReason } from "./thesis.js";
 
 // Public K28/K29 course codes and names only; no student record.
 
@@ -111,6 +111,49 @@ describe("thesisOption", () => {
   it("is thesis_in_progress while the thesis course is in progress, whatever the other courses", () => {
     expect(thesisOption(k29({ "71ITGR40206": "in_progress" }))!.path).toBe("thesis_in_progress");
     expect(thesisOption(k29({ "71ITGR40206": "in_progress", "71ITGR40203": "passed" }))!.path).toBe("thesis_in_progress");
+  });
+});
+
+describe("the way recommended and the way the student chose (user 2026-11-10: an internal setting, the student chooses)", () => {
+  const others = ["71ITGR40203", "71ITGR40303", "71ITIS30403"];
+  it("recommends by the cumulative GPA only when no way is taken (the rule itself is never shown)", () => {
+    expect(thesisWay("not_started", { actual: 2.8, scale: 4 })).toBe("thesis");
+    expect(thesisWay("not_started", { actual: 2.79, scale: 4 })).toBe("replacement");
+    expect(thesisWay("not_started", { actual: 8.1, scale: 10 })).toBeNull();
+    expect(thesisWay("not_started", null)).toBeNull();
+    expect(thesisWay("replacement", { actual: 3.6, scale: 4 })).toBe("replacement");
+    expect(thesisWay("thesis_in_progress", { actual: 2.1, scale: 4 })).toBe("thesis");
+  });
+
+  it("reads the student's choice from the transcript's path and their own courses of the group in the plan", () => {
+    expect(thesisChoice("not_started", "71ITGR40206", others, new Set())).toBeNull();
+    expect(thesisChoice("not_started", "71ITGR40206", others, new Set(["71itgr40206 "]))).toBe("thesis");
+    expect(thesisChoice("not_started", "71ITGR40206", others, new Set(["71ITIS30403"]))).toBe("replacement");
+    expect(thesisChoice("not_started", "71ITGR40206", others, new Set(["71ITGR40206", "71ITGR40303"]))).toBe("both");
+    expect(thesisChoice("replacement", "71ITGR40206", others, new Set())).toBe("replacement");
+    expect(thesisChoice("replacement", "71ITGR40206", others, new Set(["71ITGR40206"]))).toBe("both");
+    expect(thesisChoice("thesis_in_progress", "71ITGR40206", others, new Set(["71ITINXXXXX"]))).toBe("thesis");
+  });
+
+  it("follows the student's choice over the recommendation, and no single way while they hold both", () => {
+    expect(followedThesisWay("thesis", "replacement")).toBe("thesis");
+    expect(followedThesisWay("replacement", "thesis")).toBe("replacement");
+    expect(followedThesisWay(null, "replacement")).toBe("replacement");
+    expect(followedThesisWay(null, null)).toBeNull();
+    expect(followedThesisWay("both", "thesis")).toBeNull();
+  });
+});
+
+describe("withoutThesisGpaReason (outputs written while the data gave the GPA behind the way)", () => {
+  it("drops the sentences explaining the thesis way by the GPA or the threshold, keeps the rest", () => {
+    expect(withoutThesisGpaReason("Bạn còn thiếu 6 TC của Nhóm tự chọn TC306. Vì điểm TB tích lũy của bạn là 2,45, dưới 2,80, hệ thống đề xuất học Chuyên đề Tốt nghiệp 1 và Chuyên đề Tốt nghiệp 2. Hãy hỏi cố vấn học tập."))
+      .toBe("Bạn còn thiếu 6 TC của Nhóm tự chọn TC306. Hãy hỏi cố vấn học tập.");
+    expect(withoutThesisGpaReason("Với điểm trung bình tích lũy 3,10, bạn nên làm Đồ án tốt nghiệp. Hoàn thành tốt Kiểm thử phần mềm."))
+      .toBe("Hoàn thành tốt Kiểm thử phần mềm.");
+    expect(withoutThesisGpaReason("Điểm TB tích lũy từ 2,8 trở lên nên bạn làm khóa luận tốt nghiệp.")).toBeNull();
+    // The GPA alone, the threshold-free advice and other numbers stay.
+    expect(withoutThesisGpaReason("Điểm trung bình tích lũy của bạn là 2,80/4, đạt yêu cầu tối thiểu 2,00/4.")).toBe("Điểm trung bình tích lũy của bạn là 2,80/4, đạt yêu cầu tối thiểu 2,00/4.");
+    expect(withoutThesisGpaReason("Hãy đăng ký Đồ án tốt nghiệp ở HK2 2026–2027.")).toBe("Hãy đăng ký Đồ án tốt nghiệp ở HK2 2026–2027.");
   });
 });
 

@@ -9,7 +9,9 @@ import { GRADUATION_ADVICE_PROMPT_VERSION } from "./advice/prompt.js";
 import { convertibleCourses, type ConvertibleCourses } from "./convertible.js";
 import { evaluateGraduation, type GraduationEvaluation } from "./evaluation.js";
 import { normalizeCohortCode, profileSpecialty, resolveStudentStandard, type StudentGraduationResolution } from "./resolve.js";
+import { thesisOption } from "./thesis.js";
 import { majorCondition, majorIdentity } from "../curricula/majors.js";
+import { readOwnPlannedCodes } from "../study-plan/own-plan.js";
 
 // The student graduation page's data (design §4), shared by the read-only graduation router and
 // the graduation advice router: one snapshot of profile, resolved standard, transcript and CTĐT,
@@ -45,7 +47,23 @@ export type StudentGraduation = {
    * (convertible.ts, user 2026-11-08: "Không tính, chỉ nhắc"); null without a specialty or a transcript.
    */
   convertible: ConvertibleCourses | null;
+  /**
+   * The courses of a thesis group still open (thesis.ts thesisOption) the student placed in Kế hoạch học kỳ themselves
+   * (study-plan/own-plan.ts), sorted: the way they chose, which wins over the way the system recommends (user 2026-11-10:
+   * "vẫn có giữ lại môn đồ án tốt nghiệp do sinh viên chọn hết mà"). Empty without such a group or such a course.
+   */
+  thesisPlan: string[];
 };
+
+/** The courses of the evaluation's open thesis groups among the student's own planned courses (StudentGraduation.thesisPlan). */
+export function thesisPlanCodes(evaluation: Pick<GraduationEvaluation, "groups"> | null, planned: ReadonlySet<string>): string[] {
+  const codes = new Set<string>();
+  for (const group of evaluation?.groups ?? []) {
+    if (!thesisOption(group)) continue;
+    for (const course of group.courses) if (planned.has(courseKey(course.code))) codes.add(course.code);
+  }
+  return [...codes].sort();
+}
 
 /** Courses of the single active CTĐT of the cohort and major (current revision); [] when there is none or several. */
 export async function readCohortCurriculumCourses(db: Db, cohortCode: string, majorCode: string | null): Promise<CurriculumCourseInput[]> {
@@ -95,15 +113,18 @@ export async function readStudentGraduation(db: Db, userId: string): Promise<Stu
   const curriculumCourses = transcript && profile.cohortCode && (standard || resolution === "specialty_unset" || profile.specialty)
     ? await readCohortCurriculumCourses(db, profile.cohortCode, profile.majorCode) : [];
   const evaluation = standard && transcript ? evaluateGraduation({ standard, transcript, curriculumCourses }) : null;
+  // The plan is read only when a thesis group is still open: its courses there are the student's choice of way.
+  const thesisPlan = evaluation?.groups.some((group) => thesisOption(group)) ? thesisPlanCodes(evaluation, await readOwnPlannedCodes(db, userId)) : [];
   return {
     profile,
     resolution,
     standard,
     transcript: transcript && { version: transcript.version, updatedAt: transcript.updatedAt },
     evaluation,
-    fingerprint: standard && evaluation ? graduationFingerprint({ profile, standard, evaluation }) : null,
+    fingerprint: standard && evaluation ? graduationFingerprint({ profile, standard, evaluation, thesisPlan }) : null,
     specialtySuggestion: resolution === "specialty_unset" && transcript ? specialtySuggestionFor(curriculumCourses, transcript.data, profile.cohortCode) : null,
     convertible: transcript && profile.specialty ? convertibleCourses(curriculumCourses, transcript.data, profile.cohortCode, profile.specialty) : null,
+    thesisPlan,
   };
 }
 
@@ -138,6 +159,8 @@ type GraduationFingerprintInput = {
   profile: StudentGraduationProfile;
   standard: Pick<GraduationStandardInput, "revisionId">;
   evaluation: GraduationEvaluation;
+  /** StudentGraduation.thesisPlan (grad-advice-v7); none when absent. */
+  thesisPlan?: readonly string[];
 };
 
 /**
@@ -149,9 +172,11 @@ type GraduationFingerprintInput = {
  * unknown-result course codes, the improvement candidates (code, state, credits) and the data
  * warnings with their numbers. What is read from the transcript or the standard alone is covered by
  * their versions; the explicit facts also catch a changed CTĐT (credits, elective codes,
- * condition-only courses) or profile.
+ * condition-only courses) or profile. Since grad-advice-v7 also the thesis group's courses the student
+ * placed in Kế hoạch học kỳ (thesisPlan): a new choice of way re-writes the advice, another change of the
+ * plan does not.
  */
-export function graduationFingerprintFacts({ profile, standard, evaluation }: GraduationFingerprintInput) {
+export function graduationFingerprintFacts({ profile, standard, evaluation, thesisPlan = [] }: GraduationFingerprintInput) {
   const credits = evaluation.credits;
   const gpa = evaluation.gpa;
   return {
@@ -181,6 +206,7 @@ export function graduationFingerprintFacts({ profile, standard, evaluation }: Gr
     improvement: evaluation.improvementCandidates.map((course) => [course.code, course.state, course.credits]),
     // A credits_mismatch warning's computed bounds follow the CTĐT credits.
     warnings: evaluation.warnings.map(({ code, count, printed, computedLower, computedUpper }) => ({ code, count, printed, computedLower, computedUpper })),
+    thesisPlan: [...thesisPlan].sort(),
   };
 }
 

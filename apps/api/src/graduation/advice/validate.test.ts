@@ -140,18 +140,21 @@ describe("validateGraduationAdviceOutput", () => {
     expect(result.output.nextSteps).toContain("Giữ điểm trung bình tích lũy 2,85/4.");
   });
 
-  it("drops the GPA written cut even where the data has that number for something else (grad-advice-v5)", () => {
-    // 2,80 is the thesis bound of the data block, so 2,8 alone is a number of the data; after the GPA's name it is 2,85 cut.
-    expect(context.numbers.has(2.8)).toBe(true);
+  it("drops the GPA written cut, and a thesis threshold the data never names (grad-advice-v5, v7)", () => {
+    // grad-advice-v7 (user 2026-11-10): the data block no longer gives the thesis bound 2,80 (an internal setting), so 2,8 is
+    // no number of the data: a sentence explaining the way by it is dropped like the GPA written cut.
+    expect(context.numbers.has(2.8)).toBe(false);
+    expect(input.user).not.toMatch(/2,80|dưới 2,8|từ 2,8/);
     expect(context.scores).toEqual(expect.arrayContaining([{ name: "điểm trung bình tích lũy", value: "2,85" }]));
     const output = {
       ...valid(),
       advice: [...valid().advice.slice(0, 3),
         { focus: "GPA", text: "Điểm trung bình tích lũy của bạn là 2,8, đã đạt yêu cầu." },
-        { focus: "GENERAL", text: "Điểm trung bình tích lũy của bạn từ 2,8 trở lên nên hệ thống đề xuất làm Đồ án Tốt nghiệp." }],
+        { focus: "GENERAL", text: "Điểm trung bình tích lũy của bạn từ 2,80 trở lên nên hệ thống đề xuất làm Đồ án Tốt nghiệp." },
+        { focus: "GENERAL", text: "Bạn có thể làm Đồ án Tốt nghiệp hoặc học các học phần thay thế; hãy xác nhận với cố vấn học tập." }],
     };
     const result = check(output);
-    expect(result).toMatchObject({ ok: true, dropped: 1 });
+    expect(result).toMatchObject({ ok: true, dropped: 2 });
     if (result.ok) expect(result.output.advice.map((item) => item.focus)).toEqual(["G1", "G5", "CREDITS", "GENERAL"]);
   });
 

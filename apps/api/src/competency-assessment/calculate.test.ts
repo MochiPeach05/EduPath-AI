@@ -681,6 +681,29 @@ describe("thesis replacement courses are never suggested off that path (comp-cal
     expect(low.courseSuggestions.map((course) => course.code)).not.toContain("71ITGR40206");
   });
 
+  it("follows the way the student placed in Kế hoạch học kỳ over the recommended one, and leaves out neither while both are (v23)", () => {
+    const gpa = (value: string) => syntheticStudentTerms().map((term) => (term.summaries
+      ? { ...term, summaries: term.summaries.map(([label, text]) => [label, /TB tích lũy/.test(label) ? value : text] as [string, string]) } : term));
+    const planned = (terms: TranscriptTerm[], codes: string[]) => {
+      const inputs = syntheticInputs({ career: gaps, terms });
+      inputs.plannedCourses = codes;
+      return calculateAssessment(inputs);
+    };
+    // Below 2,80 the system recommends the replacement courses; Đồ án tốt nghiệp placed by the student wins (user 2026-11-10).
+    const thesis = planned(gpa("2,79"), ["71ITGR40206"]);
+    expect(thesis.excludedThesisReplacements).toEqual(["71ITGR40203", "71ITIS30403"]);
+    expect(presenting(thesis)).toEqual(["71ITGR40206", "71ITIN40304"]);
+    expect(thesis.meta.calcVersion).toBe("comp-calc-v23");
+    // From 2,80 the thesis is recommended; a replacement course placed by the student wins.
+    const replacement = planned(gpa("2,85"), ["71ITGR40203"]);
+    expect(replacement.excludedThesisReplacements).toEqual(["71ITGR40206"]);
+    expect(presenting(replacement)).toEqual(["71ITGR40203", "71ITIS30403", "71ITIN40304"]);
+    // Both ways placed: nothing is left out, the student decides.
+    expect(planned(gpa("2,79"), ["71ITGR40206", "71ITGR40203"]).excludedThesisReplacements).toEqual([]);
+    // Courses of another group in the plan change nothing.
+    expect(planned(gpa("2,79"), ["71ITIN40304"]).excludedThesisReplacements).toEqual(["71ITGR40206"]);
+  });
+
   it("does not count a failed replacement or replacements next to a thesis in progress as that path", () => {
     const failed = run(withRows(5, [["71ITGR40203", 3, 3, 0, "F"]]));
     expect(failed.excludedThesisReplacements).toEqual(["71ITGR40203", "71ITIS30403"]);
@@ -1057,7 +1080,7 @@ describe("the real codes of the graduation standard (comp-calc-v22, user 2026-11
     expect(byName(real, "Phát triển web")).toMatchObject({ status: "scored" });
     // Graduation reads the CTĐT as filed both ways: the same groups, credits and GPA.
     expect(real.graduation).toEqual(filed.graduation);
-    expect(real.meta.calcVersion).toBe("comp-calc-v22");
+    expect(real.meta.calcVersion).toBe("comp-calc-v23");
   });
 });
 

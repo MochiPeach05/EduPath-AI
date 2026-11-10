@@ -13,6 +13,7 @@ import type { DatabasePool } from "../../db/pool.js";
 import { requireAuthentication } from "../../middleware/authorization.js";
 import { studentUser } from "../../advisors/access.js";
 import { readStudentGraduation } from "../student-graduation.js";
+import { withoutThesisGpaReason } from "../thesis.js";
 import {
   adviceNeeded,
   createGraduationAdviceExpiry,
@@ -54,6 +55,26 @@ type GraduationAdviceRouterOptions = {
 const emptyObject = z.object({}).strict();
 const iso = (value: Date | string | null) => (value === null ? null : new Date(value).toISOString());
 
+/** The prompts whose data block gave the GPA behind the thesis group's way (grad-advice-v4 to v6, before 2026-11-10). */
+const GPA_REASON_PROMPTS = new Set(["grad-advice-v4", "grad-advice-v5", "grad-advice-v6"]);
+
+/**
+ * An advice as shown: one written by those prompts (while it stays on the page, stale or dimmed until the new one is ready)
+ * without the sentences explaining the thesis way by the GPA (user 2026-11-10: the rule is an internal setting;
+ * thesis.ts withoutThesisGpaReason); an item left empty is dropped.
+ */
+export function shownAdviceOutput(output: GraduationAdviceOutput | null, promptVersion: string | null | undefined): GraduationAdviceOutput | null {
+  if (!output || !promptVersion || !GPA_REASON_PROMPTS.has(promptVersion)) return output;
+  return {
+    summary: withoutThesisGpaReason(output.summary) ?? "",
+    advice: output.advice.flatMap((item) => {
+      const text = withoutThesisGpaReason(item.text);
+      return text ? [{ ...item, text }] : [];
+    }),
+    nextSteps: output.nextSteps.flatMap((step) => withoutThesisGpaReason(step) ?? []),
+  };
+}
+
 function presentGraduationAdvice(row: GraduationAdviceRow): StoredGraduationAdvice {
   return {
     id: row.id,
@@ -63,7 +84,7 @@ function presentGraduationAdvice(row: GraduationAdviceRow): StoredGraduationAdvi
     completedAt: iso(row.completedAt),
     model: row.model,
     standardVersion: row.standardVersion,
-    output: row.status === "completed" ? row.output ?? null : null,
+    output: row.status === "completed" ? shownAdviceOutput(row.output ?? null, row.promptVersion) : null,
   };
 }
 

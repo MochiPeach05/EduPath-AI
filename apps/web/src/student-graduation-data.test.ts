@@ -284,7 +284,7 @@ describe("suggestions", () => {
     expect(items[1]!.courses.map((item) => item.code)).toEqual(["71ITSE30903"]);
     expect(JSON.stringify(items).match(/Đồ án Tốt nghiệp/g)).toHaveLength(2);
   });
-  it("makes the thesis the main path of a thesis group and the replacement courses a fallback with a reason", () => {
+  it("recommends one way of a thesis group without the GPA behind it, keeps the other as an option, and follows the student's plan", () => {
     const courses = [
       course("71ITGR40203", "not_taken", { groupId: "TC306", name: "Chuyên đề Tốt nghiệp 1" }),
       course("71ITGR40206", "not_taken", { groupId: "TC306", name: "Đồ án Tốt nghiệp", credits: 6 }),
@@ -293,23 +293,45 @@ describe("suggestions", () => {
     const thesisGroup = group({ id: "TC306", kind: "elective", required: 6, lower: 0, upper: 0, remaining: 6, status: "fail", passedCount: 0, courses });
     expect(thesisOption(thesisGroup)).toMatchObject({ thesis: { code: "71ITGR40206" }, path: "not_started" });
     expect(thesisOption(thesisGroup)!.replacements.map((item) => item.code)).toEqual(["71ITGR40203", "71ITGR40303"]);
-    // Not started, the cumulative GPA chooses the way (user 2026-11-03, "TB tích lũy từ 2,80"): 3,10 → the thesis alone.
+    // Not started, the system recommends a way by an internal rule (user 2026-11-10: "cài đặt ngầm"): at 3,10 the thesis,
+    // said as a recommendation without the GPA, the replacement courses still listed as an option.
     const [item] = suggestionItems(evaluation({ status: "fail", groupStatus: "fail", groups: [thesisGroup] }));
-    expect(item!.text).toBe("Đăng ký Đồ án Tốt nghiệp (6 TC) để hoàn thành nhóm tự chọn TC306: điểm TB tích lũy của bạn 3,10, từ 2,80 trở lên, nên hệ thống đề xuất làm đồ án tốt nghiệp; một học phần đủ 6 tín chỉ của nhóm.");
+    expect(item!.text).toBe("Đề xuất: đăng ký Đồ án Tốt nghiệp (6 TC) để hoàn thành nhóm tự chọn TC306; một học phần đủ 6 tín chỉ của nhóm.");
     expect(item!.courses.map((entry) => `${entry.code} ${entry.state}`)).toEqual(["71ITGR40206 Chưa học"]);
     expect(item!.note).toBe("Hãy xác nhận điều kiện đăng ký với cố vấn học tập.");
-    expect(item!.alternative).toBeUndefined();
+    expect(item!.alternative?.label).toBe("Hoặc học Chuyên đề Tốt nghiệp 1 và Chuyên đề Tốt nghiệp 2 nếu bạn chọn phương án này");
+    expect(item!.alternative?.courses.map((entry) => entry.code)).toEqual(["71ITGR40203", "71ITGR40303"]);
     expect(thesisWay("not_started", { actual: 2.8, scale: 4 })).toBe("thesis");
     expect(thesisWay("not_started", { actual: 2.79, scale: 4 })).toBe("replacement");
     expect(thesisWay("not_started", { actual: 8.1, scale: 10 })).toBeNull();
     expect(thesisWay("replacement", { actual: 3.5, scale: 4 })).toBeNull();
-    // Below 2,80: Chuyên đề tốt nghiệp 1 and 2 only, never the thesis.
+    // Below it, Chuyên đề tốt nghiệp 1 and 2 are recommended, and Đồ án Tốt nghiệp stays listed: the student chooses.
     const low: GraduationEvaluation["gpa"] = { actual: 2.45, required: 2, scale: 4, status: "pass", source: "printed", reason: "", remaining: null };
     const [weak] = suggestionItems(evaluation({ status: "fail", groupStatus: "fail", gpa: low, groups: [thesisGroup] }));
-    expect(weak!.text).toBe("Học Chuyên đề Tốt nghiệp 1 và Chuyên đề Tốt nghiệp 2 để hoàn thành nhóm tự chọn TC306: điểm TB tích lũy của bạn 2,45, dưới 2,80, nên hệ thống đề xuất học các học phần thay thế đồ án tốt nghiệp.");
+    expect(weak!.text).toBe("Đề xuất: học Chuyên đề Tốt nghiệp 1 và Chuyên đề Tốt nghiệp 2 để hoàn thành nhóm tự chọn TC306.");
     expect(weak!.courses.map((entry) => entry.code)).toEqual(["71ITGR40203", "71ITGR40303"]);
     expect(weak!.note).toBe("Hãy xác nhận điều kiện đăng ký với cố vấn học tập.");
-    expect(weak!.alternative).toBeUndefined();
+    expect(weak!.alternative?.label).toBe("Hoặc làm Đồ án Tốt nghiệp (6 TC) nếu bạn chọn phương án này");
+    expect(weak!.alternative?.courses.map((entry) => entry.code)).toEqual(["71ITGR40206"]);
+    // The student placed Đồ án Tốt nghiệp in Kế hoạch học kỳ (API thesisPlan): their choice wins over the recommendation.
+    const [chosen] = suggestionItems(evaluation({ status: "fail", groupStatus: "fail", gpa: low, groups: [thesisGroup] }), ["71itgr40206"]);
+    expect(chosen!.text).toBe("Đăng ký Đồ án Tốt nghiệp (6 TC) để hoàn thành nhóm tự chọn TC306 như bạn đã chọn trong Kế hoạch học kỳ; một học phần đủ 6 tín chỉ của nhóm.");
+    expect(chosen!.courses.map((entry) => entry.code)).toEqual(["71ITGR40206"]);
+    expect(chosen!.alternative?.label).toBe("Hoặc học Chuyên đề Tốt nghiệp 1 và Chuyên đề Tốt nghiệp 2 nếu bạn chọn phương án này");
+    // A chuyên đề placed from the recommended thesis's side: the chuyên đề way, as chosen.
+    const [topics] = suggestionItems(evaluation({ status: "fail", groupStatus: "fail", groups: [thesisGroup] }), ["71ITGR40303"]);
+    expect(topics!.text).toBe("Học Chuyên đề Tốt nghiệp 2 và Chuyên đề Tốt nghiệp 1 để hoàn thành nhóm tự chọn TC306 như bạn đã chọn trong Kế hoạch học kỳ.");
+    expect(topics!.alternative?.label).toBe("Hoặc làm Đồ án Tốt nghiệp (6 TC) nếu bạn chọn phương án này");
+    // Both ways placed: the recommendation, both kept, and only that one way is enough.
+    const [both] = suggestionItems(evaluation({ status: "fail", groupStatus: "fail", gpa: low, groups: [thesisGroup] }), ["71ITGR40206", "71ITGR40203"]);
+    expect(both!.text).toBe("Đề xuất: học Chuyên đề Tốt nghiệp 1 và Chuyên đề Tốt nghiệp 2 để hoàn thành nhóm tự chọn TC306.");
+    expect(both!.note).toBe("Kế hoạch học kỳ của bạn có cả hai phương án; chỉ cần một phương án để hoàn thành nhóm. Hãy xác nhận điều kiện đăng ký với cố vấn học tập.");
+    expect(both!.alternative?.courses.map((entry) => entry.code)).toEqual(["71ITGR40206"]);
+    // No text of any way names a GPA, a threshold or "vì điểm".
+    for (const gpa of [low, { ...low, actual: 3.1 }, { ...low, actual: 2.8 }]) for (const plan of [[], ["71ITGR40206"], ["71ITGR40203"], ["71ITGR40206", "71ITGR40203"]]) {
+      const [entry] = suggestionItems(evaluation({ status: "fail", groupStatus: "fail", gpa, groups: [thesisGroup] }), plan);
+      expect(JSON.stringify(entry)).not.toMatch(/2,80|2,8|dưới|trở lên|điểm TB|vì điểm/);
+    }
     // Without a cumulative GPA: the thesis first, the replacement courses as a fallback with a reason.
     const unknown: GraduationEvaluation["gpa"] = { actual: null, required: 2, scale: 4, status: "unknown", source: null, reason: "Chưa có điểm các môn tính điểm trung bình hệ 4.", remaining: null };
     const [plain] = suggestionItems(evaluation({ status: "fail", groupStatus: "fail", gpa: unknown, groups: [thesisGroup] }));
@@ -326,6 +348,9 @@ describe("suggestions", () => {
     expect(next!.courses.map((entry) => entry.code)).toEqual(["71ITGR40303"]);
     expect(next!.note).toBe("Bạn đã học theo phương án này: Chuyên đề Tốt nghiệp 1 (đã đạt).");
     expect(next!.alternative).toBeUndefined();
+    // Đồ án Tốt nghiệp placed too: kept, and said neutrally that one way is enough.
+    expect(suggestionItems(evaluation({ status: "fail", groupStatus: "fail", groups: [started] }), ["71ITGR40206"])[0]!.note)
+      .toBe("Bạn đã học theo phương án này: Chuyên đề Tốt nghiệp 1 (đã đạt). Kế hoạch học kỳ của bạn cũng có Đồ án Tốt nghiệp; chỉ cần một phương án để hoàn thành nhóm.");
     // A replacement course in progress counts once it passes (same arithmetic as the advice prompt).
     const ongoing = { ...thesisGroup, courses: [{ ...courses[0]!, state: "in_progress" as const }, courses[1]!, courses[2]!] };
     const [half] = suggestionItems(evaluation({ status: "fail", groupStatus: "fail", groups: [ongoing] }));

@@ -57,15 +57,14 @@ export type StudyPlanGraduationGroup = {
 };
 export type StudyPlanUnmatched = { code: string; name: string; credits: number; state: CourseState; grade: string | null; term: string | null };
 /**
- * The elective group a thesis course completes alone and the way the system advises for it (apps/api/src/study-plan/
- * context.ts planThesis; user 2026-11-03: "điểm của sinh viên mà ổn thì đề xuất làm đồ án tốt nghiệp còn thấp thì làm 2 môn
- * thay thế đó", "TB tích lũy từ 2,80"): the thesis from a cumulative GPA of 2,80, Chuyên đề tốt nghiệp 1 and 2 below it, a
- * path already taken stays; way null without a GPA. replacements: the replacement path; others: the group's other courses.
- * reason: "điểm TB tích lũy 3,10, từ 2,80 trở lên" when the GPA decided.
+ * The elective group a thesis course completes alone and the way the system recommends for it (apps/api/src/study-plan/
+ * context.ts planThesis, user 2026-11-03): a path already taken stays, else an internal rule (user 2026-11-10: "cài đặt
+ * ngầm trong hệ thống", never explained to the student); way null without one. The page follows the way the student chose
+ * in the plan over it (thesisChoice). replacements: the replacement path; others: the group's other courses.
  */
 export type StudyPlanThesis = {
   group: string; thesis: string; replacements: string[]; others: string[];
-  path: "not_started" | "thesis_in_progress" | "replacement"; way: "thesis" | "replacement" | null; reason: string | null;
+  path: "not_started" | "thesis_in_progress" | "replacement"; way: "thesis" | "replacement" | null;
 };
 export type StudyPlanContext = {
   cohortCode: string | null; specialty: string | null; specialtyLabel: string | null;
@@ -246,72 +245,148 @@ export function orderAiAdded(context: Pick<StudyPlanContext, "courses"> & Partia
   return { plan: next, moved: [...moved.values()] };
 }
 
-/** The courses of the thesis group's way the system advises (upper-case codes; none without a way). */
-const thesisAdvised = (thesis: StudyPlanThesis) =>
-  (thesis.way === "thesis" ? [thesis.thesis] : thesis.way === "replacement" ? thesis.replacements : []).map((code) => code.toUpperCase());
+/* ---------------------------------------------------------- thesis group */
+// The thesis group (TC306/TC406) is done one way: Đồ án/Khóa luận tốt nghiệp alone, or the replacement courses (Chuyên đề
+// tốt nghiệp 1 and 2). The system recommends one by an internal rule (API graduation/thesis.ts thesisWay); since 2026-11-10
+// (user: "cái này như kiểu là cài đặt ngầm trong hệ thống vậy thôi sẽ hiện ra như kiểu đề xuất tất nhiên và vẫn có giữ lại
+// môn đồ án tốt nghiệp do sinh viên chọn hết mà") the page shows it only as a suggestion, never with the GPA, keeps the other
+// way available, and follows the way the student chose: a course they placed is never taken out nor called unnecessary.
+
+type ThesisWay = "thesis" | "replacement";
+const upper = (code: string) => code.toUpperCase();
 
 /**
- * The courses of the thesis group the advised way leaves out (upper-case codes; none without a way): with the thesis, the
- * replacement courses and the group's other courses; with the replacement courses, the thesis and the other courses.
+ * The courses the student placed in the plan themselves (upper-case codes): every planned course except those an AI
+ * roadmap's proposal added (aiAdded) and the student did not keep (Bỏ qua), as the API's study-plan/own-plan.ts reads them.
  */
-export function thesisLeftOut(context: Pick<StudyPlanContext, "thesis">): Set<string> {
-  const thesis = context.thesis;
-  if (!thesis?.way) return new Set();
-  return new Set((thesis.way === "thesis" ? [...thesis.replacements, ...thesis.others] : [thesis.thesis, ...thesis.others]).map((code) => code.toUpperCase()));
+export function ownPlanned(plan: StudyPlanData): Set<string> {
+  const kept = keptCodes(plan);
+  const added = new Set((plan.aiAdded?.codes ?? []).map(upper).filter((code) => !kept.has(code)));
+  return new Set([...plannedTerms(plan).keys()].filter((code) => !added.has(code)));
+}
+
+/** The side of the thesis group a course is on: the thesis, a replacement course, another course of the group; else null. */
+function thesisSide(thesis: StudyPlanThesis, code: string): ThesisWay | "other" | null {
+  const key = upper(code);
+  if (upper(thesis.thesis) === key) return "thesis";
+  if (thesis.replacements.some((item) => upper(item) === key)) return "replacement";
+  return thesis.others.some((item) => upper(item) === key) ? "other" : null;
+}
+
+/** The ways the transcript's path and some planned courses hold (another course of the group counts as a replacement). */
+function heldWays(thesis: StudyPlanThesis, codes: Iterable<string>): Set<ThesisWay> {
+  const ways = new Set<ThesisWay>();
+  if (thesis.path === "thesis_in_progress") ways.add("thesis");
+  if (thesis.path === "replacement") ways.add("replacement");
+  for (const code of codes) {
+    const side = thesisSide(thesis, code);
+    if (side) ways.add(side === "thesis" ? "thesis" : "replacement");
+  }
+  return ways;
 }
 
 /**
- * The plan without the thesis group's way the system does not advise (user 2026-11-03: never both ways in one plan): such
- * a course the AI roadmap added (aiAdded), or any such course while the advised way is planned, being studied or passed. A
- * course of the other way the student planned alone stays, marked (thesisHint), and so does one the student kept. Returns
- * the plan and the codes taken out.
+ * The way the student chose for the thesis group (the API's thesisChoice): the transcript's path and the courses they placed
+ * in the plan themselves (ownPlanned); "both" when they hold both ways, null when neither.
+ */
+export function thesisChoice(context: Pick<StudyPlanContext, "thesis">, plan: StudyPlanData): ThesisWay | "both" | null {
+  if (!context.thesis) return null;
+  const ways = heldWays(context.thesis, ownPlanned(plan));
+  return ways.size === 2 ? "both" : ways.size ? [...ways][0]! : null;
+}
+
+/** The way the page follows: the student's choice when it is one way, else the way the system recommends; null while they hold both. */
+export function followedThesisWay(context: Pick<StudyPlanContext, "thesis">, plan: StudyPlanData): ThesisWay | null {
+  const choice = thesisChoice(context, plan);
+  return choice === "both" ? null : choice ?? context.thesis?.way ?? null;
+}
+
+/** The courses of one way (upper-case codes). */
+const wayCodes = (thesis: StudyPlanThesis, way: ThesisWay) => (way === "thesis" ? [thesis.thesis] : thesis.replacements).map(upper);
+
+/** "làm Đồ án Tốt nghiệp", "học Chuyên đề Tốt nghiệp 1 và Chuyên đề Tốt nghiệp 2": one way, by the courses' names. */
+export function thesisWayText(context: Pick<StudyPlanContext, "thesis" | "courses">, way: ThesisWay): string {
+  const thesis = context.thesis;
+  if (!thesis) return "";
+  const name = (code: string) => context.courses.find((course) => course.code === upper(code))?.name ?? code;
+  return way === "thesis" ? `làm ${name(thesis.thesis)}` : `học ${joinVi(thesis.replacements.map(name))}`;
+}
+
+/**
+ * The courses of the thesis group Danh sách chờ leaves out (upper-case codes; Tìm học phần still finds them, with
+ * thesisHint): the group's other courses, offered by neither way, and once the student chose a way the other way. Before
+ * they chose, both ways are listed, the recommended one first (poolSections). Nothing without a recommendation, as before.
+ */
+export function thesisLeftOut(context: Pick<StudyPlanContext, "thesis">, plan: StudyPlanData = { schemaVersion: 1, terms: [] }): Set<string> {
+  const thesis = context.thesis;
+  if (!thesis) return new Set();
+  const choice = thesisChoice(context, plan);
+  if (!choice && !thesis.way) return new Set();
+  const others = thesis.others.map(upper);
+  if (choice === "thesis") return new Set([...others, ...wayCodes(thesis, "replacement")]);
+  if (choice === "replacement") return new Set([...others, ...wayCodes(thesis, "thesis")]);
+  return new Set(others);
+}
+
+/**
+ * The plan without what an AI roadmap added (aiAdded) of the thesis group off the way the page follows (the student's
+ * choice, else the recommendation): a roadmap made before roadmap-v13 may have picked the other way, or the student chose
+ * the other way since. A course the student placed themselves, or kept (Bỏ qua), is never taken out (user 2026-11-10), and
+ * while they hold both ways nothing is. Returns the plan and the codes taken out.
  */
 export function cleanThesisWay(context: Pick<StudyPlanContext, "thesis" | "courses">, plan: StudyPlanData): { plan: StudyPlanData; removed: string[] } {
-  const leftOut = thesisLeftOut(context);
-  if (!context.thesis || !leftOut.size) return { plan, removed: [] };
-  const placed = plannedTerms(plan);
-  const byCode = new Map(context.courses.map((course) => [course.code, course]));
-  const taken = (code: string) => { const state = byCode.get(code)?.state; return state !== undefined && (isDone(state) || state === "in_progress"); };
-  const mixed = thesisAdvised(context.thesis).some((code) => placed.has(code) || taken(code));
-  const added = new Set((plan.aiAdded?.codes ?? []).map((code) => code.toUpperCase()));
-  const kept = keptCodes(plan);
-  const removed = [...placed.keys()].filter((code) => leftOut.has(code) && !kept.has(code) && (mixed || added.has(code)));
+  const thesis = context.thesis;
+  const way = thesis ? followedThesisWay(context, plan) : null;
+  if (!thesis || !way) return { plan, removed: [] };
+  const followed = new Set(wayCodes(thesis, way));
+  const added = new Set((plan.aiAdded?.codes ?? []).map(upper));
+  const own = ownPlanned(plan);
+  const removed = [...plannedTerms(plan).keys()].filter((code) => thesisSide(thesis, code) && !followed.has(code) && added.has(code) && !own.has(code));
   if (!removed.length) return { plan, removed };
   const cleaned = removed.reduce((next, code) => moveCourse(next, code, null), plan);
-  return { plan: plan.aiAdded ? { ...cleaned, aiAdded: { ...plan.aiAdded, codes: plan.aiAdded.codes.filter((code) => !removed.includes(code.toUpperCase())) } } : cleaned, removed };
+  return { plan: plan.aiAdded ? { ...cleaned, aiAdded: { ...plan.aiAdded, codes: plan.aiAdded.codes.filter((code) => !removed.includes(upper(code))) } } : cleaned, removed };
 }
 
 /**
- * The way the thesis group takes, as a clause: "hệ thống đề xuất làm Đồ án Tốt nghiệp (điểm TB tích lũy 3,10, từ 2,80 trở
- * lên)", "hệ thống đề xuất học Chuyên đề Tốt nghiệp 1 và Chuyên đề Tốt nghiệp 2 thay cho Đồ án Tốt nghiệp (…)", or the path
- * already taken. Null without a way.
+ * The line on a course of the thesis group, planned or in Danh sách chờ and Tìm học phần (user 2026-11-10: the system's
+ * recommendation is a suggestion and the student chooses; never "Không cần học phần này", never the GPA): when the plan holds
+ * both ways, that one is enough; on a course listed before the student chose, whether it is the recommended way or the other
+ * option; once they chose, on a course of the other way, the way they chose. Null for any other course, and for a planned
+ * course while the plan holds one way.
  */
-export function thesisAdvice(context: Pick<StudyPlanContext, "thesis" | "courses">): string | null {
+export function thesisHint(context: Pick<StudyPlanContext, "thesis" | "courses">, plan: StudyPlanData, code: string): string | null {
   const thesis = context.thesis;
-  if (!thesis?.way) return null;
-  const name = (code: string) => context.courses.find((course) => course.code === code.toUpperCase())?.name ?? code;
-  const reason = thesis.reason ? ` (${thesis.reason})` : "";
-  if (thesis.way === "thesis") return thesis.path === "thesis_in_progress" ? `bạn đang làm ${name(thesis.thesis)}` : `hệ thống đề xuất làm ${name(thesis.thesis)}${reason}`;
-  const replacements = joinVi(thesis.replacements.map(name));
-  return thesis.path === "replacement"
-    ? `bạn đã học theo phương án học phần thay thế ${name(thesis.thesis)} (${replacements})`
-    : `hệ thống đề xuất học ${replacements} thay cho ${name(thesis.thesis)}${reason}`;
-}
-
-/** The line on a course of the thesis group's other way (planned by the student, or found by search), else null. */
-export function thesisHint(context: Pick<StudyPlanContext, "thesis" | "courses">, code: string): string | null {
-  const advice = thesisLeftOut(context).has(code.toUpperCase()) ? thesisAdvice(context) : null;
-  return advice ? `Không cần học phần này: ${advice}.` : null;
+  const side = thesis ? thesisSide(thesis, code) : null;
+  if (!thesis || !side) return null;
+  const group = thesis.group.replace(/^Nhóm/, "nhóm");
+  const placed = plannedTerms(plan);
+  const both = `Chỉ cần một phương án cho ${group}: ${thesisWayText(context, "thesis")}, hoặc ${thesisWayText(context, "replacement")}.`;
+  if (heldWays(thesis, placed.keys()).size === 2) return both;
+  if (placed.has(upper(code))) return null;
+  const choice = thesisChoice(context, plan);
+  const way = side === "other" ? null : side;
+  if (choice === "thesis" || choice === "replacement") {
+    return way === choice ? null : `Bạn đã chọn ${thesisWayText(context, choice)} cho ${group}; chỉ cần một phương án.`;
+  }
+  const recommended = thesis.way;
+  if (!recommended) return null;
+  if (!way) return `Học phần này không thuộc phương án đề xuất cho ${group} (${thesisWayText(context, recommended)}).`;
+  return way === recommended ? `Đề xuất cho ${group}: ${thesisWayText(context, recommended)}.`
+    : `Phương án khác cho ${group}, nếu bạn chọn; đề xuất: ${thesisWayText(context, recommended)}.`;
 }
 
 /**
- * The note on what cleanThesisWay took out of the plan, naming each course; proposed: what it would take out, in the
- * proposal the student applies or declines ("Bỏ khỏi kế hoạch …").
+ * The note on what cleanThesisWay took out of the plan (only courses an AI roadmap added), naming each course; proposed:
+ * what it would take out, in the proposal the student applies or declines ("Bỏ khỏi kế hoạch …"). The reason is the way
+ * the student chose, or the way the system recommends, never the GPA.
  */
-export function thesisCleanedText(context: Pick<StudyPlanContext, "thesis" | "courses">, codes: readonly string[], proposed = false): string {
-  const advice = thesisAdvice(context);
-  const group = context.thesis?.group.replace(/^Nhóm/, "nhóm");
-  return `${proposed ? "Bỏ" : "Đã bỏ"} khỏi kế hoạch ${courseList(context, codes)}${advice ? ` vì ${advice}` : ""}; kế hoạch chỉ giữ một phương án${group ? ` cho ${group}` : ""}.`;
+export function thesisCleanedText(context: Pick<StudyPlanContext, "thesis" | "courses">, plan: StudyPlanData, codes: readonly string[], proposed = false): string {
+  const thesis = context.thesis;
+  const group = thesis?.group.replace(/^Nhóm/, "nhóm") ?? "nhóm đồ án tốt nghiệp";
+  const way = thesis ? followedThesisWay(context, plan) : null;
+  const own = way !== null && thesisChoice(context, plan) === way;
+  const why = way ? `: ${own ? "bạn đã chọn" : "hệ thống đề xuất"} ${thesisWayText(context, way)} cho ${group}, chỉ cần một phương án` : "";
+  return `${proposed ? "Bỏ" : "Đã bỏ"} khỏi kế hoạch ${courseList(context, codes)} do lộ trình AI thêm trước đây${why}.${own ? "" : " Bạn vẫn có thể tự thêm lại các học phần này nếu muốn chọn chúng."}`;
 }
 
 /**
@@ -666,9 +741,13 @@ export type PoolSection = { id: string; title: string; note: string | null; cour
 export function poolSections(context: StudyPlanContext, plan: StudyPlanData, suggestions: readonly AiSuggestion[] = []): PoolSection[] {
   const placed = plannedTerms(plan);
   const open = (course: StudyPlanCourse) => needsPlanning(course) && !placed.has(course.code);
-  // The thesis group's way the system does not advise is not offered (user 2026-11-03): search still finds it, marked.
-  const leftOut = thesisLeftOut(context);
-  const own = context.courses.filter((course) => course.applicable && open(course) && !leftOut.has(course.code));
+  // The thesis group (user 2026-11-03, 2026-11-10): its other courses are not offered, nor, once the student chose a way, the
+  // other way; before that both ways are, the recommended one first. Search still finds every course, marked (thesisHint).
+  const leftOut = thesisLeftOut(context, plan);
+  const followed = context.thesis ? followedThesisWay(context, plan) : null;
+  const first = new Set(context.thesis && followed ? wayCodes(context.thesis, followed) : []);
+  const own = context.courses.filter((course) => course.applicable && open(course) && !leftOut.has(course.code))
+    .sort((a, b) => Number(!first.has(a.code)) - Number(!first.has(b.code)));
   const used = new Set<string>();
   const sections: PoolSection[] = [];
   const credits = (codes: Iterable<string>, filter: (course: StudyPlanCourse) => boolean) => [...codes]

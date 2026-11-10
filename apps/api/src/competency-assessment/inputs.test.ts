@@ -25,6 +25,8 @@ type Tables = {
   specialty: string | null; plans: { linked: boolean; major: string }[]; career: boolean;
   /** The CTĐT writes Đại số tuyến tính và ứng dụng under a paper code (71ITMA10203), its standard under the real one (71MATL10053). */
   paper?: boolean;
+  /** The saved Kế hoạch học kỳ (stu_study_plans.data); none by default. */
+  studyPlan?: unknown;
 };
 
 function fakeDb(overrides: Partial<Tables> = {}) {
@@ -69,6 +71,7 @@ function fakeDb(overrides: Partial<Tables> = {}) {
     if (sql.includes("FROM career_positions")) return rows(t.career ? [{ id: "p1", code: "NN009", name_vi: "Kỹ sư dữ liệu", name_en: "Data Engineer", version: "pv", deleted: false }] : []);
     if (sql.includes("FROM career_requirements")) return rows([{ id: "req1", skill_id: "k1", skill_name: "Lập trình", title: "Lập trình", is_required: true }]);
     if (sql.includes("FROM course_catalog")) return rows([{ code: "71AV010003", name: "Anh văn đầu vào" }]);
+    if (sql.includes("FROM stu_study_plans")) return rows(t.studyPlan ? [{ data: t.studyPlan }] : []);
     throw new Error(`unexpected query: ${sql}`);
   });
   return { query, sql: () => query.mock.calls.map(([text]) => String(text)) };
@@ -98,9 +101,11 @@ describe("readAssessmentInputs", () => {
     expect(inputs.promptVersion).toBe("comp-v1");
     const calls = db.sql();
     expect(calls.some((sql) => /FOR (UPDATE|SHARE|NO KEY|KEY)/i.test(sql))).toBe(false);
-    // Single-row reads need no order: the profile, the transcript, the career and the weight totals.
-    for (const sql of calls.filter((text) => !/FROM (student_profiles|student_transcripts|career_positions) WHERE|^SELECT count\(\*\)::int AS active_count/.test(text)))
+    // Single-row reads need no order: the profile, the transcript, the career, the saved plan and the weight totals.
+    for (const sql of calls.filter((text) => !/FROM (student_profiles|student_transcripts|career_positions|stu_study_plans) WHERE|^SELECT count\(\*\)::int AS active_count/.test(text)))
       expect(sql).toMatch(/ORDER BY/);
+    // Without a saved plan nothing is planned (comp-calc-v23).
+    expect(inputs.plannedCourses).toBeUndefined();
     // The weights are those of the shared courses of the current revision (migration 038).
     const weightLinks = db.query.mock.calls.find(([sql]) => String(sql).includes("JOIN ad_comp_course_links"));
     expect(String(weightLinks?.[0])).toContain("cfg.course_id=COALESCE(rc.course_id,cc.course_id) AND cfg.status='active'");
@@ -110,6 +115,20 @@ describe("readAssessmentInputs", () => {
     expect(calls.find((sql) => sql.includes("FROM student_profiles"))).not.toMatch(/interests|career_goal|full_name|student_code/);
     const catalog = db.query.mock.calls.find(([sql]) => String(sql).includes("course_catalog"));
     expect(catalog?.[1]).toEqual([["71AV010003"]]);
+  });
+
+  it("reads the courses the student placed in Kế hoạch học kỳ themselves, under the real codes, never what an AI roadmap added (comp-calc-v23)", async () => {
+    const studyPlan = {
+      schemaVersion: 1, roadmapId: null, kept: ["71ITSE30503"],
+      aiAdded: { completedAt: "2026-11-01T00:00:00.000Z", term: "HK262", codes: ["71ITGR40203", "71ITGR40303", "71ITSE30503"], addedAt: "2026-11-01T00:00:00.000Z" },
+      terms: [{ code: "HK262", courses: [{ code: "71itgr40206" }, { code: "71ITGR40203" }, { code: "71ITGR40303" }, { code: "71ITSE30503" }, { code: "71ITMA10203" }] }],
+    };
+    const inputs = await readAssessmentInputs(fakeDb({ studyPlan, paper: true }), userId);
+    // Đồ án tốt nghiệp placed by the student, a course the student kept, the paper code read as the real one; the AI's two
+    // chuyên đề are the system's suggestion, not the student's choice.
+    expect(inputs.plannedCourses).toEqual(["71ITGR40206", "71ITSE30503", "71MATL10053"]);
+    // A plan that does not parse reads as none.
+    expect((await readAssessmentInputs(fakeDb({ studyPlan: { terms: "?" } }), userId)).plannedCourses).toBeUndefined();
   });
 
   it("reports missing data with the API error codes", async () => {

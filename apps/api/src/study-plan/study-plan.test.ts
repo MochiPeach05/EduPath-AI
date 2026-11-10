@@ -6,6 +6,7 @@ import { syntheticCurriculum, syntheticPlan, syntheticStandards, syntheticStuden
 import type { DatabasePool } from "../db/pool.js";
 import { opensEveryTerm, planChoices, readStudyPlanFacts, type StudyPlanContext, type StudyPlanCourse } from "./context.js";
 import { calendarTermCode, creditLimits, nextTerm, studyPlanSchema, termIndex, termLabel, type StudyPlanData } from "./model.js";
+import { ownPlannedCodes } from "./own-plan.js";
 import { prefillPlan, readAiPlan, readAiProposal } from "./prefill.js";
 import { plannedTranscript, projectGraduation } from "./projection.js";
 import { createStudyPlanRouter } from "./router.js";
@@ -335,6 +336,15 @@ describe("the real codes of the graduation standard (user 2026-11-10: \"dùng lu
   });
 });
 
+describe("the courses the student placed themselves (own-plan.ts, user 2026-11-10)", () => {
+  it("are every planned course but what an AI roadmap added and the student did not keep", () => {
+    expect([...ownPlannedCodes({ terms: [{ code: "HK262", courses: [{ code: "71itgr40206" }, { code: "71ITGR40203" }, { code: "71ITIN40304" }] }],
+      aiAdded: { completedAt: "2026-11-01T00:00:00.000Z", term: "HK262", codes: ["71ITGR40203", "71ITIN40304"], addedAt: "2026-11-01T00:00:00.000Z" },
+      kept: ["71ITIN40304"] })].sort()).toEqual(["71ITGR40206", "71ITIN40304"]);
+    expect(ownPlannedCodes({ terms: [] }).size).toBe(0);
+  });
+});
+
 describe("where the plan starts", () => {
   it("fills the mandatory courses still ahead in the terms of the cohort's training plan, never a late one", async () => {
     const { context } = await facts();
@@ -366,7 +376,17 @@ describe("where the plan starts", () => {
     // From 2,80 the thesis is advised: a chuyên đề the model picked never goes into the plan.
     const high = { ...loaded.context, thesis: loaded.context.thesis && { ...loaded.context.thesis, way: "thesis" as const } };
     expect(loaded.context.thesis).toMatchObject({ thesis: "71ITGR40206" });
+    expect(loaded.context.thesis).not.toHaveProperty("reason");
     expect((await readAiProposal(db as never, studentId, high, null))!.courses.map((course) => course.code)).not.toContain("71ITGR40203");
+    // The student's own choice in the plan wins (user 2026-11-10): Đồ án tốt nghiệp placed below 2,80 keeps the chuyên đề out;
+    // a replacement course placed from 2,80 lets the AI's chuyên đề in (the synthetic CTĐT has Chuyên đề 1 and 71ITIS30403 as
+    // the replacement path); both ways placed, the AI adds nothing of the group.
+    const proposed = async (context: typeof low, own: string[]) =>
+      (await readAiPlan(db as never, studentId, context, null, new Map(), new Set(own))).proposal!.courses.map((course) => course.code);
+    expect(await proposed(low, ["71ITGR40206"])).not.toContain("71ITGR40203");
+    expect(await proposed(high, ["71ITIS30403"])).toContain("71ITGR40203");
+    expect(await proposed(low, ["71ITGR40206", "71ITIS30403"])).not.toContain("71ITGR40203");
+    expect(await proposed(low, ["71ITIN40304"])).toContain("71ITGR40203");
     // The K30 plan opens the internship in HK262 itself.
     expect(proposal!.courses.find((course) => course.code === "71ITIN40304")?.term).toBe("HK262");
     expect(await readAiProposal(db as never, studentId, loaded.context, roadmap.id)).toBeNull();

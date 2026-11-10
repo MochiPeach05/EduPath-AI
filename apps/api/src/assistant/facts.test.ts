@@ -72,8 +72,9 @@ function transcriptData(): TranscriptData {
 }
 
 /** savedBy: the survey was filled in by a cố vấn học tập or the Khoa (policy 2026-11-10); withdrawn: the student withdrew its consent. */
+/** plan: the saved Kế hoạch học kỳ (none by default). */
 function db(options: { assessment?: boolean; computed?: AssessmentResult; survey?: boolean; consent?: string | null; roadmap?: RoadmapRow | null; transcript?: TranscriptData | null;
-  savedBy?: "advisor" | "admin"; withdrawn?: boolean } = {}) {
+  savedBy?: "advisor" | "admin"; withdrawn?: boolean; plan?: unknown } = {}) {
   const query = vi.fn(async (sql: string) => {
     const rows = (list: unknown[]) => ({ rowCount: list.length, rows: list });
     if (sql.includes("FROM stu_comp_assessments")) {
@@ -88,6 +89,9 @@ function db(options: { assessment?: boolean; computed?: AssessmentResult; survey
     if (sql.includes("FROM stu_roadmaps")) return rows(options.roadmap === null ? [] : [options.roadmap ?? roadmap()]);
     if (sql.includes("FROM student_profiles p")) return rows([{ cohortCode: "K29", specialty: null, career: "Lập trình viên Web" }]);
     if (sql.includes("FROM curriculum_relations")) return rows([]);
+    if (sql.includes("FROM stu_study_plans")) return rows(options.plan ? [{ data: options.plan }] : []);
+    // The real codes of the plan (curricula/real-codes.ts readStudentRealCodes): no CTĐT, so none.
+    if (sql.startsWith("SELECT cohort_code,major_code FROM student_profiles")) return rows([]);
     throw new Error(`unexpected query: ${sql}`);
   });
   return { query } as unknown as Pick<DatabasePool, "query">;

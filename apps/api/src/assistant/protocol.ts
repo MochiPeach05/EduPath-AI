@@ -91,8 +91,14 @@ export const documentEmbeddingText = (title: string, text: string) => embeddingP
  * bổ sung"), the profile says "Bạn đã làm Đánh giá năng lực; kết quả mới nhất ngày …", and with no gap left the career's
  * met skills are the ones whose resources are looked up (facts.ts careerSkillLines, gapSkillNames). The system prompt is
  * unchanged.
+ * v12 (user 2026-11-10: "Không ghi câu này điểm TB tích lũy của bạn 2,76, dưới 2,80 … cái này như kiểu là cài đặt ngầm trong
+ * hệ thống vậy thôi … vẫn có giữ lại môn đồ án tốt nghiệp do sinh viên chọn hết mà"): the thesis group's line of the sources
+ * (roadmap-v16 sections) names the way the student chose in Kế hoạch học kỳ, else the way the system recommends, never the
+ * GPA or the threshold behind it; the newest AI roadmap's source drops the sentences an older roadmap wrote to explain the
+ * way by the GPA (roadmap/present.ts shownRoadmapOutput). The system prompt gains one line: name the way the student chose,
+ * else the recommended one as a suggestion with the other still open, never explained by the GPA or a threshold.
  */
-export const ASSISTANT_PROMPT_VERSION = "assistant-v11";
+export const ASSISTANT_PROMPT_VERSION = "assistant-v12";
 export const KNOWLEDGE_PROMPT_VERSION = "knowledge-v1";
 /** An answer takes well under a minute; a lost worker frees the job after this lease (the worker extends every 3 min). */
 export const ASSISTANT_LEASE_MINUTES = 5;

@@ -1,6 +1,6 @@
 import { referencedCourseCodes } from "../curricula/course-codes.js";
 import type { GraduationData } from "../graduation/model.js";
-import { replacementPath, startsReplacementPath, THESIS_NAME_PATTERN, thesisWay, type ThesisPath } from "../graduation/thesis.js";
+import { followedThesisWay, replacementPath, startsReplacementPath, THESIS_NAME_PATTERN, thesisChoice, thesisWay, type ThesisPath } from "../graduation/thesis.js";
 import type { TranscriptData } from "../student/transcript-parser.js";
 import {
   CALC_VERSION, CAREER_COEFFICIENTS, CAREER_THRESHOLDS, CONDITION_NOMINAL_CREDITS, COVERAGE_BANDS, DEFICIT_BANDS, EVIDENCE_BANDS, FIT_BELOW_FLOOR,
@@ -408,9 +408,12 @@ function assess(inputs: AssessmentInputs): Assessment {
   // cumulative GPA (4-point, printed, else estimated, as Xét tốt nghiệp reads it) chooses the thesis from 2,80 and
   // Chuyên đề tốt nghiệp 1 and 2 below it; without a GPA the thesis first (v7). The courses of the other way that are
   // not passed are never suggested, and never "Sắp học" unless in progress (the set keeps its v7 name; it may hold the
-  // thesis since v18).
+  // thesis since v18). v23 (user 2026-11-10: "vẫn có giữ lại môn đồ án tốt nghiệp do sinh viên chọn hết mà"): the way the
+  // student chose, by that path and the courses they placed in Kế hoạch học kỳ themselves, wins over that recommendation
+  // (an internal setting); while they hold both ways neither is left out, and a course they placed never is.
   const thesisGpa = assessGraduationGpa(standardData ?? { minimumGpa: 0, gpaScale: 4 }, transcript, transcriptRecords, conditionCodes);
   const excludedThesisReplacements = new Set<string>();
+  const plannedCourses = new Set((inputs.plannedCourses ?? []).map(courseKey));
   const started = (row: Row) => row.state !== "not_in_curriculum" && startsReplacementPath(row.state);
   for (const elective of electives) {
     const quota = quotas.get(elective.code)?.quota ?? null;
@@ -421,9 +424,12 @@ function assess(inputs: AssessmentInputs): Assessment {
     const others = rows.filter((row) => row !== thesis);
     const path: ThesisPath = thesis.state === "in_progress" ? "thesis_in_progress"
       : others.some(started) ? "replacement" : "not_started";
-    const way = thesisWay(path, thesisGpa) ?? "thesis";
-    const kept = way === "thesis" ? [thesis] : replacementPath(others, quota);
-    for (const row of rows) if (!kept.includes(row) && !isPassedState(row.state)) excludedThesisReplacements.add(row.code);
+    const choice = thesisChoice(path, thesis.code, others.map((row) => row.code), plannedCourses);
+    const way = choice === "both" ? null : followedThesisWay(choice, thesisWay(path, thesisGpa)) ?? "thesis";
+    const kept = way === null ? [thesis, ...replacementPath(others, quota)] : way === "thesis" ? [thesis] : replacementPath(others, quota);
+    for (const row of rows) {
+      if (!kept.includes(row) && !isPassedState(row.state) && !plannedCourses.has(courseKey(row.code))) excludedThesisReplacements.add(row.code);
+    }
   }
 
   /* ---- 2. weights (§2.3): matched by code, credits from the current CTĐT ---- */

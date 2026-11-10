@@ -3,7 +3,7 @@
 // profile's cohort and specialty: never a name, student code, email, class, interests, PDF or
 // file name. Every standard/admin string is sanitized because Ollama/llama.cpp parses
 // special-token strings inside message content.
-import { isPassedState } from "../../competency-assessment/course-state.js";
+import { courseKey, isPassedState } from "../../competency-assessment/course-state.js";
 import { formatGpa, formatGpaShortfall, formatNumber, GPA_NAMES, namedScoreList, sanitizeText, shownGpa, termText } from "../../competency-assessment/ai/prompt.js";
 import type { JsonSchema } from "../../competency-assessment/ai/schema.js";
 import { numberFactsOf, type NamedScore } from "../../competency-assessment/ai/validate.js";
@@ -13,7 +13,9 @@ import type {
   GradCourseState, GradStatus, GraduationCourseRow, GraduationEvaluation, GraduationGroupEvaluation, GraduationWarning,
 } from "../evaluation.js";
 import type { StudentGraduation, StudentGraduationProfile } from "../student-graduation.js";
-import { replacementPath, startsReplacementPath, thesisNoun, thesisOption, thesisWay, thesisWayReason, type ThesisGpa, type ThesisOption } from "../thesis.js";
+import {
+  followedThesisWay, replacementPath, startsReplacementPath, thesisChoice, thesisNoun, thesisOption, thesisWay, type ThesisGpa, type ThesisOption,
+} from "../thesis.js";
 import { buildGraduationAdviceSchema, GRADUATION_ADVICE_LIMITS as L } from "./schema.js";
 
 /**
@@ -26,8 +28,14 @@ import { buildGraduationAdviceSchema, GRADUATION_ADVICE_LIMITS as L } from "./sc
  * v6 (user 2026-11-10: "Nhận xét không bao giờ nhận xét bạn đã đủ tất cả mà không cần học gì mà vẫn phải khuyến khích sinh
  * viên học thêm kiến thức từ bên ngoài, tự học … kiểm tra luôn các nhận xét AI khác"): with every condition met the advice
  * no longer only congratulates; it still encourages learning beyond the program, with one such step in nextSteps.
+ * v7 (user 2026-11-10: "Không ghi câu này điểm TB tích lũy của bạn 2,76, dưới 2,80 … cái này như kiểu là cài đặt ngầm trong
+ * hệ thống vậy thôi sẽ hiện ra như kiểu đề xuất tất nhiên và vẫn có giữ lại môn đồ án tốt nghiệp do sinh viên chọn hết mà"):
+ * the thesis group's lines give the way the student chose in Kế hoạch học kỳ (StudentGraduation.thesisPlan, also in the
+ * fingerprint), else the way the system recommends, never the GPA or the threshold behind it, and the other way as an
+ * option still open; the rules ask to present the recommendation as one, never explained by the GPA, to respect the
+ * student's choice, and to say one way is enough when the plan holds both.
  */
-export const GRADUATION_ADVICE_PROMPT_VERSION = "grad-advice-v6";
+export const GRADUATION_ADVICE_PROMPT_VERSION = "grad-advice-v7";
 
 /** Ollama options sent with every job (worker adds think/stream/truncate/keep_alive/model). num_ctx must stay 16384. */
 export const GRADUATION_ADVICE_OPTIONS = { num_ctx: 16384, num_predict: 2048, temperature: 0.3, top_p: 0.95, top_k: 64 } as const;
@@ -73,7 +81,9 @@ Nội dung lời khuyên:
 - Thứ tự ưu tiên: các điều kiện chưa đạt, rồi học phần đang học, rồi điểm trung bình tích lũy, cuối cùng là cảnh báo dữ liệu.
 - Nhóm bắt buộc chưa đạt: nêu các học phần còn phải học hoặc học lại trong mục [4].
 - Nhóm tự chọn chưa đạt: nói rõ còn thiếu bao nhiêu tín chỉ, gợi ý chọn học trong các học phần được liệt kê của đúng nhóm đó, và nhắc bạn xem lịch mở lớp, điều kiện tiên quyết, trao đổi với cố vấn học tập trước khi đăng ký.
-- Nhóm tự chọn có đồ án hoặc khóa luận tốt nghiệp mà dữ liệu ghi "hệ thống đề xuất" một phương án theo điểm trung bình tích lũy (từ 2,80 trở lên làm đồ án hoặc khóa luận tốt nghiệp; dưới 2,80 học các học phần thay thế như Chuyên đề tốt nghiệp 1 và 2): chỉ khuyên đúng phương án đó, gọi đúng tên học phần trong dữ liệu, nêu lý do như dữ liệu ghi; không khuyên phương án còn lại. Nhắc bạn xác nhận điều kiện đăng ký với cố vấn học tập hoặc Khoa.
+- Nhóm tự chọn có đồ án hoặc khóa luận tốt nghiệp mà dữ liệu ghi "hệ thống đề xuất" một phương án: khuyên theo phương án đó như một đề xuất của hệ thống, gọi đúng tên học phần trong dữ liệu; không giải thích phương án bằng điểm trung bình tích lũy hay bất kỳ ngưỡng điểm nào; có thể nhắc ngắn rằng bạn vẫn có thể chọn phương án khác ghi trong dữ liệu. Nhắc bạn xác nhận điều kiện đăng ký với cố vấn học tập hoặc Khoa.
+- Dữ liệu ghi bạn đã chọn một phương án trong kế hoạch học kỳ: tôn trọng lựa chọn đó, khuyên hoàn thành theo đúng phương án bạn chọn kể cả khi khác phương án hệ thống thường đề xuất; không khuyên đổi phương án, không giải thích bằng điểm.
+- Dữ liệu ghi kế hoạch học kỳ của bạn có cả hai phương án: nhắc rằng chỉ cần một phương án để đủ tín chỉ của nhóm và bạn tự chọn phương án phù hợp; không giải thích bằng điểm.
 - Nhóm tự chọn có đồ án hoặc khóa luận tốt nghiệp mà dữ liệu ghi "phương án chính" và "phương án thay thế" (chưa có điểm trung bình tích lũy): khuyên bạn làm đồ án hoặc khóa luận tốt nghiệp (gọi đúng tên học phần trong dữ liệu) là phương án chính, vì một học phần này đã đủ số tín chỉ của nhóm. Chỉ nhắc các học phần thay thế như phương án dự phòng khi bạn không làm đồ án hoặc khóa luận tốt nghiệp theo quy định của Khoa, và phải nói rõ đó là lý do. Không tự khẳng định bạn không đủ điều kiện làm đồ án hoặc khóa luận tốt nghiệp. Nhắc bạn xác nhận điều kiện đăng ký với cố vấn học tập hoặc Khoa.
 - Dữ liệu ghi bạn đã bắt đầu phương án học phần thay thế: khuyên học tiếp các học phần thay thế được liệt kê cho đủ tín chỉ của nhóm; không khuyên chuyển sang làm đồ án hoặc khóa luận tốt nghiệp.
 - Dữ liệu ghi bạn đang làm đồ án hoặc khóa luận tốt nghiệp: khuyên hoàn thành tốt học phần đó, vì như vậy là đủ tín chỉ của nhóm.
@@ -98,7 +108,8 @@ Chỉ trả về một đối tượng JSON đúng cấu trúc sau, không thêm
 
 /* ------------------------------------------------------------------------ */
 
-type AdviceFacts = { profile: StudentGraduationProfile; standard: GraduationStandardInput; evaluation: GraduationEvaluation };
+/** thesisPlan: the thesis group's courses the student placed in Kế hoạch học kỳ (StudentGraduation.thesisPlan, grad-advice-v7). */
+type AdviceFacts = { profile: StudentGraduationProfile; standard: GraduationStandardInput; evaluation: GraduationEvaluation; thesisPlan?: readonly string[] };
 /** One condition of section [3]: its line, and for CREDITS the note on what the failing groups cover. */
 type Condition = GraduationAdviceKey & { status: GradStatus; line: string; note?: string };
 
@@ -289,31 +300,63 @@ function courseLines(courses: readonly GraduationCourseRow[], indent = ""): stri
 const creditsToReach = (value: number | null, suffix = "") =>
   value !== null && value > CREDIT_EPSILON ? `cho đủ ${formatNumber(value)} TC${suffix}` : "cho đủ tín chỉ của nhóm";
 
+/** "- học các học phần sau cho đủ 6 TC:", or "- chọn trong các học phần sau …" when they hold more credits than needed. */
+function replacementLead(courses: readonly GraduationCourseRow[], need: number | null, prefix = "- "): string {
+  const sum = courses.every((course) => course.credits !== null) ? courses.reduce((total, course) => total + course.credits!, 0) : null;
+  const verb = need !== null && sum !== null && sum > need + CREDIT_EPSILON ? "chọn trong các học phần sau" : "học các học phần sau";
+  return `${prefix}${verb} ${creditsToReach(need)}:`;
+}
+
 /**
- * A group with a thesis option (thesis.ts). Not started: the way the cumulative GPA advises (thesisWay, grad-advice-v4),
- * else (no GPA) the thesis is the main option and the replacement courses the fallback for a student who does not do it
- * under the Khoa's rules.
+ * A group with a thesis option (thesis.ts). Not started (grad-advice-v7): the way the student chose in Kế hoạch học kỳ
+ * (planned: their own courses of the plan), else the way the system recommends (thesisWay: an internal rule, never named),
+ * each with the other way as an option still open; both ways planned: both, and that one is enough; nothing recommended
+ * (no GPA): the thesis is the main option and the replacement courses the fallback for a student who does not do it under
+ * the Khoa's rules.
  * Replacement path taken: its courses so far, what the pending ones would leave, and the
- * replacement courses left (the thesis is not offered again). Thesis in progress: it completes the group.
+ * replacement courses left (the thesis is not offered again). Thesis in progress: it completes the group. Either way, a
+ * course of the other way the student planned too is named, with "one way is enough".
  */
-function thesisLines(group: GraduationGroupEvaluation, head: string, option: ThesisOption, gpa: ThesisGpa): string[] {
+function thesisLines(group: GraduationGroupEvaluation, head: string, option: ThesisOption, gpa: ThesisGpa, planned: ReadonlySet<string> = new Set()): string[] {
   const noun = thesisNoun(option.thesis);
+  const isPlanned = (course: GraduationCourseRow) => planned.has(courseKey(course.code));
+  const plannedOthers = notPassed(option.replacements.filter(isPlanned));
+  const enough = "chỉ cần một phương án để đủ tín chỉ của nhóm";
   if (option.path === "thesis_in_progress") {
-    return [`${head}: bạn đang làm ${noun}`, `- ${courseLine(option.thesis)} — hoàn thành học phần này là đủ số tín chỉ của nhóm`];
+    return [`${head}: bạn đang làm ${noun}`, `- ${courseLine(option.thesis)} — hoàn thành học phần này là đủ số tín chỉ của nhóm`,
+      ...(plannedOthers.length ? [`- kế hoạch học kỳ của bạn cũng có học phần thay thế ${noun}; ${enough}:`, ...courseLines(plannedOthers, SUB)] : [])];
   }
-  const way = option.path === "not_started" ? thesisWay(option.path, gpa) : null;
-  const reason = thesisWayReason(option.path, gpa);
-  if (way === "thesis") {
-    return [`${head}: hệ thống đề xuất làm ${noun} (${reason})`, `- ${courseLine(option.thesis)} — một học phần đủ số tín chỉ của nhóm`];
-  }
-  if (way === "replacement") {
-    return [
-      `${head}: hệ thống đề xuất học các học phần thay thế ${noun} (${reason})`,
-      `- học các học phần sau ${creditsToReach(group.remaining ?? group.required)}:`,
-      ...courseLines(notPassed(replacementPath(option.replacements, group.required)), SUB),
-    ];
-  }
+  const quota = group.remaining ?? group.required;
   if (option.path === "not_started") {
+    const choice = thesisChoice(option.path, option.thesis.code, option.replacements.map((course) => course.code), planned);
+    const recommended = thesisWay(option.path, gpa);
+    const way = followedThesisWay(choice, recommended);
+    const path = notPassed(replacementPath(option.replacements, group.required));
+    // The student's own replacement courses come first, then the replacement path's.
+    const chosen = choice === "replacement" ? [...new Set([...plannedOthers, ...path])] : path;
+    const thesisLine = `${courseLine(option.thesis)} — một học phần đủ số tín chỉ của nhóm`;
+    if (choice === "both") {
+      return [
+        `${head}: kế hoạch học kỳ của bạn có cả ${noun} và học phần thay thế; ${enough}, bạn tự chọn phương án`,
+        `- phương án làm ${noun}: ${thesisLine}`,
+        replacementLead(path, quota, "- phương án học phần thay thế: "), ...courseLines(path, SUB),
+        ...(recommended ? [`- hệ thống đề xuất: ${recommended === "thesis" ? `làm ${noun}` : `học các học phần thay thế ${noun}`}`] : []),
+      ];
+    }
+    if (way === "thesis") {
+      return [
+        `${head}: ${choice === "thesis" ? `bạn đã chọn làm ${noun} trong kế hoạch học kỳ` : `hệ thống đề xuất làm ${noun}`}`,
+        `- ${thesisLine}`,
+        ...(path.length ? [replacementLead(path, quota, "- phương án khác (bạn vẫn có thể chọn): "), ...courseLines(path, SUB)] : []),
+      ];
+    }
+    if (way === "replacement") {
+      return [
+        `${head}: ${choice === "replacement" ? `bạn đã chọn học các học phần thay thế ${noun} trong kế hoạch học kỳ` : `hệ thống đề xuất học các học phần thay thế ${noun}`}`,
+        replacementLead(chosen, quota), ...courseLines(chosen, SUB),
+        `- phương án khác (bạn vẫn có thể chọn): ${thesisLine}`,
+      ];
+    }
     return [
       `${head}: ${noun} hoặc học phần thay thế`,
       `- phương án chính: ${courseLine(option.thesis)} — một học phần đủ số tín chỉ của nhóm`,
@@ -324,6 +367,7 @@ function thesisLines(group: GraduationGroupEvaluation, head: string, option: The
   }
   const started = option.replacements.filter((course) => startsReplacementPath(course.state));
   const lines = [`${head}: bạn đã bắt đầu phương án học phần thay thế ${noun}`, "- học phần thay thế đã học hoặc đang học:", ...courseLines(started, SUB)];
+  if (isPlanned(option.thesis)) lines.push(`- kế hoạch học kỳ của bạn cũng có ${courseLine(option.thesis)}; ${enough}`);
   // Credits still missing once the courses in progress or graded without a result pass.
   const pending = started.filter((course) => !isPassedState(course.state));
   let need = group.remaining;
@@ -342,11 +386,11 @@ function thesisLines(group: GraduationGroupEvaluation, head: string, option: The
 }
 
 /** Section [4] for one group that is not passed: its not-passed courses, or its thesis option. */
-function groupLines(group: GraduationGroupEvaluation, key: string, gpa: ThesisGpa): string[] {
+function groupLines(group: GraduationGroupEvaluation, key: string, gpa: ThesisGpa, planned: ReadonlySet<string>): string[] {
   const head = `[${key}] ${sanitizeText(group.label)}`;
   const option = thesisOption(group);
   // A thesis already passed (in a group that other courses leave undecided) reads as a plain group.
-  if (option && !isPassedState(option.thesis.state)) return thesisLines(group, head, option, gpa);
+  if (option && !isPassedState(option.thesis.state)) return thesisLines(group, head, option, gpa, planned);
   const missing = notPassed(group.courses);
   return [
     group.kind === "mandatory" ? `${head}: các học phần bắt buộc chưa đạt` : `${head}: các học phần có thể chọn để đủ tín chỉ`,
@@ -357,6 +401,7 @@ function groupLines(group: GraduationGroupEvaluation, key: string, gpa: ThesisGp
 /** Renders the user message: a delimited data block (design §5.6, sections [1]–[7]). */
 function renderGraduationDataBlock(facts: AdviceFacts, list: readonly Condition[] = conditions(facts.evaluation)): string {
   const { profile, standard, evaluation } = facts;
+  const planned = new Set((facts.thesisPlan ?? []).map(courseKey));
   const lines: string[] = [];
   const push = (...items: string[]) => lines.push(...items);
   const keyOfGroup = new Map(list.filter((item) => item.groupId !== null).map((item) => [item.groupId!, item.key]));
@@ -382,7 +427,7 @@ function renderGraduationDataBlock(facts: AdviceFacts, list: readonly Condition[
   push("", "[4. HỌC PHẦN CÒN THIẾU THEO NHÓM] (chỉ các nhóm chưa đạt hoặc chưa xác định)");
   const open = evaluation.groups.filter((group) => group.status !== "pass");
   if (!open.length) push("Không có: mọi nhóm học phần đều đạt.");
-  for (const group of open) push(...groupLines(group, keyOfGroup.get(group.id)!, evaluation.gpa));
+  for (const group of open) push(...groupLines(group, keyOfGroup.get(group.id)!, evaluation.gpa, planned));
 
   push("", "[5. HỌC PHẦN ĐANG HỌC] (chưa có kết quả, chưa tính là đạt)");
   if (!evaluation.inProgress.length) push("Không có.");
@@ -436,7 +481,7 @@ export function buildGraduationAdviceInput(loaded: StudentGraduation): Graduatio
   if (!standard || !evaluation) throw new Error("graduation_advice_requires_evaluation");
   const list = conditions(evaluation);
   const keys = list.map(({ key, groupId, label }) => ({ key, groupId, label }));
-  const user = renderGraduationDataBlock({ profile: loaded.profile, standard, evaluation }, list);
+  const user = renderGraduationDataBlock({ profile: loaded.profile, standard, evaluation, thesisPlan: loaded.thesisPlan ?? [] }, list);
   return {
     system: GRADUATION_ADVICE_SYSTEM_PROMPT,
     user,

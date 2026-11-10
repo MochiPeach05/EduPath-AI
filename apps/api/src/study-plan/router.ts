@@ -8,6 +8,7 @@ import { studentUser } from "../advisors/access.js";
 import { studyPlanWithRealCodes } from "../curricula/real-codes.js";
 import { readStudyPlanFacts, type StudyPlanFacts } from "./context.js";
 import { studyPlanSchema, type StudyPlanData } from "./model.js";
+import { ownPlannedCodes } from "./own-plan.js";
 import { prefillPlan, readAiPlan } from "./prefill.js";
 import { projectGraduation } from "./projection.js";
 
@@ -51,7 +52,8 @@ async function view(db: Pick<PoolClient, "query">, userId: string, facts: StudyP
   // A plan saved before 2026-11-10 may name a course by its CTĐT file's code: the page lists it by the real one (real-codes.ts).
   const plan = saved && facts.realCodes?.size ? { ...saved, data: studyPlanWithRealCodes(saved.data, facts.realCodes) } : saved;
   const suggested = plan ? null : prefillPlan(facts.context);
-  const ai = await readAiPlan(db, userId, facts.context, plan?.data.roadmapId ?? null, facts.realCodes);
+  // The AI's courses of the thesis group follow the way the student chose in the plan (user 2026-11-10).
+  const ai = await readAiPlan(db, userId, facts.context, plan?.data.roadmapId ?? null, facts.realCodes, plan ? ownPlannedCodes(plan.data) : new Set());
   return {
     context: facts.context,
     plan,

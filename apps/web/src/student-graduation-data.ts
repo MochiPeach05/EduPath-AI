@@ -567,14 +567,26 @@ export function thesisOption(group: GraduationGroupEvaluation): ThesisOption | n
 const startsReplacementPath = (state: GradCourseState) => isPassedState(state) || state === "in_progress" || state === "graded_unknown";
 
 /**
- * The server's thesisWay (apps/api/src/graduation/thesis.ts; user 2026-11-03: "điểm của sinh viên mà ổn thì đề xuất làm đồ án
- * tốt nghiệp còn thấp thì làm 2 môn thay thế đó", "TB tích lũy từ 2,80"): not started, the cumulative GPA on the 4-point
- * scale chooses the thesis from 2,80 and the replacement courses below it; null without such a GPA.
+ * The way the system recommends, the server's thesisWay (apps/api/src/graduation/thesis.ts, user 2026-11-03): not started,
+ * the cumulative GPA on the 4-point scale picks the thesis or the replacement courses; null without such a GPA. An internal
+ * setting since 2026-11-10 (user: "cái này như kiểu là cài đặt ngầm trong hệ thống vậy thôi sẽ hiện ra như kiểu đề xuất tất
+ * nhiên và vẫn có giữ lại môn đồ án tốt nghiệp do sinh viên chọn hết mà"): the page shows the recommendation as one, never the
+ * GPA or the threshold behind it, lists the other way as an option, and follows the way the student chose in Kế hoạch học kỳ.
  */
-export const THESIS_MIN_GPA = 2.8;
+const THESIS_MIN_GPA = 2.8;
 export function thesisWay(path: ThesisOption["path"], gpa: Pick<GraduationEvaluation["gpa"], "actual" | "scale">): "thesis" | "replacement" | null {
   if (path !== "not_started" || gpa.actual === null || gpa.scale !== 4) return null;
   return gpa.actual >= THESIS_MIN_GPA - 1e-9 ? "thesis" : "replacement";
+}
+
+/**
+ * The way the student chose in Kế hoạch học kỳ (the server's thesisChoice): their own courses of the group there (API
+ * StudentGraduation.thesisPlan), the thesis, a replacement course, or both; null when they placed none.
+ */
+export function plannedThesisWay(option: Pick<ThesisOption, "thesis" | "replacements">, planned: ReadonlySet<string>): "thesis" | "replacement" | "both" | null {
+  const has = (code: string) => planned.has(code.trim().toUpperCase());
+  const thesis = has(option.thesis.code), replacement = option.replacements.some((course) => has(course.code));
+  return thesis && replacement ? "both" : thesis ? "thesis" : replacement ? "replacement" : null;
 }
 /**
  * Only Chuyên đề tốt nghiệp 1 and 2 replace the thesis when the group has them (user: "là môn học thay thế đồ án tốt
@@ -586,18 +598,31 @@ const replacementPath = (replacements: GraduationCourseRow[], required: number |
   const enough = required === null || topics.reduce((sum, course) => sum + (course.credits ?? 0), 0) + 1e-9 >= required;
   return topics.length && enough ? topics : replacements;
 };
-const gpaText = (value: number) => value.toFixed(2).replace(".", ",");
-
 /** "đồ án tốt nghiệp" or "khóa luận tốt nghiệp", as the course is named. */
 const thesisKind = (thesis: Pick<GraduationCourseRow, "name">) => /khoa luan/.test(foldName(thesis.name)) ? "khóa luận tốt nghiệp" : "đồ án tốt nghiệp";
 
-function thesisSuggestion(group: GraduationGroupEvaluation, option: ThesisOption, gpa: Pick<GraduationEvaluation["gpa"], "actual" | "scale">): SuggestionItem {
+/** Said when the student's plan holds both ways (user 2026-11-10): neutrally, nothing is taken out of the plan. */
+const BOTH_WAYS_NOTE = "Kế hoạch học kỳ của bạn có cả hai phương án; chỉ cần một phương án để hoàn thành nhóm.";
+const CONFIRM_NOTE = "Hãy xác nhận điều kiện đăng ký với cố vấn học tập.";
+const upperFirst = (text: string) => text.charAt(0).toLocaleUpperCase("vi") + text.slice(1);
+
+/**
+ * The thesis group's item (user 2026-11-10: the GPA rule is an internal setting, the student chooses): a path the transcript
+ * shows goes on; otherwise the way the student chose in Kế hoạch học kỳ ("như bạn đã chọn trong Kế hoạch học kỳ"), else the
+ * way the system recommends ("Đề xuất: …"), never with the GPA or a threshold, and the other way below as an option ("Hoặc
+ * … nếu bạn chọn phương án này"). A plan holding both ways only hears that one is enough. Without a recommendation (no GPA
+ * on the 4-point scale) the thesis is the program's main option, as before.
+ */
+function thesisSuggestion(group: GraduationGroupEvaluation, option: ThesisOption, gpa: Pick<GraduationEvaluation["gpa"], "actual" | "scale">,
+  planned: ReadonlySet<string> = new Set()): SuggestionItem {
   const title = groupInSentence(groupTitle(group));
   const { thesis, replacements, path } = option;
   const credits = thesis.credits === null ? "" : ` (${formatNumber(thesis.credits)} TC)`;
   const key = `group:${group.id}`;
+  const choice = plannedThesisWay(option, planned);
   if (path === "thesis_in_progress") {
-    return { key, text: `Hoàn thành ${thesis.name}${credits} bạn đang học: học phần này đủ số tín chỉ của ${title}.`, coursesLabel: null, courses: [suggestionCourse(thesis, 0)], note: null };
+    const also = choice === "replacement" || choice === "both" ? `Kế hoạch học kỳ của bạn cũng có học phần thay thế ${thesisKind(thesis)}; chỉ cần một phương án để hoàn thành nhóm.` : null;
+    return { key, text: `Hoàn thành ${thesis.name}${credits} bạn đang học: học phần này đủ số tín chỉ của ${title}.`, coursesLabel: null, courses: [suggestionCourse(thesis, 0)], note: also };
   }
   if (path === "replacement") {
     // Same arithmetic as the advice prompt: courses in progress or without a result count once they pass.
@@ -615,37 +640,53 @@ function thesisSuggestion(group: GraduationGroupEvaluation, option: ThesisOption
           : `Hoàn thành ${title} theo phương án học phần thay thế ${thesisKind(thesis)} mà bạn đã bắt đầu.`,
       coursesLabel: rest.length ? "Học phần thay thế còn lại:" : null,
       courses: rest.map(suggestionCourse),
-      note: `Bạn đã học theo phương án này: ${joinVi(started.map((course) => `${course.name} (${courseStateText(course).toLowerCase()})`))}.`,
+      note: `Bạn đã học theo phương án này: ${joinVi(started.map((course) => `${course.name} (${courseStateText(course).toLowerCase()})`))}.`
+        + (choice === "thesis" || choice === "both" ? ` Kế hoạch học kỳ của bạn cũng có ${thesis.name}; chỉ cần một phương án để hoàn thành nhóm.` : ""),
     };
   }
-  const way = thesisWay(path, gpa);
+  // The replacement path (Chuyên đề tốt nghiệp 1 and 2, else every other course: K28), the student's own courses first.
+  const open = (course: GraduationCourseRow) => !isPassedState(course.state);
+  const isPlanned = (course: GraduationCourseRow) => planned.has(course.code.trim().toUpperCase());
+  const advised = replacementPath(replacements, group.required).filter(open);
+  /** "học Chuyên đề Tốt nghiệp 1 và Chuyên đề Tốt nghiệp 2", or the credits to choose among other replacement courses. */
+  const replacementWhat = (courses: readonly GraduationCourseRow[]) => courses.length && courses.every((course) => TOPIC_NAME.test(foldName(course.name)))
+    ? `học ${joinVi(courses.map((course) => course.name))}`
+    : `chọn đủ ${formatNumber(group.remaining ?? group.required)} tín chỉ trong các học phần thay thế ${thesisKind(thesis)}`;
+  const way = choice === "thesis" || choice === "replacement" ? choice : thesisWay(path, gpa);
+  const own = way !== null && choice === way;
+  const note = choice === "both" ? `${BOTH_WAYS_NOTE} ${CONFIRM_NOTE}` : CONFIRM_NOTE;
   if (way === "thesis") {
     return {
       key,
-      text: `Đăng ký ${thesis.name}${credits} để hoàn thành ${title}: điểm TB tích lũy của bạn ${gpaText(gpa.actual!)}, từ ${gpaText(THESIS_MIN_GPA)} trở lên, nên hệ thống đề xuất làm ${thesisKind(thesis)}; một học phần đủ ${formatNumber(group.required)} tín chỉ của nhóm.`,
+      text: own
+        ? `Đăng ký ${thesis.name}${credits} để hoàn thành ${title} như bạn đã chọn trong Kế hoạch học kỳ; một học phần đủ ${formatNumber(group.required)} tín chỉ của nhóm.`
+        : `Đề xuất: đăng ký ${thesis.name}${credits} để hoàn thành ${title}; một học phần đủ ${formatNumber(group.required)} tín chỉ của nhóm.`,
       coursesLabel: null,
       courses: [suggestionCourse(thesis, 0)],
-      note: "Hãy xác nhận điều kiện đăng ký với cố vấn học tập.",
+      note,
+      alternative: advised.length ? { label: `Hoặc ${replacementWhat(advised)} nếu bạn chọn phương án này`, courses: advised.map(suggestionCourse) } : null,
     };
   }
   if (way === "replacement") {
-    const path = replacementPath(replacements, group.required).filter((course) => !isPassedState(course.state));
+    const courses = own ? [...new Set([...replacements.filter((course) => open(course) && isPlanned(course)), ...advised])] : advised;
     return {
       key,
-      text: `Học ${joinVi(path.map((course) => course.name))} để hoàn thành ${title}: điểm TB tích lũy của bạn ${gpaText(gpa.actual!)}, dưới ${gpaText(THESIS_MIN_GPA)}, nên hệ thống đề xuất học các học phần thay thế ${thesisKind(thesis)}.`,
+      text: own ? `${upperFirst(replacementWhat(courses))} để hoàn thành ${title} như bạn đã chọn trong Kế hoạch học kỳ.`
+        : `Đề xuất: ${replacementWhat(courses)} để hoàn thành ${title}.`,
       coursesLabel: null,
-      courses: path.map(suggestionCourse),
-      note: "Hãy xác nhận điều kiện đăng ký với cố vấn học tập.",
+      courses: courses.map(suggestionCourse),
+      note,
+      alternative: { label: `Hoặc làm ${thesis.name}${credits} nếu bạn chọn phương án này`, courses: [suggestionCourse(thesis, 0)] },
     };
   }
-  const open = replacements.filter((course) => !isPassedState(course.state));
+  const others = replacements.filter(open);
   return {
     key,
     text: `Đăng ký ${thesis.name}${credits} để hoàn thành ${title}. Đây là phương án chính của chương trình: một học phần đủ ${formatNumber(group.required)} tín chỉ của nhóm.`,
     coursesLabel: null,
     courses: [suggestionCourse(thesis, 0)],
-    note: `Chỉ chọn học phần thay thế khi bạn không làm ${thesisKind(thesis)} theo quy định của Khoa; hãy xác nhận điều kiện đăng ký với cố vấn học tập.`,
-    alternative: open.length ? { label: `Phương án thay thế: chọn đủ ${formatNumber(group.remaining ?? group.required)} tín chỉ trong các học phần sau`, courses: open.map(suggestionCourse) } : null,
+    note: `${choice === "both" ? `${BOTH_WAYS_NOTE} ` : ""}Chỉ chọn học phần thay thế khi bạn không làm ${thesisKind(thesis)} theo quy định của Khoa; hãy xác nhận điều kiện đăng ký với cố vấn học tập.`,
+    alternative: others.length ? { label: `Phương án thay thế: chọn đủ ${formatNumber(group.remaining ?? group.required)} tín chỉ trong các học phần sau`, courses: others.map(suggestionCourse) } : null,
   };
 }
 
@@ -653,9 +694,11 @@ function thesisSuggestion(group: GraduationGroupEvaluation, option: ThesisOption
  * The deterministic "Đề xuất điều cần làm" (always shown, AI or not): per failing mandatory group
  * its missing courses, per failing elective group the credits to choose and its not-passed courses
  * (the thesis first when the group has one), the credit and GPA shortfalls (with retake candidates),
- * courses in progress and unread results.
+ * courses in progress and unread results. thesisPlan: the thesis group's courses the student placed in Kế hoạch học kỳ
+ * (API StudentGraduation.thesisPlan), the way they chose.
  */
-export function suggestionItems(evaluation: GraduationEvaluation): SuggestionItem[] {
+export function suggestionItems(evaluation: GraduationEvaluation, thesisPlan: readonly string[] = []): SuggestionItem[] {
+  const planned = new Set(thesisPlan.map((code) => code.trim().toUpperCase()));
   const items: SuggestionItem[] = [];
   // A course passed under another code with the same name still counts as owed until its grade is transferred.
   const transfers = evaluation.creditTransfers ?? [];
@@ -681,7 +724,7 @@ export function suggestionItems(evaluation: GraduationEvaluation): SuggestionIte
       const count = group.remaining ?? open.length;
       items.push({ key: `group:${group.id}`, text: `Hoàn thành ${formatNumber(count)} môn còn thiếu trong ${title}:`, coursesLabel: null, courses: open, note: null });
     } else if (thesis) {
-      items.push(thesisSuggestion(group, thesis, evaluation.gpa));
+      items.push(thesisSuggestion(group, thesis, evaluation.gpa, planned));
     } else {
       items.push({
         key: `group:${group.id}`,

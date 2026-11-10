@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest";
 import { surveyFacts } from "../student/survey.js";
 import { roadmapBasis } from "./basis.js";
 import { buildRoadmapFacts } from "./facts.js";
-import { presentRoadmap } from "./present.js";
-import { buildRoadmapInput, roadmapTerms, ROADMAP_OPTIONS, ROADMAP_PROMPT_VERSION, ROADMAP_THINK } from "./prompt.js";
+import { explainedThesisByGpa, presentRoadmap, shownRoadmapOutput } from "./present.js";
+import { buildRoadmapInput, roadmapTerms, ROADMAP_OPTIONS, ROADMAP_PROMPT_VERSION, ROADMAP_SYSTEM_PROMPT, ROADMAP_THINK } from "./prompt.js";
 import { NONE, ROADMAP_LIMITS } from "./schema.js";
 import { ROADMAP_ASSESSMENT, ROADMAP_NOW, syntheticRoadmapFacts, syntheticRoadmapResult, syntheticSurveyRow } from "./test-fixture.js";
 import { cleanCourseCodes, normalizeTermNames, roadmapContextFromAiInput, unattributedClaim, validateRoadmapOutput } from "./validate.js";
@@ -75,7 +75,7 @@ describe("buildRoadmapFacts", () => {
     ] });
     result.progress = { ...result.progress!, next: [group("not_taken")] };
     const thesisChoice = (facts: ReturnType<typeof buildRoadmapFacts>) => facts.choices.find((item) => item.label.includes("TC406"));
-    const built = () => buildRoadmapFacts(ROADMAP_ASSESSMENT, result, roadmapWindow(ROADMAP_NOW));
+    const built = (planned: string[] = []) => buildRoadmapFacts(ROADMAP_ASSESSMENT, result, roadmapWindow(ROADMAP_NOW), [], new Set(planned));
     const gpa = (actual: number | null) => { result.graduation = { ...result.graduation!, gpa: { ...result.graduation!.gpa!, actual, scale: 4 } }; };
     // Without a GPA the model chooses one way of two.
     gpa(null);
@@ -83,13 +83,35 @@ describe("buildRoadmapFacts", () => {
     expect(choice!.options.map((item) => item.code)).toEqual(["71ITGR40206", "71ITGR40203", "71ITGR40303"]);
     expect(choice!.thesis).toMatchObject({ thesis: { code: "71ITGR40206" }, topics: [{ code: "71ITGR40203" }, { code: "71ITGR40303" }], way: null });
     expect(buildRoadmapInput(built()).user).toContain("chỉ chọn MỘT cách: (1) 71ITGR40206 Đồ án Tốt nghiệp (6 TC); (2) cả 71ITGR40203 Chuyên đề Tốt nghiệp 1 (3 TC) và 71ITGR40303 Chuyên đề Tốt nghiệp 2 (3 TC)");
-    // roadmap-v13 (user 2026-11-03, "TB tích lũy từ 2,80"): from 2,80 the thesis alone, below it the two chuyên đề.
+    // roadmap-v13 (user 2026-11-03): one way, the one the system recommends (from a GPA of 2,80 the thesis, below it the two
+    // chuyên đề); roadmap-v16 (user 2026-11-10): an internal setting, so neither the facts nor the data block say why.
     gpa(2.8);
-    expect(thesisChoice(built())).toMatchObject({ options: [{ code: "71ITGR40206" }], thesis: { thesis: { code: "71ITGR40206" }, topics: [], way: "thesis", reason: "điểm TB tích lũy 2,80, từ 2,80 trở lên" } });
-    expect(buildRoadmapInput(built()).user).toContain("hệ thống đề xuất làm 71ITGR40206 Đồ án Tốt nghiệp (6 TC) vì điểm TB tích lũy 2,80, từ 2,80 trở lên; không đề xuất Chuyên đề tốt nghiệp");
+    expect(thesisChoice(built())).toMatchObject({ options: [{ code: "71ITGR40206" }], thesis: { thesis: { code: "71ITGR40206" }, topics: [], way: "thesis", chosen: null } });
+    expect(thesisChoice(built())!.thesis).not.toHaveProperty("reason");
+    expect(buildRoadmapInput(built()).user).toContain("hệ thống đề xuất làm 71ITGR40206 Đồ án Tốt nghiệp (6 TC); không đề xuất Chuyên đề tốt nghiệp");
     gpa(2.45);
     expect(thesisChoice(built())).toMatchObject({ options: [{ code: "71ITGR40203" }, { code: "71ITGR40303" }], thesis: { thesis: null, way: "replacement" } });
-    expect(buildRoadmapInput(built()).user).toContain("hệ thống đề xuất học cả 71ITGR40203 Chuyên đề Tốt nghiệp 1 (3 TC) và 71ITGR40303 Chuyên đề Tốt nghiệp 2 (3 TC) thay cho Đồ án tốt nghiệp vì điểm TB tích lũy 2,45, dưới 2,80");
+    expect(buildRoadmapInput(built()).user).toContain("hệ thống đề xuất học cả 71ITGR40203 Chuyên đề Tốt nghiệp 1 (3 TC) và 71ITGR40303 Chuyên đề Tốt nghiệp 2 (3 TC) thay cho Đồ án tốt nghiệp\n");
+    // Neither the system prompt nor the data names the threshold or the GPA as the reason (2,80 here is the GPA's own line).
+    expect(ROADMAP_SYSTEM_PROMPT).not.toMatch(/2,80|dưới 2,8|theo điểm TB/);
+    for (const value of [2.8, 2.45]) {
+      gpa(value);
+      const user = buildRoadmapInput(built()).user;
+      expect(user).not.toMatch(/dưới 2,8|từ 2,8|2,80 trở lên|vì điểm|điểm TB tích lũy 2/);
+      if (value < 2.8) expect(user).not.toContain("2,80");
+    }
+    // The student's choice in Kế hoạch học kỳ wins (user 2026-11-10): Đồ án tốt nghiệp placed below 2,80 is the way offered.
+    expect(thesisChoice(built(["71ITGR40206"]))).toMatchObject({ options: [{ code: "71ITGR40206" }], thesis: { way: "thesis", chosen: "thesis" } });
+    expect(buildRoadmapInput(built(["71ITGR40206"])).user).toContain("bạn đã chọn làm 71ITGR40206 Đồ án Tốt nghiệp (6 TC) trong kế hoạch học kỳ; không đề xuất Chuyên đề tốt nghiệp");
+    // From 2,80 a chuyên đề placed is the choice too.
+    gpa(3.1);
+    expect(thesisChoice(built(["71ITGR40303"]))).toMatchObject({ options: [{ code: "71ITGR40203" }, { code: "71ITGR40303" }], thesis: { way: "replacement", chosen: "replacement" } });
+    expect(buildRoadmapInput(built(["71ITGR40303"])).user).toContain("bạn đã chọn học cả 71ITGR40203 Chuyên đề Tốt nghiệp 1 (3 TC) và 71ITGR40303 Chuyên đề Tốt nghiệp 2 (3 TC) thay cho Đồ án tốt nghiệp trong kế hoạch học kỳ");
+    // Both ways placed: both offered, the data says one is enough and leaves the choice to the student.
+    const both = thesisChoice(built(["71ITGR40206", "71ITGR40203"]))!;
+    expect(both.options.map((item) => item.code)).toEqual(["71ITGR40206", "71ITGR40203", "71ITGR40303"]);
+    expect(both.thesis).toMatchObject({ way: null, chosen: "both" });
+    expect(buildRoadmapInput(built(["71ITGR40206", "71ITGR40203"])).user).toContain("bạn có cả hai cách (trong kế hoạch học kỳ hoặc học phần đã học): (1) 71ITGR40206 Đồ án Tốt nghiệp (6 TC); (2) cả 71ITGR40203 Chuyên đề Tốt nghiệp 1 (3 TC) và 71ITGR40303 Chuyên đề Tốt nghiệp 2 (3 TC); chỉ cần MỘT cách, để bạn tự chọn");
     gpa(3.4);
     // With Chuyên đề 1 passed, only Chuyên đề 2 is left, whatever the GPA.
     result.progress = { ...result.progress!, next: [group("passed")] };
@@ -267,7 +289,7 @@ describe("courses that wait for their tiên quyết or học trước (roadmap-v
 
   it("lists a waiting course apart and lets the text name it, never the study codes", () => {
     const input = buildRoadmapInput(facts);
-    expect(input.promptVersion).toBe("roadmap-v15");
+    expect(input.promptVersion).toBe("roadmap-v16");
     expect(input.user).toContain("Chưa đăng ký được ở HK2 2026–2027 (cần đạt môn tiên quyết hoặc học môn học trước; học ở các học kỳ sau):");
     expect(input.user).toContain(`- 71ITIS30203 Hệ quản trị cơ sở dữ liệu (3 TC): cần đạt ${failedName} trước`);
     expect(input.keys.courses.map((item) => item.code)).toEqual(["71ITSE41203", "71ITIN40304", "71ITSE30903"]);
@@ -651,5 +673,33 @@ describe("presentRoadmap", () => {
     expect(view.study.every((item) => item.advice === null)).toBe(true);
     expect(view.skills.every((skill) => !skill.picked)).toBe(true);
     expect(view.ended).toBe(true);
+  });
+
+  it("shows a roadmap written while its data gave the GPA behind the thesis way without the sentences explaining it (user 2026-11-10)", () => {
+    // roadmap-v13 to v15 kept that reason in the facts: such a roadmap's text drops the sentences explaining the way by the GPA.
+    const older = {
+      ...facts, choices: [...facts.choices, { label: "Nhóm tự chọn TC406: chọn 6 tín chỉ", source: "next" as const, termCode: "HK262", need: "6 TC",
+        options: [{ code: "71ITGR40203", name: "Chuyên đề Tốt nghiệp 1", credits: 3 }],
+        thesis: { thesis: null, topics: [{ code: "71ITGR40203", name: "Chuyên đề Tốt nghiệp 1", credits: 3 }], way: "replacement" as const, reason: "điểm TB tích lũy 2,45, dưới 2,80" } }],
+    };
+    const output = {
+      summary: "Học kỳ tới bạn cần tập trung vào nhóm tự chọn. Vì điểm TB tích lũy của bạn là 2,45, dưới 2,80, hệ thống đề xuất học Chuyên đề Tốt nghiệp 1 và 2.",
+      advice: ["Với điểm trung bình tích lũy 2,45, bạn nên học Chuyên đề tốt nghiệp 1 và 2 thay cho Đồ án tốt nghiệp.", "Đăng ký sớm Hệ quản trị cơ sở dữ liệu."],
+      study: [{ code: "71ITGR40203", advice: "Học phần này thay thế Đồ án tốt nghiệp vì điểm TB tích lũy dưới 2,80." }],
+      improve: [], skills: [], months: [{ month: 1, focus: "Chuẩn bị chuyên đề.", tasks: ["Đọc đề cương Chuyên đề tốt nghiệp 1.", "Vì điểm trung bình dưới 2,80 nên chọn chuyên đề tốt nghiệp."] }],
+    };
+    expect(explainedThesisByGpa(older)).toBe(true);
+    const shown = shownRoadmapOutput({ facts: older, output })!;
+    expect(shown.summary).toBe("Học kỳ tới bạn cần tập trung vào nhóm tự chọn.");
+    expect(shown.advice).toEqual(["Đăng ký sớm Hệ quản trị cơ sở dữ liệu."]);
+    expect(shown.study).toEqual([{ code: "71ITGR40203", advice: "" }]);
+    expect(shown.months[0]!.tasks).toEqual(["Đọc đề cương Chuyên đề tốt nghiệp 1."]);
+    const view = presentRoadmap(row({ facts: older, output }), "2026-10-25");
+    expect(JSON.stringify(view)).not.toMatch(/2,80|dưới 2,8/);
+    // The page never gets the thesis group's facts of a choice.
+    expect(view.choices.every((choice) => !("thesis" in choice))).toBe(true);
+    // A roadmap made since roadmap-v16 holds no such reason: its text is shown as written.
+    expect(explainedThesisByGpa(facts)).toBe(false);
+    expect(shownRoadmapOutput({ facts, output })).toBe(output);
   });
 });

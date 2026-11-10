@@ -257,12 +257,25 @@ export function overallIsPooled(calcVersion: string | null | undefined): boolean
 }
 
 /**
- * comp-calc-v18 (2026-11-03): the thesis group follows the cumulative GPA (Đồ án tốt nghiệp from 2,80, Chuyên đề tốt nghiệp
- * below it); earlier results suggested the thesis first.
+ * comp-calc-v18 (2026-11-03): the thesis group follows one way, the one the system recommends (an internal rule, never
+ * explained to the student since 2026-11-10); earlier results suggested the thesis first.
  */
-export function thesisByGpa(calcVersion: string | null | undefined): boolean {
+export function thesisWayAdvised(calcVersion: string | null | undefined): boolean {
   const version = Number(/^comp-calc-v(\d+)$/.exec(calcVersion ?? "")?.[1]);
   return !Number.isFinite(version) || version >= 18;
+}
+
+/**
+ * comp-calc-v23 (user 2026-11-10: the way the student chose for the thesis group wins): the note when the student placed a
+ * course of the thesis group in Kế hoạch học kỳ that the stored result leaves out (API GET /latest thesisPlanOutdated), or
+ * null. "Kế hoạch học kỳ của bạn có Đồ án Tốt nghiệp, nhưng kết quả này được tính trước lựa chọn đó. …"
+ */
+export function thesisPlanOutdatedText(result: Pick<AssessmentResult, "courses">, codes: readonly string[] | null | undefined): string | null {
+  if (!codes?.length) return null;
+  const names = new Map((result.courses ?? []).map((course) => [course.code.toUpperCase(), course.name]));
+  const listed = [...new Set(codes.map((code) => names.get(code.toUpperCase()) ?? code))];
+  const joined = listed.length > 1 ? `${listed.slice(0, -1).join(", ")} và ${listed.at(-1)}` : listed[0];
+  return `Kế hoạch học kỳ của bạn có ${joined}, nhưng kết quả này được tính trước lựa chọn đó. Bấm “Đánh giá lại” để gợi ý học phần theo phương án bạn chọn.`;
 }
 
 /**
