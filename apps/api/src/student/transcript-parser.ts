@@ -34,14 +34,20 @@ export const reviewWarning = (rows: number) =>
 const REVIEW_WARNING = /^Có \d+ dòng có mã môn, ký hiệu hoặc ô khác dạng thường gặp\./;
 
 /**
- * Older cohorts passed a course from 4,0 on the 10-point scale (user, 2026-10-25: "khóa trước chỉ có 4đ thôi là đạt"), so
- * a row printed "Đạt" with 4,0 or more is right whatever its letter (4,1 · F · Đạt): the OCR worker's
- * result_conflicts_with_grade is not an error there. The printed result already decides the outcome on every page
- * (attemptOutcome: "Đạt" is passed), so only the review mark goes.
+ * Older cohorts' pass rules differ from the later ones, so some printed results disagree with the letter and are still
+ * right; the OCR worker's result_conflicts_with_grade is no error there:
+ * - "Đạt" with 4,0 or more, whatever the letter (user, 2026-10-25: "khóa trước chỉ có 4đ thôi là đạt"; 4,1 · F · Đạt);
+ * - any printed result with a D or D+ letter (user, 2026-11-10, a K25 transcript with 4,3 · D · Không đạt next to
+ *   4,5 · D · Đạt: "các tính toán khác mấy khóa sau tí nhưng mà không có lỗi đâu xóa thông báo đó đi").
+ * The printed result already decides the outcome on every page (attemptOutcome), so only the review mark goes.
  */
 export const OLD_PASS_SCORE_10 = 4;
-export const isSettledResultConflict = (course: { result: string | null; score10: number | null }) =>
-  /^đạt\b/.test((course.result ?? "").normalize("NFC").trim().toLowerCase()) && course.score10 !== null && course.score10 >= OLD_PASS_SCORE_10;
+const BORDER_LETTERS = new Set(["D", "D+"]);
+export const isSettledResultConflict = (course: { result: string | null; score10: number | null; letter?: string | null }) => {
+  const result = (course.result ?? "").normalize("NFC").trim().toLowerCase();
+  if (/^(đạt|không đạt)\b/.test(result) && BORDER_LETTERS.has((course.letter ?? "").trim().toUpperCase())) return true;
+  return /^đạt\b/.test(result) && course.score10 !== null && course.score10 >= OLD_PASS_SCORE_10;
+};
 
 /**
  * A VT/CT/DC row stored before its mark was known (CT 2026-10-26, DC 2026-11-09): no score, and the mark (or nothing) in

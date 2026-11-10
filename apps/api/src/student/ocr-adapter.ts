@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { KNOWN_LETTER, OLD_PASS_SCORE_10, TranscriptError, UNKNOWN_TERM_SECTION, reviewWarning, skippedRowsWarning, usualTerm, type TranscriptCourse, type TranscriptData, type TranscriptSection } from "./transcript-parser.js";
+import { KNOWN_LETTER, TranscriptError, UNKNOWN_TERM_SECTION, isSettledResultConflict, reviewWarning, skippedRowsWarning, usualTerm, type TranscriptCourse, type TranscriptData, type TranscriptSection } from "./transcript-parser.js";
 
 const text = z.string().max(2000);
 // Since 2026-10-23 the values of a row are taken as printed (a code of another format, an unknown grade mark, a cell
@@ -40,8 +40,10 @@ export function mapOcrTranscript(input: unknown): TranscriptData {
   let reviewed = 0;
   for (const c of d.courses) {
     const review = new Set(c.issues);
-    // "Đạt" with 4,0 or more is right whatever the letter: older cohorts passed from 4,0 (isSettledResultConflict).
-    if (c.result === "passed" && c.score_10 !== null && c.score_10 >= OLD_PASS_SCORE_10) review.delete("result_conflicts_with_grade");
+    // Older cohorts' results that disagree with the letter and are right (isSettledResultConflict): "Đạt" with 4,0 or
+    // more, or any result with a D/D+ letter.
+    const printedResult = c.result === "passed" ? "Đạt" : c.result === "failed" ? "Không đạt" : null;
+    if (isSettledResultConflict({ result: printedResult, score10: c.score_10, letter: c.letter_grade })) review.delete("result_conflicts_with_grade");
     const transfer = c.section === "credit_transfer";
     const term = c.section === "semester" && c.academic_year && c.semester ? { year: c.academic_year, semester: c.semester } : null;
     if (!transfer && !term) review.add("missing_semester_context");

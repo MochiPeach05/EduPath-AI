@@ -57,10 +57,11 @@ describe("OCR result boundary", () => {
     f.course_count = 3;
     const data = mapOcrTranscript(f);
     const courses = data.sections[0]!.courses;
-    // The printed result stays (Đạt counts as passed everywhere); only the 4,1 row loses its mark.
+    // The printed result stays (Đạt counts as passed everywhere). The 4,1 row loses its mark, and so does the D row
+    // printed Không đạt (user 2026-11-10, a K25 transcript: older cohorts' results around D are right as printed).
     expect(courses.map((c) => [c.code, c.result, c.review ?? null])).toEqual([
-      ["71ITNW30103", "Đạt", null], ["71ITIS30103", "Đạt", ["result_conflicts_with_grade"]], ["71ITSE30103", "Không đạt", ["result_conflicts_with_grade"]]]);
-    expect(data.warnings.some((w) => w.startsWith("Có 2 dòng có mã môn, ký hiệu"))).toBe(true);
+      ["71ITNW30103", "Đạt", null], ["71ITIS30103", "Đạt", ["result_conflicts_with_grade"]], ["71ITSE30103", "Không đạt", null]]);
+    expect(data.warnings.some((w) => w.startsWith("Có 1 dòng có mã môn, ký hiệu"))).toBe(true);
   });
   // 2026-10-23 (user): same frame, new codes, names or marks → save everything, mark it for review.
   it("keeps rows that do not fit a known form and marks them for review", () => {

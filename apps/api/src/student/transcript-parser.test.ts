@@ -105,8 +105,23 @@ describe("withoutSettledReviews", () => {
   it("removes the warning when no row is left to check, and leaves other transcripts as they are", () => {
     const read = withoutSettledReviews(data([course(1, { review: ["result_conflicts_with_grade"] })], 1));
     expect(read.warnings).toEqual(["Bảng điểm do sinh viên tải lên; chưa được nhà trường xác minh."]);
-    const untouched = data([course(1, { result: "Không đạt", letter: "D", score10: 5, review: ["result_conflicts_with_grade"] })], 1);
+    const untouched = data([course(1, { result: "Không đạt", letter: "B", score10: 7, review: ["result_conflicts_with_grade"] })], 1);
     expect(withoutSettledReviews(untouched)).toBe(untouched);
+  });
+
+  // User 2026-11-10, a K25 transcript: 4,3 · D · Không đạt next to 4,5 · D · Đạt — "các tính toán khác mấy khóa sau tí
+  // nhưng mà không có lỗi đâu xóa thông báo đó đi". The printed result decides; a D or D+ row is never marked.
+  it("drops the mark of a D or D+ row whatever its printed result, and keeps it for other letters", () => {
+    const stored = data([
+      course(1, { result: "Không đạt", letter: "D", score10: 4.3, review: ["result_conflicts_with_grade"] }),
+      course(2, { result: "Không đạt", letter: "D+", score10: 5.2, review: ["result_conflicts_with_grade"] }),
+      course(3, { result: "Đạt", letter: "D", score10: 3.9, review: ["result_conflicts_with_grade"] }),
+      course(4, { result: "Không đạt", letter: "C", score10: 5.6, review: ["result_conflicts_with_grade"] }),
+    ], 4);
+    const read = withoutSettledReviews(stored);
+    expect(read.sections[0]!.courses.map((row) => row.review ?? null)).toEqual([null, null, null, ["result_conflicts_with_grade"]]);
+    expect(read.sections[0]!.courses.map((row) => row.result)).toEqual(["Không đạt", "Không đạt", "Đạt", "Không đạt"]);
+    expect(read.warnings).toEqual(["Bảng điểm do sinh viên tải lên; chưa được nhà trường xác minh.", reviewWarning(1)]);
   });
 
   // 2026-10-26 (user): "CT … là chữ cấm thi cũng là không đạt"; rows stored before were marked as unknown marks.
