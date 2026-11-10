@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import StudentCurriculum, { CourseDetail } from "./StudentCurriculum";
-import type { StudentCourse, StudentCurriculumData, StudentCurriculumList } from "./student-curriculum-types";
+import { studentCurriculumWithRealCodes, type StudentCourse, type StudentCurriculumData, type StudentCurriculumList } from "./student-curriculum-types";
 import type { StudentGraduationResponse } from "./student-graduation-types";
 
 const liveData = vi.hoisted(() => vi.fn());
@@ -45,9 +45,10 @@ const data: StudentCurriculumData = {
   ],
   courses,
 };
+const ownListItem = { id: curriculumId, version: 1, name: data.name, major: data.major, cohortCode: "K27", totalCredits: 130, courseCount: courses.length };
+// The student's own CTĐT alone (API curricula/own-program.ts, user 2026-11-10).
 const list: StudentCurriculumList = {
-  items: [{ id: curriculumId, version: 1, name: data.name, major: data.major, cohortCode: "K27", totalCredits: 130, courseCount: courses.length }],
-  profileCohort: "K27", suggestedId: curriculumId,
+  items: [ownListItem], profileCohort: "K27", profileMajor: "7480201", resolution: "found", suggestedId: curriculumId,
 };
 const row = (code: string, result: string | null, letter: string | null, extra: Record<string, unknown> = {}) =>
   ({ code, name: code, credits: 3, score10: letter ? 7 : null, score4: letter ? 3 : null, letter, result, conditional: false, ...extra });
@@ -78,10 +79,10 @@ const graduation = {
 } as unknown as StudentGraduationResponse;
 
 const ready = <T,>(value: T) => ({ data: value, error: null, loading: false });
-function render(options: { graduation?: unknown } = {}) {
+function render(options: { graduation?: unknown; list?: unknown; detail?: StudentCurriculumData } = {}) {
   liveData.mockImplementation((url: string) => {
-    if (url === "/api/student/curricula") return ready(list);
-    if (url === `/api/student/curricula/${curriculumId}`) return ready(data);
+    if (url === "/api/student/curricula") return options.list === undefined ? ready(list) : options.list;
+    if (url === `/api/student/curricula/${curriculumId}`) return ready(options.detail ?? data);
     if (url === "/api/student/transcript") return ready(transcript);
     if (url === "/api/student/graduation") return options.graduation === undefined ? ready(graduation) : options.graduation;
     throw new Error(`Unexpected URL ${url}`);
@@ -148,6 +149,85 @@ describe("StudentCurriculum (audit 2026-10-25)", () => {
     expect(html).toContain('<option value="1">2021–2022</option>');
     expect(html).toContain('<option value="1">HK1</option>');
     expect(html).not.toMatch(/Năm 1|Năm · Học kỳ|Học kỳ 1</);
+  });
+});
+
+// User 2026-11-10: "Không cho sinh viên chọn Khung chương trình đào tạo … như trang xét tốt nghiệp vậy".
+describe("StudentCurriculum: the student's own CTĐT only", () => {
+  const detailUrls = () => liveData.mock.calls.map(([url]) => String(url)).filter((url) => url.startsWith("/api/student/curricula/"));
+
+  it("offers no choice and says whose CTĐT it is, with the way to check the profile", () => {
+    const html = render();
+    const visible = text(html);
+    expect(visible).toContain("Chương trình đào tạo của khóa K27, ngành Công nghệ thông tin theo hồ sơ của bạn. Xem hồ sơ");
+    expect(html).toContain('<a class="sp-link" href="#profile">Xem hồ sơ</a>');
+    expect(visible).not.toMatch(/Chương trình đang mở|Chọn chương trình|tham khảo|Hãy đối chiếu ngành học/);
+    expect(html).not.toContain("sc-selector");
+    // The filters of the courses stay.
+    expect(html).toContain("Tất cả khối");
+  });
+
+  it("shows only the item the API names, never another cohort's (an older API listed every one)", () => {
+    liveData.mockClear();
+    const other = { ...ownListItem, id: "55555555-5555-4555-8555-555555555555", cohortCode: "K29" };
+    const html = render({ list: ready({ items: [other, ownListItem], profileCohort: "K27", suggestedId: null }) });
+    expect(detailUrls()).toEqual([]);
+    expect(text(html)).toContain("Chưa có chương trình đào tạo cho khóa K27");
+    expect(html).not.toContain("<select");
+  });
+
+  it("puts a card like Xét tốt nghiệp's in place of a missing CTĐT, with the profile facts it was picked by", () => {
+    liveData.mockClear();
+    const html = render({ list: ready({ items: [], profileCohort: "K32", profileMajor: "7480201", resolution: "not_found", suggestedId: null }) });
+    const visible = text(html);
+    expect(detailUrls()).toEqual([]);
+    expect(html).toContain('<h2 id="sc-own-missing-title">Chưa có chương trình đào tạo cho khóa K32, ngành Công nghệ thông tin</h2>');
+    expect(visible).toContain("Khoa chưa công bố chương trình đào tạo của khóa K32, ngành Công nghệ thông tin. Hãy quay lại sau; nếu khóa hoặc ngành trong hồ sơ chưa đúng, hãy liên hệ Khoa để được cập nhật.");
+    expect(visible).toContain("Khóa trong tài khoản: K32");
+    expect(visible).toContain("Ngành trong hồ sơ: Công nghệ thông tin");
+    expect(html).toContain('<a class="sw-outline" href="#profile">Xem hồ sơ</a>');
+    expect(visible).not.toMatch(/Đang triển khai|Sắp có/);
+    // No cohort, or a cohort of several majors without one: why, in the words of Xét tốt nghiệp.
+    expect(text(render({ list: ready({ items: [], profileCohort: null, profileMajor: null, resolution: "cohort_unknown", suggestedId: null }) })))
+      .toContain("Hồ sơ chưa có khóa học");
+    expect(text(render({ list: ready({ items: [], profileCohort: "K29", profileMajor: null, resolution: "ambiguous", suggestedId: null }) })))
+      .toContain("Hồ sơ chưa có ngành học Khóa trong tài khoản: K29 Ngành trong hồ sơ: Chưa có Khóa K29 có chương trình đào tạo của nhiều ngành.");
+  });
+
+  it("shows a loading state and a retry after a failed load", () => {
+    expect(text(render({ list: { data: null, error: null, loading: true } }))).toContain("Đang tải chương trình đào tạo của bạn…");
+    const failed = render({ list: { data: null, error: "Chưa tải được chương trình đào tạo. Vui lòng thử lại.", loading: false } });
+    expect(failed).toContain('<p role="alert" class="sw-error">Chưa tải được chương trình đào tạo. Vui lòng thử lại.</p>');
+    expect(text(failed)).toContain("Thử lại");
+  });
+
+  // Real codes (API curricula/real-codes.ts, user 2026-11-10: "dùng luôn mã thực tế"): never the file's code.
+  it("reads a course the file writes under another code by its real code only: row, search, conditions, groups and result", () => {
+    const algebra = course("71ITMA10203", "Đại số tuyến tính và ứng dụng", { realCode: "71MATL10053", type: "TC101" });
+    const after = course("71ITSE20103", "Toán rời rạc", {
+      prerequisite: "[71ITMA10203]Đại số tuyến tính và ứng dụng",
+      conditions: [{ kind: "prerequisite", targetCodes: ["71ITMA10203"], reviewRequired: false }],
+    });
+    const detail: StudentCurriculumData = { ...data, courses: [algebra, after], electives: [{ code: "TC101", requiredCredits: 3, courseCodes: ["71ITMA10203"] }] };
+    const passed = { transcript: { data: { sections: [{ courses: [row("71MATL10053", "Đạt", "B")] }] } } };
+    liveData.mockImplementation((url: string) => {
+      if (url === "/api/student/curricula") return ready(list);
+      if (url === `/api/student/curricula/${curriculumId}`) return ready(detail);
+      if (url === "/api/student/transcript") return ready(passed);
+      if (url === "/api/student/graduation") return ready(graduation);
+      throw new Error(`Unexpected URL ${url}`);
+    });
+    const html = renderToStaticMarkup(createElement(StudentCurriculum));
+    expect(html).not.toContain("71ITMA10203");
+    expect(html).toContain("<td>71MATL10053</td>");
+    expect(html).toContain('<span class="sc-condition-text">71MATL10053 · Đại số tuyến tính và ứng dụng</span>');
+    expect(new RegExp('<td>71MATL10053</td>(?:(?!</tr>).)*?aria-label="Đã đạt"', "s").test(html)).toBe(true);
+    // Data the API already serves with the real codes is read as it is.
+    expect(studentCurriculumWithRealCodes(data)).toBe(data);
+    const shown = studentCurriculumWithRealCodes(detail);
+    expect(shown.courses[1]!.conditions[0]!.targetCodes).toEqual(["71MATL10053"]);
+    expect(shown.electives[0]!.courseCodes).toEqual(["71MATL10053"]);
+    expect(shown.courses[0]).not.toHaveProperty("realCode");
   });
 });
 

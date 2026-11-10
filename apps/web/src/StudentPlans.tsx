@@ -1,10 +1,14 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { PlanData, PlanItem } from "./plan-types";
 import { decimalText, programName, termName } from "./display-format";
-import { courseTypeLabel, plannedTermText, prerequisiteText, programTitle, searchTerm } from "./student-curriculum-types";
+import {
+  courseTypeLabel, plannedTermText, prerequisiteText, programTitle, realCodeMap, realCodesInText, searchTerm,
+} from "./student-curriculum-types";
 import { CourseResultMark } from "./StudentCurriculum";
+import { MissingProgram, OwnProgramNote, ownItem, ownScope, upperFirst, type OwnProgramFacts } from "./own-program";
 import { readGraduation } from "./student-graduation-api";
 import { GRADUATION_API } from "./student-graduation-data";
+import { Icon } from "./student-icons";
 import { useLiveData } from "./use-live-data";
 import type { Transcript } from "./StudentTranscript";
 import { INFERRED_RESULT_NOTE } from "./transcript-results";
@@ -14,11 +18,18 @@ import {
 import "./student-curriculum.css";
 import "./student-plans.css";
 
-type List = {
-  /** fromCurriculum: read from the cohort's CTĐT, which has no KHĐT (API plans/from-curriculum.ts, 2026-11-05). */
+/**
+ * GET /api/student/plans: the student's own KHĐT alone (user 2026-11-10, no choice, as on Xét tốt nghiệp), picked by the
+ * cohort in the account and the major of the MSSV; suggestedId is its id, null with why in `resolution`.
+ */
+type List = OwnProgramFacts & {
+  /** fromCurriculum: read from the CTĐT of a cohort and major without a KHĐT (API plans/from-curriculum.ts, 2026-11-05). */
   items: { id: string; name: string; cohortCode: string; major: string; fromCurriculum?: boolean }[];
   suggestedId: string | null;
-  profileCohort: string | null;
+};
+type DetailItem = Omit<PlanItem, "position" | "sourceRow" | "sourceSheet" | "sourceCells"> & {
+  /** The real code of a row the file writes under another one (as StudentCourse.realCode); students read only it. */
+  realCode?: string | null;
 };
 type Detail = Pick<
   PlanData,
@@ -27,16 +38,13 @@ type Detail = Pick<
   physicalEducationGroups?: Record<string, string[]>;
   /** A plan read from the CTĐT: its courses without a planned year and semester, not shown. */
   unplacedCount?: number;
-  items: Omit<
-    PlanItem,
-    "position" | "sourceRow" | "sourceSheet" | "sourceCells"
-  >[];
+  items: DetailItem[];
 };
 async function readPlan<T>(response: Response): Promise<T> {
   if (!response.ok)
     throw new Error(
       response.status === 404
-        ? "Kế hoạch không còn được mở. Hãy chọn kế hoạch khác."
+        ? "Kế hoạch đào tạo này hiện không còn mở để tra cứu. Vui lòng thử lại."
         : response.status === 401
           ? "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại."
           : "Không thể tải kế hoạch đào tạo. Vui lòng thử lại.",
@@ -48,69 +56,56 @@ async function readTranscript(response: Response): Promise<{ transcript: Transcr
   return response.json();
 }
 
-/** Where a student without a plan of their cohort still finds each course's planned year and term. */
+/** The plan as students read it: each row by its real code only, also in the conditions of the other rows. */
+function planWithRealCodes(data: Detail): Detail {
+  const codes = realCodeMap(data.items);
+  if (!codes.size) return data;
+  return {
+    ...data,
+    items: data.items.map(({ realCode: _realCode, ...item }) => ({
+      ...item,
+      code: codes.get(item.code.trim().toUpperCase()) ?? item.code,
+      prerequisite: realCodesInText(item.prerequisite, codes),
+      prior: realCodesInText(item.prior, codes),
+    })),
+  };
+}
+
+/** Where a student whose plan is read from the CTĐT finds each course's planned year and term. */
 function CurriculumLink() {
   return <a className="sp-link" href="#curriculum">Chương trình đào tạo</a>;
 }
 
+/**
+ * #plans: the student's own KHĐT only (user 2026-11-10: "Không cho sinh viên chọn … như trang xét tốt nghiệp"), the one
+ * of the cohort in the account and the major of the MSSV, else the plan read from their CTĐT (own-program.tsx).
+ */
 export default function StudentPlans() {
-  const [choice, setChoice] = useState<string | null>(null);
-  const list = useLiveData<List>("/api/student/plans", 0, readPlan);
-  const id = choice ?? list.data?.suggestedId ?? "";
-  const selected = list.data?.items.find((item) => item.id === id);
-  const profileCohort = list.data?.profileCohort ?? null;
-  const ownMissing = Boolean(profileCohort && list.data && !list.data.items.some((item) => item.cohortCode === profileCohort));
+  const [revision, setRevision] = useState(0);
+  const list = useLiveData<List>("/api/student/plans", revision, readPlan);
+  const retry = () => setRevision((n) => n + 1);
+  const own = ownItem(list.data);
   return (
     <div className="sc-workspace">
-      <section className="sw-panel sc-selector sp-selector">
-        <div>
-          <p className="sc-eyebrow">KẾ HOẠCH ĐÀO TẠO</p>
-          <h2>Tra cứu kế hoạch theo học kỳ</h2>
-          <p className="sc-muted">
-            Xem các học phần dự kiến trong từng năm học, học kỳ của khóa tuyển
-            sinh.
-          </p>
-        </div>
-        <div className="sc-selector-controls">
-          <label>
-            Kế hoạch đang mở
-            <select
-              value={selected?.id ?? ""}
-              onChange={(e) => setChoice(e.target.value)}
-              disabled={list.loading}
-            >
-              <option value="">Chọn kế hoạch đào tạo</option>
-              {list.data?.items.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.cohortCode} · {programTitle(item.name, item.major)}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        {list.loading && <p role="status">Đang tải kế hoạch…</p>}
-        {list.error && <p role="alert">{list.error}</p>}
-        {list.data && !list.data.items.length && (
-          <p>
-            Chưa có kế hoạch đào tạo đang mở. Bạn có thể xem năm học, học kỳ dự kiến của từng học phần trong <CurriculumLink />.
-          </p>
-        )}
-        {list.data && !!list.data.items.length && (
-          <p className="sc-muted">
-            {selected?.fromCurriculum
-              ? <>Khóa {selected.cohortCode} chưa có kế hoạch đào tạo riêng; các học kỳ dưới đây lấy từ năm học, học kỳ dự kiến của từng học phần trong <CurriculumLink /> khóa {selected.cohortCode}.</>
-              : selected?.cohortCode === profileCohort
-              ? "Kế hoạch cùng khóa tuyển sinh của bạn."
-              : ownMissing
-                ? <>Chưa có kế hoạch đào tạo của khóa {profileCohort}. Bạn có thể chọn kế hoạch của khóa khác để tham khảo, hoặc xem năm học, học kỳ dự kiến của từng học phần trong <CurriculumLink />.</>
-                : "Bạn có thể chọn kế hoạch của khóa khác để tham khảo."}
-            {selected && " Đây là kế hoạch giảng dạy, không phải danh sách môn bạn đã đăng ký."}
-          </p>
-        )}
-      </section>
-      {selected && (
-        <PlanContents key={selected.id} id={selected.id} />
+      {list.loading && (
+        <section className="sw-panel" role="status">
+          Đang tải kế hoạch đào tạo của bạn…
+        </section>
       )}
+      {list.error && (
+        <section className="sw-panel sc-empty">
+          <p role="alert" className="sw-error">{list.error}</p>
+          <button className="sw-outline" onClick={retry}>
+            <Icon name="refresh" /> Thử lại
+          </button>
+        </section>
+      )}
+      {list.data &&
+        (own ? (
+          <PlanContents key={own.id} id={own.id} fromCurriculum={own.fromCurriculum === true} facts={list.data} revision={revision} retry={retry} />
+        ) : (
+          <MissingProgram kind="plan" facts={list.data} />
+        ))}
     </div>
   );
 }
@@ -132,7 +127,13 @@ function termCreditsText(term: Detail["terms"][number], items: Detail["items"], 
     : `${decimalText(sum.credits)} (cộng từ các học phần trong kỳ, không tính môn điều kiện (*))`;
 }
 
-function PlanContents({ id }: { id: string }) {
+function PlanContents({ id, fromCurriculum, facts, revision, retry }: {
+  id: string;
+  fromCurriculum: boolean;
+  facts: OwnProgramFacts;
+  revision: number;
+  retry: () => void;
+}) {
   const [transcriptRevision, setTranscriptRevision] = useState(0);
   const transcript = useLiveData<{ transcript: Transcript | null }>(
     "/api/student/transcript", transcriptRevision, readTranscript,
@@ -141,7 +142,9 @@ function PlanContents({ id }: { id: string }) {
   const graduation = useLiveData(GRADUATION_API, transcriptRevision, readGraduation);
   const states = transcriptCourseStates(transcript.data?.transcript?.data.sections ?? []);
   const aliases = graduationCourseAliases(graduation.data?.evaluation);
-  const remote = useLiveData<Detail>(`/api/student/plans/${id}`, 0, readPlan);
+  const remote = useLiveData<Detail>(`/api/student/plans/${id}`, revision, readPlan);
+  // Read with the real codes of its rows only (planWithRealCodes; never the file's code).
+  const shown = useMemo(() => remote.data && planWithRealCodes(remote.data), [remote.data]);
   const [query, setQuery] = useState(""),
     [term, setTerm] = useState("");
   if (remote.loading)
@@ -150,13 +153,16 @@ function PlanContents({ id }: { id: string }) {
         Đang tải nội dung kế hoạch…
       </section>
     );
-  if (remote.error)
+  if (remote.error || !shown)
     return (
-      <section className="sw-panel" role="alert">
-        {remote.error}
+      <section className="sw-panel sc-empty">
+        <p role="alert" className="sw-error">{remote.error ?? "Không thể tải kế hoạch đào tạo. Vui lòng thử lại."}</p>
+        <button className="sw-outline" onClick={retry}>
+          <Icon name="refresh" /> Thử lại
+        </button>
       </section>
     );
-  const data = remote.data!;
+  const data = shown;
   const physicalEducation = physicalEducationProgress(
     [...(data.physicalEducationGroups?.TC002 ?? []), ...(data.physicalEducationGroups?.TC102 ?? [])],
     states,
@@ -174,10 +180,22 @@ function PlanContents({ id }: { id: string }) {
   const showsInferred = rows.some((item) => outcome(item)?.inferred);
   return (
     <section className="sw-panel sp-content">
-      <h2>{programTitle(data.name, data.major)}</h2>
-      <p>
-        {programName(data.major)} · {data.cohortCode} · Tổng tín chỉ quy định:{" "}
-        {data.totalCredits === null ? "Chưa xác định" : decimalText(data.totalCredits)}
+      <div className="sp-heading">
+        <h2>{programTitle(data.name, data.major)}</h2>
+        <p>
+          {programName(data.major)} · {data.cohortCode} · Tổng tín chỉ quy định:{" "}
+          {data.totalCredits === null ? "Chưa xác định" : decimalText(data.totalCredits)}
+        </p>
+        <OwnProgramNote kind="plan" facts={facts} />
+      </div>
+      <p className="sc-muted">
+        {fromCurriculum && (
+          <>
+            {upperFirst(ownScope(facts))} chưa có kế hoạch đào tạo riêng; các học kỳ dưới đây lấy từ năm học, học kỳ dự kiến
+            của từng học phần trong <CurriculumLink /> của bạn.{" "}
+          </>
+        )}
+        Đây là kế hoạch giảng dạy, không phải danh sách môn bạn đã đăng ký.
       </p>
       {!!data.unplacedCount && (
         <p className="sc-muted">

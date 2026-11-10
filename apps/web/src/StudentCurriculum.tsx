@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLiveFilters } from "./use-live-filters";
 import {
   courseKind,
@@ -11,13 +11,15 @@ import {
   programTitle,
   searchableCourse,
   searchTerm,
+  studentCurriculumWithRealCodes,
   studyYearText,
   uniqueCourseCount,
   type StudentCourse,
   type StudentCurriculumData,
   type StudentCurriculumList,
 } from "./student-curriculum-types";
-import { decimalText, programName } from "./display-format";
+import { decimalText } from "./display-format";
+import { MissingProgram, OwnProgramNote, ownItem, type OwnProgramFacts } from "./own-program";
 import { readGraduation } from "./student-graduation-api";
 import { GRADUATION_API, standardElectiveQuotas, type StandardElectiveQuota } from "./student-graduation-data";
 import { Icon } from "./student-icons";
@@ -48,7 +50,7 @@ async function readCurriculum<T>(res: Response): Promise<T> {
         : res.status === 403
           ? "Tài khoản hiện không thể truy cập dữ liệu."
           : res.status === 404
-            ? "Khung này không còn được mở để tra cứu. Hãy chọn khung khác."
+            ? "Chương trình đào tạo này hiện không còn mở để tra cứu. Vui lòng thử lại."
             : "Chưa tải được chương trình đào tạo. Vui lòng thử lại.";
     throw new Error(message);
   }
@@ -58,97 +60,56 @@ function useCurriculumRequest<T>(url: string, revision: number) {
   return useLiveData<T>(url, revision, readCurriculum);
 }
 
+/**
+ * #curriculum: the student's own CTĐT only (user 2026-11-10: "Không cho sinh viên chọn … như trang xét tốt nghiệp"), the
+ * one of the cohort in the account and the major of the MSSV (own-program.tsx); no other cohort's or major's is offered.
+ */
 export default function StudentCurriculum() {
-  const [revision, setRevision] = useState(0),
-    [choice, setChoice] = useState<string | null>(null);
+  const [revision, setRevision] = useState(0);
   const list = useCurriculumRequest<StudentCurriculumList>(endpoint, revision);
-  const chosen = choice ?? list.data?.suggestedId ?? "";
-  const selected = list.data?.items.find((item) => item.id === chosen);
-  const sameCohort =
-    selected && selected.cohortCode === list.data?.profileCohort;
+  const retry = () => setRevision((n) => n + 1);
+  const own = ownItem(list.data);
   return (
     <div className="sc-workspace">
-      <section className="sw-panel sc-selector">
-        <div>
-          <p className="sc-eyebrow">KHUNG CHƯƠNG TRÌNH</p>
-          <h2>Tra cứu chương trình đào tạo</h2>
-          <p className="sc-muted">
-            Tìm hiểu các học phần và điều kiện học trước khi lên kế hoạch cho
-            từng học kỳ.
-          </p>
-        </div>
-        <div className="sc-selector-controls">
-          <label>
-            Chương trình đang mở
-            <select
-              value={selected?.id ?? ""}
-              disabled={list.loading || !list.data?.items.length}
-              onChange={(e) => setChoice(e.target.value)}
-            >
-              <option value="">Chọn chương trình đào tạo</option>
-              {list.data?.items.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.cohortCode} · {programName(item.major)}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        {list.loading && (
-          <p role="status" className="sc-muted">
-            Đang tải danh sách chương trình…
-          </p>
-        )}
-        {list.error && (
+      {list.loading && (
+        <section className="sw-panel sc-empty" role="status">
+          Đang tải chương trình đào tạo của bạn…
+        </section>
+      )}
+      {list.error && (
+        <section className="sw-panel sc-empty">
           <p role="alert" className="sw-error">
             {list.error}
           </p>
-        )}
-        {list.data && (
-          <p className="sc-selection-note">
-            {!list.data.items.length
-              ? "Chưa có khung chương trình đào tạo đang mở. Vui lòng quay lại sau."
-              : !list.data.profileCohort
-                ? "Hồ sơ chưa có khóa học. Bạn có thể chọn một chương trình để tham khảo."
-                : !list.data.items.some(
-                  (item) => item.cohortCode === list.data!.profileCohort,
-                )
-                  ? `Chưa có khung đang mở cho khóa ${list.data.profileCohort}. Các khung khác chỉ dùng để tham khảo.`
-                  : sameCohort
-                    ? `Khung cùng khóa ${list.data.profileCohort} trong hồ sơ của bạn. Hãy đối chiếu ngành học khi lựa chọn.`
-                    : selected
-                      ? `Bạn đang tham khảo khung ${selected.cohortCode}; khóa trong hồ sơ là ${list.data.profileCohort}.`
-                      : `Chọn chương trình phù hợp với khóa ${list.data.profileCohort} và ngành học của bạn.`}
-          </p>
-        )}
-      </section>
-      {selected && (
-        <CurriculumContent
-          key={selected.id}
-          id={selected.id}
-          revision={revision}
-          retry={() => setRevision((n) => n + 1)}
-        />
-      )}
-      {!list.loading && list.data?.items.length && !selected ? (
-        <section className="sw-panel sc-empty">
-          <h2>Chọn một khung để bắt đầu</h2>
-          <p>
-            Bạn sẽ xem được số tín chỉ, nhóm môn bắt buộc/tự chọn và điều kiện
-            của từng học phần.
-          </p>
+          <button className="sw-outline" onClick={retry}>
+            <Icon name="refresh" /> Thử lại
+          </button>
         </section>
-      ) : null}
+      )}
+      {list.data &&
+        (own ? (
+          <CurriculumContent
+            key={own.id}
+            id={own.id}
+            facts={list.data}
+            revision={revision}
+            retry={retry}
+          />
+        ) : (
+          <MissingProgram kind="curriculum" facts={list.data} />
+        ))}
     </div>
   );
 }
 
 function CurriculumContent({
   id,
+  facts,
   revision,
   retry,
 }: {
   id: string;
+  facts: OwnProgramFacts;
   revision: number;
   retry: () => void;
 }) {
@@ -164,6 +125,8 @@ function CurriculumContent({
     `${endpoint}/${id}`,
     revision,
   );
+  // Read with the real codes of its courses only (studentCurriculumWithRealCodes; never the file's code).
+  const shown = useMemo(() => remote.data && studentCurriculumWithRealCodes(remote.data), [remote.data]);
   // The opened row itself: a code can be listed in several groups (K27 71ITDS40503).
   const [opened, setOpened] = useState<StudentCourse | null>(null);
   const { draft, setDraft, filters, reset } = useLiveFilters({
@@ -191,7 +154,7 @@ function CurriculumContent({
         </button>
       </section>
     );
-  const data = remote.data;
+  const data = shown;
   if (!data) return null;
   const term = searchTerm(filters.q);
   const courses = data.courses.filter(
@@ -223,6 +186,7 @@ function CurriculumContent({
               {data.cohortCode} · Nhập học {data.admissionYear}
             </p>
             <h2>{programTitle(data.name, data.major)}</h2>
+            <OwnProgramNote kind="curriculum" facts={facts} />
           </div>
         </div>
         <dl className="sc-stats">

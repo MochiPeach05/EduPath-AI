@@ -3,8 +3,8 @@ import { z } from "zod";
 import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
 import { studentUser } from "../advisors/access.js";
-import { majorIdentity, majorKey } from "./majors.js";
 import type { CurriculumData } from "./model.js";
+import { readOwnProgramProfile, resolveOwnCurriculum } from "./own-program.js";
 
 /** One element per distinct key, the first one kept, in order. */
 function uniqueBy<T>(items: readonly T[], key: (item: T) => string): T[] {
@@ -97,34 +97,33 @@ export function createStudentCurriculaRouter(pool: DatabasePool | undefined) {
     }
     next();
   });
+  // Only the student's own CTĐT (own-program.ts, user 2026-11-10: no choice, "như trang xét tốt nghiệp"): the cohort in the
+  // account and the major of the MSSV, as the engine picks it. items holds it alone and suggestedId is its id, so a page
+  // loaded before the change still opens it.
   router.get("/", async (req, res) => {
     z.object({}).strict().parse(req.query);
-    const [result, profile] = await Promise.all([
-      pool!
-        .query(`SELECT c.id,c.cohort_code AS "cohortCode",r.data->>'name' AS name,
-        r.data->>'major' AS major,(r.data->>'totalCredits')::int AS "totalCredits",
-        jsonb_array_length(r.data->'courses') AS "courseCount",r.version
-        FROM curricula c JOIN curriculum_revisions r ON r.id=c.current_revision
-        WHERE c.is_active ORDER BY c.cohort_code DESC,r.data->>'major',c.id`),
-      pool!.query("SELECT cohort_code,major_code FROM student_profiles WHERE user_id=$1", [
-        studentUser(req).userId,
-      ]),
-    ]);
-    const profileCohort = profile.rows[0]?.cohort_code ?? null;
-    // The cohort's framework of the student's major (052; user, 2026-10-27).
-    const major = majorIdentity(profile.rows[0]?.major_code);
-    const matches = result.rows.filter(
-      (row) => row.cohortCode === profileCohort && (!major || majorKey(row.major ?? "") === major),
-    );
+    const profile = await readOwnProgramProfile(pool!, studentUser(req).userId);
+    const { resolution, curriculum } = await resolveOwnCurriculum(pool!, profile);
     res.json({
-      items: result.rows,
-      profileCohort,
-      suggestedId: matches.length === 1 ? matches[0]!.id : null,
+      items: curriculum ? [{
+        id: curriculum.id, cohortCode: curriculum.cohortCode, name: curriculum.name, major: curriculum.major,
+        totalCredits: curriculum.totalCredits, courseCount: curriculum.courseCount, version: curriculum.version,
+      }] : [],
+      profileCohort: profile.cohortCode,
+      profileMajor: profile.majorCode,
+      resolution,
+      suggestedId: curriculum?.id ?? null,
     });
   });
+  // Another CTĐT than the student's own is unavailable, as a closed one.
   router.get("/:id", async (req, res) => {
     const id = z.uuid().parse(req.params.id);
     z.object({}).strict().parse(req.query);
+    const own = await resolveOwnCurriculum(pool!, await readOwnProgramProfile(pool!, studentUser(req).userId));
+    if (own.curriculum?.id !== id) {
+      res.status(404).json({ error: "curriculum_unavailable" });
+      return;
+    }
     const result = await pool!.query<{
       id: string;
       version: number;

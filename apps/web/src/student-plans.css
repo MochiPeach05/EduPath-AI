@@ -1,7 +1,3 @@
-.sp-selector > p {
-  grid-column: 1 / -1;
-  margin: 0;
-}
 /* One column that never grows past the panel: each term's table scrolls inside its
    .sc-table-wrap instead of widening the page (about 500 px and 1024 px wide). */
 .sp-content {
@@ -15,6 +11,15 @@
 }
 .sp-content > h2,
 .sp-content > p {
+  margin: 0;
+}
+/* The plan's title, its programme line and the line saying it is the student's own (own-program.tsx). */
+.sp-heading {
+  display: grid;
+  gap: 8px;
+}
+.sp-heading > h2,
+.sp-heading > p {
   margin: 0;
 }
 .sp-content .sc-table-wrap {

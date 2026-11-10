@@ -90,21 +90,31 @@ const activeListRow = {
   courseCount: curriculum.courses.length,
   version: 2,
 };
+/** An active CTĐT as the own-curriculum query reads it (own-program.ts), with its identity major:cohort. */
+const ownRow = (row: typeof activeListRow, identityKey: string) => ({ ...row, identityKey });
+const k29Cntt = ownRow(activeListRow, "cong nghe thong tin:K29");
+const k29Httt = ownRow({ ...activeListRow, id: "11111111-2222-4333-8444-555555555555", major: "HỆ THỐNG THÔNG TIN" }, "he thong thong tin:K29");
+const k30Cntt = ownRow({ ...activeListRow, id: "66666666-6666-4666-8666-666666666666", cohortCode: "K30" }, "cong nghe thong tin:K30");
 
 type SetupOptions = {
   sessionUser?: AuthenticatedUser | null;
   active?: boolean;
   profileCohort?: string | null;
   profileMajor?: string | null;
-  listRows?: unknown[];
+  /** Every active CTĐT; the own-curriculum query keeps those of the cohort and major it is asked for. */
+  curricula?: ReturnType<typeof ownRow>[];
   detailRows?: unknown[];
+  /** Acting mode: the student another account works for (X-Advisor-Student, advisors/access.ts). */
+  acting?: AuthenticatedUser;
 };
 
 function setup(options: SetupOptions = {}) {
   const sessionUser = options.sessionUser === null ? undefined : options.sessionUser ?? student;
-  const listRows = options.listRows ?? [activeListRow];
+  const curricula = options.curricula ?? [k29Cntt, k29Httt, k30Cntt];
+  const profileCohort = options.profileCohort === undefined ? "K29" : options.profileCohort;
+  const profileMajor = options.profileMajor === undefined ? "7480201" : options.profileMajor;
   const detailRows = options.detailRows ?? [{ id: curriculumId, version: 2, data: curriculum }];
-  const query = vi.fn(async (sql: string) => {
+  const query = vi.fn(async (sql: string, params: unknown[] = []) => {
     if (sql.includes("SELECT id FROM users")) {
       return {
         rowCount: options.active === false ? 0 : 1,
@@ -112,15 +122,20 @@ function setup(options: SetupOptions = {}) {
       };
     }
     if (sql.includes("SELECT cohort_code,major_code FROM student_profiles")) {
-      return { rowCount: options.profileCohort ? 1 : 0, rows: options.profileCohort ? [{ cohort_code: options.profileCohort, major_code: options.profileMajor ?? null }] : [] };
+      return { rowCount: profileCohort ? 1 : 0, rows: profileCohort ? [{ cohort_code: profileCohort, major_code: profileMajor }] : [] };
     }
-    if (sql.includes("SELECT c.id,c.cohort_code")) return { rowCount: listRows.length, rows: listRows };
+    if (sql.includes('c.identity_key AS "identityKey"')) {
+      const [cohort, major] = params as [string, string | null];
+      const rows = curricula.filter((row) => row.cohortCode === cohort && (major === null || row.identityKey.split(":")[0] === major));
+      return { rowCount: rows.length, rows };
+    }
     if (sql.includes("SELECT c.id,r.version,r.data")) return { rowCount: detailRows.length, rows: detailRows };
     throw new Error(`Unexpected query: ${sql}`);
   });
   const app = express();
   app.use((req, _res, next) => {
     req.session = { user: sessionUser } as typeof req.session;
+    if (options.acting) req.advisorActing = { advisor: sessionUser!, student: { user: options.acting } } as typeof req.advisorActing;
     next();
   });
   app.use("/curricula", createStudentCurriculaRouter({ query } as unknown as DatabasePool));
@@ -146,38 +161,59 @@ describe("student curriculum API", () => {
     expect(blocked.query).toHaveBeenCalledTimes(1);
   });
 
-  it("lists active frameworks and suggests the one matching the student cohort", async () => {
-    const { app, query } = setup({ listRows: [activeListRow], profileCohort: "K29" });
+  // User 2026-11-10: no choice of CTĐT, only the student's own, as Xét tốt nghiệp shows only the student's own standard.
+  it("lists only the student's own CTĐT: the cohort in the account and the major of the MSSV, as the engine picks it", async () => {
+    const { app, query } = setup();
     const response = await request(app).get("/curricula").expect(200);
 
     expect(response.body).toEqual({
       items: [activeListRow],
       profileCohort: "K29",
+      profileMajor: "7480201",
+      resolution: "found",
       suggestedId: curriculumId,
     });
-    expect(queryText(query)).toContain("WHERE c.is_active");
+    expect(queryText(query)).toContain("WHERE c.is_active AND c.cohort_code=$1 AND ($2::text IS NULL OR split_part(c.identity_key, ':', 1) = $2)");
     expect(queryText(query)).toContain("JOIN curriculum_revisions r ON r.id=c.current_revision");
+    expect(query.mock.calls.find(([sql]) => String(sql).includes('"identityKey"'))?.[1]).toEqual(["K29", "cong nghe thong tin"]);
   });
 
-  // 2026-10-27: a cohort may have a framework per major; the student's is the one of the major in the MSSV.
-  it("suggests the framework of the student's major when the cohort has several", async () => {
-    const cntt = { ...activeListRow, major: "CÔNG NGHỆ THÔNG TIN" };
-    const httt = { ...activeListRow, id: "11111111-2222-4333-8444-555555555555", major: "HỆ THỐNG THÔNG TIN" };
-    const asHttt = (await request(setup({ listRows: [cntt, httt], profileCohort: "K29", profileMajor: "7480104" }).app).get("/curricula").expect(200)).body;
-    expect(asHttt.suggestedId).toBe(httt.id);
-    const asCntt = (await request(setup({ listRows: [cntt, httt], profileCohort: "K29", profileMajor: "7480201" }).app).get("/curricula").expect(200)).body;
-    expect(asCntt.suggestedId).toBe(curriculumId);
-    // Without a major (no MSSV) a cohort with two frameworks suggests none, as before.
-    expect((await request(setup({ listRows: [cntt, httt], profileCohort: "K29" }).app).get("/curricula").expect(200)).body.suggestedId).toBeNull();
+  // 2026-10-27: a cohort may have a CTĐT per major; the student's is the one of the major in the MSSV.
+  it("takes the CTĐT of the student's major when the cohort has several, and none without a major", async () => {
+    const asHttt = (await request(setup({ profileMajor: "7480104" }).app).get("/curricula").expect(200)).body;
+    expect(asHttt).toMatchObject({ resolution: "found", suggestedId: k29Httt.id, items: [{ id: k29Httt.id, major: "HỆ THỐNG THÔNG TIN" }] });
+    expect(asHttt.items[0]).not.toHaveProperty("identityKey");
+    // Without a major (no MSSV) a cohort with two CTĐT is ambiguous: nothing is shown.
+    const noMajor = (await request(setup({ profileMajor: null }).app).get("/curricula").expect(200)).body;
+    expect(noMajor).toEqual({ items: [], profileCohort: "K29", profileMajor: null, resolution: "ambiguous", suggestedId: null });
+    // A cohort with one CTĐT takes it without a major, as before majors.
+    expect((await request(setup({ profileMajor: null, curricula: [k29Cntt, k30Cntt] }).app).get("/curricula").expect(200)).body)
+      .toMatchObject({ resolution: "found", suggestedId: curriculumId });
   });
 
-  it("does not fall back to another cohort when the profile cohort is unmatched", async () => {
-    const { app } = setup({ profileCohort: "K32" });
-    const response = await request(app).get("/curricula").expect(200);
+  it("never falls back to another cohort or major: not_found, and cohort_unknown without a cohort", async () => {
+    const k32 = (await request(setup({ profileCohort: "K32" }).app).get("/curricula").expect(200)).body;
+    expect(k32).toEqual({ items: [], profileCohort: "K32", profileMajor: "7480201", resolution: "not_found", suggestedId: null });
+    const mmt = (await request(setup({ profileMajor: "7480102" }).app).get("/curricula").expect(200)).body;
+    expect(mmt).toMatchObject({ items: [], resolution: "not_found", suggestedId: null });
 
-    expect(response.body.profileCohort).toBe("K32");
-    expect(response.body.items).toHaveLength(1);
-    expect(response.body.suggestedId).toBeNull();
+    const { app, query } = setup({ profileCohort: null });
+    expect((await request(app).get("/curricula").expect(200)).body)
+      .toEqual({ items: [], profileCohort: null, profileMajor: null, resolution: "cohort_unknown", suggestedId: null });
+    expect(queryText(query)).not.toContain("FROM curricula");
+  });
+
+  it("reads the cohort as the engine does (trimmed, upper case)", async () => {
+    const { app, query } = setup({ profileCohort: " k29 " });
+    expect((await request(app).get("/curricula").expect(200)).body).toMatchObject({ profileCohort: "K29", suggestedId: curriculumId });
+    expect(query.mock.calls.find(([sql]) => String(sql).includes('"identityKey"'))?.[1]).toEqual(["K29", "cong nghe thong tin"]);
+  });
+
+  it("serves the CTĐT of the student a staff account works for (acting mode)", async () => {
+    const acted = { ...student, userId: "77777777-7777-4777-8777-777777777777" } satisfies AuthenticatedUser;
+    const { app, query } = setup({ sessionUser: { ...student, role: "admin" }, acting: acted });
+    await request(app).get("/curricula").expect(200);
+    expect(query.mock.calls.find(([sql]) => String(sql).includes("FROM student_profiles"))?.[1]).toEqual([acted.userId]);
   });
 
   it("projects detail data without administrative fields and preserves public conditions", async () => {
@@ -230,10 +266,20 @@ describe("student curriculum API", () => {
   });
 
   it.each([lockedId, missingId])("returns 404 for locked or nonexistent framework %s", async (id) => {
-    const { app, query } = setup({ detailRows: [] });
+    const { app, query } = setup({ curricula: [ownRow({ ...activeListRow, id }, "cong nghe thong tin:K29")], detailRows: [] });
     const response = await request(app).get(`/curricula/${id}`).expect(404);
     expect(response.body).toEqual({ error: "curriculum_unavailable" });
     expect(queryText(query)).toContain("WHERE c.id=$1 AND c.is_active");
+  });
+
+  it("refuses another cohort's or major's CTĐT, even an active one, without reading it", async () => {
+    for (const other of [k29Httt.id, k30Cntt.id]) {
+      const { app, query } = setup();
+      expect((await request(app).get(`/curricula/${other}`).expect(404)).body).toEqual({ error: "curriculum_unavailable" });
+      expect(queryText(query)).not.toContain("SELECT c.id,r.version,r.data");
+    }
+    // Without a CTĐT of their own a student opens none.
+    await request(setup({ profileCohort: "K32" }).app).get(`/curricula/${curriculumId}`).expect(404);
   });
 
   it("rejects historical revision queries instead of exposing an older revision", async () => {

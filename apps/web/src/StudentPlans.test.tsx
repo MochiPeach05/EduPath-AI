@@ -37,10 +37,14 @@ const transcript = { transcript: { data: { sections: [{ courses: [
 const graduation = { evaluation: { codeAliases: [{ code: "DIT0070", viaCode: "71ITIS30103", transfer: true }] } };
 
 const ready = <T,>(value: T) => ({ data: value, error: null, loading: false });
-function render(list: { items: { id: string; name: string; cohortCode: string; major: string }[]; suggestedId: string | null; profileCohort: string | null }) {
+type List = {
+  items: { id: string; name: string; cohortCode: string; major: string; fromCurriculum?: boolean }[];
+  suggestedId: string | null; profileCohort: string | null; profileMajor?: string | null; resolution?: string;
+};
+function render(list: List, detail: unknown = plan) {
   liveData.mockImplementation((url: string) => {
     if (url === "/api/student/plans") return ready(list);
-    if (url === `/api/student/plans/${planId}`) return ready(plan);
+    if (url === `/api/student/plans/${planId}`) return ready(detail);
     if (url === "/api/student/transcript") return ready(transcript);
     if (url === "/api/student/graduation") return ready(graduation);
     throw new Error(`Unexpected URL ${url}`);
@@ -48,11 +52,13 @@ function render(list: { items: { id: string; name: string; cohortCode: string; m
   return renderToStaticMarkup(createElement(StudentPlans));
 }
 const k26 = { id: planId, name: plan.name, cohortCode: "K26", major: plan.major };
+// The student's own KHĐT alone (API curricula/own-program.ts, user 2026-11-10).
+const own: List = { items: [k26], suggestedId: planId, profileCohort: "K26", profileMajor: "7480201", resolution: "found" };
 const text = (html: string) => html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ");
 
 describe("StudentPlans (audit 2026-10-25)", () => {
   it("shows the K26 results: DGT0010 passed under its own code, a course being studied, a retake with a later cohort", () => {
-    const html = render({ items: [k26], suggestedId: planId, profileCohort: "K26" });
+    const html = render(own);
     const cell = (code: string) => new RegExp(`<td>${code}</td>(?:(?!</tr>).)*?<td class="sc-result-cell">((?:(?!</td>).)*)</td>`, "s").exec(html)?.[1];
     expect(cell("DGT0010")).toBe('<span class="sc-result sc-result-pass" role="img" aria-label="Đã đạt" title="Đã đạt">✓</span>');
     expect(cell("DCT0080")).toBe('<span class="sc-result sc-result-info" role="img" aria-label="Đang học" title="Đang học">◐</span><small class="sc-result-note">Đang học</small>');
@@ -61,7 +67,7 @@ describe("StudentPlans (audit 2026-10-25)", () => {
   });
 
   it("adds up a term without a printed total, labels condition-only rows and reads bracketed codes", () => {
-    const html = render({ items: [k26], suggestedId: planId, profileCohort: "K26" });
+    const html = render(own);
     const visible = text(html);
     // HK201: 3 + 4 TC; GDQP (BBKTL) is left out.
     expect(visible).toContain("Tín chỉ học kỳ theo kế hoạch: 7 (cộng từ các học phần trong kỳ, không tính môn điều kiện (*))");
@@ -71,20 +77,57 @@ describe("StudentPlans (audit 2026-10-25)", () => {
     expect(visible).toContain("Đây là kế hoạch giảng dạy, không phải danh sách môn bạn đã đăng ký.");
   });
 
-  it("without a plan of the student's cohort, points to the curriculum and does not speak of a plan on screen", () => {
-    const html = render({ items: [{ ...k26, cohortCode: "K29", id: "55555555-5555-4555-8555-555555555555" }], suggestedId: null, profileCohort: "K27" });
+  // User 2026-11-10: no choice of KHĐT; without one of their own (and no CTĐT to read it from) a card like Xét tốt nghiệp's.
+  it("without a plan of the student's own, shows the not-found card and never another cohort's plan", () => {
+    liveData.mockClear();
+    const html = render({ items: [], suggestedId: null, profileCohort: "K32", profileMajor: "7480201", resolution: "not_found" });
     const visible = text(html);
-    expect(visible).toContain("Chưa có kế hoạch đào tạo của khóa K27.");
-    expect(html).toContain('<a class="sp-link" href="#curriculum">Chương trình đào tạo</a>');
+    expect(html).toContain('<h2 id="sc-own-missing-title">Chưa có kế hoạch đào tạo cho khóa K32, ngành Công nghệ thông tin</h2>');
+    expect(visible).toContain("Khoa chưa công bố kế hoạch đào tạo của khóa K32, ngành Công nghệ thông tin. Hãy quay lại sau; nếu khóa hoặc ngành trong hồ sơ chưa đúng, hãy liên hệ Khoa để được cập nhật.");
+    expect(html).toContain('<a class="sw-outline" href="#profile">Xem hồ sơ</a>');
     expect(visible).not.toContain("Đây là kế hoạch giảng dạy");
     expect(html).not.toContain("sp-content");
+    // An older API listing every plan: another cohort's is never opened.
+    const other = render({ items: [{ ...k26, cohortCode: "K29", id: "55555555-5555-4555-8555-555555555555" }], suggestedId: null, profileCohort: "K27" });
+    expect(text(other)).toContain("Chưa có kế hoạch đào tạo cho khóa K27");
+    expect(liveData.mock.calls.map(([url]) => String(url)).filter((url) => url.startsWith("/api/student/plans/"))).toEqual([]);
+  });
+
+  it("offers no choice and says whose plan it is, with the way to check the profile", () => {
+    const html = render(own);
+    const visible = text(html);
+    expect(visible).toContain("Kế hoạch đào tạo của khóa K26, ngành Công nghệ thông tin theo hồ sơ của bạn. Xem hồ sơ");
+    expect(html).toContain('<a class="sp-link" href="#profile">Xem hồ sơ</a>');
+    expect(visible).not.toMatch(/Kế hoạch đang mở|Chọn kế hoạch|tham khảo|Kế hoạch cùng khóa tuyển sinh/);
+    expect(html).not.toContain("sp-selector");
+    // Search and the term filter stay.
+    expect(html).toContain('<option value="" selected="">Tất cả học kỳ</option>');
+  });
+
+  it("reads a row the file writes under another code by its real code only (API curricula/real-codes.ts)", () => {
+    const withReal = { ...plan, items: [
+      item("1", "71ITMA10203", "Đại số tuyến tính và ứng dụng", 3, "BB", { realCode: "71MATL10053" }),
+      item("2", "71ITSE20103", "Toán rời rạc", 3, "BB", { prerequisite: "[71ITMA10203]Đại số tuyến tính và ứng dụng" }),
+    ] };
+    liveData.mockImplementation((url: string) => {
+      if (url === "/api/student/plans") return ready(own);
+      if (url === `/api/student/plans/${planId}`) return ready(withReal);
+      if (url === "/api/student/transcript") return ready({ transcript: { data: { sections: [{ courses: [row("71MATL10053", "Đạt", "B")] }] } } });
+      if (url === "/api/student/graduation") return ready(graduation);
+      throw new Error(`Unexpected URL ${url}`);
+    });
+    const html = renderToStaticMarkup(createElement(StudentPlans));
+    expect(html).not.toContain("71ITMA10203");
+    expect(html).toContain("<td>71MATL10053</td>");
+    expect(html).toContain("<div>Tiên quyết: 71MATL10053 · Đại số tuyến tính và ứng dụng</div>");
+    expect(new RegExp('<td>71MATL10053</td>(?:(?!</tr>).)*?aria-label="Đã đạt"', "s").test(html)).toBe(true);
   });
 
   it("shows the plan read from the CTĐT of a cohort without a KHĐT and says so (user 2026-11-05)", () => {
     const fromCurriculum = { id: "ctdt-66666666-6666-4666-8666-666666666666", cohortCode: "K27", major: "CÔNG NGHỆ THÔNG TIN",
       name: "Kế hoạch đào tạo ngành CÔNG NGHỆ THÔNG TIN khóa 27 (theo chương trình đào tạo)", fromCurriculum: true };
     liveData.mockImplementation((url: string) => {
-      if (url === "/api/student/plans") return ready({ items: [fromCurriculum], suggestedId: fromCurriculum.id, profileCohort: "K27" });
+      if (url === "/api/student/plans") return ready({ items: [fromCurriculum], suggestedId: fromCurriculum.id, profileCohort: "K27", profileMajor: "7480201", resolution: "found" });
       if (url === `/api/student/plans/${fromCurriculum.id}`) return ready({ ...plan, name: fromCurriculum.name, major: fromCurriculum.major, cohortCode: "K27", admissionYear: 2022, unplacedCount: 2 });
       if (url === "/api/student/transcript") return ready(transcript);
       if (url === "/api/student/graduation") return ready(graduation);
@@ -92,16 +135,17 @@ describe("StudentPlans (audit 2026-10-25)", () => {
     });
     const html = renderToStaticMarkup(createElement(StudentPlans));
     const visible = text(html);
-    expect(visible).toContain("Khóa K27 chưa có kế hoạch đào tạo riêng; các học kỳ dưới đây lấy từ năm học, học kỳ dự kiến của từng học phần trong Chương trình đào tạo khóa K27.");
+    expect(visible).toContain("Khóa K27, ngành Công nghệ thông tin chưa có kế hoạch đào tạo riêng; các học kỳ dưới đây lấy từ năm học, học kỳ dự kiến của từng học phần trong Chương trình đào tạo của bạn. Đây là kế hoạch giảng dạy, không phải danh sách môn bạn đã đăng ký.");
+    expect(html).toContain('<a class="sp-link" href="#curriculum">Chương trình đào tạo</a>');
     expect(html).toContain("<h2>Kế hoạch đào tạo ngành Công nghệ thông tin khóa 27 (theo chương trình đào tạo)</h2>");
     expect(visible).toContain("2 học phần trong chương trình đào tạo không ghi năm học, học kỳ dự kiến nên không có trong kế hoạch này.");
-    expect(visible).not.toContain("Chưa có kế hoạch đào tạo của khóa K27");
+    expect(visible).not.toContain("Chưa có kế hoạch đào tạo cho khóa K27");
   });
 
   it("writes each term the one way and a capital name in sentence case (user review 2026-10-30)", () => {
     const capital = { ...k26, name: "KẾ HOẠCH ĐÀO TẠO NGÀNH CÔNG NGHỆ THÔNG TIN - KHÓA 26", major: "CÔNG NGHỆ THÔNG TIN" };
     liveData.mockImplementation((url: string) => {
-      if (url === "/api/student/plans") return ready({ items: [capital], suggestedId: planId, profileCohort: "K26" });
+      if (url === "/api/student/plans") return ready({ items: [capital], suggestedId: planId, profileCohort: "K26", profileMajor: "7480201", resolution: "found" });
       if (url === `/api/student/plans/${planId}`) return ready({ ...plan, name: capital.name, major: capital.major, admissionYear: 2020 });
       if (url === "/api/student/transcript") return ready(transcript);
       if (url === "/api/student/graduation") return ready(graduation);
@@ -109,7 +153,6 @@ describe("StudentPlans (audit 2026-10-25)", () => {
     });
     const html = renderToStaticMarkup(createElement(StudentPlans));
     expect(html).toContain("<h2>Kế hoạch đào tạo ngành Công nghệ thông tin – khóa 26</h2>");
-    expect(html).toContain("K26 · Kế hoạch đào tạo ngành Công nghệ thông tin – khóa 26</option>");
     expect(text(html)).toContain("Công nghệ thông tin · K26 · Tổng tín chỉ quy định: 130");
     expect(html).toContain("<h3>HK1 2020–2021</h3>");
     expect(html).toContain('<option value="HK202">HK2 2020–2021</option>');

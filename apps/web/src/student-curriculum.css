@@ -3,15 +3,6 @@
   gap: 24px;
   min-width: 0;
 }
-.sc-selector {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 1fr);
-  gap: 20px;
-  align-items: center;
-}
-.sc-selector h2 {
-  margin: 6px 0 8px;
-}
 .sc-eyebrow {
   font-size: 12px;
   font-weight: 700;
@@ -24,17 +15,6 @@
   color: var(--sw-muted);
   line-height: 1.7;
 }
-.sc-selector-controls {
-  display: flex;
-  gap: 12px;
-  align-items: end;
-  min-width: 0;
-}
-.sc-selector-controls label {
-  flex: 1;
-  min-width: 0;
-}
-.sc-selector label,
 .sc-filters label {
   display: grid;
   gap: 7px;
@@ -42,7 +22,6 @@
   color: var(--sw-muted);
   min-width: 0;
 }
-.sc-selector select,
 .sc-filters :is(select, input) {
   width: 100%;
   max-width: 100%;
@@ -52,13 +31,6 @@
   background: #fff;
   color: var(--sw-ink);
   padding: 10px 12px;
-}
-.sc-selection-note {
-  grid-column: 1/-1;
-  font-size: 14px;
-  color: var(--sw-muted);
-  border-top: 1px solid var(--sw-border);
-  padding-top: 16px;
 }
 .sc-summary-title {
   display: flex;
@@ -367,9 +339,6 @@
   background: #fffafb;
 }
 @media (max-width: 1000px) {
-  .sc-selector {
-    grid-template-columns: 1fr;
-  }
   .sc-filters {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -391,12 +360,6 @@
   }
   .sc-summary-title h2 {
     font-size: 18px;
-  }
-  .sc-selector-controls {
-    flex-wrap: wrap;
-  }
-  .sc-selector-controls label {
-    flex-basis: 100%;
   }
   .sc-stats {
     grid-template-columns: 1fr;
@@ -428,7 +391,6 @@
   .sc-filters .sc-search {
     grid-column: 1/-1;
   }
-  .sc-selector select,
   .sc-filters :is(select, input) {
     font-size: 16px;
   }
@@ -468,4 +430,90 @@
 .sc-catalog > .sc-result-legend { margin: 0; padding: 0 24px 16px; }
 @media (max-width: 600px) {
   .sc-catalog > .sc-result-legend { padding: 0 16px 16px; }
+}
+/* The student's own CTĐT/KHĐT (own-program.tsx, user 2026-11-10: no choice, as on Xét tốt nghiệp): the line under the
+   title saying which one is shown and why, and the card in its place when there is none (.sg-unresolved's look). */
+.sc-own-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: var(--sw-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+.sc-own-note > svg {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  color: #1c4182;
+}
+.sc-own-note .sp-link {
+  white-space: nowrap;
+}
+.sc-own-missing {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.sc-own-heading {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+/* Two classes: the portal's .sw-shell h2 (15px) would win otherwise; 20px as Xét tốt nghiệp's card title. */
+.sc-own-missing .sc-own-heading h2 {
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.45;
+}
+.sc-summary-title .sc-own-note {
+  margin-top: 6px;
+}
+.sc-own-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 2px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.sc-own-tags li {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+  padding: 4px 12px;
+  border: 1px solid #ead0d9;
+  border-radius: 999px;
+  background: #fdf6f8;
+  font-size: 15px;
+  line-height: 1.5;
+}
+.sc-own-tags span {
+  color: var(--sw-muted);
+  font-size: 14px;
+}
+.sc-own-tags strong {
+  color: var(--sw-ink);
+  font-weight: 700;
+}
+.sc-unresolved {
+  display: grid;
+  justify-items: start;
+  gap: 12px;
+  padding: 18px 20px;
+  border: 1px solid #e9d39b;
+  border-radius: 8px;
+  background: #fffaf0;
+  font-size: 14px;
+  line-height: 1.7;
+}
+@media (max-width: 600px) {
+  .sc-own-missing .sc-own-heading h2 {
+    font-size: 18px;
+  }
+  .sc-unresolved {
+    padding: 14px;
+  }
 }

@@ -172,8 +172,8 @@ export function portalGuides(): PortalGuide[] {
     ]],
     ["chuong-trinh-ke-hoach-dao-tao", "Chương trình đào tạo và Kế hoạch đào tạo", "#curriculum", [
       "Chương trình đào tạo (CTĐT) và Kế hoạch đào tạo (KHĐT) nằm trong menu tài khoản.",
-      "- CTĐT là khung chương trình của ngành và khóa: các khối kiến thức, học phần bắt buộc (BB) và tự chọn theo nhóm (TC…), số tín chỉ, chuyên ngành, năm và học kỳ dự kiến, môn tiên quyết và môn học trước. Trang gợi ý CTĐT của khóa và ngành của bạn; bạn có thể chọn CTĐT khác để tham khảo và tìm học phần theo mã hoặc tên.",
-      "- KHĐT là kế hoạch giảng dạy theo từng học kỳ (mã HK251 là học kỳ 1 năm học 2025–2026): học phần, tín chỉ, loại môn, nhóm lựa chọn và chuyên ngành. Đây là kế hoạch giảng dạy, không phải đăng ký học phần của bạn; hãy xem thêm lịch đăng ký học phần của trường.",
+      "- CTĐT là khung chương trình của ngành và khóa: các khối kiến thức, học phần bắt buộc (BB) và tự chọn theo nhóm (TC…), số tín chỉ, chuyên ngành, năm và học kỳ dự kiến, môn tiên quyết và môn học trước. Trang chỉ hiện CTĐT của khóa và ngành trong hồ sơ của bạn, như trang Xét tốt nghiệp (không chọn CTĐT khác); bạn tìm học phần theo mã hoặc tên và lọc theo khối kiến thức, loại môn, chuyên ngành, năm học, học kỳ.",
+      "- KHĐT là kế hoạch giảng dạy theo từng học kỳ (mã HK251 là học kỳ 1 năm học 2025–2026) của khóa và ngành trong hồ sơ của bạn: học phần, tín chỉ, loại môn, nhóm lựa chọn và chuyên ngành; khóa và ngành chưa có KHĐT xem kế hoạch dựng từ năm học, học kỳ dự kiến trong CTĐT. Đây là kế hoạch giảng dạy, không phải đăng ký học phần của bạn; hãy xem thêm lịch đăng ký học phần của trường.",
       "- Nhóm tự chọn chỉ cần đủ số tín chỉ yêu cầu, không cần học tất cả các môn trong danh sách.",
       "- Sau khi có bảng điểm, cột Kết quả đánh dấu môn đã đạt (✓) hoặc chưa đạt (✗).",
     ]],

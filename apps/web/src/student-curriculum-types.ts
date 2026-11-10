@@ -1,7 +1,14 @@
 import { planTermCode, programName, termName } from "./display-format";
+import type { OwnProgramFacts } from "./own-program";
 
 export interface StudentCourse {
   code: string;
+  /**
+   * The graduation standard's code of a course the CTĐT file writes under another one (API curricula/real-codes.ts, user
+   * 2026-11-10: "dùng luôn mã thực tế"; HTTT K29 71ITMA10203 → 71MATL10053). Students read only this code
+   * (studentCurriculumWithRealCodes); absent when the codes agree or the API already serves the real one as `code`.
+   */
+  realCode?: string | null;
   name: string;
   englishName: string;
   description: string | null;
@@ -45,7 +52,11 @@ export interface StudentCurriculumData {
   }[];
   courses: StudentCourse[];
 }
-export interface StudentCurriculumList {
+/**
+ * GET /api/student/curricula: the student's own CTĐT alone (user 2026-11-10, no choice, as on Xét tốt nghiệp), picked by
+ * the cohort in the account and the major of the MSSV; suggestedId is its id, null with why in `resolution`.
+ */
+export interface StudentCurriculumList extends OwnProgramFacts {
   items: {
     id: string;
     version: number;
@@ -55,8 +66,51 @@ export interface StudentCurriculumList {
     totalCredits: number | null;
     courseCount: number;
   }[];
-  profileCohort: string | null;
   suggestedId: string | null;
+}
+
+const codeKey = (code: string) => code.trim().toUpperCase();
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** File code (upper case) → real code, of the rows that carry a real code other than their own. */
+export function realCodeMap(rows: readonly { code: string; realCode?: string | null }[]): Map<string, string> {
+  const codes = new Map<string, string>();
+  for (const row of rows) {
+    const real = row.realCode?.trim();
+    if (real && codeKey(real) !== codeKey(row.code)) codes.set(codeKey(row.code), real);
+  }
+  return codes;
+}
+
+/** A text naming courses by code ("[71ITMA10203]Đại số…"), each file code written as its real one. */
+export function realCodesInText(text: string, codes: ReadonlyMap<string, string>): string {
+  if (!text || !codes.size) return text;
+  let result = text;
+  for (const [file, real] of codes)
+    result = result.replace(new RegExp(`(^|[^\\p{L}\\p{N}])${escapeRegExp(file)}(?![\\p{L}\\p{N}])`, "giu"), (_, before: string) => `${before}${real}`);
+  return result;
+}
+
+/**
+ * The CTĐT as students read it: a course with a real code is shown, searched and matched to the transcript by that code
+ * only, and its conditions, elective groups and the prerequisite texts of the other courses name it so too; students never
+ * see the file's code. Data without real codes is returned as it is.
+ */
+export function studentCurriculumWithRealCodes(data: StudentCurriculumData): StudentCurriculumData {
+  const codes = realCodeMap(data.courses);
+  if (!codes.size) return data;
+  const real = (code: string) => codes.get(codeKey(code)) ?? code;
+  return {
+    ...data,
+    electives: data.electives.map((group) => ({ ...group, courseCodes: group.courseCodes.map(real) })),
+    courses: data.courses.map(({ realCode: _realCode, ...course }) => ({
+      ...course,
+      code: real(course.code),
+      prerequisite: realCodesInText(course.prerequisite, codes),
+      prior: realCodesInText(course.prior, codes),
+      conditions: course.conditions.map((condition) => ({ ...condition, targetCodes: condition.targetCodes.map(real) })),
+    })),
+  };
 }
 export const courseKind = (type: string) =>
   type.startsWith("TC") ? "elective" : "required";

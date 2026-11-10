@@ -63,7 +63,7 @@ try {
   await pool.query(
     "CREATE TABLE users(id UUID PRIMARY KEY,entra_tenant_id TEXT,is_active BOOLEAN,role TEXT,role_override TEXT)",
   );
-  await pool.query("CREATE TABLE student_profiles(user_id UUID PRIMARY KEY,cohort_code TEXT)");
+  await pool.query("CREATE TABLE student_profiles(user_id UUID PRIMARY KEY,cohort_code TEXT,major_code TEXT)");
   await pool.query(
     (await readFile("apps/api/migrations/011_curricula.sql", "utf8")).replaceAll(
       "public.",
@@ -74,7 +74,8 @@ try {
     "INSERT INTO users(id,entra_tenant_id,is_active,role,role_override) VALUES($1,$2,true,'admin',null),($3,$2,true,'student',null)",
     [adminId, tenantId, studentId],
   );
-  await pool.query("INSERT INTO student_profiles(user_id,cohort_code) VALUES($1,'K29')", [studentId]);
+  // CNTT (7480201): the seeded workbooks are the CNTT frameworks of K29–K31.
+  await pool.query("INSERT INTO student_profiles(user_id,cohort_code,major_code) VALUES($1,'K29','7480201')", [studentId]);
   await seedCurricula(pool);
   await seedCurricula(pool);
 
@@ -117,19 +118,26 @@ try {
   const adminApi = (path = "", method = "GET", body, headers = {}) =>
     call("/api/admin/curricula", path, method, body, { "x-test-user": "admin", ...headers });
 
+  // The student's own CTĐT only (curricula/own-program.ts, user 2026-11-10: no choice, as on Xét tốt nghiệp).
   let result = await studentApi();
   assert.equal(result.status, 200);
-  assert.equal(result.body.items.length, 3);
   assert.deepEqual(
     result.body.items.map((item) => [item.cohortCode, item.courseCount]),
-    [["K31", 89], ["K30", 89], ["K29", 88]],
+    [["K29", 88]],
   );
   assert.equal(result.body.profileCohort, "K29");
-  const k29 = result.body.items.find((item) => item.cohortCode === "K29");
-  const k30 = result.body.items.find((item) => item.cohortCode === "K30");
-  assert(k29?.id && k30?.id, "seeded K29 and K30 frameworks must be listed");
+  assert.equal(result.body.profileMajor, "7480201");
+  assert.equal(result.body.resolution, "found");
+  const k29 = result.body.items[0];
   assert.equal(result.body.suggestedId, k29.id);
-  checks.push("seeded active K29/K30/K31 list with K29 cohort suggestion");
+  const k30 = (await pool.query("SELECT id FROM curricula WHERE cohort_code='K30'")).rows[0];
+  assert(k30?.id, "the seeded K30 framework must exist");
+  checks.push("seeded K29/K30/K31: the K29 CNTT student is given the K29 framework alone");
+
+  result = await studentApi(`/${k30.id}`);
+  assert.equal(result.status, 404);
+  assert.equal(result.body.error, "curriculum_unavailable");
+  checks.push("another cohort's active framework is refused (404) to the student");
 
   result = await studentApi(`/${k29.id}`);
   assert.equal(result.status, 200);
@@ -175,7 +183,8 @@ try {
   assert.equal(result.status, 200);
   result = await studentApi();
   assert.equal(result.status, 200);
-  assert.equal(result.body.items.some((item) => item.id === k29.id), false);
+  assert.deepEqual(result.body.items, []);
+  assert.equal(result.body.resolution, "not_found");
   assert.equal(result.body.suggestedId, null);
   result = await studentApi(`/${k29.id}`);
   assert.equal(result.status, 404);
@@ -190,13 +199,15 @@ try {
   assert.equal(result.body.error, "read_only");
   checks.push("student curriculum API has no write access");
 
-  // A profile cohort with no open framework has no fallback suggestion.
+  // A profile cohort with no open framework gets none, never another cohort's.
   await pool.query("UPDATE student_profiles SET cohort_code='K32' WHERE user_id=$1", [studentId]);
   result = await studentApi();
   assert.equal(result.status, 200);
   assert.equal(result.body.profileCohort, "K32");
+  assert.deepEqual(result.body.items, []);
+  assert.equal(result.body.resolution, "not_found");
   assert.equal(result.body.suggestedId, null);
-  checks.push("unmatched profile cohort does not silently suggest another framework");
+  checks.push("unmatched profile cohort gets no framework, never another cohort's");
 
   result = await studentApi("?revision=" + k30.id);
   assert.equal(result.status, 400);
