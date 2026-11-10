@@ -2,6 +2,14 @@ export interface PlanItem {
   id: string;
   position: number;
   code: string;
+  /**
+   * The code the graduation standard gives a row the KHĐT file writes under another code (API plans/repository.ts detail,
+   * curricula/real-codes.ts, user 2026-11-10: "dùng luôn mã thực tế"; CNTT K28 71ITMA10203 → 71MATL10053): the real code of the
+   * plan's CTĐT, what students read on their KHĐT. Absent when the codes agree. The admin detail shows it with "Mã trong tệp
+   * KHĐT: <code>" under it; the row is still edited by `code`, the file's code, and `realCode` is never sent back (the API's
+   * item schema is strict).
+   */
+  realCode?: string;
   name: string;
   credits: number | null;
   type: string;

@@ -6,6 +6,7 @@ import { PlanError, reviewPlan, identity, type PlanData } from "./model.js";
 import type { CurriculumData } from "../curricula/model.js";
 import { byOrder, byText, orderBy, type OwnOrder, type SortDirection } from "../admin/table-sort.js";
 import { notifyCatalogUpdate } from "../notifications/catalog.js";
+import { readPlanRealCodes, withRealCodeField } from "../curricula/real-codes.js";
 // The columns the list sorts by (web PlansManagement.tsx, admin/table-sort.ts): Khóa K9 before K29, Phiên bản by number
 // then the last update, Trạng thái Đang mở first.
 export const planSort = {
@@ -82,7 +83,17 @@ export class PlanRepository {
       `SELECT action,created_at AS "createdAt" FROM training_plan_events WHERE plan_id=$1 ORDER BY id DESC LIMIT 50`,
       [id],
     );
-    return { ...result.rows[0], history: history.rows, events: events.rows };
+    const row = result.rows[0]! as { data: PlanData };
+    // The code students read for a row the file writes under another one (curricula/real-codes.ts, user 2026-11-10):
+    // `realCode`, the real code of the plan's CTĐT as the student KHĐT reads it (plans/student-router.ts, readPlanRealCodes),
+    // shown with the file's code beside it ("Mã trong tệp KHĐT"); the row keeps the file's code, by which it is edited.
+    const realCodes = await readPlanRealCodes(this.pool, identity(row.data));
+    return {
+      ...row,
+      data: { ...row.data, items: withRealCodeField(row.data.items, realCodes) },
+      history: history.rows,
+      events: events.rows,
+    };
   }
   async source(id: string, revision: string) {
     const result = await this.pool.query(

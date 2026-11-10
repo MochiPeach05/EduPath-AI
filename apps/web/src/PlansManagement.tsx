@@ -22,9 +22,10 @@ const fold = (s: string) =>
     .toLowerCase()
     .trim();
 const date = (s: string) => formatVnDateTime(s);
-// The columns the plan table sorts by (table-sort.tsx); Tiên quyết / Học trước by its two texts in that order.
+// The columns the plan table sorts by (table-sort.tsx); Tiên quyết / Học trước by its two texts in that order; a row by
+// the code it shows (the real code when the API sends one, plan-types.ts realCode).
 const itemSort: Record<string, SortRule<PlanItem>> = {
-  code: { value: (i) => i.code },
+  code: { value: (i) => i.realCode ?? i.code },
   name: { value: (i) => i.name },
   credits: { value: (i) => i.credits, by: "number" },
   type: { value: (i) => i.type },
@@ -62,6 +63,20 @@ const messages: Record<string, string> = {
 // A failure is worded by admin-errors.ts: this page's texts first, the server's detail lines under them.
 function request<T>(url: string, init: RequestInit): Promise<T> {
   return adminRequest<T>(url, init, messages, { details: true });
+}
+/**
+ * The body of Lưu phân bổ: the row's editable fields. realCode is the API's reading of the graduation standard (never saved;
+ * the API's item schema is strict): the row is edited by its file code.
+ */
+export function planItemChange(form: PlanItem) {
+  const { id, position, sourceRow, sourceSheet, sourceCells, realCode, ...change } = form;
+  void id;
+  void position;
+  void sourceRow;
+  void sourceSheet;
+  void sourceCells;
+  void realCode;
+  return change;
 }
 function Warnings({ data }: { data: PlanData }) {
   return data.warnings.length ? (
@@ -551,9 +566,10 @@ function PlanStructure({
     group: "",
   });
   const labels = new Map(data.sections.map((s) => [s.id, s.label]));
+  // Tìm học phần finds a row by the code it shows or by the file's code (a row with realCode has both).
   const items = data.items.filter(
     (i) =>
-      (!filters.q || fold(`${i.code} ${i.name}`).includes(fold(filters.q))) &&
+      (!filters.q || fold([i.code, i.realCode, i.name].filter(Boolean).join(" ")).includes(fold(filters.q))) &&
       (!filters.term || i.termCode === filters.term) &&
       (!filters.group || labels.get(i.sectionId) === filters.group),
   );
@@ -658,7 +674,7 @@ function PlanStructure({
                       )}
                       <tr>
                         <td className="cm-stt">{stt.get(i.id)}</td>
-                        <td>{i.code || "Chưa có mã"}</td>
+                        <td>{i.realCode ?? (i.code || "Chưa có mã")}{i.realCode && <small className="cm-file-code">Mã trong tệp KHĐT: {i.code}</small>}</td>
                         <td>
                           <strong>{i.name}</strong>
                         </td>
@@ -1029,7 +1045,7 @@ function ItemEditor({
   ] as const;
   return (
     <Modal
-      title={`${item.code || "Học phần"} · ${item.name}`}
+      title={`${item.realCode ?? (item.code || "Học phần")} · ${item.name}`}
       onClose={onClose}
       busy={busy}
     >
@@ -1041,21 +1057,13 @@ function ItemEditor({
           setBusy(true);
           setError("");
           try {
-            const {
-              id: _id,
-              position: _position,
-              sourceRow: _row,
-              sourceSheet: _sheet,
-              sourceCells: _cells,
-              ...change
-            } = form;
             await request(`${endpoint}/${plan.id}/items/${item.id}`, {
               method: "PATCH",
               headers: {
                 "Content-Type": "application/json",
                 "x-version": plan.token,
               },
-              body: JSON.stringify(change),
+              body: JSON.stringify(planItemChange(form)),
             });
             onSaved();
           } catch (err) {
@@ -1206,7 +1214,14 @@ function ItemEditor({
             {textFields.map(([key, label]) => (
               <section key={key}>
                 <h3>{label}</h3>
-                <p className="pm-prewrap">{item[key] || "Chưa ghi"}</p>
+                {key === "code" && item.realCode ? (
+                  <p className="pm-prewrap">
+                    {item.realCode}
+                    <small className="cm-file-code">Mã trong tệp KHĐT: {item.code}</small>
+                  </p>
+                ) : (
+                  <p className="pm-prewrap">{item[key] || "Chưa ghi"}</p>
+                )}
               </section>
             ))}
             <details>

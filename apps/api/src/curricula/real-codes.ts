@@ -12,8 +12,9 @@ import { MAJORS, majorCondition, majorIdentity, majorKey } from "./majors.js";
 // kỳ (study-plan/context.ts, a saved plan too), Tổng quan, Lộ trình AI's relations (roadmap/jobs.ts), Trợ lý AI's catalog
 // (assistant/knowledge.ts), Cấu hình môn học and the career course weights (the row counts under the real code's shared
 // course), the student CTĐT and KHĐT (curricula/student-router.ts, plans/student-router.ts: the real code is the row's
-// code), and the admin CTĐT detail (`realCode` on the row, withRealCodeField, with the file's code beside it). The CTĐT keeps
-// the file's code (an admin edits the row by it) and graduation reads the CTĐT as filed, so its results do not change.
+// code), and the admin CTĐT and KHĐT details (`realCode` on the row, withRealCodeField, with the file's code beside it; the
+// KHĐT's rows take the codes of the plan's CTĐT, readPlanRealCodes, as the student KHĐT does). The CTĐT and the KHĐT keep the
+// file's code (an admin edits the row by it) and graduation reads the CTĐT as filed, so its results do not change.
 
 type Db = Pick<PoolClient, "query">;
 type StandardCourse = GraduationData["courses"][number];

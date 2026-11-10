@@ -83,6 +83,14 @@
   line-height: 1.75;
 }
 
+/* The file's code under the real code of a row (admin only, 2026-11-10) in the row's detail; the table's is in curricula.css. */
+.pm-prewrap .cm-file-code {
+  display: block;
+  color: var(--cm-muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+
 .pm-edit-grid,
 .pm-detail-fields {
   display: grid;
