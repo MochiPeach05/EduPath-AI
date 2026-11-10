@@ -14,8 +14,7 @@ import { buildRoadmapFacts, type RoadmapFacts, type RoadmapSkill } from "../road
 import { newestAssessment, readNewestRoadmap, readRoadmapRelations, type RoadmapRow } from "../roadmap/jobs.js";
 import { roadmapDataSections } from "../roadmap/prompt.js";
 import { roadmapWindow } from "../roadmap/window.js";
-import { activeConsentVersion, isValidConsent } from "../student/consent.js";
-import { readSurvey, surveyFacts } from "../student/survey.js";
+import { readSurvey, surveyFacts, surveyUsable } from "../student/survey.js";
 import { withoutSettledReviews, type TranscriptData } from "../student/transcript-parser.js";
 import type { AssistantIntent } from "./intent.js";
 import { termName } from "../term-name.js";
@@ -177,7 +176,7 @@ async function profileOnly(db: Db, userId: string, hasTranscript: boolean): Prom
  * The student's sources for one question. Always: profile, the transcript (if any), the target career's skills, the
  * courses to take or improve, the graduation pace. By intent: the skill levels (gaps, or a skill named in the question),
  * the newest AI roadmap (roadmap, course_reason) and the profile survey (roadmap, resources; only under a valid
- * profile_survey consent). The transcript gives the rows the question names, or every row for a grade question.
+ * profile_survey consent, or filled in for the student by a cố vấn học tập or the Khoa, surveyUsable). The transcript gives the rows the question names, or every row for a grade question.
  */
 export async function studentSources(db: Db, userId: string, question: string, intents: readonly AssistantIntent[], now: Date = new Date()): Promise<StudentContext> {
   const assessment = await newestAssessment(db, userId);
@@ -189,7 +188,7 @@ export async function studentSources(db: Db, userId: string, question: string, i
   let survey = null;
   if (wants("roadmap", "resources")) {
     const row = await readSurvey(db, userId);
-    if (row?.complete && isValidConsent(await activeConsentVersion(db, userId, "profile_survey"))) survey = surveyFacts(row);
+    if (row && await surveyUsable(db, userId, row)) survey = surveyFacts(row);
   }
   const sections = roadmapDataSections(facts, survey);
   const sources: ContextSource[] = [

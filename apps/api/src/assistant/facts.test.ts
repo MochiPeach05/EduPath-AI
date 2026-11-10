@@ -71,7 +71,9 @@ function transcriptData(): TranscriptData {
   };
 }
 
-function db(options: { assessment?: boolean; computed?: AssessmentResult; survey?: boolean; consent?: string | null; roadmap?: RoadmapRow | null; transcript?: TranscriptData | null } = {}) {
+/** savedBy: the survey was filled in by a cố vấn học tập or the Khoa (policy 2026-11-10); withdrawn: the student withdrew its consent. */
+function db(options: { assessment?: boolean; computed?: AssessmentResult; survey?: boolean; consent?: string | null; roadmap?: RoadmapRow | null; transcript?: TranscriptData | null;
+  savedBy?: "advisor" | "admin"; withdrawn?: boolean } = {}) {
   const query = vi.fn(async (sql: string) => {
     const rows = (list: unknown[]) => ({ rowCount: list.length, rows: list });
     if (sql.includes("FROM stu_comp_assessments")) {
@@ -80,7 +82,8 @@ function db(options: { assessment?: boolean; computed?: AssessmentResult; survey
     if (sql.includes("FROM student_transcripts")) {
       return rows(options.transcript === null ? [] : [{ data: options.transcript ?? transcriptData(), updatedAt: new Date("2026-10-20T03:00:00Z") }]);
     }
-    if (sql.includes("FROM stu_profile_surveys")) return rows(options.survey === false ? [] : [syntheticSurveyRow()]);
+    if (sql.includes("FROM stu_profile_surveys")) return rows(options.survey === false ? [] : [{ ...syntheticSurveyRow(), saved_by_role: options.savedBy ?? null }]);
+    if (sql.includes("AS withdrawn")) return rows([{ withdrawn: options.withdrawn === true }]);
     if (sql.includes("FROM data_consents")) return rows(options.consent === null ? [] : [{ policy_version: options.consent ?? TRANSCRIPT_POLICY_VERSION }]);
     if (sql.includes("FROM stu_roadmaps")) return rows(options.roadmap === null ? [] : [options.roadmap ?? roadmap()]);
     if (sql.includes("FROM student_profiles p")) return rows([{ cohortCode: "K29", specialty: null, career: "Lập trình viên Web" }]);
@@ -141,6 +144,16 @@ describe("assistant student sources", () => {
       "Học kỳ tới mình nên học gì?", ["roadmap"], ROADMAP_NOW);
     expect(context.sources.some((source) => source.title.startsWith("Khảo sát"))).toBe(false);
     expect(context.sources.find((source) => source.title === "Lộ trình AI đề xuất cho bạn")?.text).toContain("từ một kết quả đánh giá cũ hơn");
+  });
+
+  it("uses a survey a cố vấn học tập filled in without the student's consent, and not after the student withdrew it (policy 2026-11-10)", async () => {
+    const titles = async (options: Parameters<typeof db>[0]) =>
+      (await studentSources(db(options), userId, "Học kỳ tới mình nên học gì?", ["roadmap"], ROADMAP_NOW)).sources.map((source) => source.title);
+    const survey = "Khảo sát định hướng của bạn (bạn tự khai)";
+    expect(await titles({ consent: null, savedBy: "advisor" })).toContain(survey);
+    expect(await titles({ consent: "2026-10-11", savedBy: "admin" })).toContain(survey);
+    expect(await titles({ consent: null, savedBy: "advisor", withdrawn: true })).not.toContain(survey);
+    expect(await titles({ consent: null })).not.toContain(survey);
   });
 
   it("lists the career's missing skills under their heading and looks up resources for them only (assistant-v11)", async () => {

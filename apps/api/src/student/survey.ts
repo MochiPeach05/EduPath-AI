@@ -1,6 +1,7 @@
 import type { PoolClient } from "pg";
 import { z } from "zod";
 import type { DatabasePool } from "../db/pool.js";
+import { activeConsentVersion, consentWithdrawn, isValidConsent } from "./consent.js";
 import { INTEREST_HOBBIES, INTEREST_HOBBY_IDS, INTEREST_TECH, INTEREST_TECH_IDS, interestChoices, interestLabels } from "./interests.js";
 
 // "Khảo sát định hướng" in the student profile (user 2026-10-24): "bổ sung cái vụ sở thích và thành tích làm như 1 cái
@@ -14,6 +15,9 @@ import { INTEREST_HOBBIES, INTEREST_HOBBY_IDS, INTEREST_TECH, INTEREST_TECH_IDS,
 // the student is proficient in, migration 051), question 12 "Sở trường"; a v2 survey is incomplete until saved again.
 // survey-v4 (user 2026-10-31: "Bỏ cái câu tự luận ở thế mạnh của bạn đi"): "Thế mạnh của bạn" is the technologies only. A
 // stored description is no longer read, shown or given to the AI, and saving the survey clears it; v3 surveys stay complete.
+// Since 2026-11-10 (user: "Khảo sát định hướng … cố vấn học tập và quản trị viên làm luôn nhé", policy 2026-11-10) a cố vấn
+// học tập or the Khoa may fill it in for the student (savedBy, migration 062): no consent is recorded in the student's name,
+// and such a survey counts like the student's own unless the student withdrew the consent (surveyUsable).
 
 export const SURVEY_VERSION = "survey-v4";
 /** Characters of the achievements list. */
@@ -49,12 +53,16 @@ export const SURVEY_QUESTIONS = [
 ] as const satisfies readonly SurveyQuestion[];
 
 export type SurveyAnswers = Record<string, string>;
+/** Who filled in the survey for the student (migration 062): the class's cố vấn học tập, or the Khoa (an admin, Ban chủ nhiệm khoa). */
+export type SurveySavedBy = "advisor" | "admin";
 /** interestTech makes "Thế mạnh của bạn", interestHobbies "Sở trường". */
 export type StudentSurvey = {
   version: string; answers: SurveyAnswers; interestTech: string[]; interestHobbies: string[];
   hasAchievements: boolean; achievements: string | null; updatedAt: string;
   /** Every question of the current set is answered (a newer set may add questions). */
   complete: boolean;
+  /** Last saved for the student in their page (policy 2026-11-10); null when the student saved it. */
+  savedBy: SurveySavedBy | null;
 };
 export type SurveyInput = {
   answers: SurveyAnswers; interestTech: string[]; interestHobbies: string[]; hasAchievements: boolean; achievements: string | null;
@@ -98,15 +106,15 @@ const isComplete = (row: Pick<StudentSurvey, "version" | "answers" | "interestTe
 
 type SurveyRow = {
   version: string; answers: SurveyAnswers; interest_tech: string[] | null; interest_hobbies: string[] | null;
-  has_achievements: boolean; achievements: string | null; updated_at: Date | string;
+  has_achievements: boolean; achievements: string | null; updated_at: Date | string; saved_by_role?: SurveySavedBy | null;
 };
-const surveyColumns = "survey_version AS version,answers,interest_tech,interest_hobbies,has_achievements,achievements,updated_at";
+const surveyColumns = "survey_version AS version,answers,interest_tech,interest_hobbies,has_achievements,achievements,updated_at,saved_by_role";
 function fromRow(row: SurveyRow): StudentSurvey {
   const survey = {
     version: row.version, answers: row.answers, interestTech: row.interest_tech ?? [], interestHobbies: row.interest_hobbies ?? [],
     hasAchievements: row.has_achievements, achievements: row.achievements, updatedAt: new Date(row.updated_at).toISOString(),
   };
-  return { ...survey, complete: isComplete(survey) };
+  return { ...survey, complete: isComplete(survey), savedBy: row.saved_by_role ?? null };
 }
 
 export async function readSurvey(db: Pick<DatabasePool, "query"> | PoolClient, userId: string): Promise<StudentSurvey | null> {
@@ -115,15 +123,19 @@ export async function readSurvey(db: Pick<DatabasePool, "query"> | PoolClient, u
 }
 
 /**
- * Caller holds the user's row lock and has checked the consent. The interests chosen in the profile before the move (049)
- * and the free text before that are cleared: the survey holds them now. So is a survey-v3 description of the strengths.
+ * Caller holds the user's row lock and has checked the consent (the student) or the withdrawal (savedBy: a cố vấn học tập
+ * or the Khoa saving it for the student, policy 2026-11-10; the student's own save clears it). The interests chosen in the
+ * profile before the move (049) and the free text before that are cleared: the survey holds them now. So is a survey-v3
+ * description of the strengths.
  */
-export async function saveSurvey(client: PoolClient, userId: string, input: SurveyInput): Promise<StudentSurvey> {
-  const result = await client.query<SurveyRow>(`INSERT INTO stu_profile_surveys(user_id,survey_version,answers,interest_tech,interest_hobbies,has_achievements,achievements,strengths)
-    VALUES($1,$2,$3::jsonb,$4,$5,$6,$7,$8) ON CONFLICT(user_id) DO UPDATE SET survey_version=EXCLUDED.survey_version,answers=EXCLUDED.answers,
+export async function saveSurvey(client: PoolClient, userId: string, input: SurveyInput,
+  savedBy: { userId: string; role: SurveySavedBy } | null = null): Promise<StudentSurvey> {
+  const result = await client.query<SurveyRow>(`INSERT INTO stu_profile_surveys(user_id,survey_version,answers,interest_tech,interest_hobbies,has_achievements,achievements,strengths,saved_by,saved_by_role)
+    VALUES($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(user_id) DO UPDATE SET survey_version=EXCLUDED.survey_version,answers=EXCLUDED.answers,
     interest_tech=EXCLUDED.interest_tech,interest_hobbies=EXCLUDED.interest_hobbies,has_achievements=EXCLUDED.has_achievements,
-    achievements=EXCLUDED.achievements,strengths=NULL,updated_at=now() RETURNING ${surveyColumns}`,
-  [userId, SURVEY_VERSION, JSON.stringify(input.answers), input.interestTech, input.interestHobbies, input.hasAchievements, input.achievements, null]);
+    achievements=EXCLUDED.achievements,strengths=NULL,saved_by=EXCLUDED.saved_by,saved_by_role=EXCLUDED.saved_by_role,updated_at=now() RETURNING ${surveyColumns}`,
+  [userId, SURVEY_VERSION, JSON.stringify(input.answers), input.interestTech, input.interestHobbies, input.hasAchievements, input.achievements, null,
+    savedBy?.userId ?? null, savedBy?.role ?? null]);
   await client.query("UPDATE student_profiles SET interest_tech='{}',interest_hobbies='{}',interests=NULL WHERE user_id=$1", [userId]);
   return fromRow(result.rows[0]!);
 }
@@ -144,6 +156,18 @@ export async function deleteSurvey(client: PoolClient, userId: string): Promise<
   const deleted = await client.query("DELETE FROM stu_profile_surveys WHERE user_id=$1", [userId]);
   await client.query("DELETE FROM stu_roadmaps WHERE user_id=$1", [userId]);
   return Boolean(deleted.rowCount);
+}
+
+/**
+ * Whether the AI features (Lộ trình AI, Trợ lý AI, Định hướng nghề nghiệp, the Tổng quan gate) may use the stored survey:
+ * complete, and agreed to by the student under a policy whose consents still count, or filled in for the student by a cố
+ * vấn học tập or the Khoa (savedBy) while the student has not withdrawn the consent ("Cho làm, báo sinh viên", policy
+ * 2026-11-10). The same rule in SQL: SURVEY_COMPLETE_SQL (admin/student-profiles.ts).
+ */
+export async function surveyUsable(db: Pick<DatabasePool, "query"> | PoolClient, userId: string, survey: StudentSurvey | null): Promise<boolean> {
+  if (survey?.complete !== true) return false;
+  if (isValidConsent(await activeConsentVersion(db, userId, "profile_survey"))) return true;
+  return survey.savedBy !== null && !await consentWithdrawn(db, userId, "profile_survey");
 }
 
 /**

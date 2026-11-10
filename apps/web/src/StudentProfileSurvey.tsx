@@ -9,6 +9,7 @@ import { InterestGroup } from "./InterestChoices";
 import { interestLabels } from "./profile-interests";
 import { PROFILE_SECTIONS, formatUpdatedAt } from "./student-overview-data";
 import { isAdvisorView } from "./advisor-view";
+import { ActingConfirmDialog, surveyConfirm } from "./acting-confirm";
 import "./profile-survey.css";
 
 // "Khảo sát định hướng" on Hồ sơ và bảng điểm (user 2026-10-24): radio answers so nothing is left empty or typed at
@@ -17,6 +18,9 @@ import "./profile-survey.css";
 // deleted (and the consent withdrawn) at any time, also while they wait for the newer questions or policy.
 // A done survey is a short summary (user 2026-11-04: the open form, over a screen long, hid the transcript import below
 // it): "Chỉnh sửa khảo sát" opens the form, Hủy and Lưu khảo sát close it. The form stays open while the survey is not done.
+// A cố vấn học tập or the Khoa working in the student's page fills it in the same way (user 2026-11-10: "Khảo sát định hướng
+// … cố vấn học tập và quản trị viên làm luôn nhé", policy 2026-11-10): no consent box (no consent in the student's name),
+// a confirmation before saving, never Xóa câu trả lời; the API logs it and tells the student.
 
 async function send<T>(action: SurveyAction, init: RequestInit & { consent?: boolean } = {}): Promise<T> {
   const { consent, ...request } = init;
@@ -66,13 +70,17 @@ export type SurveyUi = {
   error: string;
 };
 
-/** Every required answer is saved, under a consent that still counts. */
+/**
+ * Every required answer is saved, under a consent that still counts, or filled in for the student by a cố vấn học tập or
+ * the Khoa (savedBy, policy 2026-11-10; the API's surveyUsable also checks the consent was not withdrawn).
+ */
 export const surveyDone = (data: Pick<SurveyResponse, "survey" | "consentVersion">) =>
-  data.survey?.complete === true && isValidConsent(data.consentVersion);
+  data.survey?.complete === true && (isValidConsent(data.consentVersion) || Boolean(data.survey.savedBy));
 
 /**
  * Just loaded: the summary when the survey is done, else the form (answers missing, or waiting for consent to a newer
- * policy); never the form for a cố vấn học tập, who only reads the answers (policy 2026-11-03).
+ * policy). A cố vấn học tập or the Khoa starts on the summary, or a note when nothing is stored, and opens the form with
+ * Chỉnh sửa khảo sát or Làm khảo sát thay sinh viên (policy 2026-11-10).
  */
 export const loadedUi = (data: SurveyResponse, advisor = isAdvisorView()): SurveyUi => ({
   editing: !advisor && !surveyDone(data), draft: draftOf(data.survey, data.previous), consented: false, attempted: false, message: "", error: "",
@@ -86,11 +94,16 @@ export const cancelledUi = (ui: SurveyUi, data: Pick<SurveyResponse, "survey" | 
   ...ui, editing: false, draft: draftOf(data.survey, data.previous), consented: false, attempted: false, error: "",
 });
 
-/** "Lưu khảo sát" went through: back to the summary of the saved answers. */
-export const savedUi = (survey: StudentSurvey | null): SurveyUi => ({
+/** "Lưu khảo sát" went through: back to the summary of the saved answers. advisor: saved for the student. */
+export const savedUi = (survey: StudentSurvey | null, advisor = false): SurveyUi => ({
   editing: false, draft: draftOf(survey), consented: false, attempted: false, error: "",
-  message: "Đã lưu khảo sát định hướng. EduPath AI sẽ dùng các câu trả lời này khi soạn lộ trình học tập cho bạn.",
+  message: advisor ? "Đã lưu khảo sát định hướng của sinh viên. EduPath AI sẽ dùng các câu trả lời này khi soạn lộ trình học tập cho sinh viên."
+    : "Đã lưu khảo sát định hướng. EduPath AI sẽ dùng các câu trả lời này khi soạn lộ trình học tập cho bạn.",
 });
+
+/** ", do cố vấn học tập làm thay bạn" after the date of answers filled in for the student (to the student, or to staff). */
+const savedByText = (savedBy: StudentSurvey["savedBy"], advisor: boolean) => savedBy
+  ? `, do ${savedBy === "admin" ? "cán bộ Khoa" : "cố vấn học tập"} làm thay ${advisor ? "sinh viên" : "bạn"}` : "";
 
 const deletedUi = (): SurveyUi => ({
   editing: true, draft: draftOf(null), consented: false, attempted: false, error: "",
@@ -127,7 +140,7 @@ type SurveyCardActions = {
 const noop = () => {};
 const NO_ACTIONS: SurveyCardActions = { edit: noop, cancel: noop, askDelete: noop, save: noop, draft: noop, consent: noop };
 
-/** The card of the loaded survey: the summary, or the form while it is being filled in (never for a cố vấn học tập). */
+/** The card of the loaded survey: the summary, or the form while it is being filled in (by the student or for them). */
 export function SurveyCard({ data, ui, busy = false, actions = NO_ACTIONS, refs = {}, children }: {
   data: SurveyResponse; ui: SurveyUi; busy?: boolean; actions?: SurveyCardActions;
   refs?: { heading?: Ref<HTMLHeadingElement>; form?: Ref<HTMLFormElement>; editButton?: Ref<HTMLButtonElement> };
@@ -137,12 +150,15 @@ export function SurveyCard({ data, ui, busy = false, actions = NO_ACTIONS, refs 
   const { questions, survey, achievementsMax, interests } = data;
   const { draft, consented, attempted } = ui;
   const advisor = isAdvisorView();
-  const needsConsent = !isValidConsent(data.consentVersion);
+  // The student agrees when saving; a cố vấn học tập or the Khoa never agrees in the student's name (a note instead).
+  const needsConsent = !advisor && !isValidConsent(data.consentVersion);
   const done = surveyDone(data);
-  // With nothing stored the form is the only view; a cố vấn học tập reads a note instead.
-  const formOpen = !advisor && (ui.editing || !survey);
-  // Stored answers that no longer count: what to add before they do.
-  const gaps = surveyGaps(questions, survey, data.consentVersion);
+  // With nothing stored the student's only view is the form; a cố vấn học tập reads a note and opens the form by its button.
+  const formOpen = ui.editing || (!advisor && !survey);
+  // Stored answers that no longer count: what to add before they do (no consent to give when working for the student).
+  const gaps = surveyGaps(questions, survey, data.consentVersion, !advisor);
+  // Nothing may be filled in for a student who deleted the answers and withdrew the consent (API: survey_withdrawn).
+  const canAct = !advisor || Boolean(survey) || !data.withdrawn;
   const problems = surveyProblems(questions, draft, { needsConsent, consented, achievementsMax });
   const shown = new Map<SurveyField, string>(attempted ? problems : []);
   const errorId = (field: SurveyField) => `ps-error-${field.replace(":", "-")}`;
@@ -159,11 +175,11 @@ export function SurveyCard({ data, ui, busy = false, actions = NO_ACTIONS, refs 
         </div>
         {formOpen || !survey
           ? <p className="sw-muted ps-intro">Trả lời {questions.length} câu hỏi ngắn, cho biết thế mạnh, sở trường và thành tích của bạn. EduPath AI dùng các câu trả lời này để tư vấn lộ trình học tập sát với mục tiêu của bạn{done ? "." : ". Bạn cần hoàn thành khảo sát trước khi tạo Lộ trình AI."}</p>
-          : updated !== "—" && <p className="sw-muted ps-updated">Cập nhật lúc {updated}</p>}
+          : updated !== "—" && <p className="sw-muted ps-updated">Cập nhật lúc {updated}{savedByText(survey.savedBy, advisor)}</p>}
       </div>
       {/* Like "Chỉnh sửa thông tin" of Mục tiêu học tập; after saving, the message is read with the button that gets the focus. */}
-      {!formOpen && survey && !advisor && <button ref={refs.editButton} type="button" className="sw-text-link" onClick={actions.edit}
-        aria-describedby={ui.message ? "ps-message" : undefined}><Icon name="edit" />Chỉnh sửa khảo sát</button>}
+      {!formOpen && (survey || advisor) && canAct && <button ref={refs.editButton} type="button" className="sw-text-link" onClick={actions.edit}
+        aria-describedby={ui.message ? "ps-message" : undefined}><Icon name="edit" />{survey ? "Chỉnh sửa khảo sát" : "Làm khảo sát thay sinh viên"}</button>}
     </div>
     {ui.message && <p className="sr-success" id="ps-message" role="status">{ui.message}</p>}
     {gaps.length > 0 && <div className="ps-gaps" role="note">
@@ -226,24 +242,24 @@ export function SurveyCard({ data, ui, busy = false, actions = NO_ACTIONS, refs 
           <label>
             <input type="checkbox" checked={consented} onChange={(event) => actions.consent(event.target.checked)}
               aria-describedby={shown.has("consent") ? errorId("consent") : undefined} />
-            <span>Tôi đồng ý để EduPath AI dùng câu trả lời khảo sát (kể cả thế mạnh, sở trường) và thành tích của tôi để tư vấn lộ trình học tập bằng AI, theo <a href={surveyPolicyHref} target="_blank" rel="noreferrer">Chính sách bảo mật</a>.{survey ? " (Chính sách vừa được cập nhật, vui lòng xác nhận lại.)" : ""}</span>
+            <span>Tôi đồng ý để EduPath AI dùng câu trả lời khảo sát (kể cả thế mạnh, sở trường) và thành tích của tôi để tư vấn lộ trình học tập bằng AI, theo <a href={surveyPolicyHref} target="_blank" rel="noreferrer">Chính sách bảo mật</a>.{data.consentVersion ? " (Chính sách vừa được cập nhật, vui lòng xác nhận lại.)" : ""}</span>
           </label>
           {fieldError("consent")}
         </div>}
+        {advisor && <p className="sw-advisor-note">Bạn làm khảo sát thay sinh viên; sinh viên sẽ nhận thông báo và có thể sửa lại.</p>}
       </fieldset>
       {ui.error && <p className="sr-error" role="alert">{ui.error}</p>}
       <p className="sr-only" role="alert">{attempted ? problemSummary(problems.length) : ""}</p>
       <div className="sr-actions sr-form-actions">
         {/* Stored answers can always go back to the summary or be deleted, even before they count again. */}
-        {survey ? <button type="button" className="sr-secondary" disabled={busy} onClick={actions.cancel}><Icon name="close" /> Hủy</button> : <span />}
-        {survey && <button type="button" className="sw-text-link ps-delete" disabled={busy} onClick={actions.askDelete}><Icon name="trash" /> Xóa câu trả lời</button>}
+        {survey || advisor ? <button type="button" className="sr-secondary" disabled={busy} onClick={actions.cancel}><Icon name="close" /> Hủy</button> : <span />}
+        {survey && !advisor && <button type="button" className="sw-text-link ps-delete" disabled={busy} onClick={actions.askDelete}><Icon name="trash" /> Xóa câu trả lời</button>}
         {attempted && problems.length > 0 && <span className="ps-summary" aria-hidden="true">{problemSummary(problems.length)}</span>}
         <button className="sw-primary" disabled={busy}><Icon name="save" /> {busy ? "Đang lưu…" : "Lưu khảo sát"}</button>
       </div>
     </form> : survey && <SurveySummary data={data} survey={survey} />}
-    {!formOpen && advisor && <p className="sw-advisor-note">{survey
-      ? "Bạn chỉ xem câu trả lời; sinh viên tự sửa hoặc xóa khảo sát."
-      : "Sinh viên chưa làm Khảo sát định hướng. Chỉ sinh viên tự làm được khảo sát."}</p>}
+    {!formOpen && advisor && !survey && <p className="sw-advisor-note">{canAct ? "Sinh viên chưa làm Khảo sát định hướng."
+      : "Sinh viên đã xóa câu trả lời khảo sát và rút lại sự đồng ý, nên bạn không làm khảo sát thay được."}</p>}
     {children}
   </section>;
 }
@@ -254,6 +270,8 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
   const [reload, setReload] = useState(0);
   const [ui, setUi] = useState<SurveyUi>(() => ({ editing: false, draft: draftOf(null), consented: false, attempted: false, message: "", error: "" }));
   const [busy, setBusy] = useState(false);
+  // Saving for the student waits for Lưu khảo sát in the confirmation (acting-confirm.tsx).
+  const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState("");
   const form = useRef<HTMLFormElement>(null);
@@ -286,7 +304,8 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
   if (!data) return <section className="sw-panel ps-survey" id={PROFILE_SECTIONS.survey} aria-busy="true"><p role="status">Đang tải khảo sát định hướng…</p></section>;
 
   const { questions, survey, achievementsMax } = data;
-  const needsConsent = !isValidConsent(data.consentVersion);
+  const advisor = isAdvisorView();
+  const needsConsent = !advisor && !isValidConsent(data.consentVersion);
   const problems = surveyProblems(questions, ui.draft, { needsConsent, consented: ui.consented, achievementsMax });
 
   const edit = () => {
@@ -303,7 +322,7 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
   };
   const askDelete = () => { setDeleting(true); setDeleteError(""); };
 
-  const save = async (event: FormEvent) => {
+  const save = (event: FormEvent) => {
     event.preventDefault();
     setUi((current) => ({ ...current, attempted: true, message: "" }));
     if (problems.length) {
@@ -311,6 +330,11 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
       form.current?.querySelector<HTMLElement>(`[data-field="${field}"] input, [data-field="${field}"] textarea`)?.focus();
       return;
     }
+    if (advisor) setConfirming(true);
+    else void submit();
+  };
+
+  const submit = async () => {
     setBusy(true);
     setUi((current) => ({ ...current, error: "" }));
     const { draft } = ui;
@@ -321,7 +345,7 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
       };
       const saved = await send<Pick<SurveyResponse, "survey" | "consentVersion">>("save", { method: "PUT", body: JSON.stringify(body), consent: needsConsent });
       setData({ ...data, survey: saved.survey, previous: null, consentVersion: saved.consentVersion });
-      setUi(savedUi(saved.survey));
+      setUi(savedUi(saved.survey, advisor));
       // The form closes into the summary: back to "Chỉnh sửa khảo sát", else the heading.
       focusNext.current = () => editButton.current ?? heading.current;
       onSaved();
@@ -351,10 +375,12 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
 
   return <SurveyCard data={data} ui={ui} busy={busy} refs={{ heading, form, editButton }}
     actions={{
-      edit, cancel, askDelete, save: (event) => void save(event),
+      edit, cancel, askDelete, save,
       draft: (draft) => setUi((current) => ({ ...current, draft })),
       consent: (consented) => setUi((current) => ({ ...current, consented })),
     }}>
     {deleting && <DeleteSurveyDialog busy={busy} error={deleteError} onClose={() => setDeleting(false)} onConfirm={() => void remove()} />}
+    {confirming && <ActingConfirmDialog {...surveyConfirm(Boolean(survey))} onClose={() => setConfirming(false)}
+      onConfirm={() => { setConfirming(false); void submit(); }} />}
   </SurveyCard>;
 }

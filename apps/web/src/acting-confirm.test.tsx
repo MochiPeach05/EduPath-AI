@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { ActingConfirmDialog, assessmentConfirm, goalsConfirm, roadmapConfirm } from "./acting-confirm";
+import { ActingConfirmDialog, assessmentConfirm, goalsConfirm, planConfirm, roadmapConfirm, surveyConfirm } from "./acting-confirm";
 
 // QA 2026-11-07: an advisor's Đánh giá lại and Tạo lộ trình replace the student's results and notify the student.
 describe("the confirmation of an action done for a student", () => {
@@ -29,5 +29,14 @@ describe("the confirmation of an action done for a student", () => {
     const both = goalsConfirm({ specialty: null, career: null });
     expect(both.title).toBe("Đổi chuyên ngành và vị trí nghề nghiệp mục tiêu thay sinh viên");
     expect(both.text).toMatch(/^Sinh viên sẽ chưa có chuyên ngành \(Chưa xác định\)\. Sinh viên sẽ không còn vị trí nghề nghiệp mục tiêu\. /);
+  });
+
+  it("asks once before editing Kế hoạch học kỳ and before saving Khảo sát định hướng for the student (user 2026-11-10)", () => {
+    expect(planConfirm).toMatchObject({ title: "Sửa Kế hoạch học kỳ thay sinh viên", confirm: "Sửa kế hoạch" });
+    expect(planConfirm.text).toContain("được lưu ngay vào Kế hoạch học kỳ của sinh viên, như khi sinh viên tự sửa");
+    expect(surveyConfirm(false)).toMatchObject({ title: "Lưu Khảo sát định hướng thay sinh viên", confirm: "Lưu khảo sát" });
+    expect(surveyConfirm(false).text).toMatch(/^Các câu trả lời này sẽ được lưu làm Khảo sát định hướng của sinh viên\. /);
+    expect(surveyConfirm(true).text).toMatch(/^Câu trả lời khảo sát hiện tại của sinh viên sẽ được thay bằng các câu trả lời này\. /);
+    for (const words of [planConfirm, surveyConfirm(true), surveyConfirm(false)]) expect(words.text).toContain("Sinh viên sẽ nhận thông báo trong chuông");
   });
 });

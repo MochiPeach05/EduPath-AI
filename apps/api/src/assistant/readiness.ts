@@ -9,8 +9,7 @@
 import type { PoolClient } from "pg";
 import { fold } from "../competency-assessment/specialty.js";
 import type { DatabasePool } from "../db/pool.js";
-import { activeConsentVersion, isValidConsent } from "../student/consent.js";
-import { readSurvey } from "../student/survey.js";
+import { readSurvey, surveyUsable } from "../student/survey.js";
 import type { AssistantSourceKind } from "./facts.js";
 import type { AssistantIntent } from "./intent.js";
 
@@ -30,9 +29,9 @@ export async function readReadiness(db: Db, userId: string): Promise<Readiness> 
        EXISTS (SELECT 1 FROM student_profiles p WHERE p.user_id=$1 AND p.career_position_id IS NOT NULL) AS career,
        EXISTS (SELECT 1 FROM stu_comp_assessments a WHERE a.user_id=$1) AS assessment,
        EXISTS (SELECT 1 FROM stu_roadmaps r WHERE r.user_id=$1 AND r.status='completed') AS roadmap`, [userId])).rows[0];
-  // The survey counts as on Tổng quan: answered, and agreed to under a policy whose consents still count.
-  const survey = await readSurvey(db, userId);
-  const surveyDone = survey?.complete === true && isValidConsent(await activeConsentVersion(db, userId, "profile_survey"));
+  // The survey counts as on Tổng quan: answered, and agreed to under a policy whose consents still count, or filled in
+  // for the student by a cố vấn học tập or the Khoa (surveyUsable, policy 2026-11-10).
+  const surveyDone = await surveyUsable(db, userId, await readSurvey(db, userId));
   return {
     transcript: row?.transcript === true, specialty: row?.specialty === true, career: row?.career === true,
     survey: surveyDone, assessment: row?.assessment === true, roadmap: row?.roadmap === true,

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { DatabasePool } from "../db/pool.js";
+import { syntheticSurveyRow } from "../roadmap/test-fixture.js";
 import { detectIntents } from "./intent.js";
 import { READINESS_ANSWER_VERSION, readinessAnswer, readReadiness, suggestedQuestions, type Readiness } from "./readiness.js";
 
@@ -31,6 +32,23 @@ describe("readReadiness", () => {
     expect(query.mock.calls[0]?.[1]).toEqual([userId]);
     const empty = { query: vi.fn(async () => ({ rows: [] })) } as unknown as DatabasePool;
     expect(await readReadiness(empty, userId)).toEqual(none);
+  });
+
+  it("counts a complete survey a cố vấn học tập or the Khoa filled in, unless the student withdrew the consent (policy 2026-11-10)", async () => {
+    const state = { withdrawn: false, savedBy: "advisor" as string | null };
+    const query = vi.fn(async (sql: string) => {
+      if (sql.includes("AS withdrawn")) return { rows: [{ withdrawn: state.withdrawn }] };
+      if (sql.includes("FROM stu_profile_surveys")) return { rows: [{ ...syntheticSurveyRow(), saved_by_role: state.savedBy }] };
+      if (sql.includes("FROM data_consents")) return { rows: [] };
+      return { rows: [{ transcript: true, specialty: true, career: true, assessment: false, roadmap: false }] };
+    });
+    const db = { query } as unknown as DatabasePool;
+    expect((await readReadiness(db, userId)).survey).toBe(true);
+    state.withdrawn = true;
+    expect((await readReadiness(db, userId)).survey).toBe(false);
+    state.withdrawn = false;
+    state.savedBy = null;
+    expect((await readReadiness(db, userId)).survey).toBe(false);
   });
 });
 

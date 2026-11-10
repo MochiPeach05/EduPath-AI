@@ -204,8 +204,9 @@ export function portalGuides(): PortalGuide[] {
     ]],
     ["co-van-va-can-bo-khoa", "Cố vấn học tập và cán bộ Khoa xem và làm thay được gì", "#profile", [
       "Cố vấn học tập được Khoa phân công cho lớp của bạn, quản trị viên của Khoa và Ban chủ nhiệm khoa mở được trang EduPath AI của bạn: hồ sơ, bảng điểm (kể cả tệp PDF), khảo sát định hướng và thành tích, đánh giá năng lực, khoảng trống kỹ năng, định hướng nghề nghiệp, lộ trình, kế hoạch học kỳ và xét tốt nghiệp.",
-      "- Họ có thể làm thay bạn: import bảng điểm, chọn chuyên ngành và vị trí nghề nghiệp mục tiêu, chạy đánh giá năng lực và tạo lại nhận xét AI, tạo Lộ trình AI, tạo lại lời khuyên xét tốt nghiệp và hỏi Trợ lý AI; cuộc trò chuyện đó được ghi là do cố vấn học tập hay cán bộ Khoa tạo và bạn xem được.",
-      "- Họ không làm hay sửa khảo sát, không đồng ý hay rút đồng ý thay bạn, không xóa dữ liệu, không sửa kế hoạch học kỳ, và không xem thông báo trong chuông cũng như các cuộc trò chuyện Trợ lý AI do bạn tạo.",
+      "- Họ có thể làm thay bạn: import bảng điểm, chọn chuyên ngành và vị trí nghề nghiệp mục tiêu, sửa kế hoạch học kỳ, làm khảo sát định hướng, chạy đánh giá năng lực và tạo lại nhận xét AI, tạo Lộ trình AI, tạo lại lời khuyên xét tốt nghiệp và hỏi Trợ lý AI; cuộc trò chuyện đó được ghi là do cố vấn học tập hay cán bộ Khoa tạo và bạn xem được.",
+      "- Khảo sát họ làm thay được dùng cho các chức năng AI của bạn như khảo sát bạn tự làm, cho đến khi bạn sửa lại hoặc rút đồng ý.",
+      "- Họ không đồng ý hay rút đồng ý thay bạn, không xóa dữ liệu, và không xem thông báo trong chuông cũng như các cuộc trò chuyện Trợ lý AI do bạn tạo.",
       "- Mỗi lần mở trang của bạn và mỗi việc làm thay đều được ghi vào nhật ký thao tác, và bạn nhận một thông báo trong chuông khi có người làm thay bạn. Khi Khoa đổi phân công lớp, cố vấn cũ không còn xem được trang của bạn.",
     ]],
     ["luu-va-xoa-du-lieu", "Lưu giữ và xóa dữ liệu", "#profile", [

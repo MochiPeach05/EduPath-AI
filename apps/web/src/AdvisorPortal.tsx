@@ -172,7 +172,7 @@ function StudentManagement({ scope }: { scope: StudentScope }) {
       <div className="career-list-heading">
         <div>
           <h2 id="av-students-title">{text.students}{students.data && <span className="am-count">{students.data.total}</span>}</h2>
-          <p>Ở trang sinh viên, bạn xem được các mục sinh viên đã cung cấp, có thể import bảng điểm, chọn chuyên ngành và vị trí nghề nghiệp mục tiêu, chạy Đánh giá năng lực, Lộ trình AI và hỏi Trợ lý AI thay sinh viên. Mỗi việc làm thay được ghi vào Nhật ký thao tác và báo cho sinh viên.</p>
+          <p>Ở trang sinh viên, bạn xem được các mục sinh viên đã cung cấp, có thể import bảng điểm, chọn chuyên ngành và vị trí nghề nghiệp mục tiêu, sửa Kế hoạch học kỳ, làm Khảo sát định hướng, chạy Đánh giá năng lực, Lộ trình AI và hỏi Trợ lý AI thay sinh viên. Mỗi việc làm thay được ghi vào Nhật ký thao tác và báo cho sinh viên.</p>
         </div>
       </div>
       <CheckedForm className="cm-filters av-student-filters" onSubmit={(event) => { event.preventDefault(); flush(); }}>

@@ -44,25 +44,22 @@ function actionOf(id: string, profile: StudentProfile): string | null {
   return null;
 }
 
-/** The steps a cố vấn học tập or a Khoa admin may do for the student: all but the survey (policy 2026-11-10). */
-const ACTING_STEPS: ReadonlySet<string> = new Set(["transcript", "specialty", "career"]);
-
 /** A missing step as an advisor reads it: the transcript and the survey in the student's words, never "của bạn". */
 function advisorNote(item: { id: string; hint: string }, profile: StudentProfile): string {
   if (item.id === "transcript") return "Chưa có bảng điểm";
-  if (item.id === "survey") return profile.surveyUpdatedAt ? "Sinh viên chưa làm xong" : "Sinh viên chưa làm";
+  if (item.id === "survey") return profile.surveyWithdrawn ? "Sinh viên đã rút đồng ý" : profile.surveyUpdatedAt ? "Sinh viên chưa làm xong" : "Sinh viên chưa làm";
   return item.hint;
 }
 
 /**
- * The four steps of the profile. The next step is the first one missing, among those the reader may do: a cố vấn học
- * tập or a Khoa admin imports the transcript and chooses the specialty and the target for the student (policy
- * 2026-11-10) but never answers the survey, so in their view the survey is never the next step and only says what the
- * student lacks.
+ * The four steps of the profile. The next step is the first one missing: a cố vấn học tập or a Khoa admin may do each of
+ * them for the student (the transcript, the specialty and the target, and since the same day Khảo sát định hướng too;
+ * policy 2026-11-10), so their view points at the same step, its notes in the student's words; only a survey whose consent
+ * the student withdrew is never theirs to do.
  */
 export function profileSteps(profile: StudentProfile, advisorView = false): ProfileStep[] {
   const items = requiredProfileItems(profile, profile.hasTranscript === true);
-  const next = items.find((item) => !item.done && (!advisorView || ACTING_STEPS.has(item.id)));
+  const next = items.find((item) => !item.done && !(advisorView && item.id === "survey" && profile.surveyWithdrawn));
   return items.map((item) => ({
     id: item.id,
     label: item.label,
@@ -97,7 +94,7 @@ export default function StudentProfileSteps({ profile, advisorView = isAdvisorVi
       <h2 id="sps-title">{advisorView ? "Hồ sơ của sinh viên" : "Hoàn thành hồ sơ"}</h2>
       <span className="sps-count">Đã xong {count}</span>
       <p>{advisorView
-        ? "Bạn import được bảng điểm, chọn chuyên ngành và vị trí nghề nghiệp mục tiêu thay sinh viên. Khảo sát định hướng do sinh viên tự làm."
+        ? "Bạn import được bảng điểm, chọn chuyên ngành, vị trí nghề nghiệp mục tiêu và làm Khảo sát định hướng thay sinh viên."
         : `EduPath AI cần đủ ${steps.length} mục này để đánh giá năng lực và gợi ý lộ trình học tập cho bạn.`}</p>
     </div>
     <ol className="sps-steps">{steps.map((step, index) => <li key={step.id}>

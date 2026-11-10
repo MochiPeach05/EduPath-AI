@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";
 import StudentProfileSurvey, { SurveyCard, cancelledUi, loadedUi, openedUi, savedUi, type SurveyUi } from "./StudentProfileSurvey";
-import { draftOf, type StudentSurvey, type SurveyQuestion, type SurveyResponse } from "./profile-survey";
+import { draftOf, surveyProblems, type StudentSurvey, type SurveyQuestion, type SurveyResponse } from "./profile-survey";
 import { policyVersion } from "./public-information";
 import { installAdvisorFetch, stopActing } from "./advisor-view";
 
@@ -155,11 +155,12 @@ describe("Khảo sát định hướng not done", () => {
   });
 });
 
-describe("Khảo sát định hướng in a cố vấn học tập's tab (policy 2026-11-03)", () => {
+describe("Khảo sát định hướng in the tab of a cố vấn học tập or the Khoa (policy 2026-11-10)", () => {
   afterEach(() => stopActing());
   const advisor = () => installAdvisorFetch("00000000-0000-4000-8000-0000000e2e05");
+  const note = "Bạn làm khảo sát thay sinh viên; sinh viên sẽ nhận thông báo và có thể sửa lại.";
 
-  it("shows the summary read-only, with no Chỉnh sửa khảo sát", () => {
+  it("starts on the summary, with Chỉnh sửa khảo sát and never Xóa câu trả lời", () => {
     advisor();
     const data = response();
     const ui = loadedUi(data);
@@ -168,28 +169,75 @@ describe("Khảo sát định hướng in a cố vấn học tập's tab (policy
     expect(isForm(html)).toBe(false);
     expect(html).toContain('<span class="sw-tag sw-tag-green">Đã hoàn thành</span>');
     expect(html).toContain("<dt>Mục tiêu sau tốt nghiệp</dt><dd>Đi làm ngay</dd>");
-    expect(html).toContain("<li>Python</li>");
-    expect(html).toContain('<p class="sw-advisor-note">Bạn chỉ xem câu trả lời; sinh viên tự sửa hoặc xóa khảo sát.</p>');
-    expect(html).not.toContain("Chỉnh sửa khảo sát");
-    expect(html).not.toContain("Xóa câu trả lời");
-    // Never the form, whatever the state says.
-    expect(isForm(render(data, { ...ui, editing: true }))).toBe(false);
+    expect(html).toMatch(editLink);
+    for (const gone of ["Bạn chỉ xem", "sinh viên tự sửa", "Xóa câu trả lời"]) expect(html).not.toContain(gone);
   });
 
-  it("keeps an unfinished survey read-only, and says when there is none", () => {
+  it("opens the form without the student's consent box, with a note instead, Hủy and no Xóa câu trả lời", () => {
     advisor();
-    const data = response({ survey: partial });
-    const ui = loadedUi(data);
+    // The student's consent no longer counts (an older policy): staff still save it, never agreeing for the student.
+    const data = response({ consentVersion: "2026-10-24" });
+    const html = render(data, openedUi(loadedUi(data)));
+    expect(isForm(html)).toBe(true);
+    expect(html).toContain(`<p class="sw-advisor-note">${note}</p>`);
+    expect(html).toContain("Hủy</button>");
+    for (const gone of ["Tôi đồng ý", "Xóa câu trả lời", "Xác nhận lại theo chính sách mới", "Đánh dấu ô đồng ý"]) expect(html).not.toContain(gone);
+    // Nothing blocks saving but the answers themselves.
+    expect(surveyProblems(questions, openedUi(loadedUi(data)).draft, { needsConsent: false, consented: false, achievementsMax: 1000 })).toEqual([]);
+  });
+
+  it("offers Làm khảo sát thay sinh viên when there is none, and nothing after the student withdrew the consent", () => {
+    advisor();
+    const none = response({ survey: null, consentVersion: null });
+    const ui = loadedUi(none);
+    expect(ui.editing).toBe(false);
+    const empty = render(none, ui);
+    expect(isForm(empty)).toBe(false);
+    expect(empty).toContain('<p class="sw-advisor-note">Sinh viên chưa làm Khảo sát định hướng.</p>');
+    expect(empty).toMatch(/<button type="button" class="sw-text-link"><svg.*?<\/svg>Làm khảo sát thay sinh viên<\/button>/);
+    const opened = render(none, openedUi(ui));
+    expect(isForm(opened)).toBe(true);
+    expect(opened).toContain("Hủy</button>");
+    expect(opened).toContain(note);
+    const withdrawn = response({ survey: null, consentVersion: null, withdrawn: true });
+    const refused = render(withdrawn, loadedUi(withdrawn));
+    expect(refused).toContain("Sinh viên đã xóa câu trả lời khảo sát và rút lại sự đồng ý, nên bạn không làm khảo sát thay được.");
+    expect(refused).not.toContain("Làm khảo sát thay sinh viên");
+    // An unfinished survey: what it lacks, without the consent, and Chỉnh sửa khảo sát.
+    const unfinished = render(response({ survey: partial, consentVersion: null }), loadedUi(response({ survey: partial })));
+    expect(unfinished).toContain("<strong>Để hoàn thành khảo sát, bạn cần:</strong><ul><li>Trả lời 1 câu hỏi còn thiếu</li></ul>");
+    expect(unfinished).toMatch(editLink);
+  });
+
+  it("says who filled the answers in, and that they count", () => {
+    advisor();
+    const data = response({ survey: { ...survey, savedBy: "admin" }, consentVersion: null });
+    const html = render(data, loadedUi(data));
+    expect(html).toContain('<span class="sw-tag sw-tag-green">Đã hoàn thành</span>');
+    expect(html).toContain('<p class="sw-muted ps-updated">Cập nhật lúc 10:15 24/10/2026, do cán bộ Khoa làm thay sinh viên</p>');
+    expect(savedUi(survey, true).message).toBe("Đã lưu khảo sát định hướng của sinh viên. EduPath AI sẽ dùng các câu trả lời này khi soạn lộ trình học tập cho sinh viên.");
+  });
+});
+
+describe("Khảo sát định hướng a cố vấn học tập filled in, in the student's own page (policy 2026-11-10)", () => {
+  const data = response({ survey: { ...survey, savedBy: "advisor" }, consentVersion: null });
+
+  it("counts without the student's consent and says who filled it in", () => {
+    const ui = loadedUi(data, false);
     expect(ui.editing).toBe(false);
     const html = render(data, ui);
-    expect(isForm(html)).toBe(false);
-    expect(html).toContain('<span class="sw-tag ps-tag-required">Bắt buộc</span>');
-    expect(html).toContain("<li>Trả lời 1 câu hỏi còn thiếu</li>");
-    expect(html).not.toContain("Chỉnh sửa khảo sát");
-    const none = response({ survey: null, consentVersion: null });
-    const empty = render(none, loadedUi(none));
-    expect(isForm(empty)).toBe(false);
-    expect(empty).toContain("Sinh viên chưa làm Khảo sát định hướng. Chỉ sinh viên tự làm được khảo sát.");
+    expect(html).toContain('<span class="sw-tag sw-tag-green">Đã hoàn thành</span>');
+    expect(html).toContain('<p class="sw-muted ps-updated">Cập nhật lúc 10:15 24/10/2026, do cố vấn học tập làm thay bạn</p>');
+    expect(html).not.toContain("Để hoàn thành khảo sát");
+    expect(html).toMatch(editLink);
+  });
+
+  it("asks the student's consent when the student saves it, as for any first save", () => {
+    const html = render(data, openedUi(loadedUi(data, false)));
+    expect(html).toContain("Tôi đồng ý để EduPath AI dùng câu trả lời khảo sát");
+    expect(html).not.toContain("Chính sách vừa được cập nhật");
+    expect(html).toContain("Xóa câu trả lời</button>");
+    expect(html).not.toContain("sw-advisor-note");
   });
 });
 

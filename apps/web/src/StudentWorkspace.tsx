@@ -103,7 +103,7 @@ export function AdvisorViewBanner({ advisorName, role = "advisor", studentName, 
       <span className="sw-advisor-icon" aria-hidden="true"><Icon name="shield" /></span>
       <p className="sw-advisor-text">
         <strong>Bạn đang xem trang của {who} với tư cách {actingAsText(role)}{advisorName ? ` (${advisorName})` : ""}.</strong>{" "}
-        Bạn làm thay được: import bảng điểm, chọn chuyên ngành và vị trí nghề nghiệp mục tiêu, Đánh giá năng lực, Lộ trình AI, lời khuyên xét tốt nghiệp và Trợ lý AI. Mỗi việc làm thay được ghi lại và báo cho sinh viên.
+        Bạn làm thay được: import bảng điểm, chọn chuyên ngành và vị trí nghề nghiệp mục tiêu, Kế hoạch học kỳ, Khảo sát định hướng, Đánh giá năng lực, Lộ trình AI, lời khuyên xét tốt nghiệp và Trợ lý AI. Mỗi việc làm thay được ghi lại và báo cho sinh viên.
       </p>
       <button type="button" className="sw-outline sw-advisor-close" onClick={onClose}><Icon name="close" />Đóng trang sinh viên</button>
     </div>

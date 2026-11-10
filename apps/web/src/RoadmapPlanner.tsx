@@ -87,16 +87,16 @@ function ProposalBox({ context, proposal, names, onApply, onDecline }: {
 }
 
 /**
- * readOnly: a cố vấn học tập's view of the student's plan (advisor-view.ts): the terms as they are, nothing to move, add
- * or apply. suggestions: the AI roadmap's improvements (Danh sách chờ, never added); proposal: what the page proposes to
+ * readOnly: a cố vấn học tập's or the Khoa's view of the student's plan (advisor-view.ts) until they choose Sửa kế hoạch
+ * (onEdit, user 2026-11-10): the terms as they are, nothing to move, add or apply. suggestions: the AI roadmap's improvements (Danh sách chờ, never added); proposal: what the page proposes to
  * change (onApply: Áp dụng; onDecline: Bỏ qua; declined: the student declined one on this visit); cleaned: what an older AI
  * roadmap had added and the student took out on this visit (cleanAiAdded); thesisCleaned: the thesis group's other way
  * taken out on this visit (cleanThesisWay, user 2026-11-03).
  */
-export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, origin, onOpenAi, readOnly = false, suggestions = [], cleaned = [], thesisCleaned = [],
+export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, origin, onOpenAi, readOnly = false, onEdit, suggestions = [], cleaned = [], thesisCleaned = [],
   proposal = null, onApply, onDecline, declined = false }: {
   context: StudyPlanContext; plan: StudyPlanData; onChange: (plan: StudyPlanData) => void; saveState: SaveState; saveError: string;
-  origin: PlanOrigin; onOpenAi: () => void; readOnly?: boolean; suggestions?: readonly AiSuggestion[]; cleaned?: readonly string[]; thesisCleaned?: readonly string[];
+  origin: PlanOrigin; onOpenAi: () => void; readOnly?: boolean; onEdit?: () => void; suggestions?: readonly AiSuggestion[]; cleaned?: readonly string[]; thesisCleaned?: readonly string[];
   proposal?: PlanProposal | null; onApply?: () => void; onDecline?: () => void; declined?: boolean;
 }) {
   const [side, setSide] = useState<"list" | "search">("list");
@@ -162,10 +162,11 @@ export function RoadmapPlanner({ context, plan, onChange, saveState, saveError, 
     <header className="rm-planner-head">
       <div>
         <h2 id="rm-planner-title">Kế hoạch học kỳ</h2>
-        {readOnly ? <p>Kế hoạch các học kỳ tới của sinh viên. Bạn chỉ xem; sinh viên tự sắp xếp và điều chỉnh kế hoạch này.</p> : <p>{plannedCount
+        {readOnly ? <p>Kế hoạch các học kỳ tới của sinh viên.{onEdit ? " Bấm Sửa kế hoạch để sắp xếp, điều chỉnh kế hoạch thay sinh viên." : ""}</p> : <p>{plannedCount
           ? <>Bạn điều chỉnh kế hoạch bằng cách kéo học phần giữa các học kỳ, kéo từ Danh sách chờ vào, hoặc chọn học kỳ ở "Thêm vào" rồi bấm Thêm.</>
           : <>Xếp các học phần còn thiếu vào từng học kỳ: kéo từ Danh sách chờ vào một học kỳ, hoặc chọn học kỳ ở "Thêm vào" rồi bấm Thêm.</>} Kế hoạch tự lưu và được tính ở chế độ Theo kế hoạch của mục Theo dõi tiến độ.</p>}
       </div>
+      {readOnly && onEdit && <button type="button" className="sw-outline" onClick={onEdit}><Icon name="edit" />Sửa kế hoạch</button>}
       {!readOnly && <p className={`rm-save rm-save-${saveState}`} role="status">{saveState === "saving" ? "Đang lưu…" : saveState === "saved" ? "Đã lưu" : saveState === "dirty" ? "Có thay đổi chưa lưu" : saveState === "error" ? saveError || "Chưa lưu được" : ""}</p>}
     </header>
     {!context.curriculum && <p className="rm-note">Chưa có chương trình đào tạo cho khóa của bạn nên chưa có danh sách học phần để lên kế hoạch.</p>}

@@ -7,12 +7,15 @@ import {
   type StudyPlanResponse,
 } from "./study-plan-data";
 import { isAdvisorView } from "./advisor-view";
+import { ActingConfirmDialog, planConfirm } from "./acting-confirm";
 import "./student-roadmap.css";
 
 // #roadmap "Lộ trình học tập" (user 2026-10-24: "Gần như áp dụng theo trang này làm nè cả giao diện luôn", OU's Stellic
 // student guide): Theo dõi tiến độ (with the symbols folded in), Lộ trình AI, then Kế hoạch học kỳ, which starts from the
 // training plan and the AI's proposal for the student to adjust. Stellic's "Schedule term" (weekly timetable) and
-// "Request to graduate" are left out at the user's request.
+// "Request to graduate" are left out at the user's request. A cố vấn học tập or the Khoa working in the student's page
+// edits Kế hoạch học kỳ as the student does after Sửa kế hoạch and one confirmation per visit (user 2026-11-10: "Kế hoạch
+// học kỳ … cố vấn học tập và quản trị viên làm luôn nhé", policy 2026-11-10); the API logs it and tells the student.
 
 /** The tabs and their addresses ("#roadmap/ke-hoach-hoc-ky"): a reload or a shared link opens the same tab. */
 const TABS = [
@@ -77,10 +80,11 @@ async function call<T>(init: RequestInit = {}): Promise<T> {
  * saved at the first edit; what the page would change (the newest AI roadmap's courses, what an AI roadmap of before
  * 2026-11-03 added and the plan must not hold, the thesis group's way the system does not advise) is proposed
  * (planProposal), applied and saved by Áp dụng or declined by Bỏ qua, which saves only what keeps the proposal from coming
- * back (declineProposal). A cố vấn học tập's tab never proposes anything. The plan is read again only when Lộ trình AI đề
- * xuất shows a completed roadmap the loaded data does not know (roadmapShown).
+ * back (declineProposal). editable: false while a cố vấn học tập or the Khoa only looks at the plan, which proposes
+ * nothing then. The plan is read again only when Lộ trình AI đề xuất shows a completed roadmap the loaded data does not know
+ * (roadmapShown).
  */
-function useStudyPlan() {
+function useStudyPlan(editable: boolean) {
   const [loaded, setLoaded] = useState<{ data: StudyPlanResponse | null; error: string | null }>({ data: null, error: null });
   const [plan, setPlan] = useState<StudyPlanData | null>(null);
   const [projection, setProjection] = useState<StudyPlanProjection | null>(null);
@@ -169,8 +173,7 @@ function useStudyPlan() {
 
   const context = loaded.data?.context ?? null;
   const aiProposal = loaded.data?.aiProposal ?? null;
-  const advisor = isAdvisorView();
-  const proposal = useMemo(() => (!advisor && context && plan ? planProposal(context, plan, aiProposal) : null), [advisor, context, plan, aiProposal]);
+  const proposal = useMemo(() => (editable && context && plan ? planProposal(context, plan, aiProposal) : null), [editable, context, plan, aiProposal]);
   const apply = useCallback(() => {
     if (!context || !plan) return;
     // Taken again now, so what the AI added says when (aiAdded.addedAt).
@@ -205,7 +208,12 @@ function useStudyPlan() {
 export default function StudentRoadmap({ notice }: { notice?: ReactNode }) {
   const [tab, setTab] = useState<RoadmapTab>(initialTab);
   const shown = useRef(tab);
-  const study = useStudyPlan();
+  // Working for the student: the plan as it is until Sửa kế hoạch is confirmed, then every edit as the student makes it.
+  const acting = isAdvisorView();
+  const [editing, setEditing] = useState(false);
+  const [confirming, setConfirming] = useState(false);
+  const readOnly = acting && !editing;
+  const study = useStudyPlan(!readOnly);
   const { refreshIfStale } = study;
   const choose = useCallback((next: RoadmapTab) => {
     shown.current = next;
@@ -223,7 +231,6 @@ export default function StudentRoadmap({ notice }: { notice?: ReactNode }) {
     return () => window.removeEventListener("hashchange", follow);
   }, [choose]);
   const needsPlan = tab === "track" || tab === "manual";
-  const readOnly = isAdvisorView();
   return <div className="rm-page">
     <nav className="rm-tabs" role="tablist" aria-label="Lộ trình học tập">
       {TABS.map((item) => <button key={item.id} type="button" role="tab" id={`rm-tab-${item.id}`} aria-selected={tab === item.id}
@@ -237,8 +244,11 @@ export default function StudentRoadmap({ notice }: { notice?: ReactNode }) {
               : tab === "track" ? <RoadmapTrack context={study.context} plan={study.plan} projection={study.projection} origin={study.origin}
                 proposal={study.proposal} onOpenPlanner={() => choose("manual")} />
                 : <RoadmapPlanner context={study.context} plan={study.plan} onChange={study.change} saveState={study.saveState} saveError={study.saveError}
-                  origin={study.origin} onOpenAi={() => choose("ai")} readOnly={readOnly} suggestions={study.suggestions} cleaned={study.cleaned}
-                  thesisCleaned={study.thesisCleaned} proposal={study.proposal} onApply={study.apply} onDecline={study.decline} declined={study.declined} />}
+                  origin={study.origin} onOpenAi={() => choose("ai")} readOnly={readOnly} onEdit={readOnly ? () => setConfirming(true) : undefined}
+                  suggestions={study.suggestions} cleaned={study.cleaned} thesisCleaned={study.thesisCleaned} proposal={study.proposal} onApply={study.apply}
+                  onDecline={study.decline} declined={study.declined} />}
     </div>
+    {confirming && <ActingConfirmDialog {...planConfirm} onClose={() => setConfirming(false)}
+      onConfirm={() => { setConfirming(false); setEditing(true); }} />}
   </div>;
 }

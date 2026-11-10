@@ -1,6 +1,7 @@
 // A cố vấn học tập or a Khoa admin working in a student's page confirms an action that replaces the student's results
 // or choices and tells the student in the bell (QA 2026-11-07: "Đánh giá lại chạy ngay khi bấm … bấm nhầm là có hậu
-// quả"; the specialty and the target vị trí nghề nghiệp since 2026-11-10). The student, in their own page, is not asked.
+// quả"; the specialty and the target vị trí nghề nghiệp, Kế hoạch học kỳ and Khảo sát định hướng since 2026-11-10). The
+// student, in their own page, is not asked.
 import { useLayoutEffect, useRef, type SyntheticEvent } from "react";
 import "./student-records.css";
 
@@ -50,6 +51,22 @@ export function goalsConfirm({ specialty, career }: { specialty?: string | null;
     text: `${changes.join(" ")} Kết quả Đánh giá năng lực đã có chỉ cập nhật theo lựa chọn mới khi đánh giá lại. Sinh viên sẽ nhận thông báo trong chuông.`,
   };
 }
+
+/**
+ * The words of the confirmation before editing Kế hoạch học kỳ for the student (user 2026-11-10, policy 2026-11-10): asked
+ * once per visit, since the plan saves after every change.
+ */
+export const planConfirm = {
+  title: "Sửa Kế hoạch học kỳ thay sinh viên", confirm: "Sửa kế hoạch",
+  text: "Mỗi thay đổi sau đó (thêm, bỏ, chuyển học phần, áp dụng hay bỏ qua đề xuất) được lưu ngay vào Kế hoạch học kỳ của sinh viên, như khi sinh viên tự sửa. Sinh viên sẽ nhận thông báo trong chuông.",
+};
+
+/** The words of the confirmation for Khảo sát định hướng saved for the student (replace: the student already has answers). */
+export const surveyConfirm = (replace: boolean) => ({
+  title: "Lưu Khảo sát định hướng thay sinh viên", confirm: "Lưu khảo sát",
+  text: `${replace ? "Câu trả lời khảo sát hiện tại của sinh viên sẽ được thay bằng các câu trả lời này." : "Các câu trả lời này sẽ được lưu làm Khảo sát định hướng của sinh viên."} `
+    + "EduPath AI sẽ dùng chúng cho Lộ trình AI và Trợ lý AI của sinh viên như khảo sát sinh viên tự làm. Sinh viên sẽ nhận thông báo trong chuông và có thể sửa lại.",
+});
 
 /** The words of the confirmation for Lộ trình AI (replace: the student already has a roadmap). */
 export const roadmapConfirm = (replace: boolean) => ({

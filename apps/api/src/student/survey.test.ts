@@ -5,7 +5,8 @@ import type { AuthenticatedUser } from "../auth/types.js";
 import type { DatabasePool } from "../db/pool.js";
 import { TRANSCRIPT_POLICY_VERSION } from "./consent.js";
 import { createStudentDataRouter } from "./router.js";
-import { ACHIEVEMENTS_MAX, parseSurveyInput, SURVEY_QUESTIONS, surveyFacts } from "./survey.js";
+import { ACHIEVEMENTS_MAX, parseSurveyInput, SURVEY_QUESTIONS, surveyFacts, surveyUsable, type StudentSurvey } from "./survey.js";
+import { SURVEY_COMPLETE_SQL } from "../admin/student-profiles.js";
 
 // Invented answers only.
 const studentId = "11111111-1111-4111-8111-111111111111";
@@ -15,6 +16,9 @@ const student = {
   userId: studentId, identityKey: `${tenantId}:${studentId}`, tenantId, objectId: studentId, name: "Student User",
   email: "student@example.edu", username: "student@example.edu", role: "student", signedInAt: new Date(0).toISOString(),
 } satisfies AuthenticatedUser;
+/** A cố vấn học tập or a Khoa admin working in the student's page (advisors/access.ts sets advisorActing). */
+const staffId = "88888888-8888-4888-8888-888888888888";
+const staff = { ...student, userId: staffId, name: "Cố vấn", email: "co.van@vlu.edu.vn", role: "advisor" } satisfies AuthenticatedUser;
 
 const answers = { goal: "study", environment: "both", company: "large", partTime: "no", leadership: "few", projects: "many",
   internship: "done", selfStudy: "high", english: "working", field: "data" };
@@ -23,10 +27,13 @@ const interests = { interestTech: ["ai_ml", "python_data"], interestHobbies: ["r
 const savedRow = (extra: Record<string, unknown> = {}) => ({ version: "survey-v3", answers, interest_tech: interests.interestTech,
   interest_hobbies: interests.interestHobbies, has_achievements: false, achievements: null, updated_at: new Date("2026-10-24T10:00:00Z"), ...extra });
 
-function setup(options: { consent?: string | null; survey?: boolean; row?: Record<string, unknown>; previous?: Record<string, unknown> } = {}) {
+/** acting: the survey is saved by a cố vấn học tập ("advisor") or the Khoa ("admin"); withdrawn: the student withdrew the consent. */
+function setup(options: { consent?: string | null; survey?: boolean; row?: Record<string, unknown>; previous?: Record<string, unknown>;
+  acting?: "advisor" | "admin"; withdrawn?: boolean } = {}) {
   const consentRows = options.consent ? [{ policy_version: options.consent }] : [];
   const read = async (sql: string) => {
     if (sql.includes("FROM stu_profile_surveys WHERE user_id=$1")) return { rowCount: options.survey ? 1 : 0, rows: options.survey ? [savedRow(options.row)] : [] };
+    if (sql.includes("AS withdrawn")) return { rowCount: 1, rows: [{ withdrawn: options.withdrawn === true }] };
     if (sql.includes("FROM data_consents")) return { rowCount: consentRows.length, rows: consentRows };
     if (sql.includes("FROM student_profiles WHERE user_id=$1")) return { rowCount: options.previous ? 1 : 0, rows: options.previous ? [options.previous] : [] };
     return null;
@@ -36,7 +43,7 @@ function setup(options: { consent?: string | null; survey?: boolean; row?: Recor
     if (sql.includes("SELECT id FROM users")) return { rowCount: 1, rows: [{ id: studentId }] };
     if (sql.startsWith("INSERT INTO stu_profile_surveys")) {
       return { rowCount: 1, rows: [savedRow({ answers: JSON.parse(String(params?.[2])), interest_tech: params?.[3], interest_hobbies: params?.[4],
-        has_achievements: params?.[5], achievements: params?.[6] })] };
+        has_achievements: params?.[5], achievements: params?.[6], saved_by_role: params?.[9] })] };
     }
     if (sql.startsWith("DELETE FROM stu_profile_surveys")) return { rowCount: options.survey ? 1 : 0, rows: [] };
     return (await read(sql)) ?? { rowCount: 1, rows: [] };
@@ -46,7 +53,14 @@ function setup(options: { consent?: string | null; survey?: boolean; row?: Recor
   const pool = { connect, query: poolQuery } as unknown as DatabasePool;
   const app = express();
   app.use(express.json());
-  app.use((req, _res, next) => { req.session = { user: student } as typeof req.session; next(); });
+  app.use((req, _res, next) => {
+    req.session = { user: options.acting ? staff : student } as typeof req.session;
+    if (options.acting) {
+      req.advisorActing = { advisor: staff, student: { user: student, studentCode: null, name: "Student", className: "71K29CNTT99",
+        actorKind: options.acting, actorName: "Cố vấn", advisorName: "Cố vấn" } };
+    }
+    next();
+  });
   app.use("/student", createStudentDataRouter(pool, origin, true));
   app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     res.status(500).json({ error: error instanceof Error ? error.message : "unexpected_error" });
@@ -155,5 +169,73 @@ describe("/student/survey", () => {
 
   it("refuses writes from another origin", async () => {
     await request(setup().app).put("/student/survey").set("Origin", "https://evil.example").send({}).expect(403, { error: "invalid_origin" });
+  });
+});
+
+describe("Khảo sát định hướng filled in by a cố vấn học tập or the Khoa (policy 2026-11-10)", () => {
+  const body = { answers, ...interests, hasAchievements: false };
+  const surveyInsert = (query: ReturnType<typeof setup>["clientQuery"]) =>
+    query.mock.calls.find(([sql]) => String(sql).startsWith("INSERT INTO stu_profile_surveys"))?.[1];
+
+  it("saves without the student's consent, records none even when a consent header comes, and keeps who saved it", async () => {
+    const acting = setup({ acting: "advisor" });
+    const response = await put(acting.app, body, TRANSCRIPT_POLICY_VERSION).expect(200);
+    expect(response.body).toMatchObject({ survey: { answers, ...interests, complete: true, savedBy: "advisor" }, consentVersion: null });
+    expect(acting.sql().some((sql) => sql.includes("data_consents") && /INSERT|UPDATE/.test(sql))).toBe(false);
+    expect(surveyInsert(acting.clientQuery)?.slice(8)).toEqual([staffId, "advisor"]);
+    expect(acting.sql().at(-1)).toBe("COMMIT");
+    // The Khoa over an older consent of the student: saved, the consent left as it was.
+    const admin = setup({ acting: "admin", survey: true, consent: "2026-10-24" });
+    expect((await put(admin.app, body).expect(200)).body).toMatchObject({ survey: { savedBy: "admin" }, consentVersion: "2026-10-24" });
+    expect(admin.sql().some((sql) => sql.includes("data_consents") && /INSERT|UPDATE/.test(sql))).toBe(false);
+  });
+
+  it("refuses once the student withdrew the consent (Xóa câu trả lời), writing nothing", async () => {
+    const refused = setup({ acting: "advisor", withdrawn: true });
+    await put(refused.app, body).expect(409, { error: "survey_withdrawn" });
+    expect(surveyInsert(refused.clientQuery)).toBeUndefined();
+    expect(refused.sql().at(-1)).toBe("ROLLBACK");
+  });
+
+  it("becomes the student's own when the student saves it, under the consent as before", async () => {
+    await put(setup({ survey: true, row: { saved_by_role: "advisor" } }).app, body).expect(400, { error: "consent_required" });
+    const own = setup({ survey: true, row: { saved_by_role: "advisor" } });
+    const response = await put(own.app, body, TRANSCRIPT_POLICY_VERSION).expect(200);
+    expect(response.body).toMatchObject({ survey: { savedBy: null }, consentVersion: TRANSCRIPT_POLICY_VERSION });
+    expect(surveyInsert(own.clientQuery)?.slice(8)).toEqual([null, null]);
+    expect(own.sql().some((sql) => sql.includes("INSERT INTO data_consents"))).toBe(true);
+  });
+
+  it("sends who saved the survey with it, and whether the student withdrew the consent", async () => {
+    expect((await request(setup({ survey: true, row: { saved_by_role: "admin" } }).app).get("/student/survey").expect(200)).body)
+      .toMatchObject({ survey: { savedBy: "admin" }, withdrawn: false });
+    expect((await request(setup({ survey: true, consent: TRANSCRIPT_POLICY_VERSION }).app).get("/student/survey").expect(200)).body.survey.savedBy).toBeNull();
+    expect((await request(setup({ withdrawn: true }).app).get("/student/survey").expect(200)).body).toMatchObject({ survey: null, withdrawn: true });
+  });
+});
+
+describe("when the AI features may use the survey (surveyUsable)", () => {
+  const own: StudentSurvey = { version: "survey-v4", answers, ...interests, hasAchievements: false, achievements: null, updatedAt: "2026-11-10T03:00:00.000Z",
+    complete: true, savedBy: null };
+  const filled: StudentSurvey = { ...own, savedBy: "advisor" };
+  const db = (consent: string | null, withdrawn = false) => ({
+    query: vi.fn(async (sql: string) => (sql.includes("AS withdrawn") ? { rows: [{ withdrawn }] } : { rows: consent ? [{ policy_version: consent }] : [] })),
+  }) as unknown as DatabasePool;
+
+  it("needs the student's consent for their own answers, and none for answers a cố vấn học tập or the Khoa filled in until the student withdraws it", async () => {
+    expect(await surveyUsable(db(TRANSCRIPT_POLICY_VERSION), studentId, own)).toBe(true);
+    expect(await surveyUsable(db(null), studentId, own)).toBe(false);
+    expect(await surveyUsable(db("2026-10-24"), studentId, own)).toBe(false);
+    expect(await surveyUsable(db(null), studentId, filled)).toBe(true);
+    expect(await surveyUsable(db("2026-10-24"), studentId, { ...filled, savedBy: "admin" })).toBe(true);
+    expect(await surveyUsable(db(null, true), studentId, filled)).toBe(false);
+    expect(await surveyUsable(db(TRANSCRIPT_POLICY_VERSION), studentId, { ...filled, complete: false })).toBe(false);
+    expect(await surveyUsable(db(TRANSCRIPT_POLICY_VERSION), studentId, null)).toBe(false);
+  });
+
+  it("is the rule the profile steps and the Tổng quan gate read in SQL (SURVEY_COMPLETE_SQL)", () => {
+    expect(SURVEY_COMPLETE_SQL).toContain("s.saved_by_role IS NOT NULL");
+    expect(SURVEY_COMPLETE_SQL).toContain("c.end_reason = 'withdrawn'");
+    expect(SURVEY_COMPLETE_SQL).toContain("c.policy_version >= '2026-10-25'");
   });
 });

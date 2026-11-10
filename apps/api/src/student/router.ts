@@ -8,7 +8,7 @@ import { requireAuthentication } from "../middleware/authorization.js";
 import { actingAdvisor, studentUser } from "../advisors/access.js";
 import { parseTranscript, TranscriptError, withoutSettledReviews, type TranscriptData } from "./transcript-parser.js";
 import { enqueueTranscript, expireJobs, jobColumns, runAfterTranscriptImport, type TranscriptImportOptions } from "./transcript-jobs.js";
-import { activeConsentVersion, isValidConsent, recordConsent, recordTranscriptConsent, TRANSCRIPT_POLICY_VERSION, withdrawConsent, withdrawTranscriptConsent } from "./consent.js";
+import { activeConsentVersion, consentWithdrawn, isValidConsent, recordConsent, recordTranscriptConsent, TRANSCRIPT_POLICY_VERSION, withdrawConsent, withdrawTranscriptConsent } from "./consent.js";
 import { ACHIEVEMENTS_MAX, deleteSurvey, parseSurveyInput, readPreviousInterests, readSurvey, saveSurvey, SURVEY_QUESTIONS } from "./survey.js";
 import { bothOrNeither, INTEREST_HOBBIES, INTEREST_MAX, INTEREST_TECH, interestFields } from "./interests.js";
 import { deleteCompetencyData } from "../competency-assessment/repository.js";
@@ -91,8 +91,9 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
     finally { client.release(); }
   });
 
-  // "Khảo sát định hướng": the questions and interest lists, the stored answers, what the profile held before the
-  // interests moved into the survey (to start from), and the policy version the student agreed to.
+  // "Khảo sát định hướng": the questions and interest lists, the stored answers (with who saved them for the student,
+  // savedBy), what the profile held before the interests moved into the survey (to start from), the policy version the
+  // student agreed to, and whether the student withdrew that consent (no one may then fill it in for them).
   router.get("/survey", async (req, res) => {
     const userId = studentUser(req).userId;
     const survey = await readSurvey(pool!, userId);
@@ -100,24 +101,29 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
       questions: SURVEY_QUESTIONS, interests: { tech: INTEREST_TECH, hobbies: INTEREST_HOBBIES, max: INTEREST_MAX }, achievementsMax: ACHIEVEMENTS_MAX,
       survey, previous: survey?.interestTech.length ? null : await readPreviousInterests(pool!, userId),
       consentVersion: await activeConsentVersion(pool!, userId, "profile_survey"),
+      withdrawn: await consentWithdrawn(pool!, userId, "profile_survey"),
     });
   });
   // Saving needs consent: to the current policy with this request (X-Consent-Policy-Version), or an active one that still
-  // counts (isValidConsent).
+  // counts (isValidConsent). A cố vấn học tập or the Khoa filling it in for the student (policy 2026-11-10) needs neither
+  // and records none in the student's name (a consent header is ignored); the survey keeps who saved it (savedBy), and a
+  // student who withdrew the consent ("Xóa câu trả lời") keeps that choice, as with the assessment (409 survey_withdrawn).
   router.put("/survey", async (req, res) => {
     const input = parseSurveyInput(req.body);
     if ("error" in input) { res.status(400).json({ error: input.error }); return; }
-    const consentVersion = req.get("x-consent-policy-version");
+    const acting = req.advisorActing ?? null;
+    const consentVersion = acting ? undefined : req.get("x-consent-policy-version");
     if (consentVersion && consentVersion !== TRANSCRIPT_POLICY_VERSION) { res.status(409).json({ error: "policy_outdated" }); return; }
     const userId = studentUser(req).userId;
     const client = await pool!.connect();
     try {
       await client.query("BEGIN");
       await lockStudent(client, studentUser(req));
+      if (acting && await consentWithdrawn(client, userId, "profile_survey")) throw new TranscriptError("survey_withdrawn", 409);
       if (consentVersion) await recordConsent(client, userId, "profile_survey");
       const agreed = consentVersion ?? await activeConsentVersion(client, userId, "profile_survey");
-      if (!isValidConsent(agreed)) throw new TranscriptError("consent_required", 400);
-      const survey = await saveSurvey(client, userId, input.value);
+      if (!acting && !isValidConsent(agreed)) throw new TranscriptError("consent_required", 400);
+      const survey = await saveSurvey(client, userId, input.value, acting && { userId: acting.advisor.userId, role: acting.student.actorKind });
       await client.query("COMMIT");
       res.json({ survey, consentVersion: agreed });
     } catch (error) { await client.query("ROLLBACK"); throw error; }

@@ -14,8 +14,7 @@ import {
 } from "../competency-assessment/ai/worker-protocol.js";
 import type { AssessmentResult } from "../competency-assessment/types.js";
 import type { DatabasePool } from "../db/pool.js";
-import { activeConsentVersion, isValidConsent } from "../student/consent.js";
-import { readSurvey, surveyFacts } from "../student/survey.js";
+import { readSurvey, surveyFacts, surveyUsable } from "../student/survey.js";
 import { buildRoadmapFacts, type RoadmapFacts, type RoadmapRelation } from "./facts.js";
 import { sanitizeText } from "../competency-assessment/ai/prompt.js";
 import { buildRoadmapInput } from "./prompt.js";
@@ -177,11 +176,10 @@ export async function createRoadmap(client: PoolClient, userId: string, options:
   if (options.expire) await options.expire(client);
   const assessment = await newestAssessment(client, userId);
   if (!assessment) throw new RoadmapError("assessment_required", 409);
-  // The answers go to the AI only under consent to the current policy (2026-10-25 added the interests).
+  // The answers go to the AI only under consent to the current policy (2026-10-25 added the interests), or when a cố vấn
+  // học tập or the Khoa filled them in for the student and the student has not withdrawn it (surveyUsable, policy 2026-11-10).
   const survey = await readSurvey(client, userId);
-  if (!survey?.complete || !isValidConsent(await activeConsentVersion(client, userId, "profile_survey"))) {
-    throw new RoadmapError("survey_required", 409);
-  }
+  if (!survey || !await surveyUsable(client, userId, survey)) throw new RoadmapError("survey_required", 409);
   const rows = await readRoadmapRows(client, userId);
   const pending = rows.find((row) => row.status === "queued" || row.status === "processing");
   if (pending?.assessmentId === assessment.id) return { row: pending, created: false };

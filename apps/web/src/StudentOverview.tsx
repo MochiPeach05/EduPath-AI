@@ -29,8 +29,11 @@ export type StudentProfile = {
   email: string | null; careerGoal: string | null; interests: string | null; profileStatus: string;
   /** When the profile survey ("Khảo sát định hướng") was saved; null when not yet. */
   surveyUpdatedAt?: string | null;
-  /** The survey is complete (interests included) and agreed to under the current policy. */
+  /** The survey is complete (interests included) and agreed to under the current policy, or filled in for the student by a
+   *  cố vấn học tập or the Khoa (policy 2026-11-10). */
   surveyComplete?: boolean;
+  /** The student withdrew the consent for the survey (Xóa câu trả lời): no one may fill it in for them. */
+  surveyWithdrawn?: boolean;
   /** A transcript is stored. */
   hasTranscript?: boolean;
 };

@@ -41,8 +41,11 @@ export interface StudentProfileDetail extends StudentProfileSummary {
   interests: string | null;
   /** When the profile survey was last saved (stu_profile_surveys); the answers stay with the student. */
   surveyUpdatedAt?: string | null;
-  /** The survey has the interest lists (survey-v2) and the student agreed to the current policy for it. */
+  /** The survey has the interest lists (survey-v2) and the student agreed to the current policy for it, or a cố vấn học tập
+   *  or the Khoa filled it in for the student (SURVEY_COMPLETE_SQL). */
   surveyComplete?: boolean;
+  /** The student withdrew the consent for the survey (Xóa câu trả lời) and has not given it again: no one fills it in for them. */
+  surveyWithdrawn?: boolean;
   /** A transcript is stored (the student pages list what the profile still lacks). */
   hasTranscript?: boolean;
   username: string | null; careerGoal: string | null;
@@ -62,11 +65,16 @@ export interface StudentProfileRepository {
   transcript(actor: AuthenticatedUser, id: string): Promise<AdminTranscriptView>;
 }
 // The survey counts when it holds the interest lists (survey-v3 or later; v4 dropped the written strengths, 050, 051) and the student's consent for it
-// still counts (consent.ts isValidConsent; the constant is code, not input).
+// still counts (consent.ts isValidConsent; the constant is code, not input), or a cố vấn học tập or the Khoa filled it in
+// for the student (062 saved_by_role, policy 2026-11-10) and the student has not withdrawn that consent: the rule of
+// student/survey.ts surveyUsable.
 export const SURVEY_COMPLETE_SQL = `EXISTS (SELECT 1 FROM stu_profile_surveys s WHERE s.user_id = u.id
     AND s.survey_version NOT IN ('survey-v1', 'survey-v2') AND cardinality(s.interest_tech) > 0 AND cardinality(s.interest_hobbies) > 0
-    AND EXISTS (SELECT 1 FROM data_consents c WHERE c.user_id = s.user_id AND c.purpose = 'profile_survey' AND c.ended_at IS NULL
-      AND c.policy_version >= '${CONSENT_VALID_SINCE}'))`;
+    AND (EXISTS (SELECT 1 FROM data_consents c WHERE c.user_id = s.user_id AND c.purpose = 'profile_survey' AND c.ended_at IS NULL
+      AND c.policy_version >= '${CONSENT_VALID_SINCE}')
+      OR (s.saved_by_role IS NOT NULL
+        AND (EXISTS (SELECT 1 FROM data_consents c WHERE c.user_id = s.user_id AND c.purpose = 'profile_survey' AND c.ended_at IS NULL)
+          OR NOT EXISTS (SELECT 1 FROM data_consents c WHERE c.user_id = s.user_id AND c.purpose = 'profile_survey' AND c.end_reason = 'withdrawn')))))`;
 const surveyComplete = SURVEY_COMPLETE_SQL;
 // Derive completion from saved data so profile edits and transcript deletion stay in sync. Since 2026-10-24 the
 // specialty and the profile survey count too (the student portal asks for both before its AI features); the interests
@@ -126,6 +134,8 @@ export class PostgresStudentProfileRepository implements StudentProfileRepositor
       p.career_goal AS "careerGoal", p.career_position_id AS "careerPositionId", p.specialty, p.major_code AS "majorCode",
       (SELECT json_build_object('id',c.id,'nameVi',c.name_vi,'nameEn',c.name_en,'deletedAt',c.deleted_at) FROM career_positions c WHERE c.id=p.career_position_id) AS "careerPosition", p.interests,
       (SELECT s.updated_at FROM stu_profile_surveys s WHERE s.user_id=u.id) AS "surveyUpdatedAt", ${surveyComplete} AS "surveyComplete",
+      (NOT EXISTS (SELECT 1 FROM data_consents c WHERE c.user_id=u.id AND c.purpose='profile_survey' AND c.ended_at IS NULL)
+        AND EXISTS (SELECT 1 FROM data_consents c WHERE c.user_id=u.id AND c.purpose='profile_survey' AND c.end_reason='withdrawn')) AS "surveyWithdrawn",
       EXISTS (SELECT 1 FROM student_transcripts t WHERE t.user_id = u.id) AS "hasTranscript", u.created_at AS "accountCreatedAt", u.first_login_at AS "firstLoginAt",
       u.last_login_at AS "lastLoginAt", p.created_at AS "profileCreatedAt", p.updated_at AS "profileUpdatedAt"
       FROM users u LEFT JOIN student_profiles p ON p.user_id = u.id

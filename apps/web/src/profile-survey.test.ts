@@ -72,6 +72,10 @@ describe("profile survey form", () => {
       "Trả lời 1 câu hỏi còn thiếu", "Chọn công nghệ trong Thế mạnh của bạn", "Chọn sở trường",
       "Đánh dấu ô đồng ý cho EduPath AI dùng câu trả lời",
     ]);
+    // Answers a cố vấn học tập or the Khoa filled in need no consent (policy 2026-11-10), and staff never give one.
+    expect(surveyGaps(questions, { ...answered, savedBy: "advisor" }, null)).toEqual([]);
+    expect(surveyGaps(questions, answered, "2026-10-24", false)).toEqual([]);
+    expect(surveyGaps(questions, { ...v1, savedBy: "admin" }, null)).toEqual(["Trả lời 1 câu hỏi còn thiếu", "Chọn công nghệ trong Thế mạnh của bạn", "Chọn sở trường"]);
     expect(gapSentence(["Xác nhận lại theo chính sách mới"])).toBe("Xác nhận lại theo chính sách mới");
     expect(gapSentence(["Trả lời 1 câu hỏi còn thiếu", "Chọn sở trường", "Xác nhận lại theo chính sách mới"]))
       .toBe("Trả lời 1 câu hỏi còn thiếu, chọn sở trường và xác nhận lại theo chính sách mới");

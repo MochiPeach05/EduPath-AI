@@ -1,7 +1,8 @@
 // Student API of the study roadmap, mounted at /api/student/roadmap. GET / reads the newest roadmap with the newest
 // competency assessment (a roadmap built from an older one is "stale"), GET /status is the cheap poll while the AI
 // writes, POST / creates one ("Tạo lộ trình", "Tạo lại"). No consent header: a roadmap is built only from an
-// assessment and a profile survey the student already consented to, and goes with them.
+// assessment and a profile survey the student already consented to (or one a cố vấn học tập or the Khoa filled in for
+// them, policy 2026-11-10), and goes with them.
 import { Router, type ErrorRequestHandler } from "express";
 import type { PoolClient } from "pg";
 import { z } from "zod";
@@ -10,8 +11,7 @@ import { STUDY_ROADMAP_KIND } from "../competency-assessment/ai/worker-protocol.
 import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
 import { studentUser } from "../advisors/access.js";
-import { activeConsentVersion, isValidConsent } from "../student/consent.js";
-import { readSurvey, surveyFacts } from "../student/survey.js";
+import { readSurvey, surveyFacts, surveyUsable } from "../student/survey.js";
 import { roadmapBasis } from "./basis.js";
 import {
   createRoadmap, createRoadmapExpiry, newestAssessmentInfo, readNewestRoadmap, readPreviousCompletedRoadmap, RoadmapError, type RoadmapRow, type RoadmapStatus,
@@ -37,10 +37,10 @@ function upcomingTerm() {
 /**
  * Where the advice of a roadmap comes from (roadmap-v9; user 2026-10-30: "Nên tách riêng phần 'bạn tự đánh giá' với 'hệ
  * thống ghi nhận'"): what the student says in the profile survey, read now (the roadmap never stores it), next to what the
- * system had on record. Null for a roadmap made before roadmap-v9 or without the survey under a valid consent.
+ * system had on record. Null for a roadmap made before roadmap-v9 or without a survey the AI may use (usable).
  */
-function roadmapBasisView(row: RoadmapRow | null, survey: Awaited<ReturnType<typeof readSurvey>>, consented: boolean) {
-  if (!row?.facts.recorded || !survey || !consented) return null;
+function roadmapBasisView(row: RoadmapRow | null, survey: Awaited<ReturnType<typeof readSurvey>>, usable: boolean) {
+  if (!row?.facts.recorded || !survey || !usable) return null;
   const { selfReported, recorded } = roadmapBasis(row.facts, surveyFacts(survey));
   return { selfReported, recorded, surveyChanged: new Date(survey.updatedAt).getTime() > new Date(row.createdAt).getTime() };
 }
@@ -96,14 +96,14 @@ export function createRoadmapRouter(pool: DatabasePool | undefined, webOrigin: s
     let previous: RoadmapRow | null;
     let assessment: Awaited<ReturnType<typeof newestAssessmentInfo>>;
     let survey: Awaited<ReturnType<typeof readSurvey>>;
-    let surveyConsent: string | null;
+    let surveyDone: boolean;
     try {
       await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
       assessment = await newestAssessmentInfo(client, userId);
       row = await readNewestRoadmap(client, userId);
       previous = row && row.status !== "completed" ? await readPreviousCompletedRoadmap(client, userId, row.id) : null;
       survey = await readSurvey(client, userId);
-      surveyConsent = await activeConsentVersion(client, userId, "profile_survey");
+      surveyDone = await surveyUsable(client, userId, survey);
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
@@ -118,9 +118,10 @@ export function createRoadmapRouter(pool: DatabasePool | undefined, webOrigin: s
       previous: previous && presentRoadmap(previous, today()),
       assessment: assessment && { id: assessment.id, createdAt: iso(assessment.createdAt), hasCareer: assessment.hasCareer === true },
       stale: Boolean(row && assessment && row.assessmentId !== assessment.id),
-      // A new roadmap needs the answered profile survey, agreed to under the current policy.
-      surveyDone: survey?.complete === true && isValidConsent(surveyConsent),
-      basis: roadmapBasisView(row, survey, isValidConsent(surveyConsent)),
+      // A new roadmap needs the answered profile survey, agreed to under the current policy or filled in for the student
+      // by a cố vấn học tập or the Khoa (surveyUsable).
+      surveyDone,
+      basis: roadmapBasisView(row, survey, surveyDone),
       aiEnabled: enabled,
       worker: await workerStatus(),
       upcoming: upcomingTerm(),

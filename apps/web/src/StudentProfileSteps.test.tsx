@@ -96,27 +96,32 @@ describe("the steps of Hồ sơ và bảng điểm", () => {
     for (const loud of ["Hoàn thành hồ sơ", "Đã xong", "aria-current", "chưa hoàn thành", "so-gate"]) expect(html).not.toContain(loud);
   });
 
-  it("never ask a cố vấn học tập to do what only the student may do", () => {
-    // Nothing done: the advisor may import the transcript (AD-AST-07) and, since 2026-11-10, choose the specialty and the
-    // target for the student; the survey is the student's.
+  it("let a cố vấn học tập or the Khoa do every step for the student, the survey too (policy 2026-11-10)", () => {
+    // Nothing done: the transcript first (AD-AST-07); the notes speak of the student, never "của bạn".
     const steps = profileSteps(empty, true);
     expect(steps.map((step) => step.state)).toEqual(["next", "todo", "todo", "todo"]);
     expect(steps.map((step) => step.action)).toEqual(["Import bảng điểm", null, null, null]);
     expect(steps.slice(1).map((step) => step.note)).toEqual([...requiredProfileItems(empty, false).slice(1, 3).map((item) => item.hint), "Sinh viên chưa làm"]);
     const html = render(empty, true);
     expect(html).toContain("Hồ sơ của sinh viên");
-    expect(html).toContain("Bạn import được bảng điểm, chọn chuyên ngành và vị trí nghề nghiệp mục tiêu thay sinh viên. Khảo sát định hướng do sinh viên tự làm.");
-    for (const studentOnly of ["Làm khảo sát", "Cập nhật khảo sát", "cho bạn", "của bạn", "Sinh viên chưa chọn"]) expect(html).not.toContain(studentOnly);
-    // The transcript there: the specialty, then the target are the next steps, never the survey.
+    expect(html).toContain("Bạn import được bảng điểm, chọn chuyên ngành, vị trí nghề nghiệp mục tiêu và làm Khảo sát định hướng thay sinh viên.");
+    for (const words of ["do sinh viên tự làm", "cho bạn", "của bạn", "Sinh viên chưa chọn"]) expect(html).not.toContain(words);
     const imported = { ...empty, hasTranscript: true, surveyUpdatedAt: "2026-10-20T00:00:00Z" };
     expect(states(imported, true)).toEqual(["done", "next", "todo", "todo"]);
-    expect(profileSteps(imported, true)[1]!.action).toBe("Chọn chuyên ngành");
     expect(profileSteps({ ...imported, specialty: "CNPM" }, true).map((step) => step.action)).toEqual([null, null, "Chọn vị trí nghề nghiệp", null]);
+    // The goals chosen: the survey is the next step, as for the student.
     const chosen = { ...imported, specialty: "CNPM", careerPositionId: "00000000-0000-4000-8000-0000000000c1" };
-    expect(states(chosen, true)).toEqual(["done", "done", "done", "todo"]);
-    expect(profileSteps(chosen, true)[3]!.note).toBe("Sinh viên chưa làm xong");
-    expect(render(chosen, true)).not.toContain("aria-current");
-    expect(render(complete, true)).toContain("Hồ sơ đã đủ 4/4");
+    expect(states(chosen, true)).toEqual(["done", "done", "done", "next"]);
+    expect(profileSteps(chosen, true)[3]!.action).toBe("Cập nhật khảo sát");
+    expect(profileSteps({ ...chosen, surveyUpdatedAt: null }, true)[3]!.action).toBe("Làm khảo sát");
+    expect(render(chosen, true).match(/aria-current="step"/g)).toHaveLength(1);
+    // A survey filled in for the student counts once the API says it does (surveyComplete).
+    expect(render({ ...chosen, surveyComplete: true }, true)).toContain("Hồ sơ đã đủ 4/4");
+    // The student withdrew the consent (Xóa câu trả lời): never the staff's next step; the student still sees it as theirs.
+    const withdrawn = { ...chosen, surveyUpdatedAt: null, surveyWithdrawn: true };
+    expect(states(withdrawn, true)).toEqual(["done", "done", "done", "todo"]);
+    expect(profileSteps(withdrawn, true)[3]!.note).toBe("Sinh viên đã rút đồng ý");
+    expect(profileSteps(withdrawn)[3]!.action).toBe("Làm khảo sát");
   });
 
   it("keeps its text at 12px or more and follows its own width, not the screen's", async () => {

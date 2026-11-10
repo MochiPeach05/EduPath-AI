@@ -139,8 +139,9 @@ describe("a cố vấn học tập in a student's page (advisorActing)", () => {
   });
 
   it.each([
-    ["patch", "/api/student/profile"], ["put", "/api/student/survey"], ["delete", "/api/student/transcript"],
-    ["delete", `/api/student/assistant/threads/${STUDENT_ID}`], ["put", "/api/student/study-plan"],
+    ["patch", "/api/student/profile"], ["delete", "/api/student/survey"], ["delete", "/api/student/transcript"],
+    ["delete", `/api/student/assistant/threads/${STUDENT_ID}`], ["delete", "/api/student/study-plan"], ["post", "/api/student/notifications/read-all"],
+    ["delete", "/api/student/competency-assessments"],
   ] as const)("refuses %s %s, which the policy leaves to the student", async (method, path) => {
     const { app, writes } = setup(advisor);
     expect((await request(app)[method](path).set("X-Advisor-Student", STUDENT_ID).expect(403)).body).toEqual({ error: "advisor_action_not_allowed" });
@@ -200,6 +201,43 @@ describe("a cố vấn học tập in a student's page (advisorActing)", () => {
     expect(writes).toEqual([]);
   });
 
+  it("saves Kế hoạch học kỳ for the student, told once a day and logged once per half hour (user 2026-11-10)", async () => {
+    const { app, writes } = setup(advisor);
+    const plan = { version: null, data: { schemaVersion: 1, terms: [] } };
+    await request(app).put("/api/student/study-plan").set("X-Advisor-Student", STUDENT_ID).send(plan).expect(200);
+    await vi.waitFor(() => expect(writes).toHaveLength(2));
+    expect(writes.find((write) => write.table === "audit")!.values.slice(5, 11)).toEqual(["Cập nhật Kế hoạch học kỳ thay sinh viên",
+      "2374802010994 – Sinh viên Thử nghiệm (lớp 71K29CNTT99)", "student", STUDENT_ID, "PUT", "/api/student/study-plan"]);
+    const notification = writes.find((write) => write.table === "notification")!.values;
+    expect(notification.slice(1, 5)).toEqual([STUDENT_ID, "khoa", "advisor_action", "Cố vấn học tập đã cập nhật Kế hoạch học kỳ thay bạn"]);
+    expect(notification[5]).toBe("ThS. Nguyễn Văn Cố Vấn (cố vấn học tập của lớp bạn) đã cập nhật Kế hoạch học kỳ thay bạn trên EduPath AI. "
+      + "Bạn xem lại kế hoạch ở tab Kế hoạch học kỳ; nếu chưa đúng ý, bạn vẫn tự sửa lại được như thường.");
+    expect(notification[6]).toBe("#roadmap");
+    expect(notification[8]).toMatch(new RegExp(`^advisor:plan:${ADVISOR_ID}:\\d{4}-\\d{2}-\\d{2}$`));
+    // The plan saves after every change: the next save adds no row to the log; the bell keeps one a day by its key.
+    await request(app).put("/api/student/study-plan").set("X-Advisor-Student", STUDENT_ID).send(plan).expect(200);
+    await vi.waitFor(() => expect(writes).toHaveLength(3));
+    await settle();
+    expect(writes.filter((write) => write.table === "audit")).toHaveLength(1);
+    expect(writes.at(-1)!.values[8]).toBe(notification[8]);
+  });
+
+  it("fills in Khảo sát định hướng for the student, logged and told each time (user 2026-11-10)", async () => {
+    const { app, writes } = setup(advisor);
+    await request(app).put("/api/student/survey").set("X-Advisor-Student", STUDENT_ID).send({ answers: {} }).expect(200);
+    await vi.waitFor(() => expect(writes).toHaveLength(2));
+    expect(writes.find((write) => write.table === "audit")!.values.slice(5, 11)).toEqual(["Làm Khảo sát định hướng thay sinh viên",
+      "2374802010994 – Sinh viên Thử nghiệm (lớp 71K29CNTT99)", "student", STUDENT_ID, "PUT", "/api/student/survey"]);
+    const notification = writes.find((write) => write.table === "notification")!.values;
+    expect(notification.slice(1, 5)).toEqual([STUDENT_ID, "khoa", "advisor_action", "Cố vấn học tập đã làm Khảo sát định hướng thay bạn"]);
+    expect(notification[5]).toBe("ThS. Nguyễn Văn Cố Vấn (cố vấn học tập của lớp bạn) đã làm Khảo sát định hướng thay bạn trên EduPath AI. "
+      + "Bạn xem lại câu trả lời; nếu chưa đúng, bạn vẫn tự sửa hoặc xóa được như thường.");
+    expect(notification[6]).toBe("#profile");
+    expect(notification[8]).toMatch(new RegExp(`^advisor:survey:${ADVISOR_ID}:\\d{4}-\\d{2}-\\d{2}$`));
+    await request(app).put("/api/student/survey").set("X-Advisor-Student", STUDENT_ID).send({ answers: {} }).expect(200);
+    await vi.waitFor(() => expect(writes.filter((write) => write.table === "audit")).toHaveLength(2));
+  });
+
   it("writes nothing when the action fails", async () => {
     const { app, writes } = setup(advisor, advisedRow, 409);
     await request(app).post("/api/student/transcript").set("X-Advisor-Student", STUDENT_ID).expect(409);
@@ -231,7 +269,13 @@ describe("a cố vấn học tập in a student's page (advisorActing)", () => {
     expect(actingAction("POST", "/assistant/threads")?.did).toBe("đã hỏi Trợ lý AI");
     expect(actingAction("POST", `/assistant/threads/${STUDENT_ID}/messages`)?.key).toBe("assistant");
     expect(actingAction("DELETE", `/assistant/threads/${STUDENT_ID}`)).toBeNull();
-    expect(actingAction("PUT", "/study-plan")).toBeNull();
+    expect(actingAction("PUT", "/study-plan")?.key).toBe("plan");
+    expect(actingAction("PUT", "/study-plan", { version: null, data: {} })?.logWindow).toBe(true);
+    expect(actingAction("PUT", "/survey")?.key).toBe("survey");
+    expect(actingAction("PUT", "/study-plan/")).toBeNull();
+    expect(actingAction("DELETE", "/study-plan")).toBeNull();
+    expect(actingAction("DELETE", "/survey")).toBeNull();
+    expect(actingAction("PATCH", "/survey")).toBeNull();
     // Every notified action opens a page of the student portal.
     for (const rule of ACTING_ACTIONS) if (rule.did) expect(rule.link).toMatch(/^#[a-z-]+$/);
   });
@@ -288,8 +332,25 @@ describe("a quản trị viên or Ban chủ nhiệm khoa in a student's page (QT
     expect((await request(app).get("/api/student/notifications").set("X-Advisor-Student", STUDENT_ID).expect(403)).body).toEqual({ error: "advisor_action_not_allowed" });
     expect((await request(app).patch("/api/student/profile").set("X-Advisor-Student", STUDENT_ID).send({ currentSemester: 2 }).expect(403)).body).toEqual({ error: "advisor_action_not_allowed" });
     expect((await request(app).delete("/api/student/transcript").set("X-Advisor-Student", STUDENT_ID).expect(403)).body).toEqual({ error: "advisor_action_not_allowed" });
+    expect((await request(app).delete("/api/student/survey").set("X-Advisor-Student", STUDENT_ID).send({ confirmed: true }).expect(403)).body).toEqual({ error: "advisor_action_not_allowed" });
+    expect((await request(app).delete("/api/student/study-plan").set("X-Advisor-Student", STUDENT_ID).send({}).expect(403)).body).toEqual({ error: "advisor_action_not_allowed" });
     await settle();
     expect(writes).toEqual([]);
+  });
+
+  it("lets an admin fill in the survey and edit the plan, and tells the student a quản trị viên of the Khoa did it (user 2026-11-10)", async () => {
+    for (const [path, action, title] of [
+      ["/api/student/survey", "Làm Khảo sát định hướng thay sinh viên", "Quản trị viên của Khoa đã làm Khảo sát định hướng thay bạn"],
+      ["/api/student/study-plan", "Cập nhật Kế hoạch học kỳ thay sinh viên", "Quản trị viên của Khoa đã cập nhật Kế hoạch học kỳ thay bạn"],
+    ] as const) {
+      const { app, writes } = setup(qtv, null, 200, anyRow);
+      await request(app).put(path).set("X-Advisor-Student", STUDENT_ID).send({}).expect(200);
+      await vi.waitFor(() => expect(writes).toHaveLength(2));
+      expect(writes.find((write) => write.table === "audit")!.values.slice(1, 6)).toEqual([ADMIN_ID, "Trần Thị Quản Trị", "admin", "advisor", action]);
+      const notification = writes.find((write) => write.table === "notification")!.values;
+      expect(notification[4]).toBe(title);
+      expect(String(notification[5])).toMatch(new RegExp(`^Trần Thị Quản Trị \\(quản trị viên của Khoa\\) ${title.replace("Quản trị viên của Khoa ", "")} trên EduPath AI\\.`));
+    }
   });
 
   it("logs an admin's import as kind advisor and tells the student a quản trị viên of the Khoa did it", async () => {

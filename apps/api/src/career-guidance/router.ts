@@ -13,8 +13,8 @@ import type { AssessmentInputs, AssessmentResult, CareerInput, CareerRequirement
 import type { DatabasePool } from "../db/pool.js";
 import { requireAuthentication } from "../middleware/authorization.js";
 import { studentUser } from "../advisors/access.js";
-import { activeConsentVersion, consentWithdrawn, isValidConsent } from "../student/consent.js";
-import { readSurvey, type StudentSurvey } from "../student/survey.js";
+import { consentWithdrawn } from "../student/consent.js";
+import { readSurvey, surveyUsable, type StudentSurvey } from "../student/survey.js";
 import { interestMatch, type InterestMatch } from "./interests.js";
 
 type CatalogRow = CareerInput & { category: string; categoryName: string; description: string };
@@ -117,11 +117,11 @@ export function guidanceCareers(catalog: CatalogRow[], inputs: AssessmentInputs 
 }
 
 /**
- * The survey answers this page may use: only a complete Khảo sát định hướng agreed to under the current policy, the rule
- * of the AI roadmap (roadmap/router.ts surveyDone); older or partial answers are left out and the page asks for the survey.
+ * The survey answers this page may use: only a Khảo sát định hướng the AI features may use (usable: student/survey.ts
+ * surveyUsable, the rule of the AI roadmap); older or partial answers are left out and the page asks for the survey.
  */
-export function surveyAnswers(survey: StudentSurvey | null, consentVersion: string | null): { done: boolean; field: string | null; tech: string[] } {
-  if (survey?.complete !== true || !isValidConsent(consentVersion)) return { done: false, field: null, tech: [] };
+export function surveyAnswers(survey: StudentSurvey | null, usable: boolean): { done: boolean; field: string | null; tech: string[] } {
+  if (survey?.complete !== true || !usable) return { done: false, field: null, tech: [] };
   const field = survey.answers.field;
   return { done: true, field: field && field !== "unsure" ? field : null, tech: survey.interestTech };
 }
@@ -177,9 +177,9 @@ export function createCareerGuidanceRouter(pool: DatabasePool | undefined) {
       const stored = await client.query<{ career: CareerResult | null; created_at: Date }>(
         "SELECT computed->'career' AS career,created_at FROM stu_comp_assessments WHERE user_id=$1 ORDER BY created_at DESC,id DESC LIMIT 1", [userId]);
       const survey = await readSurvey(client, userId);
-      const surveyConsent = await activeConsentVersion(client, userId, "profile_survey");
+      const usable = await surveyUsable(client, userId, survey);
       await client.query("COMMIT");
-      const answers = surveyAnswers(survey, surveyConsent);
+      const answers = surveyAnswers(survey, usable);
       const careers = guidanceCareers(catalog, inputs, targetId, answers);
       const target = careers.find((career) => career.isTarget);
       const gapCareer = stored.rows[0]?.career ?? null;

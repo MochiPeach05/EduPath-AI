@@ -3,8 +3,8 @@
 // /api/student request (apps/web/src/advisor-view.ts), and advisorActing checks on each request that the signed-in
 // admin-portal account still advises the student's class. The student routers read the student through studentUser().
 // Only what the policy lets an advisor do for the student passes (ACTING_ACTIONS: import the transcript, the specialty and
-// the target vị trí nghề nghiệp (policy 2026-11-10), the competency assessment and its AI comment, the AI roadmap, the
-// graduation advice, Trợ lý AI), even without the student's consent
+// the target vị trí nghề nghiệp, Kế hoạch học kỳ and Khảo sát định hướng (policy 2026-11-10), the competency assessment and
+// its AI comment, the AI roadmap, the graduation advice, Trợ lý AI), even without the student's consent
 // (user: "Cho làm, báo sinh viên"); no consent is recorded in the student's name. Each such action is logged (kind
 // 'advisor') and told to the student by a notification. Reads pass, except the student's own notifications. In the admin
 // portal the role 'advisor' only reads what its rows of the function list show (advisorReadOnly). Since the user's
@@ -136,17 +136,23 @@ export async function advisedStudent(db: Db, account: Pick<AuthenticatedUser, "u
 
 /**
  * What an advisor may do in a student's page (user, 2026-11-03: import bảng điểm, đánh giá năng lực, Lộ trình AI, Trợ lý
- * AI; 2026-11-10: the specialty and the target vị trí nghề nghiệp too). action names the row of the log; did, link and key
- * make the student's notification ("Cố vấn học tập đã import bảng điểm thay bạn"), at most one per advisor, key and day;
- * after is its last sentence when the usual one does not fit. fields: the request's JSON body must have exactly these
- * fields (the other fields of the same route stay the student's). Paths are under /api/student.
+ * AI; 2026-11-10: the specialty and the target vị trí nghề nghiệp, then Kế hoạch học kỳ and Khảo sát định hướng too).
+ * action names the row of the log; did, link and key make the student's notification ("Cố vấn học tập đã import bảng điểm
+ * thay bạn"), at most one per advisor, key and day; after is its last sentence when the usual one does not fit. fields:
+ * the request's JSON body must have exactly these fields (the other fields of the same route stay the student's).
+ * logWindow: one log row per account, student and half hour (a page that saves after every change). Paths are under
+ * /api/student.
  */
 export type ActingAction = {
   method: "POST" | "PUT" | "PATCH" | "DELETE"; path: RegExp; action: string; did?: string; link?: string; key?: string; log?: false;
-  fields?: readonly string[]; after?: string;
+  fields?: readonly string[]; after?: string; logWindow?: true;
 };
 /** The last sentence of the notification of a changed specialty or target: the student changes it back as before. */
 const GOALS_AFTER = "Bạn xem lại lựa chọn này; nếu chưa đúng ý, bạn vẫn tự đổi lại được như thường.";
+/** The last sentence of the notification of a changed Kế hoạch học kỳ. */
+const PLAN_AFTER = "Bạn xem lại kế hoạch ở tab Kế hoạch học kỳ; nếu chưa đúng ý, bạn vẫn tự sửa lại được như thường.";
+/** The last sentence of the notification of a Khảo sát định hướng filled in for the student. */
+const SURVEY_AFTER = "Bạn xem lại câu trả lời; nếu chưa đúng, bạn vẫn tự sửa hoặc xóa được như thường.";
 export const ACTING_ACTIONS: readonly ActingAction[] = [
   { method: "POST", path: /^\/transcript$/, action: "Import bảng điểm thay sinh viên", did: "đã import bảng điểm", link: "#profile", key: "transcript" },
   // Mục tiêu học tập (user 2026-11-10: "có thể sửa chuyên ngành và nghề nghiệp của sinh viên luôn"): the specialty, the
@@ -158,6 +164,13 @@ export const ACTING_ACTIONS: readonly ActingAction[] = [
     did: "đã đổi vị trí nghề nghiệp mục tiêu", link: "#career", key: "career", after: GOALS_AFTER },
   { method: "PATCH", path: /^\/profile$/, fields: ["careerPositionId", "specialty"], action: "Đổi chuyên ngành và vị trí nghề nghiệp mục tiêu thay sinh viên",
     did: "đã đổi chuyên ngành và vị trí nghề nghiệp mục tiêu", link: "#profile", key: "goals", after: GOALS_AFTER },
+  // Kế hoạch học kỳ and Khảo sát định hướng (user 2026-11-10: "Kế hoạch học kỳ, Khảo sát định hướng … cố vấn học tập và
+  // quản trị viên làm luôn nhé"), saved as the student saves them. The plan saves after every change, so its log keeps one
+  // row per half hour; the survey records no consent in the student's name (student/router.ts). Deleting stays the student's.
+  { method: "PUT", path: /^\/study-plan$/, action: "Cập nhật Kế hoạch học kỳ thay sinh viên", did: "đã cập nhật Kế hoạch học kỳ",
+    link: "#roadmap", key: "plan", after: PLAN_AFTER, logWindow: true },
+  { method: "PUT", path: /^\/survey$/, action: "Làm Khảo sát định hướng thay sinh viên", did: "đã làm Khảo sát định hướng",
+    link: "#profile", key: "survey", after: SURVEY_AFTER },
   { method: "DELETE", path: /^\/transcript\/job$/, action: "Hủy lần import bảng điểm đang chạy" },
   { method: "POST", path: /^\/competency-assessments$/, action: "Đánh giá năng lực thay sinh viên", did: "đã chạy Đánh giá năng lực", link: "#competency", key: "assessment" },
   { method: "POST", path: /^\/competency-assessments\/[^/]+\/ai$/, action: "Tạo lại nhận xét năng lực thay sinh viên" },
@@ -220,7 +233,8 @@ export const studentViews: StudentViews = createStudentViews();
  * Mounted on /api/student before the student routers (app.ts). A student passes untouched; an admin-portal account or a
  * staff mailbox passes only for the student named by X-Advisor-Student that advisedStudent gives it (its own classes; any
  * student for admins and Ban chủ nhiệm khoa), and only for reads and ACTING_ACTIONS. A read logs "Mở trang sinh viên"
- * once per account, student and half hour (studentViews), however the page was opened.
+ * once per account, student and half hour (studentViews), however the page was opened; so does an action with logWindow,
+ * under a key of its own.
  */
 export function advisorActing(db: Db | undefined, staffEmailDomains: ReadonlySet<string>, views: StudentViews = studentViews): RequestHandler {
   return async (request, response, next) => {
@@ -253,10 +267,14 @@ export function advisorActing(db: Db | undefined, staffEmailDomains: ReadonlySet
         const path = request.originalUrl.split("?")[0] ?? "";
         response.once("finish", () => {
           if (response.statusCode >= 400) return;
-          void recordAudit(db, auditActorOf(user), {
-            kind: "advisor", action: action.action, summary: studentLabel(student), targetType: "student", targetId: student.user.userId,
-            method: request.method, path,
-          });
+          const windowKey = `${user.userId}:${action.key ?? action.action}`;
+          if (!action.logWindow || views.due(windowKey, student.user.userId)) {
+            if (action.logWindow) views.mark(windowKey, student.user.userId);
+            void recordAudit(db, auditActorOf(user), {
+              kind: "advisor", action: action.action, summary: studentLabel(student), targetType: "student", targetId: student.user.userId,
+              method: request.method, path,
+            });
+          }
           if (action.did && action.link && action.key) {
             void notifySafely(db, student.user.userId,
               advisorAction(student.actorName, action.did, action.link, vietnamDay(), `${action.key}:${user.userId}`, student.actorKind, action.after));

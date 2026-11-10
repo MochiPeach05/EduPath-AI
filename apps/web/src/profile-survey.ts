@@ -1,7 +1,9 @@
 // "Khảo sát định hướng" of the profile (user 2026-10-24): ten single-choice questions, "Thế mạnh của bạn" (1 to 5
 // technologies; survey-v4 dropped the written description, user 2026-10-31: "Bỏ cái câu tự luận ở thế mạnh của bạn đi"),
 // "Sở trường" (1 to 5) and the achievements yes/no with a list when yes, all required. The questions and
-// interest lists come from the API (apps/api/src/student/survey.ts, interests.ts).
+// interest lists come from the API (apps/api/src/student/survey.ts, interests.ts). Since 2026-11-10 a cố vấn học tập or
+// the Khoa may fill it in for the student (savedBy): it counts without the student's consent, until the student saves it
+// again themselves (policy 2026-11-10).
 import { interestProblem, type InterestOption } from "./profile-interests";
 import { isValidConsent } from "./public-information";
 
@@ -11,12 +13,15 @@ export type SurveyQuestion = { id: string; label: string; options: { id: string;
 export type StudentSurvey = {
   version: string; answers: Record<string, string>; interestTech: string[]; interestHobbies: string[];
   hasAchievements: boolean; achievements: string | null; updatedAt: string; complete: boolean;
+  /** Last saved for the student by their cố vấn học tập ("advisor") or the Khoa ("admin"); null when the student saved it. */
+  savedBy?: "advisor" | "admin" | null;
 };
 /** What the profile held before the interests moved into the survey: the form starts from it. */
 export type PreviousInterests = { tech: string[]; hobbies: string[]; text: string | null };
+/** withdrawn: the student withdrew the consent (Xóa câu trả lời), so no one may fill the survey in for them. */
 export type SurveyResponse = {
   questions: SurveyQuestion[]; interests: { tech: InterestOption[]; hobbies: InterestOption[]; max: number }; achievementsMax: number;
-  survey: StudentSurvey | null; previous: PreviousInterests | null; consentVersion: string | null;
+  survey: StudentSurvey | null; previous: PreviousInterests | null; consentVersion: string | null; withdrawn?: boolean;
 };
 /** hasAchievements is null until the student picks Có or Không. */
 export type SurveyDraft = {
@@ -64,9 +69,10 @@ export const problemSummary = (count: number) => (count ? `Còn ${count} mục c
 /**
  * What stored answers still lack under the current questions and policy, in form order (answers saved before a question,
  * the two lists of survey-v3 or a policy update was added); empty when nothing is stored or nothing is missing. Same rule
- * as the API's "complete" (apps/api/src/student/survey.ts) plus the consent.
+ * as the API's "complete" (apps/api/src/student/survey.ts) plus the consent, which answers filled in for the student by a
+ * cố vấn học tập or the Khoa do not need, and which consent: false (their own view) leaves out.
  */
-export function surveyGaps(questions: SurveyQuestion[], survey: StudentSurvey | null, consentVersion: string | null): string[] {
+export function surveyGaps(questions: SurveyQuestion[], survey: StudentSurvey | null, consentVersion: string | null, consent = true): string[] {
   if (!survey) return [];
   const gaps: string[] = [];
   const unanswered = questions.filter((question) => answerLabel(question, survey.answers) === null).length;
@@ -75,7 +81,9 @@ export function surveyGaps(questions: SurveyQuestion[], survey: StudentSurvey | 
   const older = survey.version === "survey-v1" || survey.version === "survey-v2";
   if (!survey.interestTech.length || older) gaps.push("Chọn công nghệ trong Thế mạnh của bạn");
   if (!survey.interestHobbies.length || older) gaps.push("Chọn sở trường");
-  if (!isValidConsent(consentVersion)) gaps.push(consentVersion ? "Xác nhận lại theo chính sách mới" : "Đánh dấu ô đồng ý cho EduPath AI dùng câu trả lời");
+  if (consent && !survey.savedBy && !isValidConsent(consentVersion)) {
+    gaps.push(consentVersion ? "Xác nhận lại theo chính sách mới" : "Đánh dấu ô đồng ý cho EduPath AI dùng câu trả lời");
+  }
   return gaps;
 }
 
@@ -90,6 +98,7 @@ const ERRORS: Record<string, string> = {
   achievements_required: "Vui lòng liệt kê thành tích của bạn.",
   achievements_too_long: "Danh sách thành tích quá dài.",
   consent_required: "Vui lòng đánh dấu ô đồng ý trước khi lưu.",
+  survey_withdrawn: "Sinh viên đã xóa câu trả lời khảo sát và rút lại sự đồng ý, nên bạn không làm khảo sát thay được.",
   policy_outdated: "Chính sách bảo mật vừa được cập nhật. Hãy tải lại trang, đọc chính sách mới rồi xác nhận lại.",
   insufficient_role: "Tài khoản hiện không dùng được chức năng này.",
   invalid_origin: "Phiên thao tác không hợp lệ. Vui lòng tải lại trang.",

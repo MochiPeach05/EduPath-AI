@@ -103,15 +103,24 @@ describe("Kế hoạch học kỳ", () => {
     expect(html).toContain("Kỳ sau (HK2 2026–2027): có mở · thường mở HK2");
   });
 
-  it("shows a cố vấn học tập the plan with nothing to move, add or hide", () => {
+  it("shows a cố vấn học tập the plan with nothing to move, add or hide until Sửa kế hoạch (user 2026-11-10)", () => {
     const html = planner({ schemaVersion: 1, aiAdded: { completedAt: "2026-10-24T10:00:00.000Z", term: "HK262", codes: ["C"], addedAt: "2026-10-24T10:05:00.000Z" },
       terms: [{ code: "HK261", courses: [] }, { code: "HK262", courses: [{ code: "C" }] }] }, true);
-    expect(html).toContain("Bạn chỉ xem; sinh viên tự sắp xếp và điều chỉnh kế hoạch này.");
+    expect(html).toContain("<p>Kế hoạch các học kỳ tới của sinh viên.</p>");
+    expect(html).not.toContain("Bạn chỉ xem");
+    expect(html).not.toContain("Sửa kế hoạch");
     expect(html).toContain("Môn C");
     for (const control of ["Danh sách chờ", "Thêm học kỳ", "+ Thêm vào học kỳ này", "Bỏ khỏi kế hoạch", "Ẩn thông báo", "draggable"]) {
       expect(html).not.toContain(control);
     }
     expect(html).toContain("rm-planner-readonly");
+    const editable = renderToStaticMarkup(createElement(RoadmapPlanner, {
+      context, plan: { schemaVersion: 1, terms: [{ code: "HK262", courses: [{ code: "C" }] }] }, onChange: () => {}, saveState: "idle", saveError: "",
+      origin: null, onOpenAi: () => {}, readOnly: true, onEdit: () => {},
+    }));
+    expect(editable).toContain("Bấm Sửa kế hoạch để sắp xếp, điều chỉnh kế hoạch thay sinh viên.");
+    expect(editable).toMatch(/<button type="button" class="sw-outline"><svg[^>]*>.*?<\/svg>Sửa kế hoạch<\/button>/);
+    expect(editable).not.toContain("draggable");
   });
 
   it("promises no prefill when nothing is planned, even with a course being studied", () => {
