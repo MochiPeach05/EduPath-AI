@@ -13,6 +13,7 @@ import { syntheticRoadmapFacts } from "../../roadmap/test-fixture.js";
 import { buildAiInput } from "./prompt.js";
 import { syntheticResult, withCompV3Improvements } from "./test-fixture.js";
 import { createCompetencyAiExpiry, createCompetencyWorkerRouter, expireCompetencyAiJobs } from "./worker-router.js";
+import { createDeferredPromotion } from "./deferred.js";
 
 const KEY = "k".repeat(40);
 const AUTH = `Bearer ${KEY}`;
@@ -120,6 +121,72 @@ describe("heartbeat and claim", () => {
     now += 31_000;
     await request(app).post("/w/claim").set("Authorization", AUTH).expect(200);
     expect(housekeepingCount()).toBe(2);
+  });
+});
+
+describe("deferred requests on /claim (QA 2026-11-10: they come back by themselves)", () => {
+  function withPromote(handler: Handler = () => undefined) {
+    const run = vi.fn(async (sql: string, params?: unknown[]) => handler(sql, params) ?? { rows: [], rowCount: 0 });
+    const pool = { query: run, connect: vi.fn(async () => ({ query: run, release: vi.fn() })) } as unknown as DatabasePool;
+    const promote = vi.fn(async () => true);
+    const app = express();
+    app.use("/w", createCompetencyWorkerRouter(pool, KEY, { promote }));
+    return { app, pool, promote, run };
+  }
+
+  it("runs the housekeeping of the deferred requests on a claim, for the kinds the worker runs, before it claims", async () => {
+    const { app, pool, promote, run } = withPromote();
+    await request(app).post("/w/claim").set("Authorization", AUTH).send({ kinds: ["study_roadmap", "graduation_advice", "unknown"] }).expect(200);
+    expect(promote).toHaveBeenCalledWith(pool, ["graduation_advice", "study_roadmap"]);
+    expect(promote.mock.invocationCallOrder[0]!).toBeLessThan(run.mock.invocationCallOrder.at(-1)!);
+    // A worker released before the kinds runs comments only; a heartbeat never runs it.
+    await request(app).post("/w/claim").set("Authorization", AUTH).send({}).expect(200);
+    expect(promote).toHaveBeenLastCalledWith(pool, ["competency_assessment"]);
+    await request(app).post("/w/heartbeat").set("Authorization", AUTH).expect(200);
+    expect(promote).toHaveBeenCalledTimes(2);
+  });
+
+  it("queues a deferred comment by default, so one deferred before the deploy is picked up by the first claim", async () => {
+    const result = syntheticResult();
+    const app = express();
+    const handler: Handler = (sql) => sql.startsWith("SELECT a.id,a.user_id") ? { rows: [{ id: ASSESSMENT, user_id: USER }] }
+      : sql.startsWith("SELECT id FROM users") ? { rows: [{ id: USER }], rowCount: 1 }
+        : sql.startsWith("SELECT computed FROM stu_comp_assessments") ? { rows: [{ computed: result }], rowCount: 1 }
+          : sql.startsWith("SELECT count(*)::int AS count FROM stu_comp_ai_jobs") ? { rows: [{ count: 0 }] } : undefined;
+    const run = vi.fn(async (sql: string, params?: unknown[]) => handler(sql, params) ?? { rows: [], rowCount: 0 });
+    const pool = { query: run, connect: vi.fn(async () => ({ query: run, release: vi.fn() })) } as unknown as DatabasePool;
+    const log = { info: vi.fn(), error: vi.fn() };
+    app.use("/w", createCompetencyWorkerRouter(pool, KEY, { promote: createDeferredPromotion({ log }) }));
+    await request(app).post("/w/claim").set("Authorization", AUTH).send({}).expect(200);
+    const insert = run.mock.calls.find(([sql]) => sql.startsWith("INSERT INTO stu_comp_ai_jobs"))!;
+    expect((insert[1] as unknown[]).slice(1, 3)).toEqual([ASSESSMENT, USER]);
+    expect(log.info).toHaveBeenCalledWith("[AI] queued 1 deferred competency_assessment request(s)");
+    expect(JSON.stringify(log.info.mock.calls)).not.toContain(USER);
+  });
+});
+
+describe("createDeferredPromotion", () => {
+  const pool = {} as DatabasePool;
+  it("runs the kinds' housekeeping at most once a minute, only for the kinds asked, and never throws", async () => {
+    let now = 7_000_000;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    const competency = vi.fn(async () => 2);
+    const roadmap = vi.fn(async () => { throw Object.assign(new Error("deadlock for user 11111111"), { code: "40P01" }); });
+    const advice = vi.fn(async () => 0);
+    const log = { info: vi.fn(), error: vi.fn() };
+    const promote = createDeferredPromotion({ log, promoters: { competency_assessment: competency, study_roadmap: roadmap, graduation_advice: advice } });
+    await expect(promote(pool, ["competency_assessment", "study_roadmap", "assistant_chat"])).resolves.toBe(true);
+    expect(competency).toHaveBeenCalledWith(pool);
+    expect(advice).not.toHaveBeenCalled();
+    expect(log.info).toHaveBeenCalledWith("[AI] queued 2 deferred competency_assessment request(s)");
+    expect(log.error).toHaveBeenCalledWith("[AI] deferred study_roadmap requests not queued (40P01)");
+    expect(JSON.stringify(log.error.mock.calls)).not.toContain("1111");
+    now += 59_000;
+    await expect(promote(pool, ["competency_assessment"])).resolves.toBe(false);
+    expect(competency).toHaveBeenCalledTimes(1);
+    now += 2_000;
+    await expect(promote(pool, ["graduation_advice"])).resolves.toBe(true);
+    expect(advice).toHaveBeenCalledTimes(1);
   });
 });
 

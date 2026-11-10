@@ -130,9 +130,34 @@ describe("cloudflareChat", () => {
     expect((init?.headers as Record<string, string>).authorization).toBe("Bearer test-token-0123456789abcdef");
   });
 
-  it("reports a cut answer as ai_output_truncated", async () => {
-    const fetch: FetchLike = async () => sse([delta('{"summary":"Tố'), finish("length"), "data: [DONE]\n\n"]);
+  it("reports a cut answer as ai_output_truncated once json_object mode is cut too", async () => {
+    const modes: string[] = [];
+    const fetch: FetchLike = async (_url, init) => {
+      modes.push((JSON.parse(String(init?.body)) as { response_format?: { type: string } }).response_format?.type ?? "none");
+      return sse([delta('{"summary":"Tom'), finish("length"), "data: [DONE]\n\n"]);
+    };
     await expect(cloudflareChat(runtime, job, { fetch })).rejects.toMatchObject({ code: "ai_output_truncated" });
+    expect(modes).toEqual(["json_schema", "json_object"]);
+    // A plain-text answer is never asked twice.
+    modes.length = 0;
+    await expect(cloudflareChat(runtime, { ...job, schema: null }, { fetch })).rejects.toMatchObject({ code: "ai_output_truncated" });
+    expect(modes).toEqual(["none"]);
+  });
+
+  it("asks once more in json_object mode when a json_schema answer is cut at its cap by blanks between its values (2026-11-10)", async () => {
+    const modes: string[] = [];
+    const neurons: number[] = [];
+    // Runs of blanks shorter than the runaway guard's, between values, up to the token cap.
+    const padded = [delta('{"summary":'), ...Array.from({ length: 30 }, () => delta(`${" ".repeat(400)}\n`)), delta('"Ban'), usage, finish("length"), "data: [DONE]\n\n"];
+    const fetch: FetchLike = async (_url, init) => {
+      modes.push((JSON.parse(String(init?.body)) as { response_format: { type: string } }).response_format.type);
+      return modes.length === 1 ? sse(padded) : sse([delta('{"summary":"Bạn đạt 2/4 kỹ năng."}'), usage, finish(), "data: [DONE]\n\n"]);
+    };
+    const result = await cloudflareChat(runtime, job, { fetch, onNeurons: (value) => neurons.push(value) });
+    expect(result.content).toBe('{"summary":"Bạn đạt 2/4 kỹ năng."}');
+    expect(modes).toEqual(["json_schema", "json_object"]);
+    // Both calls count in the day's budget.
+    expect(neurons).toHaveLength(2);
   });
 
   it("takes the JSON object out of an answer in a fence or with words around it, for a job with a schema only", async () => {

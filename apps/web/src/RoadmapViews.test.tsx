@@ -235,6 +235,7 @@ describe("Lộ trình AI đề xuất", () => {
 
   describe("the older roadmap while a new one is written (user 2026-11-05: like Xét tốt nghiệp)", () => {
     const note = "Lộ trình trước, viết cho dữ liệu cũ — có thể không còn đúng. Lộ trình mới sẽ thay thế khi sẵn sàng.";
+    const pendingNote = note;
     const month = (index: number, start: string, end: string, focus: string | null, tasks: string[]) => ({ month: index, start, end, focus, tasks });
     // Synthetic: the newest roadmap (HK262) is not written yet; the older one covered HK261.
     const older: Roadmap = {
@@ -252,7 +253,9 @@ describe("Lộ trình AI đề xuất", () => {
       return renderToStaticMarkup(createElement(StudentAiRoadmap));
     };
 
-    it.each([["queued", null], ["processing", null], ["failed", "ai_timeout"], ["cancelled", null]] as const)("keeps its advice and month plan dimmed while the newest is %s", (status, errorCode) => {
+    it.each([["deferred", null], ["queued", null], ["processing", null], ["failed", "ai_timeout"], ["cancelled", null]] as const)("keeps its advice and month plan dimmed while the newest is %s", (status, errorCode) => {
+      // Once the newest failed or stopped no new one is coming by itself: the note says no more than that (2026-11-10).
+      const note = status === "failed" || status === "cancelled" ? "Lộ trình trước, viết cho dữ liệu cũ — có thể không còn đúng." : pendingNote;
       const html = page({ ...response(true), stale: false, roadmap: newest(status, errorCode), previous: older });
       const at = { state: html.indexOf('class="rm-ai-state'), advice: html.indexOf('<div class="rm-previous rm-dimmed"><p class="rm-old">'), study: html.indexOf('id="rm-study"') };
       expect(at.state).toBeGreaterThan(0);
@@ -272,6 +275,30 @@ describe("Lộ trình AI đề xuất", () => {
       expect(html.match(new RegExp(note, "g"))).toHaveLength(2);
       // The page's footer stays the one of the current state.
       expect(html).toContain("Các học phần và kỹ năng trên do hệ thống tính từ kết quả Đánh giá năng lực của bạn.");
+    });
+
+    it("says above the older roadmap that the newest one failed, when, why and what to do (QA 2026-11-10)", () => {
+      const html = page({ ...response(true), stale: false, roadmap: { ...newest("failed", "ai_output_truncated"), createdAt: "2026-11-08T14:40:00.000Z" }, previous: older });
+      const line = "Lần tạo Lộ trình AI mới lúc 21:40 08/11/2026 không thành công. Câu trả lời của AI bị cắt giữa chừng nên chưa dùng được. Lộ trình bên dưới là bản trước. Bấm “Thử lại” để thử lần nữa.";
+      expect(html).toContain(`<strong>Chưa soạn được lộ trình mới</strong><p>${line}</p>`);
+      // Not dimmed, above the dimmed older advice, with the button it names right under it.
+      const at = { line: html.indexOf(line), dimmed: html.indexOf('class="rm-previous rm-dimmed"'), button: html.indexOf("Thử lại</button>") };
+      expect(at.line).toBeGreaterThan(0);
+      expect(at.dimmed).toBeGreaterThan(at.line);
+      expect(at.button).toBeGreaterThan(at.line);
+      expect(at.button).toBeLessThan(at.dimmed);
+      expect(html).not.toContain("ai_output_truncated");
+      // Without an older roadmap the box keeps its short words.
+      const alone = page({ ...response(true), stale: false, roadmap: newest("failed", "ai_output_truncated"), previous: null });
+      expect(alone).toContain("<strong>Chưa soạn được lộ trình</strong><p>Câu trả lời của AI bị cắt giữa chừng nên chưa dùng được. Các học phần và kỹ năng do hệ thống tính bên dưới vẫn dùng được.</p>");
+    });
+
+    it("says a deferred roadmap is queued by itself, polls it, and keeps Tạo lại as an option (2026-11-10)", () => {
+      const html = page({ ...response(true), stale: false, roadmap: newest("deferred"), previous: null });
+      expect(html).toContain("<strong>Hàng đợi AI đang đầy</strong><p>Yêu cầu của bạn đã được giữ lại. Hệ thống sẽ tự xếp hàng soạn lộ trình khi hàng đợi có chỗ, bạn không cần bấm gì thêm.</p>");
+      expect(html).not.toContain("rm-spinner");
+      expect(html).not.toMatch(/Sau ít phút, bấm/);
+      expect(html).toContain("Tạo lại</button>");
     });
 
     it("shows only the month plan of an older roadmap without advice, and nothing once the newest is written", () => {

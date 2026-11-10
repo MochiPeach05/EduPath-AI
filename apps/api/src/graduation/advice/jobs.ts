@@ -38,8 +38,11 @@ const MAX_AUTO_ADVICE_PER_FINGERPRINT = 2;
 
 type Db = Pick<DatabasePool, "query">;
 const PENDING = "('queued','processing')";
+/** A student's advice still to be written: queued, being written, or deferred (asked for while the queue was full). */
+const OWN_PENDING = "('deferred','queued','processing')";
 
-export type GraduationAdviceStatus = "queued" | "processing" | "completed" | "failed" | "cancelled";
+/** "deferred" (2026-11-10): asked for while the queue was full, without AI input; promoteDeferredGraduationAdvice queues it. */
+export type GraduationAdviceStatus = "deferred" | "queued" | "processing" | "completed" | "failed" | "cancelled";
 
 /** A stored row as the student routes read it. */
 export type GraduationAdviceRow = {
@@ -84,8 +87,7 @@ type AdviceJobOptions = {
 export type AdviceOutcome =
   /** No transcript, no resolved standard (or no profile cohort): nothing to advise on. */
   | { kind: "unavailable"; graduation: StudentGraduation }
-  /** The queue is full: nothing was stored. */
-  | { kind: "deferred"; graduation: EvaluatedGraduation }
+  /** The row for these facts; one asked for while the queue was full is stored deferred (2026-11-10). */
   | { kind: "stored"; row: GraduationAdviceRow; created: boolean; graduation: EvaluatedGraduation };
 
 const rowColumns = `id,fingerprint,status,error_code AS "errorCode",created_at AS "createdAt",completed_at AS "completedAt",
@@ -153,16 +155,16 @@ export async function deleteGraduationAdvice(db: Db, userId: string): Promise<vo
   await db.query("DELETE FROM stu_grad_advice WHERE user_id=$1", [userId]);
 }
 
-/** Keeps the newest MAX_ADVICE_PER_USER rows of the student (a pending row is never pruned). */
+/** Keeps the newest MAX_ADVICE_PER_USER rows of the student (a pending or deferred row is never pruned). */
 export async function pruneGraduationAdvice(db: Db, userId: string): Promise<void> {
-  await db.query(`DELETE FROM stu_grad_advice WHERE user_id=$1 AND status NOT IN ${PENDING} AND id NOT IN (
+  await db.query(`DELETE FROM stu_grad_advice WHERE user_id=$1 AND status NOT IN ${OWN_PENDING} AND id NOT IN (
     SELECT id FROM stu_grad_advice WHERE user_id=$1 ORDER BY created_at DESC,id DESC LIMIT $2)`, [userId, MAX_ADVICE_PER_USER]);
 }
 
-/** Cancels the student's pending advice written for other facts; returns how many rows changed. */
+/** Cancels the student's pending or deferred advice written for other facts; returns how many rows changed. */
 async function cancelPendingGraduationAdvice(db: Db, userId: string, keepFingerprint: string): Promise<number> {
   const result = await db.query(`UPDATE stu_grad_advice SET status='cancelled',ai_input=NULL,lease_token=NULL,lease_until=NULL,
-      completed_at=now(),updated_at=now() WHERE user_id=$1 AND status IN ${PENDING} AND fingerprint<>$2`, [userId, keepFingerprint]);
+      completed_at=now(),updated_at=now() WHERE user_id=$1 AND status IN ${OWN_PENDING} AND fingerprint<>$2`, [userId, keepFingerprint]);
   return result.rowCount ?? 0;
 }
 
@@ -183,26 +185,30 @@ async function lockAndRead(client: PoolClient, userId: string, options: AdviceJo
   return (options.read ?? readStudentGraduation)(client, userId);
 }
 
-async function othersPending(db: Db, userId: string): Promise<number> {
+/** Advice of other students queued or being written (all of them for null): the queue a new one joins. */
+async function othersPending(db: Db, userId: string | null): Promise<number> {
   const result = await db.query<{ count: number }>(
-    `SELECT count(*)::int AS count FROM stu_grad_advice WHERE status IN ${PENDING} AND user_id<>$1`, [userId]);
+    `SELECT count(*)::int AS count FROM stu_grad_advice WHERE status IN ${PENDING} AND user_id IS DISTINCT FROM $1`, [userId]);
   return result.rows[0]?.count ?? 0;
 }
 
-/** Cancels pending advice for other facts, queues a job for these facts and prunes old rows. */
-async function insertAdvice(client: PoolClient, userId: string, graduation: EvaluatedGraduation): Promise<GraduationAdviceRow> {
+/**
+ * Cancels pending or deferred advice for other facts, queues a job for these facts (or, while the queue is full, stores
+ * it deferred, without AI input: promoteDeferredGraduationAdvice queues it once there is room) and prunes old rows.
+ */
+async function insertAdvice(client: PoolClient, userId: string, graduation: EvaluatedGraduation, status: "queued" | "deferred" = "queued"): Promise<GraduationAdviceRow> {
   const { standard, evaluation, fingerprint } = graduation;
   await cancelPendingGraduationAdvice(client, userId, fingerprint);
   const id = randomUUID();
   const aiInput = buildGraduationAdviceInput(graduation);
   const inserted = await client.query<{ createdAt: Date | string }>(
     `INSERT INTO stu_grad_advice(id,user_id,transcript_version,standard_id,standard_revision_id,standard_version,calc_version,fingerprint,
-      status,ai_input,prompt_version) VALUES($1,$2,$3,$4,$5,$6,$7,$8,'queued',$9::jsonb,$10) RETURNING created_at AS "createdAt"`,
+      status,ai_input,prompt_version) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11) RETURNING created_at AS "createdAt"`,
     [id, userId, evaluation.asOf.transcriptVersion, standard.id, standard.revisionId, standard.version, evaluation.calcVersion, fingerprint,
-      JSON.stringify(aiInput), aiInput.promptVersion]);
+      status, status === "queued" ? JSON.stringify(aiInput) : null, aiInput.promptVersion]);
   await pruneGraduationAdvice(client, userId);
   return {
-    id, fingerprint, status: "queued", errorCode: null, createdAt: inserted.rows[0]?.createdAt ?? new Date(), completedAt: null,
+    id, fingerprint, status, errorCode: null, createdAt: inserted.rows[0]?.createdAt ?? new Date(), completedAt: null,
     model: null, standardVersion: standard.version, output: null, recent: true, retryDue: false,
   };
 }
@@ -210,10 +216,10 @@ async function insertAdvice(client: PoolClient, userId: string, graduation: Eval
 /**
  * Idempotent per evaluation fingerprint (POST /ensure and the post-import hook), inside the
  * caller's transaction: the newest row for the current facts is returned unchanged while it is
- * queued, processing or completed, or when it failed and may not be re-queued automatically
+ * deferred, queued, processing or completed, or when it failed and may not be re-queued automatically
  * (the page then offers "Thử lại"). Otherwise a job is queued, unless the student queued one in
- * the last 30 seconds (the row for these facts, else the newest row, is returned) or the queue is
- * full ("deferred", nothing stored).
+ * the last 30 seconds (the row for these facts, else the newest row, is returned); while the queue is
+ * full it is stored deferred instead (2026-11-10: before, nothing was stored until the page opened again).
  */
 export async function ensureGraduationAdvice(client: PoolClient, userId: string, options: AdviceJobOptions = {}): Promise<AdviceOutcome> {
   const graduation = await lockAndRead(client, userId, options);
@@ -224,14 +230,14 @@ export async function ensureGraduationAdvice(client: PoolClient, userId: string,
   const newest = rows[0];
   // Within 30 seconds of the last insert: the failed row for these facts, else the newest row.
   if (newest?.recent) return { kind: "stored", row: current ?? newest, created: false, graduation };
-  if (await othersPending(client, userId) >= MAX_PENDING_GRADUATION_ADVICE) return { kind: "deferred", graduation };
-  return { kind: "stored", row: await insertAdvice(client, userId, graduation), created: true, graduation };
+  const status = await othersPending(client, userId) >= MAX_PENDING_GRADUATION_ADVICE ? "deferred" : "queued";
+  return { kind: "stored", row: await insertAdvice(client, userId, graduation, status), created: true, graduation };
 }
 
 /**
  * Manual "Thử lại" (POST /retry), inside the caller's transaction: only when the newest row for
  * the current facts failed or was cancelled. Ignores the per-fingerprint cap but keeps the
- * 30-second guard (429 advice_too_frequent) and the queue cap (429 queue_full).
+ * 30-second guard (429 advice_too_frequent); while the queue is full the advice is stored deferred.
  */
 export async function retryGraduationAdvice(client: PoolClient, userId: string, options: AdviceJobOptions = {}): Promise<Extract<AdviceOutcome, { kind: "stored" }>> {
   const graduation = await lockAndRead(client, userId, options);
@@ -240,8 +246,77 @@ export async function retryGraduationAdvice(client: PoolClient, userId: string, 
   const current = currentAdvice(rows, graduation.fingerprint);
   if (!current || (current.status !== "failed" && current.status !== "cancelled")) throw new GraduationAdviceError("advice_not_retryable", 409);
   if (rows[0]?.recent) throw new GraduationAdviceError("advice_too_frequent", 429);
-  if (await othersPending(client, userId) >= MAX_PENDING_GRADUATION_ADVICE) throw new GraduationAdviceError("queue_full", 429);
-  return { kind: "stored", row: await insertAdvice(client, userId, graduation), created: true, graduation };
+  const status = await othersPending(client, userId) >= MAX_PENDING_GRADUATION_ADVICE ? "deferred" : "queued";
+  return { kind: "stored", row: await insertAdvice(client, userId, graduation, status), created: true, graduation };
+}
+
+/**
+ * One deferred advice into the queue, in the lock order of lockAndRead (the student's row, then the queue lock). A
+ * student whose row a write holds is skipped until the next run; "full" stops the run. Written for the facts as they are
+ * now: the same facts keep their row (queued in place, its 24 hours in the queue start now); other facts cancel it and
+ * queue a new row unless those facts have their advice already, as POST /ensure would; nothing left to advise on (no
+ * transcript or standard) cancels it.
+ */
+async function promoteAdvice(client: PoolClient, candidate: { id: string; userId: string }, read: GraduationAdviceReader): Promise<"queued" | "full" | "skipped"> {
+  const user = await client.query("SELECT id FROM users WHERE id=$1 AND is_active FOR KEY SHARE SKIP LOCKED", [candidate.userId]);
+  if (!user.rowCount) return "skipped";
+  await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [GRADUATION_ADVICE_QUEUE_LOCK]);
+  if (await othersPending(client, null) >= MAX_PENDING_GRADUATION_ADVICE) return "full";
+  const row = await client.query<{ fingerprint: string }>(
+    "SELECT fingerprint FROM stu_grad_advice WHERE id=$1 AND user_id=$2 AND status='deferred' FOR UPDATE", [candidate.id, candidate.userId]);
+  const deferred = row.rows[0];
+  if (!deferred) return "skipped";
+  const cancel = () => client.query("UPDATE stu_grad_advice SET status='cancelled',completed_at=now(),updated_at=now() WHERE id=$1", [candidate.id]);
+  const graduation = await read(client, candidate.userId);
+  if (!isEvaluated(graduation)) {
+    await cancel();
+    return "skipped";
+  }
+  if (graduation.fingerprint !== deferred.fingerprint) {
+    const rows = await readGraduationAdviceRows(client, candidate.userId);
+    if (currentAdvice(rows, graduation.fingerprint) && !autoRetryDue(rows, graduation.fingerprint)) {
+      await cancel();
+      return "skipped";
+    }
+    await insertAdvice(client, candidate.userId, graduation);
+    return "queued";
+  }
+  const { standard, evaluation } = graduation;
+  const aiInput = buildGraduationAdviceInput(graduation);
+  await client.query(`UPDATE stu_grad_advice SET status='queued',transcript_version=$2,standard_id=$3,standard_revision_id=$4,standard_version=$5,
+      calc_version=$6,ai_input=$7::jsonb,prompt_version=$8,error_code=NULL,created_at=now(),updated_at=now() WHERE id=$1`,
+  [candidate.id, evaluation.asOf.transcriptVersion, standard.id, standard.revisionId, standard.version, evaluation.calcVersion,
+    JSON.stringify(aiInput), aiInput.promptVersion]);
+  return "queued";
+}
+
+/**
+ * Queues the deferred advice again while the queue has room (QA 2026-11-10), oldest first, each in a transaction of its
+ * own; run from the AI worker's claims (competency-assessment/ai/deferred.ts). Returns how many were queued.
+ */
+export async function promoteDeferredGraduationAdvice(pool: Pick<DatabasePool, "query" | "connect">, options: Pick<AdviceJobOptions, "read"> = {}): Promise<number> {
+  const read = options.read ?? readStudentGraduation;
+  const candidates = await pool.query<{ id: string; userId: string }>(
+    `SELECT a.id,a.user_id AS "userId" FROM stu_grad_advice a JOIN users u ON u.id=a.user_id AND u.is_active
+      WHERE a.status='deferred' ORDER BY a.created_at,a.id LIMIT $1`, [MAX_PENDING_GRADUATION_ADVICE]);
+  let queued = 0;
+  for (const candidate of candidates.rows) {
+    const client = await pool.connect();
+    let outcome: Awaited<ReturnType<typeof promoteAdvice>>;
+    try {
+      await client.query("BEGIN");
+      outcome = await promoteAdvice(client, candidate, read);
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+    if (outcome === "full") break;
+    if (outcome === "queued") queued += 1;
+  }
+  return queued;
 }
 
 /** A loggable code without data: the advice error code, the PostgreSQL SQLSTATE or the error class. */

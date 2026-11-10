@@ -1049,16 +1049,19 @@ export function normalizeAdviceStatus(value: unknown): GraduationAdviceStatusRes
   return { id: stringOrNull(data.id), status: adviceStatus(data.status), errorCode: stringOrNull(data.errorCode), worker: worker(data.worker) };
 }
 
-/** POST /ensure and /retry: the stored advice, or `deferred` when the queue was full and nothing was stored. */
+/**
+ * POST /ensure and /retry: the stored advice (since 2026-11-10 also one stored deferred while the queue is full, which the
+ * server queues by itself), or `deferred` without an advice from an older API that stored nothing.
+ */
 export function normalizeAdviceWrite(value: unknown): { advice: StoredAdvice | null; deferred: boolean } {
   const data = record(value);
   const advice = normalizeStoredAdvice(data.advice);
   const deferred = advice?.status === "deferred" || data.status === "deferred";
-  return { advice: deferred ? null : advice, deferred };
+  return { advice: deferred && !advice?.id ? null : advice, deferred };
 }
 
-/** Only these statuses change on their own, so only they are polled. */
-export const shouldPollAdvice = (status: AdviceStatus | null | undefined) => status === "queued" || status === "processing";
+/** Only these statuses change on their own, so only they are polled (a stored deferred advice is queued by the server). */
+export const shouldPollAdvice = (status: AdviceStatus | null | undefined) => status === "queued" || status === "processing" || status === "deferred";
 
 const hasOutput = (advice: StoredAdvice | null | undefined): advice is StoredAdvice & { output: AdviceOutput } =>
   advice?.status === "completed" && advice.output !== null;
@@ -1073,7 +1076,7 @@ export type AdviceView =
   | ({ kind: "preparing" | "deferred" | "request_failed" | "cancelled" } & Previous)
   | ({ kind: "queued"; worker: "ready" | "outdated" | "offline" } & Previous)
   | ({ kind: "processing"; since: string | null } & Previous)
-  | ({ kind: "failed"; errorCode: string | null } & Previous)
+  | ({ kind: "failed"; errorCode: string | null; since: string | null } & Previous)
   | { kind: "completed"; advice: StoredAdvice & { output: AdviceOutput }; stale: boolean };
 export type AdviceKind = AdviceView["kind"];
 
@@ -1098,15 +1101,16 @@ export function adviceView(input: {
   const previous = response.stale && hasOutput(row) ? row
     : hasOutput(input.remembered) && input.remembered.id !== row?.id ? input.remembered : null;
   const ensure = input.ensure?.fingerprint === response.fingerprint ? input.ensure.state : null;
-  // A full queue first: nothing was stored, so there is nothing to poll or retry until the page opens again.
+  // A full queue first: a stored deferred advice is queued by the server by itself and polled (2026-11-10); an older API
+  // stored nothing, so the page asks again when it opens.
   if (row?.status === "deferred" || (response.needsAdvice && ensure === "deferred")) return { kind: "deferred", previous };
   if (response.needsAdvice) return { kind: ensure === "error" ? "request_failed" : "preparing", previous };
   if (!row) return { kind: "hidden" };
   switch (row.status) {
-    case "completed": return hasOutput(row) ? { kind: "completed", advice: row, stale: response.stale } : { kind: "failed", errorCode: row.errorCode ?? "invalid_ai_output", previous };
+    case "completed": return hasOutput(row) ? { kind: "completed", advice: row, stale: response.stale } : { kind: "failed", errorCode: row.errorCode ?? "invalid_ai_output", since: row.createdAt, previous };
     case "queued": return { kind: "queued", worker: !response.worker.online ? "offline" : response.worker.supportsAdvice ? "ready" : "outdated", previous };
     case "processing": return { kind: "processing", since: row.createdAt, previous };
-    case "failed": return { kind: "failed", errorCode: row.errorCode, previous };
+    case "failed": return { kind: "failed", errorCode: row.errorCode, since: row.createdAt, previous };
     default: return { kind: "cancelled", previous };
   }
 }
@@ -1147,13 +1151,21 @@ export function adviceStateCopy(view: AdviceView): { title: string; text: string
         : view.worker === "outdated" ? { title: "Máy AI đang chạy phiên bản cũ…", text: "Lời khuyên sẽ được viết khi máy AI được cập nhật. Các đề xuất ở trên vẫn đầy đủ." }
           : { title: "Lời khuyên sẽ có khi máy AI hoạt động trở lại", text: "Yêu cầu đã được giữ trong hàng đợi; bạn không cần làm gì thêm." };
     case "processing": return { title: "EduPath AI đang viết lời khuyên…", text: "Thường mất khoảng 20–60 giây." };
-    case "deferred": return { title: "Hàng đợi AI đang đầy", text: "Lời khuyên sẽ được tạo tự động khi bạn mở lại trang này sau ít phút." };
+    case "deferred": return { title: "Hàng đợi AI đang đầy", text: "Hệ thống sẽ tự xếp hàng viết lời khuyên khi hàng đợi có chỗ, bạn không cần làm gì thêm. Các đề xuất ở trên đã đủ để bạn bắt đầu." };
     case "request_failed": return { title: "Chưa gửi được yêu cầu tạo lời khuyên", text: "Hãy tải lại trang sau ít phút. Các đề xuất ở trên không bị ảnh hưởng." };
-    case "failed": return { title: "Chưa tạo được lời khuyên", text: `${adviceErrorMessage(view.errorCode)} Các đề xuất ở trên không bị ảnh hưởng.` };
+    // With an older advice below, dimmed: when the new one failed, why, and what to do (QA 2026-11-10).
+    case "failed": return view.previous
+      ? { title: "Chưa tạo được lời khuyên mới", text: `Lần tạo lời khuyên mới lúc ${formatDateTime(view.since)} không thành công. ${adviceErrorMessage(view.errorCode)} Lời khuyên bên dưới là bản trước. Bấm “Thử lại” để thử lần nữa.` }
+      : { title: "Chưa tạo được lời khuyên", text: `${adviceErrorMessage(view.errorCode)} Các đề xuất ở trên không bị ảnh hưởng.` };
     case "cancelled": return { title: "Yêu cầu tạo lời khuyên đã dừng", text: "Lời khuyên mới sẽ được tạo tự động khi bạn mở lại trang." };
     default: return null;
   }
 }
+
+/** Over an older advice kept, dimmed, under the state box; once the new one failed or stopped, no new one is coming by itself. */
+export const previousAdviceNote = (kind: AdviceKind) => kind === "failed" || kind === "cancelled" || kind === "request_failed"
+  ? "Lời khuyên trước, viết cho dữ liệu cũ — có thể không còn đúng."
+  : "Lời khuyên trước, viết cho dữ liệu cũ — có thể không còn đúng. Lời khuyên mới sẽ thay thế khi sẵn sàng.";
 
 /** What the live region says when the AI state changes on screen (nothing for the first load). */
 export function adviceAnnouncement(kind: AdviceKind): string {
@@ -1163,7 +1175,7 @@ export function adviceAnnouncement(kind: AdviceKind): string {
     case "processing": return "EduPath AI đang viết lời khuyên.";
     case "queued":
     case "preparing": return "Đang chuẩn bị lời khuyên từ EduPath AI.";
-    case "deferred": return "Hàng đợi AI đang đầy; lời khuyên sẽ được tạo khi bạn mở lại trang.";
+    case "deferred": return "Hàng đợi AI đang đầy; lời khuyên sẽ tự được tạo khi hàng đợi có chỗ.";
     case "request_failed": return "Chưa gửi được yêu cầu tạo lời khuyên.";
     default: return "";
   }

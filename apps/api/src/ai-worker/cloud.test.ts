@@ -64,6 +64,30 @@ describe("a 4006 answer on Cloudflare", () => {
   });
 });
 
+describe("a spent neuron budget", () => {
+  it("keeps the in-process worker from claiming, so no deferred request is queued while the AI cannot run it (2026-11-10)", async () => {
+    const paths: string[] = [];
+    const apiFetch: FetchLike = async (url) => { paths.push(new URL(url).pathname); return json({ job: null }); };
+    const fetch: FetchLike = async () => json({ success: true, result: [{ name: CLOUDFLARE_CHAT_MODEL }] });
+    const budget = createNeuronBudget({ limit: 1_000, log: { warn: () => undefined } });
+    await budget.spend(900);
+    expect(await budget.allows()).toBe(false);
+    const worker = startCloudAiWorker({ port: 4321, workerKey: "k".repeat(40), accountId: "0".repeat(32), apiToken: "t".repeat(30), concurrency: 2, fetch, apiFetch, budget, log: () => undefined });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    worker.stop();
+    await worker.done;
+    // The claim is what runs the deferred requests' housekeeping (worker-router.ts): no claim, nothing queued, nothing failed.
+    expect(paths.filter((path) => path.endsWith("/claim"))).toEqual([]);
+    // With neurons left, the same worker claims at once.
+    const roomy = startCloudAiWorker({ port: 4321, workerKey: "k".repeat(40), accountId: "0".repeat(32), apiToken: "t".repeat(30), concurrency: 1, fetch, apiFetch,
+      budget: createNeuronBudget({ limit: 1_000, log: { warn: () => undefined } }), log: () => undefined });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    roomy.stop();
+    await roomy.done;
+    expect(paths.filter((path) => path.endsWith("/claim")).length).toBeGreaterThan(0);
+  });
+});
+
 describe("AI_PROVIDER and the Cloudflare values", () => {
   it("runs on Cloudflare only when asked, and keeps the values only when they look right (a bad paste never stops the site)", () => {
     expect(aiProviderConfig({})).toEqual({ provider: "ollama", cloudflare: null, concurrency: 2, thinking: false, dailyNeurons: 9_000 });

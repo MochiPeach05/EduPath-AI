@@ -343,7 +343,7 @@ describe("roadmapOverview", () => {
   it("lists retakes first, then the AI's picks, with the picked skills, the first month with a text and the planned credits", () => {
     const saved = { schemaVersion: 1 as const, terms: [{ code: "HK262", courses: [{ code: "71ITSE30803" }, { code: "71ITIS30203" }] }] };
     expect(roadmapOverview(row(), saved, credits, now)).toEqual({
-      status: "completed", createdAt: "2026-10-24T03:00:00.000Z", term: { code: "HK262", label: "HK2 2026–2027" },
+      status: "completed", errorCode: null, createdAt: "2026-10-24T03:00:00.000Z", term: { code: "HK262", label: "HK2 2026–2027" },
       courses: [
         { code: "71ITBS10203", name: "Cơ sở lập trình", credits: 3, reason: "Học lại" },
         { code: "71ITSE30803", name: "Lập trình Web nâng cao với framework", credits: 3, reason: "Tự chọn TC309" },
@@ -391,6 +391,13 @@ describe("roadmapOverview", () => {
       .toMatchObject({ status: "pending", courses: [], skills: [], firstMonth: null, plan: null, limits: null });
     expect(roadmapOverview(row({ status: "failed" }), null, credits, now)!.status).toBe("failed");
     expect(roadmapOverview(null, null, credits, now)).toBeNull();
+    // Asked for while the queue was full: the server queues it by itself (2026-11-10).
+    expect(roadmapOverview(row({ status: "deferred", completedAt: null }), null, credits, now)).toMatchObject({ status: "pending", errorCode: null, courses: [] });
+  });
+
+  it("says why the newest roadmap failed, for the line over the previous one (2026-11-10)", () => {
+    expect(roadmapOverview(row({ status: "failed", errorCode: "ai_output_truncated" }), null, credits, now)).toMatchObject({ status: "failed", errorCode: "ai_output_truncated" });
+    expect(roadmapOverview(row({ status: "cancelled", errorCode: null }), null, credits, now)).toMatchObject({ status: "failed", errorCode: null });
   });
 });
 

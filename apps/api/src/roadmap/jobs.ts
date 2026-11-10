@@ -39,8 +39,11 @@ const MAX_RETRY_ISSUES = 6;
 
 type Db = Pick<DatabasePool, "query">;
 const PENDING = "('queued','processing')";
+/** A student's roadmap still to be written: queued, being written, or deferred (asked for while the queue was full). */
+const OWN_PENDING = "('deferred','queued','processing')";
 
-export type RoadmapStatus = "queued" | "processing" | "completed" | "failed" | "cancelled";
+/** "deferred" (2026-11-10): asked for while the queue was full, without AI input; promoteDeferredRoadmaps queues it. */
+export type RoadmapStatus = "deferred" | "queued" | "processing" | "completed" | "failed" | "cancelled";
 
 /** A stored row as the student routes read it. */
 export type RoadmapRow = {
@@ -155,10 +158,29 @@ export function createRoadmapExpiry(intervalMs: number = AI_HOUSEKEEPING_INTERVA
   };
 }
 
-/** Keeps the newest MAX_ROADMAPS_PER_USER rows of the student (a pending row is never pruned). */
+/** Keeps the newest MAX_ROADMAPS_PER_USER rows of the student (a pending or deferred row is never pruned). */
 async function pruneRoadmaps(db: Db, userId: string): Promise<void> {
-  await db.query(`DELETE FROM stu_roadmaps WHERE user_id=$1 AND status NOT IN ${PENDING} AND id NOT IN (
+  await db.query(`DELETE FROM stu_roadmaps WHERE user_id=$1 AND status NOT IN ${OWN_PENDING} AND id NOT IN (
     SELECT id FROM stu_roadmaps WHERE user_id=$1 ORDER BY created_at DESC,id DESC LIMIT $2)`, [userId, MAX_ROADMAPS_PER_USER]);
+}
+
+/** Roadmaps of other students queued or being written: the queue a new one joins. */
+async function othersPending(db: Db, userId: string | null): Promise<number> {
+  const result = await db.query<{ count: number }>(
+    `SELECT count(*)::int AS count FROM stu_roadmaps WHERE status IN ${PENDING} AND user_id IS DISTINCT FROM $1`, [userId]);
+  return result.rows[0]?.count ?? 0;
+}
+
+type NewestAssessment = NonNullable<Awaited<ReturnType<typeof newestAssessment>>>;
+type UsableSurvey = NonNullable<Awaited<ReturnType<typeof readSurvey>>>;
+
+/** What a roadmap is built from now: the term window, the facts the page shows and the AI input (never stored while deferred). */
+async function buildRoadmapJob(client: Db, userId: string, assessment: NewestAssessment, survey: UsableSurvey, now: Date) {
+  const window = roadmapWindow(now);
+  // roadmap-v16: the thesis group follows the way the student chose in Kế hoạch học kỳ (user 2026-11-10).
+  const facts = buildRoadmapFacts(assessment.id, assessment.computed, window, await readRoadmapRelations(client, assessment.computed),
+    await readOwnPlannedCodes(client, userId));
+  return { window, facts, aiInput: buildRoadmapInput(facts, surveyFacts(survey)) };
 }
 
 /* ------------------------------------------------------------------------ */
@@ -177,7 +199,9 @@ type CreateOptions = {
  * (409 assessment_required) and the answered profile survey, agreed to under the current policy (409 survey_required,
  * user 2026-10-24: the AI advises from it). A roadmap still being written for the newest assessment is returned as it is; otherwise one queued for an older
  * assessment is cancelled and a new one is queued, unless the student queued one in the last 30 seconds (429
- * roadmap_too_frequent) or the queue is full (429 queue_full).
+ * roadmap_too_frequent). While the queue is full (2026-11-10, no longer 429 queue_full) the new roadmap is stored deferred,
+ * with its facts and without AI input, and promoteDeferredRoadmaps queues it once there is room; one already deferred for
+ * the newest assessment is returned as it is.
  */
 export async function createRoadmap(client: PoolClient, userId: string, options: CreateOptions = {}): Promise<{ row: RoadmapRow; created: boolean }> {
   const user = await client.query("SELECT id FROM users WHERE id=$1 AND is_active FOR KEY SHARE", [userId]);
@@ -194,28 +218,84 @@ export async function createRoadmap(client: PoolClient, userId: string, options:
   const pending = rows.find((row) => row.status === "queued" || row.status === "processing");
   if (pending?.assessmentId === assessment.id) return { row: pending, created: false };
   if (rows[0]?.recent) throw new RoadmapError("roadmap_too_frequent", 429);
-  const others = await client.query<{ count: number }>(
-    `SELECT count(*)::int AS count FROM stu_roadmaps WHERE status IN ${PENDING} AND user_id<>$1`, [userId]);
-  if ((others.rows[0]?.count ?? 0) >= MAX_PENDING_ROADMAPS) throw new RoadmapError("queue_full", 429);
+  const full = await othersPending(client, userId) >= MAX_PENDING_ROADMAPS;
+  const deferred = rows.find((row) => row.status === "deferred");
+  if (full && deferred?.assessmentId === assessment.id) return { row: deferred, created: false };
 
   await client.query(`UPDATE stu_roadmaps SET status='cancelled',ai_input=NULL,lease_token=NULL,lease_until=NULL,completed_at=now(),updated_at=now()
-    WHERE user_id=$1 AND status IN ${PENDING}`, [userId]);
-  const window = roadmapWindow(options.now ?? new Date());
-  // roadmap-v16: the thesis group follows the way the student chose in Kế hoạch học kỳ (user 2026-11-10).
-  const facts = buildRoadmapFacts(assessment.id, assessment.computed, window, await readRoadmapRelations(client, assessment.computed),
-    await readOwnPlannedCodes(client, userId));
-  const aiInput = buildRoadmapInput(facts, surveyFacts(survey));
+    WHERE user_id=$1 AND status IN ${OWN_PENDING}`, [userId]);
+  const { window, facts, aiInput } = await buildRoadmapJob(client, userId, assessment, survey, options.now ?? new Date());
+  const status = full ? "deferred" : "queued";
   const id = randomUUID();
   const inserted = await client.query<{ createdAt: Date | string }>(
     `INSERT INTO stu_roadmaps(id,user_id,assessment_id,window_start,window_end,facts,status,ai_input,prompt_version)
-      VALUES($1,$2,$3,$4,$5,$6::jsonb,'queued',$7::jsonb,$8) RETURNING created_at AS "createdAt"`,
-    [id, userId, assessment.id, window.start, window.end, JSON.stringify(facts), JSON.stringify(aiInput), aiInput.promptVersion]);
+      VALUES($1,$2,$3,$4,$5,$6::jsonb,$7,$8::jsonb,$9) RETURNING created_at AS "createdAt"`,
+    [id, userId, assessment.id, window.start, window.end, JSON.stringify(facts), status, full ? null : JSON.stringify(aiInput), aiInput.promptVersion]);
   await pruneRoadmaps(client, userId);
   return {
-    row: { id, assessmentId: assessment.id, status: "queued", errorCode: null, createdAt: inserted.rows[0]?.createdAt ?? new Date(),
+    row: { id, assessmentId: assessment.id, status, errorCode: null, createdAt: inserted.rows[0]?.createdAt ?? new Date(),
       completedAt: null, model: null, facts, output: null, recent: true },
     created: true,
   };
+}
+
+/** A roadmap transaction of its own (promoteDeferredRoadmaps). */
+async function inOwnTransaction<T>(pool: Pick<DatabasePool, "connect">, work: (client: PoolClient) => Promise<T>): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await work(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * One deferred roadmap into the queue, in the lock order of createRoadmap (the student's row, then the queue lock). A
+ * student whose row a write holds is skipped until the next run; "full" stops the run. The roadmap is built now, from the
+ * newest assessment and the survey as they are, like "Tạo lại" (and its 24 hours in the queue start now); one the student
+ * can no longer have (no usable survey) is cancelled.
+ */
+async function promoteRoadmap(client: PoolClient, candidate: { id: string; userId: string }, now: Date): Promise<"queued" | "full" | "skipped"> {
+  const user = await client.query("SELECT id FROM users WHERE id=$1 AND is_active FOR KEY SHARE SKIP LOCKED", [candidate.userId]);
+  if (!user.rowCount) return "skipped";
+  await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [ROADMAP_QUEUE_LOCK]);
+  if (await othersPending(client, null) >= MAX_PENDING_ROADMAPS) return "full";
+  const row = await client.query("SELECT id FROM stu_roadmaps WHERE id=$1 AND user_id=$2 AND status='deferred' FOR UPDATE", [candidate.id, candidate.userId]);
+  if (!row.rowCount) return "skipped";
+  const assessment = await newestAssessment(client, candidate.userId);
+  const survey = await readSurvey(client, candidate.userId);
+  if (!assessment || !survey || !await surveyUsable(client, candidate.userId, survey)) {
+    await client.query("UPDATE stu_roadmaps SET status='cancelled',completed_at=now(),updated_at=now() WHERE id=$1", [candidate.id]);
+    return "skipped";
+  }
+  const { window, facts, aiInput } = await buildRoadmapJob(client, candidate.userId, assessment, survey, now);
+  await client.query(`UPDATE stu_roadmaps SET status='queued',assessment_id=$2,window_start=$3,window_end=$4,facts=$5::jsonb,ai_input=$6::jsonb,
+      prompt_version=$7,error_code=NULL,created_at=now(),updated_at=now() WHERE id=$1`,
+  [candidate.id, assessment.id, window.start, window.end, JSON.stringify(facts), JSON.stringify(aiInput), aiInput.promptVersion]);
+  return "queued";
+}
+
+/**
+ * Queues the deferred roadmaps again while the queue has room (QA 2026-11-10), oldest first; run from the AI worker's
+ * claims (competency-assessment/ai/deferred.ts). Returns how many were queued.
+ */
+export async function promoteDeferredRoadmaps(pool: Pick<DatabasePool, "query" | "connect">, options: { now?: Date } = {}): Promise<number> {
+  const candidates = await pool.query<{ id: string; userId: string }>(
+    `SELECT r.id,r.user_id AS "userId" FROM stu_roadmaps r JOIN users u ON u.id=r.user_id AND u.is_active
+      WHERE r.status='deferred' ORDER BY r.created_at,r.id LIMIT $1`, [MAX_PENDING_ROADMAPS]);
+  let queued = 0;
+  for (const candidate of candidates.rows) {
+    const outcome = await inOwnTransaction(pool, (client) => promoteRoadmap(client, candidate, options.now ?? new Date()));
+    if (outcome === "full") break;
+    if (outcome === "queued") queued += 1;
+  }
+  return queued;
 }
 
 /* ------------------------------------------------------------------------ */

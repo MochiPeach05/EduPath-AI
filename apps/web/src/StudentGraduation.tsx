@@ -8,7 +8,7 @@ import {
   OUTSIDE_STANDARD_TITLE, STATUS_DISPLAY,
   adviceAnnouncement, adviceFocusLabel, adviceStateCopy, adviceView, asOfLine, conditionItems, courseStateText, filterCourses,
   formatDateTime, formatElapsed, formatNumber, groupFacts, groupShortfall, groupViews, methodNotes, modelLabel, modelPlace,
-  normalizeAdviceResponse, normalizeAdviceStatus, normalizeAdviceWrite, outsideStandardViews, profileLineParts, requestErrorMessage, scoreParts,
+  normalizeAdviceResponse, normalizeAdviceStatus, normalizeAdviceWrite, outsideStandardViews, previousAdviceNote, profileLineParts, requestErrorMessage, scoreParts,
   shouldPollAdvice, standardDocumentName, standardMetaParts, standardNameParts, standardNotesText, standardThresholds, suggestionItems, toneClass,
   unresolvedCopy, verdictHeadline, warningNotes,
   type AdviceKind, type AdviceView, type ConditionItem, type CourseFilter, type CourseView, type EnsureState, type GroupView, type MetaPart,
@@ -88,12 +88,13 @@ function useGraduationAdvice(): AdviceState {
     setEnsure({ fingerprint, state: "sending" });
     postAdvice("ensure").then((result) => {
       setEnsure({ fingerprint, state: result.deferred ? "deferred" : "sent" });
-      if (!result.deferred) apply(result.advice, fingerprint);
+      // A deferred advice is stored since 2026-11-10 (the server queues it by itself): it is shown and polled like a queued one.
+      if (!result.deferred || result.advice) apply(result.advice, fingerprint);
     }, () => setEnsure({ fingerprint, state: "error" }));
   }, [wanted, fingerprint]);
 
-  // Poll the small status payload only while a stored advice can still change on its own
-  // (never for "deferred": nothing was stored and its id is null).
+  // Poll the small status payload only while a stored advice can still change on its own (deferred, queued or being
+  // written; never for a deferred one an older API did not store: its id is null).
   const adviceId = row?.id ?? null, status = row?.status ?? null;
   useEffect(() => {
     if (!adviceId || !shouldPollAdvice(status)) return;
@@ -124,7 +125,7 @@ function useGraduationAdvice(): AdviceState {
   const retry = () => {
     setRetrying(true); setRetryError("");
     postAdvice("retry").then((result) => {
-      if (result.deferred) setRetryError(requestErrorMessage("queue_full"));
+      if (result.deferred && !result.advice) setRetryError(requestErrorMessage("queue_full"));
       else apply(result.advice, null);
     }, (error: Error) => setRetryError(error.message)).finally(() => setRetrying(false));
   };
@@ -194,7 +195,7 @@ function AdvicePanel({ advice }: { advice: AdviceState }) {
           </div>}
           {advice.retryError && <p className="sg-ai-error" role="alert">{advice.retryError}</p>}
         </div>
-        {previous && <AdviceContent advice={previous} note="Lời khuyên trước, viết cho dữ liệu cũ — có thể không còn đúng. Lời khuyên mới sẽ thay thế khi sẵn sàng." />}
+        {previous && <AdviceContent advice={previous} note={previousAdviceNote(view.kind)} />}
       </>}
   </section>;
 }

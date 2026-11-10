@@ -836,8 +836,11 @@ export function bucketSkills(result: Pick<AssessmentResult, "groups">, skills: r
 
 /* --------------------------------------------------------------------- AI */
 
-/** Only these statuses change on their own, so only they are polled. */
-export const shouldPoll = (status: AiStatus | null | undefined) => status === "queued" || status === "processing";
+/**
+ * Only these statuses change on their own, so only they are polled: a deferred comment (asked for while the AI queue was
+ * full) is queued by the server by itself once there is room (2026-11-10).
+ */
+export const shouldPoll = (status: AiStatus | null | undefined) => status === "queued" || status === "processing" || status === "deferred";
 
 /** POST /:id/ai is offered for these states (disabled only once AI is switched on). */
 export function canRegenerate(status: AiStatus, aiEnabled: boolean): boolean {
@@ -849,7 +852,7 @@ export function aiStateCopy(status: AiStatus, workerOnline: boolean, aiEnabled: 
     case "disabled": return aiEnabled
       ? { title: "Chưa có nhận xét cho lần đánh giá này", text: "Nhận xét AI vừa được bật. Bạn có thể tạo nhận xét cho kết quả hiện tại." }
       : { title: "Nhận xét AI chưa được bật", text: "Kết quả bên dưới do hệ thống tính và đã đầy đủ. Khi nhận xét AI được bật, bạn có thể nhận thêm lời nhận xét." };
-    case "deferred": return { title: "Hàng đợi AI đang đầy", text: "Kết quả tính toán đã sẵn sàng. Sau ít phút, bấm “Tạo lại nhận xét” để xếp hàng lại." };
+    case "deferred": return { title: "Hàng đợi AI đang đầy", text: "Kết quả tính toán đã sẵn sàng. Hệ thống sẽ tự xếp hàng tạo nhận xét khi hàng đợi có chỗ, bạn không cần làm gì thêm." };
     case "queued": return workerOnline
       ? { title: "Đang xếp hàng tạo nhận xét", text: "AI suy luận trước khi viết nên nhận xét thường mất 1–3 phút. Bạn có thể xem kết quả bên dưới trong lúc chờ." }
       : { title: "Đang chờ máy AI kết nối", text: "Yêu cầu đã được giữ trong hàng đợi và sẽ được xử lý khi máy AI kết nối lại." };
@@ -1003,6 +1006,15 @@ export const hasCompetencyContent = (output: MappedAiOutput): boolean =>
 
 /** Over an older comment shown while the newest one is not ready (the wording of Xét tốt nghiệp's previous advice). */
 export const PREVIOUS_COMMENT_NOTE = "Nhận xét trước, viết cho kết quả đánh giá cũ — có thể không còn đúng. Nhận xét mới sẽ thay thế khi sẵn sàng.";
+/** The note once the newest comment failed or was stopped: no new one is coming by itself (2026-11-10). */
+export const previousCommentNote = (status: AiStatus) =>
+  status === "failed" || status === "cancelled" ? "Nhận xét trước, viết cho kết quả đánh giá cũ — có thể không còn đúng." : PREVIOUS_COMMENT_NOTE;
+/**
+ * The line over the older comment when the newest one failed (QA 2026-11-10: the page kept the old comment dimmed without
+ * saying the new one failed and what to do): when, why (aiErrorMessage) and the button.
+ */
+export const failedCommentText = (assessment: Pick<StoredAssessment, "createdAt" | "ai">) =>
+  `Lần tạo nhận xét mới cho kết quả đánh giá lúc ${formatDateTime(assessment.createdAt)} không thành công. ${aiErrorMessage(assessment.ai.errorCode)} Nhận xét bên dưới là bản trước. Bấm “Tạo lại nhận xét” để thử lần nữa.`;
 
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null && !Array.isArray(value);
 const textOrNull = (value: unknown) => (typeof value === "string" && value ? value : null);

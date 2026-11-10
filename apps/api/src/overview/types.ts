@@ -84,6 +84,8 @@ export type OverviewCompetency = {
 
 export type OverviewRoadmap = {
   status: "completed" | "pending" | "failed";
+  /** Why a failed roadmap failed (roadmap error_code); null otherwise, and from an older API. */
+  errorCode?: string | null;
   createdAt: string;
   term: OverviewTerm | null;
   courses: { code: string; name: string; credits: number; reason: string }[];

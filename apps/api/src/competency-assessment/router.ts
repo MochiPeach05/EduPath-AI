@@ -155,7 +155,7 @@ export function createCompetencyAssessmentRouter(
       if (!row.latest || !REGENERABLE_AI_STATUSES.includes(row.ai_status)) throw new AssessmentError("ai_not_regenerable", 409);
       return aiQueue!.regenerate(client, { assessmentId: row.id, userId: user.userId, result: row.computed });
     });
-    if (outcome === "deferred") { res.status(429).json({ error: "queue_full" }); return; }
+    // "deferred" (queue full): kept, and queued by the server once there is room (2026-11-10; before, 429 queue_full).
     res.status(202).json({ aiStatus: outcome });
   });
 

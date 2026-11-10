@@ -214,12 +214,12 @@ describe("POST /ensure", () => {
     expect(writes(same.sql())).toEqual([]);
   });
 
-  it("answers a full queue with an unstored deferred advice", async () => {
+  it("answers a full queue with a stored deferred advice the server queues by itself (2026-11-10)", async () => {
     const { app, sql } = setup({ othersPending: 20 });
-    await request(app).post("/advice/ensure").set("Origin", origin).send({}).expect(200, { advice: {
-      id: null, status: "deferred", errorCode: null, createdAt: null, completedAt: null, model: null, standardVersion: 1, output: null,
-    } });
-    expect(writes(sql())).toEqual([]);
+    const res = await request(app).post("/advice/ensure").set("Origin", origin).send({}).expect(200);
+    expect(res.body.advice).toMatchObject({ status: "deferred", errorCode: null, createdAt: "2026-10-13T10:00:00.000Z", completedAt: null, model: null, output: null });
+    expect(res.body.advice.id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(writes(sql()).filter((text) => text.startsWith("INSERT INTO stu_grad_advice"))).toHaveLength(1);
   });
 });
 
@@ -230,7 +230,7 @@ describe("POST /retry", () => {
     expect(res.body.advice).toMatchObject({ status: "queued", output: null });
   });
 
-  it("refuses with AI off, without a failure, too soon or with a full queue", async () => {
+  it("refuses with AI off, without a failure or too soon, and keeps a retry with a full queue deferred", async () => {
     await request(setup({ enabled: false }).app).post("/advice/retry").set("Origin", origin).send({}).expect(409, { error: "ai_disabled" });
     const done = setup({ rows: [row()] });
     await request(done.app).post("/advice/retry").set("Origin", origin).send({}).expect(409, { error: "advice_not_retryable" });
@@ -238,7 +238,8 @@ describe("POST /retry", () => {
     expect(done.release).toHaveBeenCalled();
     await request(setup({ rows: [row({ status: "failed", recent: true })] }).app).post("/advice/retry").set("Origin", origin).send({})
       .expect(429, { error: "advice_too_frequent" });
-    await request(setup({ rows: [row({ status: "cancelled" })], othersPending: 20 }).app).post("/advice/retry").set("Origin", origin).send({})
-      .expect(429, { error: "queue_full" });
+    const full = await request(setup({ rows: [row({ status: "cancelled" })], othersPending: 20 }).app).post("/advice/retry").set("Origin", origin).send({})
+      .expect(201);
+    expect(full.body.advice).toMatchObject({ status: "deferred", output: null });
   });
 });

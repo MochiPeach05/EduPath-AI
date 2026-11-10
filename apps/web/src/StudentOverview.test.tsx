@@ -359,6 +359,22 @@ describe("Tổng quan progress after the review of 2026-11-04 (comp-calc-v19)", 
     expect(text(alone)).toContain("EduPath AI đang soạn lộ trình cho học kỳ tới");
   });
 
+  it("says above the previous roadmap that the newest one failed, when, why and where to try again (QA 2026-11-10)", () => {
+    const { term, courses, skills, firstMonth } = full.roadmap!;
+    const failed = { ...full, roadmap: { ...full.roadmap!, status: "failed" as const, errorCode: "ai_output_truncated", createdAt: "2026-11-08T14:40:00.000Z",
+      courses: [], skills: [], firstMonth: null, previous: { createdAt: "2026-11-01T03:00:00.000Z", term, courses, skills, firstMonth } } };
+    const html = dashboard(failed);
+    expect(text(html)).toContain("Lần tạo Lộ trình AI mới lúc 21:40 08/11/2026 không thành công. Câu trả lời của AI bị cắt giữa chừng nên chưa dùng được. "
+      + "Lộ trình bên dưới là bản trước. Bạn mở Lộ trình AI đề xuất và bấm “Thử lại” để thử lần nữa.");
+    // The line is not dimmed; the note over the dimmed roadmap no longer promises a new one.
+    expect(html.indexOf("Lần tạo Lộ trình AI mới")).toBeLessThan(html.indexOf('class="ov-previous"'));
+    expect(html).toContain('<p class="ov-previous-note">Lộ trình trước, viết cho dữ liệu cũ — có thể không còn đúng.</p>');
+    expect(html).not.toContain("ai_output_truncated");
+    // A stopped one (no error code), or an older API without it, still says when.
+    const older = dashboard({ ...failed, roadmap: { ...failed.roadmap, errorCode: undefined } });
+    expect(text(older)).toContain("Lần tạo Lộ trình AI mới lúc 21:40 08/11/2026 không thành công. Lộ trình bên dưới là bản trước.");
+  });
+
   it("says on the card that the roadmap is out of date, by the Lộ trình AI tab's rules", () => {
     const stale = { ...full, roadmap: { ...full.roadmap!, stale: true, ended: false } };
     const plain = text(dashboard(stale));

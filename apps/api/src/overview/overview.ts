@@ -568,8 +568,9 @@ export function competencyOverview(
 /* ------------------------------------------------------------------------ */
 /* AI roadmap */
 
+// A deferred roadmap (asked for while the queue was full) is queued by the server by itself (2026-11-10): "Đang soạn".
 const ROADMAP_STATUS: Record<RoadmapRow["status"], OverviewRoadmap["status"]> = {
-  completed: "completed", queued: "pending", processing: "pending", failed: "failed", cancelled: "failed",
+  completed: "completed", deferred: "pending", queued: "pending", processing: "pending", failed: "failed", cancelled: "failed",
 };
 const tcCode = (label: string | null) => /\bTC\d{3}\b/.exec(label ?? "")?.[0] ?? null;
 
@@ -660,6 +661,8 @@ export function roadmapOverview(
   }
   return {
     status,
+    // Why the newest one failed (the Lộ trình AI tab's texts): the card says so over the previous one (2026-11-10).
+    errorCode: status === "failed" ? row.errorCode : null,
     createdAt: new Date(row.createdAt).toISOString(),
     term: term ? termRef(term) : null,
     courses,

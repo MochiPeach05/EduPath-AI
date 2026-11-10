@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  COURSE_FILTERS, adviceAnnouncement, adviceErrorMessage, adviceFocusLabel, adviceStateCopy, adviceView, asOfLine, conditionItems,
+  COURSE_FILTERS, adviceAnnouncement, previousAdviceNote, adviceErrorMessage, adviceFocusLabel, adviceStateCopy, adviceView, asOfLine, conditionItems,
   courseStateText, criteriaRows, failingGroupCredits, filterCourses, formatDate, formatElapsed, formatGpa, formatGpaShortfall, formatNumber,
   groupFacts, groupInSentence, groupShortfall, groupTitle, groupViews, joinVi, loadErrorMessage, lowerFirst, methodNotes, modelLabel,
   normalizeAdviceOutput, normalizeAdviceResponse, normalizeAdviceStatus, normalizeAdviceWrite, normalizeStoredAdvice, outsideStandardViews,
@@ -569,6 +569,8 @@ describe("AI advice", () => {
     expect(normalizeAdviceWrite({ advice: deferred })).toEqual({ advice: null, deferred: true });
     expect(normalizeAdviceWrite({ status: "deferred" })).toEqual({ advice: null, deferred: true });
     expect(normalizeAdviceWrite({ advice: null })).toEqual({ advice: null, deferred: false });
+    // Since 2026-11-10 a full queue stores the advice deferred: the page shows it and polls it until the server queues it.
+    expect(normalizeAdviceWrite({ advice: stored("deferred") })).toEqual({ advice: stored("deferred"), deferred: true });
     expect(shouldPollAdvice("queued")).toBe(true);
     expect(shouldPollAdvice("processing")).toBe(true);
     expect(shouldPollAdvice("completed")).toBe(false);
@@ -597,9 +599,10 @@ describe("AI advice", () => {
     expect(view(advice({ advice: stored("deferred", { id: null, createdAt: null }) })).kind).toBe("deferred");
     // Deferred comes first, even while the current facts still need advice.
     expect(view(advice({ needsAdvice: true, advice: stored("deferred", { id: null, createdAt: null }) }), { ensure: { fingerprint: "fp-1", state: "error" } }).kind).toBe("deferred");
-    expect(shouldPollAdvice("deferred")).toBe(false);
+    expect(shouldPollAdvice("deferred")).toBe(true);
+    expect(view(advice({ advice: stored("deferred") })).kind).toBe("deferred");
     expect(view(advice({ advice: stored("cancelled") })).kind).toBe("cancelled");
-    expect(view(advice({ advice: stored("failed", { errorCode: "ai_timeout" }) }))).toMatchObject({ kind: "failed", errorCode: "ai_timeout" });
+    expect(view(advice({ advice: stored("failed", { errorCode: "ai_timeout" }) }))).toMatchObject({ kind: "failed", errorCode: "ai_timeout", since: "2026-10-13T10:00:00Z" });
     expect(view(advice({ advice: stored("completed", { output: null }) }))).toMatchObject({ kind: "failed", errorCode: "invalid_ai_output" });
     const done = view(advice({ advice: stored("completed") }), { remembered: stored("completed") });
     expect(done).toMatchObject({ kind: "completed", stale: false });
@@ -610,9 +613,19 @@ describe("AI advice", () => {
     expect(adviceStateCopy({ kind: "queued", worker: "outdated", previous: null })?.title).toBe("Máy AI đang chạy phiên bản cũ…");
     expect(adviceStateCopy({ kind: "queued", worker: "offline", previous: null })?.title).toBe("Lời khuyên sẽ có khi máy AI hoạt động trở lại");
     expect(adviceStateCopy({ kind: "processing", since: "", previous: null })?.text).toBe("Thường mất khoảng 20–60 giây.");
-    expect(adviceStateCopy({ kind: "deferred", previous: null })?.text).toContain("tự động khi bạn mở lại trang");
-    expect(adviceStateCopy({ kind: "failed", errorCode: "worker_timeout", previous: null })?.text)
+    expect(adviceStateCopy({ kind: "deferred", previous: null })).toEqual({ title: "Hàng đợi AI đang đầy",
+      text: "Hệ thống sẽ tự xếp hàng viết lời khuyên khi hàng đợi có chỗ, bạn không cần làm gì thêm. Các đề xuất ở trên đã đủ để bạn bắt đầu." });
+    expect(adviceStateCopy({ kind: "failed", errorCode: "worker_timeout", since: null, previous: null })?.text)
       .toBe("Máy AI chưa xử lý xong trong thời gian cho phép. Các đề xuất ở trên không bị ảnh hưởng.");
+    // Over an older advice, dimmed: when the new one failed, why, and the button (QA 2026-11-10).
+    const older = { ...stored("completed", { id: "old" }), output };
+    expect(adviceStateCopy({ kind: "failed", errorCode: "ai_output_truncated", since: "2026-11-08T14:40:00.000Z", previous: older })).toEqual({
+      title: "Chưa tạo được lời khuyên mới",
+      text: "Lần tạo lời khuyên mới lúc 21:40 08/11/2026 không thành công. Lời khuyên bị cắt giữa chừng nên chưa dùng được. Lời khuyên bên dưới là bản trước. Bấm “Thử lại” để thử lần nữa.",
+    });
+    expect(previousAdviceNote("failed")).toBe("Lời khuyên trước, viết cho dữ liệu cũ — có thể không còn đúng.");
+    expect(previousAdviceNote("queued")).toBe("Lời khuyên trước, viết cho dữ liệu cũ — có thể không còn đúng. Lời khuyên mới sẽ thay thế khi sẵn sàng.");
+    expect(adviceAnnouncement("deferred")).toBe("Hàng đợi AI đang đầy; lời khuyên sẽ tự được tạo khi hàng đợi có chỗ.");
     expect(adviceStateCopy({ kind: "completed", advice: { ...stored("completed"), output }, stale: false })).toBeNull();
     expect(adviceAnnouncement("completed")).toBe("Đã có lời khuyên từ EduPath AI.");
     expect(adviceAnnouncement("failed")).toBe("Chưa tạo được lời khuyên từ EduPath AI.");

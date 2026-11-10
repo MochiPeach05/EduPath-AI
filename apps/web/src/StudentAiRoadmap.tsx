@@ -5,7 +5,7 @@ import { useLiveData } from "./use-live-data";
 import {
   ROADMAP_API, ROADMAP_POLL_MS, choiceText, dateText, failureText, roadmapTermLabel, roadmapWindowTitle, formatDateTime, helpsText, improveHeading, improveTag, isPending, modelLabel, modelPlace,
   monthTitle, normalizeRoadmap, normalizeRoadmapResponse, normalizeRoadmapStatus, pendingCopy, requestErrorMessage, sentence, skillTags, studyTag,
-  hasMonthPlan, previousRoadmap, PREVIOUS_ROADMAP_NOTE,
+  hasMonthPlan, previousRoadmap, previousRoadmapNote, failedRoadmapText, shouldPollRoadmap, DEFERRED_ROADMAP_COPY,
   type Roadmap, type RoadmapBasis, type RoadmapImprove, type RoadmapResponse, type RoadmapSkill, type RoadmapStatus, type RoadmapStudy,
 } from "./student-roadmap-data";
 import { nextTermOffer, type StudyPlanContext } from "./study-plan-data";
@@ -64,7 +64,8 @@ function useRoadmap() {
 
   const roadmapId = response?.roadmap?.id ?? null, status = response?.roadmap?.status ?? null;
   useEffect(() => {
-    if (!roadmapId || !isPending(status)) return;
+    // Also while deferred: the server queues it by itself once the AI queue has room (2026-11-10).
+    if (!roadmapId || !shouldPollRoadmap(status)) return;
     const pending = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
     const poll = async () => {
@@ -102,8 +103,8 @@ function useRoadmap() {
   useEffect(() => {
     const before = shown.current;
     shown.current = status;
-    if (before && isPending(before) && status === "completed") setAnnouncement("EduPath AI đã soạn xong lộ trình học tập.");
-    if (before && isPending(before) && status === "failed") setAnnouncement("Chưa soạn được lộ trình học tập.");
+    if (before && shouldPollRoadmap(before) && status === "completed") setAnnouncement("EduPath AI đã soạn xong lộ trình học tập.");
+    if (before && shouldPollRoadmap(before) && status === "failed") setAnnouncement("Chưa soạn được lộ trình học tập.");
   }, [status]);
 
   // The newest completed roadmap this page session has shown (the newest one, or the older one the API sent): "Tạo lại"
@@ -237,7 +238,7 @@ function SkillsSection({ roadmap, completed }: { roadmap: Roadmap; completed: bo
 }
 
 /** note: over the months of an older roadmap, shown dimmed while the newest one is not ready. */
-function MonthsSection({ roadmap, note }: { roadmap: Roadmap; note?: string }) {
+function MonthsSection({ roadmap, note }: { roadmap: Roadmap; note?: string | undefined }) {
   const months = <ol className="rm-months">{roadmap.months.map((month) => <li key={month.month} className="rm-month">
     <h3>{monthTitle(month)}</h3>
     {month.focus && <p className="rm-month-focus">{month.focus}</p>}
@@ -269,9 +270,9 @@ function AdviceSummary({ roadmap }: { roadmap: Roadmap }) {
  * Xét tốt nghiệp's "Lời khuyên trước, viết cho dữ liệu cũ"), with which roadmap it was and when; its month plan is
  * dimmed further down.
  */
-function PreviousAdvice({ roadmap }: { roadmap: Roadmap }) {
+function PreviousAdvice({ roadmap, note }: { roadmap: Roadmap; note: string }) {
   return <div className="rm-previous rm-dimmed">
-    <p className="rm-old">{PREVIOUS_ROADMAP_NOTE}</p>
+    <p className="rm-old">{note}</p>
     <AdviceSummary roadmap={roadmap} />
     <p className="rm-previous-meta">{roadmapWindowTitle(roadmap.window)} · {modelLabel(roadmap.model)} ({modelPlace(roadmap.model)}) soạn lúc {formatDateTime(roadmap.completedAt ?? roadmap.createdAt)}.</p>
   </div>;
@@ -311,7 +312,15 @@ function SurveyNeeded({ again = false }: { again?: boolean }) {
   </div>;
 }
 
-function AiState({ roadmap, response, create, creating }: { roadmap: Roadmap; response: RoadmapResponse; create: () => void; creating: boolean }) {
+/** previous: an older roadmap is shown dimmed below; a failure then says so, when and what to do (QA 2026-11-10). */
+function AiState({ roadmap, response, create, creating, previous }: { roadmap: Roadmap; response: RoadmapResponse; create: () => void; creating: boolean; previous: boolean }) {
+  if (roadmap.status === "deferred") {
+    return <div className="rm-ai-state">
+      <strong>{DEFERRED_ROADMAP_COPY.title}</strong>
+      <p>{DEFERRED_ROADMAP_COPY.text}</p>
+      <p>Trong lúc chờ, các học phần và kỹ năng do hệ thống tính sẵn đã hiện bên dưới.</p>
+    </div>;
+  }
   if (roadmap.status === "queued" || roadmap.status === "processing") {
     const copy = pendingCopy(roadmap.status, response.worker, roadmap.errorCode);
     const moving = roadmap.status === "processing" || (response.worker.online && response.worker.supportsRoadmap);
@@ -323,9 +332,10 @@ function AiState({ roadmap, response, create, creating }: { roadmap: Roadmap; re
     </div>;
   }
   if (roadmap.status === "failed" || roadmap.status === "cancelled") {
+    const failedOverPrevious = roadmap.status === "failed" && previous;
     return <div className="rm-ai-state rm-ai-problem">
-      <strong>{roadmap.status === "failed" ? "Chưa soạn được lộ trình" : "Yêu cầu soạn lộ trình đã dừng"}</strong>
-      <p>{roadmap.status === "failed" ? `${failureText(roadmap.errorCode)} ` : ""}Các học phần và kỹ năng do hệ thống tính bên dưới vẫn dùng được.</p>
+      <strong>{failedOverPrevious ? "Chưa soạn được lộ trình mới" : roadmap.status === "failed" ? "Chưa soạn được lộ trình" : "Yêu cầu soạn lộ trình đã dừng"}</strong>
+      <p>{failedOverPrevious ? failedRoadmapText(roadmap) : <>{roadmap.status === "failed" ? `${failureText(roadmap.errorCode)} ` : ""}Các học phần và kỹ năng do hệ thống tính bên dưới vẫn dùng được.</>}</p>
       <div className="rm-actions"><button type="button" className="sw-outline" disabled={creating || !response.surveyDone}
         aria-describedby={response.surveyDone ? undefined : SURVEY_NOTE_ID} onClick={create}><Icon name="refresh" />{creating ? "Đang gửi…" : "Thử lại"}</button></div>
     </div>;
@@ -360,16 +370,16 @@ function RoadmapView({ roadmap, previous, response, create, creating, createErro
       {!response.surveyDone && !pending && <SurveyNeeded again />}
       {response.stale && <p className="rm-note">Kết quả Đánh giá năng lực của bạn đã thay đổi sau khi lộ trình này được soạn. {regenerateText(response.surveyDone, "để cập nhật theo kết quả mới.")}</p>}
       {roadmap.ended && <p className="rm-note">Lộ trình này đã hết thời gian (đến {dateText(roadmap.window.end)}). {regenerateText(response.surveyDone, "để soạn lộ trình cho học kỳ tiếp theo.")}</p>}
-      <AiState roadmap={roadmap} response={response} create={create} creating={creating} />
+      <AiState roadmap={roadmap} response={response} create={create} creating={creating} previous={earlier !== null} />
       {completed && roadmap.summary && <AdviceSummary roadmap={roadmap} />}
-      {earlier?.summary && <PreviousAdvice roadmap={earlier} />}
+      {earlier?.summary && <PreviousAdvice roadmap={earlier} note={previousRoadmapNote(roadmap.status)} />}
       {response.basis && <BasisBox basis={response.basis} />}
     </section>
     <StudySection roadmap={roadmap} planContext={planContext} />
     <ImproveSection roadmap={roadmap} planContext={planContext} />
     <SkillsSection roadmap={roadmap} completed={completed} />
     {completed && <MonthsSection roadmap={roadmap} />}
-    {earlier && hasMonthPlan(earlier) && <MonthsSection roadmap={earlier} note={PREVIOUS_ROADMAP_NOTE} />}
+    {earlier && hasMonthPlan(earlier) && <MonthsSection roadmap={earlier} note={previousRoadmapNote(roadmap.status)} />}
     <p className="rm-footer">{completed
       ? `Lộ trình do ${modelLabel(roadmap.model)} (${modelPlace(roadmap.model)}) soạn lúc ${formatDateTime(roadmap.completedAt ?? roadmap.createdAt)} từ kết quả Đánh giá năng lực của bạn.`
       : "Các học phần và kỹ năng trên do hệ thống tính từ kết quả Đánh giá năng lực của bạn."} Lộ trình chỉ để tham khảo: hãy trao đổi với cố vấn học tập và xem lịch đăng ký học phần của trường trước khi đăng ký.</p>

@@ -128,7 +128,7 @@ export function createRoadmapRouter(pool: DatabasePool | undefined, webOrigin: s
     });
   });
 
-  // Cheap poll (every few seconds while queued/processing): the student's newest row.
+  // Cheap poll (every few seconds while deferred, queued or processing): the student's newest row.
   router.get("/status", async (req, res) => {
     emptyObject.parse(req.query);
     await expireQuietly();

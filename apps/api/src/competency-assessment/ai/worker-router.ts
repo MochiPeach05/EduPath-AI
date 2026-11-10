@@ -54,9 +54,10 @@ import { createKnowledgeRefresh } from "../../assistant/knowledge.js";
 import { CLAIM_WAIT_MS, EMBEDDING_DIMENSIONS, prepareBodySchema, progressBodySchema } from "../../assistant/protocol.js";
 import { waitForAssistantWork } from "../../assistant/wakeup.js";
 import { cleanAiOutputKeys, keyNamesFrom } from "./key-cleanup.js";
+import { createDeferredPromotion, type DeferredPromotion } from "./deferred.js";
+import { createCompetencyAiExpiry, expireCompetencyAiJobs } from "./expiry.js";
 import { repairAiOutput, retryNote, validateAiOutput, validationContextFromAiInput } from "./validate.js";
 import {
-  AI_HOUSEKEEPING_INTERVAL_MS,
   AI_JOB_LEASE_MINUTES,
   AI_JOB_MAX_ATTEMPTS,
   AI_WORKER_ERROR_CODES,
@@ -104,38 +105,8 @@ type JobRow = {
   ai_input: { schema?: unknown; user?: unknown; promptVersion?: unknown; checks?: unknown; retryNote?: unknown } | null;
 };
 
-/**
- * Fails stuck jobs and marks their assessments failed, then deletes old terminal JOBS.
- * Stuck = a processing job whose lease expired after the last attempt, or any pending job
- * older than 24 hours (a processing one only once its lease has expired, so a running job
- * is never cut off). ai_input is cleared with the failure. Assessments are never deleted here.
- */
-export async function expireCompetencyAiJobs(db: Pick<DatabasePool, "query">): Promise<void> {
-  await db.query(`WITH failed AS (
-      UPDATE stu_comp_ai_jobs SET status='failed',error_code='worker_timeout',ai_input=NULL,lease_token=NULL,lease_until=NULL,updated_at=now()
-      WHERE (status='queued' AND created_at<now()-interval '24 hours')
-        OR (status='processing' AND lease_until<now() AND (attempts>=$1 OR created_at<now()-interval '24 hours'))
-      RETURNING assessment_id)
-    UPDATE stu_comp_assessments a SET ai_status='failed',ai_error_code='worker_timeout'
-      FROM failed f WHERE a.id=f.assessment_id AND a.ai_status IN ('queued','processing')`, [AI_JOB_MAX_ATTEMPTS]);
-  await db.query(`DELETE FROM stu_comp_ai_jobs WHERE status IN ('completed','failed','cancelled') AND updated_at<now()-interval '7 days'`);
-}
-
-/**
- * Rate-limited expiry (at most once per interval per returned function). The worker router
- * runs it on /claim and the student API on its reads and writes, so stuck jobs also expire
- * while the worker is offline.
- */
-export function createCompetencyAiExpiry(intervalMs: number = AI_HOUSEKEEPING_INTERVAL_MS) {
-  let last = Number.NEGATIVE_INFINITY;
-  return async (db: Pick<DatabasePool, "query">): Promise<boolean> => {
-    const now = Date.now();
-    if (now - last < intervalMs) return false;
-    last = now;
-    await expireCompetencyAiJobs(db);
-    return true;
-  };
-}
+// The comment jobs' expiry lives in expiry.ts (queue.ts uses it too); exported here as before.
+export { createCompetencyAiExpiry, expireCompetencyAiJobs };
 
 /** A connection from this machine (the in-process Cloudflare worker calls 127.0.0.1). */
 export function isLoopbackAddress(address: string | undefined): boolean {
@@ -145,12 +116,18 @@ export function isLoopbackAddress(address: string | undefined): boolean {
 /**
  * localOnly (AI_PROVIDER=cloudflare, 2026-11-08): the worker routes answer only connections from this machine, the
  * in-process worker of ai-worker/cloud.ts; a PC worker still polling gets 403 worker_moved.
+ * promote (tests): the deferred requests' housekeeping run on /claim (deferred.ts createDeferredPromotion by default).
  */
-export function createCompetencyWorkerRouter(pool: DatabasePool | undefined, aiWorkerKey: string | undefined, options: { localOnly?: boolean } = {}) {
+export function createCompetencyWorkerRouter(pool: DatabasePool | undefined, aiWorkerKey: string | undefined,
+  options: { localOnly?: boolean; promote?: DeferredPromotion } = {}) {
   const router = Router();
   const hash = (value: string) => createHash("sha256").update(value).digest();
   const expected = aiWorkerKey ? hash(`Bearer ${aiWorkerKey}`) : null;
   const housekeeping = createCompetencyAiExpiry();
+  // Comments, roadmaps and graduation advice asked for while the queue was full go back into it here, once a minute and
+  // only from a worker's claim: a worker that claims is up and has neurons left (ai-worker/budget.ts), so nothing is
+  // queued while the AI cannot run it, and a deferred request keeps waiting instead of failing (QA 2026-11-10).
+  const promote = options.promote ?? createDeferredPromotion();
   const careerHousekeeping = createCareerSuggestionExpiry();
   const graduationHousekeeping = createGraduationAdviceExpiry();
   const courseHousekeeping = createCourseSuggestionExpiry();
@@ -221,6 +198,8 @@ export function createCompetencyWorkerRouter(pool: DatabasePool | undefined, aiW
     await graduationHousekeeping(db);
     await courseHousekeeping(db);
     await roadmapHousekeeping(db);
+    // Never fails a claim: an error is logged by its code and the next run tries again.
+    await promote(db, kinds);
     // The Trợ lý AI tables are touched only by workers that run its kinds (the student API expires answers too).
     if (kinds.includes(ASSISTANT_CHAT_KIND)) await assistantHousekeeping(db);
     if (kinds.includes(KNOWLEDGE_EMBEDDING_KIND)) {

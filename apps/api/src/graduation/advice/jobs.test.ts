@@ -6,7 +6,7 @@ import { canonicalJson, graduationFingerprintFacts } from "../student-graduation
 import {
   adviceErrorCode, adviceNeeded, autoRetryDue, claimGraduationAdvice, completeGraduationAdvice, createGraduationAdviceExpiry, currentAdvice,
   deleteGraduationAdvice, ensureGraduationAdvice, ensureGraduationAdviceAfterImport, expireGraduationAdvice, extendGraduationAdvice,
-  GraduationAdviceError, pruneGraduationAdvice, retryGraduationAdvice, type GraduationAdviceRow,
+  GraduationAdviceError, promoteDeferredGraduationAdvice, pruneGraduationAdvice, retryGraduationAdvice, type GraduationAdviceRow,
 } from "./jobs.js";
 import { buildGraduationAdviceInput, GRADUATION_ADVICE_PROMPT_VERSION } from "./prompt.js";
 import { ADVICE_TRANSCRIPT_VERSION, syntheticGraduation, unevaluatedGraduation } from "./test-fixture.js";
@@ -96,18 +96,18 @@ describe("ensureGraduationAdvice", () => {
     expect(outcome).toMatchObject({ kind: "stored", created: true, row: { fingerprint: FINGERPRINT, status: "queued", standardVersion: 1, output: null, recent: true } });
     const [cancel, insert, prune] = writes(sql());
     expect(cancel).toContain("UPDATE stu_grad_advice SET status='cancelled',ai_input=NULL");
-    expect(cancel).toContain("WHERE user_id=$1 AND status IN ('queued','processing') AND fingerprint<>$2");
+    expect(cancel).toContain("WHERE user_id=$1 AND status IN ('deferred','queued','processing') AND fingerprint<>$2");
     expect(insert).toContain("INSERT INTO stu_grad_advice");
-    expect(prune).toContain("DELETE FROM stu_grad_advice WHERE user_id=$1 AND status NOT IN ('queued','processing')");
+    expect(prune).toContain("DELETE FROM stu_grad_advice WHERE user_id=$1 AND status NOT IN ('deferred','queued','processing')");
     expect(calls().find(([text]) => text === cancel)![1]).toEqual([USER, FINGERPRINT]);
     expect(calls().find(([text]) => text === prune)![1]).toEqual([USER, 5]);
     const params = calls().find(([text]) => text === insert)![1] as unknown[];
     expect(params[0]).toMatch(/^[0-9a-f-]{36}$/);
     expect(outcome.kind === "stored" && outcome.row.id).toBe(params[0]);
-    expect(params.slice(1, 8)).toEqual([USER, ADVICE_TRANSCRIPT_VERSION, graduation.standard.id, graduation.standard.revisionId, 1,
-      graduation.evaluation.calcVersion, FINGERPRINT]);
-    expect(JSON.parse(params[8] as string)).toEqual(buildGraduationAdviceInput(graduation));
-    expect(params[9]).toBe(GRADUATION_ADVICE_PROMPT_VERSION);
+    expect(params.slice(1, 9)).toEqual([USER, ADVICE_TRANSCRIPT_VERSION, graduation.standard.id, graduation.standard.revisionId, 1,
+      graduation.evaluation.calcVersion, FINGERPRINT, "queued"]);
+    expect(JSON.parse(params[9] as string)).toEqual(buildGraduationAdviceInput(graduation));
+    expect(params[10]).toBe(GRADUATION_ADVICE_PROMPT_VERSION);
   });
 
   it("queues fresh advice when the stored one was written by an older prompt for the same facts", async () => {
@@ -119,7 +119,7 @@ describe("ensureGraduationAdvice", () => {
     const { client, calls, sql } = fakeClient({ rows: [stored] });
     expect(await ensureGraduationAdvice(client, USER, { read: reader() })).toMatchObject({ kind: "stored", created: true, row: { fingerprint: FINGERPRINT } });
     const insert = calls().find(([text]) => text.startsWith("INSERT INTO stu_grad_advice"))!;
-    expect((insert[1] as unknown[])[9]).toBe("grad-advice-v7");
+    expect((insert[1] as unknown[])[10]).toBe("grad-advice-v7");
     expect(writes(sql())).toHaveLength(3);
   });
 
@@ -148,13 +148,26 @@ describe("ensureGraduationAdvice", () => {
     expect([...writes(sql()), ...writes(both.sql())]).toEqual([]);
   });
 
-  it("defers without storing anything while 20 jobs of other students are pending", async () => {
+  it("stores the advice deferred, without its AI input, while 20 jobs of other students are pending (2026-11-10)", async () => {
     const { client, calls, sql } = fakeClient({ rows: [row({ fingerprint: OLD, status: "queued" })], othersPending: 20 });
-    expect(await ensureGraduationAdvice(client, USER, { read: reader() })).toEqual({ kind: "deferred", graduation });
-    expect(writes(sql())).toEqual([]);
-    expect(calls().find(([text]) => text.includes("count(*)"))![0]).toContain("user_id<>$1");
+    expect(await ensureGraduationAdvice(client, USER, { read: reader() })).toMatchObject({
+      kind: "stored", created: true, row: { fingerprint: FINGERPRINT, status: "deferred", output: null } });
+    const [cancel, insert, prune] = writes(sql());
+    expect(cancel).toContain("status IN ('deferred','queued','processing') AND fingerprint<>$2");
+    expect(insert).toContain("INSERT INTO stu_grad_advice");
+    expect(prune).toContain("DELETE FROM stu_grad_advice");
+    const params = calls().find(([text]) => text === insert)![1] as unknown[];
+    expect(params.slice(8)).toEqual(["deferred", null, GRADUATION_ADVICE_PROMPT_VERSION]);
+    expect(calls().find(([text]) => text.includes("count(*)"))).toEqual([expect.stringContaining("user_id IS DISTINCT FROM $1"), [USER]]);
     const roomy = fakeClient({ othersPending: 19 });
-    expect(await ensureGraduationAdvice(roomy.client, USER, { read: reader() })).toMatchObject({ kind: "stored", created: true });
+    expect(await ensureGraduationAdvice(roomy.client, USER, { read: reader() })).toMatchObject({ kind: "stored", created: true, row: { status: "queued" } });
+  });
+
+  it("returns a deferred row for the current facts unchanged: the housekeeping queues it", async () => {
+    const deferred = row({ status: "deferred", completedAt: null, retryDue: false });
+    const { client, sql } = fakeClient({ rows: [deferred] });
+    expect(await ensureGraduationAdvice(client, USER, { read: reader() })).toEqual({ kind: "stored", row: deferred, created: false, graduation });
+    expect(writes(sql())).toEqual([]);
   });
 
   it("has nothing to do without an evaluation, and refuses an inactive account", async () => {
@@ -186,12 +199,87 @@ describe("retryGraduationAdvice", () => {
     await expect(retryGraduationAdvice(client, USER, { read: reader(unevaluatedGraduation()) })).rejects.toMatchObject({ code: "advice_not_retryable" });
   });
 
-  it("keeps the 30 second guard and the queue cap (429)", async () => {
+  it("keeps the 30 second guard (429) and stores the advice deferred while the queue is full", async () => {
     const recent = fakeClient({ rows: [row({ status: "failed", recent: true })] });
     await expect(retryGraduationAdvice(recent.client, USER, { read: reader() })).rejects.toMatchObject({ code: "advice_too_frequent", status: 429 });
+    expect(writes(recent.sql())).toEqual([]);
     const full = fakeClient({ rows: [row({ status: "cancelled" })], othersPending: 25 });
-    await expect(retryGraduationAdvice(full.client, USER, { read: reader() })).rejects.toMatchObject({ code: "queue_full", status: 429 });
-    expect([...writes(recent.sql()), ...writes(full.sql())]).toEqual([]);
+    expect(await retryGraduationAdvice(full.client, USER, { read: reader() })).toMatchObject({ kind: "stored", created: true, row: { status: "deferred" } });
+    const insert = full.calls().find(([text]) => text.startsWith("INSERT INTO stu_grad_advice"))!;
+    expect((insert[1] as unknown[]).slice(8, 10)).toEqual(["deferred", null]);
+  });
+});
+
+describe("promoteDeferredGraduationAdvice (QA 2026-11-10: deferred advice comes back by itself)", () => {
+  const OTHER = "77777777-7777-4777-8777-777777777777";
+  const SECOND = "88888888-8888-4888-8888-888888888888";
+  type Promote = { candidates: { id: string; userId: string; fingerprint?: string }[]; pending?: number; locked?: string[] };
+  /** A pool whose connections share one log; every queued advice takes a place in the queue. */
+  function promotePool(state: Promote) {
+    const log: [string, unknown[]][] = [];
+    let pending = state.pending ?? 0;
+    const query = vi.fn(async (sql: string, params: unknown[] = []) => {
+      log.push([sql, params]);
+      if (sql.includes("FROM stu_grad_advice a JOIN users u")) return { rowCount: state.candidates.length, rows: state.candidates.map(({ id, userId }) => ({ id, userId })) };
+      if (sql.startsWith("SELECT id FROM users")) return state.locked?.includes(params[0] as string) ? { rowCount: 0, rows: [] } : { rowCount: 1, rows: [{ id: params[0] }] };
+      if (sql.includes("count(*)::int AS count FROM stu_grad_advice")) return { rowCount: 1, rows: [{ count: pending }] };
+      if (sql.startsWith("SELECT fingerprint FROM stu_grad_advice")) {
+        const found = state.candidates.find((candidate) => candidate.id === params[0]);
+        return found ? { rowCount: 1, rows: [{ fingerprint: found.fingerprint ?? FINGERPRINT }] } : { rowCount: 0, rows: [] };
+      }
+      if (sql.includes("FROM stu_grad_advice WHERE user_id=$1 ORDER BY created_at DESC,id DESC")) return { rowCount: 0, rows: [] };
+      if (sql.startsWith("INSERT INTO stu_grad_advice")) { pending += 1; return { rowCount: 1, rows: [{ createdAt: new Date() }] }; }
+      if (sql.startsWith("UPDATE stu_grad_advice SET status='queued'")) { pending += 1; return { rowCount: 1, rows: [] }; }
+      return { rowCount: 0, rows: [] };
+    });
+    const release = vi.fn();
+    const pool = { query, connect: vi.fn(async () => ({ query, release })) } as unknown as DatabasePool;
+    return { pool, log, release, sql: () => log.map(([sql]) => sql) };
+  }
+
+  it("queues the oldest deferred advice of active students in place, with its input built now, in the lock order of ensure", async () => {
+    const { pool, log, release } = promotePool({ candidates: [{ id: ADVICE, userId: USER }] });
+    const read = reader();
+    expect(await promoteDeferredGraduationAdvice(pool, { read })).toBe(1);
+    const [first] = log;
+    expect(first![0]).toContain("WHERE a.status='deferred' ORDER BY a.created_at,a.id LIMIT $1");
+    expect(first![0]).toContain("JOIN users u ON u.id=a.user_id AND u.is_active");
+    expect(first![1]).toEqual([20]);
+    const steps = log.slice(1).map(([sql]) => sql.split(/\s+/).slice(0, 4).join(" "));
+    expect(steps.slice(0, 5)).toEqual(["BEGIN", "SELECT id FROM users", "SELECT pg_advisory_xact_lock(hashtext($1))", "SELECT count(*)::int AS count"]
+      .concat(["SELECT fingerprint FROM stu_grad_advice"]));
+    expect(log.find(([sql]) => sql.startsWith("SELECT id FROM users"))![0]).toContain("FOR KEY SHARE SKIP LOCKED");
+    const update = log.find(([sql]) => sql.startsWith("UPDATE stu_grad_advice SET status='queued'"))!;
+    expect(update[0]).toContain("created_at=now()");
+    expect(update[1]![0]).toBe(ADVICE);
+    expect(JSON.parse(update[1]![6] as string)).toEqual(buildGraduationAdviceInput(graduation));
+    expect(update[1]![7]).toBe(GRADUATION_ADVICE_PROMPT_VERSION);
+    expect(read).toHaveBeenCalledTimes(1);
+    expect(log.at(-1)![0]).toBe("COMMIT");
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops while the queue is full and skips a student whose row a write holds", async () => {
+    const full = promotePool({ candidates: [{ id: ADVICE, userId: USER }], pending: 20 });
+    expect(await promoteDeferredGraduationAdvice(full.pool, { read: reader() })).toBe(0);
+    expect(full.sql().some((sql) => /^(INSERT|UPDATE)/.test(sql))).toBe(false);
+    // One place left: the oldest gets it, the next one waits for the next run.
+    const one = promotePool({ candidates: [{ id: ADVICE, userId: USER }, { id: SECOND, userId: OTHER }], pending: 19 });
+    expect(await promoteDeferredGraduationAdvice(one.pool, { read: reader() })).toBe(1);
+    expect(one.log.filter(([sql]) => sql.startsWith("UPDATE stu_grad_advice SET status='queued'")).map(([, params]) => params[0])).toEqual([ADVICE]);
+    const locked = promotePool({ candidates: [{ id: ADVICE, userId: USER }, { id: SECOND, userId: OTHER }], locked: [USER] });
+    expect(await promoteDeferredGraduationAdvice(locked.pool, { read: reader() })).toBe(1);
+    expect(locked.log.filter(([sql]) => sql.startsWith("UPDATE stu_grad_advice SET status='queued'")).map(([, params]) => params[0])).toEqual([SECOND]);
+  });
+
+  it("queues new facts as a new row, and cancels advice with nothing left to advise on", async () => {
+    const changed = promotePool({ candidates: [{ id: ADVICE, userId: USER, fingerprint: OLD }] });
+    expect(await promoteDeferredGraduationAdvice(changed.pool, { read: reader() })).toBe(1);
+    expect(changed.sql().filter((sql) => /^(INSERT|UPDATE)/.test(sql.trim())).map((sql) => sql.slice(0, 40))).toEqual([
+      "UPDATE stu_grad_advice SET status='cance", "INSERT INTO stu_grad_advice(id,user_id,t"]);
+    const gone = promotePool({ candidates: [{ id: ADVICE, userId: USER }] });
+    expect(await promoteDeferredGraduationAdvice(gone.pool, { read: reader(unevaluatedGraduation()) })).toBe(0);
+    expect(gone.log.find(([sql]) => sql.startsWith("UPDATE stu_grad_advice SET status='cancelled'"))![1]).toEqual([ADVICE]);
   });
 });
 

@@ -115,9 +115,14 @@ export function buildCloudflareChatBody(runtime: Pick<CloudflareRuntime, "model"
   return body;
 }
 
-/** An answer to ask again in the next JSON mode: it ran into blank space, or Workers AI refused the schema (400). */
+/**
+ * An answer to ask again in the next JSON mode: it ran into blank space, Workers AI refused the schema (400), or a
+ * json_schema answer reached its token cap (2026-11-10: json_schema mode can pad the JSON with blanks between its values
+ * up to the cap without one long run at the end; an answer the schema allows is about 4k tokens at most, under the 8192
+ * of ANSWER_CAP, so the cap means padding or a loop, and json_object mode, which never padded, is asked once more).
+ */
 class ModeFallback extends Error {
-  constructor(readonly reason: "whitespace_runaway" | "schema_rejected") {
+  constructor(readonly reason: "whitespace_runaway" | "schema_rejected" | "truncated") {
     super(reason);
     this.name = "ModeFallback";
   }
@@ -319,7 +324,8 @@ function pause(ms: number, signal: AbortSignal): Promise<void> {
  * One streamed chat completion, like ollamaChat: resolves with the visible content and Ollama-named metrics, or throws
  * an AiWorkerError (ai_timeout, ai_output_truncated, ollama_unavailable = Workers AI unreachable, refused or out of the
  * day's neurons, ai_failed) or GenerationAbortedError. A request Workers AI could not take is sent again up to twice. A
- * JSON answer asked in json_object mode that runs into blank space is stopped at once and asked again without the mode.
+ * JSON answer asked in json_schema mode that runs into blank space, or is cut at its token cap, is asked once more in
+ * json_object mode (both calls count in the neuron budget; JOB_RESERVE covers the two).
  */
 export async function cloudflareChat(runtime: CloudflareRuntime, job: OllamaJob, deps: CloudflareDeps = {}, signal?: AbortSignal): Promise<OllamaChatResult> {
   const hasSchema = job.schema !== null && job.schema !== undefined && typeof job.schema === "object";
@@ -430,6 +436,7 @@ async function chatOnce(runtime: CloudflareRuntime, job: OllamaJob, deps: Cloudf
     reportContent();
     deps.onNeurons?.(chatNeurons(accumulator.usage, { promptChars: job.system.length + job.user.length, outputChars: accumulator.content.length }));
     const finish = accumulator.finishReason ?? "stop";
+    if (finish === "length" && mode === "json_schema") throw new ModeFallback("truncated");
     if (finish === "length") throw new AiWorkerError("ai_output_truncated", "finish_reason_length");
     if (finish !== "stop") throw new AiWorkerError("ai_failed", "unexpected_finish_reason");
     const visible = visibleContent(accumulator.content);

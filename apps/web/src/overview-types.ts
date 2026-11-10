@@ -150,6 +150,8 @@ export type OverviewResponse = {
   /** The latest AI roadmap (completed, or the state of the one being written), null when none. */
   roadmap: null | {
     status: "completed" | "pending" | "failed";
+    /** Why a failed roadmap failed (its error code, shown with the Lộ trình AI tab's texts); absent from an older API. */
+    errorCode?: string | null;
     createdAt: string;
     /** The term the roadmap covers. */
     term: OverviewTerm | null;

@@ -390,9 +390,10 @@ describe("POST /:id/ai", () => {
     expect(t.sql().at(-1)).toBe("COMMIT");
   });
 
-  it("answers 429 queue_full when the queue defers the job", async () => {
+  it("answers 202 deferred when the queue is full: the server queues the comment by itself (2026-11-10)", async () => {
     const t = setup({ aiQueue: queue({ regenerate: vi.fn(async () => "deferred" as const) }) });
-    await request(t.app).post(`/assessments/${latestId}/ai`).set("Origin", origin).expect(429, { error: "queue_full" });
+    await request(t.app).post(`/assessments/${latestId}/ai`).set("Origin", origin).expect(202, { aiStatus: "deferred" });
+    expect(t.sql().at(-1)).toBe("COMMIT");
   });
 
   it("refuses completed, older and foreign assessments", async () => {

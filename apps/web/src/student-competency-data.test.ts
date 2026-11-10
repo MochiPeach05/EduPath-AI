@@ -216,10 +216,16 @@ describe("level chart", () => {
 });
 
 describe("polling and AI actions", () => {
-  it("polls only while the AI comment can still change", () => {
+  it("polls only while the AI comment can still change, a deferred one too: the server queues it by itself (2026-11-10)", () => {
     expect(shouldPoll("queued")).toBe(true);
     expect(shouldPoll("processing")).toBe(true);
-    for (const status of ["disabled", "deferred", "completed", "failed", "cancelled", null] as const) expect(shouldPoll(status)).toBe(false);
+    expect(shouldPoll("deferred")).toBe(true);
+    for (const status of ["disabled", "completed", "failed", "cancelled", null] as const) expect(shouldPoll(status)).toBe(false);
+  });
+  it("says a deferred comment is queued by itself, without asking for a button (QA 2026-11-10)", () => {
+    const copy = aiStateCopy("deferred", true, true);
+    expect(copy).toEqual({ title: "Hàng đợi AI đang đầy", text: "Kết quả tính toán đã sẵn sàng. Hệ thống sẽ tự xếp hàng tạo nhận xét khi hàng đợi có chỗ, bạn không cần làm gì thêm." });
+    expect(copy.text).not.toContain("bấm");
   });
   it("offers regeneration for failed, cancelled, deferred and disabled-once-enabled", () => {
     expect(canRegenerate("failed", false)).toBe(true);

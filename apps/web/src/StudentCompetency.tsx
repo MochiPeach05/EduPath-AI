@@ -10,7 +10,7 @@ import {
   careerSummaryText, formatDifference, formatNumber, formatPercent, formatScore, gapHistory, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isOverdue, isPreconditionError, levelChart, levelSentence, levelStep, nextCourseCount, nextTermOf, noCreditSkill, overallIsPooled, overdueText, countsFromStudyTerm, thesisWayAdvised, thesisPlanOutdatedText, lateBeforeStudyTerm, physicalEducationOutdated, levelSummary, levelText, mapAiOutput, missingRequirements, skillGroupKeys, missingRequirementsMessage, modelLabel, modelPlace, needsSelfStudy,
   plannedCourseNote, plansFor, relatedSkillNames, scoreDifference, shouldPoll, skillName, sortRequirements, studyTermOf, upcomingText, withCurrentLevels, type ChartLevel, type DisplayLevel, type FitLevel, type LevelBar, type LevelSegment, type MappedAiOutput, type PreconditionError, type SkillFilters, type StatusTone,
   fitMeaning, historyTermName, levelMeaning, noGapText, scoreSources, scoreSourcesText,
-  careerRaise, hasCompetencyContent, hasGapContent, normalizePreviousComment, ownComment, previousComment, PREVIOUS_COMMENT_NOTE,
+  careerRaise, failedCommentText, hasCompetencyContent, hasGapContent, normalizePreviousComment, ownComment, previousComment, previousCommentNote,
 } from "./student-competency-data";
 import { meaningClass, termName } from "./display-format";
 import { readGraduation } from "./student-graduation-api";
@@ -820,19 +820,21 @@ function AiPanel({ assessment, aiEnabled, workerOnline, busy, onRegenerate, onCa
   const mapped = ai.status === "completed" ? mapAiOutput(ai.output, result) : null;
   const pending = shouldPoll(ai.status);
   const copy = aiStateCopy(ai.status, workerOnline, aiEnabled);
+  // The newest comment failed while an older one stays below, dimmed: say so, when and what to do (QA 2026-11-10).
+  const failedOverPrevious = ai.status === "failed" && previous !== null && previousContent(previous, view) !== null;
   return <section id="scomp-ai" tabIndex={-1} className="sw-panel scomp-section scomp-ai" aria-labelledby="scomp-ai-title">
     <div className="scomp-section-heading"><div className="scomp-ai-heading"><span className="scomp-ai-icon"><Icon name="spark" /></span><h2 id="scomp-ai-title">{view === "gap" ? "Nhận xét từ EduPath AI về khoảng trống kỹ năng" : "Nhận xét từ EduPath AI"}</h2><span className="scomp-ai-tag">AI</span></div></div>
     {mapped ? view === "gap" ? <AiGapContent output={mapped} hasCareer={Boolean(result.career)} careerKeys={careerSkillKeys(result)} /> : <AiContent output={mapped} /> : <div className={`scomp-ai-state${pending ? " scomp-ai-pending" : ""}${ai.status === "failed" ? " scomp-ai-failed" : ""}`}>
       {pending && <span className="sr-job-spinner" aria-hidden="true" />}
-      <strong>{ai.status === "completed" ? "Chưa hiển thị được nhận xét" : copy.title}</strong>
-      <p>{ai.status === "failed" ? `${aiErrorMessage(ai.errorCode)} ${copy.text}` : ai.status === "completed" ? "Nhận xét đã lưu không đọc được. Kết quả tính toán bên dưới vẫn đầy đủ." : copy.text}</p>
-      {pending && <ol className="sr-job-steps" aria-label="Tiến trình tạo nhận xét"><li>1. Đã tính kết quả</li><li aria-current={ai.status === "queued" ? "step" : undefined}>2. {workerOnline ? "Xếp hàng" : "Chờ máy AI"}</li><li aria-current={ai.status === "processing" ? "step" : undefined}>3. Viết nhận xét</li></ol>}
+      <strong>{ai.status === "completed" ? "Chưa hiển thị được nhận xét" : failedOverPrevious ? "Chưa tạo được nhận xét mới" : copy.title}</strong>
+      <p>{failedOverPrevious ? failedCommentText(assessment) : ai.status === "failed" ? `${aiErrorMessage(ai.errorCode)} ${copy.text}` : ai.status === "completed" ? "Nhận xét đã lưu không đọc được. Kết quả tính toán bên dưới vẫn đầy đủ." : copy.text}</p>
+      {pending && <ol className="sr-job-steps" aria-label="Tiến trình tạo nhận xét"><li>1. Đã tính kết quả</li><li aria-current={ai.status === "queued" || ai.status === "deferred" ? "step" : undefined}>2. {ai.status === "deferred" ? "Chờ hàng đợi có chỗ" : workerOnline ? "Xếp hàng" : "Chờ máy AI"}</li><li aria-current={ai.status === "processing" ? "step" : undefined}>3. Viết nhận xét</li></ol>}
     </div>}
     {(canRegenerate(ai.status, aiEnabled) || pending) && <div className="scomp-actions">
       {canRegenerate(ai.status, aiEnabled) && <button type="button" className="sw-outline" disabled={busy} onClick={onRegenerate}><Icon name="refresh" />{ai.status === "disabled" ? "Tạo nhận xét" : "Tạo lại nhận xét"}</button>}
       {pending && !isAdvisorView() && <button type="button" className="sr-secondary" disabled={busy} onClick={onCancel}>Hủy tạo nhận xét</button>}
     </div>}
-    {!mapped && previous && <PreviousComment comment={previous} view={view} />}
+    {!mapped && previous && <PreviousComment comment={previous} view={view} note={previousCommentNote(ai.status)} />}
     <p className="scomp-ai-footer">{ai.status === "completed" ? `${modelLabel(ai.model)}${aiReasoned(result.meta.promptVersion, ai.model) ? " có suy luận" : ""}, ${modelPlace(ai.model)} · tạo lúc ${formatDateTime(ai.completedAt)}. ` : ""}Nhận xét do AI viết dựa trên kết quả đã tính, có thể chưa chính xác — hãy đối chiếu số liệu và trao đổi với cố vấn học tập.</p>
   </section>;
 }
@@ -880,12 +882,19 @@ function AiGapContent({ output, hasCareer, careerKeys }: { output: MappedAiOutpu
  * Xét tốt nghiệp's "Lời khuyên trước, viết cho dữ liệu cũ"). Its keys are read with its own assessment's names; nothing
  * shows when it has no part for this page.
  */
-function PreviousComment({ comment, view }: { comment: PreviousAiComment; view: CompetencyView }) {
+/** The older comment read with its own assessment's names, or null when it has no part for this page. */
+function previousContent(comment: PreviousAiComment, view: CompetencyView): MappedAiOutput | null {
   const mapped = mapAiOutput(comment.output, comment.context);
+  if (!mapped || (view === "gap" ? !hasGapContent(mapped, careerSkillKeys(comment.context)) : !hasCompetencyContent(mapped))) return null;
+  return mapped;
+}
+
+function PreviousComment({ comment, view, note }: { comment: PreviousAiComment; view: CompetencyView; note: string }) {
+  const mapped = previousContent(comment, view);
   const careerKeys = careerSkillKeys(comment.context);
-  if (!mapped || (view === "gap" ? !hasGapContent(mapped, careerKeys) : !hasCompetencyContent(mapped))) return null;
+  if (!mapped) return null;
   return <div className="scomp-ai-previous scomp-ai-dimmed">
-    <p className="scomp-ai-old">{PREVIOUS_COMMENT_NOTE}</p>
+    <p className="scomp-ai-old">{note}</p>
     {view === "gap" ? <AiGapContent output={mapped} hasCareer={Boolean(comment.context.career)} careerKeys={careerKeys} /> : <AiContent output={mapped} />}
     <p className="scomp-ai-old-meta">{modelLabel(comment.model)}{aiReasoned(comment.promptVersion, comment.model) ? " có suy luận" : ""}, {modelPlace(comment.model)} · tạo lúc {formatDateTime(comment.completedAt)}.</p>
   </div>;

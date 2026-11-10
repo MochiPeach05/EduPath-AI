@@ -328,12 +328,15 @@ describe("StudentGraduation AI advice", () => {
     expect(offline).toContain("Lời khuyên sẽ có khi máy AI hoạt động trở lại");
     expect(offline).not.toContain("sg-ai-spinner");
   });
-  it("says the queue is full for a deferred advice, without a spinner or a retry button", () => {
-    const html = withAdvice(adviceResponse({ advice: stored("deferred", { id: null, createdAt: null }), needsAdvice: true }));
-    expect(html).toContain("Hàng đợi AI đang đầy");
-    expect(html).toContain("Lời khuyên sẽ được tạo tự động khi bạn mở lại trang này sau ít phút.");
-    expect(html).not.toContain("sg-ai-spinner");
-    expect(html).not.toContain("Thử lại");
+  it("says the queue is full for a deferred advice and that it is queued by itself, without a spinner or a retry button", () => {
+    for (const deferred of [stored("deferred"), stored("deferred", { id: null, createdAt: null })]) {
+      const html = withAdvice(adviceResponse({ advice: deferred, needsAdvice: deferred.id === null }));
+      expect(html).toContain("Hàng đợi AI đang đầy");
+      expect(html).toContain("Hệ thống sẽ tự xếp hàng viết lời khuyên khi hàng đợi có chỗ, bạn không cần làm gì thêm.");
+      expect(html).not.toContain("mở lại trang");
+      expect(html).not.toContain("sg-ai-spinner");
+      expect(html).not.toContain("Thử lại");
+    }
   });
   it("shows the elapsed time while the advice is being written", () => {
     const html = withAdvice(adviceResponse({ advice: stored("processing") }));

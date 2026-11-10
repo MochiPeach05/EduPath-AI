@@ -29,10 +29,13 @@ import {
 } from "./jobs.js";
 import type { GraduationAdviceOutput } from "./validate.js";
 
-/** One advice as the page sees it. "deferred" (queue full) is never stored: its id and createdAt are null. */
+/**
+ * One advice as the page sees it. "deferred" (asked for while the queue was full) is stored since 2026-11-10 and queued by
+ * the server once there is room; before, it was never stored and came with a null id and createdAt.
+ */
 type StoredGraduationAdvice = {
   id: string | null;
-  status: GraduationAdviceStatus | "deferred";
+  status: GraduationAdviceStatus;
   errorCode: string | null;
   createdAt: string | null;
   completedAt: string | null;
@@ -90,12 +93,7 @@ function presentGraduationAdvice(row: GraduationAdviceRow): StoredGraduationAdvi
 
 /** The advice an ensure/retry answers with; null when there is nothing to advise on. */
 function outcomeAdvice(outcome: AdviceOutcome): StoredGraduationAdvice | null {
-  if (outcome.kind === "unavailable") return null;
-  if (outcome.kind === "stored") return presentGraduationAdvice(outcome.row);
-  return {
-    id: null, status: "deferred", errorCode: null, createdAt: null, completedAt: null, model: null,
-    standardVersion: outcome.graduation.standard.version, output: null,
-  };
+  return outcome.kind === "unavailable" ? null : presentGraduationAdvice(outcome.row);
 }
 
 async function inTransaction<T>(pool: DatabasePool, work: (client: PoolClient) => Promise<T>): Promise<T> {
@@ -172,7 +170,7 @@ export function createGraduationAdviceRouter(pool: DatabasePool | undefined, web
     });
   });
 
-  // Cheap poll (every 2.5 s while queued/processing): the student's newest row.
+  // Cheap poll (every 2.5 s while deferred, queued or processing): the student's newest row.
   router.get("/status", async (req, res) => {
     emptyObject.parse(req.query);
     await expireQuietly();

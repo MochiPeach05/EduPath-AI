@@ -6,7 +6,8 @@ export const ROADMAP_API = "/api/student/roadmap";
 /** How often the page asks for the job status while the AI writes. */
 export const ROADMAP_POLL_MS = 3000;
 
-export type RoadmapStatus = "queued" | "processing" | "completed" | "failed" | "cancelled";
+/** "deferred" (2026-11-10): asked for while the AI queue was full; the server queues it by itself once there is room. */
+export type RoadmapStatus = "deferred" | "queued" | "processing" | "completed" | "failed" | "cancelled";
 export type RoadmapStudy = {
   code: string; name: string; credits: number | null; source: "running" | "late" | "next" | "following" | "choice";
   /** An item of the term being studied not registered (comp-calc-v19): not "Trễ kế hoạch" (user 2026-11-04). */
@@ -100,6 +101,9 @@ export function normalizeRoadmapResponse(value: unknown): RoadmapResponse {
 
 /** Over the AI parts of an older roadmap shown while the newest one is not ready (the wording of Xét tốt nghiệp's previous advice). */
 export const PREVIOUS_ROADMAP_NOTE = "Lộ trình trước, viết cho dữ liệu cũ — có thể không còn đúng. Lộ trình mới sẽ thay thế khi sẵn sàng.";
+/** The note once the newest roadmap failed or was stopped: no new one is coming by itself (2026-11-10). */
+export const previousRoadmapNote = (status: RoadmapStatus | "pending" | null | undefined) =>
+  status === "failed" || status === "cancelled" ? "Lộ trình trước, viết cho dữ liệu cũ — có thể không còn đúng." : PREVIOUS_ROADMAP_NOTE;
 /** The AI wrote a plan for at least one month. */
 export const hasMonthPlan = (roadmap: Pick<Roadmap, "months">) => roadmap.months.some((month) => month.focus || month.tasks.length > 0);
 
@@ -127,6 +131,8 @@ export function normalizeRoadmapStatus(value: unknown): RoadmapStatusResponse {
 }
 
 export const isPending = (status: RoadmapStatus | null | undefined) => status === "queued" || status === "processing";
+/** The statuses that change on their own, so the page polls them: a deferred roadmap is queued by the server (2026-11-10). */
+export const shouldPollRoadmap = (status: RoadmapStatus | null | undefined) => isPending(status) || status === "deferred";
 
 /* ----------------------------------------------------------------- labels */
 
@@ -197,12 +203,25 @@ export function failureText(errorCode: string | null): string {
   switch (errorCode) {
     case "worker_timeout": return "Máy AI không trả lời kịp.";
     case "ai_timeout": return "EduPath AI soạn quá lâu nên đã dừng.";
-    case "ai_output_truncated": return "Lộ trình quá dài nên bị cắt giữa chừng.";
+    case "ai_output_truncated": return "Câu trả lời của AI bị cắt giữa chừng nên chưa dùng được.";
     case "invalid_ai_output": return "Nội dung AI soạn chưa đạt yêu cầu kiểm tra nên không được lưu.";
     case "ollama_unavailable": return "Máy AI chưa sẵn sàng.";
     default: return "Đã có lỗi khi soạn lộ trình.";
   }
 }
+
+/**
+ * The line over the older roadmap when the newest one failed (QA 2026-11-10: the page kept the old roadmap dimmed without
+ * saying the new one failed and what to do): when, why (failureText) and the button; action: where that button is.
+ */
+export const failedRoadmapText = (roadmap: { createdAt: string; errorCode?: string | null }, action = "Bấm “Thử lại” để thử lần nữa.") =>
+  `Lần tạo Lộ trình AI mới lúc ${formatDateTime(roadmap.createdAt)} không thành công. ${roadmap.errorCode ? `${failureText(roadmap.errorCode)} ` : ""}Lộ trình bên dưới là bản trước. ${action}`;
+
+/** A roadmap asked for while the AI queue was full (2026-11-10): it is queued by itself, no button needed. */
+export const DEFERRED_ROADMAP_COPY = {
+  title: "Hàng đợi AI đang đầy",
+  text: "Yêu cầu của bạn đã được giữ lại. Hệ thống sẽ tự xếp hàng soạn lộ trình khi hàng đợi có chỗ, bạn không cần bấm gì thêm.",
+} as const;
 
 /** error_code of a roadmap the AI writes once more because its first answer did not hold to the data (roadmap-v9). */
 export const ROADMAP_RETRY_CODE = "grounding_retry";

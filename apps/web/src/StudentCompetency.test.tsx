@@ -603,6 +603,7 @@ describe("StudentCompetency — audit of 2026-10-25", () => {
 
 describe("StudentCompetency — the older comment while a new one is prepared (user 2026-11-05: like Xét tốt nghiệp)", () => {
   const note = "Nhận xét trước, viết cho kết quả đánh giá cũ — có thể không còn đúng. Nhận xét mới sẽ thay thế khi sẵn sàng.";
+  const pendingNote = note;
   // Synthetic older assessment: its S01 is Kiểm thử tự động (Lập trình web in the newest result) and only it has TST120.
   const previous: PreviousAiComment = {
     assessmentId: "22222222-2222-4222-8222-222222222222", assessmentCreatedAt: "2026-10-01T02:00:00.000Z", model: "gemma4:e4b",
@@ -625,6 +626,8 @@ describe("StudentCompetency — the older comment while a new one is prepared (u
   const panel = (html: string) => html.slice(html.indexOf('id="scomp-ai"'), html.indexOf("</section>", html.indexOf('id="scomp-ai"')));
 
   it.each(["queued", "processing", "failed", "cancelled", "deferred"] as const)("keeps it dimmed under the state box while the comment is %s", (status) => {
+    // Once the newest failed or was stopped, no new comment is coming by itself: the note says no more (2026-11-10).
+    const note = status === "failed" || status === "cancelled" ? "Nhận xét trước, viết cho kết quả đánh giá cũ — có thể không còn đúng." : pendingNote;
     const html = panel(page(status));
     const at = { state: html.indexOf("scomp-ai-state"), dimmed: html.indexOf('<div class="scomp-ai-previous scomp-ai-dimmed"><p class="scomp-ai-old">'), footer: html.indexOf("scomp-ai-footer") };
     expect(at.state).toBeGreaterThan(0);
@@ -643,10 +646,27 @@ describe("StudentCompetency — the older comment while a new one is prepared (u
   });
   it("keeps the state box's actions right under it", () => {
     const failed = panel(page("failed"));
+    const older = "Nhận xét trước, viết cho kết quả đánh giá cũ — có thể không còn đúng.";
     expect(failed).toContain("Máy AI xử lý quá thời gian cho phép.");
-    expect(failed.indexOf("Tạo lại nhận xét")).toBeLessThan(failed.indexOf(note));
+    expect(failed.lastIndexOf("Tạo lại nhận xét")).toBeLessThan(failed.indexOf(older));
     const processing = panel(page("processing"));
     expect(processing.indexOf("Hủy tạo nhận xét")).toBeLessThan(processing.indexOf(note));
+  });
+  it("says above the older comment that the newest one failed, when, why and what to do (QA 2026-11-10)", () => {
+    const html = panel(page("failed"));
+    expect(html).toMatch(/<strong>Chưa tạo được nhận xét mới<\/strong><p>Lần tạo nhận xét mới cho kết quả đánh giá lúc \d\d:\d\d \d\d\/\d\d\/2026 không thành công\. Máy AI xử lý quá thời gian cho phép\. Nhận xét bên dưới là bản trước\. Bấm “Tạo lại nhận xét” để thử lần nữa\.<\/p>/);
+    // Not dimmed: the line is in the state box, before the dimmed older comment.
+    expect(html.indexOf("Lần tạo nhận xét mới")).toBeLessThan(html.indexOf("scomp-ai-dimmed"));
+    expect(html).not.toContain("ai_timeout");
+    // Without an older comment the box keeps its short words.
+    const alone = panel(page("failed", undefined, { previous: null }));
+    expect(alone).toContain("<strong>Chưa tạo được nhận xét</strong><p>Máy AI xử lý quá thời gian cho phép. Kết quả tính toán không bị ảnh hưởng.</p>");
+  });
+  it("waits for room in the queue on step 2 while deferred, with the regenerate button as an option", () => {
+    const html = panel(page("deferred", undefined, { previous: null }));
+    expect(html).toContain("Hệ thống sẽ tự xếp hàng tạo nhận xét khi hàng đợi có chỗ, bạn không cần làm gì thêm.");
+    expect(html).toContain('<li aria-current="step">2. Chờ hàng đợi có chỗ</li>');
+    expect(html).toContain("Tạo lại nhận xét</button>");
   });
   it("shows the gap part on Khoảng trống kỹ năng, with that assessment's career", () => {
     const html = panel(page("processing", "gap"));

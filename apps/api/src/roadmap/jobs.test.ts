@@ -1,6 +1,7 @@
 import type { PoolClient } from "pg";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { claimRoadmap, completeRoadmap, createRoadmap, createRoadmapExpiry, expireRoadmaps, extendRoadmap, readRoadmapRelations, retryInput, RoadmapError, ROADMAP_RETRY_CODE, type RoadmapRow } from "./jobs.js";
+import { claimRoadmap, completeRoadmap, createRoadmap, createRoadmapExpiry, expireRoadmaps, extendRoadmap, promoteDeferredRoadmaps, readRoadmapRelations, retryInput, RoadmapError, ROADMAP_RETRY_CODE, type RoadmapRow } from "./jobs.js";
+import type { DatabasePool } from "../db/pool.js";
 import type { AssessmentResult as RoadmapRelationResult } from "../competency-assessment/types.js";
 import { TRANSCRIPT_POLICY_VERSION } from "../student/consent.js";
 import { surveyFacts } from "../student/survey.js";
@@ -64,12 +65,14 @@ describe("createRoadmap", () => {
     const [cancel, insert, prune] = writes(sql());
     expect(cancel).toContain("UPDATE stu_roadmaps SET status='cancelled',ai_input=NULL");
     expect(insert).toContain("INSERT INTO stu_roadmaps");
-    expect(prune).toContain("DELETE FROM stu_roadmaps WHERE user_id=$1 AND status NOT IN ('queued','processing')");
+    expect(cancel).toContain("WHERE user_id=$1 AND status IN ('deferred','queued','processing')");
+    expect(prune).toContain("DELETE FROM stu_roadmaps WHERE user_id=$1 AND status NOT IN ('deferred','queued','processing')");
     const params = calls().find(([text]) => text.startsWith("INSERT INTO stu_roadmaps"))![1] as unknown[];
     expect(params.slice(1, 5)).toEqual([USER, ROADMAP_ASSESSMENT, "2026-12-21", "2027-04-04"]);
     expect(JSON.parse(params[5] as string)).toEqual(facts);
-    expect(JSON.parse(params[6] as string)).toEqual(aiInput);
-    expect(params[7]).toBe(ROADMAP_PROMPT_VERSION);
+    expect(params[6]).toBe("queued");
+    expect(JSON.parse(params[7] as string)).toEqual(aiInput);
+    expect(params[8]).toBe(ROADMAP_PROMPT_VERSION);
     expect(calls().find(([text]) => text.startsWith("DELETE FROM stu_roadmaps"))![1]).toEqual([USER, 5]);
   });
 
@@ -88,11 +91,25 @@ describe("createRoadmap", () => {
     expect(writes(sql())[0]).toContain("status='cancelled'");
   });
 
-  it("creates at most one roadmap per student per 30 seconds, and none while 20 of other students wait", async () => {
+  it("creates at most one roadmap per student per 30 seconds, and stores it deferred while 20 of other students wait (2026-11-10)", async () => {
     await expect(createRoadmap(fakeClient({ rows: [row({ recent: true })] }).client, USER)).rejects.toEqual(new RoadmapError("roadmap_too_frequent", 429));
     const full = fakeClient({ rows: [row()], othersPending: 20 });
-    await expect(createRoadmap(full.client, USER)).rejects.toMatchObject({ code: "queue_full", status: 429 });
-    expect(writes(full.sql())).toEqual([]);
+    const deferred = await createRoadmap(full.client, USER, { now: ROADMAP_NOW });
+    expect(deferred).toMatchObject({ created: true, row: { status: "deferred", output: null, facts: { window: { start: "2026-12-21" } } } });
+    const params = full.calls().find(([text]) => text.startsWith("INSERT INTO stu_roadmaps"))![1] as unknown[];
+    // The facts the page shows at once; no AI input waits with the survey in it.
+    expect(JSON.parse(params[5] as string)).toEqual(facts);
+    expect(params.slice(6)).toEqual(["deferred", null, ROADMAP_PROMPT_VERSION]);
+    expect(full.calls().find(([text]) => text.includes("count(*)"))).toEqual([expect.stringContaining("user_id IS DISTINCT FROM $1"), [USER]]);
+    // Asked again while still deferred for the same assessment and the queue is still full: unchanged.
+    const waiting = row({ status: "deferred", completedAt: null, model: null });
+    const again = fakeClient({ rows: [waiting], othersPending: 20 });
+    expect(await createRoadmap(again.client, USER, { now: ROADMAP_NOW })).toEqual({ row: waiting, created: false });
+    expect(writes(again.sql())).toEqual([]);
+    // With room, "Tạo lại" queues it at once (the deferred row is cancelled).
+    const roomy = fakeClient({ rows: [waiting], othersPending: 19 });
+    expect(await createRoadmap(roomy.client, USER, { now: ROADMAP_NOW })).toMatchObject({ created: true, row: { status: "queued" } });
+    expect(writes(roomy.sql())[0]).toContain("status IN ('deferred','queued','processing')");
     // A completed roadmap of the same assessment may be written again ("Tạo lại").
     expect((await createRoadmap(fakeClient({ rows: [row()], othersPending: 19 }).client, USER, { now: ROADMAP_NOW })).created).toBe(true);
   });
@@ -101,7 +118,7 @@ describe("createRoadmap", () => {
     const { client, calls } = fakeClient();
     await createRoadmap(client, USER, { now: ROADMAP_NOW });
     const params = calls().find(([text]) => text.startsWith("INSERT INTO stu_roadmaps"))![1] as unknown[];
-    const user = (JSON.parse(params[6] as string) as { user: string }).user;
+    const user = (JSON.parse(params[7] as string) as { user: string }).user;
     expect(user).toContain("[8. BẠN TỰ KHAI TRONG KHẢO SÁT ĐỊNH HƯỚNG] (chưa kiểm chứng)");
     // roadmap-v9: what the system has on record about those claims, next to them.
     expect(user).toContain("[9. HỆ THỐNG GHI NHẬN VỀ CÁC ĐIỀU BẠN TỰ KHAI] (từ bảng điểm và kết quả đánh giá)\n"
@@ -130,6 +147,69 @@ describe("createRoadmap", () => {
     const inactive = fakeClient({ active: false });
     await expect(createRoadmap(inactive.client, USER)).rejects.toMatchObject({ code: "account_unavailable", status: 403 });
     expect(inactive.sql()).toHaveLength(1);
+  });
+});
+
+describe("promoteDeferredRoadmaps (QA 2026-11-10: deferred roadmaps come back by themselves)", () => {
+  const OTHER = "88888888-8888-4888-8888-888888888888";
+  const SECOND = "99999999-9999-4999-8999-999999999999";
+  type Promote = { candidates: { id: string; userId: string }[]; pending?: number; locked?: string[]; survey?: boolean };
+  function promotePool(state: Promote) {
+    const base = fakeClient(state.survey === false ? { survey: false } : {});
+    const log: [string, unknown[]][] = [];
+    let pending = state.pending ?? 0;
+    const query = vi.fn(async (sql: string, params: unknown[] = []) => {
+      log.push([sql, params]);
+      if (sql.includes("FROM stu_roadmaps r JOIN users u")) return { rowCount: state.candidates.length, rows: state.candidates };
+      if (sql.startsWith("SELECT id FROM users")) return state.locked?.includes(params[0] as string) ? { rowCount: 0, rows: [] } : { rowCount: 1, rows: [{ id: params[0] }] };
+      if (sql.includes("count(*)::int AS count FROM stu_roadmaps")) return { rowCount: 1, rows: [{ count: pending }] };
+      if (sql.startsWith("SELECT id FROM stu_roadmaps WHERE id=$1")) return { rowCount: 1, rows: [{ id: params[0] }] };
+      if (sql.startsWith("UPDATE stu_roadmaps SET status='queued'")) { pending += 1; return { rowCount: 1, rows: [] }; }
+      return base.query(sql, params);
+    });
+    const release = vi.fn();
+    const pool = { query, connect: vi.fn(async () => ({ query, release })) } as unknown as DatabasePool;
+    return { pool, log, release };
+  }
+  const queuedIds = (log: [string, unknown[]][]) => log.filter(([sql]) => sql.startsWith("UPDATE stu_roadmaps SET status='queued'")).map(([, params]) => params[0]);
+
+  it("queues the oldest deferred roadmap of an active student in place, built now, in the lock order of createRoadmap", async () => {
+    const { pool, log, release } = promotePool({ candidates: [{ id: ROADMAP, userId: USER }] });
+    expect(await promoteDeferredRoadmaps(pool, { now: ROADMAP_NOW })).toBe(1);
+    expect(log[0]![0]).toContain("JOIN users u ON u.id=r.user_id AND u.is_active");
+    expect(log[0]![0]).toContain("WHERE r.status='deferred' ORDER BY r.created_at,r.id LIMIT $1");
+    expect(log[0]![1]).toEqual([20]);
+    expect(log[1]![0]).toBe("BEGIN");
+    expect(log[2]![0]).toBe("SELECT id FROM users WHERE id=$1 AND is_active FOR KEY SHARE SKIP LOCKED");
+    expect(log[3]).toEqual(["SELECT pg_advisory_xact_lock(hashtext($1))", ["edupath:study-roadmap"]]);
+    expect(log[4]).toEqual([expect.stringContaining("user_id IS DISTINCT FROM $1"), [null]]);
+    const update = log.find(([sql]) => sql.startsWith("UPDATE stu_roadmaps SET status='queued'"))!;
+    expect(update[0]).toContain("created_at=now()");
+    expect(update[1].slice(0, 4)).toEqual([ROADMAP, ROADMAP_ASSESSMENT, "2026-12-21", "2027-04-04"]);
+    expect(JSON.parse(update[1][4] as string)).toEqual(facts);
+    expect(JSON.parse(update[1][5] as string)).toEqual(aiInput);
+    expect(update[1][6]).toBe(ROADMAP_PROMPT_VERSION);
+    expect(log.at(-1)![0]).toBe("COMMIT");
+    expect(release).toHaveBeenCalledTimes(1);
+  });
+
+  it("fills only the room left, oldest first, skips a student whose row a write holds, and waits while the queue is full", async () => {
+    const one = promotePool({ candidates: [{ id: ROADMAP, userId: USER }, { id: SECOND, userId: OTHER }], pending: 19 });
+    expect(await promoteDeferredRoadmaps(one.pool, { now: ROADMAP_NOW })).toBe(1);
+    expect(queuedIds(one.log)).toEqual([ROADMAP]);
+    const locked = promotePool({ candidates: [{ id: ROADMAP, userId: USER }, { id: SECOND, userId: OTHER }], locked: [USER] });
+    expect(await promoteDeferredRoadmaps(locked.pool, { now: ROADMAP_NOW })).toBe(1);
+    expect(queuedIds(locked.log)).toEqual([SECOND]);
+    const full = promotePool({ candidates: [{ id: ROADMAP, userId: USER }], pending: 20 });
+    expect(await promoteDeferredRoadmaps(full.pool, { now: ROADMAP_NOW })).toBe(0);
+    expect(full.log.some(([sql]) => /^(INSERT|UPDATE|DELETE)/.test(sql))).toBe(false);
+  });
+
+  it("cancels a deferred roadmap the student can no longer have (no usable survey)", async () => {
+    const { pool, log } = promotePool({ candidates: [{ id: ROADMAP, userId: USER }], survey: false });
+    expect(await promoteDeferredRoadmaps(pool, { now: ROADMAP_NOW })).toBe(0);
+    expect(log.find(([sql]) => sql.startsWith("UPDATE stu_roadmaps SET status='cancelled'"))![1]).toEqual([ROADMAP]);
+    expect(queuedIds(log)).toEqual([]);
   });
 });
 
