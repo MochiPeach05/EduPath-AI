@@ -155,14 +155,17 @@ Khi thêm code, không tạo thêm vòng mới. Phần dùng chung nên tách th
 ### 3.6 Cơ sở dữ liệu và migration
 
 - `apps/api/migrations/NNN_ten.sql` chạy theo số. Runner (`db/migrate.ts`) ghi checksum từng tệp vào `schema_migrations` và **từ chối khởi động nếu một tệp đã chạy bị sửa**.
-- Không bao giờ sửa migration đã lên production. Muốn thay đổi thì thêm số tiếp theo (hiện là 041).
+- Không bao giờ sửa migration đã lên production. Muốn thay đổi thì thêm số tiếp theo (hiện là 065).
 - Production tự chạy migration khi deploy (`DATABASE_AUTO_MIGRATE=true`); server chỉ mở cổng sau khi chạy xong.
 - Bảng mới bật Row Level Security và thu quyền của `anon`/`authenticated`/`service_role`, theo mẫu ở `034_competency_ai_suggestions.sql`.
 - Có phần được **giữ lại dù không còn dùng**, vì production đã chạy và xóa sẽ làm lệch lịch sử migration:
   - cột của 033 (`runner`, `scoring_mode`, `ai_scoring`);
-  - chế độ `skills` của 035/036;
-  - bảng `ad_comp_skill_field_groups` của 037 (tính năng đã hoàn tác);
-  - các bảng `ad_comp_import_*` của phần nhập Excel đã xóa.
+  - chế độ `skills` của 035/036.
+- Bốn bảng không còn dùng đã được **064** xóa (12/11/2026), nên database còn 55 bảng:
+  - `ad_comp_imports`, `ad_comp_import_aliases` của phần nhập Excel đã xóa;
+  - `ad_comp_skill_field_groups` của 037 (nhóm theo lĩnh vực, đã hoàn tác);
+  - `ad_comp_skill_majors` của 054 (ngành áp dụng, đã hoàn tác).
+  File 026/037/054 giữ nguyên; trên database mới, 064 xóa các bảng ngay sau khi chúng được tạo.
 
 ## 4. Web (`apps/web/src`)
 
