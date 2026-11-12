@@ -18,7 +18,9 @@ const CATALOG_TABLES = [
   "curricula", "curriculum_revisions", "curriculum_courses", "curriculum_relations", "curriculum_events",
   "training_plans", "training_plan_revisions", "training_plan_items", "training_plan_events",
   "graduation_standards", "graduation_revisions", "graduation_courses", "graduation_events",
-  "ad_comp_groups", "ad_comp_skills", "ad_comp_skill_groups", "ad_comp_skill_majors", "ad_comp_skill_field_groups",
+  // ad_comp_skill_majors and ad_comp_skill_field_groups left this list before migration 064 dropped them (2026-11-12): a
+  // running server builds its stamp SQL once, so a dropped table still in it would fail the reports until a restart.
+  "ad_comp_groups", "ad_comp_skills", "ad_comp_skill_groups",
   "ad_comp_courses", "ad_comp_course_configs", "ad_comp_course_links", "ad_comp_course_aliases", "ad_comp_events",
   "career_fields", "career_positions", "career_requirements", "career_skills",
   "competency_groups", "competency_skills", "competency_weights", "competency_course_links", "competency_criteria",
