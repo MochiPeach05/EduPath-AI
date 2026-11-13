@@ -99,6 +99,17 @@ class OutlinePageTest(unittest.TestCase):
             page.draw_polyline([(300, 12), (306, 5), (309, 14), (303, 10)], color=None, fill=(0, 0, 0), closePath=True)
             self.assertEqual([p['method'] for p in read(document)['pages']], ['pdf_outline'])
 
+    def test_a_page_with_a_screenshot_among_its_outlines_is_left_to_ocr(self):
+        # A picture that may hold rows (test_ocr.holds_picture): the outlines cannot tell what it shows. The result
+        # marks and a banner are pictures too, and small.
+        with pymupdf.open(FIXTURE) as document:
+            page = document[0]
+            page.insert_image(pymupdf.Rect(20, 20, 575, 85), pixmap=pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 60, 8), False), keep_proportion=False)
+            self.assertEqual([p['method'] for p in read(document)['pages']], ['pdf_outline'])
+            page.insert_image(pymupdf.Rect(40, 500, 555, 800), pixmap=pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 60, 30), False), keep_proportion=False)
+            with self.assertRaises(OcrRequired):
+                read(document)
+
     def test_a_page_without_outlines_is_not_read_here(self):
         document = pymupdf.open()
         page = document.new_page()

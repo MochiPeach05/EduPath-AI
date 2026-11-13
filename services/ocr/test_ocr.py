@@ -105,6 +105,7 @@ def folded(value):
 # hệ 10. EduPath reads only the "Xem điểm SV" transcript (user 2026-11-05: "không hỗ trợ định dạng Xem điểm theo CTĐT").
 # The words "Xem điểm theo CTĐT" themselves are no sign: a full-page print of the transcript shows them on a radio button.
 CURRICULUM_VIEW_MARK = 'mon tuong duong'
+WEB_ADDRESS = re.compile(r'https?://', re.I)
 
 
 class CurriculumViewError(ValueError):
@@ -181,6 +182,20 @@ def is_scanned(page):
     """True when a raster image covers most of the page (scan or photo); digital exports are never skewed."""
     area = abs(page.rect)
     return any(abs(pymupdf.Rect(info['bbox']) & page.rect) > .5 * area for info in page.get_image_info())
+
+
+def holds_picture(page):
+    """True when a picture at least half the page wide and a fifth of it high lies on the page: a scan, a photo, or a
+    screenshot put into a digital page. In a transcript such a picture may hold table rows that are in no text layer
+    and in no outline (2026-11-13: a real transcript whose column header, Điểm bảo lưu and first term were one picture,
+    the other terms text; its text alone read 30 of its 36 rows). The banner of a full-page print is as wide but a
+    twelfth of the page high; a result mark is a few points."""
+    width, height = page.rect.width, page.rect.height
+    for info in page.get_image_info():
+        seen = pymupdf.Rect(info['bbox']) & page.rect
+        if seen.width >= .5 * width and seen.height >= .2 * height:
+            return True
+    return False
 
 
 def attach_result_marks(page, rows, dpi=100):
@@ -414,12 +429,17 @@ def join_page_breaks(pages):
 
 def parse_pages(pages, catalog):
     join_page_breaks(pages)
-    courses, summaries, unparsed = [], [], []
+    courses, summaries = [], []
+    # Rows that are no row of the transcript, each with the number of transcript rows read before it and whether it is
+    # one cell across the whole table. Which of them are reported is settled after the last page (end of this function).
+    loose, table_rows = [], 0
     year = semester = None
     section = 'unknown'
     # Only expect a result per course when the document shows result marks at all (older exports do not).
     has_result_marks = any(len(r) == 8 and clean(r[7]) in RESULT_MARKS for p in pages for r in p['rows'])
     for page in pages:
+        # Read without OCR: an empty cell is empty, and a cell across the table is known as one (find_tables: None).
+        exact = page['method'] in ('pdf_text', 'pdf_outline')
         for row_index, raw_cells in enumerate(page['rows'], 1):
             cells = [clean(c) for c in raw_cells]
             text = ' '.join(cells)
@@ -438,9 +458,17 @@ def parse_pages(pages, catalog):
                 year = semester = None
                 section = 'credit_transfer'
             if not cells or not cells[0].isdigit():
-                if text and not context and not is_summary and not is_transfer and 'ma mon' not in folded(text):
-                    unparsed.append({'source_page': page['page'], 'raw_cells': raw_cells})
+                if context or is_summary or is_transfer or 'ma mon' in folded(text):
+                    table_rows += 1
+                elif exact and WEB_ADDRESS.search(text):
+                    # The browser's own footer line (the page's address, the page number) caught in the table's frame
+                    # where a page ends: no row of the transcript holds a web address.
+                    continue
+                elif text.strip() if exact else text:
+                    across = exact and len(raw_cells) > 1 and all(c is None for c in raw_cells[1:])
+                    loose.append((table_rows, across, {'source_page': page['page'], 'raw_cells': raw_cells}))
                 continue
+            table_rows += 1
             issues = []
             if len(cells) != 8:
                 issues.append('unexpected_column_count')
@@ -488,6 +516,12 @@ def parse_pages(pages, catalog):
                 'catalog_matched': matched, 'suggested_course_codes': suggestions,
                 'needs_review': bool(issues) or bool(page['warnings']),
                 'issues': issues, 'raw_cells': raw_cells})
+    # A full-page print of the portal has the portal's own boxes in the table's frame: its filters, the "Chú ý" note
+    # and the radio buttons above the column header, its footer under the last term. Each is one cell across the whole
+    # table, before the first or after the last row of the transcript: no row was lost there, so none is reported
+    # (2026-11-13: such prints were told "10 dòng không đọc được"; six of the ten were empty rows). A cell across the
+    # table between two rows of the transcript is still reported: it may be a heading this reader does not know.
+    unparsed = [row for seen, across, row in loose if not (across and seen in (0, table_rows))]
     return courses, summaries, unparsed
 
 
@@ -588,6 +622,15 @@ def extract_transcript(document, source_name, options=None, catalog=None, output
             if sheet_usable:
                 natives[i] = (sheet_rows, True, sheet_expected)
                 outlined.add(i)
+    # In a transcript (a page has course rows in its text or its outlines), a page with a picture that may hold rows is
+    # not read from text or outlines alone: they cannot tell what the picture shows, OCR reads the page as it looks. A
+    # document without any course row stays as it is: it is refused without OCR (slides, a report with pictures).
+    if document.is_pdf and options.mode != 'ocr' and any(expected for _, _, expected in natives):
+        for i, page in enumerate(document):
+            rows, usable, expected = natives[i]
+            if usable and holds_picture(page):
+                natives[i] = (rows, False, expected)
+                outlined.discard(i)
     # Gemma reads every page that needs OCR at once, each in strips (gemma_ocr.py, user 2026-11-08); the rows of its
     # items are built in page order below, so a row repeated where strips or pages meet is kept once.
     gemma_items, gemma_rows = {}, None

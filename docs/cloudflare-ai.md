@@ -56,6 +56,22 @@ Trang đọc theo cách này ghi `method: "pdf_outline"`, không có cảnh báo
 
 Tệp đi kèm: `arial_glyphs.json`, `outline_blank.ttf`, `outline_build.py` (dựng hai tệp trên và bản giả lập; cần fontTools và Arial của Windows, máy chủ không chạy), `fixtures/outline_transcript.{html,pdf}` (bảng điểm bịa để kiểm thử).
 
+## Thử với mọi bảng điểm trong máy người dùng (14/11): hai chỗ sửa trong bộ đọc
+
+Người dùng yêu cầu ngày 13/11: "test với toàn bộ bảng điểm tôi có trong máy". Tìm được 17 bảng điểm thật khác nhau (13 file trong thư mục bộ thử, 4 file ở nơi khác, 3 bản sao). Chỉ in số đếm, không sao chép file.
+
+- 16/17 đọc trọn trong lượt `--text-only`, không OCR, không AI: 13 file có lớp chữ (48 trang), 3 file in bằng Microsoft Print to PDF (10 trang, 1,9–2,4 giây mỗi file). 797 dòng môn, 150 học kỳ; số thứ tự của mọi khối đều liền 1..n.
+- 3 file in máy in ảo được kiểm lại theo cách không dùng bộ giải mã: dựng lại 12.829 ký tự đã đọc bằng chính tệp phông Arial của Windows ở đúng vị trí và cỡ chữ, vẽ cả hai ở 600 DPI rồi chồng lên nhau, cho phép lệch 2 đơn vị máy in: 0 điểm lệch. Phép chồng này bắt được 720/720 ký tự cố ý đổi sai (8 thành 3, ơ thành ô, dấu chấm thành dấu phẩy, i thành í). Một trong ba file có bản "Lưu dưới dạng PDF" của cùng bảng điểm: 51/51 dòng và 130/130 giá trị tổng kết trùng. Mã, tên, tín chỉ của 143/144 dòng trùng với chữ của cổng đào tạo trong bảng điểm có lớp chữ của sinh viên khác (dòng còn lại không có bản đối chiếu).
+- 10 file có lớp chữ Arial được giả lập thành bản in máy in ảo rồi đọc lại: 524/525 dòng và 1.400/1.400 giá trị tổng kết trùng lớp chữ; dòng còn lại là tên môn mà chính lớp chữ đặt dấu nặng sai chữ ("lưc̣"), bản đọc từ nét chữ ra "lực".
+- File còn lại cần OCR là đúng: nửa trên trang 1 của nó là **một tấm ảnh** (tiêu đề cột, Điểm bảo lưu, học kỳ đầu), phần sau mới là chữ. Gemma đọc trên tài khoản thử: 36 dòng, khoảng 280 neuron, 35 giây; 30/30 dòng có trong lớp chữ trùng hoàn toàn, 78/78 giá trị tổng kết trùng, học kỳ nằm trong ảnh khớp số tín chỉ đạt và điểm trung bình in trên giấy.
+
+Hai chỗ sửa trong `test_ocr.py`:
+
+1. **Trang có ảnh lớn trong một bảng điểm luôn đi OCR** (`holds_picture`: ảnh rộng từ nửa trang và cao từ một phần năm trang). File nói trên trước đây chỉ đi OCR vì lưới bảng của nó tình cờ có 10 cột; nếu lưới đủ 8 cột, lớp chữ sẽ được đọc và 6 dòng nằm trong ảnh mất mà không có cảnh báo nào. Quy tắc chỉ áp dụng khi tài liệu có dòng môn (ở lớp chữ hoặc nét chữ); tài liệu không có dòng môn nào (slide, báo cáo có hình) vẫn bị từ chối ngay, không tốn OCR. Băng-rôn của cổng trên bản in cả trang chỉ cao khoảng 1/12 trang nên không bị tính.
+2. **Bản in cả trang web không còn báo "Có N dòng không đọc được" sai** (`parse_pages`). Trên trang đọc bằng lớp chữ hoặc nét chữ, ba loại dòng sau không phải dòng bị mất: dòng trống; ô chạy hết chiều ngang bảng nằm trước dòng đầu tiên hoặc sau dòng cuối cùng của bảng điểm (bộ lọc, nút chọn, ô "Chú ý", chân trang của cổng); dòng có địa chỉ web (dòng chân trang của trình duyệt lọt vào khung bảng ở chỗ ngắt trang). Một ô chạy hết chiều ngang nằm **giữa** hai dòng của bảng điểm vẫn được báo, vì có thể là một tiêu đề bộ đọc chưa biết. Trang đọc bằng OCR giữ nguyên cách báo cũ.
+
+Kiểm tra trên 52 bảng điểm đã lưu (chỉ đọc, trong bộ nhớ, chỉ in số đếm): dòng môn, học kỳ và ô tổng kết của cả 52 file giống hệt trước và sau khi sửa; 4 bản in cả trang hết cảnh báo sai (10, 15, 6, 7 dòng thành 0), 3 trong số đó không còn bị đánh dấu cần đối chiếu. Cả 52 file giờ đọc trọn trong lượt `--text-only` (34 lớp chữ, 18 nét chữ). Dữ liệu đã lưu không đổi.
+
 ## OCR bằng Gemma (`services/ocr/gemma_ocr.py`)
 
 Từ 13/11 chỉ còn dành cho bản scan và ảnh chụp thật, và cho trang in máy in ảo mà `outline_text.py` không đọc trọn được.

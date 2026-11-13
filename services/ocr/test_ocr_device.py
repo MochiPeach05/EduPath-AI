@@ -512,6 +512,168 @@ class SummaryLineTests(TestCase):
         self.assertIn("- Xếp loại học tập HK: Trung bình", summaries[0]["raw_cells"][0].split("\n"))
 
 
+class PortalBoxRowTests(TestCase):
+    """A full-page print of the portal: its own boxes stand in the table's frame (synthetic rows, no student data)."""
+
+    WIDE = [None] * 7  # a cell across the whole table, as find_tables gives it
+    HEADER = ["STT", "Mã môn học", "Tên môn học", "Tín chỉ", "Điểm hệ 10", "Điểm hệ 4", "Điểm chữ", "Kết quả"]
+    TERM = ["Năm học: 2024-2025 - Học kỳ: HK01", *WIDE]
+    COURSE = ["1", "71ENG110013", "Anh văn 1 (AV1)", "3", "7.5", "3.00", "B", "✓"]
+    SUMMARY = ["- Số tín chỉ đạt học kỳ: 3\n- Điểm TB học kỳ (Hệ 4): 3.00", None, None, None, "- Tổng số tín chỉ tích lũy: 3", None, None, None]
+
+    def rows(self, between=()):
+        return [["Học kỳ\nNăm học\nTất cả\nIn bảng điểm", *self.WIDE],
+                ["Xem điểm SV Xem điểm theo CTĐT", *self.WIDE],
+                ["Chú ý:\n- Những môn có dấu (*) sẽ không tính điểm trung bình mà chỉ là môn điều kiện", *self.WIDE],
+                ["", "", "", "", "", "", "", ""],
+                self.HEADER, self.TERM, self.COURSE, *between,
+                ["", None, None, None, "", None, None, None],
+                self.SUMMARY,
+                ["Copyright © Trường Đại học Văn Lang", *self.WIDE]]
+
+    @staticmethod
+    def page(rows, method):
+        return {"page": 1, "method": method, "warnings": [], "rows": rows}
+
+    def test_the_boxes_above_and_under_the_table_and_empty_rows_are_no_unread_rows(self):
+        import test_ocr
+
+        for method in ("pdf_text", "pdf_outline"):
+            courses, summaries, unparsed = test_ocr.parse_pages([self.page(self.rows(), method)], {})
+            self.assertEqual(unparsed, [], method)
+            self.assertEqual([(c["course_code"], c["academic_year"], c["semester"], c["issues"]) for c in courses], [("71ENG110013", "2024-2025", "HK01", [])])
+            [semester] = test_ocr.parse_semesters(summaries, courses)
+            self.assertEqual(semester["issues"], [])
+
+    def test_a_heading_this_reader_does_not_know_between_two_rows_is_still_reported(self):
+        import test_ocr
+
+        heading = ["Điểm chuyển đổi", *self.WIDE]
+        second = ["2", "71ITBS10103", "Nhập môn công nghệ thông tin", "3", "6.0", "2.40", "C", "✓"]
+        _courses, _summaries, unparsed = test_ocr.parse_pages([self.page(self.rows(between=[heading, second]), "pdf_text")], {})
+        self.assertEqual([row["raw_cells"] for row in unparsed], [heading])
+        # So is a row that is no single cell across the table: part of a course row may be in it.
+        loose = ["", "", "Thực tập tốt nghiệp", "", "", "", "", "✓"]
+        _courses, _summaries, unparsed = test_ocr.parse_pages([self.page([loose, self.HEADER, self.TERM, self.COURSE, self.SUMMARY, loose], "pdf_text")], {})
+        self.assertEqual([row["raw_cells"] for row in unparsed], [loose, loose])
+
+    def test_the_browsers_footer_line_caught_in_the_frame_at_a_page_break_is_no_unread_row(self):
+        import test_ocr
+
+        footer = ["https://online.vlu.edu.vn/Home/Marks", None, None, None, "2/5", None, None, None]
+        second = ["2", "71ITBS10103", "Nhập môn công nghệ thông tin", "3", "6.0", "2.40", "C", "✓"]
+        courses, _summaries, unparsed = test_ocr.parse_pages([self.page([self.HEADER, self.TERM, self.COURSE, footer, second, self.SUMMARY], "pdf_text")], {})
+        self.assertEqual((unparsed, [c["ordinal"] for c in courses]), ([], [1, 2]))
+        # Read by OCR, the same line is reported: there a web address may be a row read wrongly.
+        _courses, _summaries, unparsed = test_ocr.parse_pages([self.page([self.HEADER, self.TERM, self.COURSE, footer, second, self.SUMMARY], "gemma")], {})
+        self.assertEqual(len(unparsed), 1)
+
+    def test_on_a_page_read_by_ocr_every_such_row_is_reported_as_before(self):
+        import test_ocr
+
+        # OCR gives no empty cell for certain and knows no cell across the table: an empty row may be one it could not read.
+        _courses, _summaries, unparsed = test_ocr.parse_pages([self.page(self.rows(), "gemma")], {})
+        self.assertEqual(len(unparsed), 6)
+
+
+def ruled_transcript(picture=None):
+    """A one-page PDF with a text layer: an eight-column ruled table with the column header and two course rows, and a
+    picture in the rectangle `picture` (synthetic, ASCII names: the built-in font has no Vietnamese letters)."""
+    import pymupdf
+
+    document = pymupdf.open()
+    page = document.new_page()
+    xs = [30, 60, 150, 310, 370, 410, 450, 510, 565]
+    rows = [["STT", "Ma mon hoc", "Ten mon hoc", "Tin chi", "He 10", "He 4", "Chu", "Ket qua"],
+            ["1", "71ENG110013", "Anh van 1 (AV1)", "3", "7.5", "3.00", "B", ""],
+            ["2", "71ITBS10103", "Nhap mon cong nghe thong tin", "3", "6.0", "2.40", "C", ""]]
+    ys = [320 + 20 * index for index in range(len(rows) + 1)]
+    shape = page.new_shape()
+    for x in xs:
+        shape.draw_line((x, ys[0]), (x, ys[-1]))
+    for y in ys:
+        shape.draw_line((xs[0], y), (xs[-1], y))
+    shape.finish(color=(0, 0, 0), width=0.5)
+    shape.commit()
+    for top, row in zip(ys, rows):
+        for left, cell in zip(xs, row):
+            if cell:
+                page.insert_text((left + 3, top + 14), cell, fontsize=8)
+    if picture:
+        page.insert_image(pymupdf.Rect(picture), pixmap=pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 60, 30), False), keep_proportion=False)
+    return document
+
+
+class PictureOnTextPageTests(TestCase):
+    """A screenshot or a photo on a page that also has text may hold rows the text does not have (2026-11-13)."""
+
+    SCREENSHOT = (40, 40, 555, 300)  # most of the page's width, a third of its height: room for a header and rows
+    BANNER = (20, 20, 575, 88)       # the portal's banner on a full-page print: as wide, a twelfth of the page high
+    MARK = (520, 345, 531, 356)      # a result mark
+
+    def test_a_page_of_text_and_rules_is_read_from_its_text(self):
+        import test_ocr
+
+        for picture in (None, self.BANNER, self.MARK):
+            with ruled_transcript(picture) as document:
+                self.assertFalse(test_ocr.holds_picture(document[0]), picture)
+                _rows, usable, expected = test_ocr.native_rows(document[0])
+                self.assertTrue(usable, picture)
+                self.assertEqual(expected, Counter({"71ENG110013": 1, "71ITBS10103": 1}))
+                result = test_ocr.extract_transcript(document, "synthetic.pdf", test_ocr.Options(ocr_enabled=False), log=lambda _m: None)
+                self.assertEqual([p["method"] for p in result["pages"]], ["pdf_text"])
+                self.assertEqual([c["course_code"] for c in result["courses"]], ["71ENG110013", "71ITBS10103"])
+
+    def test_a_page_with_a_screenshot_above_its_text_is_left_to_ocr(self):
+        import test_ocr
+
+        with ruled_transcript(self.SCREENSHOT) as document:
+            self.assertTrue(test_ocr.holds_picture(document[0]))
+            # The text has both codes and both are in the table rows: only the picture says the page may hold more.
+            rows, usable, expected = test_ocr.native_rows(document[0])
+            self.assertEqual(sum(1 for row in rows if len(row) == 8 and test_ocr.CODE.fullmatch(test_ocr.clean(row[1]))), 2)
+            self.assertEqual((sum(expected.values()), usable), (2, True))
+            with self.assertRaises(test_ocr.OcrRequired):
+                test_ocr.extract_transcript(document, "synthetic.pdf", test_ocr.Options(ocr_enabled=False), log=lambda _m: None)
+
+    def test_a_page_of_the_transcript_whose_text_has_no_course_row_is_left_to_ocr_for_its_picture_too(self):
+        import pymupdf
+        import test_ocr
+
+        # Page 2: a screenshot and a line of text, no course code in the text. The transcript's rows may go on in the picture.
+        with ruled_transcript() as document:
+            page = document.new_page()
+            page.insert_text((40, 700), "- Tong so tin chi tich luy: 6", fontsize=8)
+            page.insert_image(pymupdf.Rect(self.SCREENSHOT), pixmap=pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 60, 30), False), keep_proportion=False)
+            self.assertTrue(test_ocr.native_rows(page)[1])
+            with self.assertRaises(test_ocr.OcrRequired) as raised:
+                test_ocr.extract_transcript(document, "synthetic.pdf", test_ocr.Options(ocr_enabled=False), log=lambda _m: None)
+            self.assertIn("Page 2", str(raised.exception))
+
+    def test_a_document_without_any_course_row_is_not_sent_to_ocr_for_its_pictures(self):
+        import pymupdf
+        import test_ocr
+
+        # Slides, a report: text and big pictures, no course row anywhere. Read as text, no course found: the server
+        # refuses it (unsupported_layout) without OCR, as before.
+        document = pymupdf.open()
+        page = document.new_page()
+        page.insert_text((40, 700), "Chuong 1. Gioi thieu de tai", fontsize=12)
+        page.insert_image(pymupdf.Rect(self.SCREENSHOT), pixmap=pymupdf.Pixmap(pymupdf.csRGB, pymupdf.IRect(0, 0, 60, 30), False), keep_proportion=False)
+        result = test_ocr.extract_transcript(document, "synthetic.pdf", test_ocr.Options(ocr_enabled=False), log=lambda _m: None)
+        self.assertEqual(([p["method"] for p in result["pages"]], result["courses"]), (["pdf_text"], []))
+
+    def test_a_picture_that_runs_off_the_page_counts_by_the_part_on_the_page(self):
+        import test_ocr
+
+        # As in the real file: most of the picture lies above the page's top edge.
+        with ruled_transcript((40, -385, 555, 316)) as document:
+            self.assertTrue(test_ocr.holds_picture(document[0]))
+            self.assertFalse(test_ocr.is_scanned(document[0]))
+        with ruled_transcript((40, -385, 555, 60)) as document:
+            self.assertFalse(test_ocr.holds_picture(document[0]))
+
+
 class TextOnlyTests(TestCase):
     """worker.py --parse --text-only, the API's own reader on Render (2026-11-07): never OCR, never Paddle."""
 
