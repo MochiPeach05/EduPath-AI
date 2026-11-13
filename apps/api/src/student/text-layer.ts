@@ -8,6 +8,9 @@
 // With Gemma OCR (AI_PROVIDER=cloudflare, user 2026-11-08: "chuyển ocr thành gemma luôn") a PDF that needs OCR is read here
 // too, by worker.py --parse --gemma (services/ocr/gemma_ocr.py: Gemma 4 on Cloudflare Workers AI reads the scanned pages),
 // and nothing goes back to the PC: a PDF Gemma cannot read ends with ocr_failed, which the student can try again.
+// Since 2026-11-13 the text-only pass also reads the PDFs printed through a printer driver ("Microsoft: Print To PDF"),
+// which have no text layer but are no scans: their characters are vector outlines, read exactly by outline_text.py
+// (pages with method "pdf_outline"). Only real scans, and the outline pages it cannot read whole, go on to Gemma.
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
@@ -24,6 +27,13 @@ export const OCR_DIR = fileURLToPath(new URL("../../../../services/ocr/", import
 export const PYDEPS_DIR = join(OCR_DIR, ".pydeps");
 /** The worker's own refusals (worker.py PARSE_ERRORS): the PC worker would answer the same, so the job ends with them. */
 const FINAL_ERRORS: ReadonlySet<string> = new Set(["invalid_pdf", "encrypted_pdf", "too_many_pages", "unsupported_layout", "curriculum_view"]);
+
+/**
+ * The time limit of the text-only pass. It also reads the PDFs a printer driver wrote without a text layer ("Microsoft:
+ * Print To PDF": every character a vector outline, services/ocr/outline_text.py, 2026-11-13), exactly and without OCR:
+ * 2–3.4 s per transcript on a desktop, several times that on a Render free instance (0.1 CPU).
+ */
+export const TEXT_ONLY_TIMEOUT_MS = 240_000;
 
 export type TextLayerOutcome = { kind: "result"; result: unknown } | { kind: "error"; code: string } | { kind: "ocr" } | { kind: "fallback" };
 /** The Cloudflare values Gemma OCR runs with; null: PDFs that need OCR stay with the PC worker. */
@@ -95,7 +105,7 @@ export function gemmaQuotaRefused(data: unknown): boolean {
   return (data as { reason?: unknown } | null)?.reason === "daily_limit";
 }
 
-export function pythonTextLayerRunner(python: string, timeoutMs = 120_000, gemma: GemmaOcr | null = null, gemmaTimeoutMs = 600_000,
+export function pythonTextLayerRunner(python: string, timeoutMs = TEXT_ONLY_TIMEOUT_MS, gemma: GemmaOcr | null = null, gemmaTimeoutMs = 600_000,
   budget: NeuronBudget | null = null): TextLayerRunner {
   return async (pdf) => {
     const dir = await mkdtemp(join(tmpdir(), "edupath-text-"));
@@ -237,7 +247,7 @@ export function startTextLayerReader(python: string | null, jobs: TextLayerJobs 
   if (python && jobs) {
     void (options.probe ?? probeTextLayer)(python).then((ok) => {
       if (!ok) { state = "off"; log.warn("[transcript] text-layer reader off: python, PyMuPDF, numpy or OpenCV missing"); return; }
-      reader = createTextLayerReader(jobs, options.runner ?? pythonTextLayerRunner(python, 120_000, options.gemma ?? null, 600_000, options.budget ?? null), log);
+      reader = createTextLayerReader(jobs, options.runner ?? pythonTextLayerRunner(python, TEXT_ONLY_TIMEOUT_MS, options.gemma ?? null, 600_000, options.budget ?? null), log);
       state = "ready";
       log.info("[transcript] text-layer reader ready");
       reader.kick();

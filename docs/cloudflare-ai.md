@@ -10,6 +10,7 @@ Người dùng chốt ngày 8/11/2026: "Chốt phương án chuyển ocr thành 
 | Embedding của Trợ lý AI | EmbeddingGemma (768 chiều) trong Ollama | BGE-M3 (`@cf/baai/bge-m3`, 1024 chiều). EmbeddingGemma trên Workers AI ngừng ngày 20/11/2026 |
 | PDF có lớp chữ | Đọc trên Render (`text-layer.ts`, PyMuPDF) | Như cũ |
 | PDF scan hoặc ảnh chụp | Worker OCR trên PC (PaddleOCR) | Đọc trên Render: `worker.py --parse --gemma` (`services/ocr/gemma_ocr.py`) |
+| PDF in qua máy in ảo (không có lớp chữ, chữ là nét vẽ vector) | Worker OCR trên PC (PaddleOCR) | Từ 13/11: đọc chính xác trên Render, không OCR, không AI (`services/ocr/outline_text.py`); xem mục "PDF in qua máy in ảo" |
 
 Worker AI trong API vẫn chạy đúng vòng lặp và giao thức của worker trên PC (`worker.ts`, gọi `/api/worker/...` qua `127.0.0.1`). Nhờ vậy cách nhận việc, gia hạn, thử lại và kiểm tra kết quả không đổi. Chỉ phần gọi mô hình khác (`ai-worker/cloudflare.ts`):
 
@@ -30,7 +31,35 @@ Khi `AI_PROVIDER=cloudflare`:
   - Khi Workers AI tạm thời không nhận việc (hết lượt miễn phí trong ngày, quá tải, mất kết nối, token bị từ chối), PDF kết thúc bằng `ocr_busy` (`worker.gemma_error`). Trang báo máy đọc bản scan đang tạm ngưng, bảng điểm cũ vẫn giữ, gợi ý thử lại sau hoặc dùng PDF xuất từ cổng đào tạo.
   - Các lỗi khác (không tìm thấy khung bảng, câu trả lời không phải JSON) kết thúc bằng `ocr_failed`.
 
+## PDF in qua máy in ảo: đọc từ nét chữ vector (`services/ocr/outline_text.py`, 13/11/2026)
+
+Người dùng hỏi ngày 13/11: "ocr của gemma 4 26B vẫn đang làm sai ở bước nhập bảng điểm, bạn có cách nào tốt hơn không". Kiểm tra 18 bảng điểm đã lưu mà trước giờ phải đi qua OCR (15 do Gemma đọc, 3 do PaddleOCR): **không file nào là ảnh scan**. Cả 18 là PDF sinh viên in từ trình duyệt bằng máy in ảo (17 file "Microsoft: Print To PDF", 1 file Foxit) thay vì "Lưu dưới dạng PDF". Máy in ảo không ghi lớp chữ: mỗi ký tự là một nét vẽ vector, đúng hình con chữ Arial của trang cổng đào tạo, trên lưới 600 DPI của máy in.
+
+Cách đọc mới không nhận dạng ảnh mà **so hình học**:
+
+1. Lấy mọi nét vẽ tô kín của trang (`page_paths`). Hình chữ nhật dài và mảnh là đường kẻ bảng; còn lại là ứng viên ký tự.
+2. Tìm lưới của máy in (`device_unit`) và các cỡ chữ của trang (`font_sizes`).
+3. Một nét vẽ là một ký tự khi mọi đỉnh của nó nằm trên các điểm của đúng một con chữ Arial ở một cỡ chữ của trang, sai lệch không quá khoảng một đơn vị máy in, theo cả hai chiều (`candidates`, `_fit`). Dữ liệu đối chiếu là `arial_glyphs.json`: với mỗi ký tự và kiểu chữ, bề rộng, khung bao và các điểm nằm trên đường viền của con chữ (không đủ để vẽ lại phông).
+4. Ghép ký tự thành dòng, từ theo đường chân chữ, vị trí và bề rộng con chữ (`phrases`). Dấu thanh rời (cổng đào tạo viết "học kỳ" bằng o + dấu nặng, y + dấu huyền) được gắn về đúng chữ của nó (`attach_marks`).
+5. Viết lại các từ thành lớp chữ ẩn trên một trang mới chỉ có đường kẻ bảng (`text_pages`, phông `outline_blank.ttf`: mỗi ký tự là một ô chữ nhật, không có hình chữ), rồi đọc bằng đúng bộ đọc lớp chữ sẵn có (`test_ocr.native_rows`). Dấu ✓/✗ là ảnh: đọc từ chính ô Kết quả của trang gốc, theo màu, và theo hình dạng khi bản in không màu (`cell_mark`).
+
+Không đoán: một nét vẽ trong bảng không khớp con chữ nào, hoặc khớp hai ký tự khác nhau, thì cả trang đó quay về OCR bằng Gemma như cũ (`in_doubt`). Ngoại lệ duy nhất là chữ I hoa và l thường, Arial vẽ cả hai thành một thanh chữ nhật: phân biệt theo các chữ trong từ (mã môn toàn chữ hoa và số là I; sau chữ thường là l; đầu từ trước nguyên âm là l…) và, khi các chữ chưa đủ chắc, theo vị trí của thanh giữa hai chữ bên cạnh (`_settle_bars`).
+
+Trang đọc theo cách này ghi `method: "pdf_outline"`, không có cảnh báo "cần đối chiếu" vì không còn nhận dạng. Chạy ngay trong lượt `--text-only` trên Render (PyMuPDF, numpy, OpenCV có sẵn), không gọi Workers AI, không tốn neuron, không gửi gì ra ngoài máy chủ.
+
+Đo ngày 13/11 (đọc lại trong bộ nhớ, chỉ in số đếm, không ghi gì vào database):
+
+- 18/18 bảng điểm đã lưu đọc trọn bằng cách mới, 2–3,4 giây mỗi file trên máy thử.
+- 978 dòng môn: 976 dòng trùng hoàn toàn với kết quả OCR đã lưu (mã, tín chỉ, hệ 10, hệ 4, điểm chữ, kết quả); 2 dòng còn lại khác mã môn, và ở cả hai mã do cách mới đọc có trong danh mục, mã OCR đã lưu thì không (Gemma làm rớt một chữ số; PaddleOCR đọc sai một ký tự).
+- 1.607/1.607 giá trị ở các ô tổng kết trùng nhau.
+- 6 PDF có lớp chữ được giả lập thành bản in máy in ảo (`outline_build.py simulate`) rồi đọc lại: 297 dòng môn và 798 giá trị tổng kết trùng với lớp chữ gốc.
+
+Tệp đi kèm: `arial_glyphs.json`, `outline_blank.ttf`, `outline_build.py` (dựng hai tệp trên và bản giả lập; cần fontTools và Arial của Windows, máy chủ không chạy), `fixtures/outline_transcript.{html,pdf}` (bảng điểm bịa để kiểm thử).
+
 ## OCR bằng Gemma (`services/ocr/gemma_ocr.py`)
+
+Từ 13/11 chỉ còn dành cho bản scan và ảnh chụp thật, và cho trang in máy in ảo mà `outline_text.py` không đọc trọn được.
+
 
 1. Trang không có lớp chữ dùng được được vẽ ở 200 DPI. Bản scan được xoay thẳng như với PaddleOCR (`rectify`). Nếu vẫn không thấy khung bảng (bảng ngắn ở trang cuối, đường kẻ dọc quá ngắn để xoay), `deskew` thử các góc trong ±1,5° và chọn góc làm các hàng mực sắc nét nhất.
 2. `ppocr_table.table_bands` tìm khung bảng. Chỉ phần khung bảng được gửi đi; mọi thứ ngoài khung bảng bị cắt bỏ: tiêu đề, đầu trang, chân trang, phần thông tin quanh bảng. Không tìm thấy khung bảng thì trang không được gửi (`table_not_found`).
@@ -128,5 +157,5 @@ Giá trị sai không làm sập trang. `aiProviderConfig` đọc lỏng; `serve
 ## Kiểm thử
 
 - `apps/api`: `ai-worker/cloudflare.test.ts`, `ai-worker/cloud.test.ts`, `student/text-layer.test.ts`.
-- `services/ocr`: `python -m unittest test_gemma_ocr`.
+- `services/ocr`: `python -m unittest test_gemma_ocr test_outline_text`.
 - Đánh giá trên bảng điểm giả theo đúng mẫu VLU: lấy bảng của PDF thật trên máy, thay mọi điểm và số tổng kết bằng số ngẫu nhiên, xóa chữ ngoài bảng. Chạy trong thư mục tạm, không commit. Bảng điểm thật chỉ được gửi lên tài khoản phụ khi người dùng yêu cầu (8/11: thư mục thử; 9/11: bảng điểm trong database). Khi đó chỉ gửi phần bảng đã che và chỉ in số đếm.

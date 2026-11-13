@@ -18,7 +18,9 @@ const courseSchema = z.object({
 const documentSchema = z.object({
   schema_version: z.literal("1.1"), adapter: z.literal("vlu_8_columns"), course_count: z.number().int().min(0).max(1000),
   courses: z.array(courseSchema).max(1000), needs_review: z.boolean(),
-  pages: z.array(z.object({ page: z.number().int().min(1).max(20), method: z.enum(["pdf_text", "ppocr", "gemma"]), warnings: z.array(text).max(100) })).min(1).max(20),
+  // pdf_outline (2026-11-13): a page a printer driver wrote without a text layer, its characters read exactly from their
+  // vector outlines (services/ocr/outline_text.py); no OCR, so nothing to review, like pdf_text.
+  pages: z.array(z.object({ page: z.number().int().min(1).max(20), method: z.enum(["pdf_text", "pdf_outline", "ppocr", "gemma"]), warnings: z.array(text).max(100) })).min(1).max(20),
   summaries: z.array(z.object({ academic_year: text.nullable(), semester: text.nullable(), raw_cells: z.array(text.nullable()).max(20) })).max(200),
   semesters: z.array(z.record(z.string(), z.unknown())).max(100),
   unparsed_rows: z.array(z.object({ source_page: z.number().int().min(1).max(20).optional() })).max(1000)

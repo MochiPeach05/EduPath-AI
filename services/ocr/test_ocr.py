@@ -156,15 +156,18 @@ class TableParser(HTMLParser):
             self.row = None
 
 
-def native_rows(page):
+def native_rows(page, rows=None):
+    """(table rows, usable, the course codes in the page's text) of a page with a text layer. rows: the page's table
+    rows when the caller has them already (outline_text.text_pages)."""
     text = page.get_text()
     if not text.strip():
         return [], False, Counter()
     if is_curriculum_view([text]):
         raise CurriculumViewError()
-    rows = []
-    for table in sorted(page.find_tables().tables, key=lambda t: t.bbox[1]):
-        rows.extend(table.extract())
+    if rows is None:
+        rows = []
+        for table in sorted(page.find_tables().tables, key=lambda t: t.bbox[1]):
+            rows.extend(table.extract())
     expected = Counter(CODE.findall(text))
     actual = Counter(clean(r[1]) for r in rows
                      if len(r) == 8 and CODE.fullmatch(clean(r[1])))
@@ -566,6 +569,25 @@ def extract_transcript(document, source_name, options=None, catalog=None, output
         raise ValueError('The vl engine writes page crops and needs output_dir')
     pages = []
     natives = [native_rows(page) if document.is_pdf else ([], False, Counter()) for page in document]
+    # A page a printer driver wrote ("Microsoft: Print To PDF"): no text layer, yet no scan either, every character is a
+    # vector outline. outline_text.py reads those characters exactly (no OCR, no AI) and the page is then read like a text
+    # layer (user 2026-11-13: every stored transcript that had gone to OCR was such a page). Whatever it cannot read
+    # exactly stays with OCR, as before; a failure of the reader itself never fails the transcript.
+    outlined = set()
+    if document.is_pdf and options.mode != 'ocr' and not all(usable for _, usable, _ in natives):
+        sheets = {}
+        try:
+            import outline_text
+            missing = [i for i, ((_, usable, _), page) in enumerate(zip(natives, document)) if not usable and not is_scanned(page)]
+            if missing:
+                sheet_document, sheets = outline_text.text_pages(document, missing)
+        except Exception:  # noqa: BLE001
+            sheets = {}
+        for i, (sheet, sheet_rows) in sheets.items():
+            sheet_rows, sheet_usable, sheet_expected = native_rows(sheet, sheet_rows)
+            if sheet_usable:
+                natives[i] = (sheet_rows, True, sheet_expected)
+                outlined.add(i)
     # Gemma reads every page that needs OCR at once, each in strips (gemma_ocr.py, user 2026-11-08); the rows of its
     # items are built in page order below, so a row repeated where strips or pages meet is kept once.
     gemma_items, gemma_rows = {}, None
@@ -603,8 +625,9 @@ def extract_transcript(document, source_name, options=None, catalog=None, output
             if expected and actual != expected:
                 warnings.append('course_codes_differ_from_pdf_text')
         else:
-            method, warnings = 'pdf_text', []
-            rows = attach_result_marks(page, rows)
+            method, warnings = ('pdf_outline' if index - 1 in outlined else 'pdf_text'), []
+            if index - 1 not in outlined:
+                rows = attach_result_marks(page, rows)
         # A scan of the "Xem điểm theo CTĐT" table has no text layer: its header row read by OCR tells it.
         if is_curriculum_view(' '.join(cell or '' for cell in row) for row in rows):
             raise CurriculumViewError()
@@ -615,7 +638,7 @@ def extract_transcript(document, source_name, options=None, catalog=None, output
         log(f'Page {index}: {method}, {len(rows)} table rows')
     courses, summaries, unparsed = parse_pages(pages, catalog)
     semesters = parse_semesters(summaries, courses)
-    ocr_used = any(p['method'] != 'pdf_text' for p in pages)
+    ocr_used = any(p['method'] not in ('pdf_text', 'pdf_outline') for p in pages)
     return {
         'schema_version': '1.1', 'source_file': source_name, 'adapter': 'vlu_8_columns',
         'course_count': len(courses),

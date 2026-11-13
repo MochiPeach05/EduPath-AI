@@ -20,6 +20,15 @@ describe("OCR result boundary", () => {
     expect(result.sections[0]?.summaries).toEqual([{ label: "Điểm TB học kỳ (Hệ 4)", value: "2.4" }]);
     expect(result.ocr?.needsReview).toBe(true);
   });
+  it("accepts a page read from its vector outlines (a printer driver's PDF): exact, nothing to review", () => {
+    const f = fixture();
+    Object.assign(f, { needs_review: false, pages: [{ page: 1, method: "pdf_outline", warnings: [] }] });
+    f.courses[0]!.needs_review = false;
+    const result = mapOcrTranscript(f);
+    expect(result.ocr).toMatchObject({ needsReview: false, pages: [{ page: 1, method: "pdf_outline", warnings: [] }] });
+    expect(result.warnings).toEqual(["Bảng điểm do sinh viên tải lên; chưa được nhà trường xác minh."]);
+    expect(() => mapOcrTranscript({ ...f, pages: [{ page: 1, method: "pdf_guess", warnings: [] }] })).toThrow("invalid_ocr_result");
+  });
   it("accepts VT (vắng thi): a failed attempt printed without a score", () => {
     const f = fixture();
     Object.assign(f.courses[0]!, { score_10: null, score_4: null, letter_grade: "VT", result: "failed" });

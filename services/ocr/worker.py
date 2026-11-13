@@ -90,7 +90,7 @@ def schema_problems(d):
         cells=c.get('raw_cells')
         if cells is not None and not (isinstance(cells,list) and len(cells)<=20 and all(x is None or text(x) for x in cells)): bad('raw_cells')
     if not isinstance(d.get('needs_review'),bool): bad('needs_review')
-    if not 1<=len(pages)<=20 or any(not integer(p.get('page'),1,20) or p.get('method') not in ('pdf_text','ppocr','gemma')
+    if not 1<=len(pages)<=20 or any(not integer(p.get('page'),1,20) or p.get('method') not in ('pdf_text','pdf_outline','ppocr','gemma')
             or not isinstance(p.get('warnings'),list) or len(p['warnings'])>100 for p in pages): bad('pages')
     if len(summaries)>200: bad('summaries',f'{len(summaries)} rows')
     for s in summaries:
@@ -215,7 +215,7 @@ def process_job(job):
         parsed=json.loads(result.read_text(encoding='utf-8'))
         if 'result' in parsed:
             pages=parsed['result'].get('pages',[])
-            ocr_pages=sum(page['method']!='pdf_text' for page in pages)
+            ocr_pages=sum(page['method'] not in ('pdf_text','pdf_outline') for page in pages)
             device=(parsed['result'].get('ocr_settings') or {}).get('device','cpu (PDF text)')
             print(f'Parsed in {time.perf_counter()-started:.1f}s; pages={len(pages)}, OCR pages={ocr_pages}, device={device}.',flush=True)
         return parsed
