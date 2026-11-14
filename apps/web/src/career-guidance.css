@@ -42,6 +42,9 @@
 .cg-target-score { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
 .cg-keep { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
 .cg-target-line > .cg-note { grid-column: 1 / -1; }
+/* "Đổi vị trí nghề nghiệp" / "Chọn vị trí nghề nghiệp" and Xem Khoảng trống kỹ năng (user 2026-11-14), on the right of the target. */
+.cg-target-actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px 16px; }
+.cg-target-actions .sw-outline, .cg-target-line > .cg-note .sw-outline { min-height: 36px; padding: 6px 12px; font-size: 13px; }
 .cg-level { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin-bottom: -8px; }
 .cg-level p { margin: 0; color: var(--sw-muted); font-size: 13px; }
 
@@ -149,7 +152,7 @@
 .cg-page .cg-target-tag-action svg { width: 16px; height: 16px; }
 
 /* Level 3: every career, folded */
-.cg-all { padding: 0; }
+.cg-all { padding: 0; scroll-margin-top: calc(var(--sw-header-height, 72px) + 16px); }
 .cg-all > summary { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; padding: 16px 20px; cursor: pointer; list-style: none; }
 .cg-all > summary::-webkit-details-marker { display: none; }
 .cg-all > summary::after { content: "Mở"; margin-left: auto; color: var(--sw-red); font-size: 13px; font-weight: 700; }
@@ -163,9 +166,11 @@
 .cg-filters label { display: grid; gap: 6px; min-width: 0; color: #616777; font-size: 12px; }
 .cg-filters input:not([type=checkbox]), .cg-filters select { width: 100%; min-width: 0; padding: 10px 12px; border: 1px solid #dddfe6; border-radius: 6px; background: #fff; color: #252b38; font: inherit; font-size: 13px; }
 
-.cg-list { display: grid; gap: 10px; margin: 0; padding: 0; list-style: none; }
-.cg-list > li { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(170px, .8fr) auto; gap: 10px 20px; align-items: center; padding: 14px 16px;
-  border: 1px solid var(--sw-border); border-radius: var(--sw-radius); background: #fff; }
+/* One set of columns for every card (subgrid), so the scores and the buttons line up although the target's card has no
+   "Chọn làm mục tiêu" (2026-11-14). */
+.cg-list { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(170px, .8fr) auto; gap: 10px 20px; margin: 0; padding: 0; list-style: none; }
+.cg-list > li { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(170px, .8fr) auto; grid-template-columns: subgrid;
+  gap: 10px 20px; align-items: center; padding: 14px 16px; border: 1px solid var(--sw-border); border-radius: var(--sw-radius); background: #fff; }
 .cg-list > li.is-target { border-color: #b9dcc7; background: #fbfefc; }
 .cg-row-main { display: grid; gap: 4px; min-width: 0; }
 /* Each card of the full list names its number on a line of its own, so the name stays with it at every width. */
@@ -247,7 +252,7 @@
 
 @media (max-width: 1000px) {
   .cg-pairs { grid-template-columns: minmax(0, 1fr); }
-  .cg-list > li { grid-template-columns: minmax(0, 1fr) auto; }
+  .cg-list { grid-template-columns: minmax(0, 1fr) auto; }
   .cg-list > li .cg-actions { grid-column: 1 / -1; }
   .cg-tray { grid-template-columns: minmax(0, 1fr) auto; }
   .cg-slots { grid-column: 1 / -1; grid-row: 2; flex-wrap: wrap; }
@@ -256,12 +261,13 @@
 @media (max-width: 760px) {
   .cg-top { grid-template-columns: minmax(0, 1fr); }
   .cg-top-score { padding: 16px 0 0; border-left: 0; border-top: 1px solid var(--sw-border); }
-  .cg-list > li { grid-template-columns: minmax(0, 1fr); }
+  .cg-list { grid-template-columns: minmax(0, 1fr); }
 }
 
 @media (max-width: 600px) {
   .cg-filters { grid-template-columns: minmax(0, 1fr); }
   .cg-target-line { grid-template-columns: minmax(0, 1fr); }
+  .cg-target-actions { justify-content: flex-start; }
   .cg-dock { bottom: 8px; }
   .cg-tray { grid-template-columns: minmax(0, 1fr); }
   .cg-slots li.is-empty { display: none; }

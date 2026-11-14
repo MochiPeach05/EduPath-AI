@@ -46,6 +46,28 @@ describe("Định hướng nghề nghiệp (plan \"Một bước để bắt đ�
     expect(html).not.toContain("Làm Khảo sát nhanh (5 câu");
   });
 
+  // User 2026-11-14: "Chỗ đổi vị trí nghề nghiệp ở đây đâu nếu chưa có bảng điểm và có cả bảng điểm luôn?"
+  const chosen = guidance({ targetCareerId: "b", careers: guidance().careers.map((item) => ({ ...item, isTarget: item.id === "b" })) });
+  it("puts Đổi vị trí nghề nghiệp beside the target with or without a transcript, and Chọn làm mục tiêu on every other vị trí of the full list", () => {
+    for (const data of [chosen, { ...chosen, blocked: "transcript_required" }]) {
+      const html = page(data);
+      expect(html).toMatch(/<button type="button" class="sw-outline" aria-controls="cg-all"><svg[^]*?<\/svg>Đổi vị trí nghề nghiệp<\/button>/);
+      expect(html).toContain('<details id="cg-all" class="sw-panel cg-all"');
+      expect(html.match(/>Chọn làm mục tiêu<\/button>/g)).toHaveLength(3);
+      expect(html).toContain('aria-label="Chọn làm mục tiêu: Lập trình viên web"');
+      expect(html).not.toContain('aria-label="Chọn làm mục tiêu: Kỹ sư dữ liệu"');
+    }
+    expect(page(guidance())).toMatch(/aria-controls="cg-all"><svg[^]*?<\/svg>Chọn vị trí nghề nghiệp<\/button>/);
+  });
+
+  it("gives the note under the target a link to Đánh giá năng lực, and leaves the note out while no fit is computed", () => {
+    expect(page(chosen)).toContain('<div class="cg-note cg-note-warn"><p>Bạn chưa đánh giá năng lực với vị trí nghề nghiệp này; bấm Đánh giá năng lực để xem '
+      + 'Khoảng trống kỹ năng.</p><a class="sw-outline" href="#competency">Mở Đánh giá năng lực</a></div>');
+    const blocked = page({ ...chosen, blocked: "transcript_required" });
+    expect(blocked).not.toContain("Bạn chưa đánh giá năng lực với vị trí nghề nghiệp này");
+    expect(blocked).toContain("Mở Hồ sơ và bảng điểm");
+  });
+
   it("shows the survey alone while no fit can be computed", () => {
     const html = page(guidance({ blocked: "transcript_required" }));
     const top = row(html.replace('<div class="cg-level"><h3>Các lựa chọn khác</h3>', "") + '<div class="cg-level"><h3>Các lựa chọn khác</h3>');

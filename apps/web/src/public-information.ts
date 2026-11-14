@@ -102,9 +102,9 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
       "Mở Định hướng nghề nghiệp, xem Vị trí nghề nghiệp phù hợp với năng lực hiện tại (sắp xếp theo điểm phù hợp giảm dần), rồi Các lựa chọn khác: Theo bảng xếp hạng và Vị trí nghề nghiệp phù hợp với sở thích và thế mạnh.",
       "Mở Đánh giá điểm phù hợp kỹ năng với tất cả vị trí nghề nghiệp để lọc theo lĩnh vực hoặc tìm theo tên; bấm + So sánh ở 2 hoặc 3 vị trí, rồi bấm Xem so sánh trên thanh So sánh ở cuối màn hình để mở bảng so sánh từng kỹ năng.",
       "Bấm Xem chi tiết để đọc mô tả, các yêu cầu kỹ năng và mức hiện tại của bạn ở từng yêu cầu.",
-      "Bấm Chọn làm vị trí nghề nghiệp mục tiêu. Mục tiêu được lưu ngay; nếu bạn đã đánh giá năng lực, EduPath AI tự đánh giá lại theo vị trí mới để Khoảng trống kỹ năng và Lộ trình học tập dùng được ngay."
+      "Bấm Chọn làm vị trí nghề nghiệp mục tiêu (ở vị trí đứng đầu hoặc trong Xem chi tiết), hoặc Chọn làm mục tiêu ở từng vị trí trong danh sách tất cả vị trí. Mục tiêu được lưu ngay; nếu bạn đã đánh giá năng lực, EduPath AI tự đánh giá lại theo vị trí mới để Khoảng trống kỹ năng và Lộ trình học tập dùng được ngay."
     ],
-    note: "Bạn có thể chọn một vị trí khác bất cứ lúc nào khi định hướng thay đổi; bấm Xem chi tiết để đọc lại yêu cầu của vị trí đang chọn."
+    note: "Bạn có thể chọn một vị trí khác bất cứ lúc nào khi định hướng thay đổi, kể cả khi chưa có bảng điểm: bấm Đổi vị trí nghề nghiệp cạnh vị trí mục tiêu ở đầu trang, tìm vị trí mới trong danh sách rồi bấm Chọn làm mục tiêu."
   },
   {
     question: "Làm thế nào để đánh giá năng lực?",

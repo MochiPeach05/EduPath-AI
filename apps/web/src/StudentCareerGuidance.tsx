@@ -307,6 +307,17 @@ export default function StudentCareerGuidance({ onProfileChanged, initial = null
   // Grows each time a button of this page asks Khảo sát nhanh for its form (StudentProfileSurvey openRequest).
   const [surveyRequest, setSurveyRequest] = useState(0);
   const toast = useRef<HTMLDivElement>(null);
+  // "Đổi vị trí nghề nghiệp" / "Chọn vị trí nghề nghiệp" beside the target (user 2026-11-14: "Chỗ đổi vị trí nghề nghiệp ở đây đâu nếu chưa
+  // có bảng điểm và có cả bảng điểm luôn?"): the list of every vị trí opens, comes into view and takes the typing, with or without a transcript.
+  const allPanel = useRef<HTMLDetailsElement>(null);
+  const allSearch = useRef<HTMLInputElement>(null);
+  const [listRequest, setListRequest] = useState(0);
+  useEffect(() => {
+    if (!listRequest) return;
+    allPanel.current?.scrollIntoView({ block: "start" });
+    allSearch.current?.focus({ preventScroll: true });
+  }, [listRequest]);
+  const openList = () => { setAllOpen(true); setListRequest((value) => value + 1); };
 
   useEffect(() => {
     let alive = true;
@@ -374,8 +385,8 @@ export default function StudentCareerGuidance({ onProfileChanged, initial = null
   const heading = bestFitsHeading(shownPicks);
   const interests = surveyInterests(careers);
   const surveyed = data.surveyDone && (interests.field !== null || interests.tech.length > 0);
-  // After "Xóa kết quả đánh giá" the note of the page says it all.
-  const targetNote = target && data.blocked !== "assessment_withdrawn" ? gapNote(data, target) : null;
+  // While no fit can be computed (no transcript or specialty, results deleted), the page's own note says what to do instead.
+  const targetNote = target && !data.blocked ? gapNote(data, target) : null;
   const unblock = data.blocked ? blockedAction(data.blocked) : null;
   const openDetail = (career: GuidanceCareer) => () => setDetailId(career.id);
   const toggle = (career: GuidanceCareer) => () => setCompare((value) => toggleCompare(value, career.id));
@@ -402,8 +413,12 @@ export default function StudentCareerGuidance({ onProfileChanged, initial = null
           : data.deletedTargetName ? <span>{data.deletedTargetName}: vị trí này không còn trong danh mục; bạn nên chọn vị trí nghề nghiệp khác.</span>
             : <><strong>Chưa chọn</strong><span className="cg-target-hint">Chọn một vị trí bên dưới khi bạn muốn. Không bắt buộc.</span></>}
       </div>
-      {target && <a className="sw-text-link" href="#skill-gap">Xem Khoảng trống kỹ năng <Icon name="arrow" /></a>}
-      {targetNote && <p className="cg-note cg-note-warn">{targetNote}</p>}
+      <div className="cg-target-actions">
+        <button type="button" className="sw-outline" onClick={openList} aria-controls="cg-all">
+          <Icon name={target ? "edit" : "target"} />{target ? "Đổi vị trí nghề nghiệp" : "Chọn vị trí nghề nghiệp"}</button>
+        {target && <a className="sw-text-link" href="#skill-gap">Xem Khoảng trống kỹ năng <Icon name="arrow" /></a>}
+      </div>
+      {targetNote && <div className="cg-note cg-note-warn"><p>{targetNote}</p><a className="sw-outline" href={NOTICE_LINKS.competency.href}>{NOTICE_LINKS.competency.label}</a></div>}
     </div>
 
     {data.blocked && <div className="cg-note cg-note-warn" role="note"><p>{blockedText(data.blocked)} Bạn vẫn xem được danh mục vị trí nghề nghiệp và yêu cầu của từng vị trí.</p>
@@ -445,12 +460,12 @@ export default function StudentCareerGuidance({ onProfileChanged, initial = null
     </>}
 
     {/* "Tất cả nghề nghiệp" named by what it does (advisor 2026-10-31: "đánh giá/tính điểm phù hợp đối với tất cả vị trí nghề nghiệp"). */}
-    <details className="sw-panel cg-all" open={allOpen} onToggle={(event) => setAllOpen(event.currentTarget.open)}>
+    <details ref={allPanel} id="cg-all" className="sw-panel cg-all" open={allOpen} onToggle={(event) => setAllOpen(event.currentTarget.open)}>
       <summary><span className="cg-all-title" id="cg-all-title">Đánh giá điểm phù hợp kỹ năng với tất cả {careers.length} vị trí nghề nghiệp</span>
         <span className="cg-all-hint">{data.blocked ? "Sắp xếp theo tên" : FIT_ORDER_TEXT} · tìm theo tên, lọc theo lĩnh vực, bấm + So sánh ở 2–3 vị trí để so sánh</span></summary>
       <div className="cg-all-body">
         <div className="cg-filters">
-          <label>Tìm vị trí nghề nghiệp<input value={filters.q} maxLength={100} placeholder="Tên tiếng Việt hoặc tiếng Anh…" onChange={(event) => setFilters({ ...filters, q: event.target.value })} /></label>
+          <label>Tìm vị trí nghề nghiệp<input ref={allSearch} value={filters.q} maxLength={100} placeholder="Tên tiếng Việt hoặc tiếng Anh…" onChange={(event) => setFilters({ ...filters, q: event.target.value })} /></label>
           <label>Lĩnh vực<select value={filters.field} onChange={(event) => setFilters({ ...filters, field: event.target.value })}>
             <option value="">Tất cả lĩnh vực</option>{data.fields.map((field) => <option key={field.code} value={field.code}>{field.name}</option>)}
           </select></label>
@@ -466,6 +481,9 @@ export default function StudentCareerGuidance({ onProfileChanged, initial = null
           <div className="cg-actions">
             <CompareButton career={career} compared={compare.includes(career.id)} full={compareFull} onToggle={toggle(career)} />
             <button type="button" className="sr-secondary" onClick={openDetail(career)} aria-label={`Xem chi tiết ${career.nameVi}`}><Icon name="eye" />Chi tiết</button>
+            {/* Chosen from the list itself, without opening the details first (user 2026-11-14). */}
+            {!career.isTarget && <button type="button" className="sw-outline" disabled={saving !== null} onClick={() => pick(career)}
+              aria-label={`Chọn làm mục tiêu: ${career.nameVi}`}><Icon name="check" />{saving === career.id ? "Đang lưu…" : "Chọn làm mục tiêu"}</button>}
           </div>
         </li>)}</ul>
         {!visible.length && <p className="cg-empty">Không có vị trí nghề nghiệp nào khớp bộ lọc.</p>}
