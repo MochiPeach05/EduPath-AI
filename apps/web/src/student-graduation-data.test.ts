@@ -612,7 +612,7 @@ describe("AI advice", () => {
     expect(adviceStateCopy({ kind: "queued", worker: "ready", previous: null })?.title).toBe("Đang chuẩn bị lời khuyên…");
     expect(adviceStateCopy({ kind: "queued", worker: "outdated", previous: null })?.title).toBe("Máy AI đang chạy phiên bản cũ…");
     expect(adviceStateCopy({ kind: "queued", worker: "offline", previous: null })?.title).toBe("Lời khuyên sẽ có khi máy AI hoạt động trở lại");
-    expect(adviceStateCopy({ kind: "processing", since: "", previous: null })?.text).toBe("Thường mất khoảng 20–60 giây.");
+    expect(adviceStateCopy({ kind: "processing", since: "", previous: null })?.text).toBe("Thường mất khoảng 10–30 giây.");
     expect(adviceStateCopy({ kind: "deferred", previous: null })).toEqual({ title: "Hàng đợi AI đang đầy",
       text: "Hệ thống sẽ tự xếp hàng viết lời khuyên khi hàng đợi có chỗ, bạn không cần làm gì thêm. Các đề xuất ở trên đã đủ để bạn bắt đầu." });
     expect(adviceStateCopy({ kind: "failed", errorCode: "worker_timeout", since: null, previous: null })?.text)

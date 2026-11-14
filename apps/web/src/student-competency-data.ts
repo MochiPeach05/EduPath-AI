@@ -855,9 +855,9 @@ export function aiStateCopy(status: AiStatus, workerOnline: boolean, aiEnabled: 
       : { title: "Nhận xét AI chưa được bật", text: "Kết quả bên dưới do hệ thống tính và đã đầy đủ. Khi nhận xét AI được bật, bạn có thể nhận thêm lời nhận xét." };
     case "deferred": return { title: "Hàng đợi AI đang đầy", text: "Kết quả tính toán đã sẵn sàng. Hệ thống sẽ tự xếp hàng tạo nhận xét khi hàng đợi có chỗ, bạn không cần làm gì thêm." };
     case "queued": return workerOnline
-      ? { title: "Đang xếp hàng tạo nhận xét", text: "AI suy luận trước khi viết nên nhận xét thường mất 1–3 phút. Bạn có thể xem kết quả bên dưới trong lúc chờ." }
+      ? { title: "Đang xếp hàng tạo nhận xét", text: "Nhận xét thường có sau khoảng 30 giây đến 1 phút, lúc nhiều người dùng có thể lâu hơn. Bạn có thể xem kết quả bên dưới trong lúc chờ." }
       : { title: "Đang chờ máy AI kết nối", text: "Yêu cầu đã được giữ trong hàng đợi và sẽ được xử lý khi máy AI kết nối lại." };
-    case "processing": return { title: "EduPath AI đang suy luận và viết nhận xét", text: "Mô hình suy luận từ kết quả đã tính rồi mới viết nhận xét, thường mất 1–3 phút. Bạn có thể rời trang và quay lại sau." };
+    case "processing": return { title: "EduPath AI đang viết nhận xét", text: "AI viết nhận xét từ kết quả đã tính, thường mất khoảng 30 giây đến 1 phút. Bạn có thể rời trang và quay lại sau." };
     case "failed": return { title: "Chưa tạo được nhận xét", text: "Kết quả tính toán không bị ảnh hưởng." };
     case "cancelled": return { title: "Đã hủy tạo nhận xét", text: "Bạn có thể tạo lại nhận xét bất cứ lúc nào." };
     default: return { title: "Nhận xét từ EduPath AI", text: "" };

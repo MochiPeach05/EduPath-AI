@@ -52,7 +52,7 @@ export default function CompetencyCourseAi({ course, close, saved }: Props) {
           <span className="cai-spinner" aria-hidden="true" />
           <div>
             <p className="cai-state" role="status" aria-live="polite">{suggestion.status === "queued" ? "Đang chờ máy AI nhận việc…" : "AI đang chọn kỹ năng và chia trọng số cho môn học…"}</p>
-            {suggestion.status === "processing" && <p className="cai-muted"><Elapsed since={suggestion.updatedAt} /> · AI suy luận trước khi trả lời nên thường mất 30 giây đến 2 phút.</p>}
+            {suggestion.status === "processing" && <p className="cai-muted"><Elapsed since={suggestion.updatedAt} /> · Thường mất khoảng 10–30 giây.</p>}
             {(suggestion.status === "processing" || worker.tone === "ok") && <p className="cai-muted">{AI_COMPUTING_MESSAGE}</p>}
             <p className="cai-muted">{course.code} · {course.name}</p>
           </div>

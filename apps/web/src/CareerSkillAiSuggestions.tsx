@@ -122,7 +122,7 @@ export default function CareerSkillAiSuggestions({ career, catalog, close, saved
           <span className="cai-spinner" aria-hidden="true" />
           <div>
             <p className="cai-state" role="status" aria-live="polite">{suggestion.status === "queued" ? "Đang chờ máy AI nhận việc…" : "AI đang phân tích vị trí nghề nghiệp…"}</p>
-            {suggestion.status === "processing" && <p className="cai-muted"><Elapsed since={suggestion.createdAt} /> · Thường mất khoảng 30–60 giây.</p>}
+            {suggestion.status === "processing" && <p className="cai-muted"><Elapsed since={suggestion.createdAt} /> · Thường mất khoảng 20–40 giây.</p>}
             <p className="cai-muted">{career.nameVi}</p>
           </div>
         </div>

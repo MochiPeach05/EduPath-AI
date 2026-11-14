@@ -27,7 +27,7 @@ describe("CompetencyBulkAi", () => {
     const html = render(null);
     expect(html).toContain("Xóa liên kết của 2 môn");
     expect(html).toContain("Chạy AI cho 1 môn chưa có liên kết");
-    expect(html).toContain("AI suy luận trước khi trả lời");
+    expect(html).toContain("Mỗi môn thường mất khoảng 10–30 giây; 80 môn khoảng 10–30 phút.");
     expect(html).toContain("cho từng môn chưa có liên kết của K30.");
     // The course list follows the cohort filter; the latest run is shown whatever filter started it.
     expect(liveData.mock.calls.some(([url]) => String(url).endsWith("/courses?cohort=K30"))).toBe(true);

@@ -55,7 +55,7 @@ describe("CareerSkillAiSuggestions", () => {
     expect(queued).toContain("Hủy đề xuất");
     const processing = render(suggestion({ status: "processing", completedAt: null }));
     expect(processing).toContain("AI đang phân tích vị trí nghề nghiệp…");
-    expect(processing).toContain("Thường mất khoảng 30–60 giây.");
+    expect(processing).toContain("Thường mất khoảng 20–40 giây.");
     expect(processing).toMatch(/class="cai-elapsed"[^>]*>\d{2,}:\d{2}</);
   });
   it("explains a failure and offers a new suggestion", () => {

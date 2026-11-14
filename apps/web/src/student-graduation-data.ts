@@ -1150,10 +1150,10 @@ export function adviceStateCopy(view: AdviceView): { title: string; text: string
     case "unavailable": return { title: "Chưa tải được lời khuyên từ EduPath AI", text: "Trang sẽ tự thử lại. Các đề xuất ở trên vẫn đầy đủ." };
     case "preparing": return { title: "Đang chuẩn bị lời khuyên…", text: "EduPath AI sẽ viết lời khuyên từ kết quả ở trên. Các đề xuất ở trên đã đủ để bạn bắt đầu." };
     case "queued":
-      return view.worker === "ready" ? { title: "Đang chuẩn bị lời khuyên…", text: "Yêu cầu đang chờ đến lượt; lời khuyên thường có sau khoảng một phút." }
+      return view.worker === "ready" ? { title: "Đang chuẩn bị lời khuyên…", text: "Yêu cầu đang chờ đến lượt; lời khuyên thường có sau khoảng 10–30 giây." }
         : view.worker === "outdated" ? { title: "Máy AI đang chạy phiên bản cũ…", text: "Lời khuyên sẽ được viết khi máy AI được cập nhật. Các đề xuất ở trên vẫn đầy đủ." }
           : { title: "Lời khuyên sẽ có khi máy AI hoạt động trở lại", text: "Yêu cầu đã được giữ trong hàng đợi; bạn không cần làm gì thêm." };
-    case "processing": return { title: "EduPath AI đang viết lời khuyên…", text: "Thường mất khoảng 20–60 giây." };
+    case "processing": return { title: "EduPath AI đang viết lời khuyên…", text: "Thường mất khoảng 10–30 giây." };
     case "deferred": return { title: "Hàng đợi AI đang đầy", text: "Hệ thống sẽ tự xếp hàng viết lời khuyên khi hàng đợi có chỗ, bạn không cần làm gì thêm. Các đề xuất ở trên đã đủ để bạn bắt đầu." };
     case "request_failed": return { title: "Chưa gửi được yêu cầu tạo lời khuyên", text: "Hãy tải lại trang sau ít phút. Các đề xuất ở trên không bị ảnh hưởng." };
     // With an older advice below, dimmed: when the new one failed, why, and what to do (QA 2026-11-10).

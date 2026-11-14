@@ -357,7 +357,7 @@ describe("StudentGraduation AI advice", () => {
   it("shows the elapsed time while the advice is being written", () => {
     const html = withAdvice(adviceResponse({ advice: stored("processing") }));
     expect(html).toContain("EduPath AI đang viết lời khuyên…");
-    expect(html).toMatch(/<span class="sg-ai-elapsed"><span class="sr-only">Đã chạy <\/span>\d{2}:\d{2}<\/span> · Thường mất khoảng 20–60 giây\./);
+    expect(html).toMatch(/<span class="sg-ai-elapsed"><span class="sr-only">Đã chạy <\/span>\d{2}:\d{2}<\/span> · Thường mất khoảng 10–30 giây./);
     expect(html).toContain("sg-ai-spinner");
     expect(html).not.toMatch(/sg-ai[^"]*"[^>]*aria-busy/);
   });

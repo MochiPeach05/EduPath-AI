@@ -233,9 +233,9 @@ export const ROADMAP_RETRY_CODE = "grounding_retry";
 /** The line under the spinner while the AI works, or the reason it waits; errorCode: a second try (ROADMAP_RETRY_CODE). */
 export function pendingCopy(status: "queued" | "processing", workerState: RoadmapResponse["worker"], errorCode: string | null = null): { title: string; text: string } {
   if (errorCode === ROADMAP_RETRY_CODE && (status === "processing" || (workerState.online && workerState.supportsRoadmap))) {
-    return { title: "EduPath AI đang viết lại lộ trình…", text: "Bản đầu có vài câu chưa khớp dữ liệu của bạn (học kỳ đã qua, hoặc điều bạn tự đánh giá mà hệ thống chưa ghi nhận) nên AI viết lại một lần. Có thể mất thêm vài phút." };
+    return { title: "EduPath AI đang viết lại lộ trình…", text: "Bản đầu có vài câu chưa khớp dữ liệu của bạn (học kỳ đã qua, hoặc điều bạn tự đánh giá mà hệ thống chưa ghi nhận) nên AI viết lại một lần, thường thêm khoảng 30 giây đến 1 phút." };
   }
-  if (status === "processing") return { title: "EduPath AI đang soạn lộ trình…", text: "AI suy nghĩ kỹ trước khi viết nên có thể mất vài phút. Bạn có thể rời trang và quay lại sau." };
+  if (status === "processing") return { title: "EduPath AI đang soạn lộ trình…", text: "Thường mất khoảng 1–2 phút. Bạn có thể rời trang và quay lại sau." };
   if (!workerState.online) return { title: "Lộ trình sẽ được soạn khi máy AI hoạt động trở lại", text: "Yêu cầu đã được giữ trong hàng đợi; bạn không cần làm gì thêm." };
   if (!workerState.supportsRoadmap) return { title: "Máy AI đang chạy phiên bản cũ…", text: "Lộ trình sẽ được soạn khi máy AI được cập nhật." };
   return { title: "Đang chờ đến lượt…", text: "Yêu cầu của bạn đã vào hàng đợi của EduPath AI." };

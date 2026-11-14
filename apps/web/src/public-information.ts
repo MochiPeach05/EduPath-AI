@@ -112,7 +112,7 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
     steps: [
       "Ở Hồ sơ và bảng điểm, chọn chuyên ngành và import bảng điểm PDF, nếu bạn chưa có bảng điểm trên EduPath AI.",
       "Mở trang Đánh giá năng lực và bấm nút Đánh giá năng lực.",
-      "Ở lần đầu, đọc phần giải thích về cách xử lý dữ liệu, tích ô đồng ý rồi xác nhận. Kết quả tính toán hiện ngay, còn nhận xét AI được tạo sau và có thể mất vài phút."
+      "Ở lần đầu, đọc phần giải thích về cách xử lý dữ liệu, tích ô đồng ý rồi xác nhận. Kết quả tính toán hiện ngay, còn nhận xét AI thường có sau khoảng 30 giây đến 1 phút."
     ],
     note: "Khi đổi chuyên ngành, hãy bấm Đánh giá lại để cập nhật kết quả. Khi bạn chọn vị trí nghề nghiệp mục tiêu khác ở Định hướng nghề nghiệp, EduPath AI tự đánh giá lại nếu bạn đã đánh giá trước đó. Khi bạn thay bảng điểm mới, kết quả cũ bị xóa và bạn cần đánh giá lại."
   },

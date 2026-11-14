@@ -112,7 +112,7 @@ export function CompetencyBulkAi({ cohort, canManage, revision, onSaved }: Props
       <span className="cai-intro-icon" aria-hidden="true"><Icon name="spark" /></span>
       <div>
         <h3 id="comp-ai-batch-title">Chạy AI cho các môn chưa có liên kết</h3>
-        <p className="comp-hint">AI đề xuất liên kết kỹ năng và trọng số cho từng môn chưa có liên kết {cohort ? `của ${cohort}` : "(mọi khóa)"}. AI suy luận trước khi trả lời nên mỗi môn mất khoảng 30 giây đến 2 phút; 80 môn khoảng 1–2 giờ. Đề xuất chỉ được lưu khi bạn bấm lưu; môn đã có liên kết được giữ nguyên.</p>
+        <p className="comp-hint">AI đề xuất liên kết kỹ năng và trọng số cho từng môn chưa có liên kết {cohort ? `của ${cohort}` : "(mọi khóa)"}. Mỗi môn thường mất khoảng 10–30 giây; 80 môn khoảng 10–30 phút. Đề xuất chỉ được lưu khi bạn bấm lưu; môn đã có liên kết được giữ nguyên.</p>
       </div>
     </div>
     <p className={`cai-worker cai-worker-${worker.tone}`}><span aria-hidden="true" />{status.loading && !status.data ? "Đang kiểm tra máy AI…" : worker.text}</p>

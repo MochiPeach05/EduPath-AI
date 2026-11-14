@@ -114,7 +114,7 @@ export function portalGuides(): PortalGuide[] {
       "Các bước:",
       "- Chọn chuyên ngành và import bảng điểm PDF ở Hồ sơ và bảng điểm nếu chưa có.",
       "- Mở trang Đánh giá năng lực và bấm nút Đánh giá năng lực. Lần đầu, đọc phần giải thích về cách xử lý dữ liệu, tích ô đồng ý rồi xác nhận.",
-      "Kết quả tính toán hiện ngay; nhận xét AI được tạo sau và có thể mất vài phút. Trang có điểm tổng, điểm và mức theo nhóm năng lực, mức thành thạo từng kỹ năng, theo dõi năng lực theo học kỳ, tiến độ so với kế hoạch đào tạo và kết luận xét tốt nghiệp tham khảo.",
+      "Kết quả tính toán hiện ngay; nhận xét AI thường có sau khoảng 30 giây đến 1 phút. Trang có điểm tổng, điểm và mức theo nhóm năng lực, mức thành thạo từng kỹ năng, theo dõi năng lực theo học kỳ, tiến độ so với kế hoạch đào tạo và kết luận xét tốt nghiệp tham khảo.",
       "Khi đổi chuyên ngành hoặc thay bảng điểm, hãy bấm Đánh giá lại; khi bạn chọn vị trí nghề nghiệp mục tiêu khác, EduPath AI tự đánh giá lại nếu bạn đã đánh giá trước đó. Mỗi tài khoản giữ tối đa 20 lần đánh giá gần nhất. Nút Xóa kết quả đánh giá rút lại sự đồng ý và xóa toàn bộ kết quả cùng nhận xét AI (không khôi phục được); hồ sơ và bảng điểm vẫn được giữ.",
     ]],
     ["cach-tinh-diem-nang-luc", "Cách tính điểm và mức năng lực", "#competency", [

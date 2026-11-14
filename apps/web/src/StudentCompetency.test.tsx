@@ -209,7 +209,7 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
     const html = withAi("processing");
     // No aria-busy on the AI section: it would hide the pending state from screen readers for minutes.
     expect(html).not.toMatch(/id="scomp-ai"[^>]*aria-busy/);
-    expect(html).toContain("EduPath AI đang suy luận và viết nhận xét");
+    expect(html).toContain("EduPath AI đang viết nhận xét");
     expect(html).toContain("Hủy tạo nhận xét");
   });
   it("offers regeneration after a failure and explains the error", () => {

@@ -551,7 +551,7 @@ function NextCard({ data, navigate }: { data: OverviewResponse; navigate: Naviga
   const plan = roadmap?.plan && roadmap.plan.status !== "empty" ? roadmap.plan : null;
   let body: ReactNode;
   if (!roadmap || roadmap.status !== "completed") {
-    const text = roadmap?.status === "pending" ? "EduPath AI đang soạn lộ trình cho học kỳ tới, bạn quay lại sau ít phút nhé."
+    const text = roadmap?.status === "pending" ? "EduPath AI đang soạn lộ trình cho học kỳ tới, bạn quay lại sau khoảng 1–2 phút nhé."
       : roadmap?.status === "failed" ? "Lần soạn lộ trình gần nhất chưa xong. Bạn bấm Tạo lại ở Lộ trình học tập."
         : !data.readiness.assessment ? "Lộ trình AI cần kết quả Đánh giá năng lực."
           : "Bạn chưa tạo Lộ trình AI cho học kỳ tới.";

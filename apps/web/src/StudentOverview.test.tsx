@@ -370,7 +370,7 @@ describe("Tổng quan progress after the review of 2026-11-04 (comp-calc-v19)", 
       previous: { createdAt, term, courses, skills, firstMonth } } };
     const html = dashboard(pending);
     expect(html).toContain('<div class="ov-previous"><p class="ov-previous-note">Lộ trình trước, viết cho dữ liệu cũ — có thể không còn đúng. Lộ trình mới sẽ thay thế khi sẵn sàng.</p>');
-    expect(text(html)).toContain("EduPath AI đang soạn lộ trình cho học kỳ tới, bạn quay lại sau ít phút nhé.");
+    expect(text(html)).toContain("EduPath AI đang soạn lộ trình cho học kỳ tới, bạn quay lại sau khoảng 1–2 phút nhé.");
     expect(text(html)).toContain(`${courses[0]!.name} · ${courses[0]!.credits} TC`);
     // Without an earlier roadmap the card says only what is happening.
     const alone = dashboard({ ...full, roadmap: { ...pending.roadmap, previous: null } });
