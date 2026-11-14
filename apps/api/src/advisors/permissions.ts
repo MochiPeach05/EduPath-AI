@@ -39,7 +39,7 @@ export const ADVISOR_PERMISSIONS: AdvisorPermissions = {
     { label: "Đồng ý chính sách", detail: "Không đồng ý hay rút đồng ý thay sinh viên." },
     { label: "Xóa dữ liệu", detail: "Không xóa bảng điểm, câu trả lời khảo sát, kết quả đánh giá, lộ trình hay cuộc trò chuyện của sinh viên." },
     { label: "Thông báo của sinh viên", detail: "Không xem, đánh dấu đã đọc hay xóa thông báo trong chuông của sinh viên." },
-    { label: "Trang quản trị", detail: "Vai trò Cố vấn học tập chỉ xem, trừ import danh sách sinh viên và xóa khỏi danh sách sinh viên chưa đăng nhập của lớp mình phụ trách: không thêm, sửa, xóa, import dữ liệu khác hay tải tệp Excel nguồn, không chạy AI đề xuất liên kết kỹ năng; không xem Tài khoản và Thông báo." },
+    { label: "Trang quản trị", detail: "Vai trò Cố vấn học tập chỉ xem, trừ import danh sách sinh viên và xóa khỏi danh sách sinh viên chưa đăng nhập của lớp mình phụ trách: không thêm, sửa, xóa, import dữ liệu khác hay tải xuống Excel CTĐT, KHĐT, tiêu chuẩn, không chạy AI đề xuất liên kết kỹ năng; không xem Tài khoản và Thông báo." },
     { label: "Sinh viên chưa đăng nhập", detail: "Sinh viên chỉ có tên trong danh sách lớp chưa có trang EduPath AI: không ai import bảng điểm, chạy AI, làm thay hay gửi thông báo cho họ cho đến khi họ tự đăng nhập lần đầu." },
   ],
   notes: [

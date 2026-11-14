@@ -3,7 +3,8 @@ import { Icon } from "./ui-icon";
 import { fileNameFrom } from "./admin-report-api";
 import { SESSION_EXPIRED_EVENT, adminErrorText, adminFailureText, errorCodeOf } from "./admin-errors";
 
-// "Tải xuống Excel nguồn" of the CTĐT, KHĐT and Tiêu chuẩn xét tốt nghiệp pages: GET /api/admin/{curricula|plans|
+// "Tải xuống Excel CTĐT / KHĐT / tiêu chuẩn" (user 2026-11-14: "Không ghi là tải xuống excel nguồn phải ghi là tải xuống excel
+// CTĐT") of the CTĐT, KHĐT and Tiêu chuẩn xét tốt nghiệp pages: GET /api/admin/{curricula|plans|
 // graduation}/:id/source/:revision, the workbook stored with that revision in PostgreSQL. QA 2026-11-04: one click answered
 // 503 and the next one worked. On these routes the API answers 503 only without a database (database_required), which a
 // retry does not change: a 503 that goes away is the answer of the host in front of the API while it starts (Render's free
@@ -73,10 +74,11 @@ export async function downloadSource(url: string, fallbackName: string, deps: So
 }
 
 /**
- * The "Tải xuống Excel nguồn" link of a revision. A plain click downloads through downloadSource and shows a failure
- * under the actions; a middle or modified click still opens the link the browser's way.
+ * The download link of a revision's workbook, named after what it holds (`label`: "Tải xuống Excel CTĐT", …). A plain
+ * click downloads through downloadSource and shows a failure under the actions; a middle or modified click still opens
+ * the link the browser's way.
  */
-export function SourceDownloadLink({ href, fallbackName, title }: { href: string; fallbackName: string; title?: string }) {
+export function SourceDownloadLink({ href, fallbackName, label, title }: { href: string; fallbackName: string; label: string; title?: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   useEffect(() => setError(""), [href]);
@@ -96,7 +98,7 @@ export function SourceDownloadLink({ href, fallbackName, title }: { href: string
   };
   return <>
     <a className="am-outline" href={href} title={title} aria-busy={busy || undefined} onClick={(event) => void click(event)}>
-      <Icon name="download" /> {busy ? "Đang tải xuống…" : "Tải xuống Excel nguồn"}
+      <Icon name="download" /> {busy ? "Đang tải xuống…" : label}
     </a>
     {error && <p className="admin-error cm-download-error" role="alert">{error}</p>}
   </>;

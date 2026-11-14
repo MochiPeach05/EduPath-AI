@@ -50,22 +50,24 @@ describe("source workbooks are the Quản trị viên's (AD-PLAN-14; no CVHT row
   it.each(["curricula", "plans", "graduation"] as const)("%s: the details show no download to a cố vấn học tập", (page) => {
     const advisor = renderDetail(page, false);
     expect(advisor).toContain("Phiên bản 2");
-    expect(advisor).not.toContain("Tải xuống Excel nguồn");
+    expect(advisor).not.toContain("Tải xuống Excel");
     expect(advisor).not.toContain("/source/");
     expect(advisor).not.toContain("Tệp tải xuống");
     // Nor any change: import, lock, edit.
-    expect(advisor).not.toMatch(/Cập nhật (khung|kế hoạch|tiêu chuẩn) từ Excel|Khóa (khung|kế hoạch|tiêu chuẩn)|Chỉnh sửa thông tin/);
+    expect(advisor).not.toMatch(/Cập nhật (CTĐT|KHĐT|tiêu chuẩn) từ Excel|Khóa (khung|kế hoạch|tiêu chuẩn)|Chỉnh sửa thông tin/);
   });
 
   it.each(["curricula", "plans", "graduation"] as const)("%s: an admin keeps the download and the changes", (page) => {
     const admin = renderDetail(page, true);
-    expect(admin).toContain("Tải xuống Excel nguồn");
+    // Named after what they hold (user 2026-11-14: "Không ghi là tải xuống excel nguồn phải ghi là tải xuống excel CTĐT").
+    expect(admin).toContain(`Tải xuống Excel ${page === "curricula" ? "CTĐT" : page === "plans" ? "KHĐT" : "tiêu chuẩn"}`);
+    expect(admin).not.toContain("Excel nguồn");
     expect(admin).toContain(`/api/admin/${page}/${page === "curricula" ? "c1" : page === "plans" ? "p1" : "g1"}/source/r2`);
-    expect(admin).toMatch(/Cập nhật (khung|kế hoạch|tiêu chuẩn) từ Excel/);
+    expect(admin).toContain(`Cập nhật ${page === "curricula" ? "CTĐT" : page === "plans" ? "KHĐT" : "tiêu chuẩn"} từ Excel`);
   });
 
   it("keeps the source notes an admin reads", () => {
-    expect(renderDetail("curricula", true)).toContain("Tệp tải xuống là Excel nguồn; các chỉnh sửa trực tiếp được lưu trong phiên bản trên hệ thống.");
+    expect(renderDetail("curricula", true)).toContain("Tệp tải xuống là tệp Excel CTĐT đã import; các chỉnh sửa trực tiếp được lưu trong phiên bản trên hệ thống.");
     expect(renderDetail("graduation", true)).toContain("Tệp tải xuống là tệp gốc, chưa bao gồm chỉnh sửa trực tiếp.");
   });
 });

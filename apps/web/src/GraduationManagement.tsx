@@ -646,6 +646,7 @@ function Standard({
                 <SourceDownloadLink
                   href={`${endpoint}/${id}/source/${data.revisionId}`}
                   fallbackName="tieu-chuan-goc.xlsx"
+                  label="Tải xuống Excel tiêu chuẩn"
                 />
                 {editable && (
                   <>

@@ -42,7 +42,7 @@ const messages: Record<string, string> = {
   invalid_plan_input:
     "Thông tin chưa hợp lệ. Kiểm tra tín chỉ, năm, học kỳ và nhóm môn.",
   plan_exists:
-    "Kế hoạch của ngành và khóa này đã tồn tại. Hãy mở kế hoạch đó và chọn Cập nhật kế hoạch từ Excel.",
+    "Kế hoạch của ngành và khóa này đã tồn tại. Hãy mở kế hoạch đó và chọn Cập nhật KHĐT từ Excel.",
   plan_changed:
     "Kế hoạch đã thay đổi. Đóng hộp thoại và tải lại trước khi sửa tiếp.",
   preview_changed:
@@ -412,12 +412,13 @@ function PlanView({
             )}
             <Summary data={p.data} />
             {p.data.notes && <p className="cm-prewrap">{p.data.notes}</p>}
-            {/* AD-PLAN-14, Tải xuống tệp Excel nguồn, is the Quản trị viên's alone (function list, 2026-11-04). */}
+            {/* AD-PLAN-14, Tải xuống Excel KHĐT, is the Quản trị viên's alone (function list, 2026-11-04). */}
             {canManage && (
               <div className="cm-actions">
                 <SourceDownloadLink
                   href={`${endpoint}/${id}/source/${p.revisionId}`}
                   fallbackName="ke-hoach-goc.xlsx"
+                  label="Tải xuống Excel KHĐT"
                 />
                 {editable && (
                   <>
@@ -425,7 +426,7 @@ function PlanView({
                       className="am-outline"
                       onClick={() => setModal("import")}
                     >
-                      <Icon name="upload" /> Cập nhật kế hoạch từ Excel
+                      <Icon name="upload" /> Cập nhật KHĐT từ Excel
                     </button>
                     <button
                       className="am-outline"
@@ -772,7 +773,7 @@ function ImportPlan({
   }
   return (
     <Modal
-      title={target ? "Cập nhật kế hoạch từ Excel" : "Import kế hoạch đào tạo"}
+      title={target ? "Cập nhật KHĐT từ Excel" : "Import kế hoạch đào tạo"}
       busy={busy}
       onClose={onClose}
     >
@@ -1180,7 +1181,7 @@ function ItemEditor({
               ))}
             </div>
             <p className="pm-muted">
-              Dùng Cập nhật kế hoạch từ Excel để thay toàn bộ cấu trúc hoặc các nhóm môn.
+              Dùng Cập nhật KHĐT từ Excel để thay toàn bộ cấu trúc hoặc các nhóm môn.
             </p>
           </>
         ) : (

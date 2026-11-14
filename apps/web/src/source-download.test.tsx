@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { RETRY_DELAY_MS, SourceDownloadLink, downloadSource, sourceDownloadError } from "./source-download";
 import { ADMIN_ERROR_TEXTS, adminErrorText } from "./admin-errors";
 
-// "Tải xuống Excel nguồn" over a fake server. Synthetic ids and file names only.
+// "Tải xuống Excel CTĐT / KHĐT / tiêu chuẩn" over a fake server. Synthetic ids and file names only.
 const url = "/api/admin/graduation/11111111-1111-4111-8111-111111111111/source/22222222-2222-4222-8222-222222222222";
 const workbook = () => new Response(new Uint8Array([0x50, 0x4b, 0x03, 0x04]), {
   status: 200,
@@ -79,9 +79,9 @@ describe("source workbook download", () => {
   });
 
   it("stays a real link, so it can still be opened or copied the browser's way", () => {
-    const html = renderToStaticMarkup(<SourceDownloadLink href={url} fallbackName="tieu-chuan.xlsx" title="Tệp gốc" />);
+    const html = renderToStaticMarkup(<SourceDownloadLink href={url} fallbackName="tieu-chuan.xlsx" label="Tải xuống Excel tiêu chuẩn" title="Tệp gốc" />);
     expect(html).toContain(`href="${url}"`);
-    expect(html).toContain("Tải xuống Excel nguồn");
+    expect(html).toContain("Tải xuống Excel tiêu chuẩn");
     expect(html).toContain('title="Tệp gốc"');
     expect(html).not.toContain('role="alert"');
   });

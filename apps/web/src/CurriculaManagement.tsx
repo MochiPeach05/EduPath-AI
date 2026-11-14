@@ -53,7 +53,7 @@ const errors: Record<string, string> = {
   duplicate_course:
     "Mã học phần bị trùng trong cùng khung. Hãy kiểm tra trước khi lưu.",
   curriculum_exists:
-    "Khung của ngành và khóa này đã tồn tại. Mở chi tiết khung rồi chọn Cập nhật khung từ Excel.",
+    "Khung của ngành và khóa này đã tồn tại. Mở chi tiết khung rồi chọn Cập nhật CTĐT từ Excel.",
   curriculum_identity_mismatch:
     "Tệp thay thế phải cùng ngành và khóa với khung đang mở. Với ngành hoặc khóa khác, hãy import khung mới.",
   curriculum_changed:
@@ -420,7 +420,7 @@ function ImportDialog({
     <Modal
       title={
         current
-          ? `Cập nhật khung ${current.data.cohortCode} từ Excel`
+          ? `Cập nhật CTĐT ${current.data.cohortCode} từ Excel`
           : "Import khung chương trình đào tạo"
       }
       onClose={onClose}
@@ -678,7 +678,8 @@ function CurriculumView({
                 <SourceDownloadLink
                   href={`${endpoint}/${id}/source/${current.revisionId}`}
                   fallbackName="khung-ctdt-goc.xlsx"
-                  title="Tải xuống tệp Excel nguồn; các chỉnh sửa trực tiếp được lưu trong phiên bản trên hệ thống"
+                  label="Tải xuống Excel CTĐT"
+                  title="Tải xuống tệp Excel CTĐT đã import; các chỉnh sửa trực tiếp được lưu trong phiên bản trên hệ thống"
                 />
                 {mutable && (
                   <>
@@ -686,7 +687,7 @@ function CurriculumView({
                       className="am-outline"
                       onClick={() => setEdit("import")}
                     >
-                      <Icon name="upload" /> Cập nhật khung từ Excel
+                      <Icon name="upload" /> Cập nhật CTĐT từ Excel
                     </button>
                     <button
                       className="am-outline"
@@ -702,7 +703,7 @@ function CurriculumView({
             <p className="cm-help">
               Tệp nguồn: {current.sourceFilename}. Tổng tín chỉ chương trình
               không phải tổng của tất cả các học phần tự chọn và chuyên ngành.
-              {canManage && " Tệp tải xuống là Excel nguồn; các chỉnh sửa trực tiếp được lưu trong phiên bản trên hệ thống."}
+              {canManage && " Tệp tải xuống là tệp Excel CTĐT đã import; các chỉnh sửa trực tiếp được lưu trong phiên bản trên hệ thống."}
             </p>
           </div>
           {notice && (
