@@ -5,10 +5,10 @@ import {
   latestResultSection, printedCumulativeCredits, printedSummaryNumber, transcriptCourses, uniqueCurriculumCourses,
   type Attempt, type ElectiveGroup, type TranscriptCourseRecord,
 } from "./course-state.js";
-import { fold } from "./specialty.js";
+import { classifyCurriculumSpecialty, fold, specialtyLabel } from "./specialty.js";
 import type {
   CurriculumCourseInput, GraduationCredits, GraduationGpa, GraduationGroupCheck, GraduationResolution, GraduationStandardInput,
-  GraduationSummary, TriState,
+  GraduationSummary, SpecialtyCode, TriState,
 } from "./types.js";
 
 // The one graduation engine (comp-calc-v5): the competency assessment (calculate.ts) and the
@@ -175,7 +175,67 @@ export type GraduationInputs = {
   aliases?: ReadonlyMap<string, string>;
   /** Standard 71PE electives filled by a passed GDTC course of the student's own programme (graduationCodeAliases); absent = none. */
   substitutes?: CreditTransfer[];
+  /** Passed courses of another specialty counted in the specialty electives group (crossSpecialtyCourses); absent = none. */
+  crossSpecialty?: CrossSpecialtyCourse[];
 };
+
+/**
+ * A passed course of another specialty of the student's CTĐT, one of its mandatory courses or one of its electives, that
+ * the student's standard does not list. It counts toward the standard's specialty electives group (`groupId`).
+ */
+export type CrossSpecialtyCourse = { code: string; name: string; credits: number; specialty: string; groupId: string };
+
+/** The student whose courses are read: "another specialty" is one that is not theirs. */
+export type GraduationStudent = { specialty: SpecialtyCode | null; cohortCode: string | null };
+
+const SPECIALTY_ELECTIVES = "tu chon chuyen nganh";
+const electiveGroupCode = (type: string) => /^(TC\d+)/i.exec(type.trim())?.[1]?.toUpperCase() ?? null;
+
+/** The elective group of the CTĐT whose courses are its "Tự chọn Chuyên ngành" (the most of them, when several). */
+export function specialtyElectivesGroup(courses: readonly Pick<CurriculumCourseInput, "type" | "specialty">[]): string | null {
+  const counts = new Map<string, number>();
+  for (const course of courses) {
+    const group = electiveGroupCode(course.type);
+    if (group && fold(course.specialty ?? "") === SPECIALTY_ELECTIVES) counts.set(group, (counts.get(group) ?? 0) + 1);
+  }
+  return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ?? null;
+}
+
+/**
+ * Courses of another specialty count as specialty electives (user 2026-11-14, after the GVHD confirmed it for a student who
+ * had taken another specialty's course as an elective before choosing his own: "môn chuyên ngành của ngành khác chuyển qua
+ * tự chọn của ngành này và môn tự chọn của ngành khác cũng được tính vào tự chọn của ngành này … vẫn ưu tiên hiển thị đúng
+ * theo ngành trước"). Before, such a mandatory course counted nowhere and the pages only said to ask the school to convert
+ * it (2026-11-08). The passed courses of the CTĐT that belong to another specialty (mandatory or elective, by the CTĐT's
+ * specialty column) and that the standard does not list at all are returned with the standard's group of specialty
+ * electives: the elective group with the courses of the CTĐT's "Tự chọn Chuyên ngành" group (TC309 ≡ TC209 for K29 CNTT).
+ * A course the standard lists counts in its own group as always. [] without a specialty, a standard, a CTĐT or such a group:
+ * the courses then stay outside every group, as before.
+ */
+export function crossSpecialtyCourses(
+  standard: Pick<GraduationData, "groups" | "courses"> | null,
+  curriculumCourses: readonly CurriculumCourseInput[],
+  records: ReadonlyMap<string, TranscriptCourseRecord>,
+  student: GraduationStudent | undefined,
+): CrossSpecialtyCourse[] {
+  if (!standard || !student?.specialty || !curriculumCourses.length) return [];
+  const courses = uniqueCurriculumCourses(curriculumCourses);
+  const electivesCode = specialtyElectivesGroup(courses);
+  const electives = electivesCode ? deriveElectiveGroups(courses).find((group) => group.code === electivesCode) : undefined;
+  const group = electives ? matchStandardElectiveGroup(electives.courseCodes, standard) : null;
+  if (!group) return [];
+  const listed = new Set(standard.courses.map((course) => courseKey(course.code)));
+  return courses.flatMap((course): CrossSpecialtyCourse[] => {
+    const code = courseKey(course.code);
+    const kind = classifyCurriculumSpecialty(course.specialty, student.cohortCode);
+    if (kind.kind !== "specialty" || kind.code === student.specialty || listed.has(code)) return [];
+    const record = records.get(code);
+    if (!record || !isPassedState(record.state)) return [];
+    const credits = course.credits > 0 ? course.credits : record.selected.credits;
+    if (!(credits > 0)) return [];
+    return [{ code, name: course.name, credits, specialty: specialtyLabel(kind.code) ?? course.specialty.trim(), groupId: group.id }];
+  });
+}
 
 /**
  * A standard course passed only under another code with the same name: a retake with a later cohort
@@ -318,11 +378,15 @@ export function graduationCodeAliases(
   return { aliases, transfers, substitutes };
 }
 
-/** The graduation inputs from the standard, the cohort's CTĐT courses ([] when there is none) and the transcript. */
+/**
+ * The graduation inputs from the standard, the cohort's CTĐT courses ([] when there is none) and the transcript. With the
+ * student (specialty, cohort) the passed courses of another specialty count as specialty electives (crossSpecialtyCourses).
+ */
 export function graduationInputs(
-  standard: Pick<GraduationData, "courses"> | null,
+  standard: Pick<GraduationData, "groups" | "courses"> | null,
   curriculumCourses: readonly CurriculumCourseInput[],
   transcript: TranscriptData,
+  student?: GraduationStudent,
 ): GraduationInputs {
   const courses = uniqueCurriculumCourses(curriculumCourses);
   const { aliases, transfers, substitutes } = graduationCodeAliases(standard, transcript,
@@ -338,6 +402,7 @@ export function graduationInputs(
       if (record) records.set(substitute.viaCode, record);
     }
   }
+  const crossSpecialty = crossSpecialtyCourses(standard, courses, records, student);
   return {
     transcript,
     records,
@@ -347,6 +412,7 @@ export function graduationInputs(
     transfers,
     aliases,
     substitutes,
+    ...(crossSpecialty.length ? { crossSpecialty } : {}),
   };
 }
 
@@ -441,13 +507,15 @@ function assessGraduationCredits(
 /**
  * Each group has a lower bound (certainly completed: passed/MT) and an upper bound (+ graded with
  * an unknown result); pass when lower ≥ required, fail when upper < required, otherwise unknown (E2).
- * Mandatory groups count courses, (*) included (E8); elective groups count E3 credits.
+ * Mandatory groups count courses, (*) included (E8); elective groups count E3 credits. The specialty electives group also
+ * counts the credits of the passed courses of another specialty (crossSpecialty, comp-calc-v24), after its own courses.
  */
 function assessGraduationGroups(
   standard: Pick<GraduationData, "groups" | "courses">,
   records: ReadonlyMap<string, TranscriptCourseRecord>,
   programCredits: ReadonlyMap<string, number | null>,
   electives: readonly ElectiveGroup[],
+  crossSpecialty: readonly CrossSpecialtyCourse[] = [],
 ): GraduationGroupCheck[] {
   const state = (code: string) => records.get(courseKey(code))?.state;
   const ambiguous = standardCodesAmbiguous(standard);
@@ -462,9 +530,12 @@ function assessGraduationGroups(
     const certain = courses.filter((course) => { const value = state(course.code); return value !== undefined && isPassedState(value); });
     const possible = [...certain, ...courses.filter((course) => state(course.code) === "graded_unknown")];
     const mandatory = group.kind === "mandatory";
+    // Another specialty's passed courses this group takes as electives: certain, never condition-only.
+    const extra = mandatory ? 0 : crossSpecialty.filter((course) => course.groupId === group.id).reduce((sum, course) => sum + course.credits, 0);
+    const plus = (value: number | null) => (value === null ? null : value + extra);
     // Starred courses satisfy elective quotas, but not accumulated academic credits.
-    const lower = mandatory ? certain.length : sumCredits(certain);
-    const upper = mandatory ? possible.length : sumCredits(possible);
+    const lower = mandatory ? certain.length : plus(sumCredits(certain));
+    const upper = mandatory ? possible.length : plus(sumCredits(possible));
     const required = mandatory ? courses.length : group.minimumCredits;
     return {
       groupId: group.id,
@@ -476,7 +547,7 @@ function assessGraduationGroups(
       upper,
       required,
       status: !courses.length || ambiguous ? "unknown" : decide(lower, upper, required),
-      accumulatedCredits: sumCredits(certain.filter((course) => !course.conditionOnly)),
+      accumulatedCredits: plus(sumCredits(certain.filter((course) => !course.conditionOnly))),
       curriculumElectiveCode: mandatory ? null : matchCurriculumElective(group, standard, electives),
     };
   });
@@ -492,7 +563,7 @@ export function assessGraduationStandard(
   data: Pick<GraduationData, "groups" | "courses" | "minimumCredits" | "minimumGpa" | "gpaScale">,
   inputs: GraduationInputs,
 ): GraduationAssessment {
-  const groups = assessGraduationGroups(data, inputs.records, inputs.programCredits, inputs.electives);
+  const groups = assessGraduationGroups(data, inputs.records, inputs.programCredits, inputs.electives, inputs.crossSpecialty);
   const groupStatus: TriState = groups.some((check) => check.status === "fail") ? "fail"
     : !groups.length || groups.some((check) => check.status === "unknown") ? "unknown" : "pass";
   const gpa = assessGraduationGpa(data, inputs.transcript, inputs.records, inputs.conditionCodes);

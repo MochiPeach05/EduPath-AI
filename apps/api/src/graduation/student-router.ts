@@ -59,6 +59,7 @@ function studentGraduationResponse(loaded: StudentGraduation) {
     evaluation: loaded.evaluation,
     specialtySuggestion: loaded.specialtySuggestion,
     convertible: loaded.convertible,
+    otherSpecialty: loaded.otherSpecialty,
     thesisPlan: loaded.thesisPlan,
   };
 }

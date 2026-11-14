@@ -139,7 +139,7 @@ describe("GET /api/student/graduation", () => {
     const { app, release } = setup();
     const response = await request(app).get("/graduation").expect(200);
     expect(response.headers["cache-control"]).toBe("no-store");
-    expect(Object.keys(response.body).sort()).toEqual(["convertible", "evaluation", "profile", "resolution", "specialtySuggestion", "standard", "thesisPlan", "transcript"]);
+    expect(Object.keys(response.body).sort()).toEqual(["convertible", "evaluation", "otherSpecialty", "profile", "resolution", "specialtySuggestion", "standard", "thesisPlan", "transcript"]);
     expect(response.body).toMatchObject({
       profile: { cohortCode: "K29", specialty: "CNPM" },
       resolution: "specialty",
@@ -181,6 +181,7 @@ describe("GET /api/student/graduation", () => {
       specialtySuggestion: { code: "CNPM", label: "Công nghệ phần mềm", count: 1 },
       // No specialty: nothing is "another specialty" yet (convertible.ts).
       convertible: null,
+      otherSpecialty: null,
       thesisPlan: [],
     });
   });

@@ -5,7 +5,7 @@ import {
 } from "../competency-assessment/course-state.js";
 import {
   assessGraduationStandard, countsInGpa, gpaAttempt, graduationInputs, standardCodesAmbiguous, standardCourseCredits, type CreditTransfer,
-  type GraduationInputs,
+  type GraduationInputs, type GraduationStudent,
 } from "../competency-assessment/graduation.js";
 import type { CurriculumCourseInput, GraduationStandardInput } from "../competency-assessment/types.js";
 import type { TranscriptData } from "../student/transcript-parser.js";
@@ -47,6 +47,11 @@ export interface GraduationCourseRow {
    * transfer. It is listed first in its group, with the elective's credits; the elective's own row reads "not_taken".
    */
   inPlaceOf?: string;
+  /**
+   * Only on a row that is no standard course: a passed course of this other specialty (its label, "Trí tuệ nhân tạo")
+   * that the specialty electives group counts (crossSpecialtyCourses, 2026-11-14). Listed after the group's own courses.
+   */
+  fromSpecialty?: string;
 }
 
 /** A passed transcript course that maps to no course of the standard: it counts toward no group (shown for the student to ask). */
@@ -168,6 +173,8 @@ type GraduationEvaluationInput = {
   transcript: { version: string; updatedAt: string; data: TranscriptData };
   /** Courses of the cohort's single active CTĐT, current revision; [] when it is missing or ambiguous. */
   curriculumCourses: readonly CurriculumCourseInput[];
+  /** The student's specialty and cohort: another specialty's passed courses then count as specialty electives. */
+  student?: GraduationStudent;
 };
 
 export const MAX_IMPROVEMENT_CANDIDATES = 8;
@@ -182,7 +189,7 @@ const compareCode = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 export function evaluateGraduation(input: GraduationEvaluationInput): GraduationEvaluation {
   const data = input.standard.data;
   const transcript = input.transcript.data;
-  const core = graduationInputs(data, input.curriculumCourses, transcript);
+  const core = graduationInputs(data, input.curriculumCourses, transcript, input.student);
   const { records, programCredits, conditionCodes } = core;
   const result = assessGraduationStandard(data, core);
   const transferOf = new Map(core.transfers.map((transfer) => [transfer.code, transfer.viaCode]));
@@ -223,13 +230,19 @@ export function evaluateGraduation(input: GraduationEvaluationInput): Graduation
     const course = data.courses.find((item) => courseKey(item.code) === substitute.code);
     return course ? [fillRow(substitute, course)] : [];
   });
+  // Another specialty's passed courses the specialty electives group counts, after the group's own courses.
+  const cross = core.crossSpecialty ?? [];
+  const crossRows = cross.map((course): GraduationCourseRow => ({
+    code: course.code, name: course.name, credits: course.credits, conditionOnly: false, groupId: course.groupId,
+    ...outcome(records.get(course.code)), fromSpecialty: course.specialty,
+  }));
   // One row per code for the lists outside the groups (a code repeated in the standard is listed once).
   const listed = new Set<string>();
   const distinct = [...fills, ...rows].filter((item) => !listed.has(item.code) && Boolean(listed.add(item.code)));
 
   const groups: GraduationGroupEvaluation[] = data.groups.map((group, index) => {
     const check = result.groups[index]!;
-    const courses = [...fills, ...rows].filter((item) => item.groupId === group.id);
+    const courses = [...fills, ...rows, ...crossRows].filter((item) => item.groupId === group.id);
     return {
       id: group.id, name: group.name, label: check.label, kind: group.kind, code: check.code,
       curriculumElectiveCode: check.curriculumElectiveCode, unit: check.unit,
@@ -286,8 +299,9 @@ export function evaluateGraduation(input: GraduationEvaluationInput): Graduation
     .map(([via, code]) => ({ code, viaCode: via, transfer: transferred.has(via) }))
     .sort((a, b) => compareCode(a.code, b.code) || compareCode(a.viaCode, b.viaCode));
   const standardCodes = new Set(data.courses.map((course) => courseKey(course.code)));
+  const counted = new Set(cross.map((course) => course.code));
   const outsideStandard = [...transcriptCourses(transcript).values()]
-    .filter((record) => isPassedState(record.state) && !standardCodes.has(aliases.get(record.code) ?? record.code))
+    .filter((record) => isPassedState(record.state) && !standardCodes.has(aliases.get(record.code) ?? record.code) && !counted.has(record.code))
     .sort((a, b) => compareCode(a.code, b.code))
     .map((record): GraduationOutsideCourse => {
       const { state, score10, score4, letter, term } = outcome(record);

@@ -333,7 +333,8 @@ export async function readStudyPlanFacts(db: Db, userId: string, now = new Date(
     specialty: course.specialty, semester: course.semester, studyYear: course.studyYear,
   }));
   const readTranscript = transcript ?? EMPTY_TRANSCRIPT;
-  const inputs = graduationInputs(standard?.data ?? null, curriculumCourses, readTranscript);
+  // Another specialty's passed courses count as specialty electives, as on Xét tốt nghiệp (crossSpecialtyCourses, 2026-11-14).
+  const inputs = graduationInputs(standard?.data ?? null, curriculumCourses, readTranscript, { specialty, cohortCode });
   const standardCodes = new Set((standard?.data.courses ?? []).map((course) => courseKey(course.code)));
   // The relations by kind and course, and the plan rows by course code and by folded name, are looked up, never searched:
   // matching every course against every plan row folded both names each time (some 200 000 fold calls for one student,
@@ -460,9 +461,14 @@ export async function readStudyPlanFacts(db: Db, userId: string, now = new Date(
     gpa = { actual: assessed.gpa.actual, required: assessed.gpa.required, scale: assessed.gpa.scale };
     graduation = {
       standardName: standard.data.name,
+      // The specialty electives group lists another specialty's passed courses it counts after its own (applicable false,
+      // specialtyName set: the page names the specialty); they are no longer "Học phần không được tính".
       groups: assessed.groups.map((group): StudyPlanGraduationGroup => ({
         label: group.label, kind: group.kind, unit: group.unit, required: group.required, passed: group.lower, status: group.status,
-        courseCodes: [...new Set(standard.data.courses.filter((course) => course.groupId === group.groupId).map((course) => courseKey(course.code)))],
+        courseCodes: [...new Set([
+          ...standard.data.courses.filter((course) => course.groupId === group.groupId).map((course) => courseKey(course.code)),
+          ...(inputs.crossSpecialty ?? []).filter((course) => course.groupId === group.groupId).map((course) => course.code),
+        ])],
       })),
       credits: assessed.credits ? { completed: assessed.credits.lower, required: assessed.credits.required, source: assessed.credits.source } : null,
     };

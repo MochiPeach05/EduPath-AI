@@ -12,7 +12,7 @@ import {
   electiveCodeOf, hasScore, isAttemptedState, isConditionOnly, isPassedState, isStudiedState, physicalEducationFills, termCode, type TranscriptCourseRecord,
   transcriptCourses, uniqueCurriculumCourses, withPhysicalEducationFills,
 } from "./course-state.js";
-import { assessGraduation, assessGraduationGpa, electiveQuotas, graduationCodeAliases, programCreditMap } from "./graduation.js";
+import { assessGraduation, assessGraduationGpa, crossSpecialtyCourses, electiveQuotas, graduationCodeAliases, programCreditMap } from "./graduation.js";
 import { physicalEducationGroupsFor, planProgress, type PlanCourseInfo } from "./plan-progress.js";
 import {
   classifyCurriculumSpecialty, type CurriculumSpecialtyClass, fold, specialtyBlocks, specialtyConflict, specialtyCounts,
@@ -864,9 +864,13 @@ function assessAll(inputs: AssessmentInputs, otherCareers: readonly CareerInput[
   /* ---- 10. graduation (§7.9): the graduation page's engine, inputs built like graduationInputs() ---- */
   const curriculumCredits = new Map([...table.values()].map((row) => [row.code, row.credits]));
   // Every alias of the standard (step 1), those between two CTĐT codes too, and the CTĐT as filed: the graduation page's inputs exactly.
+  // v24: another specialty's passed courses count as specialty electives (crossSpecialtyCourses), as on the graduation page.
+  const graduationRecords = transcriptCourses(transcript, codeAliases);
+  const crossSpecialty = crossSpecialtyCourses(standardData, filedCourses, graduationRecords, { specialty, cohortCode: inputs.student.cohortCode });
   const graduation = assessGraduation({
     resolution: inputs.graduation.resolution, standard: graduationStandard, transcript, transfers,
-    records: transcriptCourses(transcript, codeAliases),
+    records: graduationRecords,
+    ...(crossSpecialty.length ? { crossSpecialty } : {}),
     programCredits: programCreditMap(standardData, curriculumCreditMap(filedCourses)),
     ...(filedCourses === curriculumCourses ? { electives, conditionCodes }
       : { electives: deriveElectiveGroups(filedCourses), conditionCodes: conditionOnlyCodes(standardData, filedCourses) }),

@@ -821,6 +821,12 @@ export function auditNote(row: AuditRow, currentTerm?: string): string {
   return planned ? `Chưa học${planned}` : currentTerm && due ? `Chưa học · dự kiến ${termLabel(due)}` : "Chưa học";
 }
 
+/**
+ * The note on a course of another specialty a requirement group lists: the specialty electives group counts it (API
+ * crossSpecialtyCourses, user 2026-11-14). Only such courses are rows of a standard's group without applying to the student.
+ */
+export const otherSpecialtyRowNote = (specialtyName: string) => `Môn chuyên ngành ${specialtyName}: được tính vào nhóm này`;
+
 export const unmatchedNote = (course: StudyPlanUnmatched) =>
   course.state === "in_progress" ? `Đang học${course.term ? ` · ${termLabel(course.term)}` : ""}`
     : [course.grade, course.term && termLabel(course.term)].filter(Boolean).join(" · ");

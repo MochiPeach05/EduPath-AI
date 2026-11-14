@@ -1,5 +1,9 @@
 # Đánh giá năng lực sinh viên và nhận xét AI
 
+## comp-calc-v24: môn chuyên ngành khác tính vào nhóm tự chọn chuyên ngành (14/11/2026)
+
+Phần xét tốt nghiệp của kết quả đánh giá dùng cùng quy tắc với trang Xét tốt nghiệp: môn đã đạt của chuyên ngành khác (bắt buộc hoặc tự chọn) mà tiêu chuẩn không liệt kê được cộng vào nhóm tự chọn chuyên ngành (`crossSpecialtyCourses`, xem graduation-standards.md). Kết quả đã lưu đổi khi sinh viên bấm Đánh giá lại.
+
 ## Không cần vị trí nghề nghiệp mục tiêu (14/11/2026)
 
 - Đánh giá năng lực chỉ cần bảng điểm và chuyên ngành: máy chủ không còn trả 409 `career_required`; `result.career` là null khi chưa chọn vị trí. Nhận xét AI `comp-v16`: khi chưa có vị trí, phần nghề nghiệp nói nơi chọn vị trí và không tự chọn nghề.

@@ -5,7 +5,10 @@ import {
   syntheticCurriculum, syntheticInputs, syntheticStandards, syntheticStudentTerms, syntheticTranscript, type TranscriptTerm,
 } from "../competency-assessment/fixtures/synthetic-k29.js";
 import type { AssessmentInputs, CurriculumCourseInput, GraduationStandardInput } from "../competency-assessment/types.js";
+import type { GraduationStudent } from "../competency-assessment/graduation.js";
+import { specialtyLabel } from "../competency-assessment/specialty.js";
 import type { TranscriptData } from "../student/transcript-parser.js";
+import { otherSpecialtyCourses } from "./convertible.js";
 import { evaluateGraduation, type GraduationEvaluation, MAX_IMPROVEMENT_CANDIDATES, MAX_LISTED_COURSES } from "./evaluation.js";
 
 // Synthetic K29 data only (fixtures/synthetic-k29.json); no real student record.
@@ -438,5 +441,56 @@ describe("retake with a later cohort under another code (2026-10-23)", () => {
     const usual = run();
     expect("creditTransfers" in usual).toBe(false);
     expect(usual.groups.flatMap((group) => group.courses).some((course) => "transferFrom" in course)).toBe(false);
+  });
+});
+
+describe("another specialty's passed courses count as specialty electives (comp-calc-v24, user 2026-11-14)", () => {
+  // The synthetic CNPM student without 71ITIS30303: TC209 holds 3 of its 6 credits. 71ITAI40803 (Trí tuệ Nhân tạo) and
+  // 71ITDS40303 (Công nghệ Dữ liệu) are mandatory courses of the other specialties, listed by no group of the CNPM standard.
+  const base = terms().map((term) => ({ ...term, rows: term.rows.filter((row) => row[0] !== "71ITIS30303") }));
+  const data = syntheticTranscript(withRows(base, "2024-2025", "HK03", [["71ITAI40803", 3, 8.5, 3.4, "A"], ["71ITDS40303", 3, 7, 3, "B"]]));
+  const evaluate = (standard: GraduationStandardInput = cnpm(), student?: GraduationStudent) => evaluateGraduation({
+    standard, transcript: { version: "00000000-0000-4000-8000-0000000000f1", updatedAt, data }, curriculumCourses: syntheticCurriculum().courses,
+    ...(student ? { student } : {}),
+  });
+  const tc209 = (evaluation: GraduationEvaluation) => evaluation.groups.find((group) => group.code === "TC209")!;
+  const outside = (evaluation: GraduationEvaluation) => (evaluation.outsideStandard ?? []).map((course) => course.code);
+
+  it("adds their credits to the specialty electives group, lists them after its own courses and no longer outside the standard", () => {
+    const before = evaluate();
+    expect([tc209(before).lower, tc209(before).status]).toEqual([3, "fail"]);
+    expect(outside(before)).toEqual(expect.arrayContaining(["71ITAI40803", "71ITDS40303"]));
+    const after = evaluate(cnpm(), { specialty: "CNPM", cohortCode: "K29" });
+    expect([tc209(after).lower, tc209(after).upper, tc209(after).status, tc209(after).remaining, tc209(after).accumulatedCredits])
+      .toEqual([9, 9, "pass", null, 9]);
+    expect(tc209(after).courses.slice(-2).map((row) => [row.code, row.fromSpecialty, row.state, row.credits])).toEqual([
+      ["71ITDS40303", specialtyLabel("CNDL"), "passed", 3], ["71ITAI40803", specialtyLabel("TTNT"), "passed", 3]]);
+    expect(tc209(after).courses.slice(0, -2).some((row) => "fromSpecialty" in row)).toBe(false);
+    expect(outside(after)).not.toContain("71ITAI40803");
+    expect(outside(after)).not.toContain("71ITDS40303");
+    // Nothing else changes.
+    const others = (evaluation: GraduationEvaluation) => evaluation.groups.filter((group) => group.code !== "TC209").map((group) => [group.lower, group.status]);
+    expect(others(after)).toEqual(others(before));
+  });
+
+  it("counts a course of the student's own standard in its own group, and nothing without a specialty", () => {
+    const cndl = evaluate(syntheticStandards()[1]!, { specialty: "CNDL", cohortCode: "K29" });
+    // 71ITDS40303 is a mandatory course of the CNDL standard; CNPM's 71ITSE41003 (passed) and TTNT's 71ITAI40803 are the others.
+    expect(cndl.groups.find((group) => group.kind === "mandatory")!.courses.find((row) => row.code === "71ITDS40303")?.state).toBe("passed");
+    expect(tc209(cndl).courses.filter((row) => row.fromSpecialty).map((row) => row.code)).toEqual(["71ITSE41003", "71ITAI40803"]);
+    expect(tc209(evaluate(cnpm(), { specialty: null, cohortCode: "K29" })).lower).toBe(3);
+  });
+
+  it("tells the pages which courses count and in which group; only the uncounted ones keep the reminder", () => {
+    const counted = otherSpecialtyCourses(cnpm().data, syntheticCurriculum().courses, data, "K29", "CNPM");
+    expect(counted.counted?.courses.map((course) => course.code)).toEqual(["71ITDS40303", "71ITAI40803"]);
+    expect(counted.counted?.group).toBe(tc209(evaluate(cnpm(), { specialty: "CNPM", cohortCode: "K29" })).label);
+    expect(counted.convertible?.courses).toEqual([]);
+    // A standard without a group of specialty electives counts none: the mandatory ones keep the reminder (2026-11-08).
+    const standard = cnpm();
+    const noElectives = { ...standard.data, groups: standard.data.groups.filter((group) => !/TC209/.test(group.name)) };
+    const none = otherSpecialtyCourses(noElectives, syntheticCurriculum().courses, data, "K29", "CNPM");
+    expect(none.counted).toBeNull();
+    expect(none.convertible?.courses.map((course) => course.code)).toEqual(["71ITDS40303", "71ITAI40803"]);
   });
 });

@@ -7,7 +7,7 @@ import type { DatabasePool } from "../db/pool.js";
 import { PROFILE_SQL, TRANSCRIPT_SQL } from "../db/student-rows.js";
 import type { TranscriptData } from "../student/transcript-parser.js";
 import { GRADUATION_ADVICE_PROMPT_VERSION } from "./advice/prompt.js";
-import { convertibleCourses, type ConvertibleCourses } from "./convertible.js";
+import { otherSpecialtyCourses, type ConvertibleCourses, type CountedOtherSpecialty } from "./convertible.js";
 import { evaluateGraduation, type GraduationEvaluation } from "./evaluation.js";
 import { normalizeCohortCode, profileSpecialty, resolveStudentStandard, type StudentGraduationResolution } from "./resolve.js";
 import { thesisOption } from "./thesis.js";
@@ -44,10 +44,16 @@ export type StudentGraduation = {
   /** Only for "specialty_unset": the one specialty whose mandatory courses the student passed. */
   specialtySuggestion: StudentGraduationSpecialtySuggestion | null;
   /**
-   * Passed mandatory courses of another specialty, counted nowhere until the school converts them into electives
-   * (convertible.ts, user 2026-11-08: "Không tính, chỉ nhắc"); null without a specialty or a transcript.
+   * Passed mandatory courses of another specialty still counted nowhere (the standard has no specialty electives group to
+   * take them), until the school converts them into electives (convertible.ts, user 2026-11-08: "Không tính, chỉ nhắc");
+   * null without a specialty or a transcript.
    */
   convertible: ConvertibleCourses | null;
+  /**
+   * Passed courses of another specialty the specialty electives group counts (2026-11-14, crossSpecialtyCourses), with that
+   * group's label; null when there is none. They are also rows of that group in the evaluation (fromSpecialty).
+   */
+  otherSpecialty: CountedOtherSpecialty | null;
   /**
    * The courses of a thesis group still open (thesis.ts thesisOption) the student placed in Kế hoạch học kỳ themselves
    * (study-plan/own-plan.ts), sorted: the way they chose, which wins over the way the system recommends (user 2026-11-10:
@@ -111,7 +117,9 @@ export async function readStudentGraduation(db: Db, userId: string): Promise<Stu
   // The CTĐT only refines credits and elective codes, or suggests a specialty; missing or ambiguous → none.
   const curriculumCourses = transcript && profile.cohortCode && (standard || resolution === "specialty_unset" || profile.specialty)
     ? await readCohortCurriculumCourses(db, profile.cohortCode, profile.majorCode) : [];
-  const evaluation = standard && transcript ? evaluateGraduation({ standard, transcript, curriculumCourses }) : null;
+  const student = { specialty: profile.specialty, cohortCode: profile.cohortCode };
+  const evaluation = standard && transcript ? evaluateGraduation({ standard, transcript, curriculumCourses, student }) : null;
+  const others = otherSpecialtyCourses(standard?.data ?? null, curriculumCourses, transcript?.data ?? null, profile.cohortCode, profile.specialty);
   // The plan is read only when a thesis group is still open: its courses there are the student's choice of way.
   const thesisPlan = evaluation?.groups.some((group) => thesisOption(group)) ? thesisPlanCodes(evaluation, await readOwnPlannedCodes(db, userId)) : [];
   return {
@@ -122,7 +130,8 @@ export async function readStudentGraduation(db: Db, userId: string): Promise<Stu
     evaluation,
     fingerprint: standard && evaluation ? graduationFingerprint({ profile, standard, evaluation, thesisPlan }) : null,
     specialtySuggestion: resolution === "specialty_unset" && transcript ? specialtySuggestionFor(curriculumCourses, transcript.data, profile.cohortCode) : null,
-    convertible: transcript && profile.specialty ? convertibleCourses(curriculumCourses, transcript.data, profile.cohortCode, profile.specialty) : null,
+    convertible: others.convertible,
+    otherSpecialty: others.counted,
     thesisPlan,
   };
 }

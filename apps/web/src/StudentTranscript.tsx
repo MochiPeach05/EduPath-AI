@@ -3,7 +3,7 @@ import { Icon } from "./student-icons";
 import TranscriptProgress from "./TranscriptProgress";
 import { policyVersion } from "./public-information";
 import TranscriptTables, { courseMatcher, transcriptNotes } from "./TranscriptTables";
-import type { ConvertibleCourses } from "./convertible-courses";
+import type { ConvertibleCourses, CountedOtherSpecialty } from "./convertible-courses";
 import { PROFILE_SECTIONS, TRANSCRIPT_UPDATED_EVENT, formatUpdatedAt } from "./student-overview-data";
 import { isAdvisorView } from "./advisor-view";
 import { decimalText } from "./display-format";
@@ -61,7 +61,7 @@ export function failedImportMessage(code: string | null): string {
 export { courseMatcher };
 /** A request the API refused, carrying the message to show; anything else (a network error's own text is English) gets the request's fallback. */
 class TranscriptRequestError extends Error {}
-async function read(response: Response, fallback: string): Promise<{ transcript?: Transcript | null; job?: ImportJob | null; workerOnline?: boolean; ocrEnabled?: boolean; convertible?: ConvertibleCourses | null }> {
+async function read(response: Response, fallback: string): Promise<{ transcript?: Transcript | null; job?: ImportJob | null; workerOnline?: boolean; ocrEnabled?: boolean; convertible?: ConvertibleCourses | null; otherSpecialty?: CountedOtherSpecialty | null }> {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new TranscriptRequestError(errors[data.error] ?? fallback);
   return data;
@@ -264,8 +264,10 @@ export default function StudentTranscript({ profile = null, mode = "profile", su
   const [transcript, setTranscript] = useState<Transcript | null>(null);
   const [job, setJob] = useState<ImportJob | null>(null);
   const [workerOnline, setWorkerOnline] = useState(false);
-  // Passed mandatory courses of another specialty (graduation/convertible.ts): marked, counted nowhere.
+  // Passed courses of another specialty (graduation/convertible.ts): counted in the specialty electives group (otherSpecialty,
+  // 2026-11-14) or, without such a group, counted nowhere (convertible); both are marked.
   const [convertible, setConvertible] = useState<ConvertibleCourses | null>(null);
+  const [otherSpecialty, setOtherSpecialty] = useState<CountedOtherSpecialty | null>(null);
   const pendingJob = job?.status === "queued" || job?.status === "processing";
   const [file, setFile] = useState<File | null>(null);
   const [confirmed, setConfirmed] = useState(false);
@@ -334,7 +336,7 @@ export default function StudentTranscript({ profile = null, mode = "profile", su
     try {
       const data = await read(await fetch("/api/student/transcript", { credentials: "include", signal: pending.signal }), FAILED.load);
       if (!pending.signal.aborted) {
-        setTranscript(data.transcript ?? null); setJob(data.job ?? null); setWorkerOnline(data.workerOnline ?? false); setConvertible(data.convertible ?? null); setLoaded(true);
+        setTranscript(data.transcript ?? null); setJob(data.job ?? null); setWorkerOnline(data.workerOnline ?? false); setConvertible(data.convertible ?? null); setOtherSpecialty(data.otherSpecialty ?? null); setLoaded(true);
         // The short import of a page that thought there was none: the page reads its data again.
         if (start && data.transcript) imported.current?.();
       }
@@ -351,7 +353,7 @@ export default function StudentTranscript({ profile = null, mode = "profile", su
         const data = await read(await fetch("/api/student/transcript", { credentials: "include", signal: pending.signal }), FAILED.poll);
         if (!pending.signal.aborted) {
           setJob(data.job ?? null); setWorkerOnline(data.workerOnline ?? false);
-          setTranscript(data.transcript ?? null); setConvertible(data.convertible ?? null); setError("");
+          setTranscript(data.transcript ?? null); setConvertible(data.convertible ?? null); setOtherSpecialty(data.otherSpecialty ?? null); setError("");
           // The 100% bar says it was saved (TranscriptProgress); no second message.
           if (data.job?.status === "completed") { setImportCompleted(true); setMessage(""); announceTranscriptUpdated(); imported.current?.(); }
         }
@@ -534,7 +536,7 @@ export default function StudentTranscript({ profile = null, mode = "profile", su
     {progress}
     {jobBox}
     {transcriptWarnings.length > 0 && <div className="sr-review" role="note">{transcriptWarnings.join(" ")}</div>}
-    {loaded && transcript && <TranscriptTables key={transcript.version} data={transcript.data} convertible={convertible} />}
+    {loaded && transcript && <TranscriptTables key={transcript.version} data={transcript.data} convertible={convertible} otherSpecialty={otherSpecialty} />}
     {deleteOpen && <DeleteTranscriptDialog busy={busy} error={deleteError} onClose={() => setDeleteOpen(false)} onConfirm={() => void remove()} />}
     {actingDialog}
   </section>;

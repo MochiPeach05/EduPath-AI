@@ -4,7 +4,7 @@ import { Icon } from "./student-icons";
 import type { Transcript } from "./StudentTranscript";
 import { INFERRED_RESULT_NOTE, attemptOutcome, isFailLetter, isNoScoreMark, isRowWarning, reviewLabels, transcriptCreditCheck, type CreditCheck } from "./transcript-results";
 import { academicSections, foldText, printedSemesterGpa } from "./student-overview-data";
-import { CONVERTIBLE_ROW_NOTE, convertibleCodes, convertibleText, isConvertible, type ConvertibleCourses } from "./convertible-courses";
+import { convertibleText, countedText, otherSpecialtyNotes, type ConvertibleCourses, type CountedOtherSpecialty } from "./convertible-courses";
 import "./student-records.css";
 import "./transcript-terms.css";
 
@@ -142,7 +142,7 @@ function CreditMismatch({ check }: { check: CreditCheck }) {
  * One term: its header is a button (the WAI-ARIA disclosure pattern) that opens or folds the table and the printed
  * summaries under it. "1 môn chưa đạt" is the one red note; rows to check are amber, the term being studied grey.
  */
-function TermSection({ term, studying, panelId, onToggle, others }: { term: TermView; studying: boolean; panelId: string; onToggle: () => void; others: ReadonlySet<string> }) {
+function TermSection({ term, studying, panelId, onToggle, others }: { term: TermView; studying: boolean; panelId: string; onToggle: () => void; others: ReadonlyMap<string, string> }) {
   const { section, title, courses, open } = term;
   const facts = termFacts(section);
   const line = [`${facts.courses} môn`, facts.credits > 0 ? credits(facts.credits) : "", facts.average ? `Điểm TB học kỳ ${facts.average}` : ""].filter(Boolean).join(" · ");
@@ -159,19 +159,22 @@ function TermSection({ term, studying, panelId, onToggle, others }: { term: Term
       {flags.length > 0 && <>{" "}<span className="tt-term-flags">{flags.map(([, meaning, text], i) => <Fragment key={meaning}>{i > 0 && " "}<span className={`tt-flag ${meaningClass(meaning)}`}>{text}</span></Fragment>)}</span></>}
     </button></h3>
     <div className="tt-term-panel" id={panelId} hidden={!open}>
-      <div className="sr-table-scroll" tabIndex={0} role="region" aria-label={`Bảng điểm ${title}`}><table><caption className="sr-only">{`Bảng điểm ${title}`}</caption><thead><tr><th scope="col">STT</th><th scope="col">Mã môn học</th><th scope="col">Tên môn học</th><th scope="col">Tín chỉ</th><th scope="col">Hệ 10</th><th scope="col">Hệ 4</th><th scope="col">Điểm chữ</th><th scope="col">Kết quả</th></tr></thead><tbody>{courses.map((course, index) => <tr key={`${course.sourcePage}-${course.ordinal}-${index}`} className={course.review?.length ? "sr-row-review" : undefined}><td>{course.ordinal}</td><td>{course.code || "—"}</td><td>{course.name}{isConvertible(others, course.code) && <small className="sr-other-specialty">{CONVERTIBLE_ROW_NOTE}</small>}{course.review?.length ? <small className="sr-review-reasons">Cần kiểm tra: {reviewLabels(course.review).join(", ")}</small> : null}</td><td>{course.printed?.credits !== undefined ? course.printed.credits || "—" : decimalText(course.credits)}</td><td>{course.score10 !== null ? decimalText(course.score10) : course.printed?.score10 ?? (isNoScoreMark(course) ? course.letter : "—")}</td><td>{course.score4 === null ? course.printed?.score4 ?? (isNoScoreMark(course) ? course.letter : "—") : decimalText(course.score4, 2)}</td><td><span className={isFailLetter(course.letter) ? "sr-grade-fail" : "sr-grade"}>{course.letter ?? "—"}</span></td><ResultCell course={course} /></tr>)}</tbody></table></div>
+      <div className="sr-table-scroll" tabIndex={0} role="region" aria-label={`Bảng điểm ${title}`}><table><caption className="sr-only">{`Bảng điểm ${title}`}</caption><thead><tr><th scope="col">STT</th><th scope="col">Mã môn học</th><th scope="col">Tên môn học</th><th scope="col">Tín chỉ</th><th scope="col">Hệ 10</th><th scope="col">Hệ 4</th><th scope="col">Điểm chữ</th><th scope="col">Kết quả</th></tr></thead><tbody>{courses.map((course, index) => <tr key={`${course.sourcePage}-${course.ordinal}-${index}`} className={course.review?.length ? "sr-row-review" : undefined}><td>{course.ordinal}</td><td>{course.code || "—"}</td><td>{course.name}{others.has(course.code.trim().toUpperCase()) && <small className="sr-other-specialty">{others.get(course.code.trim().toUpperCase())}</small>}{course.review?.length ? <small className="sr-review-reasons">Cần kiểm tra: {reviewLabels(course.review).join(", ")}</small> : null}</td><td>{course.printed?.credits !== undefined ? course.printed.credits || "—" : decimalText(course.credits)}</td><td>{course.score10 !== null ? decimalText(course.score10) : course.printed?.score10 ?? (isNoScoreMark(course) ? course.letter : "—")}</td><td>{course.score4 === null ? course.printed?.score4 ?? (isNoScoreMark(course) ? course.letter : "—") : decimalText(course.score4, 2)}</td><td><span className={isFailLetter(course.letter) ? "sr-grade-fail" : "sr-grade"}>{course.letter ?? "—"}</span></td><ResultCell course={course} /></tr>)}</tbody></table></div>
       {section.summaries.length > 0 && <dl className="sr-summaries">{section.summaries.map((summary, i) => <div key={i}><dt>{summary.label}</dt><dd>{summary.value === null ? "—" : printedFigure(summary.value)}</dd></div>)}</dl>}
     </div>
   </section>;
 }
 
 /**
- * Remount it (`key`) to clear the filters and fold the terms as at first, e.g. after a new import. convertible: the passed
- * mandatory courses of another specialty, marked and counted nowhere (the student's own page; user 2026-11-08).
+ * Remount it (`key`) to clear the filters and fold the terms as at first, e.g. after a new import. Courses of another
+ * specialty (the student's own page): otherSpecialty, counted in the specialty electives group (2026-11-14), and
+ * convertible, the passed mandatory ones still counted nowhere (2026-11-08); their rows are marked.
  */
-export default function TranscriptTables({ data, convertible = null }: { data: TranscriptData; convertible?: ConvertibleCourses | null }) {
-  const others = convertibleCodes(convertible);
-  const convertibleNote = convertibleText(convertible);
+export default function TranscriptTables({ data, convertible = null, otherSpecialty = null }: {
+  data: TranscriptData; convertible?: ConvertibleCourses | null; otherSpecialty?: CountedOtherSpecialty | null;
+}) {
+  const others = otherSpecialtyNotes(convertible, otherSpecialty);
+  const convertibleNote = [countedText(otherSpecialty), convertibleText(convertible)].filter(Boolean).join(" ") || null;
   const [filter, setFilter] = useState("all");
   const [search, setSearch] = useState("");
   const [folds, dispatch] = useReducer(foldTerms, data, initialTermFolds);

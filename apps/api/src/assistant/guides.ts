@@ -167,6 +167,7 @@ export function portalGuides(): PortalGuide[] {
       "- Tiêu chuẩn gồm số tín chỉ tích lũy tối thiểu, điểm trung bình tích lũy tối thiểu và các nhóm môn. Nhóm bắt buộc cần đạt toàn bộ các môn được liệt kê; mỗi nhóm tự chọn cần đủ số tín chỉ yêu cầu, không cần học tất cả các môn trong nhóm.",
       "- Môn có dấu (*) là môn điều kiện: vẫn phải đạt nếu nằm trong nhóm bắt buộc nhưng không tính vào tín chỉ tích lũy và điểm trung bình (ví dụ các môn Giáo dục quốc phòng). Ở nhóm tự chọn, môn (*) vẫn giúp hoàn thành yêu cầu của nhóm.",
       "- Dòng Đã đạt và Yêu cầu ở đầu mỗi nhóm cho biết bạn còn thiếu bao nhiêu.",
+      "- Môn bắt buộc hoặc tự chọn của chuyên ngành khác mà bạn đã đạt được tính vào nhóm tự chọn chuyên ngành của bạn, có ghi rõ trong nhóm đó.",
       "- Lời khuyên từ EduPath AI được tạo tự động sau khi có bảng điểm và gợi ý cách hoàn thành các điều kiện còn thiếu; kết luận và danh sách Đề xuất điều cần làm do hệ thống tính.",
       "Thông báo trên trang chỉ để bạn tự đối chiếu; kết quả xét tốt nghiệp chính thức do nhà trường công bố. Hãy liên hệ cố vấn học tập để xác nhận trường hợp cụ thể.",
     ]],

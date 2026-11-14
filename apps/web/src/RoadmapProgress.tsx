@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { programName } from "./display-format";
 import {
-  auditGroups, auditNote, courseList, creditProgress, filledByText, formatNumber, groupCountText, neededTone, planChoiceText, proposalSummaryText, termLabel, unmatchedNote,
+  auditGroups, auditNote, courseList, creditProgress, filledByText, formatNumber, groupCountText, neededTone, otherSpecialtyRowNote, planChoiceText, proposalSummaryText, termLabel, unmatchedNote,
   type AuditMark, type AuditView, type NeededTone, type PlanOrigin, type PlanProposal, type StudyPlanContext, type StudyPlanData, type StudyPlanProjection,
 } from "./study-plan-data";
 
@@ -116,7 +116,7 @@ export function RoadmapTrack({ context, plan, projection, origin = null, proposa
           return <li key={row.course.code} className={`rm-req-row rm-row-${row.mark}${tone ? ` rm-needed-${tone}` : ""}`}>
             <Mark kind={row.mark} tone={tone} />
             <span className="rm-row-code">{row.course.code}</span>
-            <span className="rm-row-name">{row.course.name}{row.course.attempts > 1 && <> <Mark kind="retake" /></>}{row.course.equivalent && <> <Mark kind="equivalent" /><small> qua {row.course.equivalent}</small></>}{taken && <small className="rm-row-taken">{taken}</small>}</span>
+            <span className="rm-row-name">{row.course.name}{row.course.attempts > 1 && <> <Mark kind="retake" /></>}{row.course.equivalent && <> <Mark kind="equivalent" /><small> qua {row.course.equivalent}</small></>}{taken && <small className="rm-row-taken">{taken}</small>}{!row.course.applicable && row.course.specialtyName && <small className="rm-row-taken">{otherSpecialtyRowNote(row.course.specialtyName)}</small>}</span>
             <span className="rm-row-credits">{formatNumber(row.course.credits)} TC</span>
             <span className="rm-row-note">{auditNote(row, context.currentTerm)}</span>
           </li>;

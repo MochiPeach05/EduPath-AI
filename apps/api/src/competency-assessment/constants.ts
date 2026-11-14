@@ -113,11 +113,18 @@ import type { Confidence, FitCode, GapStatus } from "./types.js";
  * setting). While the student holds both ways neither is left out; a course the student placed or started never is.
  * Stored results change only with "Đánh giá lại"; Đánh giá năng lực says so when the plan holds a course the stored result
  * leaves out (router.ts thesisPlanOutdated). Tổng quan computes the engine live and always reads v23.
+ * v24 (user 2026-11-14, after the GVHD confirmed it: "môn chuyên ngành của ngành khác chuyển qua tự chọn của ngành này và môn
+ * tự chọn của ngành khác cũng được tính vào tự chọn của ngành này"): a passed course of another specialty of the student's
+ * CTĐT that the standard does not list counts toward the standard's specialty electives group (graduation.ts
+ * crossSpecialtyCourses), on Xét tốt nghiệp, Theo dõi tiến độ, the plan projection and here. Only students with such a
+ * course see a change.
  */
-export const CALC_VERSION = "comp-calc-v23";
+export const CALC_VERSION = "comp-calc-v24";
 /**
  * The graduation evaluation uses no skill level, so it keeps the version of its last change:
- * comp-calc-v10 changed only levels and must not re-date every student's graduation advice.
+ * comp-calc-v10 changed only levels and must not re-date every student's graduation advice. Neither does v24: it changes
+ * the groups of the few students with another specialty's course, and their advice is written again anyway, since its
+ * fingerprint holds each group's bounds (student-graduation.ts graduationFingerprintFacts).
  */
 export const GRADUATION_CALC_VERSION = "comp-calc-v9";
 

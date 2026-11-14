@@ -693,7 +693,7 @@ describe("thesis replacement courses are never suggested off that path (comp-cal
     const thesis = planned(gpa("2,79"), ["71ITGR40206"]);
     expect(thesis.excludedThesisReplacements).toEqual(["71ITGR40203", "71ITIS30403"]);
     expect(presenting(thesis)).toEqual(["71ITGR40206", "71ITIN40304"]);
-    expect(thesis.meta.calcVersion).toBe("comp-calc-v23");
+    expect(thesis.meta.calcVersion).toBe("comp-calc-v24");
     // From 2,80 the thesis is recommended; a replacement course placed by the student wins.
     const replacement = planned(gpa("2,85"), ["71ITGR40203"]);
     expect(replacement.excludedThesisReplacements).toEqual(["71ITGR40206"]);
@@ -1080,7 +1080,7 @@ describe("the real codes of the graduation standard (comp-calc-v22, user 2026-11
     expect(byName(real, "Phát triển web")).toMatchObject({ status: "scored" });
     // Graduation reads the CTĐT as filed both ways: the same groups, credits and GPA.
     expect(real.graduation).toEqual(filed.graduation);
-    expect(real.meta.calcVersion).toBe("comp-calc-v23");
+    expect(real.meta.calcVersion).toBe("comp-calc-v24");
   });
 });
 

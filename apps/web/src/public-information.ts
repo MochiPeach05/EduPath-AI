@@ -82,7 +82,8 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
     question: "Môn có dấu (*) và nhóm tự chọn được xét như thế nào?",
     answer: [
       "Trong Nhóm bắt buộc, bạn cần đạt toàn bộ các môn được liệt kê. Những môn có dấu (*) vẫn phải đạt nếu nằm trong nhóm bắt buộc, nhưng không được tính vào tín chỉ tích lũy và điểm trung bình. Ví dụ, các môn GDQP có dấu (*) vẫn là những môn cần hoàn thành.",
-      "Nhóm tự chọn được xét theo số tín chỉ yêu cầu của từng nhóm. Ví dụ, nếu TC002 yêu cầu 2 tín chỉ và mỗi lựa chọn là một môn 2 tín chỉ, bạn chỉ cần đạt một môn trong nhóm. Không cần học tất cả các môn trong danh sách. Môn có dấu (*) ở nhóm tự chọn vẫn giúp hoàn thành yêu cầu của nhóm, nhưng không cộng vào tín chỉ tích lũy chung."
+      "Nhóm tự chọn được xét theo số tín chỉ yêu cầu của từng nhóm. Ví dụ, nếu TC002 yêu cầu 2 tín chỉ và mỗi lựa chọn là một môn 2 tín chỉ, bạn chỉ cần đạt một môn trong nhóm. Không cần học tất cả các môn trong danh sách. Môn có dấu (*) ở nhóm tự chọn vẫn giúp hoàn thành yêu cầu của nhóm, nhưng không cộng vào tín chỉ tích lũy chung.",
+      "Môn bắt buộc hoặc môn tự chọn của chuyên ngành khác mà bạn đã đạt (ví dụ học trước khi chọn chuyên ngành) được tính vào nhóm tự chọn chuyên ngành của bạn. Trang Xét tốt nghiệp và phần Theo dõi tiến độ ghi rõ môn đó trong nhóm."
     ],
     note: "Hãy đọc dòng Đã đạt và Yêu cầu ở đầu mỗi nhóm để biết mình còn thiếu bao nhiêu tín chỉ. Mỗi nhóm có thể yêu cầu số tín chỉ khác nhau, tùy tiêu chuẩn của khóa và chuyên ngành của bạn."
   },

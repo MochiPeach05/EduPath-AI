@@ -17,7 +17,7 @@ import {
 import type {
   AdviceOutput, GradStatus, GraduationAdviceResponse, GraduationEvaluation, StoredAdvice, StudentGraduationResponse,
 } from "./student-graduation-types";
-import { convertibleText } from "./convertible-courses";
+import { convertibleText, countedText } from "./convertible-courses";
 import StudentTranscript from "./StudentTranscript";
 import { SpecialtyForm, type SpecialtyProfile } from "./SpecialtyChoice";
 import "./student-curriculum.css";
@@ -289,8 +289,9 @@ function EvaluationResult({ evaluation, advice, convertible, thesisPlan }: { eva
 
 function ResultSection({ data, advice }: { data: StudentGraduationResponse; advice: AdviceState }) {
   const evaluation = data.evaluation;
-  // Another specialty's mandatory courses: counted nowhere, the school can convert them (user 2026-11-08).
-  const convertible = convertibleText(data.convertible);
+  // Another specialty's courses: counted in the specialty electives group (2026-11-14), or, without such a group, counted
+  // nowhere and the school can convert them (user 2026-11-08).
+  const convertible = [countedText(data.otherSpecialty), convertibleText(data.convertible)].filter(Boolean).join(" ") || null;
   return <section className="sw-panel sg-section sg-result" aria-labelledby="sg-result-title">
     <div>
       <h2 id="sg-result-title" className="sg-title">Kết quả xét tốt nghiệp tính đến thời điểm hiện tại</h2>
@@ -388,7 +389,7 @@ function CourseRow({ course, options }: { course: CourseView; options: TableOpti
   const state = row ? COURSE_STATES[row.state] : null;
   return <tr>
     <td className="sg-code-cell">{course.code}</td>
-    <td className="sg-name-cell">{course.name}{course.conditionOnly && <small>Môn điều kiện (*): cần đạt nhưng không tính vào tín chỉ tích lũy và điểm trung bình</small>}{row?.transferFrom && <small>Đã học trả nợ với khóa sau (mã {row.transferFrom}); cần làm thủ tục chuyển điểm</small>}{row?.inPlaceOf && <small>{IN_PLACE_OF_NOTE}</small>}</td>
+    <td className="sg-name-cell">{course.name}{course.conditionOnly && <small>Môn điều kiện (*): cần đạt nhưng không tính vào tín chỉ tích lũy và điểm trung bình</small>}{row?.transferFrom && <small>Đã học trả nợ với khóa sau (mã {row.transferFrom}); cần làm thủ tục chuyển điểm</small>}{row?.inPlaceOf && <small>{IN_PLACE_OF_NOTE}</small>}{row?.fromSpecialty && <small>Môn chuyên ngành {row.fromSpecialty}: được tính vào nhóm tự chọn chuyên ngành của bạn</small>}</td>
     {options.showGroup && <td className="sg-group-cell">{course.groupTitle}</td>}
     <td className="sg-num" data-label="TC">{formatNumber(course.credits)}</td>
     {options.hasResults && <>

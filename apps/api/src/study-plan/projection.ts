@@ -44,9 +44,11 @@ export function projectGraduation(facts: StudyPlanFacts, plan: StudyPlanData): S
   const { standard, transcript, curriculumCourses } = facts;
   if (!standard || !transcript) return null;
   const names = new Map(facts.context.courses.map((course) => [course.code, { name: course.name, credits: course.credits, conditional: course.conditional }]));
-  const now = assessGraduationStandard(standard.data, graduationInputs(standard.data, curriculumCourses, transcript));
+  // Another specialty's passed courses count as specialty electives, now and with the plan (crossSpecialtyCourses).
+  const student = { specialty: facts.context.specialty, cohortCode: facts.context.cohortCode };
+  const now = assessGraduationStandard(standard.data, graduationInputs(standard.data, curriculumCourses, transcript, student));
   const running = facts.context.courses.filter((course) => course.state === "in_progress").map((course) => course.code);
-  const later = assessGraduationStandard(standard.data, graduationInputs(standard.data, curriculumCourses, plannedTranscript(transcript, plan, names, running)));
+  const later = assessGraduationStandard(standard.data, graduationInputs(standard.data, curriculumCourses, plannedTranscript(transcript, plan, names, running), student));
   const before = new Map(now.groups.map((group) => [group.groupId, group]));
   return {
     standardName: standard.data.name,

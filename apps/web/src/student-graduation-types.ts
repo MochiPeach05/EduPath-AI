@@ -33,6 +33,11 @@ export interface GraduationCourseRow {
   term: string | null;
   /** Passed only under this other code with the same name (a retake with a later cohort): needs a credit transfer. */
   transferFrom?: string;
+  /**
+   * A passed course of this other specialty ("Trí tuệ nhân tạo") that the specialty electives group counts (API
+   * crossSpecialtyCourses, 2026-11-14); listed after the group's own courses. Absent otherwise.
+   */
+  fromSpecialty?: string;
 }
 
 export interface GraduationGroupEvaluation {
@@ -161,8 +166,13 @@ export type StudentGraduationResponse = {
   evaluation: GraduationEvaluation | null;
   /** Only for "specialty_unset": the one specialty whose mandatory courses the student passed. */
   specialtySuggestion: StudentGraduationSpecialtySuggestion | null;
-  /** Passed mandatory courses of another specialty, counted nowhere (API graduation/convertible.ts); absent on older APIs. */
+  /**
+   * Passed mandatory courses of another specialty still counted nowhere, the standard having no specialty electives group
+   * to take them (API graduation/convertible.ts); absent on older APIs.
+   */
   convertible?: import("./convertible-courses").ConvertibleCourses | null;
+  /** Passed courses of another specialty the specialty electives group counts, and that group (2026-11-14); absent on older APIs. */
+  otherSpecialty?: import("./convertible-courses").CountedOtherSpecialty | null;
   /**
    * The thesis group's courses the student placed in Kế hoạch học kỳ themselves (API StudentGraduation.thesisPlan): the way
    * they chose, which the suggestion follows over the recommended one (user 2026-11-10); absent on older APIs.

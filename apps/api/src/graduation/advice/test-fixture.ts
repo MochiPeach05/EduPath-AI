@@ -81,7 +81,7 @@ export function syntheticGraduation(options: SyntheticGraduationOptions = {}): E
   return {
     profile, resolution: "specialty", standard, transcript: { version: transcript.version, updatedAt: transcript.updatedAt },
     evaluation, fingerprint: graduationFingerprint({ profile, standard, evaluation, thesisPlan }), specialtySuggestion: null, convertible: null,
-    thesisPlan,
+    otherSpecialty: null, thesisPlan,
   };
 }
 
