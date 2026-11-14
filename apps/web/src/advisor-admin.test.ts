@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  AdvisorRequestError, advisorErrorText, advisorRequest, advisorTime, classPreview, cohortOfClass, importResultText, importSummaryText, importableCount,
-  isStudentStatus, matchesSearch, openStudentPage, splitClasses,
+  AdvisorRequestError, advisorErrorText, advisorRequest, advisorTime, classPreview, cohortOfClass, forgetChosenFile, importNothingText, importResultText,
+  importSummaryText, importableCount, isStudentStatus, matchesSearch, openStudentPage, readWorkbook, splitClasses, uploadWorkbook,
 } from "./advisor-admin";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -36,6 +36,40 @@ describe("advisor admin helpers", () => {
     expect(importableCount({ summary: { add: 3, update: 2, unchanged: 4, error: 1, classes: 9, moved: 0 } })).toBe(5);
     expect(importResultText({ added: 3, updated: 0, unchanged: 1, skipped: 2 })).toBe("Đã import danh sách cố vấn học tập: 3 thêm mới, 1 không đổi; bỏ qua 2 cố vấn có lỗi.");
     expect(importResultText({ added: 0, updated: 0, unchanged: 0, skipped: 0 })).toBe("Đã import danh sách cố vấn học tập.");
+  });
+
+  // User 2026-11-14: "Phải cho phép import lại file Excel sau khi dữ liệu thay đổi. Không chỉ import một lần."
+  it("reads a chosen tệp once: the preview and the import send the same bytes, even when the tệp is saved again in between", async () => {
+    const fetch = vi.fn(async () => new Response("{}", { status: 200 }));
+    vi.stubGlobal("fetch", fetch);
+    vi.stubGlobal("window", { dispatchEvent: vi.fn() });
+    const first = new Uint8Array([80, 75, 3, 4, 1]).buffer;
+    // The tệp on disk changes after it was chosen: a second read would give other bytes.
+    const arrayBuffer = vi.fn().mockResolvedValueOnce(first).mockResolvedValue(new Uint8Array([80, 75, 3, 4, 2]).buffer);
+    const workbook = await readWorkbook({ name: "CVHT 2026–2027.xlsx", arrayBuffer });
+    await uploadWorkbook("/api/admin/advisors/import/preview", workbook);
+    await uploadWorkbook("/api/admin/advisors/import", workbook);
+    expect(arrayBuffer).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls.map((call) => (call as unknown[])[0])).toEqual(["/api/admin/advisors/import/preview", "/api/admin/advisors/import"]);
+    for (const call of fetch.mock.calls) {
+      expect((call as unknown[])[1]).toMatchObject({ method: "POST", body: first, headers: {
+        "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "x-filename": encodeURIComponent("CVHT 2026–2027.xlsx") } });
+    }
+    await expect(readWorkbook({ name: "x.xlsx", arrayBuffer: vi.fn().mockRejectedValue(new DOMException("changed", "NotReadableError")) }))
+      .rejects.toThrow("Không đọc được tệp này. Vui lòng chọn lại tệp.");
+  });
+
+  it("lets the same path be chosen again: the file input forgets its tệp when clicked", () => {
+    const input = { value: "C:\\fakepath\\CVHT 2026–2027.xlsx" };
+    forgetChosenFile({ currentTarget: input });
+    expect(input.value).toBe("");
+  });
+
+  it("says why a preview of the same tệp has nothing to import", () => {
+    expect(importNothingText({ add: 0, update: 0, unchanged: 9, error: 0, classes: 11, moved: 0 })).toBe("Mọi dòng trong tệp đều giống danh sách hiện tại, không có gì cần cập nhật.");
+    expect(importNothingText({ add: 0, update: 0, unchanged: 3, error: 1, classes: 4, moved: 0 })).toBe("Các dòng không có lỗi đều giống danh sách hiện tại, không có gì cần cập nhật.");
+    expect(importNothingText({ add: 0, update: 5, unchanged: 3, error: 0, classes: 10, moved: 1 })).toBeNull();
+    expect(importNothingText({ add: 0, update: 0, unchanged: 0, error: 2, classes: 0, moved: 0 })).toBeNull();
   });
 
   it("searches without accents and knows the status filter values", () => {

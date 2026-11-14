@@ -30,9 +30,10 @@ const classGrid = [...titles(9), BY_CLASS,
   ["3", ...an, "71K27CNTT03", "K27", "58", "60", ""],
   ["4", ...an, "71K28CNTT05", "K28", "2", "60", "Lớp ghép"],
   ["5", ...binh, "71K29CNTT01", "K29", "45", "45", ""]];
+// The Khoa's layouts have no Đơn vị column: unread says so, and an import keeps the stored unit (planImport).
 const anItem = { name: "Nguyễn Văn An", email: "an.nv@vlu.edu.vn", staffCode: "1000000001", unit: null,
-  classes: ["71K27CNTT01", "71K27CNTT02", "71K27CNTT03", "71K28CNTT05"], problems: [] };
-const binhItem = { name: "Trần Thị Bình", email: "binh.tt@vlu.edu.vn", staffCode: "0000012345", unit: null, classes: ["71K29CNTT01"], problems: [] };
+  classes: ["71K27CNTT01", "71K27CNTT02", "71K27CNTT03", "71K28CNTT05"], problems: [], unread: ["unit"] };
+const binhItem = { name: "Trần Thị Bình", email: "binh.tt@vlu.edu.vn", staffCode: "0000012345", unit: null, classes: ["71K29CNTT01"], problems: [], unread: ["unit"] };
 
 describe("advisor workbook headers and classes", () => {
   it.each([
@@ -149,7 +150,7 @@ describe("the Khoa's workbook layouts", () => {
     expect(sheet.items).toEqual([{ rows: [6, 7, 8, 9], ...anItem }, { rows: [10], ...binhItem }]);
     const extra = readAdvisorSheets([{ name: "Theo lớp", grid: classGrid }, { name: "Bổ sung", grid: [...titles(7), PDT, ["1", ...cuong, "71K30CNTT02", "40", ""]] }]);
     expect(extra.items[2]).toEqual({ rows: [6], sheet: "Bổ sung", name: "Lê Văn Cường", email: "cuong.lv@vlu.edu.vn", staffCode: "1000000003", unit: null,
-      classes: ["71K30CNTT02"], problems: [] });
+      classes: ["71K30CNTT02"], problems: [], unread: ["unit"] });
   });
 
   it("merges sheets that disagree, says how, and refuses a class each sheet gives to someone else", () => {
@@ -297,6 +298,95 @@ describe("planImport", () => {
   });
 });
 
+// User 2026-11-14: "Phải cho phép import lại file Excel sau khi dữ liệu thay đổi. Không chỉ import một lần. Dòng không thay đổi
+// giữ nguyên, dòng có nội dung thay đổi phải được cập nhật tương ứng." Names and emails are made up.
+describe("importing a tệp again", () => {
+  const OLD_LAYOUT = ["STT", "Họ và tên", "Email", "Mã giảng viên", "Đơn vị", "Lớp phụ trách"];
+  const first = [OLD_LAYOUT,
+    ["1", "Nguyễn Văn An", "an.nv@vlu.edu.vn", "GV01", "Bộ môn KTPM", "71K29CNTT01, 71K29CNTT02"],
+    ["2", "Trần Thị Bình", "binh.tt@vlu.edu.vn", "GV02", "Bộ môn HTTT", "71K29CNTT03"],
+    ["3", "Lê Văn Cường", "cuong.lv@vlu.edu.vn", "GV03", "Bộ môn MMT", "71K29CNTT04, 71K29CNTT05"],
+    ["4", "Phạm Thị Dung", "dung.pt@vlu.edu.vn", "GV04", "Bộ môn KHMT", "71K29CNTT06"],
+    ["5", "Võ Văn Em", "em.vv@vlu.edu.vn", "GV05", "Bộ môn KTPM", "71K29CNTT07"]];
+  /** The list once a sheet was imported: each advisor's account (u1, u2…), details and classes; overrides change a stored advisor. */
+  const stored = (read: AdvisorSheet, overrides: Record<string, Partial<{ name: string; staffCode: string | null; unit: string | null; classes: string[] }>> = {}) => {
+    const id = (email: string) => `u${read.items.findIndex((item) => item.email === email) + 1}`;
+    const advisors = new Map(read.items.map((item) => [id(item.email),
+      { name: item.name, staffCode: item.staffCode, unit: item.unit, classes: [...item.classes].sort(), ...overrides[item.email] }]));
+    return lookups({
+      accounts: new Map(read.items.map((item) => [item.email, [{ id: id(item.email), role: "advisor", isActive: true }]])),
+      advisors,
+      classOwners: new Map([...advisors].flatMap(([userId, advisor]) => advisor.classes.map((name) => [name, { userId, name: advisor.name }] as const))),
+      classesWithStudents: new Set(read.items.flatMap((item) => item.classes)),
+    });
+  };
+  const statuses = (items: readonly { email: string; status: string }[]) => items.map((item) => [item.email.split(".")[0], item.status]);
+
+  it("finds every advisor of the same tệp unchanged: nothing to apply", () => {
+    const again = planImport("cvht.xlsx", readAdvisorGrid(first), stored(readAdvisorGrid(first)));
+    expect(statuses(again.preview.items)).toEqual([["an", "unchanged"], ["binh", "unchanged"], ["cuong", "unchanged"], ["dung", "unchanged"], ["em", "unchanged"]]);
+    expect(again.preview.items.every((item) => item.changes.length === 0)).toBe(true);
+    expect(again.preview.summary).toEqual({ add: 0, update: 0, unchanged: 5, error: 0, classes: 7, moved: 0 });
+    expect(again.plan.filter((item) => item.status === "add" || item.status === "update")).toEqual([]);
+  });
+
+  it("updates only the rows that changed, each with what changed: name, MGV, Đơn vị, a class added, removed or moved", () => {
+    const edited = [OLD_LAYOUT,
+      ["1", "Nguyễn Văn Anh", "an.nv@vlu.edu.vn", "GV01", "Bộ môn KTPM", "71K29CNTT01"],
+      ["2", "Trần Thị Bình", "binh.tt@vlu.edu.vn", "GV20", "Bộ môn HTTT", "71K29CNTT03, 71K29CNTT08"],
+      ["3", "Lê Văn Cường", "cuong.lv@vlu.edu.vn", "GV03", "Bộ môn ATTT", "71K29CNTT04"],
+      ["4", "Phạm Thị Dung", "dung.pt@vlu.edu.vn", "GV04", "Bộ môn KHMT", "71K29CNTT06"],
+      ["5", "Võ Văn Em", "em.vv@vlu.edu.vn", "GV05", "Bộ môn KTPM", "71K29CNTT07, 71K29CNTT02"]];
+    const { preview, plan } = planImport("cvht.xlsx", readAdvisorGrid(edited), stored(readAdvisorGrid(first)));
+    expect(preview.items.map((item) => [item.email.split(".")[0], item.status, item.changes])).toEqual([
+      ["an", "update", ["Đổi họ và tên: Nguyễn Văn An → Nguyễn Văn Anh", "Bỏ lớp 71K29CNTT02"]],
+      ["binh", "update", ["Đổi mã giảng viên: GV02 → GV20", "Thêm lớp 71K29CNTT08"]],
+      ["cuong", "update", ["Đổi đơn vị: Bộ môn MMT → Bộ môn ATTT", "Bỏ lớp 71K29CNTT05"]],
+      ["dung", "unchanged", []],
+      ["em", "update", ["Thêm lớp 71K29CNTT02", "Lớp 71K29CNTT02 chuyển từ Nguyễn Văn An"]],
+    ]);
+    expect(preview.summary).toMatchObject({ add: 0, update: 4, unchanged: 1, error: 0, moved: 1 });
+    // What apply writes for an update: the row as the tệp has it, on the advisor's own account.
+    expect(plan[2]).toMatchObject({ userId: "u3", name: "Lê Văn Cường", staffCode: "GV03", unit: "Bộ môn ATTT", classes: ["71K29CNTT04"] });
+  });
+
+  it("keeps a stored value the tệp has no column for: the Khoa's own file (no Đơn vị) imported again is unchanged", () => {
+    const read = readAdvisorGrid(pdtGrid);
+    expect(read.items.map((item) => item.unread)).toEqual([["unit"], ["unit"]]);
+    // An's unit was typed in the form after the first import.
+    const known = stored(read, { "an.nv@vlu.edu.vn": { unit: "Bộ môn CNPM" } });
+    const again = planImport("CVHT _Phan cong 2026_2027.xlsx", read, known);
+    expect(again.preview.items.map((item) => [item.status, item.unit])).toEqual([["unchanged", "Bộ môn CNPM"], ["unchanged", null]]);
+    expect(again.preview.items[0]).not.toHaveProperty("unread");
+    // A row that does change keeps the unit too: apply writes it back as it is.
+    const changed = readAdvisorGrid([...titles(7), PDT, ["1", "1000000009", "Nguyễn Văn An", "an.nv@vlu.edu.vn", "71K27CNTT01, 02, 03\n71K28CNTT05", "180", ""]]);
+    const update = planImport("f.xlsx", changed, known);
+    expect(update.preview.items[0]).toMatchObject({ status: "update", changes: ["Đổi mã giảng viên: 1000000001 → 1000000009"], unit: "Bộ môn CNPM" });
+    expect(update.plan[0]).toMatchObject({ unit: "Bộ môn CNPM", staffCode: "1000000009" });
+    // A Đơn vị column with an empty cell does say "trống".
+    const cleared = readAdvisorGrid([OLD_LAYOUT, ["1", "Nguyễn Văn An", "an.nv@vlu.edu.vn", "1000000001", "", "71K27CNTT01, 71K27CNTT02, 71K27CNTT03, 71K28CNTT05"]]);
+    expect(planImport("f.xlsx", cleared, known).preview.items[0]).toMatchObject({ status: "update", changes: ["Đổi đơn vị: Bộ môn CNPM → trống"] });
+  });
+
+  it("reads a column of any sheet of the advisor's rows: one sheet with Đơn vị is enough", () => {
+    const units = [["Họ và tên", "Email", "Đơn vị", "Lớp"], ["Nguyễn Văn An", "an.nv@vlu.edu.vn", "Bộ môn KTPM", "71K27CNTT01"]];
+    const read = readAdvisorSheets([{ name: "GUI PDT", grid: pdtGrid }, { name: "Đơn vị", grid: units }]);
+    expect(read.items.map((item) => [item.email, item.unit, item.unread])).toEqual([
+      ["an.nv@vlu.edu.vn", "Bộ môn KTPM", undefined], ["binh.tt@vlu.edu.vn", null, ["unit"]],
+    ]);
+  });
+
+  it("takes a name typed with combining accents for the same name", () => {
+    const decomposed = [OLD_LAYOUT, ["1", "Nguyễn Văn An".normalize("NFD"), "an.nv@vlu.edu.vn", "GV01", "Bộ môn KTPM", "71K29CNTT01, 71K29CNTT02"]];
+    const read = readAdvisorGrid(decomposed);
+    expect(read.items[0]!.name).toBe("Nguyễn Văn An".normalize("NFC"));
+    expect(planImport("f.xlsx", read, stored(readAdvisorGrid(first))).preview.items[0]).toMatchObject({ status: "unchanged", changes: [] });
+    // A name stored in the decomposed form (an earlier import) is no change either.
+    const old = stored(readAdvisorGrid(first), { "an.nv@vlu.edu.vn": { name: "Nguyễn Văn An".normalize("NFD") } });
+    expect(planImport("f.xlsx", read, old).preview.items[0]).toMatchObject({ status: "unchanged" });
+  });
+});
+
 describe("advisor workbook file", () => {
   it("serves the Khoa's layout as the template and reads it back: one advisor, two classes", { timeout: 30_000 }, async () => {
     const { default: ExcelJS } = await import("exceljs");
@@ -312,7 +402,7 @@ describe("advisor workbook file", () => {
     expect(sheet.fileProblems).toEqual([]);
     expect(sheet.notes).toEqual([{ tone: "info", text: 'Đọc trang tính "CVHT 2026-2027".' }]);
     expect(sheet.items).toEqual([{ rows: [6], name: "Nguyễn Văn A", email: "nguyenvana@vlu.edu.vn", staffCode: "1234567890",
-      unit: null, classes: ["71K29CNTT01", "71K29CNTT02"], problems: [] }]);
+      unit: null, classes: ["71K29CNTT01", "71K29CNTT02"], problems: [], unread: ["unit"] }]);
     // A school year starts in August: in July the template still names the year that ends.
     const july = new ExcelJS.Workbook();
     await july.xlsx.load(await advisorTemplate("vlu.edu.vn", new Date(2027, 6, 31)) as never);

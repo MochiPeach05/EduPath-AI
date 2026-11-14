@@ -8,8 +8,8 @@ import {
   type AdvisorImportResult, type AdvisorInput, type AdvisorRow,
 } from "./advisor-types";
 import {
-  ACCOUNT_TEXT, IMPORT_STATUS_TEXT, advisorRequest, advisorTime, classPreview, importResultText, importSummaryText, importableCount, matchesSearch,
-  splitClasses,
+  ACCOUNT_TEXT, IMPORT_AGAIN_TEXT, IMPORT_STATUS_TEXT, advisorRequest, advisorTime, classPreview, forgetChosenFile, importNothingText, importResultText,
+  importSummaryText, importableCount, matchesSearch, readWorkbook, splitClasses, uploadWorkbook, type ChosenWorkbook,
 } from "./advisor-admin";
 import type { AppRole } from "./types";
 import "./curricula.css";
@@ -20,8 +20,6 @@ import "./advisors.css";
 // admin-portal account reads the list (QTV & CVHT); the admins and Ban chủ nhiệm khoa add, edit, delete and import
 // (canManage = canManageAdvisors). An advisor's account is created ahead of the first Microsoft sign-in (migration 058).
 // Contract: advisor-types.ts.
-
-const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 // The columns the list sorts by (table-sort.tsx); STT keeps the row's number in the list by name (from the server).
 const advisorSort: Record<string, SortRule<AdvisorRow>> = {
@@ -282,6 +280,7 @@ function ImportNotes({ item }: { item: AdvisorImportItem }) {
 export function ImportPreview({ preview }: { preview: SheetPreview }) {
   const { sort, sortHeader } = useTableSort();
   const notes = preview.notes ?? [];
+  const nothing = importNothingText(preview.summary);
   return <section className="av-preview" aria-label="Xem trước danh sách cố vấn học tập">
     <h3>{preview.fileName}</h3>
     <p className="av-summary">Đọc {preview.rows.toLocaleString("vi-VN")} dòng · {importSummaryText(preview.summary)}</p>
@@ -299,29 +298,35 @@ export function ImportPreview({ preview }: { preview: SheetPreview }) {
         <td><ImportNotes item={row} /></td>
       </tr>)}</tbody>
     </table></div>}
+    {nothing && <p className="cm-help av-nothing" role="status">{nothing}</p>}
     {preview.summary.error > 0 && <p className="cm-help">Các cố vấn có Lỗi sẽ được bỏ qua; sửa tệp rồi chọn lại để import cả những dòng đó.</p>}
     <p className="cm-help">Với cố vấn có tên trong tệp, lớp phụ trách theo đúng tệp; cố vấn không có trong tệp giữ nguyên.</p>
   </section>;
 }
 
-function AdvisorImport({ close, imported }: { close: () => void; imported: (result: AdvisorImportResult) => void }) {
-  const [file, setFile] = useState<File | null>(null);
+/**
+ * Import danh sách (AD-ADV-01, 03; exported for its test). A tệp can be imported again and again (user 2026-11-14): it is
+ * read once when chosen, so the preview and the import send the same bytes (readWorkbook); the input forgets its tệp when
+ * clicked, so the same path chosen again after an edit is previewed again; Modal ignores the cancel event of the chooser.
+ */
+export function AdvisorImport({ close, imported }: { close: () => void; imported: (result: AdvisorImportResult) => void }) {
+  const [file, setFile] = useState<ChosenWorkbook | null>(null);
   const [preview, setPreview] = useState<SheetPreview | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   // A file chosen while the previous one is still read wins: the late answer of the older file is dropped.
   const generation = useRef(0);
-  const upload = (url: string, chosen: File) => advisorRequest<AdvisorImportPreview | AdvisorImportResult>(url, {
-    method: "POST", headers: { "Content-Type": XLSX_MIME, "x-filename": encodeURIComponent(chosen.name) }, body: chosen,
-  });
   async function inspect(chosen: File | null) {
     const own = ++generation.current;
-    setFile(chosen); setPreview(null); setError("");
+    setFile(null); setPreview(null); setError("");
     if (!chosen) return;
     if (!/\.xlsx$/i.test(chosen.name) || chosen.size > 5 * 1024 * 1024) { setError("Chọn tệp .xlsx không quá 5 MB."); return; }
     setBusy(true);
     try {
-      const result = await upload(`${ADVISORS_API}/import/preview`, chosen) as SheetPreview;
+      const workbook = await readWorkbook(chosen);
+      if (own !== generation.current) return;
+      setFile(workbook);
+      const result = await uploadWorkbook<SheetPreview>(`${ADVISORS_API}/import/preview`, workbook);
       if (own === generation.current) setPreview(result);
     } catch (failure) { if (own === generation.current) setError((failure as Error).message); }
     finally { if (own === generation.current) setBusy(false); }
@@ -329,7 +334,7 @@ function AdvisorImport({ close, imported }: { close: () => void; imported: (resu
   async function apply() {
     if (!file || !preview) return;
     setBusy(true); setError("");
-    try { imported(await upload(`${ADVISORS_API}/import`, file) as AdvisorImportResult); }
+    try { imported(await uploadWorkbook<AdvisorImportResult>(`${ADVISORS_API}/import`, file)); }
     catch (failure) { setError((failure as Error).message); }
     finally { setBusy(false); }
   }
@@ -337,9 +342,10 @@ function AdvisorImport({ close, imported }: { close: () => void; imported: (resu
     <div className="cm-dialog-body av-import">
       <p>1. Chọn tệp Excel → 2. Xem trước và rà soát → 3. Xác nhận import</p>
       <label className="cm-upload">Danh sách cố vấn học tập (.xlsx · tối đa 5 MB)
-        <input type="file" accept=".xlsx" disabled={busy} onChange={(event) => void inspect(event.target.files?.[0] ?? null)} /></label>
+        <input type="file" accept=".xlsx" disabled={busy} onClick={forgetChosenFile} onChange={(event) => void inspect(event.target.files?.[0] ?? null)} /></label>
       <p className="cm-help">Dùng file phân công của Khoa: cột CVHT, EMAIL (@vlu.edu.vn hoặc @vanlanguni.vn), MÃ LỚP và MGV nếu có; mỗi dòng là một cố vấn hoặc một lớp, nhiều lớp trong một ô cách nhau bằng dấu phẩy. Trang tính ẩn không được đọc.{" "}
         <a className="av-template" href={`${ADVISORS_API}/import/template`} download><Icon name="download" /> Tải file mẫu</a></p>
+      <p className="cm-help">{IMPORT_AGAIN_TEXT}</p>
       {busy && <p role="status">{preview ? "Đang import danh sách…" : "Đang đọc tệp Excel…"}</p>}
       {error && <p className="admin-error" role="alert">{error}</p>}
       {preview && <ImportPreview preview={preview} />}

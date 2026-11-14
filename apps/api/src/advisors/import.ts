@@ -9,6 +9,10 @@
 // The file is authoritative for the advisors it lists; the others are untouched. Classes are stored as canonical codes
 // (class-code.ts, QA 2026-11-04): a class written short (CNTT08) takes the cohort of its row's KHÓA cell (71K29CNTT08);
 // one with no cohort at all is refused, as it would match no student.
+// A file is imported again as often as it changes (user 2026-11-14: "Phải cho phép import lại file Excel sau khi dữ liệu thay
+// đổi … Dòng không thay đổi giữ nguyên, dòng có nội dung thay đổi phải được cập nhật tương ứng"): an advisor whose row says
+// what the list holds is "unchanged" and never written, one whose row differs is updated with exactly those changes. A
+// column the file does not have (the Khoa's own file has no Đơn vị) says nothing about that field: it keeps what is stored.
 import { CurriculumError } from "../curricula/model.js";
 import { checkArchive } from "../curricula/parser.js";
 import { foldText } from "../admin/audit/record.js";
@@ -88,16 +92,21 @@ export function splitClasses(text: string, cohort: string | null = null): { clas
 }
 
 const cleanEmail = (text: string) => text.trim().replace(/^mailto:/i, "").replace(/^<|>$/g, "").trim().toLowerCase();
-const cleanLine = (text: string) => text.replace(/\s+/g, " ").trim();
+// NFC: a name typed with combining accents (some Vietnamese keyboards) is the same text as the precomposed one.
+const cleanLine = (text: string) => text.normalize("NFC").replace(/\s+/g, " ").trim();
 const unique = <T>(values: readonly T[]) => [...new Set(values)];
+/** The fields a file may leave out: without the column, an import keeps what is stored (planImport). */
+export type OptionalField = "staffCode" | "unit";
+const OPTIONAL_FIELDS: readonly OptionalField[] = ["staffCode", "unit"];
 
 /** A line of the preview about the workbook: the sheets read and how they compare; warn: worth a look before importing. */
 export type ImportNote = { text: string; tone: "info" | "warn" };
 /**
  * One advisor of the workbook before the database is asked (its problems are the file's own). rows are the Excel rows of
- * the first sheet read that lists the advisor; sheet names that sheet when several were read and it is not the first.
+ * the first sheet read that lists the advisor; sheet names that sheet when several were read and it is not the first;
+ * unread names the optional fields no sheet of the advisor's rows has a column for (left out when there are none).
  */
-export type SheetAdvisor = Omit<AdvisorImportItem, "status" | "changes" | "emptyClasses"> & { sheet?: string };
+export type SheetAdvisor = Omit<AdvisorImportItem, "status" | "changes" | "emptyClasses"> & { sheet?: string; unread?: OptionalField[] };
 /** sheets: the sheets read, the one the row numbers follow first; notes: what the preview says about them. */
 export type AdvisorSheet = { rows: number; items: SheetAdvisor[]; fileProblems: string[]; sheets?: string[]; notes?: ImportNote[] };
 /** A sheet as cell texts (grid[0] is Excel row 1). */
@@ -105,7 +114,8 @@ export type SheetGrid = { name: string; grid: readonly (readonly string[])[] };
 
 type Header = { row: number; columns: { field: Field; column: number }[] };
 type Line = { row: number; name: string; email: string; staffCode: string; unit: string; classes: string[]; invalid: string[] };
-type List = { name: string; lines: Line[]; classes: number };
+/** fields: the fields its header has a column for. */
+type List = { name: string; lines: Line[]; classes: number; fields: ReadonlySet<Field> };
 type Source = { sheet: number; row: number };
 type Variant = { text: string; sources: Source[] };
 
@@ -184,7 +194,7 @@ export function readAdvisorSheets(sheets: readonly SheetGrid[], fileProblems: st
     if (!header) continue;
     if (!header.columns.some((cell) => cell.field === "classes")) { partial.push(sheet.name); continue; }
     const lines = readLines(sheet.grid, header);
-    found.push({ name: sheet.name, lines, classes: new Set(lines.flatMap((line) => line.classes)).size });
+    found.push({ name: sheet.name, lines, classes: new Set(lines.flatMap((line) => line.classes)).size, fields: new Set(header.columns.map((cell) => cell.field)) });
   }
   if (!found.length) throw new AdvisorError("missing_columns", 400);
   const main = found.reduce((best, list) => (list.classes > best.classes ? list : best));
@@ -205,7 +215,7 @@ export function readAdvisorSheets(sheets: readonly SheetGrid[], fileProblems: st
 
   // The same email on several rows (of one sheet or several) is one advisor with every class of those rows.
   type Item = { sources: Source[]; name: string; email: string; staffCode: string | null; unit: string | null;
-    classes: Map<string, Source[]>; invalid: string[]; names: Map<string, Variant>; codes: Map<string, Variant> };
+    classes: Map<string, Source[]>; invalid: string[]; names: Map<string, Variant>; codes: Map<string, Variant>; read: Set<Field> };
   const variant = (known: Map<string, Variant>, key: string, text: string, source: Source) => {
     const seen = known.get(key);
     if (seen) seen.sources.push(source); else known.set(key, { text, sources: [source] });
@@ -216,11 +226,13 @@ export function readAdvisorSheets(sheets: readonly SheetGrid[], fileProblems: st
     const source = { sheet: line.sheet, row: line.row };
     let item = line.email ? byEmail.get(line.email) : undefined;
     if (!item) {
-      item = { sources: [], name: "", email: line.email, staffCode: null, unit: null, classes: new Map(), invalid: [], names: new Map(), codes: new Map() };
+      item = { sources: [], name: "", email: line.email, staffCode: null, unit: null, classes: new Map(), invalid: [], names: new Map(), codes: new Map(),
+        read: new Set() };
       items.push(item);
       if (line.email) byEmail.set(line.email, item);
     }
     item.sources.push(source);
+    for (const field of lists[line.sheet]!.fields) item.read.add(field);
     item.name ||= line.name;
     item.staffCode ||= line.staffCode || null;
     item.unit ||= line.unit || null;
@@ -253,10 +265,12 @@ export function readAdvisorSheets(sheets: readonly SheetGrid[], fileProblems: st
       if (all.length > 1) problems.push(`Lớp ${name} có ở nhiều cố vấn trong tệp (${where(all.flatMap((owner) => owner.classes.get(name)!))}).`);
     }
     const sheet = Math.min(...item.sources.map((source) => source.sheet));
+    const unread = OPTIONAL_FIELDS.filter((field) => !item.read.has(field));
     return {
       rows: unique(item.sources.filter((source) => source.sheet === sheet).map((source) => source.row)),
       name: item.name, email: item.email, staffCode: item.staffCode, unit: item.unit, classes: [...item.classes.keys()], problems,
       ...(sheet > 0 ? { sheet: lists[sheet]!.name } : {}),
+      ...(unread.length ? { unread } : {}),
     };
   });
 
@@ -417,19 +431,32 @@ export const STUDENT_ACCOUNT_PROBLEM = "Email này đang là tài khoản sinh v
 // Roles an import leaves as they are: the advisor keeps the rights of the role and advises the classes too.
 const KEPT_ROLES = new Set(["admin", "faculty_board", "department_head", "advisor"]);
 
-/** The preview of a workbook against the database (AD-ADV-03), and the plan applying it follows. */
+/** The same text, whatever Unicode form its accents are written in; null is empty. */
+const sameText = (a: string | null, b: string | null) => (a ?? "").normalize("NFC") === (b ?? "").normalize("NFC");
+
+/**
+ * The preview of a workbook against the database (AD-ADV-03), and the plan applying it follows. Imported again, a file
+ * finds its advisors in the list: those whose rows say what is stored are "unchanged" (apply skips them), the others are
+ * "update" with what differs. A field without a column in the file (unread) takes the stored value: it is no change.
+ */
 export function planImport(fileName: string, sheet: AdvisorSheet, lookups: ImportLookups): { preview: AdvisorPreview; plan: PlannedAdvisor[] } {
-  const plan: PlannedAdvisor[] = sheet.items.map((item) => {
-    const problems = [...item.problems];
+  const plan: PlannedAdvisor[] = sheet.items.map(({ unread = [], ...read }) => {
+    const problems = [...read.problems];
     // A school account only (staff or student mailbox), as the form's own rule (repository.ts).
-    if (item.email && !problems.some((problem) => problem.startsWith("Email")) && !isAdvisorEmail(item.email, lookups.staffDomains)) {
+    if (read.email && !problems.some((problem) => problem.startsWith("Email")) && !isAdvisorEmail(read.email, lookups.staffDomains)) {
       problems.push(`Email không phải email của trường (${advisorDomainText(lookups.staffDomains)}).`);
     }
-    const matches = item.email ? lookups.accounts.get(item.email) ?? [] : [];
+    const matches = read.email ? lookups.accounts.get(read.email) ?? [] : [];
     if (matches.length > 1) problems.push("Email này trùng với nhiều tài khoản trong EduPath AI.");
     const account = matches.length === 1 ? matches[0]! : null;
     if (account?.role === "student") problems.push(STUDENT_ACCOUNT_PROBLEM);
     if (account && !account.isActive) problems.push("Tài khoản của email này đang bị khóa; mở khóa ở trang Tài khoản trước.");
+    const existing = account ? lookups.advisors.get(account.id) : undefined;
+    const item = {
+      ...read,
+      staffCode: unread.includes("staffCode") ? existing?.staffCode ?? null : read.staffCode,
+      unit: unread.includes("unit") ? existing?.unit ?? null : read.unit,
+    };
     if (problems.length) {
       return { ...item, problems, status: "error", changes: [], emptyClasses: [], userId: account?.id ?? null, roleChange: false };
     }
@@ -440,7 +467,6 @@ export function planImport(fileName: string, sheet: AdvisorSheet, lookups: Impor
     });
     // A class nobody studies in yet (a new cohort) is imported all the same, with a warning.
     const emptyClasses = item.classes.filter((name) => !lookups.classesWithStudents.has(name));
-    const existing = account ? lookups.advisors.get(account.id) : undefined;
     const roleWords = !account ? ["Tạo tài khoản, chờ đăng nhập Microsoft lần đầu"]
       : roleChange ? [`Đổi vai trò ${roleLabel(account.role)} thành Cố vấn học tập`]
         : account.role !== "advisor" ? [`Giữ vai trò ${roleLabel(account.role)}`] : [];
@@ -449,9 +475,9 @@ export function planImport(fileName: string, sheet: AdvisorSheet, lookups: Impor
         changes: ["Thêm cố vấn học tập mới", ...roleWords, `Phụ trách ${item.classes.length} lớp: ${words(item.classes)}`, ...moves] };
     }
     const changes: string[] = [];
-    if (existing.name !== item.name) changes.push(`Đổi họ và tên: ${existing.name} → ${item.name}`);
-    if ((existing.staffCode ?? null) !== item.staffCode) changes.push(`Đổi mã giảng viên: ${existing.staffCode ?? "trống"} → ${item.staffCode ?? "trống"}`);
-    if ((existing.unit ?? null) !== item.unit) changes.push(`Đổi đơn vị: ${existing.unit ?? "trống"} → ${item.unit ?? "trống"}`);
+    if (!sameText(existing.name, item.name)) changes.push(`Đổi họ và tên: ${existing.name} → ${item.name}`);
+    if (!sameText(existing.staffCode, item.staffCode)) changes.push(`Đổi mã giảng viên: ${existing.staffCode ?? "trống"} → ${item.staffCode ?? "trống"}`);
+    if (!sameText(existing.unit, item.unit)) changes.push(`Đổi đơn vị: ${existing.unit ?? "trống"} → ${item.unit ?? "trống"}`);
     if (roleChange) changes.push(...roleWords);
     const added = item.classes.filter((name) => !existing.classes.includes(name));
     const removed = existing.classes.filter((name) => !item.classes.includes(name));

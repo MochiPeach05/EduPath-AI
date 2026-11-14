@@ -92,6 +92,46 @@ export function importSummaryText(summary: AdvisorImportPreview["summary"]): str
 /** How many advisors applying the preview changes (the rows with errors are left out). */
 export const importableCount = (preview: Pick<AdvisorImportPreview, "summary">) => preview.summary.add + preview.summary.update;
 
+/** The import dialog's line on importing again (user 2026-11-14: "Phải cho phép import lại file Excel sau khi dữ liệu thay đổi"). */
+export const IMPORT_AGAIN_TEXT = "Có thể import lại tệp nhiều lần sau khi sửa: dòng không thay đổi được giữ nguyên, dòng có nội dung thay đổi được cập nhật tương ứng.";
+
+/** Why a preview has nothing to import when its rows all say what the list holds (the same tệp chosen again); null otherwise. */
+export function importNothingText(summary: AdvisorImportPreview["summary"]): string | null {
+  if (summary.add + summary.update > 0 || summary.unchanged === 0) return null;
+  return summary.error
+    ? "Các dòng không có lỗi đều giống danh sách hiện tại, không có gì cần cập nhật."
+    : "Mọi dòng trong tệp đều giống danh sách hiện tại, không có gì cần cập nhật.";
+}
+
+const XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+/** A tệp chosen in the import dialog, read once (readWorkbook). */
+export type ChosenWorkbook = { name: string; bytes: ArrayBuffer };
+
+/**
+ * Reads the chosen tệp once. The preview and the import send these same bytes: what is imported is what was previewed,
+ * even when the tệp is saved again in Excel in between. Chrome refuses to send a File changed on disk after it was chosen
+ * (net::ERR_UPLOAD_FILE_CHANGED, which read as a lost connection); an edited tệp is previewed again by choosing it again.
+ */
+export async function readWorkbook(file: Pick<File, "name" | "arrayBuffer">): Promise<ChosenWorkbook> {
+  try { return { name: file.name, bytes: await file.arrayBuffer() }; }
+  catch { throw new Error("Không đọc được tệp này. Vui lòng chọn lại tệp."); }
+}
+
+/** Sends a chosen tệp to the preview or the import (POST, the raw .xlsx with its name in x-filename: advisors/router.ts). */
+export function uploadWorkbook<T>(url: string, workbook: ChosenWorkbook): Promise<T> {
+  return advisorRequest<T>(url, {
+    method: "POST", headers: { "Content-Type": XLSX_MIME, "x-filename": encodeURIComponent(workbook.name) }, body: workbook.bytes,
+  });
+}
+
+/**
+ * The file input forgets its tệp when clicked, so choosing the same path again (the tệp edited and saved) is a new choice:
+ * a browser fires no change event for the file it already holds.
+ */
+export function forgetChosenFile(event: { currentTarget: { value: string } }): void {
+  event.currentTarget.value = "";
+}
+
 /** "Đã import: 3 thêm mới, 2 cập nhật, 1 không đổi; bỏ qua 1 cố vấn có lỗi." */
 export function importResultText(result: { added: number; updated: number; unchanged: number; skipped: number }): string {
   const done = [result.added ? `${result.added} thêm mới` : "", result.updated ? `${result.updated} cập nhật` : "", result.unchanged ? `${result.unchanged} không đổi` : ""].filter(Boolean);

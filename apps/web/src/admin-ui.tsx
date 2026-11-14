@@ -17,6 +17,11 @@ export function Pagination({ total, page, setPage }: { total: number; page: numb
   useEffect(() => { if (page > pages) setPage(pages); }, [page, pages, setPage]);
   return <div className="am-pagination"><span role="status">{total} kết quả</span><div><button className="am-outline" disabled={page <= 1} onClick={() => setPage(page - 1)}><Icon name="back" /> Trước</button><span>Trang {page} / {pages}</span><button className="am-outline" disabled={page >= pages} onClick={() => setPage(page + 1)}>Sau <Icon name="chevron" /></button></div></div>;
 }
+/**
+ * Whether a cancel event is the dialog's own (Esc). A file input inside fires one too, which bubbles to the dialog, when its
+ * chooser closes without a new choice (cancelled, or the same file chosen again; Chrome 113+): that one must not close it.
+ */
+export const ownCancel = (event: { target: EventTarget | null; currentTarget: EventTarget | null }) => event.target === event.currentTarget;
 export function Modal({ title, children, onClose, busy = false, size }: { title: string; children: ReactNode; onClose: () => void; busy?: boolean; size?: "sm" }) {
   const ref = useRef<HTMLDialogElement>(null);
   const opener = useRef<HTMLElement | null>(null);
@@ -26,7 +31,7 @@ export function Modal({ title, children, onClose, busy = false, size }: { title:
     dialog?.showModal();
     return () => { dialog?.close(); opener.current?.focus(); };
   }, []);
-  return <dialog ref={ref} className={`am-dialog${size === "sm" ? " am-dialog-sm" : ""}`} aria-labelledby="account-dialog-title" onCancel={(event) => { event.preventDefault(); if (!busy) onClose(); }}><div className="am-dialog-heading"><h2 id="account-dialog-title">{title}</h2><button className="am-icon-btn" type="button" disabled={busy} onClick={onClose} aria-label="Đóng hộp thoại" title="Đóng"><Icon name="close" /></button></div>{children}</dialog>;
+  return <dialog ref={ref} className={`am-dialog${size === "sm" ? " am-dialog-sm" : ""}`} aria-labelledby="account-dialog-title" onCancel={(event) => { if (!ownCancel(event)) return; event.preventDefault(); if (!busy) onClose(); }}><div className="am-dialog-heading"><h2 id="account-dialog-title">{title}</h2><button className="am-icon-btn" type="button" disabled={busy} onClick={onClose} aria-label="Đóng hộp thoại" title="Đóng"><Icon name="close" /></button></div>{children}</dialog>;
 }
 export type MenuEntry = { key: string; icon: string; label: string; danger?: boolean; disabled?: boolean; onSelect: () => void };
 /** The ⋮ row-actions button and the popup menu it opens, shared so every admin

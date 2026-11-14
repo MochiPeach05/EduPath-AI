@@ -182,7 +182,11 @@ export class PostgresAdvisorRepository {
     return planImport(fileName, sheet, await this.lookups(this.pool, sheet)).preview;
   }
 
-  /** Applies the advisors of the workbook that have no problem, in one transaction; the others are skipped. */
+  /**
+   * Applies the advisors of the workbook that have no problem, in one transaction; the others are skipped. The same file
+   * imported again writes nothing: an unchanged advisor is never touched (no updated_at, no class assigned again), and the
+   * advisors the file does not list keep everything but a class the file gives to someone else.
+   */
   async apply(actor: AuthenticatedUser, fileName: string, sheet: AdvisorSheet): Promise<AdvisorImportResult> {
     const client = await this.pool.connect();
     try {
@@ -207,7 +211,9 @@ export class PostgresAdvisorRepository {
     await client.query(`INSERT INTO ad_advisors(user_id, full_name, staff_code, unit, created_by, updated_by) VALUES($1, $2, $3, $4, $5, $5)
       ON CONFLICT (user_id) DO UPDATE SET full_name = EXCLUDED.full_name, staff_code = EXCLUDED.staff_code, unit = EXCLUDED.unit,
         updated_at = now(), updated_by = EXCLUDED.updated_by`, [userId, item.name, item.staffCode, item.unit, actor.userId]);
-    await client.query("UPDATE users SET display_name = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $1 AND entra_object_id IS NULL", [userId, item.name.slice(0, 200)]);
+    // Only when the name changed: an update of the classes alone leaves the account as it is.
+    await client.query(`UPDATE users SET display_name = $2, updated_at = CURRENT_TIMESTAMP
+      WHERE id = $1 AND entra_object_id IS NULL AND display_name IS DISTINCT FROM $2`, [userId, item.name.slice(0, 200)]);
     await this.setClasses(client, actor, userId, item.classes, true);
   }
 
