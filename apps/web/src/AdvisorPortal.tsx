@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Pagination, Status, useData } from "./admin-ui";
+import { ActionMenu, Pagination, Status, useData } from "./admin-ui";
 import { Icon } from "./admin-account-shared";
 import { CheckedForm } from "./CheckedForm";
 import { useLiveFilters } from "./use-live-filters";
@@ -60,7 +60,12 @@ const classSort: Record<string, SortRule<AdvisorClass>> = {
   roadmap: { value: (row) => (row.students ? row.roadmap / row.students : null), by: "number" },
 };
 
-/** The classes (AD-AST-01; exported for its test). showAdvisor: the column of each class's cố vấn học tập (scope "all"). */
+/**
+ * The classes (AD-AST-01; exported for its test). showAdvisor: the column of each class's cố vấn học tập (scope "all").
+ * Each row's actions are in the shared ⋮ menu (reviewer note 2026-11-14, user: "Cô đề xuất dùng menu ba chấm để nhóm các
+ * thao tác “Xem danh sách sinh viên” và “Import danh sách sinh viên”, giúp giao diện gọn hơn"); the chosen class's row is
+ * the current one.
+ */
 export function ClassTable({ classes, sort, sortHeader, selected, onPick, showAdvisor = false }: {
   classes: readonly AdvisorClass[]; sort: TableSort; sortHeader: ReturnType<typeof useTableSort>["sortHeader"]; selected: string;
   onPick: (className: string) => void; showAdvisor?: boolean;
@@ -69,7 +74,8 @@ export function ClassTable({ classes, sort, sortHeader, selected, onPick, showAd
     <thead><tr>{sortHeader("Khóa", "cohort")}{sortHeader("Lớp", "className")}{showAdvisor && sortHeader("Cố vấn học tập", "advisorName")}{sortHeader("Sinh viên", "students")}
       {sortHeader("Có bảng điểm", "withTranscript")}{sortHeader("Đã đánh giá năng lực", "assessed")}{sortHeader("Đã làm khảo sát", "surveyDone")}{sortHeader("Có Lộ trình AI", "roadmap")}
       <th scope="col">Thao tác</th></tr></thead>
-    <tbody>{sortRows(classes, classSort, sort).map(({ row }) => <tr key={row.className} className={row.className === selected ? "av-row-current" : undefined}>
+    <tbody>{sortRows(classes, classSort, sort).map(({ row }) => <tr key={row.className} className={row.className === selected ? "av-row-current" : undefined}
+      aria-current={row.className === selected ? "true" : undefined}>
       <td>{row.cohort ?? "—"}</td>
       <td><strong>{row.className}</strong></td>
       {showAdvisor && <td>{row.advisorName?.trim() ? row.advisorName : <span className="career-empty">Chưa phân công</span>}</td>}
@@ -78,7 +84,9 @@ export function ClassTable({ classes, sort, sortHeader, selected, onPick, showAd
       <td className="av-num">{share(row.assessed, row.students)}</td>
       <td className="av-num">{share(row.surveyDone, row.students)}</td>
       <td className="av-num">{share(row.roadmap, row.students)}</td>
-      <td><button type="button" className="am-outline" aria-current={row.className === selected ? "true" : undefined} onClick={() => onPick(row.className)}><Icon name="users" /> Xem sinh viên</button></td>
+      <td><ActionMenu label={`Thao tác với lớp ${row.className}`} items={[
+        { key: "students", icon: "users", label: "Xem danh sách sinh viên", onSelect: () => onPick(row.className) },
+      ]} /></td>
     </tr>)}</tbody>
   </table></div>;
 }
@@ -118,9 +126,9 @@ export function StudentTable({ students, page, sortHeader, opening, onOpen }: {
 const emptyFilters = { q: "", class: "", status: "all" };
 
 /**
- * The filters after Xem sinh viên on a class: that class, the other filters kept (exported for its test). A second click
- * on the same class keeps it (QA 2026-11-04: it cleared the filter and listed every class); Xóa bộ lọc or "Tất cả lớp"
- * clears it.
+ * The filters after Xem danh sách sinh viên on a class: that class, the other filters kept (exported for its test). A
+ * second choice of the same class keeps it (QA 2026-11-04: it cleared the filter and listed every class); Xóa bộ lọc or
+ * "Tất cả lớp" clears it.
  */
 export const withClass = <T extends { class: string }>(filters: T, className: string): T => ({ ...filters, class: className });
 
@@ -160,7 +168,7 @@ function StudentManagement({ scope }: { scope: StudentScope }) {
       <div className="career-list-heading">
         <div>
           <h2 id="av-classes-title">{text.classes}{classes.data && <span className="am-count">{items.length}</span>}</h2>
-          <p>Chọn Xem sinh viên để xem sinh viên của một lớp.</p>
+          <p>Ở cột Thao tác, chọn Xem danh sách sinh viên để xem sinh viên của một lớp.</p>
         </div>
       </div>
       <Status {...classes} />

@@ -25,7 +25,7 @@ Cùng ngày, người dùng mở thêm: "Kế hoạch học kỳ, Khảo sát đ
 - **Ai thấy trang:** quản trị viên và Ban chủ nhiệm khoa (`canManageAdvisors`) luôn thấy, với mọi lớp và mọi sinh viên (`GET /me` trả `scope: "all"`). Vai trò `advisor` luôn thấy, với lớp mình phụ trách, và trang này là trang mở đầu của CVHT. Vai trò khác chỉ thấy khi `GET /me` báo có lớp phụ trách (`scope: "own"`).
 - **Nội dung, theo thứ tự** (`apps/web/src/AdvisorPortal.tsx`):
   1. Một câu nói trang liệt kê sinh viên nào: mọi sinh viên của Khoa, hoặc sinh viên các lớp mình phụ trách.
-  2. Bảng lớp (AD-AST-01). Khi xem mọi lớp, bảng có thêm cột "Cố vấn học tập" (tên CVHT, "Chưa phân công" khi lớp chưa có CVHT). Nút "Xem sinh viên" lọc bảng sinh viên theo lớp.
+  2. Bảng lớp (AD-AST-01). Khi xem mọi lớp, bảng có thêm cột "Cố vấn học tập" (tên CVHT, "Chưa phân công" khi lớp chưa có CVHT). Cột Thao tác là menu ba chấm (góp ý của GVHD 14/11/2026, người dùng: "Cô đề xuất dùng menu ba chấm để nhóm các thao tác “Xem danh sách sinh viên” và “Import danh sách sinh viên”, giúp giao diện gọn hơn"); "Xem danh sách sinh viên" lọc bảng sinh viên theo lớp, dòng của lớp đang chọn được tô màu.
   3. Bảng sinh viên (AD-AST-02…04): tìm theo MSSV hoặc họ tên, lọc theo lớp và tình trạng, sắp xếp, phân trang. Nút "Xem chi tiết" (AD-AST-05, 06) mở trang của sinh viên ở thẻ mới.
   4. Mục "Quyền khi làm việc với trang sinh viên" (AD-AST-09), gập sẵn: ba danh sách và phần ghi chú từ `GET /permissions`.
 

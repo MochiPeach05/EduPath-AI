@@ -109,18 +109,20 @@ describe("Quản lý sinh viên page (2026-11-03)", () => {
     const html = renderToStaticMarkup(<Classes classes={classes} />);
     expect(html).toContain("<td class=\"av-num\">38/45</td>");
     // Khóa first, then Lớp (user 2026-11-08).
-    expect(html).toMatch(/<tr class="av-row-current"><td>K\d+<\/td><td><strong>71K29CNTT02<\/strong>/);
+    expect(html).toMatch(/<tr class="av-row-current" aria-current="true"><td>K\d+<\/td><td><strong>71K29CNTT02<\/strong>/);
     expect(html.indexOf("<span>Khóa</span>")).toBeLessThan(html.indexOf("<span>Lớp</span>"));
-    // The chosen class's button is the current one, not a toggle: pressing it again keeps the class (QA 2026-11-04).
+    // The chosen class's row is the current one, not a toggle: choosing it again keeps the class (QA 2026-11-04).
     expect(html.match(/aria-current="true"/g)).toHaveLength(1);
     expect(html).not.toContain("aria-pressed");
-    expect(html).toContain("Xem sinh viên");
+    // Each row's actions are in the ⋮ menu (reviewer note 2026-11-14); its items: AdvisorPortalMenus.test.tsx.
+    expect(html).toContain('aria-label="Thao tác với lớp 71K29CNTT01"');
+    expect(html).not.toContain("Xem sinh viên</button>");
     // An advisor's own classes: no advisor column.
     expect(html).not.toContain("<span>Cố vấn học tập</span>");
     expect(html).not.toContain("Nguyễn Văn An");
   });
 
-  it("keeps the class filter when Xem sinh viên is pressed a second time on the same class", () => {
+  it("keeps the class filter when Xem danh sách sinh viên is chosen a second time on the same class", () => {
     const start = { q: "nguyen", class: "", status: "no_survey" };
     const first = withClass(start, "71K29CNTT08");
     expect(first).toEqual({ q: "nguyen", class: "71K29CNTT08", status: "no_survey" });
