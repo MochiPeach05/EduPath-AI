@@ -4,6 +4,7 @@ import { ADVISOR_ERRORS, type AdvisedStudentStatus, type AdvisorAccountStatus, t
 import { searchTerm } from "./student-curriculum-types";
 import { ADMIN_ERROR_TEXTS, SESSION_EXPIRED_EVENT, adminErrorText } from "./admin-errors";
 import { formatVnDateTime } from "./display-format";
+import { IMPORT_MAX_BYTES, importFileProblem } from "./import-file";
 
 /** A failed advisor request: the code the API answered and its message in Vietnamese. */
 export class AdvisorRequestError extends Error {
@@ -12,17 +13,36 @@ export class AdvisorRequestError extends Error {
 
 type TakenClass = { className?: unknown; advisorName?: unknown };
 /**
- * The message of an error answer; class_taken names the classes and who advises them now. A code without a text of these
- * pages is worded by its HTTP status (admin-errors.ts; 0: no answer, 500 when unknown).
+ * The import's refusals whose answer words the tệp's own problem (QA 2026-11-14, advisors/import.ts): the sheet, the
+ * header row, the columns missing or not recognised, the rows; the API sends it as message.
  */
-export function advisorErrorText(code: string, body: { classes?: unknown } = {}, status = 500): string {
+const FILE_MESSAGE_CODES = new Set(["missing_columns", "empty_workbook", "student_list", "too_many_rows"]);
+/**
+ * The message of an error answer; class_taken names the classes and who advises them now, an import refusal of a tệp
+ * says what the API found in it. A code without a text of these pages is worded by its HTTP status (admin-errors.ts; 0:
+ * no answer, 500 when unknown).
+ */
+export function advisorErrorText(code: string, body: { classes?: unknown; message?: unknown } = {}, status = 500): string {
   if (code === "class_taken" && Array.isArray(body.classes)) {
     const taken = (body.classes as TakenClass[])
       .filter((item) => typeof item?.className === "string")
       .map((item) => `${item.className as string}${typeof item.advisorName === "string" && item.advisorName.trim() ? ` (${item.advisorName.trim()})` : ""}`);
     if (taken.length) return `${taken.length > 1 ? "Các lớp" : "Lớp"} ${taken.join(", ")} đang do cố vấn học tập khác phụ trách. Bỏ lớp khỏi cố vấn đó trước, hoặc import danh sách mới để chuyển lớp.`;
   }
+  if (FILE_MESSAGE_CODES.has(code) && typeof body.message === "string" && body.message.trim()) return body.message.trim();
   return adminErrorText(status, { error: code }, ADVISOR_ERRORS);
+}
+
+/**
+ * Why the tệp chosen in the import dialog cannot be read, or "" when it can be sent (QA 2026-11-14): an Excel 97–2003
+ * (.xls) or CSV tệp says how to save it as .xlsx; any other type, an empty tệp and one over 5 MB as every admin import
+ * says it (import-file.ts).
+ */
+export function advisorFileProblem(file: Pick<File, "name" | "size">): string {
+  const saveAs = "Mở tệp bằng Excel, chọn Lưu thành → Excel Workbook (.xlsx) rồi chọn lại tệp.";
+  if (/\.xls$/i.test(file.name)) return `Tệp “${file.name}” là bảng tính Excel 97–2003 (.xls), chưa đọc được. ${saveAs}`;
+  if (/\.csv$/i.test(file.name)) return `Tệp “${file.name}” là tệp CSV, chưa đọc được. ${saveAs}`;
+  return importFileProblem(file, [".xlsx"], IMPORT_MAX_BYTES);
 }
 
 /** fetch with the session cookie; JSON bodies get their Content-Type, a file keeps its own. Throws AdvisorRequestError. */
@@ -41,7 +61,7 @@ export async function advisorRequest<T>(url: string, init: RequestInit = {}): Pr
   }
   if (response.status === 401) window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
   if (!response.ok) {
-    const body = await response.json().catch(() => ({})) as { error?: string; classes?: unknown };
+    const body = await response.json().catch(() => ({})) as { error?: string; classes?: unknown; message?: unknown };
     const code = body.error ?? (response.status === 403 ? "insufficient_role" : "request_failed");
     throw new AdvisorRequestError(code, response.status, advisorErrorText(code, body, response.status));
   }

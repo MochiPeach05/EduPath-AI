@@ -8,8 +8,8 @@ import {
   type AdvisorImportResult, type AdvisorInput, type AdvisorRow,
 } from "./advisor-types";
 import {
-  ACCOUNT_TEXT, IMPORT_AGAIN_TEXT, IMPORT_STATUS_TEXT, advisorRequest, advisorTime, classPreview, forgetChosenFile, importNothingText, importResultText,
-  importSummaryText, importableCount, matchesSearch, readWorkbook, splitClasses, uploadWorkbook, type ChosenWorkbook,
+  ACCOUNT_TEXT, IMPORT_AGAIN_TEXT, IMPORT_STATUS_TEXT, advisorFileProblem, advisorRequest, advisorTime, classPreview, forgetChosenFile, importNothingText,
+  importResultText, importSummaryText, importableCount, matchesSearch, readWorkbook, splitClasses, uploadWorkbook, type ChosenWorkbook,
 } from "./advisor-admin";
 import type { AppRole } from "./types";
 import "./curricula.css";
@@ -320,7 +320,8 @@ export function AdvisorImport({ close, imported }: { close: () => void; imported
     const own = ++generation.current;
     setFile(null); setPreview(null); setError("");
     if (!chosen) return;
-    if (!/\.xlsx$/i.test(chosen.name) || chosen.size > 5 * 1024 * 1024) { setError("Chọn tệp .xlsx không quá 5 MB."); return; }
+    const problem = advisorFileProblem(chosen);
+    if (problem) { setError(problem); return; }
     setBusy(true);
     try {
       const workbook = await readWorkbook(chosen);

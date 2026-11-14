@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  AdvisorRequestError, advisorErrorText, advisorRequest, advisorTime, classPreview, cohortOfClass, forgetChosenFile, importNothingText, importResultText,
+  AdvisorRequestError, advisorErrorText, advisorFileProblem, advisorRequest, advisorTime, classPreview, cohortOfClass, forgetChosenFile, importNothingText, importResultText,
   importSummaryText, importableCount, isStudentStatus, matchesSearch, openStudentPage, readWorkbook, splitClasses, uploadWorkbook,
 } from "./advisor-admin";
 
@@ -110,5 +110,41 @@ describe("advisor admin helpers", () => {
 
     const blocked = { open: vi.fn(() => null) };
     await expect(openStudentPage(async () => ({ url: "/dashboard?sv=2#overview" }), blocked)).resolves.toBe("/dashboard?sv=2#overview");
+  });
+});
+
+// QA 2026-11-14 (user: "Kiểm thử các trường hợp file Excel sai cấu trúc, thêm cột, thừa dữ liệu hoặc khác file mẫu. Cần có
+// cách xử lý và thông báo phù hợp"). Made-up file names and sizes.
+describe("Import danh sách cố vấn học tập: a tệp that cannot be read", () => {
+  it("refuses an .xls, a CSV, another type, an empty tệp and one over 5 MB in the dialog, saying how to fix it", () => {
+    expect(advisorFileProblem({ name: "CVHT 2026-2027.xlsx", size: 40_000 })).toBe("");
+    expect(advisorFileProblem({ name: "CVHT.XLSX", size: 5 * 1024 * 1024 })).toBe("");
+    expect(advisorFileProblem({ name: "CVHT cũ.xls", size: 40_000 }))
+      .toBe("Tệp “CVHT cũ.xls” là bảng tính Excel 97–2003 (.xls), chưa đọc được. Mở tệp bằng Excel, chọn Lưu thành → Excel Workbook (.xlsx) rồi chọn lại tệp.");
+    expect(advisorFileProblem({ name: "cvht.csv", size: 300 }))
+      .toBe("Tệp “cvht.csv” là tệp CSV, chưa đọc được. Mở tệp bằng Excel, chọn Lưu thành → Excel Workbook (.xlsx) rồi chọn lại tệp.");
+    expect(advisorFileProblem({ name: "cvht.pdf", size: 300 })).toBe("Tệp “cvht.pdf” không đúng định dạng. Hãy chọn tệp .xlsx.");
+    expect(advisorFileProblem({ name: "rong.xlsx", size: 0 })).toBe("Tệp “rong.xlsx” không có dữ liệu. Hãy chọn lại tệp .xlsx.");
+    expect(advisorFileProblem({ name: "lon.xlsx", size: 6 * 1024 * 1024 })).toBe("Tệp “lon.xlsx” lớn hơn 5 MB. Hãy chọn tệp .xlsx không quá 5 MB.");
+  });
+
+  it("shows what the API found in the tệp (sheet, header row, columns) and words the other refusals itself", () => {
+    const message = 'Trang "CVHT" (dòng tiêu đề 5) thiếu cột EMAIL. Cần đủ các cột CVHT (họ và tên), EMAIL và MÃ LỚP: thêm cột còn thiếu hoặc sửa tên cột cho giống tệp mẫu, rồi chọn lại tệp.';
+    expect(advisorErrorText("missing_columns", { message }, 400)).toBe(message);
+    expect(advisorErrorText("empty_workbook", { message: " Trang \"CVHT\" có dòng tiêu đề (dòng 5) nhưng chưa có cố vấn nào bên dưới. " }, 400))
+      .toBe("Trang \"CVHT\" có dòng tiêu đề (dòng 5) nhưng chưa có cố vấn nào bên dưới.");
+    expect(advisorErrorText("missing_columns", {}, 400)).toBe("Tệp Excel thiếu cột CVHT (họ và tên), EMAIL hoặc MÃ LỚP. Sửa tên cột cho giống tệp mẫu rồi chọn lại tệp.");
+    expect(advisorErrorText("legacy_workbook", {}, 400)).toMatch(/^Tệp là bảng tính Excel 97–2003 \(\.xls\) hoặc đang đặt mật khẩu/);
+    expect(advisorErrorText("invalid_workbook", {}, 400)).toMatch(/^Tệp không phải bảng tính Excel \(\.xlsx\) hợp lệ hoặc đã bị hỏng\./);
+    // A message is only taken for the tệp's own refusals; another code keeps the page's text.
+    expect(advisorErrorText("read_only_role", { message: "Thông điệp khác" }, 403)).toBe("Cố vấn học tập chỉ có quyền xem ở trang quản trị.");
+  });
+
+  it("passes the message of a refused preview to the dialog", async () => {
+    vi.stubGlobal("window", { dispatchEvent: vi.fn() });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: "student_list", message: "Trang \"DSSV\" có cột MSSV: đây là danh sách sinh viên." }),
+      { status: 400, headers: { "Content-Type": "application/json" } })));
+    await expect(advisorRequest("/api/admin/advisors/import/preview", { method: "POST", body: new ArrayBuffer(1) }))
+      .rejects.toMatchObject({ code: "student_list", status: 400, message: "Trang \"DSSV\" có cột MSSV: đây là danh sách sinh viên." });
   });
 });

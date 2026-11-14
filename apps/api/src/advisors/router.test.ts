@@ -165,6 +165,20 @@ describe("advisors router: import", () => {
     expect(JSON.stringify(answer.body)).not.toContain("71K99CNTT99");
   });
 
+  it("answers a tệp without the list with the message naming its sheet, header row and missing column (QA 2026-11-14)", { timeout: WORKBOOK_TIMEOUT }, async () => {
+    const { default: ExcelJS } = await import("exceljs");
+    const book = new ExcelJS.Workbook();
+    const sheet = book.addWorksheet("CVHT");
+    sheet.addRow(["STT", "CVHT", "MÃ LỚP"]);
+    sheet.addRow([1, "Nguyễn Văn Thử", "71K29CNTT91"]);
+    const { app, repository } = setup();
+    const answer = await request(app).post("/advisors/import/preview").set("Origin", origin).set("Content-Type", XLSX)
+      .send(Buffer.from(await book.xlsx.writeBuffer())).expect(400);
+    expect(answer.body).toEqual({ error: "missing_columns", message: 'Trang "CVHT" (dòng tiêu đề 1) thiếu cột EMAIL. Cần đủ các cột CVHT (họ và tên), EMAIL '
+      + "và MÃ LỚP: thêm cột còn thiếu hoặc sửa tên cột cho giống tệp mẫu, rồi chọn lại tệp." });
+    expect(repository.preview).not.toHaveBeenCalled();
+  });
+
   it("refuses what is not a workbook and a bad file name", { timeout: WORKBOOK_TIMEOUT }, async () => {
     const { app, repository } = setup();
     await request(app).post("/advisors/import/preview").set("Origin", origin).set("Content-Type", "text/plain").send("x").expect(400, { error: "invalid_workbook" });

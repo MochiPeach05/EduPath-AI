@@ -388,7 +388,7 @@ describe("importing a tệp again", () => {
 });
 
 describe("advisor workbook file", () => {
-  it("serves the Khoa's layout as the template and reads it back: one advisor, two classes", { timeout: 30_000 }, async () => {
+  it("serves the Khoa's layout as the template and reads it back: its example row is never imported", { timeout: 30_000 }, async () => {
     const { default: ExcelJS } = await import("exceljs");
     const file = await advisorTemplate("vlu.edu.vn", new Date(2026, 10, 3));
     const workbook = new ExcelJS.Workbook();
@@ -401,8 +401,9 @@ describe("advisor workbook file", () => {
     const sheet = await readAdvisorWorkbook(file);
     expect(sheet.fileProblems).toEqual([]);
     expect(sheet.notes).toEqual([{ tone: "info", text: 'Đọc trang tính "CVHT 2026-2027".' }]);
+    // The template unchanged (QA 2026-11-14): its made-up row is read, but as an error, so "Xác nhận import" leaves it out.
     expect(sheet.items).toEqual([{ rows: [6], name: "Nguyễn Văn A", email: "nguyenvana@vlu.edu.vn", staffCode: "1234567890",
-      unit: null, classes: ["71K29CNTT01", "71K29CNTT02"], problems: [], unread: ["unit"] }]);
+      unit: null, classes: ["71K29CNTT01", "71K29CNTT02"], problems: ["Đây là dòng ví dụ của tệp mẫu: xóa dòng này rồi chọn lại tệp."], unread: ["unit"] }]);
     // A school year starts in August: in July the template still names the year that ends.
     const july = new ExcelJS.Workbook();
     await july.xlsx.load(await advisorTemplate("vlu.edu.vn", new Date(2027, 6, 31)) as never);
@@ -450,4 +451,177 @@ describe("advisor workbook file", () => {
     expect(read.items[0]).toMatchObject({ email: "lvc@vlu.edu.vn", classes: ["71K31CNTT01", "71K31CNTT02"] });
     await expect(readAdvisorWorkbook(Buffer.from("not a workbook"))).rejects.toMatchObject({ code: "invalid_workbook", status: 400 });
   });
+});
+
+// QA 2026-11-14 (user: "Kiểm thử các trường hợp file Excel sai cấu trúc, thêm cột, thừa dữ liệu hoặc khác file mẫu. Cần
+// có cách xử lý và thông báo phù hợp"). Names, emails and classes are made up.
+describe("files that differ from the template", () => {
+  const head = ["STT", "MGV", "CVHT", "EMAIL", "MÃ LỚP", "GHI CHÚ"];
+  const thu = ["1", "1000000001", "Nguyễn Văn Thử", "cvht.thu@vlu.edu.vn", "71K29CNTT91, 92", ""];
+  const mau = ["2", "1000000002", "Trần Thị Mẫu", "cvht.mau@vlu.edu.vn", "71K30CNTT91", ""];
+  const refusal = (sheets: Parameters<typeof readAdvisorSheets>[0], options = {}) => {
+    try { readAdvisorSheets(sheets, [], [], options); } catch (error) { return error as AdvisorError; }
+    throw new Error("not refused");
+  };
+  const book = async (fill: (workbook: import("exceljs").Workbook) => void) => {
+    const { default: ExcelJS } = await import("exceljs");
+    const workbook = new ExcelJS.Workbook();
+    fill(workbook);
+    return Buffer.from(await workbook.xlsx.writeBuffer());
+  };
+
+  it("names the sheet, the header row, the missing columns and the headers it does not know", () => {
+    const without = (column: number) => [...titles(5), head.filter((_, i) => i !== column), thu.filter((_, i) => i !== column)];
+    const fix = " Cần đủ các cột CVHT (họ và tên), EMAIL và MÃ LỚP: thêm cột còn thiếu hoặc sửa tên cột cho giống tệp mẫu, rồi chọn lại tệp.";
+    expect(refusal([{ name: "CVHT 2026-2027", grid: without(3) }])).toMatchObject({ code: "missing_columns", status: 400,
+      details: { message: `Trang "CVHT 2026-2027" (dòng tiêu đề 5) thiếu cột EMAIL.${fix}` } });
+    expect(refusal([{ name: "CVHT", grid: without(4) }]).details).toEqual({ message: `Trang "CVHT" (dòng tiêu đề 5) thiếu cột MÃ LỚP.${fix}` });
+    expect(refusal([{ name: "CVHT", grid: without(2) }]).details).toEqual({ message: `Trang "CVHT" (dòng tiêu đề 5) thiếu cột CVHT (họ và tên).${fix}` });
+    // A typo: the header is found, the column it could not read is named.
+    expect(refusal([{ name: "CVHT", grid: [["STT", "CVHT", "Emial", "Mã lớp"], ["1", "Nguyễn Văn Thử", "cvht.thu@vlu.edu.vn", "71K29CNTT91"]] }]).details)
+      .toEqual({ message: `Trang "CVHT" (dòng tiêu đề 1) thiếu cột EMAIL. Cột chưa nhận ra: "Emial".${fix}` });
+    // The list of the Tài khoản page: names and emails, no classes.
+    expect(refusal([{ name: "Tài khoản", grid: [["Họ và tên", "Email", "Vai trò"], ["Nguyễn Văn Thử", "cvht.thu@vlu.edu.vn", "Giảng viên"]] }]).details)
+      .toEqual({ message: `Trang "Tài khoản" (dòng tiêu đề 1) thiếu cột MÃ LỚP. Cột chưa nhận ra: "Vai trò".${fix}` });
+  });
+
+  it("refuses a workbook that is no advisor list, naming the columns it needs and the hidden sheets, and a student list", () => {
+    const plan = [["KẾ HOẠCH ĐÀO TẠO KHÓA 29"], ["STT", "Mã học phần", "Tên học phần", "Số tín chỉ"], ["1", "DIT0101", "Nhập môn", "3"]];
+    const none = "Tệp này không có danh sách cố vấn học tập: không trang tính nào có dòng tiêu đề với các cột CVHT (họ và tên), EMAIL và MÃ LỚP "
+      + "trong 50 dòng đầu. Hãy chọn tệp phân công cố vấn của Khoa, hoặc bấm Tải file mẫu rồi điền theo mẫu.";
+    expect(refusal([{ name: "KHĐT K29", grid: plan }])).toMatchObject({ code: "missing_columns", details: { message: none } });
+    expect(refusal([{ name: "Hướng dẫn", grid: [["Danh sách ở trang bên cạnh."]] }], { hiddenSheets: ["CVHT 2026-2027"] }).details).toEqual({ message: `${none} `
+      + "Tệp có 1 trang tính đang ẩn (\"CVHT 2026-2027\") không được đọc: nếu danh sách nằm ở đó, hiện trang tính (Unhide) rồi chọn lại tệp." });
+    // A student list has every column of an advisor list: its MSSV column says what it is, and no student becomes an advisor.
+    const students = [["STT", "MSSV", "Họ và tên", "Email", "Lớp"], ["1", "2374802019901", "Sinh Viên Giả", "sv.gia.2374802019901@vanlanguni.vn", "71K30CNTT98"]];
+    expect(refusal([{ name: "DSSV", grid: students }])).toMatchObject({ code: "student_list", details: { message: "Trang \"DSSV\" có cột MSSV: đây là danh sách "
+      + "sinh viên, không phải danh sách cố vấn học tập. Hãy chọn tệp phân công cố vấn của Khoa, với các cột CVHT (họ và tên), EMAIL và MÃ LỚP." } });
+    const both = readAdvisorSheets([{ name: "DSSV", grid: students }, { name: "CVHT", grid: [head, thu] }]);
+    expect(both.items.map((item) => item.email)).toEqual(["cvht.thu@vlu.edu.vn"]);
+    expect(both.fileProblems).toEqual(["Bỏ qua trang \"DSSV\": có cột MSSV nên là danh sách sinh viên, không phải danh sách cố vấn học tập."]);
+    // A header without rows says where it is.
+    expect(refusal([{ name: "CVHT 2026-2027", grid: [...titles(6), head] }])).toMatchObject({ code: "empty_workbook", details: { message: "Trang \"CVHT 2026-2027\" "
+      + "có dòng tiêu đề (dòng 5) nhưng chưa có cố vấn nào bên dưới. Thêm mỗi cố vấn một dòng với CVHT (họ và tên), EMAIL và MÃ LỚP rồi chọn lại tệp." } });
+  });
+
+  it("reads English headers, a name in two columns (Họ đệm | Tên) and a header below many title rows", () => {
+    const english = readAdvisorGrid([["No.", "Staff ID", "Full name", "Email", "Class"], ["1", "GV01", "Nguyễn Văn Thử", "cvht.thu@vlu.edu.vn", "71K29CNTT91"]]);
+    expect(english.items).toEqual([{ rows: [2], name: "Nguyễn Văn Thử", email: "cvht.thu@vlu.edu.vn", staffCode: "GV01", unit: null, classes: ["71K29CNTT91"], problems: [],
+      unread: ["unit"] }]);
+    expect(english.notes).toEqual([]);
+    const split = readAdvisorGrid([["STT", "Họ đệm", "Tên", "Email", "Mã lớp"], ["1", "Nguyễn Văn", "Thử", "cvht.thu@vlu.edu.vn", "71K29CNTT91"]]);
+    expect(split.items[0]).toMatchObject({ name: "Nguyễn Văn Thử", problems: [] });
+    expect(headerField("Tên lớp")).toBe(null);
+    expect(headerField("Họ và tên đệm")).toBe("familyName");
+    const deep = readAdvisorGrid([...Array.from({ length: 24 }, (_, i) => [`Căn cứ ${i + 1}`]), head, thu]);
+    expect(deep.items[0]).toMatchObject({ rows: [26], classes: ["71K29CNTT91", "71K29CNTT92"], problems: [] });
+  });
+
+  it("reads past unused columns, a column given twice, a repeated header, group titles and notes below the table, and says so", () => {
+    const group = Array<string>(8).fill("BỘ MÔN CÔNG NGHỆ PHẦN MỀM");
+    const header = ["STT", "MGV", "CVHT", "Học vị", "EMAIL", "MÃ LỚP", "Email cá nhân", "GHI CHÚ"];
+    const sheet = readAdvisorSheets([{ name: "CVHT", grid: [...titles(8), header, group,
+      ["1", "1000000001", "Nguyễn Văn Thử", "ThS.", "cvht.thu@vlu.edu.vn", "71K29CNTT91", "thu@gmail.com", ""],
+      [],
+      ["DANH SÁCH BỔ SUNG"],
+      header,
+      ["2", "1000000002", "Trần Thị Mẫu", "TS.", "cvht.mau@vlu.edu.vn", "71K30CNTT91", "", ""],
+      ["", "", "Tổng cộng: 2 cố vấn, 2 lớp"],
+      ["", "", "", "", "TP. Hồ Chí Minh, ngày 03 tháng 11 năm 2026"],
+      ["", "", "Người lập bảng", "", "", "", "", "TRƯỞNG KHOA"]] }]);
+    expect(sheet.items.map((item) => [item.rows, item.email, item.problems])).toEqual([
+      [[7], "cvht.thu@vlu.edu.vn", []], [[11], "cvht.mau@vlu.edu.vn", []],
+    ]);
+    expect(sheet.rows).toBe(2);
+    expect(sheet.notes).toEqual([
+      { tone: "info", text: "Đọc trang tính \"CVHT\"." },
+      { tone: "info", text: "Bỏ qua các cột không dùng: \"Học vị\"." },
+      { tone: "warn", text: "Có 2 cột email: \"EMAIL\" (cột E) và \"Email cá nhân\" (cột G); chỉ đọc cột E. Nếu cần đọc cột kia, xóa hoặc đổi tên cột thừa rồi chọn lại tệp." },
+      { tone: "info", text: "Bỏ qua dòng 10: dòng tiêu đề lặp lại." },
+      { tone: "info", text: "Bỏ qua dòng 6: dòng tên nhóm (\"BỘ MÔN CÔNG NGHỆ PHẦN MỀM\")." },
+      { tone: "info", text: "Bỏ qua 3 dòng dưới bảng không có email và mã lớp (dòng 12, 13, 14: \"Tổng cộng: 2 cố vấn, 2 lớp\", "
+        + "\"TP. Hồ Chí Minh, ngày 03 tháng 11 năm 2…\", \"Người lập bảng\"). Nếu có dòng là cố vấn, thêm email và mã lớp cho dòng đó rồi chọn lại tệp." },
+    ]);
+    // A row in the table without an email or a class is still an advisor to fix, not a note.
+    const inside = readAdvisorGrid([head, ["1", "", "Lê Văn Kiểm", "", "", ""], thu]);
+    expect(inside.items[0]).toMatchObject({ name: "Lê Văn Kiểm", problems: ["Thiếu email.", "Chưa có lớp phụ trách."] });
+  });
+
+  it("never imports the template's example row, two spellings of a name, an email with accents or two emails, or a class without letters", () => {
+    const sheet = readAdvisorGrid([head,
+      ["1", "1234567890", "Nguyễn Văn A", "nguyenvana@vlu.edu.vn", "71K29CNTT01, 71K29CNTT02", "Dòng ví dụ, xóa trước khi import"],
+      ["2", "1000000001", "Nguyễn Văn Thử", "cvht.thu@vlu.edu.vn", "71K29CNTT91", ""],
+      ["3", "1000000001", "Nguyễn Văn Thứ", "cvht.thu@vlu.edu.vn", "71K29CNTT92", ""],
+      ["4", "1000000003", "Lê Văn Kiểm", "lê.kiểm@vlu.edu.vn", "71K29CNTT93", ""],
+      ["5", "1000000004", "Phạm Thị Nghiệm", "a@vlu.edu.vn; b@vlu.edu.vn", "71K29CNTT94", ""],
+      ["6", "1000000005", "Võ Văn Dò", "cvht.do@vlu.edu.vn", "2029-01-02", ""],
+      // Copied from a web page: a zero-width space and a BOM around the email and the name.
+      ["7", "1000000006", "\u200bĐặng Thị Soát", "\ufeffcvht.soat@vlu.edu.vn\u200b", "71K29CNTT96", ""],
+    ]);
+    expect(sheet.items.map((item) => [item.email, item.problems])).toEqual([
+      ["nguyenvana@vlu.edu.vn", ["Đây là dòng ví dụ của tệp mẫu: xóa dòng này rồi chọn lại tệp."]],
+      ["cvht.thu@vlu.edu.vn", ["Họ và tên ghi khác nhau: \"Nguyễn Văn Thử\" (dòng 3), \"Nguyễn Văn Thứ\" (dòng 4)."]],
+      ["lê.kiểm@vlu.edu.vn", ["Email lê.kiểm@vlu.edu.vn có chữ có dấu hoặc ký tự lạ: email của trường chỉ gồm chữ cái không dấu, chữ số và các dấu chấm, gạch ngang, gạch dưới."]],
+      ["a@vlu.edu.vn; b@vlu.edu.vn", ["Email ghi nhiều địa chỉ trong một ô (a@vlu.edu.vn; b@vlu.edu.vn): mỗi cố vấn chỉ ghi một email."]],
+      ["cvht.do@vlu.edu.vn", ["Tên lớp không hợp lệ: 2029-01-02."]],
+      ["cvht.soat@vlu.edu.vn", []],
+    ]);
+    expect(sheet.items[5]!.name).toBe("Đặng Thị Soát");
+    // Capitals alone are no second spelling.
+    expect(readAdvisorGrid([head, thu, ["2", "1000000001", "NGUYỄN VĂN THỬ", "cvht.thu@vlu.edu.vn", "71K29CNTT93", ""]]).items[0]!.problems).toEqual([]);
+    const planned = planImport("f.xlsx", sheet, lookups());
+    expect(planned.preview.items[0]).toMatchObject({ status: "error" });
+    expect(planned.preview.summary).toMatchObject({ add: 1, error: 5 });
+  });
+
+  it("reports a date, a formula without its value and a formula error in a cell it reads, and the hidden rows it reads", { timeout: 30_000 }, async () => {
+    const file = await book((workbook) => {
+      const sheet = workbook.addWorksheet("CVHT");
+      for (const row of [...titles(6), head, thu, mau, ["3", "1000000003", "Lê Văn Kiểm", "cvht.kiem@vlu.edu.vn", "71K28CNTT93", ""],
+        ["4", "1000000004", "Phạm Thị Nghiệm", "cvht.nghiem@vlu.edu.vn", "71K29CNTT96", ""]]) sheet.addRow(row);
+      sheet.getCell("B6").value = new Date(Date.UTC(2026, 10, 3));
+      sheet.getCell("D7").value = { formula: "LOWER(\"CVHT.MAU@VLU.EDU.VN\")" } as never;
+      sheet.getCell("E8").value = { formula: "DS!#REF!", result: { error: "#REF!" } } as never;
+      // A date in a column that is not read (GHI CHÚ) says nothing.
+      sheet.getCell("F9").value = new Date(Date.UTC(2026, 8, 1));
+      sheet.getRow(9).hidden = true;
+      // Borders drawn ahead of time far below the table are no rows.
+      for (let row = 10; row <= 2600; row++) sheet.getCell(row, 1).border = { bottom: { style: "thin" } };
+    });
+    const read = await readAdvisorWorkbook(file);
+    expect(read.items.map((item) => [item.rows, item.email, item.problems])).toEqual([
+      [[6], "cvht.thu@vlu.edu.vn", ["Ô B6 (cột MGV) đang là ngày tháng (03/11/2026): định dạng ô thành Text (Văn bản) rồi gõ lại."]],
+      [[7], "", ["Ô D7 (cột EMAIL) là công thức chưa có kết quả: mở tệp bằng Excel, lưu lại rồi chọn lại tệp."]],
+      [[8], "cvht.kiem@vlu.edu.vn", ["Ô E8 (cột MÃ LỚP) có lỗi công thức #REF!: sửa ô này trong Excel rồi chọn lại tệp."]],
+      [[9], "cvht.nghiem@vlu.edu.vn", []],
+    ]);
+    expect(read.notes).toEqual([
+      { tone: "info", text: "Đọc trang tính \"CVHT\"." },
+      { tone: "warn", text: "1 dòng đang ẩn trong Excel vẫn được đọc (dòng 9). Nếu không muốn import các dòng này, xóa chúng khỏi tệp rồi chọn lại." },
+    ]);
+  });
+
+  it("refuses an old or protected workbook, a zip without a sheet, an empty workbook, hidden sheets only and too many rows, each in its words",
+    { timeout: 30_000 }, async () => {
+      const ole = Buffer.concat([Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]), Buffer.alloc(504)]);
+      await expect(readAdvisorWorkbook(ole)).rejects.toMatchObject({ code: "legacy_workbook", status: 400 });
+      const { default: JSZip } = await import("jszip");
+      const word = new JSZip();
+      word.file("[Content_Types].xml", "<?xml version=\"1.0\"?><Types xmlns=\"http://schemas.openxmlformats.org/package/2006/content-types\"/>");
+      word.file("word/document.xml", "<?xml version=\"1.0\"?><document/>");
+      await expect(readAdvisorWorkbook(await word.generateAsync({ type: "nodebuffer" }))).rejects.toMatchObject({ code: "invalid_workbook" });
+      await expect(readAdvisorWorkbook(await book((workbook) => { workbook.addWorksheet("Sheet1"); }))).rejects.toMatchObject({ code: "empty_workbook",
+        details: { message: "Tệp Excel trống: các trang tính đang hiện không có dữ liệu. Hãy điền danh sách theo tệp mẫu (bấm Tải file mẫu) rồi chọn lại tệp." } });
+      await expect(readAdvisorWorkbook(await book((workbook) => {
+        workbook.addWorksheet("Hướng dẫn").addRow(["Danh sách ở trang bên cạnh."]);
+        const list = workbook.addWorksheet("CVHT 2026-2027", { state: "hidden" });
+        list.addRow(head); list.addRow(thu);
+      }))).rejects.toMatchObject({ code: "missing_columns", details: { message: expect.stringContaining("Tệp có 1 trang tính đang ẩn (\"CVHT 2026-2027\") không được đọc") } });
+      await expect(readAdvisorWorkbook(await book((workbook) => {
+        const list = workbook.addWorksheet("CVHT");
+        list.addRow(head);
+        for (let i = 1; i <= 2001; i++) list.addRow([i, "", `Cố Vấn ${i}`, `cv${i}@vlu.edu.vn`, `71K29CNTT${String(i).padStart(4, "0")}`, ""]);
+      }))).rejects.toMatchObject({ code: "too_many_rows", details: { message: "Trang \"CVHT\" có 2.001 dòng dữ liệu, nhiều hơn giới hạn 2.000 dòng của một lần import. "
+        + "Xóa các dòng thừa hoặc chia danh sách thành nhiều tệp rồi import lần lượt." } });
+    });
 });
