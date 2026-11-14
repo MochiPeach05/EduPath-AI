@@ -15,7 +15,8 @@ export const adminNavigation = [
   // AD-ADV-01…05 and AD-AST-01…09 (2026-11-03): the faculty's cố vấn học tập, then Quản lý sinh viên, where an advisor sees
   // the students of their classes and the admins every student, opens a student's page and reads what may be done there
   // (user 2026-11-03: "Cái mục quyền cố vấn sửa lại thành quản lý sinh viên").
-  { path: "/quantri/co-van-hoc-tap", label: "Cố vấn", eyebrow: "QUẢN LÝ CỐ VẤN HỌC TẬP", icon: "user" },
+  // "Danh sách" in the group, the full name as the page title (user 2026-11-14: "Không dùng tên rút gọn “Cố vấn” gây mơ hồ").
+  { path: "/quantri/co-van-hoc-tap", label: "Danh sách", title: "Danh sách cố vấn học tập", eyebrow: "QUẢN LÝ CỐ VẤN HỌC TẬP", icon: "user" },
   { path: "/quantri/quan-ly-sinh-vien", label: "Quản lý sinh viên", eyebrow: "QUẢN LÝ SINH VIÊN CỦA CỐ VẤN HỌC TẬP", icon: "cap" },
   // In the order the Khoa sets them up, under full names (user 2026-11-05: "Chương trình đào tạo → Kế hoạch đào tạo → Xét
   // tốt nghiệp", "Tốt nghiệp" alone is too vague).
@@ -121,6 +122,9 @@ export function canSeeAdminPage(path: string, access: AdminAccess): boolean {
   if (access.role === "advisor") return ADVISOR_PAGES.has(path);
   return path !== ADVISOR_STUDENTS_PATH || alwaysSeesStudents(access) || access.advisesClasses !== false;
 }
+
+/** The page's heading, breadcrumb and browser tab title: its sidebar name, or the full name of a page that has one. */
+export const adminPageTitle = (page: AdminPage): string => ("title" in page ? page.title : page.label);
 
 /** A page as the sidebar shows it: "Thống kê / Nhật ký" inside a group, "Tài khoản" alone. */
 export function adminPageName(page: AdminPage): string {

@@ -30,7 +30,7 @@ function Students({ students }: { students: AdvisedStudentRow[] }) {
   return <StudentTable students={students} page={1} sortHeader={sortHeader} opening={null} onOpen={() => undefined} />;
 }
 
-describe("Cố vấn page", () => {
+describe("Danh sách cố vấn học tập page", () => {
   it("lists each advisor with the email, the classes as chips (+n) and the account state", () => {
     const html = renderToStaticMarkup(<Advisors rows={[advisor(), advisor({ stt: 2, userId: "2", name: "Trần Thị Bình", account: "active", classes: [], students: 0, staffCode: null })]} canManage={false} />);
     for (const header of ["STT", "Cố vấn học tập", "Mã giảng viên", "Đơn vị", "Lớp phụ trách", "Sinh viên", "Tài khoản"]) expect(html).toContain(`<span>${header}</span>`);

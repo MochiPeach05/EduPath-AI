@@ -1,15 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { ADVISOR_STUDENTS_PATH, REPORT_PATHS, adminGroupOf, adminNavigation, adminPageName, adminSidebar, adminSidebarFor, advisorRefusedText, canSeeAdminPage, homeAdminPath, isReportPath, profileIdOf, refusedAdminPage, reportViewOf, resolveAdminPage, studentProfileLink, withoutProfileId, type AdminAccess } from "./admin-navigation";
+import { ADVISOR_STUDENTS_PATH, REPORT_PATHS, adminGroupOf, adminNavigation, adminPageName, adminPageTitle, adminSidebar, adminSidebarFor, advisorRefusedText, canSeeAdminPage, homeAdminPath, isReportPath, profileIdOf, refusedAdminPage, reportViewOf, resolveAdminPage, studentProfileLink, withoutProfileId, type AdminAccess } from "./admin-navigation";
 describe("admin section navigation", () => {
   it("has account, student-profile, curriculum, graduation, training-plan, career, career-field, skill and competency sections", () => {
     expect(adminNavigation.map(item => item.path)).toEqual(["/quantri/tong-quan", "/quantri/bao-cao-tien-do", "/quantri/bao-cao-nguy-co", "/quantri/bao-cao-ky-nang", "/quantri/bao-cao-nghe-nghiep", "/quantri/bao-cao-mon-hoc", "/quantri/nhat-ky", "/quantri/tai-khoan", "/quantri/sinh-vien", "/quantri/co-van-hoc-tap", "/quantri/quan-ly-sinh-vien", "/quantri/chuong-trinh", "/quantri/ke-hoach", "/quantri/tieu-chuan-tot-nghiep", "/quantri/linh-vuc-nghe-nghiep", "/quantri/ky-nang", "/quantri/vi-tri-nghe-nghiep", "/quantri/nhom-nang-luc", "/quantri/cau-hinh-nang-luc", "/quantri/cau-hinh-mon-hoc", "/quantri/gui-thong-bao", "/quantri/thong-bao-da-gui"]);
   });
-  it("uses short sidebar names, which are also the page title and breadcrumb", () => {
-    expect(adminNavigation.map(item => item.label)).toEqual(["Tổng quan", "Tiến độ", "Nguy cơ", "Kỹ năng thiếu", "Vị trí mục tiêu", "Môn đề xuất", "Nhật ký", "Tài khoản", "Sinh viên", "Cố vấn", "Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp", "Lĩnh vực", "Kỹ năng", "Vị trí nghề nghiệp", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học", "Gửi thông báo", "Đã gửi"]);
+  it("uses short sidebar names, which are also the page title and breadcrumb unless the page has a full name", () => {
+    expect(adminNavigation.map(item => item.label)).toEqual(["Tổng quan", "Tiến độ", "Nguy cơ", "Kỹ năng thiếu", "Vị trí mục tiêu", "Môn đề xuất", "Nhật ký", "Tài khoản", "Sinh viên", "Danh sách", "Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp", "Lĩnh vực", "Kỹ năng", "Vị trí nghề nghiệp", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học", "Gửi thông báo", "Đã gửi"]);
+    // The advisors' list is "Danh sách" in its group and "Danh sách cố vấn học tập" as the title (user 2026-11-14: "Không
+    // dùng tên rút gọn “Cố vấn” gây mơ hồ"); every other page keeps its sidebar name.
+    expect(adminNavigation.filter(item => adminPageTitle(item) !== item.label).map(item => [item.label, adminPageTitle(item)]))
+      .toEqual([["Danh sách", "Danh sách cố vấn học tập"]]);
+    expect(adminNavigation.some(item => [item.label as string, adminPageTitle(item)].includes("Cố vấn"))).toBe(false);
   });
   it("groups the career pages under Quản lý nghề nghiệp, the competency pages under Quản lý năng lực and the announcements under Quản lý thông báo", () => {
     expect(adminSidebar.map(entry => entry.kind === "page" ? entry.page.label : `${entry.label}: ${entry.pages.map(page => page.label).join(", ")}`))
-      .toEqual(["Thống kê: Tổng quan, Tiến độ, Nguy cơ, Kỹ năng thiếu, Vị trí mục tiêu, Môn đề xuất, Nhật ký", "Tài khoản", "Sinh viên", "Cố vấn học tập: Cố vấn, Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp", "Quản lý nghề nghiệp: Lĩnh vực, Kỹ năng, Vị trí nghề nghiệp",
+      .toEqual(["Thống kê: Tổng quan, Tiến độ, Nguy cơ, Kỹ năng thiếu, Vị trí mục tiêu, Môn đề xuất, Nhật ký", "Tài khoản", "Sinh viên", "Cố vấn học tập: Danh sách, Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp", "Quản lý nghề nghiệp: Lĩnh vực, Kỹ năng, Vị trí nghề nghiệp",
         "Quản lý năng lực: Nhóm năng lực, Cấu hình năng lực, Cấu hình môn học", "Quản lý thông báo: Gửi thông báo, Đã gửi"]);
     expect(adminGroupOf("/quantri/thong-bao-da-gui")).toBe("announcements");
     expect(adminNavigation.filter(item => item.eyebrow === "QUẢN LÝ NĂNG LỰC").map(item => item.label)).toEqual(["Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học"]);
@@ -75,7 +80,7 @@ describe("admin navigation by role (cố vấn học tập, 2026-11-03)", () => 
 
   it("gives an advisor Thống kê (2026-11-07) but not Tài khoản or Quản lý thông báo, the rows left to the Quản trị viên", () => {
     expect(sidebarText(advisor)).toEqual(["Thống kê: Tổng quan, Tiến độ, Nguy cơ, Kỹ năng thiếu, Vị trí mục tiêu, Môn đề xuất, Nhật ký",
-      "Sinh viên", "Cố vấn học tập: Cố vấn, Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp",
+      "Sinh viên", "Cố vấn học tập: Danh sách, Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp",
       "Quản lý nghề nghiệp: Lĩnh vực, Kỹ năng, Vị trí nghề nghiệp", "Quản lý năng lực: Nhóm năng lực, Cấu hình năng lực, Cấu hình môn học"]);
     for (const path of Object.values(REPORT_PATHS)) {
       expect(canSeeAdminPage(path, advisor)).toBe(true);
@@ -144,13 +149,13 @@ describe("admin navigation by role (cố vấn học tập, 2026-11-03)", () => 
   it("always shows Quản lý sinh viên to the admins, Ban chủ nhiệm khoa and advisors, to other accounts once they advise classes", () => {
     const other = (advisesClasses: boolean | null): AdminAccess => ({ role: "lecturer", advisesClasses });
     for (const access of [admin(null), admin(false), admin(true), { role: "faculty_board", advisesClasses: false } as AdminAccess, advisor]) {
-      expect(sidebarText(access)).toContain("Cố vấn học tập: Cố vấn, Quản lý sinh viên");
+      expect(sidebarText(access)).toContain("Cố vấn học tập: Danh sách, Quản lý sinh viên");
       expect(resolveAdminPage(ADVISOR_STUDENTS_PATH, access).path).toBe(ADVISOR_STUDENTS_PATH);
     }
     expect(sidebarText(admin(true))[0]).toBe("Thống kê: Tổng quan, Tiến độ, Nguy cơ, Kỹ năng thiếu, Vị trí mục tiêu, Môn đề xuất, Nhật ký");
-    expect(sidebarText(other(null))).toContain("Cố vấn học tập: Cố vấn");
-    expect(sidebarText(other(false))).toContain("Cố vấn học tập: Cố vấn");
-    expect(sidebarText(other(true))).toContain("Cố vấn học tập: Cố vấn, Quản lý sinh viên");
+    expect(sidebarText(other(null))).toContain("Cố vấn học tập: Danh sách");
+    expect(sidebarText(other(false))).toContain("Cố vấn học tập: Danh sách");
+    expect(sidebarText(other(true))).toContain("Cố vấn học tập: Danh sách, Quản lý sinh viên");
     // While the answer is unknown a direct link stays open; once it says no classes, the page leads home.
     expect(resolveAdminPage(ADVISOR_STUDENTS_PATH, other(null)).path).toBe(ADVISOR_STUDENTS_PATH);
     expect(resolveAdminPage(ADVISOR_STUDENTS_PATH, other(true)).path).toBe(ADVISOR_STUDENTS_PATH);

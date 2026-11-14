@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import AdminWorkspace from "./AdminWorkspace";
-import { adminGroupOf, adminNavigation, toggleAdminGroup } from "./admin-navigation";
+import { adminGroupOf, adminNavigation, adminPageTitle, toggleAdminGroup } from "./admin-navigation";
 import type { AuthenticatedUser } from "./types";
 
 const user: AuthenticatedUser = { userId: "u1", identityKey: "k", tenantId: "t", objectId: "o", name: "Quản trị", email: null, username: null, role: "admin", signedInAt: "2026-10-13T00:00:00Z" };
@@ -29,7 +29,7 @@ describe("admin workspace", () => {
   it("shows the short names in the sidebar, in order, with the groups and their pages", () => {
     // Quản lý sinh viên is always an admin's page (every student, 2026-11-03), before GET advisor-portal/me answers too.
     expect(sidebarNames(render("/quantri/tai-khoan"))).toEqual(
-      ["Thống kê", "Tổng quan", "Tiến độ", "Nguy cơ", "Kỹ năng thiếu", "Vị trí mục tiêu", "Môn đề xuất", "Nhật ký", "Tài khoản", "Sinh viên", "Cố vấn học tập", "Cố vấn", "Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp", "Quản lý nghề nghiệp", "Lĩnh vực", "Kỹ năng", "Vị trí nghề nghiệp",
+      ["Thống kê", "Tổng quan", "Tiến độ", "Nguy cơ", "Kỹ năng thiếu", "Vị trí mục tiêu", "Môn đề xuất", "Nhật ký", "Tài khoản", "Sinh viên", "Cố vấn học tập", "Danh sách", "Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp", "Quản lý nghề nghiệp", "Lĩnh vực", "Kỹ năng", "Vị trí nghề nghiệp",
         "Quản lý năng lực", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học", "Quản lý thông báo", "Gửi thông báo", "Đã gửi"]);
   });
 
@@ -89,10 +89,19 @@ describe("admin workspace", () => {
     expect(openGroups(render("/quantri/ky-nang/"))).toEqual(["careers"]);
   });
 
-  it.each(adminNavigation.map(item => [item.label, item.path] as const))("uses %s as the page title and the breadcrumb", (label, path) => {
+  it.each(adminNavigation.map(item => [adminPageTitle(item), item.path] as const))("uses %s as the page title and the breadcrumb", (title, path) => {
     const html = render(path);
-    expect(html).toContain(`>${label}</h1>`);
-    expect(html).toContain(`Quản trị / <strong>${label}</strong>`);
+    expect(html).toContain(`>${title}</h1>`);
+    expect(html).toContain(`Quản trị / <strong>${title}</strong>`);
+  });
+
+  it("names the advisors' list in full on its page and 'Danh sách' in the sidebar (user 2026-11-14)", () => {
+    const html = render("/quantri/co-van-hoc-tap");
+    expect(html).toContain(">Danh sách cố vấn học tập</h1>");
+    expect(html).toContain("Quản trị / <strong>Danh sách cố vấn học tập</strong>");
+    expect(html).toContain('<a href="/quantri/co-van-hoc-tap" aria-current="page"><svg');
+    expect(html).toMatch(/<a href="\/quantri\/co-van-hoc-tap" aria-current="page">.*?<span>Danh sách<\/span><\/a>/);
+    expect(html).not.toContain(">Cố vấn</h1>");
   });
 
   it("opens on Tổng quan of the reports, with the shared filter bar (2026-10-31)", () => {
@@ -108,7 +117,7 @@ describe("admin workspace", () => {
     const advisor: AuthenticatedUser = { ...user, userId: "a1", name: "Cố vấn", role: "advisor" };
     const home = render("/quantri", advisor);
     expect(sidebarNames(home)).toEqual(["Thống kê", "Tổng quan", "Tiến độ", "Nguy cơ", "Kỹ năng thiếu", "Vị trí mục tiêu", "Môn đề xuất", "Nhật ký",
-      "Sinh viên", "Cố vấn học tập", "Cố vấn", "Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp",
+      "Sinh viên", "Cố vấn học tập", "Danh sách", "Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp",
       "Quản lý nghề nghiệp", "Lĩnh vực", "Kỹ năng", "Vị trí nghề nghiệp", "Quản lý năng lực", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học"]);
     expect(home).toContain(">Quản lý sinh viên</h1>");
     expect(home).toContain(">QUẢN LÝ SINH VIÊN CỦA CỐ VẤN HỌC TẬP</p>");

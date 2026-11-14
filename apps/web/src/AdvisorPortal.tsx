@@ -33,7 +33,7 @@ export const SCOPE_TEXT: Record<StudentScope, { lead: string; classes: string; s
   own: {
     lead: "Bạn xem được sinh viên của các lớp Khoa phân công cho bạn.",
     classes: "Lớp phụ trách", students: "Sinh viên lớp phụ trách",
-    noClass: "Bạn chưa được phân công lớp nào. Khoa thêm lớp phụ trách cho cố vấn ở trang Cố vấn.",
+    noClass: "Bạn chưa được phân công lớp nào. Khoa thêm lớp phụ trách cho cố vấn ở trang Danh sách cố vấn học tập.",
     noStudent: "Chưa có sinh viên nào của lớp bạn phụ trách đăng nhập EduPath AI.",
   },
 };

@@ -372,7 +372,7 @@ export async function advisorTemplate(domain = "vlu.edu.vn", today = new Date())
     "Mỗi lớp chỉ có một cố vấn. Cố vấn đã có trong danh sách được cập nhật theo tệp; lớp ghi cho cố vấn khác sẽ chuyển sang người đó.",
     "Mọi trang tính đang hiện có dòng tiêu đề này đều được đọc và gộp lại; trang tính ẩn không được đọc. Các cột khác (SLSV, GHI CHÚ…) được bỏ qua.",
     "Tệp theo mẫu cũ (Họ và tên, Email, Mã giảng viên, Đơn vị, Lớp phụ trách) vẫn đọc được.",
-    "Xóa dòng ví dụ trước khi import. Trước khi lưu, trang Cố vấn học tập cho xem trước từng cố vấn và lỗi nếu có.",
+    "Xóa dòng ví dụ trước khi import. Trước khi lưu, trang Danh sách cố vấn học tập cho xem trước từng cố vấn và lỗi nếu có.",
   ]) help.addRow([line]);
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
