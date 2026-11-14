@@ -271,3 +271,16 @@
 .cg-fit-rule { margin: 6px 0 0; color: #5f6b7a; font-size: 13px; }
 .cg-table .cg-num { text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
 .cg-table .cg-nowrap { white-space: nowrap; }
+
+/* The best fit with Khảo sát nhanh beside it (plan "Một bước để bắt đầu", 2026-11-14, mockup E); the survey alone takes the
+   row while no fit is computed. Beside the survey the best fit's score goes under its name, as on a phone. */
+.cg-top-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 20px; align-items: start; }
+.cg-top-row > :only-child { grid-column: 1 / -1; }
+.cg-top-row .cg-top { grid-template-columns: minmax(0, 1fr); gap: 16px; }
+.cg-top-row .cg-top-score { padding: 16px 0 0; border-left: 0; border-top: 1px solid var(--sw-border); }
+.cg-page .cg-top-row > .cg-empty { align-self: stretch; }
+.cg-target-line .cg-target-hint { color: var(--sw-muted); font-size: 13px; }
+.cg-pick-title { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; }
+@media (max-width: 1000px) {
+  .cg-top-row { grid-template-columns: minmax(0, 1fr); }
+}

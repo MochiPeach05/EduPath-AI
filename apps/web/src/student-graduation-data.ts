@@ -244,11 +244,14 @@ export function standardMeta(data: Pick<StudentGraduationResponse, "profile" | "
   return metaText(standardMetaParts(data));
 }
 
-/** The student's own identity used to pick the standard: "Khóa trong tài khoản: K29 · Chuyên ngành trong hồ sơ: Chưa xác định". */
+/**
+ * The student's own identity used to pick the standard: "Khóa trong tài khoản: K29 · Chuyên ngành trong hồ sơ: Chưa có
+ * chuyên ngành" (the words of the choice since 2026-11-14, SpecialtyChoice).
+ */
 export function profileLineParts(profile: StudentGraduationResponse["profile"]): MetaPart[] {
   return [
     { label: "Khóa trong tài khoản:", value: profile.cohortCode ?? "Chưa có" },
-    { label: "Chuyên ngành trong hồ sơ:", value: specialtyLabel(profile.specialty) },
+    { label: "Chuyên ngành trong hồ sơ:", value: profile.specialty ? specialtyLabel(profile.specialty) : "Chưa có chuyên ngành" },
   ];
 }
 export function profileLine(profile: StudentGraduationResponse["profile"]): string {
@@ -270,8 +273,8 @@ export function unresolvedCopy(data: Pick<StudentGraduationResponse, "profile" |
     case "specialty_unset": {
       const hint = data.specialtySuggestion;
       return {
-        title: "Hãy chọn chuyên ngành trong hồ sơ",
-        text: `Khóa ${cohort ?? "của bạn"} có tiêu chuẩn xét tốt nghiệp riêng cho từng chuyên ngành. Hãy cập nhật chuyên ngành trong hồ sơ để xem đúng tiêu chuẩn của bạn.`,
+        title: "Hãy chọn chuyên ngành của bạn",
+        text: `Khóa ${cohort ?? "của bạn"} có tiêu chuẩn xét tốt nghiệp riêng cho từng chuyên ngành. Hãy chọn chuyên ngành để xem đúng tiêu chuẩn của bạn.`,
         suggestion: hint ? `Gợi ý: ${hint.label} — bạn đã đạt ${formatNumber(hint.count)} học phần bắt buộc của chuyên ngành này.` : null,
         action: { label: "Cập nhật chuyên ngành", href: "#profile" },
       };

@@ -1,0 +1,141 @@
+/*
+ * The choice of the specialty (SpecialtyChoice.tsx): radio cards on Hồ sơ và bảng điểm, a select in the short import of
+ * Tổng quan and Xét tốt nghiệp (plan "Một bước để bắt đầu", 2026-11-14). Red marks the chosen card, as the primary button.
+ * `.sw-shell p` resets paragraph margins, hence the two classes on paragraph rules.
+ */
+
+.spc {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.spc .spc-label {
+  padding: 0;
+  color: var(--sw-ink, #242b39);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.spc-required {
+  color: var(--ep-action, #b51639);
+}
+
+.spc-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.spc-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 44px;
+  max-width: 100%;
+  padding: 8px 14px 8px 12px;
+  border: 1px solid #d5dbe3;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--sw-ink, #242b39);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.spc-option:hover {
+  border-color: #8f9cb0;
+}
+
+.spc-option input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--ep-action, #b51639);
+}
+
+.spc-option:focus-within {
+  outline: 2px solid var(--ep-action, #b51639);
+  outline-offset: 2px;
+}
+
+.spc-option.is-on {
+  border-color: var(--ep-action, #b51639);
+  background: var(--ep-control-soft, #fff5f7);
+}
+
+/* "Chưa có chuyên ngành": a way out, quieter than the specialties. */
+.spc-option.spc-none:not(.is-on) {
+  border-style: dashed;
+  color: var(--sw-muted, #647081);
+}
+
+.spc-cards:disabled .spc-option {
+  cursor: default;
+  opacity: .7;
+}
+
+.spc select {
+  width: 100%;
+  max-width: 360px;
+  min-height: 44px;
+  padding: 8px 12px;
+  border: 1px solid #cdd4dd;
+  border-radius: var(--ep-control-radius, 8px);
+  background: #fff;
+  color: var(--sw-ink, #242b39);
+  font-weight: 600;
+}
+
+.spc select:focus-visible {
+  outline: 2px solid var(--ep-action, #b51639);
+  outline-offset: 1px;
+}
+
+.spc .spc-hint {
+  color: var(--sw-muted, #647081);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.spc .spc-error {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: #fff0f2;
+  color: #a11638;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+/* The specialty saved on its own (SpecialtyForm). */
+.spc-form {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.spc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+@media (max-width: 640px) {
+  .spc-option {
+    flex: 1 1 100%;
+  }
+
+  .spc select {
+    max-width: none;
+  }
+}

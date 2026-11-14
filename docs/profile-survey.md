@@ -1,5 +1,14 @@
 # Khảo sát định hướng và hồ sơ bắt buộc
 
+## survey-v5: Khảo sát nhanh (14/11/2026)
+
+Theo góp ý của giảng viên hướng dẫn (13/11: "khảo sát thì dài ơi dài, tụi nó nản"), khảo sát chuyển từ Hồ sơ và bảng điểm sang trang Định hướng nghề nghiệp, đổi tên hiển thị thành **Khảo sát nhanh** (chính sách, mục đích đồng ý và nhãn quản trị vẫn gọi là khảo sát định hướng) và **không còn bắt buộc**.
+
+- Còn 5 mục: Lĩnh vực quan tâm nhất, Thế mạnh của bạn (1–5 công nghệ), Mục tiêu sau tốt nghiệp, Thời gian tự học mỗi tuần, Tiếng Anh chuyên ngành. `SURVEY_QUESTIONS` = field, goal, selfStudy, english; `interestTech` vẫn bắt buộc 1–5 trong form.
+- Bỏ: môi trường, nơi làm việc, đi làm thêm, dẫn dắt nhóm, dự án ngoài môn học, thực tập, Sở trường, Thành tích. PUT vẫn nhận các khóa cũ (trang cũ) và bỏ qua; lưu lại thì xóa `interest_hobbies`, `has_achievements`, `achievements`, `strengths`. Hoàn thành = không phải v1/v2, đủ 4 câu và có công nghệ (`SURVEY_COMPLETE_SQL` cùng luật); khảo sát v3/v4 cũ vẫn tính, không ai phải làm lại. Không có migration; câu trả lời cũ của các câu bỏ đi nằm trong database cho đến khi sinh viên lưu lại (xóa hàng loạt là ghi production, cần người dùng đồng ý).
+- Không còn "hồ sơ bắt buộc": phần dưới đây về khối đỏ ở Tổng quan và 4 mục bắt buộc chỉ còn là lịch sử. Lộ trình AI tạo được khi chưa làm khảo sát (roadmap-v17).
+- Chính sách 2026-11-10 được sửa nội dung cùng phiên bản (thu thập ít hơn, không hỏi đồng ý lại).
+
 Yêu cầu của người dùng ngày 24/10/2026: hồ sơ sinh viên có thêm một **khảo sát định hướng** làm cơ sở đánh giá tổng thể và tư vấn hướng đi ("bổ sung cái vụ sở thích và thành tích làm như 1 cái form luôn á và bộ câu hỏi nên đi kèm câu trả lời dạng radius để tránh việc sv bỏ trống hoặc nhập bừa"); phần thành tích "cho nó chọn: nếu có thì chọn có xong hiện ra ô để sv liệt kê, còn nó chọn không có thì thôi và điều kiện là bắt buộc chọn luôn". Lộ trình AI dùng các câu trả lời này và luôn phải mở hướng học tiếp, kể cả với bảng điểm tốt. Trang Tổng quan phải làm "NỔI BẦN BẬT" việc sinh viên bắt buộc hoàn thành Hồ sơ và bảng điểm trước khi dùng. Người dùng chọn sửa Chính sách bảo mật để AI được dùng khảo sát, và dùng bộ câu hỏi đề xuất.
 
 Cùng ngày, ô **Sở thích** (văn bản tự do) thành hai danh sách chọn sẵn ("dạng radius, để tránh việc sv bỏ trống hoặc nhập bừa"), rồi hai danh sách này được gộp vào khảo sát ("Công nghệ bạn thích và Sở thích khi rảnh có áp dụng vào được Khảo sát định hướng luôn không"; người dùng chọn "Gộp và cho AI dùng", chính sách bản 2026-10-25). Sau đó người dùng đổi câu 11 thành **Thế mạnh của bạn** kèm ô "mô tả công nghệ mà nó thành thạo", câu 12 thành **Sở trường**, và hai đáp án thành "Khó khăn trong việc đọc hiểu", "Trên 4 dự án".

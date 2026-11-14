@@ -76,7 +76,7 @@ describe("public policy, terms and FAQ", () => {
     expect(faqText).not.toContain("dùng Đánh giá năng lực để biết kỹ năng hiện tại");
     expect(faqText).not.toContain("cổng sinh viên");
     const functions = frequentlyAskedQuestions.find((faq) => faq.question === "Tôi có thể sử dụng những chức năng học tập nào?");
-    for (const page of ["Hồ sơ và bảng điểm", "Định hướng nghề nghiệp", "Đánh giá năng lực", "Khoảng trống kỹ năng", "Lộ trình học tập", "Điều kiện xét tốt nghiệp"]) {
+    for (const page of ["Hồ sơ và bảng điểm", "Định hướng nghề nghiệp", "Đánh giá năng lực", "Khoảng trống kỹ năng", "Lộ trình học tập", "Xét tốt nghiệp"]) {
       expect(functions?.note).toContain(page);
     }
     const ai = frequentlyAskedQuestions.find((faq) => faq.question === "EduPath AI dùng AI vào việc gì?")?.answer.join(" ") ?? "";
@@ -90,16 +90,26 @@ describe("public policy, terms and FAQ", () => {
     }
     const survey = "dùng cho các chức năng AI của bạn như khảo sát bạn tự làm, cho đến khi bạn sửa lại hoặc rút đồng ý.";
     const faq = frequentlyAskedQuestions.find((item) => item.question === "Cố vấn học tập và cán bộ Khoa có thể làm thay tôi những gì?")?.answer.join(" ");
-    expect(faq).toContain("làm thay bạn: import bảng điểm, chọn chuyên ngành và vị trí nghề nghiệp mục tiêu, sửa Kế hoạch học kỳ, làm Khảo sát định hướng,");
+    expect(faq).toContain("làm thay bạn: import bảng điểm, chọn chuyên ngành và vị trí nghề nghiệp mục tiêu, sửa Kế hoạch học kỳ, làm Khảo sát nhanh,");
     expect(faq).toContain(survey);
     expect(faq).toContain("Cố vấn và cán bộ Khoa không đồng ý hay rút đồng ý thay bạn và không xóa dữ liệu của bạn.");
     const sharing = policyBlocks.find((text) => text.startsWith("Cố vấn học tập được Khoa phân công cho lớp của bạn xem được toàn bộ trang EduPath AI của bạn:"));
-    expect(sharing).toContain("Cố vấn có thể làm thay bạn: import bảng điểm, chọn chuyên ngành và vị trí nghề nghiệp mục tiêu, sửa kế hoạch học kỳ, làm khảo sát định hướng,");
+    expect(sharing).toContain("Cố vấn có thể làm thay bạn: import bảng điểm, chọn chuyên ngành và vị trí nghề nghiệp mục tiêu, sửa kế hoạch học kỳ, làm Khảo sát nhanh,");
     expect(sharing).toContain(survey);
     const update = policyBlocks.filter((text) => text.startsWith("Bản cập nhật ngày 10/11/2026"));
     expect(update).toHaveLength(1);
     expect(update[0]).toContain("chọn chuyên ngành và vị trí nghề nghiệp mục tiêu, sửa Kế hoạch học kỳ và làm Khảo sát định hướng thay bạn");
     expect(update[0]).toContain(survey);
+  });
+
+  it("asks only for the specialty and the transcript; the target career and the survey are optional (2026-11-14)", () => {
+    // The dated update entries keep what each version said at the time.
+    for (const text of [...policyBlocks.filter((block) => !block.startsWith("Bản cập nhật ngày")), ...faqBlocks]) {
+      expect(text).not.toMatch(/Cần có đủ cả ba|hoàn thành khảo sát trước khi tạo Lộ trình AI|chưa làm khảo sát định hướng thì chưa tạo được|Mục tiêu học tập|trong Thông tin cá nhân|ô Thành tích|Vì sao tôi phải làm/);
+    }
+    const survey = frequentlyAskedQuestions.find((faq) => faq.question === "Khảo sát nhanh dùng để làm gì? Tôi có phải làm không?");
+    expect(survey?.answer[0]).toMatch(/^Không bắt buộc\. Khảo sát nhanh ở trang Định hướng nghề nghiệp có 5 câu/);
+    expect(policyBlocks.find((text) => text.startsWith("Bản cập nhật ngày 10/11/2026"))).toContain("Ngày 14/11/2026, bản này được sửa nội dung mà không cần bạn đồng ý lại");
   });
 
   it("renders the support e-mail in FAQ answers as a link", () => {

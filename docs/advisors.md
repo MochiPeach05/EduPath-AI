@@ -1,5 +1,9 @@
 # Cố vấn học tập (AD-ADV-01…05, AD-AST-01…09)
 
+## Cập nhật 14/11/2026
+
+Cố vấn và cán bộ Khoa làm thay như cũ: đổi chuyên ngành trong khung import (hộp xác nhận), chọn vị trí và làm Khảo sát nhanh ở Định hướng nghề nghiệp. Danh sách sinh viên: bộ lọc "Đã đủ các bước" = có bảng điểm, đã đánh giá năng lực và có Lộ trình AI (không còn cần khảo sát); cột và bộ lọc khảo sát ghi "Khảo sát nhanh". Chọn vị trí thay sinh viên có thể tự đánh giá lại; khi đó nhật ký và thông báo ghi như một lần Đánh giá năng lực làm thay.
+
 Người dùng (03/11/2026): "Giờ làm phần nhóm chức năng quản lý cố vấn học tập này đi và sửa lại các phần tác nhân của CVHT theo trong file function list" (`requirements/Nhom1_DanhSachChucNang_ver0.3 (1).xlsx`, không commit). Tác nhân trong file:
 - "QTV & CVHT": cố vấn học tập (CVHT) được xem;
 - "Quản trị viên": chỉ quản trị viên được thay đổi;

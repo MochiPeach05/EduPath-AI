@@ -735,7 +735,7 @@ export async function readOverview(db: PoolClient, userId: string, now: Date = n
   let blocked: string | null = null;
   if (transcript) {
     try {
-      inputs = await readAssessmentInputs(db, userId, { careerOptional: true, weightsOptional: true });
+      inputs = await readAssessmentInputs(db, userId, { weightsOptional: true });
       engine = assessWithoutHistory(inputs);
     } catch (error) {
       if (!(error instanceof AssessmentError)) throw error;

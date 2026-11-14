@@ -31,16 +31,22 @@ export function formatUpdatedAt(value: string): string {
   return formatVnDateTime(value);
 }
 
-/** The sections of Hồ sơ và bảng điểm that other pages open (each section carries its id). */
 /** Sent on window when a transcript import finishes or the transcript is deleted (StudentTranscript); the profile page reloads on it. */
 export const TRANSCRIPT_UPDATED_EVENT = "edupath-transcript-updated";
-export const PROFILE_SECTIONS = { goals: "muc-tieu-hoc-tap", survey: "khao-sat-dinh-huong", transcript: "bang-diem" } as const;
+/** Calls listener on every TRANSCRIPT_UPDATED_EVENT; returns the way to stop listening (the cleanup of a useEffect). */
+export function onTranscriptUpdated(listener: () => void): () => void {
+  window.addEventListener(TRANSCRIPT_UPDATED_EVENT, listener);
+  return () => window.removeEventListener(TRANSCRIPT_UPDATED_EVENT, listener);
+}
+/**
+ * The sections of Hồ sơ và bảng điểm that other pages open (each section carries its id). Since 2026-11-14 (plan "Một bước
+ * để bắt đầu") the page has the transcript only, whose import holds the specialty; goals and survey name sections that are
+ * gone (Mục tiêu học tập; the survey is Khảo sát nhanh on Định hướng nghề nghiệp) and are kept for older links.
+ */
+export const PROFILE_SECTIONS = { transcript: "bang-diem" } as const;
 export type ProfileSection = typeof PROFILE_SECTIONS[keyof typeof PROFILE_SECTIONS];
 
-/** The section where a required profile item (requiredProfileItems) is filled in. */
+/** The section of Hồ sơ và bảng điểm where an item is filled in: the transcript and the specialty (in its import); none else. */
 export function profileSectionOf(itemId: string): ProfileSection | undefined {
-  return itemId === "transcript" ? PROFILE_SECTIONS.transcript
-    : itemId === "specialty" || itemId === "career" ? PROFILE_SECTIONS.goals
-    : itemId === "survey" ? PROFILE_SECTIONS.survey
-    : undefined;
+  return itemId === "transcript" || itemId === "specialty" ? PROFILE_SECTIONS.transcript : undefined;
 }

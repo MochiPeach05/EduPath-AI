@@ -96,8 +96,9 @@ describe("assistant student API", () => {
     expect(online.body).toEqual({
       threads: [{ id: threadId, title: thread.title, createdAt: "2026-10-28T01:00:00.000Z", updatedAt: "2026-10-28T01:00:00.000Z", byAdvisor: false, createdByRole: null }], workerOnline: true,
       suggestions: [
-        "Làm sao để import bảng điểm PDF?", "Làm sao để chọn chuyên ngành và vị trí nghề nghiệp mục tiêu?", "Khảo sát định hướng dùng để làm gì?",
-        "Làm sao để chạy Đánh giá năng lực?", "Điều kiện xét tốt nghiệp của khóa mình là gì?", "EduPath AI dùng dữ liệu của mình như thế nào?",
+        // assistant-readiness-v3 (2026-11-14): only the specialty and the transcript come first.
+        "Làm sao để chọn chuyên ngành và import bảng điểm PDF?", "Làm sao để chạy Đánh giá năng lực?",
+        "Điều kiện xét tốt nghiệp của khóa mình là gì?", "EduPath AI dùng dữ liệu của mình như thế nào?",
       ],
     });
     const old = await request(setup({ worker: { online: true, kinds: ["study_roadmap"] } }).app).get("/assistant/threads").expect(200);

@@ -120,13 +120,15 @@ describe("GET /", () => {
     expect((await request(setup({ assessment: false }).app).get("/roadmap")).body).toMatchObject({ roadmap: null, assessment: null, stale: false });
   });
 
-  it("says whether the profile survey a new roadmap needs is answered", async () => {
+  it("says whether a new roadmap will use the profile survey, and makes one without it (2026-11-14, roadmap-v17)", async () => {
     expect((await request(setup({ survey: false }).app).get("/roadmap")).body.surveyDone).toBe(false);
     // No survey under a valid consent, or a roadmap made before roadmap-v9 (no recorded facts): no basis.
     expect((await request(setup({ survey: false, rows: [row()] }).app).get("/roadmap")).body.basis).toBeNull();
     const { recorded: _recorded, ...older } = row().facts;
     expect((await request(setup({ rows: [row({ facts: older })] }).app).get("/roadmap")).body.basis).toBeNull();
-    await request(setup({ survey: false }).app).post("/roadmap").set("Origin", origin).send({}).expect(409, { error: "survey_required" });
+    // The survey is optional: no more 409 survey_required.
+    const created = await request(setup({ survey: false }).app).post("/roadmap").set("Origin", origin).send({}).expect(201);
+    expect(created.body.roadmap).toMatchObject({ status: "queued" });
   });
 
   describe("previous (the older roadmap shown dimmed, like Xét tốt nghiệp)", () => {

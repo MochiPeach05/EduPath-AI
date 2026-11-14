@@ -103,7 +103,7 @@ export const STUDENT_STATUS_TEXT: Record<AdvisedStudentStatus, string> = {
   all: "Tất cả sinh viên",
   no_transcript: "Chưa có bảng điểm",
   no_assessment: "Chưa đánh giá năng lực",
-  no_survey: "Chưa làm khảo sát định hướng",
+  no_survey: "Chưa làm Khảo sát nhanh",
   no_roadmap: "Chưa có Lộ trình AI",
   complete: "Đã đủ các bước",
 };

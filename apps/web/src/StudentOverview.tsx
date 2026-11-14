@@ -4,10 +4,11 @@ import { queueAssistantQuestion } from "./assistant-handoff";
 import { fitAxisLabels, yearAxisLabels } from "./chart-labels";
 import { decimalText, meaningClass, meaningOf, scoreText, type Meaning } from "./display-format";
 import { OVERVIEW_API, type OverviewResponse, type OverviewWarning } from "./overview-types";
-import { PROFILE_SECTIONS, profileSectionOf, type ProfileSection } from "./student-overview-data";
+import { PROFILE_SECTIONS, type ProfileSection } from "./student-overview-data";
 import { failedRoadmapText, previousRoadmapNote } from "./student-roadmap-data";
-import { SURVEY_API, gapSentence, surveyGaps, type SurveyResponse } from "./profile-survey";
 import { Icon } from "./student-icons";
+import StudentTranscript from "./StudentTranscript";
+import { SpecialtyForm, specialtyOptions } from "./SpecialtyChoice";
 import "./student-overview.css";
 
 // Tổng quan (STU-PROG-01…03, 2026-10-30; user: "Ok triển khai đi" on the approved preview
@@ -38,19 +39,8 @@ export type StudentProfile = {
   hasTranscript?: boolean;
 };
 
-/**
- * What the profile needs before EduPath AI can help (user 2026-10-24: "mày muốn xài cái này là mày bắt buộc phải hoàn
- * thành phần này trước"): the same fields as the API's profileStatus "complete". surveyHint says what saved answers
- * still lack (surveyGaps), when known.
- */
-export function requiredProfileItems(profile: StudentProfile | null, hasTranscript: boolean, surveyHint = "") {
-  return [
-    { id: "transcript", label: "Bảng điểm học tập", hint: "Tải lên bảng điểm PDF của bạn", done: hasTranscript },
-    { id: "specialty", label: "Chuyên ngành", hint: "Chọn trong Mục tiêu học tập", done: Boolean(profile?.specialty) },
-    { id: "career", label: "Vị trí nghề nghiệp mục tiêu", hint: "Chọn trong Mục tiêu học tập hoặc Định hướng nghề nghiệp", done: Boolean(profile?.careerPositionId) },
-    { id: "survey", label: "Khảo sát định hướng", hint: profile?.surveyUpdatedAt ? surveyHint || "Cập nhật các mục còn thiếu" : "Câu hỏi, thế mạnh, sở trường và thành tích", done: profile?.surveyComplete === true },
-  ];
-}
+/** The pages a student can use once the specialty and the transcript are in (the "Bắt đầu" card of Tổng quan). */
+export const START_PAGES = ["Xét tốt nghiệp", "Đánh giá năng lực", "Định hướng nghề nghiệp", "Lộ trình học tập", "Trợ lý AI"] as const;
 
 /**
  * After navigate("profile"): scrolls to a section of Hồ sơ và bảng điểm and moves focus to its heading. The survey and
@@ -309,7 +299,7 @@ function ProgressCard({ data, navigate, openTranscript }: { data: OverviewRespon
     ? `So với kế hoạch đào tạo ${data.profile.cohortCode} ${data.profile.specialtyName}${progress?.totalCredits ? ` (${progress.totalCredits} tín chỉ)` : ""}`
     : "So với kế hoạch đào tạo của khóa bạn"}><button type="button" className="sw-text-link" onClick={() => navigate("roadmap")}>Xem chi tiết tiến độ <Icon name="arrow" /></button></Head>;
   if (!progress) return <section className="sw-panel ov-card" aria-labelledby="ov-progress-title">{head}<Empty text="Chưa có bảng điểm nên chưa tính được tiến độ." action="Import bảng điểm" onAction={openTranscript} /></section>;
-  if (progress.blocked) return <section className="sw-panel ov-card" aria-labelledby="ov-progress-title">{head}<Empty text={blockedText(progress.blocked)} action={progress.blocked === "specialty_required" ? "Chọn chuyên ngành" : undefined} onAction={() => navigate("profile")} /></section>;
+  if (progress.blocked) return <section className="sw-panel ov-card" aria-labelledby="ov-progress-title">{head}<Empty text={blockedText(progress.blocked)} action={progress.blocked === "specialty_required" ? "Chọn chuyên ngành" : undefined} onAction={openTranscript} /></section>;
   const total = progress.totalCredits;
   // passed + running + late + rest = total: the boxes, the bar and its legend say the same four numbers (user review 2026-11-04).
   const { passed, running, late, rest } = progressParts(progress);
@@ -563,9 +553,8 @@ function NextCard({ data, navigate }: { data: OverviewResponse; navigate: Naviga
   if (!roadmap || roadmap.status !== "completed") {
     const text = roadmap?.status === "pending" ? "EduPath AI đang soạn lộ trình cho học kỳ tới, bạn quay lại sau ít phút nhé."
       : roadmap?.status === "failed" ? "Lần soạn lộ trình gần nhất chưa xong. Bạn bấm Tạo lại ở Lộ trình học tập."
-        : !data.readiness.assessment ? "Lộ trình AI cần kết quả Đánh giá năng lực và Khảo sát định hướng."
-          : !data.readiness.survey ? "Bạn hoàn thành Khảo sát định hướng để tạo Lộ trình AI cho học kỳ tới."
-            : "Bạn chưa tạo Lộ trình AI cho học kỳ tới.";
+        : !data.readiness.assessment ? "Lộ trình AI cần kết quả Đánh giá năng lực."
+          : "Bạn chưa tạo Lộ trình AI cho học kỳ tới.";
     const previous = roadmap?.previous ?? null;
     // While a new roadmap is written or failed, the previous one stays, dimmed, as on the Lộ trình AI tab (2026-11-07); a
     // failed one says when, why and what to do above it (QA 2026-11-10).
@@ -579,8 +568,8 @@ function NextCard({ data, navigate }: { data: OverviewResponse; navigate: Naviga
         {previous.firstMonth && <div className="ov-month"><b>{previous.firstMonth.label}:</b> {previous.firstMonth.text}</div>}
       </div>
       <button type="button" className="sw-text-link ov-foot-link" onClick={() => navigate("roadmap")}>Mở Lộ trình AI đề xuất <Icon name="arrow" /></button>
-    </> : <Empty text={text} action={!data.readiness.assessment ? "Đánh giá năng lực" : !data.readiness.survey ? "Làm khảo sát" : "Mở Lộ trình học tập"}
-      onAction={() => navigate(!data.readiness.assessment ? "competency" : !data.readiness.survey ? "profile" : "roadmap")} />;
+    </> : <Empty text={text} action={!data.readiness.assessment ? "Đánh giá năng lực" : "Mở Lộ trình học tập"}
+      onAction={() => navigate(!data.readiness.assessment ? "competency" : "roadmap")} />;
   } else {
     const outdated = roadmapOutdated(roadmap);
     body = <>
@@ -682,11 +671,13 @@ async function readOverview(signal: AbortSignal): Promise<OverviewResponse> {
   return response.json() as Promise<OverviewResponse>;
 }
 
-export default function StudentOverview({ profile, loading: profileLoading, navigate, identity }: {
+export default function StudentOverview({ profile, loading: profileLoading, navigate, identity, onProfileChanged }: {
   profile: StudentProfile | null; loading: boolean;
   navigate: (page: OverviewPage) => void;
-  /** The student's identity strip, shown above the required-profile notice (user 2026-10-24: under the account name). */
+  /** The student's identity strip, shown above the "Bắt đầu" card (user 2026-10-24: under the account name). */
   identity: ReactNode;
+  /** The specialty or the transcript was saved here: the shell reads the profile again. */
+  onProfileChanged?: () => void;
 }) {
   const [data, setData] = useState<OverviewResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -701,50 +692,38 @@ export default function StudentOverview({ profile, loading: profileLoading, navi
       .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [reload]);
-  // Saved answers that no longer count (a newer question set or policy): the gate says what is missing.
-  const surveyOutdated = Boolean(profile?.surveyUpdatedAt) && profile?.surveyComplete === false;
-  const [surveyHint, setSurveyHint] = useState("");
-  useEffect(() => {
-    setSurveyHint("");
-    if (!surveyOutdated) return;
-    const controller = new AbortController();
-    fetch(SURVEY_API, { credentials: "include", cache: "no-store", signal: controller.signal })
-      .then(response => response.ok ? response.json() as Promise<SurveyResponse> : null)
-      .then(data => { if (data && !controller.signal.aborted) setSurveyHint(gapSentence(surveyGaps(data.questions, data.survey, data.consentVersion))); })
-      .catch(() => undefined);
-    return () => controller.abort();
-  }, [surveyOutdated]);
+  // What the student has done, from the overview once it answered, else from the profile.
   const hasTranscript = data ? data.readiness.transcript : profile?.hasTranscript === true;
-  const checklist = requiredProfileItems(profile, hasTranscript, surveyHint);
-  const ready = checklist.filter(item => item.done).length;
-  const readyKnown = !profileLoading && profile !== null && (data !== null || profile.hasTranscript !== undefined);
-  const missing = checklist.length - ready;
-  const openProfile = (section?: ProfileSection) => {
+  const known = !profileLoading && profile !== null && (data !== null || profile.hasTranscript !== undefined);
+  const openTranscript = () => {
     navigate("profile");
-    if (section) revealProfileSection(section);
+    revealProfileSection(PROFILE_SECTIONS.transcript);
   };
-  // "Hoàn thành hồ sơ" opens the first missing item; "Import bảng điểm" the transcript.
-  const firstMissing = readyKnown ? checklist.find(item => !item.done) : undefined;
-  const completeProfile = () => openProfile(firstMissing && profileSectionOf(firstMissing.id));
-  const openTranscript = () => openProfile(PROFILE_SECTIONS.transcript);
+  // A specialty or a transcript saved here: the shell reads the profile, this page its overview.
+  const saved = () => { onProfileChanged?.(); setReload(value => value + 1); };
+  // A transcript without a specialty (imported before 2026-11-14, or "Chưa có chuyên ngành"): the choice, when the major and
+  // the cohort have specialties. Not a gate: the rest of the page stays below.
+  const askSpecialty = known && hasTranscript && profile?.specialty === null && specialtyOptions(profile, false).length > 0;
   return <div className="so-overview ov-page">
     {identity}
-    {readyKnown && missing > 0 && <section className="so-gate" aria-labelledby="so-gate-title">
-      <span className="so-gate-icon" aria-hidden="true"><Icon name="shield" /></span>
-      <div className="so-gate-body">
-        <p className="so-gate-kicker">BẮT BUỘC TRƯỚC KHI SỬ DỤNG</p>
-        <h2 id="so-gate-title">Hoàn thành Hồ sơ và bảng điểm để EduPath AI hỗ trợ bạn</h2>
-        <p>Bạn vui lòng cung cấp đầy đủ các mục thông tin dưới đây để kết quả đánh giá được chính xác. Nếu có sự thay đổi, bạn có thể điều chỉnh lại các thông tin này trong tương lai.</p>
-        <ol className="so-gate-steps">{checklist.map((item, index) => <li key={item.id} className={item.done ? "is-done" : undefined}>
-          <span className="so-gate-check" aria-hidden="true">{item.done ? <Icon name="check" /> : index + 1}</span>
-          <span><strong>{item.label}</strong><small>{item.done ? "Đã hoàn thành" : item.hint}</small></span>
-          <span className="sr-only">{item.done ? "Đã hoàn thành" : "Chưa hoàn thành"}</span>
-        </li>)}</ol>
+    {/* Before the first transcript (GVHD 2026-11-13, plan "Một bước để bắt đầu", user 2026-11-14): one step, done here. It
+        replaces the red "Bắt buộc trước khi sử dụng" gate of four items. */}
+    {known && !hasTranscript && <section className="so-start" aria-labelledby="so-start-title">
+      <div className="so-start-intro">
+        <p className="so-start-kicker">BẮT ĐẦU</p>
+        <h2 id="so-start-title">Chọn chuyên ngành và import bảng điểm</h2>
+        <p className="so-start-lead">Xong bước này bạn dùng được ngay:</p>
+        <ul className="so-start-pages" aria-label="Các trang dùng được sau khi import">{START_PAGES.map(name => <li key={name}>{name}</li>)}</ul>
       </div>
-      <div className="so-gate-actions">
-        <span className="so-gate-count" aria-hidden="true">{ready}/{checklist.length}</span>
-        <button className="sw-primary so-gate-button" onClick={completeProfile}>Hoàn thành hồ sơ ngay <Icon name="arrow" /></button>
+      <div className="so-start-import"><StudentTranscript profile={profile} mode="start" onImported={saved} onProfileChanged={onProfileChanged} /></div>
+    </section>}
+    {askSpecialty && <section className="so-start so-specialty" aria-labelledby="so-specialty-title">
+      <div className="so-start-intro">
+        <p className="so-start-kicker">CHUYÊN NGÀNH</p>
+        <h2 id="so-specialty-title">Chọn chuyên ngành của bạn</h2>
+        <p className="so-start-lead">EduPath AI dùng chuyên ngành để chọn tiêu chuẩn xét tốt nghiệp và tính tiến độ theo kế hoạch đào tạo của bạn.</p>
       </div>
+      <div className="so-start-import"><SpecialtyForm profile={profile} variant="select" withNone={false} onSaved={saved} /></div>
     </section>}
     {loading && !data ? <div className="ov-loading" role="status" aria-busy="true"><span className="sr-only">Đang tải trang Tổng quan…</span><div className="ov-skel ov-skel-kpis" /><div className="ov-skel" /><div className="ov-skel" /></div>
       : error && !data ? <section className="sw-panel ov-error" role="alert"><h2>{error}</h2><p className="ov-sub">Bạn có thể thử lại để xem tiến độ học tập.</p>

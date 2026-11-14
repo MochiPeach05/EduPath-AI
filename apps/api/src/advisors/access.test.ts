@@ -229,10 +229,11 @@ describe("a cố vấn học tập in a student's page (advisorActing)", () => {
     expect(writes.find((write) => write.table === "audit")!.values.slice(5, 11)).toEqual(["Làm Khảo sát định hướng thay sinh viên",
       "2374802010994 – Sinh viên Thử nghiệm (lớp 71K29CNTT99)", "student", STUDENT_ID, "PUT", "/api/student/survey"]);
     const notification = writes.find((write) => write.table === "notification")!.values;
-    expect(notification.slice(1, 5)).toEqual([STUDENT_ID, "khoa", "advisor_action", "Cố vấn học tập đã làm Khảo sát định hướng thay bạn"]);
-    expect(notification[5]).toBe("ThS. Nguyễn Văn Cố Vấn (cố vấn học tập của lớp bạn) đã làm Khảo sát định hướng thay bạn trên EduPath AI. "
+    // Since 2026-11-14 the survey is Khảo sát nhanh on Định hướng nghề nghiệp: the student is told so and sent there; the log keeps its name.
+    expect(notification.slice(1, 5)).toEqual([STUDENT_ID, "khoa", "advisor_action", "Cố vấn học tập đã làm Khảo sát nhanh thay bạn"]);
+    expect(notification[5]).toBe("ThS. Nguyễn Văn Cố Vấn (cố vấn học tập của lớp bạn) đã làm Khảo sát nhanh thay bạn trên EduPath AI. "
       + "Bạn xem lại câu trả lời; nếu chưa đúng, bạn vẫn tự sửa hoặc xóa được như thường.");
-    expect(notification[6]).toBe("#profile");
+    expect(notification[6]).toBe("#career");
     expect(notification[8]).toMatch(new RegExp(`^advisor:survey:${ADVISOR_ID}:\\d{4}-\\d{2}-\\d{2}$`));
     await request(app).put("/api/student/survey").set("X-Advisor-Student", STUDENT_ID).send({ answers: {} }).expect(200);
     await vi.waitFor(() => expect(writes.filter((write) => write.table === "audit")).toHaveLength(2));
@@ -340,7 +341,7 @@ describe("a quản trị viên or Ban chủ nhiệm khoa in a student's page (QT
 
   it("lets an admin fill in the survey and edit the plan, and tells the student a quản trị viên of the Khoa did it (user 2026-11-10)", async () => {
     for (const [path, action, title] of [
-      ["/api/student/survey", "Làm Khảo sát định hướng thay sinh viên", "Quản trị viên của Khoa đã làm Khảo sát định hướng thay bạn"],
+      ["/api/student/survey", "Làm Khảo sát định hướng thay sinh viên", "Quản trị viên của Khoa đã làm Khảo sát nhanh thay bạn"],
       ["/api/student/study-plan", "Cập nhật Kế hoạch học kỳ thay sinh viên", "Quản trị viên của Khoa đã cập nhật Kế hoạch học kỳ thay bạn"],
     ] as const) {
       const { app, writes } = setup(qtv, null, 200, anyRow);

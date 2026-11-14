@@ -5,7 +5,8 @@ import type { PoolClient } from "pg";
 import type { DatabasePool } from "../db/pool.js";
 import type { AuthenticatedUser } from "../auth/types.js";
 import { requireAuthentication } from "../middleware/authorization.js";
-import { actingAdvisor, studentUser } from "../advisors/access.js";
+import { ASSESSMENT_ACTION, actingAdvisor, recordActingAction, studentUser } from "../advisors/access.js";
+import { reassessForNewTarget, type AssessmentRunner } from "../competency-assessment/router.js";
 import { parseTranscript, TranscriptError, withoutSettledReviews, type TranscriptData } from "./transcript-parser.js";
 import { enqueueTranscript, expireJobs, jobColumns, runAfterTranscriptImport, type TranscriptImportOptions } from "./transcript-jobs.js";
 import { activeConsentVersion, consentWithdrawn, isValidConsent, recordConsent, recordTranscriptConsent, TRANSCRIPT_POLICY_VERSION, withdrawConsent, withdrawTranscriptConsent } from "./consent.js";
@@ -27,7 +28,12 @@ async function lockStudent(client: PoolClient, user: AuthenticatedUser) {
   if (!active.rowCount) throw new TranscriptError("insufficient_role", 403);
 }
 
-export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigin: string, ocrEnabled = false, options: TranscriptImportOptions = {}) {
+export type StudentDataRouterOptions = TranscriptImportOptions & {
+  /** Stores a new assessment (competency-assessment/router.ts createAssessmentRunner): a new target career re-assesses. */
+  reassess?: AssessmentRunner | undefined;
+};
+
+export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigin: string, ocrEnabled = false, options: StudentDataRouterOptions = {}) {
   const router = Router();
   router.use(requireAuthentication);
   router.use((req, res, next) => {
@@ -39,6 +45,10 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
 
   // A cố vấn học tập or a Khoa admin working in the student's page sends only specialty and/or careerPositionId here,
   // checked the same way (advisors/access.ts ACTING_ACTIONS, policy 2026-11-10); the other fields stay the student's.
+  // A new target career (not a cleared one, nor the specialty) re-assesses a student who already has a result, after the
+  // profile is saved (2026-11-14, user: "Triển khai theo kế hoạch này đi" on the plan "Một bước để bắt đầu"; the
+  // assessment router's reassessForNewTarget): reassessed says whether a new result was stored. A cố vấn học tập or the
+  // Khoa doing it gets the log row and the notification of their Đánh giá năng lực too.
   router.patch("/profile", async (req, res) => {
     const input = z.object({
       className: z.string().trim().max(32).regex(/^[\p{L}\p{N} _.-]*$/u).nullable().optional(),
@@ -52,6 +62,7 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
     }).strict().refine(bothOrNeither).safeParse(req.body);
     if (!input.success) { res.status(400).json({ error: "invalid_profile" }); return; }
     const client = await pool!.connect();
+    let newTarget = false;
     try {
       await client.query("BEGIN");
       await lockStudent(client, studentUser(req));
@@ -61,12 +72,13 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
         [studentUser(req).userId, null, input.data.interests || null, null, input.data.currentSemester ?? null]);
       if (input.data.careerPositionId !== undefined) {
         const selected = input.data.careerPositionId;
+        const previous = await client.query<{ career_position_id: string | null }>("SELECT career_position_id FROM student_profiles WHERE user_id=$1", [studentUser(req).userId]);
         if (selected) {
           const career = await client.query("SELECT deleted_at FROM career_positions WHERE id=$1 FOR SHARE", [selected]);
-          const previous = await client.query("SELECT career_position_id FROM student_profiles WHERE user_id=$1", [studentUser(req).userId]);
           if (!career.rowCount || (career.rows[0].deleted_at && previous.rows[0]?.career_position_id !== selected))
             throw new TranscriptError("career_unavailable", 409);
         }
+        newTarget = Boolean(selected) && previous.rows[0]?.career_position_id !== selected;
         await client.query("UPDATE student_profiles SET career_position_id=$2 WHERE user_id=$1", [studentUser(req).userId, selected]);
       }
       // Absent keeps the specialty, null clears it ("Chưa xác định"). An ninh Mạng và IoTs is offered to K27 only,
@@ -86,14 +98,19 @@ export function createStudentDataRouter(pool: DatabasePool | undefined, webOrigi
           [studentUser(req).userId, input.data.interestTech, input.data.interestHobbies]);
       }
       await client.query("COMMIT");
-      res.json({ saved: true });
     } catch (error) { await client.query("ROLLBACK"); throw error; }
     finally { client.release(); }
+    const acting = req.advisorActing;
+    const reassessed = newTarget && options.reassess ? await reassessForNewTarget(pool!, options.reassess, studentUser(req), acting !== undefined) : false;
+    if (reassessed && acting) recordActingAction(pool!, acting, ASSESSMENT_ACTION, "POST", "/api/student/competency-assessments");
+    res.json({ saved: true, reassessed });
   });
 
-  // "Khảo sát định hướng": the questions and interest lists, the stored answers (with who saved them for the student,
-  // savedBy), what the profile held before the interests moved into the survey (to start from), the policy version the
-  // student agreed to, and whether the student withdrew that consent (no one may then fill it in for them).
+  // "Khảo sát định hướng" ("Khảo sát nhanh" on Định hướng nghề nghiệp since survey-v5, 2026-11-14): the questions and
+  // interest lists, the stored answers (with who saved them for the student, savedBy), what the profile held before the
+  // interests moved into the survey (to start from), the policy version the student agreed to, and whether the student
+  // withdrew that consent (no one may then fill it in for them). interests.hobbies and achievementsMax are what survey-v4
+  // asked; they stay for pages loaded before v5, which still send them (ignored, survey.ts parseSurveyInput).
   router.get("/survey", async (req, res) => {
     const userId = studentUser(req).userId;
     const survey = await readSurvey(pool!, userId);

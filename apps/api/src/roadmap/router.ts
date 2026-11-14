@@ -1,8 +1,8 @@
 // Student API of the study roadmap, mounted at /api/student/roadmap. GET / reads the newest roadmap with the newest
 // competency assessment (a roadmap built from an older one is "stale"), GET /status is the cheap poll while the AI
 // writes, POST / creates one ("Tạo lộ trình", "Tạo lại"). No consent header: a roadmap is built only from an
-// assessment and a profile survey the student already consented to (or one a cố vấn học tập or the Khoa filled in for
-// them, policy 2026-11-10), and goes with them.
+// assessment and, when there is one, a profile survey the student already consented to (or one a cố vấn học tập or the
+// Khoa filled in for them, policy 2026-11-10; optional since 2026-11-14), and goes with them.
 import { Router, type ErrorRequestHandler } from "express";
 import type { PoolClient } from "pg";
 import { z } from "zod";
@@ -118,8 +118,8 @@ export function createRoadmapRouter(pool: DatabasePool | undefined, webOrigin: s
       previous: previous && presentRoadmap(previous, today()),
       assessment: assessment && { id: assessment.id, createdAt: iso(assessment.createdAt), hasCareer: assessment.hasCareer === true },
       stale: Boolean(row && assessment && row.assessmentId !== assessment.id),
-      // A new roadmap needs the answered profile survey, agreed to under the current policy or filled in for the student
-      // by a cố vấn học tập or the Khoa (surveyUsable).
+      // Whether a new roadmap will use the profile survey: answered, agreed to under the current policy or filled in for the
+      // student by a cố vấn học tập or the Khoa (surveyUsable). Not needed to make one since 2026-11-14 (roadmap-v17).
       surveyDone,
       basis: roadmapBasisView(row, survey, surveyDone),
       aiEnabled: enabled,

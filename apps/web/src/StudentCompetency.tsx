@@ -598,10 +598,26 @@ function NoGapLines({ career }: { career: NonNullable<AssessmentResult["career"]
   return <><p className="scomp-prose sg-status-pass">✓ {text.met}</p>{text.zero && <p className="scomp-prose">{text.zero}</p>}</>;
 }
 
-function GapSummary({ result }: { result: AssessmentResult }) {
+/**
+ * Khoảng trống kỹ năng without a target career (plan "Một bước để bắt đầu", 2026-11-14, mockup F): the page compares the
+ * student with one vị trí nghề nghiệp, chosen on Định hướng nghề nghiệp. assessed: there is an assessment, which the API
+ * renews by itself once a target is chosen; without one, "Đánh giá năng lực" comes next.
+ */
+export function NoTargetGap({ assessed }: { assessed: boolean }) {
+  return <section className="sw-panel scomp-section sgap-no-target" aria-labelledby="sgap-no-target-title"><div className="sw-empty scomp-empty">
+    <span className="scomp-empty-icon" aria-hidden="true"><Icon name="target" /></span>
+    <h3 id="sgap-no-target-title">Chọn vị trí nghề nghiệp mục tiêu để xem kỹ năng còn thiếu</h3>
+    <p>{assessed ? "Trang này so năng lực của bạn với yêu cầu của một vị trí nghề nghiệp. Bạn chọn vị trí ở Định hướng nghề nghiệp, EduPath AI tính lại ngay."
+      : "Trang này so năng lực của bạn với yêu cầu của một vị trí nghề nghiệp. Hãy chọn vị trí ở Định hướng nghề nghiệp, rồi bấm “Đánh giá năng lực” để xem kỹ năng còn thiếu."}</p>
+    <a className="sw-primary" href="#career">Mở Định hướng nghề nghiệp</a>
+  </div></section>;
+}
+
+/** targetName: the target career chosen since this assessment, which was made without one. */
+function GapSummary({ result, targetName = null }: { result: AssessmentResult; targetName?: string | null }) {
   const career = result.career;
   if (!career) return <Section id="sgap-summary" title="Mức phù hợp với vị trí nghề nghiệp mục tiêu">
-    <div className="sw-empty scomp-empty"><h3>Bạn chưa chọn vị trí nghề nghiệp mục tiêu</h3><p>Khoảng trống kỹ năng được tính so với yêu cầu của vị trí nghề nghiệp mục tiêu. Kết quả này được tính khi hồ sơ chưa có vị trí nghề nghiệp mục tiêu; hãy chọn vị trí nghề nghiệp rồi bấm “Đánh giá lại” để biết kỹ năng nào đã đạt, kỹ năng nào còn thiếu và học phần nên học.</p><a className="sw-outline" href="#career">Chọn vị trí nghề nghiệp mục tiêu</a></div>
+    <div className="sw-empty scomp-empty"><h3>Cần đánh giá lại với vị trí nghề nghiệp mục tiêu</h3><p>Kết quả đánh giá này được tính khi bạn chưa chọn vị trí nghề nghiệp mục tiêu. Bấm “Đánh giá lại” để biết kỹ năng nào đã đạt, kỹ năng nào còn thiếu và học phần nên học{targetName ? <> với vị trí <strong>{targetName}</strong></> : null}.</p></div>
   </Section>;
   // "Kỹ năng còn thiếu" (isGap): below, not studied, "Cần tự học" and "Chưa đủ dữ liệu"; "Sắp học" comes with the plan.
   const missing = sortRequirements(career.requirements).filter(isGap);
@@ -902,18 +918,22 @@ function PreviousComment({ comment, view, note }: { comment: PreviousAiComment; 
 
 /* ------------------------------------------------------------------- page */
 
-function Checklist({ hasTranscript, transcriptFailed, profile, suggestion }: { hasTranscript: boolean | null; transcriptFailed: boolean; profile: Profile | null; suggestion: string | null }) {
+/**
+ * What the assessment is computed from: the transcript and the specialty (plan "Một bước để bắt đầu", 2026-11-14), and on
+ * Khoảng trống kỹ năng the target career too, chosen on Định hướng nghề nghiệp.
+ */
+function Checklist({ hasTranscript, transcriptFailed, profile, suggestion, view }: { hasTranscript: boolean | null; transcriptFailed: boolean; profile: Profile | null; suggestion: string | null; view: CompetencyView }) {
   const specialty = profile?.specialty ?? null;
-  const items: { label: string; done: boolean | null; value: string; note?: string | null }[] = [
-    { label: "Bảng điểm", done: hasTranscript, value: transcriptFailed ? "Chưa kiểm tra được — thử tải lại trang" : hasTranscript === null ? "Đang kiểm tra…" : hasTranscript ? "Đã import" : "Chưa có bảng điểm" },
-    { label: "Vị trí nghề nghiệp mục tiêu", done: profile ? Boolean(profile.careerPositionId) : null, value: profile?.careerPosition?.nameVi ?? (profile ? "Chưa chọn" : "Đang tải…") },
-    { label: "Chuyên ngành", done: profile ? Boolean(specialty) : null, value: profile ? (specialty ? specialtyLabel(specialty) : "Chưa chọn") : "Đang tải…", note: !specialty ? suggestion : null },
+  const items: { label: string; done: boolean | null; value: string; note?: string | null; href: string; edit: string; add: string }[] = [
+    { label: "Bảng điểm", done: hasTranscript, value: transcriptFailed ? "Chưa kiểm tra được — thử tải lại trang" : hasTranscript === null ? "Đang kiểm tra…" : hasTranscript ? "Đã import" : "Chưa có bảng điểm", href: "#profile", edit: "Chỉnh sửa", add: "Bổ sung" },
+    { label: "Chuyên ngành", done: profile ? Boolean(specialty) : null, value: profile ? (specialty ? specialtyLabel(specialty) : "Chưa chọn") : "Đang tải…", note: !specialty ? suggestion : null, href: "#profile", edit: "Chỉnh sửa", add: "Bổ sung" },
+    ...(view === "gap" ? [{ label: "Vị trí nghề nghiệp mục tiêu", done: profile ? Boolean(profile.careerPositionId) : null, value: profile?.careerPosition?.nameVi ?? (profile ? "Chưa chọn" : "Đang tải…"), href: "#career", edit: "Đổi", add: "Chọn" }] : []),
   ];
   return <ul className="scomp-checklist" aria-label="Điều kiện đánh giá">{items.map((item) => <li key={item.label}>
     <span className={`so-check ${item.done ? "so-check-done" : ""}`} aria-hidden="true">{item.done ? <Icon name="check" /> : null}</span>
     <span className="scomp-check-text"><strong>{item.label}</strong><span>{item.value}</span>{item.note && <span className="scomp-suggestion">{item.note}</span>}</span>
     <span className="sr-only">{item.done === null ? "Chưa xác định" : item.done ? "Đã có" : "Chưa có"}</span>
-    <a className="sw-text-link" href="#profile">{item.done ? "Chỉnh sửa" : "Bổ sung"}</a>
+    <a className="sw-text-link" href={item.href}>{item.done ? item.edit : item.add}</a>
   </li>)}</ul>;
 }
 
@@ -922,17 +942,17 @@ const HEADER_COPY: Record<CompetencyView, { title: string; resultTitle: string; 
     title: "Đánh giá năng lực của bạn", resultTitle: "Kết quả đánh giá năng lực",
     lead: "Hệ thống tính điểm từng kỹ năng từ bảng điểm và trọng số học phần do Khoa cấu hình, xếp mức thành thạo theo nhóm năng lực và đối chiếu tiến độ học tập.",
     introTitle: "Chưa có kết quả đánh giá",
-    intro: "Khi hồ sơ có đủ bảng điểm, vị trí nghề nghiệp mục tiêu và chuyên ngành, bấm “Đánh giá năng lực” để xem điểm theo từng nhóm năng lực, mức thành thạo của từng kỹ năng, tiến độ so với kế hoạch đào tạo và điều kiện xét tốt nghiệp. Kết quả chỉ mang tính tham khảo.",
+    intro: "Khi hồ sơ có bảng điểm và chuyên ngành, bấm “Đánh giá năng lực” để xem điểm theo từng nhóm năng lực, mức thành thạo của từng kỹ năng, tiến độ so với kế hoạch đào tạo và điều kiện xét tốt nghiệp. Kết quả chỉ mang tính tham khảo.",
   },
   gap: {
     title: "Phân tích khoảng trống kỹ năng", resultTitle: "Kết quả phân tích khoảng trống kỹ năng",
     lead: "Khoảng trống được tính từ điểm từng kỹ năng ở trang Đánh giá năng lực, so với ngưỡng mà vị trí nghề nghiệp mục tiêu của bạn yêu cầu.",
     introTitle: "Chưa có kết quả phân tích",
-    intro: "Khoảng trống kỹ năng được tính cùng lúc với đánh giá năng lực, từ bảng điểm, chuyên ngành và vị trí nghề nghiệp mục tiêu của bạn. Khi hồ sơ có đủ ba mục này, bấm “Đánh giá năng lực” để bắt đầu. Kết quả chỉ mang tính tham khảo.",
+    intro: "Khoảng trống kỹ năng được tính cùng lúc với đánh giá năng lực, so với vị trí nghề nghiệp mục tiêu bạn chọn ở Định hướng nghề nghiệp. Bấm “Đánh giá năng lực” để bắt đầu. Kết quả chỉ mang tính tham khảo.",
   },
 };
 
-/** notice: shown under the result panel (the workspace's "Hồ sơ của bạn chưa đầy đủ"). */
+/** notice: shown under the result panel when the workspace passes one (it passed "Hồ sơ của bạn chưa đầy đủ" until 2026-11-14). */
 export default function StudentCompetency({ profile, view = "competency", notice }: { profile: Profile | null; view?: CompetencyView; notice?: ReactNode }) {
   const [revision, setRevision] = useState(0);
   const live = useLiveData(`${COMPETENCY_API}/latest`, revision, readLatest);
@@ -1066,11 +1086,15 @@ export default function StudentCompetency({ profile, view = "competency", notice
   // comp-calc-v23: a course of the thesis group the student placed in Kế hoạch học kỳ that this result leaves out.
   const thesisPlanNote = result ? thesisPlanOutdatedText(result, data?.thesisPlanOutdated) : null;
   const mapped = useMemo(() => assessment && result && assessment.ai.status === "completed" ? mapAiOutput(assessment.ai.output, result) : null, [assessment, result]);
-  // The result was computed for meta.specialty / meta.career; say so when the profile changed since.
-  // profile.specialty is undefined only while an older API is serving: skip that comparison then.
+  // The result was computed for meta.specialty / meta.career; say so when the profile changed since. The target career
+  // matters only to Khoảng trống kỹ năng. profile.specialty is undefined only while an older API is serving: skip that
+  // comparison then.
   const profileChanged = Boolean(result && profile && (
     (profile.specialty !== undefined && (profile.specialty ?? null) !== result.meta.specialty)
-    || (profile.careerPositionId ?? null) !== (result.meta.career?.id ?? null)));
+    || (view === "gap" && (profile.careerPositionId ?? null) !== (result.meta.career?.id ?? null))));
+  // Khoảng trống kỹ năng with no target career: the page asks for one (mockup F) instead of the target's summary; the
+  // courses for the weak skills, which need no target, stay below it.
+  const noTarget = view === "gap" && profile !== null && !profile.careerPositionId && (!result || !result.career);
   const copy = HEADER_COPY[view];
   const aiPanel = assessment && <AiPanel assessment={assessment} aiEnabled={data?.aiEnabled ?? false} workerOnline={data?.workerOnline ?? false} busy={busy !== null} onRegenerate={() => void regenerate()} onCancel={() => void cancelAi()} view={view} previous={shownPrevious} />;
   return <div className="scomp-page">
@@ -1085,8 +1109,8 @@ export default function StudentCompetency({ profile, view = "competency", notice
           {assessment && view === "competency" && !isAdvisorView() && <button type="button" className="sr-secondary sr-danger" disabled={busy !== null} onClick={() => { setDeleteError(""); setDeleteOpen(true); }}><Icon name="trash" />Xóa kết quả đánh giá</button>}
         </div>
       </div>
-      <Checklist hasTranscript={hasTranscript} transcriptFailed={!transcript.loading && Boolean(transcript.error)} profile={profile} suggestion={result?.specialtySuggestion?.text ?? null} />
-      {profileChanged && <p className="scomp-meta">Hồ sơ đã thay đổi sau lần đánh giá này. Bấm “Đánh giá lại” để cập nhật kết quả.</p>}
+      <Checklist hasTranscript={hasTranscript} transcriptFailed={!transcript.loading && Boolean(transcript.error)} profile={profile} suggestion={result?.specialtySuggestion?.text ?? null} view={view} />
+      {profileChanged && !noTarget && <p className="scomp-meta">Hồ sơ đã thay đổi sau lần đánh giá này. Bấm “Đánh giá lại” để cập nhật kết quả.</p>}
       {result && !thesisWayAdvised(result.meta.calcVersion) && <p className="scomp-meta">Kết quả này được tính trước khi hệ thống đề xuất một phương án cho nhóm đồ án tốt nghiệp (Đồ án tốt nghiệp, hoặc Chuyên đề tốt nghiệp thay thế). Bấm “Đánh giá lại” để cập nhật gợi ý học phần.</p>}
       {result && thesisPlanNote && <p className="scomp-meta">{thesisPlanNote}</p>}
       {result && view === "competency" && !lateBeforeStudyTerm(result.meta.calcVersion) && <p className="scomp-meta">Kết quả này được tính trước khi hệ thống sửa cách tính tiến độ: môn của học kỳ đang học không còn bị tính là chậm, tín chỉ môn điều kiện (GDTC, GDQP) không được cộng, và nhóm tự chọn ghi đúng số tín chỉ còn thiếu. Bấm “Đánh giá lại” để cập nhật.</p>}
@@ -1099,13 +1123,15 @@ export default function StudentCompetency({ profile, view = "competency", notice
     {notice}
     {live.loading && !data && <section className="sw-panel scomp-section scomp-loading" aria-busy="true"><p>Đang tải kết quả đánh giá…</p><div /><div /><div /></section>}
     {blocked && <section className="sw-panel scomp-section" aria-labelledby="scomp-blocked-title"><div className="sw-empty scomp-empty"><span className="scomp-empty-icon" aria-hidden="true"><Icon name={blocked === "transcript_required" ? "document" : "info"} /></span><h3 id="scomp-blocked-title">{PRECONDITION_COPY[blocked].title}</h3><p>{PRECONDITION_COPY[blocked].text}</p>{PRECONDITION_COPY[blocked].action && <a className="sw-outline" href={PRECONDITION_COPY[blocked].action!.href}>{PRECONDITION_COPY[blocked].action!.label}</a>}</div></section>}
-    {data && !assessment && !blocked && <section className="sw-panel scomp-section" aria-labelledby="scomp-intro-title"><div className="sw-empty scomp-empty">
+    {noTarget && data && !blocked && <NoTargetGap assessed={Boolean(assessment)} />}
+    {data && !assessment && !blocked && !noTarget && <section className="sw-panel scomp-section" aria-labelledby="scomp-intro-title"><div className="sw-empty scomp-empty">
       <span className="scomp-empty-icon" aria-hidden="true"><Icon name={view === "gap" ? "target" : "chart"} /></span>
       <h3 id="scomp-intro-title">{copy.introTitle}</h3>
       <p>{copy.intro}</p>
     </div></section>}
     {assessment && result && (view === "gap" ? <>
-      <GapSummary result={result} />
+      {/* An assessment made before the target was chosen names it and asks to assess again. */}
+      {!noTarget && <GapSummary result={result} targetName={result.career ? null : profile?.careerPosition?.nameVi ?? null} />}
       {aiPanel}
       <GapTable result={result} />
       <GapHistory result={result} />

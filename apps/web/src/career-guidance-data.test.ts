@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   bestFits, bestFitsHeading, blockedAction, blockedText, careerPicks, compareRows, filterCareers, fitRuleText, fitScoreText, fitSummary, gapNote, interestPicks,
   interestReason, metSkills, missingSkills, nameList, surveyInterests,
-  orderedRequirements, requirementSourcesText, requirementState, toggleCompare, FIT_RULE_TEXT, type GuidanceCareer, type GuidanceRequirement,
+  orderedRequirements, reassessedOf, requirementSourcesText, requirementState, targetSavedNotice, toggleCompare, FIT_RULE_TEXT, type GuidanceCareer, type GuidanceRequirement,
 } from "./career-guidance-data";
 
 // Synthetic careers only.
@@ -21,6 +21,27 @@ const careers = [
   career("c", "Kỹ sư mạng", 90, { fit: { score: 90, code: "insufficient_data", label: "", dataShare: 0.3, met: 0, below: 0, notStudied: 0, upcoming: 0, noData: 3, total: 3, summaryText: "", dataText: "" } }),
   career("d", "Chuyên viên kiểm thử", null),
 ];
+
+describe("choosing the target career (plan \"Một bước để bắt đầu\", 2026-11-14)", () => {
+  const career = { id: "c1", nameVi: "Lập trình viên web" };
+  it("says the skill gap is updated when the API assessed again for the new target", () => {
+    expect(targetSavedNotice(career, true, null)).toEqual({
+      text: "Đã chọn Lập trình viên web làm vị trí nghề nghiệp mục tiêu. Đã đánh giá lại năng lực với vị trí này. Khoảng trống kỹ năng đã cập nhật.", link: "skill-gap",
+    });
+  });
+  it("says nothing more to do when the latest assessment is for this career, else how to update it", () => {
+    expect(targetSavedNotice(career, false, "c1")).toEqual({ text: "Đã chọn Lập trình viên web làm vị trí nghề nghiệp mục tiêu. Khoảng trống kỹ năng cũng đang hiển thị vị trí này.", link: null });
+    expect(targetSavedNotice(career, false, "c2")).toMatchObject({ link: "competency" });
+    expect(targetSavedNotice(career, false, null).text).toContain("Bấm Đánh giá lại ở trang Đánh giá năng lực");
+  });
+  it("reads reassessed from the answer of PATCH /api/student/profile, false from an older API", () => {
+    expect(reassessedOf({ reassessed: true })).toBe(true);
+    expect(reassessedOf({ reassessed: false })).toBe(false);
+    expect(reassessedOf({})).toBe(false);
+    expect(reassessedOf(null)).toBe(false);
+    expect(reassessedOf({ reassessed: "true" })).toBe(false);
+  });
+});
 
 describe("career guidance", () => {
   it("suggests the best fits with enough data, and the careers matching the survey", () => {

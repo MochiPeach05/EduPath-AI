@@ -1,6 +1,6 @@
 // A cố vấn học tập or a Khoa admin working in a student's page confirms an action that replaces the student's results
 // or choices and tells the student in the bell (QA 2026-11-07: "Đánh giá lại chạy ngay khi bấm … bấm nhầm là có hậu
-// quả"; the specialty and the target vị trí nghề nghiệp, Kế hoạch học kỳ and Khảo sát định hướng since 2026-11-10). The
+// quả"; the specialty and the target vị trí nghề nghiệp, Kế hoạch học kỳ and Khảo sát nhanh since 2026-11-10). The
 // student, in their own page, is not asked.
 import { useLayoutEffect, useRef, type SyntheticEvent } from "react";
 import "./student-records.css";
@@ -36,19 +36,23 @@ export const assessmentConfirm = (replace: boolean) => replace
 /**
  * The words of the confirmation for the specialty and the target vị trí nghề nghiệp chosen for the student (user
  * 2026-11-10, policy 2026-11-10): what each becomes (null: none any more), left out when it does not change. confirm is
- * the label of the button.
+ * the label of the button. A new target re-assesses a student who has a result (plan "Một bước để bắt đầu", 2026-11-14);
+ * a new specialty counts at the next Đánh giá lại.
  */
 export function goalsConfirm({ specialty, career }: { specialty?: string | null; career?: string | null }, confirm = "Lưu thay đổi") {
   const both = specialty !== undefined && career !== undefined;
   const changes = [
-    specialty === undefined ? null : specialty ? `Chuyên ngành của sinh viên sẽ là ${specialty}.` : "Sinh viên sẽ chưa có chuyên ngành (Chưa xác định).",
+    specialty === undefined ? null : specialty ? `Chuyên ngành của sinh viên sẽ là ${specialty}.` : "Sinh viên sẽ chưa có chuyên ngành.",
     career === undefined ? null : career ? `Vị trí nghề nghiệp mục tiêu của sinh viên sẽ là ${career}.` : "Sinh viên sẽ không còn vị trí nghề nghiệp mục tiêu.",
   ].filter(Boolean);
+  const results = career !== undefined
+    ? "Nếu sinh viên đã có kết quả Đánh giá năng lực, EduPath AI sẽ đánh giá lại theo lựa chọn mới."
+    : "Kết quả Đánh giá năng lực đã có chỉ cập nhật theo chuyên ngành mới khi đánh giá lại.";
   return {
     title: both ? "Đổi chuyên ngành và vị trí nghề nghiệp mục tiêu thay sinh viên"
       : specialty !== undefined ? "Đổi chuyên ngành thay sinh viên" : "Đổi vị trí nghề nghiệp mục tiêu thay sinh viên",
     confirm,
-    text: `${changes.join(" ")} Kết quả Đánh giá năng lực đã có chỉ cập nhật theo lựa chọn mới khi đánh giá lại. Sinh viên sẽ nhận thông báo trong chuông.`,
+    text: `${changes.join(" ")} ${results} Sinh viên sẽ nhận thông báo trong chuông.`,
   };
 }
 
@@ -61,11 +65,11 @@ export const planConfirm = {
   text: "Mỗi thay đổi sau đó (thêm, bỏ, chuyển học phần, áp dụng hay bỏ qua đề xuất) được lưu ngay vào Kế hoạch học kỳ của sinh viên, như khi sinh viên tự sửa. Sinh viên sẽ nhận thông báo trong chuông.",
 };
 
-/** The words of the confirmation for Khảo sát định hướng saved for the student (replace: the student already has answers). */
+/** The words of the confirmation for Khảo sát nhanh saved for the student (replace: the student already has answers). */
 export const surveyConfirm = (replace: boolean) => ({
-  title: "Lưu Khảo sát định hướng thay sinh viên", confirm: "Lưu khảo sát",
-  text: `${replace ? "Câu trả lời khảo sát hiện tại của sinh viên sẽ được thay bằng các câu trả lời này." : "Các câu trả lời này sẽ được lưu làm Khảo sát định hướng của sinh viên."} `
-    + "EduPath AI sẽ dùng chúng cho Lộ trình AI và Trợ lý AI của sinh viên như khảo sát sinh viên tự làm. Sinh viên sẽ nhận thông báo trong chuông và có thể sửa lại.",
+  title: "Lưu Khảo sát nhanh thay sinh viên", confirm: "Lưu khảo sát",
+  text: `${replace ? "Câu trả lời khảo sát hiện tại của sinh viên sẽ được thay bằng các câu trả lời này." : "Các câu trả lời này sẽ được lưu làm Khảo sát nhanh của sinh viên."} `
+    + "EduPath AI sẽ dùng chúng cho Định hướng nghề nghiệp, Lộ trình AI và Trợ lý AI của sinh viên như khảo sát sinh viên tự làm. Sinh viên sẽ nhận thông báo trong chuông và có thể sửa lại.",
 });
 
 /** The words of the confirmation for Lộ trình AI (replace: the student already has a roadmap). */

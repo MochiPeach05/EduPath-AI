@@ -29,12 +29,15 @@ const num = (value: unknown) => value === null || value === undefined ? null : N
  * (see loadAssessmentInputs); no row locks are taken (they fail with SQLSTATE 25006 there).
  */
 /**
- * careerOptional: no target career needed ("Định hướng nghề nghiệp" sets each catalog career itself); career is null then.
+ * The target career is optional (2026-11-14, user: "Triển khai theo kế hoạch này đi" on the plan "Một bước để bắt đầu",
+ * after the thesis advisor's review: "vị trí nghề nghiệp … khi nào ngta muốn định hướng thì ngta mới chọn"): career is null
+ * without one, and the result then has no career part (Khoảng trống kỹ năng asks for a target; Định hướng nghề nghiệp sets
+ * each catalog career itself). The 2026-10-21 rule that the assessment needs a target career (409 career_required) is gone.
  * weightsOptional: no course–skill weights needed (Tổng quan reads only the course states and the plan progress); the
  * weights are then empty when the faculty has applied none.
  */
 export async function readAssessmentInputs(db: Db, userId: string,
-  options: { promptVersion?: string; careerOptional?: boolean; weightsOptional?: boolean } = {}): Promise<AssessmentInputs> {
+  options: { promptVersion?: string; weightsOptional?: boolean } = {}): Promise<AssessmentInputs> {
   // The texts Xét tốt nghiệp and Lộ trình học tập read these rows with too (db/student-rows.ts).
   const student = await db.query<{ cohort_code: string | null; specialty: string | null; career_position_id: string | null; major_code: string | null }>(
     PROFILE_SQL, [userId]);
@@ -44,8 +47,7 @@ export async function readAssessmentInputs(db: Db, userId: string,
   const cohortCode = normalizeCohortCode(profile?.cohort_code);
   if (!cohortCode) throw new AssessmentError("cohort_unknown", 409);
   const specialty = profileSpecialty(profile?.specialty);
-  // All three of the page's checklist are required (user, 2026-10-21): transcript, target career and specialty.
-  if (!profile?.career_position_id && !options.careerOptional) throw new AssessmentError("career_required", 409);
+  // The transcript and the specialty are required; the target career is not (2026-11-14, above).
   if (!specialty) throw new AssessmentError("specialty_required", 409);
 
   /* Curriculum: the single active one of the cohort and the student's major (052), current revision. */
@@ -134,7 +136,7 @@ export async function readAssessmentInputs(db: Db, userId: string,
     physicalEducationGroups: physicalEducationGroupsFor(curriculumCourses),
   } : null;
 
-  /* Target career (kept even when soft-deleted, so the result can warn). */
+  /* Target career, if any (kept even when soft-deleted, so the result can warn). */
   let career: CareerInput | null = null;
   if (profile?.career_position_id) {
     const position = await db.query<{ id: string; code: string; name_vi: string; name_en: string; version: string; deleted: boolean }>(
@@ -153,7 +155,6 @@ export async function readAssessmentInputs(db: Db, userId: string,
       };
     }
   }
-  if (!career && !options.careerOptional) throw new AssessmentError("career_required", 409);
 
   /* Catalog names for transcript codes outside the curriculum (names never come from the transcript). */
   const curriculumCodes = new Set(curriculumCourses.map((course) => courseKey(course.code)));

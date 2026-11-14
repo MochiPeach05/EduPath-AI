@@ -12,8 +12,11 @@ import type { RoadmapFacts } from "./facts.js";
 
 /** A skill counts as shown by the transcript from the Khá threshold up. */
 const PROVEN_SCORE = LEVEL_THRESHOLDS.good;
-/** Survey questions whose answers are experience the system has no record of (only the internship course can be checked). */
-const EXPERIENCE_QUESTIONS = new Set(["Thực tập", "Dự án ngoài môn học", "Kinh nghiệm dẫn dắt nhóm", "Đi làm thêm", "Tiếng Anh chuyên ngành"]);
+/**
+ * Survey questions whose answers are experience the system has no record of. survey-v5 (2026-11-14) asks only Tiếng Anh
+ * chuyên ngành of them: the questions about internship, projects, leading a team and part-time work are no longer asked.
+ */
+const EXPERIENCE_QUESTIONS = new Set(["Tiếng Anh chuyên ngành"]);
 /** Answers that claim nothing ("Chưa thực tập", "Không", "Khó khăn trong việc đọc hiểu"). */
 const NOTHING_CLAIMED = /^(?:chua|khong|kho khan)\b/;
 const STATE_WORDS: Partial<Record<CourseState, string>> = {
@@ -65,7 +68,7 @@ export function roadmapBasis(facts: Pick<RoadmapFacts, "skills" | "recorded">, s
   if (!survey) return { selfReported: [], recorded: [], unproven: [...unproven.values()], internshipDone };
 
   // The technologies the student claims: the "Thế mạnh" labels, and every skill of the assessment their words name.
-  const words = fold([...survey.tech, survey.achievements ?? ""].join(" | "));
+  const words = fold(survey.tech.join(" | "));
   const topics = new Map(techTopics(survey.tech).map((topic) => [fold(topic), topic]));
   for (const skill of skills) {
     // Already there by name or by a part ("HTML/CSS" when HTML is a topic).
@@ -90,14 +93,12 @@ export function roadmapBasis(facts: Pick<RoadmapFacts, "skills" | "recorded">, s
   for (const item of survey.answers) {
     if (EXPERIENCE_QUESTIONS.has(item.question) && !NOTHING_CLAIMED.test(fold(item.answer))) selfReported.push(`${item.question}: ${item.answer}`);
   }
-  const achievements = (survey.achievements ?? "").split("\n").map((line) => line.trim()).filter(Boolean);
-  if (achievements.length) selfReported.push(`Thành tích bạn liệt kê: ${achievements.length} mục`);
 
   const recorded: string[] = [];
   if (proven.length) recorded.push(`Có điểm từ bảng điểm: ${proven.join("; ")}`);
   if (weak.length) recorded.push(`Điểm còn dưới mức Khá: ${weak.join("; ")}`);
   if (none.length) recorded.push(`Chưa có minh chứng (chưa có điểm từ học phần nào): ${none.join(", ")}`);
   if (internship.length) recorded.push(`Học phần thực tập trong chương trình: ${internship.map((course) => `${course.name} (${STATE_WORDS[course.state] ?? "chưa có kết quả"})`).join("; ")}`);
-  recorded.push("Dự án ngoài môn học, dẫn dắt nhóm, đi làm thêm, tiếng Anh và thành tích: hệ thống không có dữ liệu để kiểm chứng.");
+  recorded.push("Tiếng Anh chuyên ngành: hệ thống không có dữ liệu để kiểm chứng.");
   return { selfReported, recorded, unproven: [...unproven.values()], internshipDone };
 }

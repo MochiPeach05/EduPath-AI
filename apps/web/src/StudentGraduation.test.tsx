@@ -167,12 +167,20 @@ describe("StudentGraduation standard", () => {
       render(ready(graduation({ standard: null, evaluation: null, ...overrides })), ready(adviceResponse({ fingerprint: null })));
     const noCohort = unresolved({ resolution: "cohort_unknown", profile: { cohortCode: null, specialty: null } });
     expect(noCohort).toContain("Hồ sơ chưa có khóa học");
-    expect(noCohort).toContain("<li><span>Khóa trong tài khoản:</span> <strong>Chưa có</strong></li><li><span>Chuyên ngành trong hồ sơ:</span> <strong>Chưa xác định</strong></li>");
+    expect(noCohort).toContain("<li><span>Khóa trong tài khoản:</span> <strong>Chưa có</strong></li><li><span>Chuyên ngành trong hồ sơ:</span> <strong>Chưa có chuyên ngành</strong></li>");
     expect(noCohort).toContain('href="#profile"');
     const unset = unresolved({ resolution: "specialty_unset", profile: { cohortCode: "K29", specialty: null }, specialtySuggestion: { code: "CNPM", label: "Công nghệ phần mềm", count: 4 } });
-    expect(unset).toContain("Hãy chọn chuyên ngành trong hồ sơ");
+    expect(unset).toContain("Hãy chọn chuyên ngành của bạn");
     expect(unset).toContain("Gợi ý: Công nghệ phần mềm — bạn đã đạt 4 học phần bắt buộc của chuyên ngành này.");
-    expect(unset).toContain('<a class="sw-outline" href="#profile">Cập nhật chuyên ngành</a>');
+    // A transcript without a specialty: chosen on this page, the suggestion first, then Lưu (plan "Một bước để bắt đầu", 2026-11-14).
+    expect(unset).toMatch(/<label class="spc-option is-on"><input type="radio" required="" name="[^"]+" checked="" value="CNPM"\/><span>Công nghệ phần mềm<\/span><\/label>/);
+    expect(unset).toContain('<button type="submit" class="sw-primary">Lưu chuyên ngành</button>');
+    expect(unset).not.toContain('value="none"');
+    expect(unset).not.toContain('href="#profile">Cập nhật chuyên ngành');
+    // Without a transcript the specialty comes with it, in the import at the top of the page.
+    const unsetNoTranscript = unresolved({ resolution: "specialty_unset", transcript: null, profile: { cohortCode: "K29", specialty: null } });
+    expect(unsetNoTranscript).toContain('<h2 id="sg-start-title" class="sg-title">Cần chuyên ngành và bảng điểm của bạn</h2>');
+    expect(unsetNoTranscript).not.toContain("sg-standard-title");
     const notFound = unresolved({ resolution: "not_found", profile: { cohortCode: "K30", specialty: null } });
     expect(notFound).toContain("Chưa có tiêu chuẩn xét tốt nghiệp cho khóa K30");
     expect(notFound).not.toContain('href="#profile"');
@@ -188,10 +196,18 @@ describe("StudentGraduation standard", () => {
 });
 
 describe("StudentGraduation result", () => {
-  it("asks for a transcript and still lists the standard's groups and courses", () => {
+  it("asks for the specialty and the transcript on the page and still lists the standard's groups and courses", () => {
     const html = render(ready(graduation({ transcript: null, evaluation: null })), ready(adviceResponse({ fingerprint: null })));
-    expect(html).toContain("Chưa có bảng điểm để đối chiếu");
-    expect(html).toContain('<a class="sw-outline" href="#profile">Import bảng điểm</a>');
+    // GVHD 2026-11-13: "chỗ xét tốt nghiệp chỉ cần nhập bảng điểm và chọn chuyên ngành thôi" (plan "Một bước để bắt đầu").
+    expect(html).toContain('<h2 id="sg-start-title" class="sg-title">Cần chuyên ngành và bảng điểm của bạn</h2>');
+    expect(html).toContain("EduPath AI chọn tiêu chuẩn xét tốt nghiệp theo khóa K29 và chuyên ngành bạn chọn, rồi đối chiếu với bảng điểm.");
+    expect(html).toContain('<option value="CNPM" selected="">Công nghệ phần mềm</option>');
+    expect(html).toContain('<option value="none">Chưa có chuyên ngành</option>');
+    expect(html).toContain("Chọn tệp PDF bảng điểm");
+    expect(html.indexOf("sg-start-title")).toBeLessThan(html.indexOf("sg-standard-title"));
+    expect(html).not.toContain("Kết quả xét tốt nghiệp tính đến thời điểm hiện tại");
+    expect(html).not.toContain('href="#profile">Import bảng điểm');
+    for (const absent of ["vị trí nghề nghiệp", "Khảo sát"]) expect(html).not.toContain(absent);
     expect(html).toContain("Chưa có bảng điểm</span>");
     expect(html).toContain("Bắt buộc · Yêu cầu: 4 môn — phải đạt tất cả học phần");
     expect(html).toContain("Kiến trúc phần mềm");

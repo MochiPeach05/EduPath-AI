@@ -314,13 +314,27 @@ describe("Lộ trình AI đề xuất", () => {
     });
   });
 
-  it("keeps Tạo lại for after Khảo sát định hướng, which a new roadmap needs", () => {
-    const waiting = page(false);
-    expect(waiting).toMatch(/<button[^>]*disabled=""[^>]*aria-describedby="rm-survey-needed"[^>]*>.*Tạo lại<\/button>/);
-    expect(waiting).toContain("Hoàn thành Khảo sát định hướng rồi bấm Tạo lại để cập nhật theo kết quả mới.");
-    expect(waiting).toContain('id="rm-survey-needed"');
-    const ready = page(true);
-    expect(ready).not.toMatch(/<button[^>]*disabled=""[^>]*>.*Tạo lại<\/button>/);
-    expect(ready).toContain("Bấm Tạo lại để cập nhật theo kết quả mới.");
+  it("makes a roadmap again without Khảo sát nhanh, with a light hint to it (plan \"Một bước để bắt đầu\", 2026-11-14)", () => {
+    const without = page(false);
+    expect(without).not.toMatch(/<button[^>]*disabled=""[^>]*>.*Tạo lại<\/button>/);
+    expect(without).toContain("Bấm Tạo lại để cập nhật theo kết quả mới.");
+    expect(without).toContain('<p class="rm-survey-hint" role="note">');
+    expect(without).toContain('Làm Khảo sát nhanh ở Định hướng nghề nghiệp để lộ trình sát hơn. <a href="#career">Mở Định hướng nghề nghiệp</a>');
+    for (const gone of ["rm-survey-needed", "Cần hoàn thành Khảo sát", "Hoàn thành Khảo sát định hướng", "Hồ sơ và bảng điểm"]) expect(without).not.toContain(gone);
+    const done = page(true);
+    expect(done).not.toContain("rm-survey-hint");
+    expect(done).toContain("Bấm Tạo lại để cập nhật theo kết quả mới.");
+  });
+
+  it("offers the first roadmap without Khảo sát nhanh", () => {
+    const first: RoadmapResponse = { ...response(false), roadmap: null, stale: false, worker: { online: true, supportsRoadmap: true } };
+    liveData.mockReturnValue({ data: first, error: null, loading: false });
+    const html = renderToStaticMarkup(createElement(StudentAiRoadmap));
+    expect(html).toMatch(/<button type="button" class="sw-primary"><svg[^>]*>.*?<\/svg>Tạo lộ trình<\/button>/);
+    expect(html).toContain("Làm Khảo sát nhanh ở Định hướng nghề nghiệp để lộ trình sát hơn.");
+    expect(html).toContain("dựa trên kết quả đánh giá và Khảo sát nhanh (nếu bạn làm)");
+    // An assessment without a target career says where the target is chosen.
+    liveData.mockReturnValue({ data: { ...first, assessment: { ...first.assessment!, hasCareer: false } }, error: null, loading: false });
+    expect(renderToStaticMarkup(createElement(StudentAiRoadmap))).toContain('hãy chọn vị trí nghề nghiệp mục tiêu ở <a href="#career">Định hướng nghề nghiệp</a>.');
   });
 });

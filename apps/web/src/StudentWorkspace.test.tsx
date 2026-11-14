@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import StudentWorkspace, { nameInitials, pageFromHash, studentDisplayName } from "./StudentWorkspace";
+import StudentWorkspace, { ProfilePage, helpSteps, nameInitials, pageFromHash, studentDisplayName } from "./StudentWorkspace";
 import type { AuthenticatedUser } from "./types";
 
 // The shell only: every page body is replaced by nothing.
@@ -10,8 +10,6 @@ vi.mock("./StudentPlans", () => ({ default: () => null }));
 vi.mock("./StudentGraduation", () => ({ default: () => null }));
 vi.mock("./StudentCurriculum", () => ({ default: () => null }));
 vi.mock("./StudentTranscript", () => ({ default: () => null }));
-vi.mock("./StudentProfileEditor", () => ({ default: () => null }));
-vi.mock("./StudentProfileSurvey", () => ({ default: () => null }));
 
 // A synthetic test account, with the display name Microsoft gives students ("MSSV - Họ tên - Lớp").
 const user: AuthenticatedUser = {
@@ -145,7 +143,7 @@ describe("a cố vấn học tập's tab (AD-AST-05…08)", () => {
   it("says whose page it is and what the advisor may do, with the way out instead of logging out", () => {
     const html = render("#overview", advisor);
     expect(html).toContain("với tư cách cố vấn học tập (Cố vấn Thử nghiệm).");
-    expect(html).toContain("Bạn làm thay được: import bảng điểm, chọn chuyên ngành và vị trí nghề nghiệp mục tiêu, Kế hoạch học kỳ, Khảo sát định hướng, Đánh giá năng lực, Lộ trình AI, lời khuyên xét tốt nghiệp và Trợ lý AI.");
+    expect(html).toContain("Bạn làm thay được: import bảng điểm và chọn chuyên ngành, vị trí nghề nghiệp mục tiêu, Khảo sát nhanh, Kế hoạch học kỳ, Đánh giá năng lực, Lộ trình AI, lời khuyên xét tốt nghiệp và Trợ lý AI.");
     expect(html).toContain("Đóng trang sinh viên");
     expect(html).toContain('aria-label="Chế độ làm việc với trang sinh viên"');
   });
@@ -169,5 +167,26 @@ describe("a cố vấn học tập's tab (AD-AST-05…08)", () => {
     const html = render("#overview");
     expect(html).not.toContain("Chế độ làm việc với trang sinh viên");
     expect(html).toContain("sw-bell");
+  });
+});
+
+describe("one step to start (GVHD 2026-11-13, plan \"Một bước để bắt đầu\", 2026-11-14)", () => {
+  it("keeps Thông tin học tập and the transcript on Hồ sơ và bảng điểm: no steps, no Mục tiêu học tập, no survey", () => {
+    const card = createElement("section", { id: "card" }, "Thông tin học tập");
+    expect(renderToStaticMarkup(createElement(ProfilePage, { profile: null, card, onSaved: () => {} })))
+      .toBe('<div class="sr-profile-layout"><section id="card">Thông tin học tập</section></div>');
+  });
+
+  it("tells a new student three steps, only the first of them needed", () => {
+    expect(helpSteps.map(([where]) => where)).toEqual(["Hồ sơ và bảng điểm", "Xét tốt nghiệp và Đánh giá năng lực", "Định hướng nghề nghiệp"]);
+    expect(helpSteps[0]![1]).toBe("chọn chuyên ngành và import bảng điểm PDF.");
+    expect(helpSteps[2]![1]).toContain("khi muốn, chọn vị trí nghề nghiệp mục tiêu và làm Khảo sát nhanh");
+  });
+
+  it("shows no \"Hồ sơ của bạn chưa đầy đủ\" on any page", () => {
+    for (const hash of ["#graduation", "#career", "#plans", "#curriculum", "#competency", "#roadmap"]) {
+      expect(render(hash)).not.toContain("sw-profile-reminder");
+      expect(render(hash)).not.toContain("Hoàn thành hồ sơ");
+    }
   });
 });

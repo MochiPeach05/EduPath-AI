@@ -1,5 +1,9 @@
 # Tổng quan sinh viên (STU-PROG-01…03)
 
+## Khung Bắt đầu thay khối bắt buộc (14/11/2026)
+
+Khối đỏ "Bắt buộc trước khi sử dụng" (4 mục) đã bỏ. Chưa có bảng điểm: khung xanh Bắt đầu "Chọn chuyên ngành và import bảng điểm" với các trang dùng được ngay và khung import gọn (chọn chuyên ngành, rồi PDF); import xong trang tự tải lại. Có bảng điểm nhưng chưa có chuyên ngành: thẻ nhỏ Chọn chuyên ngành của bạn. Thẻ Lộ trình AI chỉ còn cần kết quả Đánh giá năng lực.
+
 Người dùng (30/10/2026) xem bản xem trước, góp ý "hơi ít thông tin", "Cái cần lưu ý đẩy xuống dưới cùng còn thông báo xóa đi vì mình có cái icon chuông", rồi duyệt: "Ok triển khai đi". Bản xem trước: https://claude.ai/code/artifact/e8499fd2-b393-45c5-a261-1fead4e09652
 
 ## Trang (`apps/web/src/StudentOverview.tsx`)

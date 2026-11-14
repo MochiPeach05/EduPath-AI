@@ -2,8 +2,10 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import StudentTranscript, {
-  TRANSCRIPT_UPDATED_EVENT, TranscriptDropZone, TranscriptUpdateBar, announceTranscriptUpdated, fileSizeText, transcriptFileProblem, type Transcript,
+  TRANSCRIPT_UPDATED_EVENT, TranscriptDropZone, TranscriptUpdateBar, announceTranscriptUpdated, fileSizeText, firstImportHint, sendImport,
+  transcriptFileProblem, type Transcript,
 } from "./StudentTranscript";
+import { policyVersion } from "./public-information";
 
 // Synthetic data only. Without a DOM these tests draw the first render; the requests and drag events run in the browser.
 // The term tables have tests of their own (TranscriptTables.test.tsx).
@@ -105,5 +107,74 @@ describe("the transcript section", () => {
     expect(TRANSCRIPT_UPDATED_EVENT).toBe("edupath-transcript-updated");
     expect(heard).toHaveBeenCalledTimes(1);
     expect(heard.mock.calls[0]?.[0]).toBeInstanceOf(CustomEvent);
+  });
+});
+
+describe("the first import: the specialty, then the PDF (GVHD 2026-11-13, plan \"Một bước để bắt đầu\", 2026-11-14)", () => {
+  const k29 = { cohortCode: "K29", majorCode: "7480201", specialty: null };
+
+  it("keeps Import bảng điểm off and says what is missing, in the order the student does things", () => {
+    const ready = { profileKnown: true, askSpecialty: true, pick: "CNPM", file: true, confirmed: true };
+    expect(firstImportHint(ready)).toBe("");
+    expect(firstImportHint({ ...ready, profileKnown: false, pick: "" })).toBe("Đang tải hồ sơ của bạn…");
+    expect(firstImportHint({ ...ready, pick: "", file: false })).toBe("Chọn chuyên ngành để import");
+    expect(firstImportHint({ ...ready, pick: "none", file: false })).toBe("Chọn tệp PDF để import");
+    expect(firstImportHint({ ...ready, confirmed: false })).toBe("Đánh dấu ô xác nhận để import");
+    // An API without the specialty in the profile: the PDF alone.
+    expect(firstImportHint({ ...ready, askSpecialty: false, pick: "" })).toBe("");
+  });
+
+  it("saves a changed specialty before the PDF is sent, and sends the PDF as before", async () => {
+    const calls: { method: string; url: string; body: unknown; headers: Record<string, string> }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
+      calls.push({ method: init.method ?? "GET", url, body: init.body, headers: (init.headers ?? {}) as Record<string, string> });
+      return new Response(JSON.stringify(init.method === "POST" ? { transcript: null, job: { id: "j1", filename: "bang-diem.pdf", status: "queued", errorCode: null } } : { student: {} }), { status: 200 });
+    }));
+    const saved = vi.fn();
+    const pdf = new File(["%PDF-1.7"], "bảng điểm.pdf", { type: "application/pdf" });
+    const data = await sendImport(pdf, { specialty: "CNPM", onSpecialtySaved: saved });
+    expect(calls.map((call) => `${call.method} ${call.url}`)).toEqual(["PATCH /api/student/profile", "POST /api/student/transcript"]);
+    expect(JSON.parse(String(calls[0]!.body))).toEqual({ specialty: "CNPM" });
+    expect(saved).toHaveBeenCalledWith("CNPM");
+    expect(calls[1]!.headers).toMatchObject({ "Content-Type": "application/pdf", "X-File-Name": encodeURIComponent("bảng điểm.pdf"), "X-Confirm-Own-Transcript": "true", "X-Consent-Policy-Version": policyVersion });
+    expect(calls[1]!.headers).not.toHaveProperty("X-Transcript-Version");
+    expect(data.job?.status).toBe("queued");
+    // "Chưa có chuyên ngành" stores none; an unchanged specialty sends no PATCH; a replaced transcript names its version.
+    calls.length = 0;
+    await sendImport(pdf, { specialty: null });
+    expect(JSON.parse(String(calls[0]!.body))).toEqual({ specialty: null });
+    calls.length = 0;
+    await sendImport(pdf, { version: transcript.version });
+    expect(calls.map((call) => call.method)).toEqual(["POST"]);
+    expect(calls[0]!.headers["X-Transcript-Version"]).toBe(transcript.version);
+  });
+
+  it("sends no PDF when the specialty is refused, and says why", async () => {
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ error: "specialty_unavailable" }), { status: 400 }));
+    vi.stubGlobal("fetch", fetch);
+    const pdf = new File(["%PDF-1.7"], "bang-diem.pdf", { type: "application/pdf" });
+    await expect(sendImport(pdf, { specialty: "ANM" })).rejects.toThrow("Chuyên ngành này không áp dụng cho khóa của bạn. Hãy chọn chuyên ngành khác.");
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the short import of Tổng quan and Xét tốt nghiệp: the specialty as a select, the PDF, no tables", () => {
+    vi.stubGlobal("window", { location: { pathname: "/dashboard", search: "", hash: "#overview" } });
+    const html = renderToStaticMarkup(createElement(StudentTranscript, { profile: { ...k29, specialty: "CNDL" }, mode: "start", submitLabel: "Import và xét tốt nghiệp" }));
+    expect(html).toContain('<option value="CNDL" selected="">Công nghệ dữ liệu</option>');
+    expect(html).toContain('<option value="none">Chưa có chuyên ngành</option>');
+    expect(html).toMatch(/<button type="button" class="sw-outline ti-start-choose" disabled="" aria-describedby="[^"]+-file">.*Chọn tệp PDF bảng điểm<\/button>/);
+    expect(html).toContain("Cùng với khóa K29, dùng để chọn tiêu chuẩn xét tốt nghiệp và học phần chuyên ngành khi đánh giá năng lực.");
+    // The confirmation and the button come with the PDF; no section, heading or tables of Hồ sơ và bảng điểm.
+    for (const absent of ["Import và xét tốt nghiệp", "Tôi xác nhận", 'id="bang-diem"', "Bảng điểm của tôi"]) expect(html).not.toContain(absent);
+    const waiting = renderToStaticMarkup(createElement(StudentTranscript, { profile: null, mode: "start" }));
+    expect(waiting).toContain('<p class="ti-start-loading" role="status">Đang tải hồ sơ của bạn…</p>');
+    expect(waiting).not.toContain("<select");
+  });
+
+  it("names the specialty on the transcript bar, with Đổi", () => {
+    const html = renderToStaticMarkup(createElement(TranscriptUpdateBar, { ...target, transcript, onDelete: noop,
+      specialty: createElement("p", { className: "ti-bar-spec" }, "Chuyên ngành: Công nghệ phần mềm") }));
+    expect(html).toContain('<p class="ti-bar-spec">Chuyên ngành: Công nghệ phần mềm</p>');
+    expect(html).not.toContain("ti-bar-below");
   });
 });

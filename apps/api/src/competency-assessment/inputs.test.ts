@@ -140,13 +140,18 @@ describe("readAssessmentInputs", () => {
     await expectCode({ transcript: false }, "transcript_required");
     await expectCode({ profile: null }, "cohort_unknown");
     await expectCode({ profile: { cohort_code: "  ", specialty: null, career_position_id: null } }, "cohort_unknown");
-    // All three of the checklist are required (2026-10-21): a target career and a specialty too.
-    await expectCode({ profile: { cohort_code: "K29", specialty: "CNDL", career_position_id: null } }, "career_required");
-    await expectCode({ career: false }, "career_required");
+    // The specialty is required; the target career is not since 2026-11-14 (plan "Một bước để bắt đầu").
     await expectCode({ specialty: null }, "specialty_required");
     await expectCode({ curricula: 0 }, "curriculum_unavailable");
     await expectCode({ curricula: 2 }, "curriculum_ambiguous");
     await expectCode({ weights: false }, "competency_weights_unavailable");
+  });
+
+  it("reads a student without a target career, or whose target is gone, with career null (2026-11-14: the target is optional)", async () => {
+    const without = await readAssessmentInputs(fakeDb({ profile: { cohort_code: "K29", specialty: "CNDL", career_position_id: null } }), userId);
+    expect(without.career).toBeNull();
+    expect(without.student.careerPositionId).toBeNull();
+    expect((await readAssessmentInputs(fakeDb({ career: false }), userId)).career).toBeNull();
   });
 
   it("marks several unlinked plans as ambiguous", async () => {

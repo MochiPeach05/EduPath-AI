@@ -1,5 +1,11 @@
 # Đánh giá năng lực sinh viên và nhận xét AI
 
+## Không cần vị trí nghề nghiệp mục tiêu (14/11/2026)
+
+- Đánh giá năng lực chỉ cần bảng điểm và chuyên ngành: máy chủ không còn trả 409 `career_required`; `result.career` là null khi chưa chọn vị trí. Nhận xét AI `comp-v16`: khi chưa có vị trí, phần nghề nghiệp nói nơi chọn vị trí và không tự chọn nghề.
+- Khoảng trống kỹ năng cần vị trí: chưa chọn thì hiện trạng thái trống với nút Mở Định hướng nghề nghiệp.
+- `PATCH /api/student/profile` đổi `careerPositionId` sang vị trí khác (không null): nếu sinh viên đã có kết quả đánh giá, được phép đánh giá (đồng ý hợp lệ, hoặc cán bộ làm thay theo `ACTING_ACTIONS`) và lần đánh giá trước cách hơn 60 giây, máy chủ tự đánh giá lại như bấm Đánh giá lại; phản hồi `{ saved: true, reassessed }`. Đổi chuyên ngành không tự đánh giá lại. Lỗi khi đánh giá lại không làm hỏng việc lưu.
+
 Cổng sinh viên tính năng lực từ bảng điểm, so với nghề mục tiêu, gợi ý học phần và (nếu bật) kèm nhận xét tiếng Việt do một LLM chạy cục bộ viết. Một lần đánh giá được lưu và hiển thị trên hai trang riêng, theo hai nhóm chức năng:
 
 | Trang | Nhóm chức năng | Nội dung |

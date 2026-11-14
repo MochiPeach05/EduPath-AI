@@ -11,6 +11,7 @@ import {
 import { nextTermOffer, type StudyPlanContext } from "./study-plan-data";
 import { isAdvisorView } from "./advisor-view";
 import { ActingConfirmDialog, roadmapConfirm } from "./acting-confirm";
+import { SURVEY_PAGE_HREF } from "./profile-survey";
 import "./student-roadmap.css";
 
 /**
@@ -282,7 +283,7 @@ function PreviousAdvice({ roadmap, note }: { roadmap: Roadmap; note: string }) {
 
 /**
  * Where the advice comes from (roadmap-v9; user 2026-10-30: "Nên tách riêng phần 'bạn tự đánh giá' với 'hệ thống ghi
- * nhận'"): what the system has on record next to what the student says in Khảo sát định hướng, which the AI may only
+ * nhận'"): what the system has on record next to what the student says in Khảo sát nhanh, which the AI may only
  * repeat as the student's own view.
  */
 function BasisBox({ basis }: { basis: RoadmapBasis }) {
@@ -296,20 +297,20 @@ function BasisBox({ basis }: { basis: RoadmapBasis }) {
       </div>
       <div>
         <h4>Bạn tự đánh giá</h4>
-        <p>Từ Khảo sát định hướng, chưa được kiểm chứng. AI chỉ nhắc lại là ý kiến của bạn và gợi ý cách chứng minh.{basis.surveyChanged ? " Bạn đã sửa khảo sát sau khi lộ trình này được soạn." : ""}</p>
+        <p>Từ Khảo sát nhanh, chưa được kiểm chứng. AI chỉ nhắc lại là ý kiến của bạn và gợi ý cách chứng minh.{basis.surveyChanged ? " Bạn đã sửa khảo sát sau khi lộ trình này được soạn." : ""}</p>
         {basis.selfReported.length ? <ul>{basis.selfReported.map((line) => <li key={line}>{line}</li>)}</ul> : <p>Bạn chưa nêu công nghệ hay kinh nghiệm nào.</p>}
       </div>
     </div>
   </section>;
 }
 
-/** The AI advises from the profile survey (user 2026-10-24), so a roadmap needs it first. */
-const SURVEY_NOTE_ID = "rm-survey-needed";
-function SurveyNeeded({ again = false }: { again?: boolean }) {
-  return <div className="rm-survey-needed" id={SURVEY_NOTE_ID} role="note">
-    <p><strong>Cần hoàn thành Khảo sát định hướng{again ? " trước khi tạo lại" : ""}.</strong> EduPath AI dùng mục tiêu, kinh nghiệm, thời gian tự học và thành tích của bạn để lộ trình sát với bạn hơn. Khảo sát chủ yếu gồm các câu chọn đáp án có sẵn, chỉ mất vài phút.</p>
-    <a className="sw-primary" href="#profile">Làm khảo sát ở Hồ sơ và bảng điểm <Icon name="arrow" /></a>
-  </div>;
+/**
+ * The AI uses Khảo sát nhanh when the student made it; a roadmap no longer needs it (plan "Một bước để bắt đầu",
+ * 2026-11-14; the advisor: the survey kept students from using EduPath AI). A light hint while it is not done.
+ */
+export function SurveyHint() {
+  return <p className="rm-survey-hint" role="note"><Icon name="info" />
+    <span>Làm Khảo sát nhanh ở Định hướng nghề nghiệp để lộ trình sát hơn. <a href={SURVEY_PAGE_HREF}>Mở Định hướng nghề nghiệp</a></span></p>;
 }
 
 /** previous: an older roadmap is shown dimmed below; a failure then says so, when and what to do (QA 2026-11-10). */
@@ -336,16 +337,14 @@ function AiState({ roadmap, response, create, creating, previous }: { roadmap: R
     return <div className="rm-ai-state rm-ai-problem">
       <strong>{failedOverPrevious ? "Chưa soạn được lộ trình mới" : roadmap.status === "failed" ? "Chưa soạn được lộ trình" : "Yêu cầu soạn lộ trình đã dừng"}</strong>
       <p>{failedOverPrevious ? failedRoadmapText(roadmap) : <>{roadmap.status === "failed" ? `${failureText(roadmap.errorCode)} ` : ""}Các học phần và kỹ năng do hệ thống tính bên dưới vẫn dùng được.</>}</p>
-      <div className="rm-actions"><button type="button" className="sw-outline" disabled={creating || !response.surveyDone}
-        aria-describedby={response.surveyDone ? undefined : SURVEY_NOTE_ID} onClick={create}><Icon name="refresh" />{creating ? "Đang gửi…" : "Thử lại"}</button></div>
+      <div className="rm-actions"><button type="button" className="sw-outline" disabled={creating} onClick={create}><Icon name="refresh" />{creating ? "Đang gửi…" : "Thử lại"}</button></div>
     </div>;
   }
   return null;
 }
 
-/** "Bấm Tạo lại …", or, while the survey a new roadmap needs is not done (POST answers 409 survey_required), what comes first. */
-const regenerateText = (surveyDone: boolean, purpose: string) =>
-  surveyDone ? `Bấm Tạo lại ${purpose}` : `Hoàn thành Khảo sát định hướng rồi bấm Tạo lại ${purpose}`;
+/** "Bấm Tạo lại …". */
+const regenerateText = (purpose: string) => `Bấm Tạo lại ${purpose}`;
 
 /** previous: an older completed roadmap whose AI parts show dimmed while this one is not completed (previousRoadmap). */
 function RoadmapView({ roadmap, previous, response, create, creating, createError, planContext }: {
@@ -362,14 +361,12 @@ function RoadmapView({ roadmap, previous, response, create, creating, createErro
           <h2 id="rm-title">Từ {dateText(roadmap.window.start)} đến {dateText(roadmap.window.end)}</h2>
           <p className="rm-hero-meta">{[roadmap.careerName && `Vị trí nghề nghiệp mục tiêu: ${roadmap.careerName}`, roadmap.specialtyLabel && `Chuyên ngành: ${roadmap.specialtyLabel}`].filter(Boolean).join(" · ")}</p>
         </div>
-        {/* A new roadmap needs the survey (POST answers 409 survey_required): "Tạo lại" waits for it. */}
-        {!pending && <button type="button" className="sw-outline" disabled={creating || !response.surveyDone}
-          aria-describedby={response.surveyDone ? undefined : SURVEY_NOTE_ID} onClick={create}><Icon name="refresh" />{creating ? "Đang gửi…" : "Tạo lại"}</button>}
+        {!pending && <button type="button" className="sw-outline" disabled={creating} onClick={create}><Icon name="refresh" />{creating ? "Đang gửi…" : "Tạo lại"}</button>}
       </div>
       {createError && <p className="rm-error" role="alert">{createError}</p>}
-      {!response.surveyDone && !pending && <SurveyNeeded again />}
-      {response.stale && <p className="rm-note">Kết quả Đánh giá năng lực của bạn đã thay đổi sau khi lộ trình này được soạn. {regenerateText(response.surveyDone, "để cập nhật theo kết quả mới.")}</p>}
-      {roadmap.ended && <p className="rm-note">Lộ trình này đã hết thời gian (đến {dateText(roadmap.window.end)}). {regenerateText(response.surveyDone, "để soạn lộ trình cho học kỳ tiếp theo.")}</p>}
+      {response.stale && <p className="rm-note">Kết quả Đánh giá năng lực của bạn đã thay đổi sau khi lộ trình này được soạn. {regenerateText("để cập nhật theo kết quả mới.")}</p>}
+      {roadmap.ended && <p className="rm-note">Lộ trình này đã hết thời gian (đến {dateText(roadmap.window.end)}). {regenerateText("để soạn lộ trình cho học kỳ tiếp theo.")}</p>}
+      {!response.surveyDone && !pending && <SurveyHint />}
       <AiState roadmap={roadmap} response={response} create={create} creating={creating} previous={earlier !== null} />
       {completed && roadmap.summary && <AdviceSummary roadmap={roadmap} />}
       {earlier?.summary && <PreviousAdvice roadmap={earlier} note={previousRoadmapNote(roadmap.status)} />}
@@ -424,16 +421,15 @@ export default function StudentAiRoadmap({ planContext = null, onRoadmap }: { pl
       <li><Icon name="book" /><span><strong>Môn bạn cần học</strong> theo kế hoạch đào tạo: học phần đang học, học phần trễ và học phần của học kỳ tới.</span></li>
       <li><Icon name="refresh" /><span><strong>Môn học bạn cần học lại và cải thiện</strong>: học lại học phần chưa đạt; học cải thiện học phần đã đạt điểm D, D+ nếu bạn muốn nâng điểm.</span></li>
       <li><Icon name="target" /><span><strong>Kỹ năng, kiến thức nên bổ sung</strong> để nâng cao trình độ và tăng khả năng làm việc ở vị trí nghề nghiệp mục tiêu.</span></li>
-      <li><Icon name="spark" /><span><strong>Lời khuyên theo mục tiêu của bạn</strong>: tiến độ tốt nghiệp, nên học gì để làm việc thực tế tốt hơn, dựa trên kết quả đánh giá và Khảo sát định hướng.</span></li>
+      <li><Icon name="spark" /><span><strong>Lời khuyên theo mục tiêu của bạn</strong>: tiến độ tốt nghiệp, nên học gì để làm việc thực tế tốt hơn, dựa trên kết quả đánh giá và Khảo sát nhanh (nếu bạn làm).</span></li>
     </ul>
     {!response.aiEnabled
       ? <p className="rm-note">Lộ trình do EduPath AI soạn hiện chưa được bật.</p>
       : <>
-        {assessment && !assessment.hasCareer && <p className="rm-note">Kết quả đánh giá của bạn chưa có vị trí nghề nghiệp mục tiêu nên lộ trình sẽ chưa có phần kỹ năng của vị trí nghề nghiệp. Hãy chọn vị trí nghề nghiệp mục tiêu ở Hồ sơ và bảng điểm rồi đánh giá lại để có lộ trình đầy đủ.</p>}
-        {!response.surveyDone ? <SurveyNeeded /> : <>
-          {!response.worker.online && <p className="rm-note">Máy AI đang tạm nghỉ: yêu cầu của bạn sẽ được giữ trong hàng đợi và lộ trình sẽ được soạn khi máy hoạt động trở lại.</p>}
-          <div className="rm-actions"><button type="button" className="sw-primary" disabled={creating} onClick={create}><Icon name="spark" />{creating ? "Đang gửi…" : "Tạo lộ trình"}</button></div>
-        </>}
+        {assessment && !assessment.hasCareer && <p className="rm-note">Kết quả đánh giá của bạn chưa có vị trí nghề nghiệp mục tiêu nên lộ trình sẽ chưa có phần kỹ năng của một vị trí nghề nghiệp. Muốn có phần này, hãy chọn vị trí nghề nghiệp mục tiêu ở <a href="#career">Định hướng nghề nghiệp</a>.</p>}
+        {!response.surveyDone && <SurveyHint />}
+        {!response.worker.online && <p className="rm-note">Máy AI đang tạm nghỉ: yêu cầu của bạn sẽ được giữ trong hàng đợi và lộ trình sẽ được soạn khi máy hoạt động trở lại.</p>}
+        <div className="rm-actions"><button type="button" className="sw-primary" disabled={creating} onClick={create}><Icon name="spark" />{creating ? "Đang gửi…" : "Tạo lộ trình"}</button></div>
         {createError && <p className="rm-error" role="alert">{createError}</p>}
       </>}
     <p className="rm-footer">Lộ trình sẽ dùng kết quả Đánh giá năng lực tạo lúc {formatDateTime(assessment?.createdAt)}. Nếu bảng điểm vừa thay đổi, hãy tạo lại kết quả đánh giá trước.</p>

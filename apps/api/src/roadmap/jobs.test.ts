@@ -16,8 +16,7 @@ const OTHER_LEASE = "66666666-6666-4666-8666-666666666666";
 const OLD_ASSESSMENT = "77777777-7777-4777-8777-777777777777";
 const facts = syntheticRoadmapFacts();
 const survey = syntheticSurveyRow();
-const aiInput = buildRoadmapInput(facts, surveyFacts({ answers: survey.answers, interestTech: survey.interest_tech,
-  interestHobbies: survey.interest_hobbies, hasAchievements: survey.has_achievements, achievements: survey.achievements }));
+const aiInput = buildRoadmapInput(facts, surveyFacts({ answers: survey.answers, interestTech: survey.interest_tech }));
 
 const row = (extra: Partial<RoadmapRow> = {}): RoadmapRow => ({
   id: ROADMAP, assessmentId: ROADMAP_ASSESSMENT, status: "completed", errorCode: null, createdAt: new Date("2026-10-24T02:00:00Z"),
@@ -119,31 +118,38 @@ describe("createRoadmap", () => {
     await createRoadmap(client, USER, { now: ROADMAP_NOW });
     const params = calls().find(([text]) => text.startsWith("INSERT INTO stu_roadmaps"))![1] as unknown[];
     const user = (JSON.parse(params[7] as string) as { user: string }).user;
-    expect(user).toContain("[8. BẠN TỰ KHAI TRONG KHẢO SÁT ĐỊNH HƯỚNG] (chưa kiểm chứng)");
+    expect(user).toContain("[8. BẠN TỰ KHAI TRONG KHẢO SÁT NHANH] (chưa kiểm chứng)");
     // roadmap-v9: what the system has on record about those claims, next to them.
     expect(user).toContain("[9. HỆ THỐNG GHI NHẬN VỀ CÁC ĐIỀU BẠN TỰ KHAI] (từ bảng điểm và kết quả đánh giá)\n"
       + "- Chưa có minh chứng (chưa có điểm từ học phần nào): Web front-end, HTML, CSS, JavaScript, React, Trí tuệ nhân tạo, học máy\n"
       + "- Học phần thực tập trong chương trình: Đồ án thực tập (chưa học)");
-    expect(user).toContain("- Mục tiêu sau tốt nghiệp: Đi làm ngay");
-    expect(user).toContain("- Thời gian tự học mỗi tuần: 5–10 giờ");
+    expect(user).toContain("- Lĩnh vực quan tâm nhất: Web\n- Mục tiêu sau tốt nghiệp: Đi làm ngay\n- Thời gian tự học mỗi tuần: 5–10 giờ\n- Tiếng Anh chuyên ngành: Đọc hiểu tốt");
     expect(user).toContain("- Thế mạnh (công nghệ thành thạo): Web front-end (HTML, CSS, JavaScript, React); Trí tuệ nhân tạo, học máy");
     // survey-v4: no written description of the strengths reaches the AI, even one still stored from survey-v3.
     expect(user).not.toContain("Mô tả thế mạnh");
     expect(user).not.toContain("Thành thạo React");
-    expect(user).toContain("- Sở trường: Tự làm dự án, viết code; Thể thao, vận động");
-    expect(user).toContain("  + Giải Ba cuộc thi lập trình cấp khoa 2025\n  + Học bổng khuyến khích học tập");
+    // survey-v5 (roadmap-v17): what a survey-v4 row still holds but v5 no longer asks never reaches the AI.
+    for (const dropped of ["Sở trường", "Thành tích", "Giải Ba", "Môi trường học tập", "Nơi làm việc", "Đi làm thêm", "dẫn dắt nhóm", "Dự án ngoài môn học"]) {
+      expect(user).not.toContain(dropped);
+    }
     expect(params[5] as string).not.toContain("Giải Ba");
     expect(params[5] as string).not.toContain("Thành thạo React");
   });
 
-  it("needs an assessment, the answered profile survey and an active account", async () => {
+  it("needs an assessment and an active account; the survey is optional (2026-11-14, roadmap-v17)", async () => {
     await expect(createRoadmap(fakeClient({ assessment: false }).client, USER)).rejects.toMatchObject({ code: "assessment_required", status: 409 });
-    const noSurvey = fakeClient({ survey: false });
-    await expect(createRoadmap(noSurvey.client, USER)).rejects.toMatchObject({ code: "survey_required", status: 409 });
-    expect(writes(noSurvey.sql())).toEqual([]);
-    // Answers agreed to under an older policy (before the interests joined) wait for the new consent.
-    await expect(createRoadmap(fakeClient({ consent: "2026-10-24" }).client, USER)).rejects.toMatchObject({ code: "survey_required", status: 409 });
-    await expect(createRoadmap(fakeClient({ consent: null }).client, USER)).rejects.toMatchObject({ code: "survey_required", status: 409 });
+    // Without a survey the AI may use (none, or answers agreed to under an older policy) the roadmap is made from the results alone.
+    for (const state of [{ survey: false }, { consent: "2026-10-24" }, { consent: null }]) {
+      const client = fakeClient(state);
+      const outcome = await createRoadmap(client.client, USER, { now: ROADMAP_NOW });
+      expect(outcome).toMatchObject({ created: true, row: { status: "queued" } });
+      const params = client.calls().find(([text]) => text.startsWith("INSERT INTO stu_roadmaps"))![1] as unknown[];
+      const input = JSON.parse(params[7] as string) as { user: string; promptVersion: string };
+      expect(input.promptVersion).toBe(ROADMAP_PROMPT_VERSION);
+      expect(input.user).toContain("[8. KHẢO SÁT NHANH]\nBạn chưa làm Khảo sát nhanh (không bắt buộc).");
+      expect(input.user).not.toContain("[9. HỆ THỐNG GHI NHẬN");
+      expect(input.user).not.toContain("Mục tiêu sau tốt nghiệp");
+    }
     const inactive = fakeClient({ active: false });
     await expect(createRoadmap(inactive.client, USER)).rejects.toMatchObject({ code: "account_unavailable", status: 403 });
     expect(inactive.sql()).toHaveLength(1);
@@ -153,9 +159,9 @@ describe("createRoadmap", () => {
 describe("promoteDeferredRoadmaps (QA 2026-11-10: deferred roadmaps come back by themselves)", () => {
   const OTHER = "88888888-8888-4888-8888-888888888888";
   const SECOND = "99999999-9999-4999-8999-999999999999";
-  type Promote = { candidates: { id: string; userId: string }[]; pending?: number; locked?: string[]; survey?: boolean };
+  type Promote = { candidates: { id: string; userId: string }[]; pending?: number; locked?: string[]; survey?: boolean; assessment?: boolean };
   function promotePool(state: Promote) {
-    const base = fakeClient(state.survey === false ? { survey: false } : {});
+    const base = fakeClient({ ...(state.survey === false ? { survey: false } : {}), ...(state.assessment === false ? { assessment: false } : {}) });
     const log: [string, unknown[]][] = [];
     let pending = state.pending ?? 0;
     const query = vi.fn(async (sql: string, params: unknown[] = []) => {
@@ -205,11 +211,15 @@ describe("promoteDeferredRoadmaps (QA 2026-11-10: deferred roadmaps come back by
     expect(full.log.some(([sql]) => /^(INSERT|UPDATE|DELETE)/.test(sql))).toBe(false);
   });
 
-  it("cancels a deferred roadmap the student can no longer have (no usable survey)", async () => {
-    const { pool, log } = promotePool({ candidates: [{ id: ROADMAP, userId: USER }], survey: false });
-    expect(await promoteDeferredRoadmaps(pool, { now: ROADMAP_NOW })).toBe(0);
-    expect(log.find(([sql]) => sql.startsWith("UPDATE stu_roadmaps SET status='cancelled'"))![1]).toEqual([ROADMAP]);
-    expect(queuedIds(log)).toEqual([]);
+  it("cancels a deferred roadmap the student can no longer have (no assessment), and queues one without a survey (2026-11-14)", async () => {
+    const gone = promotePool({ candidates: [{ id: ROADMAP, userId: USER }], assessment: false });
+    expect(await promoteDeferredRoadmaps(gone.pool, { now: ROADMAP_NOW })).toBe(0);
+    expect(gone.log.find(([sql]) => sql.startsWith("UPDATE stu_roadmaps SET status='cancelled'"))![1]).toEqual([ROADMAP]);
+    expect(queuedIds(gone.log)).toEqual([]);
+    const noSurvey = promotePool({ candidates: [{ id: ROADMAP, userId: USER }], survey: false });
+    expect(await promoteDeferredRoadmaps(noSurvey.pool, { now: ROADMAP_NOW })).toBe(1);
+    expect(queuedIds(noSurvey.log)).toEqual([ROADMAP]);
+    expect(noSurvey.log.some(([sql]) => sql.startsWith("UPDATE stu_roadmaps SET status='cancelled'"))).toBe(false);
   });
 });
 

@@ -18,12 +18,17 @@ import type {
   AdviceOutput, GradStatus, GraduationAdviceResponse, GraduationEvaluation, StoredAdvice, StudentGraduationResponse,
 } from "./student-graduation-types";
 import { convertibleText } from "./convertible-courses";
+import StudentTranscript from "./StudentTranscript";
+import { SpecialtyForm, type SpecialtyProfile } from "./SpecialtyChoice";
 import "./student-curriculum.css";
 import "./student-graduation.css";
 
 // #graduation: the student's own graduation standard (cohort in the account + specialty in the
 // profile), the server's verdict with what is missing and what to do, AI advice written
 // automatically from the same facts, and the comparison by knowledge group and by course.
+// It needs the transcript and the specialty only (GVHD 2026-11-13: "chỗ xét tốt nghiệp chỉ cần nhập bảng điểm và chọn
+// chuyên ngành thôi"; plan "Một bước để bắt đầu", user 2026-11-14): both are chosen on this page when missing, nothing about
+// the target vị trí nghề nghiệp or Khảo sát nhanh.
 
 type ApiError = Error & { code?: string; status?: number };
 
@@ -293,10 +298,27 @@ function ResultSection({ data, advice }: { data: StudentGraduationResponse; advi
     </div>
     {evaluation ? <EvaluationResult evaluation={evaluation} advice={advice} convertible={convertible} thesisPlan={data.thesisPlan ?? []} /> : <div className="sg-empty-state">
       <span className="sg-empty-icon" aria-hidden="true"><Icon name="document" /></span>
-      <h3>Chưa có bảng điểm để đối chiếu</h3>
-      <p>Hãy import bảng điểm PDF xuất từ cổng đào tạo tại mục Hồ sơ và bảng điểm. Kết quả xét tốt nghiệp sẽ được tính ngay sau khi import.</p>
-      <a className="sw-outline" href="#profile">Import bảng điểm</a>
+      <h3>Chưa đối chiếu được bảng điểm</h3>
+      <p>Hãy tải lại trang sau ít phút. Kết quả xét tốt nghiệp được tính ngay sau khi bảng điểm được lưu.</p>
     </div>}
+    <p className="sg-disclaimer">Kết quả xét tốt nghiệp chính thức do nhà trường công bố.</p>
+  </section>;
+}
+
+/**
+ * No transcript yet (plan "Một bước để bắt đầu", 2026-11-14): the specialty and the PDF are chosen here, and the result
+ * follows at once. profile: the shell's (major and cohort for the choices), null while it loads.
+ */
+function StartSection({ data, profile, onImported, onProfileChanged }: {
+  data: StudentGraduationResponse; profile: SpecialtyProfile | null; onImported: () => void; onProfileChanged: () => void;
+}) {
+  const cohort = data.profile.cohortCode;
+  return <section className="sw-panel sg-section sg-start" aria-labelledby="sg-start-title">
+    <div className="sg-heading">
+      <h2 id="sg-start-title" className="sg-title">Cần chuyên ngành và bảng điểm của bạn</h2>
+      <p className="sg-lead">EduPath AI chọn tiêu chuẩn xét tốt nghiệp theo khóa {cohort ?? "của bạn"} và chuyên ngành bạn chọn, rồi đối chiếu với bảng điểm.</p>
+    </div>
+    <StudentTranscript profile={profile} mode="start" submitLabel="Import và xét tốt nghiệp" onImported={onImported} onProfileChanged={onProfileChanged} />
     <p className="sg-disclaimer">Kết quả xét tốt nghiệp chính thức do nhà trường công bố.</p>
   </section>;
 }
@@ -308,10 +330,14 @@ function MetaTags({ parts }: { parts: MetaPart[] }) {
   return <ul className="sg-meta-tags">{parts.map((part, index) => <li key={index}>{part.label && <><span>{part.label}</span> </>}<strong>{part.value}</strong></li>)}</ul>;
 }
 
-function StandardSection({ data }: { data: StudentGraduationResponse }) {
+function StandardSection({ data, profile, onSpecialtySaved }: {
+  data: StudentGraduationResponse; profile: SpecialtyProfile | null; onSpecialtySaved: () => void;
+}) {
   const standard = data.standard;
   if (!standard) {
     const copy = unresolvedCopy(data);
+    // The specialty chosen here (a transcript without one): the suggestion from the passed mandatory courses first.
+    const chooseHere = data.resolution === "specialty_unset" && data.transcript !== null && profile !== null;
     return <section className="sw-panel sg-section sg-standard" aria-labelledby="sg-standard-title">
       <div className="sg-heading">
         <p className="sc-eyebrow">Tiêu chuẩn xét tốt nghiệp của bạn</p>
@@ -321,7 +347,8 @@ function StandardSection({ data }: { data: StudentGraduationResponse }) {
       <div className="sg-unresolved">
         <p>{copy.text}</p>
         {copy.suggestion && <p className="sg-suggestion">{copy.suggestion}</p>}
-        {copy.action && <a className="sw-outline" href={copy.action.href}>{copy.action.label}</a>}
+        {chooseHere ? <SpecialtyForm profile={profile} initial={data.specialtySuggestion?.code ?? ""} withNone={false} onSaved={onSpecialtySaved} />
+          : copy.action && <a className="sw-outline" href={copy.action.href}>{copy.action.label}</a>}
       </div>
       <p className="sg-disclaimer">Kết quả xét tốt nghiệp chính thức do nhà trường công bố.</p>
     </section>;
@@ -494,11 +521,22 @@ function CompareSection({ data }: { data: StudentGraduationResponse }) {
 
 /* ------------------------------------------------------------------- page */
 
-export default function StudentGraduation() {
+/**
+ * profile: the shell's profile (the specialty's choices need its major), null while it loads; without it (older callers)
+ * the page's own answer gives the cohort and the specialty. onProfileChanged: the specialty was saved here.
+ */
+export default function StudentGraduation({ profile, onProfileChanged }: { profile?: SpecialtyProfile | null; onProfileChanged?: () => void }) {
   const [revision, setRevision] = useState(0);
   const live = useLiveData(GRADUATION_API, revision, readGraduation);
   const advice = useGraduationAdvice();
   const data = live.data;
+  const reload = () => setRevision((value) => value + 1);
+  const profileSaved = () => { onProfileChanged?.(); reload(); };
+  const choiceProfile: SpecialtyProfile | null = profile !== undefined ? profile
+    : data ? { cohortCode: data.profile.cohortCode, specialty: data.profile.specialty, majorCode: null } : null;
+  // Before the first transcript the page asks for it, with the specialty, when the cohort's standard can be chosen from them.
+  const start = data !== null && data.transcript === null
+    && (data.standard !== null || data.resolution === "specialty" || data.resolution === "general" || data.resolution === "specialty_unset");
   return <div className="sg-page">
     {!data && live.loading && <section className="sw-panel sg-section" aria-busy="true"><p role="status" className="sg-muted">Đang tải kết quả xét tốt nghiệp…</p></section>}
     {!data && !live.loading && <section className="sw-panel sg-section">
@@ -508,8 +546,9 @@ export default function StudentGraduation() {
       </div>
     </section>}
     {data && <>
-      <StandardSection data={data} />
-      {data.standard && <ResultSection data={data} advice={advice} />}
+      {start && <StartSection data={data} profile={choiceProfile} onImported={reload} onProfileChanged={() => onProfileChanged?.()} />}
+      {(!start || data.standard) && <StandardSection data={data} profile={choiceProfile} onSpecialtySaved={profileSaved} />}
+      {data.standard && !start && <ResultSection data={data} advice={advice} />}
       {data.standard && <CompareSection data={data} />}
     </>}
   </div>;

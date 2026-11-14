@@ -325,6 +325,11 @@ export class PostgresAdvisorRepository {
       : (await this.pool.query<AdvisorClass>(classStats(OWN_CLASSES), [actor.userId])).rows;
   }
 
+  /**
+   * The students of the account's classes (any student for admins), filtered by class, text and step. "complete" (Đã đủ
+   * các bước) is a transcript, an assessment and an AI roadmap: the profile survey is optional since 2026-11-14 (plan "Một
+   * bước để bắt đầu"), so it is no step any more; "no_survey" still lists who has not done it.
+   */
   async students(actor: AuthenticatedUser, query: AdvisedStudentQuery): Promise<{ items: AdvisedStudentRow[]; total: number }> {
     const order = orderBy(studentSort, studentOrder, query.sort, query.dir);
     const result = await this.pool.query<{ items: (Omit<AdvisedStudentRow, "specialty"> & { specialty: SpecialtyCode | null })[]; total: number }>(`WITH students AS (
@@ -345,7 +350,7 @@ export class PostgresAdvisorRepository {
           AND ($3 = '' OR strpos(lower(concat_ws(' ', "studentCode", name)), lower($3)) > 0)
           AND (CASE $4::text WHEN 'no_transcript' THEN NOT "hasTranscript" WHEN 'no_assessment' THEN NOT assessed
             WHEN 'no_survey' THEN NOT "surveyDone" WHEN 'no_roadmap' THEN NOT roadmap
-            WHEN 'complete' THEN "hasTranscript" AND assessed AND "surveyDone" AND roadmap ELSE TRUE END)
+            WHEN 'complete' THEN "hasTranscript" AND assessed AND roadmap ELSE TRUE END)
       ), numbered AS (SELECT filtered.*, row_number() OVER (ORDER BY ${orderBy(studentSort, studentOrder)})::int AS stt FROM filtered),
       paged AS (SELECT * FROM numbered ORDER BY ${order} LIMIT $5 OFFSET $6)
       SELECT COALESCE((SELECT json_agg(paged ORDER BY ${order}) FROM paged), '[]'::json) AS items, (SELECT count(*)::int FROM filtered) AS total`,

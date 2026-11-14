@@ -2,8 +2,9 @@
 // /api/worker/competency-assessments, whose router calls the claim/extend/complete functions below) and the stored
 // roadmap. The student asks for one on the page ("Tạo lộ trình", "Tạo lại"); it is built from the newest competency
 // assessment and goes with it (foreign key ON DELETE CASCADE: transcript replaced or deleted, consent withdrawn,
-// assessment pruned), and from the profile survey, which only the AI input carries (cleared when the job ends; deleting
-// the survey deletes the roadmaps). One pending row per student; the newest MAX_ROADMAPS_PER_USER rows are kept.
+// assessment pruned), and from the profile survey when the student did it (optional since 2026-11-14), which only the AI
+// input carries (cleared when the job ends; deleting the survey deletes the roadmaps). One pending row per student; the
+// newest MAX_ROADMAPS_PER_USER rows are kept.
 import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
 import {
@@ -16,7 +17,7 @@ import type { AssessmentResult } from "../competency-assessment/types.js";
 import { readRealCourseRows, realCodesOfRows } from "../curricula/real-codes.js";
 import type { DatabasePool } from "../db/pool.js";
 import { readOwnPlannedCodes } from "../study-plan/own-plan.js";
-import { readSurvey, surveyFacts, surveyUsable } from "../student/survey.js";
+import { readSurvey, surveyFacts, surveyUsable, type SurveyFacts } from "../student/survey.js";
 import { buildRoadmapFacts, type RoadmapFacts, type RoadmapRelation } from "./facts.js";
 import { sanitizeText } from "../competency-assessment/ai/prompt.js";
 import { buildRoadmapInput } from "./prompt.js";
@@ -172,15 +173,24 @@ async function othersPending(db: Db, userId: string | null): Promise<number> {
 }
 
 type NewestAssessment = NonNullable<Awaited<ReturnType<typeof newestAssessment>>>;
-type UsableSurvey = NonNullable<Awaited<ReturnType<typeof readSurvey>>>;
+
+/**
+ * The survey answers a roadmap may give the AI: the stored survey when the AI features may use it (surveyUsable: complete,
+ * and agreed to under the current policy, or filled in for the student by a cố vấn học tập or the Khoa), else none. Since
+ * 2026-11-14 (roadmap-v17) a roadmap is made without it too.
+ */
+async function usableSurveyFacts(client: Db, userId: string): Promise<SurveyFacts | null> {
+  const survey = await readSurvey(client, userId);
+  return survey && await surveyUsable(client, userId, survey) ? surveyFacts(survey) : null;
+}
 
 /** What a roadmap is built from now: the term window, the facts the page shows and the AI input (never stored while deferred). */
-async function buildRoadmapJob(client: Db, userId: string, assessment: NewestAssessment, survey: UsableSurvey, now: Date) {
+async function buildRoadmapJob(client: Db, userId: string, assessment: NewestAssessment, survey: SurveyFacts | null, now: Date) {
   const window = roadmapWindow(now);
   // roadmap-v16: the thesis group follows the way the student chose in Kế hoạch học kỳ (user 2026-11-10).
   const facts = buildRoadmapFacts(assessment.id, assessment.computed, window, await readRoadmapRelations(client, assessment.computed),
     await readOwnPlannedCodes(client, userId));
-  return { window, facts, aiInput: buildRoadmapInput(facts, surveyFacts(survey)) };
+  return { window, facts, aiInput: buildRoadmapInput(facts, survey) };
 }
 
 /* ------------------------------------------------------------------------ */
@@ -196,8 +206,9 @@ type CreateOptions = {
 /**
  * "Tạo lộ trình" / "Tạo lại" (POST /api/student/roadmap), inside the caller's transaction. The student's row comes
  * first (FOR KEY SHARE, the lock the insert's foreign key takes anyway), then the queue lock. It needs an assessment
- * (409 assessment_required) and the answered profile survey, agreed to under the current policy (409 survey_required,
- * user 2026-10-24: the AI advises from it). A roadmap still being written for the newest assessment is returned as it is; otherwise one queued for an older
+ * (409 assessment_required); the profile survey, when the AI may use it, tailors the advice (2026-11-14, user: "Triển khai
+ * theo kế hoạch này đi" on the plan "Một bước để bắt đầu": "Lộ trình AI khi không có khảo sát": no more 409 survey_required,
+ * which user 2026-10-24 had asked for). A roadmap still being written for the newest assessment is returned as it is; otherwise one queued for an older
  * assessment is cancelled and a new one is queued, unless the student queued one in the last 30 seconds (429
  * roadmap_too_frequent). While the queue is full (2026-11-10, no longer 429 queue_full) the new roadmap is stored deferred,
  * with its facts and without AI input, and promoteDeferredRoadmaps queues it once there is room; one already deferred for
@@ -212,8 +223,7 @@ export async function createRoadmap(client: PoolClient, userId: string, options:
   if (!assessment) throw new RoadmapError("assessment_required", 409);
   // The answers go to the AI only under consent to the current policy (2026-10-25 added the interests), or when a cố vấn
   // học tập or the Khoa filled them in for the student and the student has not withdrawn it (surveyUsable, policy 2026-11-10).
-  const survey = await readSurvey(client, userId);
-  if (!survey || !await surveyUsable(client, userId, survey)) throw new RoadmapError("survey_required", 409);
+  const survey = await usableSurveyFacts(client, userId);
   const rows = await readRoadmapRows(client, userId);
   const pending = rows.find((row) => row.status === "queued" || row.status === "processing");
   if (pending?.assessmentId === assessment.id) return { row: pending, created: false };
@@ -259,7 +269,7 @@ async function inOwnTransaction<T>(pool: Pick<DatabasePool, "connect">, work: (c
  * One deferred roadmap into the queue, in the lock order of createRoadmap (the student's row, then the queue lock). A
  * student whose row a write holds is skipped until the next run; "full" stops the run. The roadmap is built now, from the
  * newest assessment and the survey as they are, like "Tạo lại" (and its 24 hours in the queue start now); one the student
- * can no longer have (no usable survey) is cancelled.
+ * can no longer have (no assessment) is cancelled. Without a usable survey it is made without one (2026-11-14).
  */
 async function promoteRoadmap(client: PoolClient, candidate: { id: string; userId: string }, now: Date): Promise<"queued" | "full" | "skipped"> {
   const user = await client.query("SELECT id FROM users WHERE id=$1 AND is_active FOR KEY SHARE SKIP LOCKED", [candidate.userId]);
@@ -269,11 +279,11 @@ async function promoteRoadmap(client: PoolClient, candidate: { id: string; userI
   const row = await client.query("SELECT id FROM stu_roadmaps WHERE id=$1 AND user_id=$2 AND status='deferred' FOR UPDATE", [candidate.id, candidate.userId]);
   if (!row.rowCount) return "skipped";
   const assessment = await newestAssessment(client, candidate.userId);
-  const survey = await readSurvey(client, candidate.userId);
-  if (!assessment || !survey || !await surveyUsable(client, candidate.userId, survey)) {
+  if (!assessment) {
     await client.query("UPDATE stu_roadmaps SET status='cancelled',completed_at=now(),updated_at=now() WHERE id=$1", [candidate.id]);
     return "skipped";
   }
+  const survey = await usableSurveyFacts(client, candidate.userId);
   const { window, facts, aiInput } = await buildRoadmapJob(client, candidate.userId, assessment, survey, now);
   await client.query(`UPDATE stu_roadmaps SET status='queued',assessment_id=$2,window_start=$3,window_end=$4,facts=$5::jsonb,ai_input=$6::jsonb,
       prompt_version=$7,error_code=NULL,created_at=now(),updated_at=now() WHERE id=$1`,

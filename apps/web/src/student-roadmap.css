@@ -332,3 +332,26 @@
   font-size: 14px;
   line-height: 1.6;
 }
+
+/* Khảo sát nhanh is optional (2026-11-14): a light hint, not a step to take first. */
+.rm-survey-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 14px 0 0;
+  color: var(--sw-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.rm-survey-hint svg {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+}
+
+.rm-survey-hint a {
+  color: var(--sw-red);
+  font-weight: 700;
+}

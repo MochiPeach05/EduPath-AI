@@ -1,5 +1,9 @@
 # Định hướng nghề nghiệp
 
+## Vị trí mục tiêu và Khảo sát nhanh ở trang này (14/11/2026)
+
+Theo góp ý của giảng viên hướng dẫn, vị trí nghề nghiệp mục tiêu chỉ chọn ở đây, khi sinh viên muốn ("Chưa chọn — Chọn một vị trí bên dưới khi bạn muốn. Không bắt buộc."). Khảo sát nhanh (5 câu, không bắt buộc) nằm cạnh vị trí phù hợp nhất; cột "phù hợp với sở thích và thế mạnh" có nút Làm Khảo sát nhanh khi chưa làm. Sau khi chọn vị trí, nếu phản hồi `reassessed` là true, trang báo "Đã đánh giá lại năng lực với vị trí này. Khoảng trống kỹ năng đã cập nhật.".
+
 Trang `#career` của cổng sinh viên. Người dùng (24/10/2026): "Giờ làm cho tôi phần Định hướng nghề nghiệp này đi hiện tại tôi chưa có functionlist nên bạn cứ làm theo ý bạn muốn nhưng vẫn phải phù hợp với đề tài này". Thay trang "Sắp ra mắt" có ba bước (Khám phá vị trí nghề nghiệp, Lựa chọn nghề nghiệp mục tiêu, So sánh nhiều nghề nghiệp) bằng trang làm đủ ba việc đó.
 
 Theo nguyên tắc chung của đề tài, **hệ thống tính**: mức phù hợp với từng nghề dùng đúng phép tính của trang Khoảng trống kỹ năng; không có phần AI (không gửi gì cho mô hình). Từ comp-calc-v14 trang và Khoảng trống kỹ năng hiện giống hệt nhau (mục "Đồng bộ với Khoảng trống kỹ năng").

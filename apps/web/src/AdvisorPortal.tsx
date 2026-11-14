@@ -107,7 +107,7 @@ export function StudentTable({ students, page, sortHeader, opening, onOpen }: {
       <td>{student.targetCareer ?? <span className="career-empty">Chưa chọn</span>}</td>
       <td><Step done={student.hasTranscript} label="Bảng điểm" /></td>
       <td><Step done={student.assessed} label="Đánh giá năng lực" /></td>
-      <td><Step done={student.surveyDone} label="Khảo sát định hướng" /></td>
+      <td><Step done={student.surveyDone} label="Khảo sát nhanh" /></td>
       <td><Step done={student.roadmap} label="Lộ trình AI" /></td>
       <td><button type="button" className="am-primary av-open" disabled={opening !== null} onClick={() => onOpen(student)}>
         <Icon name="eye" /> {opening === student.userId ? "Đang mở…" : "Xem chi tiết"}</button></td>

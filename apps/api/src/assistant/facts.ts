@@ -170,9 +170,10 @@ async function profileOnly(db: Db, userId: string, hasTranscript: boolean): Prom
       `Vị trí nghề nghiệp mục tiêu: ${row?.career ?? "Chưa chọn"}`,
       // assistant-v5 (2026-10-29, user: "nên trả lời một cách rõ ràng hơn bạn chưa thực hiện đánh giá năng lực nên chúng tôi
       // chưa có cơ sở để tư vấn"): the missing results and the steps, for the answer to say first.
+      // assistant-v13 (2026-11-14): only the specialty and the transcript come first; the target career is optional.
       hasTranscript
-        ? "Bạn đã import bảng điểm nhưng chưa thực hiện Đánh giá năng lực nên EduPath AI chưa có cơ sở để tư vấn về kỹ năng, học phần nên học, lộ trình và tiến độ tốt nghiệp của bạn. Cần làm: bấm Đánh giá năng lực ở trang Đánh giá năng lực (cần đủ bảng điểm, chuyên ngành và vị trí nghề nghiệp mục tiêu)."
-        : "Bạn chưa import bảng điểm và chưa thực hiện Đánh giá năng lực nên EduPath AI chưa có cơ sở để tư vấn về điểm, kỹ năng, học phần nên học, lộ trình và tiến độ tốt nghiệp của bạn. Cần làm: import bảng điểm PDF ở Hồ sơ và bảng điểm, chọn chuyên ngành và vị trí nghề nghiệp mục tiêu, rồi bấm Đánh giá năng lực ở trang Đánh giá năng lực.",
+        ? "Bạn đã import bảng điểm nhưng chưa thực hiện Đánh giá năng lực nên EduPath AI chưa có cơ sở để tư vấn về kỹ năng, học phần nên học, lộ trình và tiến độ tốt nghiệp của bạn. Cần làm: bấm Đánh giá năng lực ở trang Đánh giá năng lực (cần bảng điểm và chuyên ngành; vị trí nghề nghiệp mục tiêu không bắt buộc)."
+        : "Bạn chưa import bảng điểm và chưa thực hiện Đánh giá năng lực nên EduPath AI chưa có cơ sở để tư vấn về điểm, kỹ năng, học phần nên học, lộ trình và tiến độ tốt nghiệp của bạn. Cần làm: chọn chuyên ngành và import bảng điểm PDF ở Hồ sơ và bảng điểm, rồi bấm Đánh giá năng lực ở trang Đánh giá năng lực.",
     ]),
   };
 }
@@ -224,7 +225,8 @@ export async function studentSources(db: Db, userId: string, question: string, i
     const lines = roadmap?.status === "completed" ? aiRoadmapLines(roadmap, assessment.id) : [];
     if (lines.length) sources.push({ kind: "roadmap", title: "Lộ trình AI đề xuất cho bạn", link: "#roadmap", text: clean(lines) });
   }
-  if (sections.survey) sources.push({ kind: "profile", title: "Khảo sát định hướng của bạn (bạn tự khai)", link: "#profile", text: clean(sections.survey) });
+  // assistant-v13: the survey is Khảo sát nhanh on Định hướng nghề nghiệp (survey-v5, 2026-11-14).
+  if (sections.survey) sources.push({ kind: "profile", title: "Khảo sát nhanh của bạn (bạn tự khai)", link: "#career", text: clean(sections.survey) });
   return { sources, gapSkills: gapSkillNames(assessment.computed) };
 }
 

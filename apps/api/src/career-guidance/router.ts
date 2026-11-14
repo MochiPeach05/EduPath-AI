@@ -169,7 +169,7 @@ export function createCareerGuidanceRouter(pool: DatabasePool | undefined, optio
       if (await consentWithdrawn(db, userId, "competency_assessment")) blocked = "assessment_withdrawn";
       else {
         try {
-          inputs = await readAssessmentInputs(db, userId, { careerOptional: true });
+          inputs = await readAssessmentInputs(db, userId);
         } catch (error) {
           if (!(error instanceof AssessmentError)) throw error;
           blocked = error.code;

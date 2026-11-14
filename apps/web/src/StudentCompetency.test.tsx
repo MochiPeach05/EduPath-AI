@@ -6,6 +6,7 @@ import { installAdvisorFetch, stopActing } from "./advisor-view";
 import { fixtureAssessment, fixtureResult } from "./student-competency.fixture";
 import type { AiStatus, LatestAssessmentResponse, PreviousAiComment } from "./competency-assessment-types";
 import type { GraduationCourseRow, GraduationEvaluation, StudentGraduationResponse } from "./student-graduation-types";
+import { unresolvedCopy } from "./student-graduation-data";
 
 const liveData = vi.hoisted(() => vi.fn());
 vi.mock("./use-live-data", () => ({ useLiveData: liveData }));
@@ -43,12 +44,14 @@ const graduation: StudentGraduationResponse = {
 };
 
 const profile = { careerPositionId: "career-1", careerPosition: { id: "career-1", nameVi: "Lập trình viên web", nameEn: "Web Developer", deletedAt: null } };
-function render(latest: LatestAssessmentResponse | null, options: { loading?: boolean; transcript?: boolean; specialty?: string | null; view?: CompetencyView; graduation?: StudentGraduationResponse } = {}) {
+/** target: false for a student who chose no target career (plan "Một bước để bắt đầu", 2026-11-14: it is optional). */
+function render(latest: LatestAssessmentResponse | null, options: { loading?: boolean; transcript?: boolean; specialty?: string | null; view?: CompetencyView; graduation?: StudentGraduationResponse; target?: boolean } = {}) {
   liveData.mockImplementation((url: string) => url.endsWith("/latest")
     ? { data: latest, error: null, loading: options.loading ?? false }
     : url === "/api/student/graduation" ? { data: options.graduation ?? graduation, error: null, loading: false }
       : { data: options.transcript ?? true, error: null, loading: false });
-  return renderToStaticMarkup(createElement(StudentCompetency, { profile: { ...profile, specialty: options.specialty === undefined ? "CNPM" : options.specialty }, view: options.view }));
+  const chosen = options.target === false ? { careerPositionId: null, careerPosition: null } : profile;
+  return renderToStaticMarkup(createElement(StudentCompetency, { profile: { ...chosen, specialty: options.specialty === undefined ? "CNPM" : options.specialty }, view: options.view }));
 }
 const withAi = (status: AiStatus, view?: CompetencyView) => render({ assessment: fixtureAssessment(status), aiEnabled: true, workerOnline: true }, { view });
 const sectionOrder = (html: string, ids: string[]) => ids.map((id) => html.indexOf(`id="${id}"`));
@@ -278,18 +281,34 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
     expect(section).not.toContain("Tiêu chuẩn tốt nghiệp K29 – CNPM");
   });
   it("explains a missing standard instead of a verdict", () => {
-    const html = render({ assessment: fixtureAssessment("completed"), aiEnabled: true, workerOnline: true }, { graduation: { ...graduation, resolution: "specialty_unset", standard: null, evaluation: null } });
-    expect(html).toContain("Hãy chọn chuyên ngành trong hồ sơ");
+    const unset = { ...graduation, resolution: "specialty_unset" as const, standard: null, evaluation: null };
+    const html = render({ assessment: fixtureAssessment("completed"), aiEnabled: true, workerOnline: true }, { graduation: unset });
+    // The words of Xét tốt nghiệp itself (student-graduation-data.ts unresolvedCopy).
+    expect(html).toContain(unresolvedCopy(unset).title);
     expect(html).not.toContain("scomp-grad-verdict");
   });
   it("shows an introduction when there is no assessment yet", () => {
     const html = render({ assessment: null, aiEnabled: false, workerOnline: false }, { specialty: null });
     expect(html).toContain("Chưa có kết quả đánh giá");
     expect(html).toContain("Đánh giá năng lực</button>");
-    // All three of the checklist are required (2026-10-21): the intro says so, a missing specialty reads "Chưa chọn".
-    expect(html).toContain("Khi hồ sơ có đủ bảng điểm, vị trí nghề nghiệp mục tiêu và chuyên ngành");
+    // The transcript and the specialty only (2026-11-14): the intro says so, a missing specialty reads "Chưa chọn".
+    expect(html).toContain("Khi hồ sơ có bảng điểm và chuyên ngành, bấm “Đánh giá năng lực”");
     expect(html).toContain("<span>Chưa chọn</span>");
     expect(html).not.toContain("Xóa kết quả đánh giá");
+  });
+  it("needs no target career: the checklist and the intro leave it out, and nothing asks for it (2026-11-14)", () => {
+    const html = render({ assessment: null, aiEnabled: false, workerOnline: false }, { target: false });
+    const checklist = html.slice(html.indexOf('aria-label="Điều kiện đánh giá"'), html.indexOf("</ul>", html.indexOf('aria-label="Điều kiện đánh giá"')));
+    expect(checklist).toContain("<strong>Bảng điểm</strong>");
+    expect(checklist).toContain("<strong>Chuyên ngành</strong>");
+    expect(checklist).not.toContain("Vị trí nghề nghiệp mục tiêu");
+    expect(html).not.toContain("vị trí nghề nghiệp mục tiêu");
+    // An assessment made without a target: the competency page shows it all, with no note that the profile changed.
+    const assessment = fixtureAssessment("completed");
+    const result = { ...assessment.result, career: null, meta: { ...assessment.result.meta, career: null } };
+    const shown = render({ assessment: { ...assessment, result }, aiEnabled: true, workerOnline: true }, { target: false });
+    expect(sectionOrder(shown, ["scomp-overview", "scomp-ai", "scomp-skills", "scomp-progress"]).every((index) => index > 0)).toBe(true);
+    expect(shown).not.toContain("Hồ sơ đã thay đổi sau lần đánh giá này");
   });
   it("shows a loading state while the first request runs", () => {
     const html = render(null, { loading: true });
@@ -300,6 +319,11 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
     expect(withAi("completed")).not.toContain("Hồ sơ đã thay đổi sau lần đánh giá này");
     const html = render({ assessment: fixtureAssessment("completed"), aiEnabled: true, workerOnline: true }, { specialty: null });
     expect(html).toContain("Hồ sơ đã thay đổi sau lần đánh giá này");
+    // Another target career matters only to Khoảng trống kỹ năng.
+    const assessment = fixtureAssessment("completed");
+    const other = { ...assessment, result: { ...assessment.result, meta: { ...assessment.result.meta, career: { id: "career-2", version: "v1" } } } };
+    expect(render({ assessment: other, aiEnabled: true, workerOnline: true })).not.toContain("Hồ sơ đã thay đổi sau lần đánh giá này");
+    expect(render({ assessment: other, aiEnabled: true, workerOnline: true }, { view: "gap" })).toContain("Hồ sơ đã thay đổi sau lần đánh giá này");
   });
   it("does not stay on 'Đang kiểm tra…' when the transcript check fails", () => {
     liveData.mockImplementation((url: string) => url.endsWith("/latest")
@@ -477,11 +501,32 @@ describe("StudentCompetency — Khoảng trống kỹ năng", () => {
     expect(html).toContain("Vị trí nghề nghiệp này chưa có yêu cầu kỹ năng trong danh mục nên chưa so sánh được.");
     expect(html).not.toContain("Bạn đã đạt mọi kỹ năng có dữ liệu của vị trí nghề nghiệp này.");
   });
-  it("asks for a target career when none is chosen", () => {
+  it("asks for a target career on Định hướng nghề nghiệp when none is chosen, and shows nothing else (mockup F, 2026-11-14)", () => {
     const assessment = fixtureAssessment("completed");
-    const html = render({ assessment: { ...assessment, result: { ...assessment.result, career: null } }, aiEnabled: true, workerOnline: true }, { view: "gap" });
-    expect(html).toContain("Bạn chưa chọn vị trí nghề nghiệp mục tiêu");
-    expect(html).not.toContain('id="scomp-career"');
+    const withoutCareer = { ...assessment, result: { ...assessment.result, career: null, meta: { ...assessment.result.meta, career: null } } };
+    const html = render({ assessment: withoutCareer, aiEnabled: true, workerOnline: true }, { view: "gap", target: false });
+    expect(html).toContain('<h3 id="sgap-no-target-title">Chọn vị trí nghề nghiệp mục tiêu để xem kỹ năng còn thiếu</h3>');
+    expect(html).toContain("Trang này so năng lực của bạn với yêu cầu của một vị trí nghề nghiệp. Bạn chọn vị trí ở Định hướng nghề nghiệp, EduPath AI tính lại ngay.");
+    expect(html).toContain('<a class="sw-primary" href="#career">Mở Định hướng nghề nghiệp</a>');
+    // In place of the target's summary; the courses for the weak skills need no target and stay.
+    for (const id of ["sgap-summary", "scomp-career", "sgap-history"]) expect(html).not.toContain(`id="${id}"`);
+    expect(html.indexOf('id="sgap-no-target-title"')).toBeLessThan(html.indexOf('id="scomp-courses"'));
+    expect(html).not.toContain("Hồ sơ đã thay đổi sau lần đánh giá này");
+    // The checklist of this page names the target, which is chosen on Định hướng nghề nghiệp.
+    expect(html).toMatch(/<strong>Vị trí nghề nghiệp mục tiêu<\/strong><span>Chưa chọn<\/span>.*?<a class="sw-text-link" href="#career">Chọn<\/a>/);
+    // Before any assessment: choose, then assess.
+    const first = render({ assessment: null, aiEnabled: false, workerOnline: false }, { view: "gap", target: false });
+    expect(first).toContain("Hãy chọn vị trí ở Định hướng nghề nghiệp, rồi bấm “Đánh giá năng lực” để xem kỹ năng còn thiếu.");
+    expect(first).not.toContain("Chưa có kết quả phân tích");
+  });
+  it("asks to assess again when the target was chosen after an assessment made without one", () => {
+    const assessment = fixtureAssessment("completed");
+    const withoutCareer = { ...assessment, result: { ...assessment.result, career: null, meta: { ...assessment.result.meta, career: null } } };
+    const html = render({ assessment: withoutCareer, aiEnabled: true, workerOnline: true }, { view: "gap" });
+    expect(html).toContain("Cần đánh giá lại với vị trí nghề nghiệp mục tiêu");
+    expect(html).toContain("với vị trí <strong>Lập trình viên web</strong>");
+    for (const id of ["scomp-career", "sgap-history", "sgap-no-target-title"]) expect(html).not.toContain(`id="${id}"`);
+    expect(html).toContain('id="scomp-courses"');
   });
   it("introduces the page before the first assessment", () => {
     const html = render({ assessment: null, aiEnabled: false, workerOnline: false }, { view: "gap" });
@@ -506,7 +551,8 @@ describe("StudentCompetency — audit of 2026-10-25", () => {
     expect(html).toContain('href="#skill-gap">Xem Khoảng trống kỹ năng');
     const none = withResult((result) => ({ ...result, career: null }));
     expect(none).toContain('<a class="sw-text-link" href="#career">Chọn vị trí nghề nghiệp mục tiêu');
-    expect(withResult((result) => ({ ...result, career: null }), "gap")).toContain('<a class="sw-outline" href="#career">Chọn vị trí nghề nghiệp mục tiêu</a>');
+    // The target is chosen on Định hướng nghề nghiệp (2026-11-14): its link on Khoảng trống kỹ năng, by the checklist.
+    expect(withResult((result) => ({ ...result, career: null }), "gap")).toContain('<a class="sw-text-link" href="#career">Đổi</a>');
   });
 
   it("explains Chưa học and names a planned evidence course Sắp học after the term being studied", () => {

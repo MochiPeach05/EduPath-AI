@@ -1,5 +1,9 @@
 # Lộ trình học tập
 
+## Lộ trình AI không cần khảo sát (14/11/2026)
+
+`POST /api/student/roadmap` không còn trả 409 `survey_required`; GET vẫn trả `surveyDone` để hiện gợi ý "Làm Khảo sát nhanh ở Định hướng nghề nghiệp để lộ trình sát hơn". Prompt `roadmap-v17`: dùng 5 mục của Khảo sát nhanh khi có; khi chưa có thì ghi sinh viên chưa làm (không bắt buộc); có luật riêng khi chưa chọn vị trí nghề nghiệp mục tiêu. Sở trường và thành tích không còn được gửi.
+
 ## Bố cục trang (24/10/2026, theo Stellic)
 
 Người dùng: "Gần như áp dụng theo trang này làm nè cả giao diện luôn" (hướng dẫn Stellic cho sinh viên của Đại học Oklahoma), bỏ "Lịch trình học kỳ" (Schedule term: xếp lớp theo lịch tuần) và "Đơn xin tốt nghiệp" (Request to graduate). Tối 24/10 người dùng gộp phần ký hiệu vào tab đầu, đổi tên tab thủ công ("Lên kế hoạch cho con đường của bạn" nghe sến) và đặt tab AI trước tab thủ công. Trang `#roadmap` có ba tab (`apps/web/src/StudentRoadmap.tsx`, tab đang mở nhớ trong `localStorage`):

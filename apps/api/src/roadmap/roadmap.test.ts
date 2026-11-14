@@ -289,7 +289,7 @@ describe("courses that wait for their tiên quyết or học trước (roadmap-v
 
   it("lists a waiting course apart and lets the text name it, never the study codes", () => {
     const input = buildRoadmapInput(facts);
-    expect(input.promptVersion).toBe("roadmap-v16");
+    expect(input.promptVersion).toBe("roadmap-v17");
     expect(input.user).toContain("Chưa đăng ký được ở HK2 2026–2027 (cần đạt môn tiên quyết hoặc học môn học trước; học ở các học kỳ sau):");
     expect(input.user).toContain(`- 71ITIS30203 Hệ quản trị cơ sở dữ liệu (3 TC): cần đạt ${failedName} trước`);
     expect(input.keys.courses.map((item) => item.code)).toEqual(["71ITSE41203", "71ITIN40304", "71ITSE30903"]);
@@ -383,20 +383,19 @@ describe("roadmapTerms", () => {
 
 describe("roadmapBasis", () => {
   const row = syntheticSurveyRow();
-  const survey = surveyFacts({ answers: row.answers, interestTech: row.interest_tech,
-    interestHobbies: row.interest_hobbies, hasAchievements: row.has_achievements, achievements: row.achievements });
+  const survey = surveyFacts({ answers: row.answers, interestTech: row.interest_tech });
 
   it("keeps what the student says apart from what the system has on record", () => {
     const basis = roadmapBasis(syntheticRoadmapFacts(), survey);
+    // survey-v5 (2026-11-14): of a survey-v4 row only the technologies and Tiếng Anh chuyên ngành are said by the student now.
     expect(basis.selfReported).toEqual([
       "Công nghệ bạn chọn là thế mạnh: Web front-end (HTML, CSS, JavaScript, React); Trí tuệ nhân tạo, học máy",
-      "Đi làm thêm: Có, liên quan CNTT", "Kinh nghiệm dẫn dắt nhóm: 1 dự án", "Dự án ngoài môn học: 1–2 dự án", "Tiếng Anh chuyên ngành: Đọc hiểu tốt",
-      "Thành tích bạn liệt kê: 2 mục",
+      "Tiếng Anh chuyên ngành: Đọc hiểu tốt",
     ]);
     expect(basis.recorded).toEqual([
       "Chưa có minh chứng (chưa có điểm từ học phần nào): Web front-end, HTML, CSS, JavaScript, React, Trí tuệ nhân tạo, học máy",
       "Học phần thực tập trong chương trình: Đồ án thực tập (chưa học)",
-      "Dự án ngoài môn học, dẫn dắt nhóm, đi làm thêm, tiếng Anh và thành tích: hệ thống không có dữ liệu để kiểm chứng.",
+      "Tiếng Anh chuyên ngành: hệ thống không có dữ liệu để kiểm chứng.",
     ]);
     expect(basis.unproven).toEqual(expect.arrayContaining(["C#/C++", "Docker", "thực tập", "React", "JavaScript"]));
     expect(basis.internshipDone).toBe(false);
@@ -452,8 +451,7 @@ describe("holding the output to the data (roadmap-v9)", () => {
   });
 
   const row = syntheticSurveyRow();
-  const survey = surveyFacts({ answers: row.answers, interestTech: row.interest_tech,
-    interestHobbies: row.interest_hobbies, hasAchievements: row.has_achievements, achievements: row.achievements });
+  const survey = surveyFacts({ answers: row.answers, interestTech: row.interest_tech });
   const context = roadmapContextFromAiInput(buildRoadmapInput(syntheticRoadmapFacts(), survey))!;
   const output = (extra: Record<string, unknown> = {}) => ({
     summary: "Học kỳ tới bạn nên hoàn thành tốt Kiểm thử phần mềm và học lại Cơ sở lập trình.",

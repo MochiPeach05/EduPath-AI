@@ -102,25 +102,6 @@
     margin-left: 14px
 }
 
-.sr-personal {
-    display: grid;
-    gap: 20px;
-    margin-bottom: 0
-}
-
-.sr-personal dt {
-    font-size: 12px;
-    color: #7b8190;
-    margin-bottom: 8px
-}
-
-.sr-personal dd {
-    font-size: 14px;
-    line-height: 1.8;
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    margin: 0
-}
 
 .sr-upload {
     display: flex;
@@ -453,20 +434,10 @@
 }
 
 /* Sections that Tổng quan opens (revealProfileSection): clear of the sticky header. */
-.sw-shell .sr-editor,
 .sw-shell .sr-transcript {
     scroll-margin-top: calc(var(--sw-header-height, 72px) + 16px)
 }
 
-/* Chuyên ngành in "Mục tiêu học tập": required, with a warning while it is "Chưa xác định". */
-.sr-required {
-    color: #b51639
-}
-
-.sr-field-warning {
-    color: #704900;
-    font-weight: 600
-}
 
 .sr-field-note {
     color: #647081;

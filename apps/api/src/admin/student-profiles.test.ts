@@ -93,6 +93,15 @@ describe("student profile SQL safety", () => {
     expect(sql).not.toContain("' OR 1=1 --"); expect(sql).not.toContain("SELECT * FROM users");
     expect(values).toEqual(["' OR 1=1 --", 2023, "K29", "false", "incomplete", 10, 10, null]);
   });
+  it("counts a profile complete with the specialty and a stored transcript, the target career and the survey optional (2026-11-14)", async () => {
+    const query = vi.fn().mockResolvedValue({ rows: [{ items: [], total: 0, cohortYears: [], cohortCodes: [] }] });
+    await new PostgresStudentProfileRepository({ query } as unknown as DatabasePool).list(actor, { q: "", page: 1, pageSize: 10 });
+    const sql = String(query.mock.calls[0]![0]);
+    const status = sql.slice(sql.indexOf("CASE WHEN p.user_id IS NULL THEN 'missing'"), sql.indexOf("AS \"profileStatus\""));
+    expect(status).toContain("WHEN p.specialty IS NOT NULL\n    AND EXISTS (SELECT 1 FROM student_transcripts t WHERE t.user_id = p.user_id)\n  THEN 'complete'");
+    expect(status).not.toContain("career_position_id");
+    expect(status).not.toContain("stu_profile_surveys");
+  });
   it("numbers the rows in the list's own order and sorts the whole list by a known column before paging", async () => {
     const query = vi.fn().mockResolvedValue({ rows: [{ items: [], total: 0, cohortYears: [], cohortCodes: [] }] });
     const repo = new PostgresStudentProfileRepository({ query } as unknown as DatabasePool);

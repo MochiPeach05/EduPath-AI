@@ -2,25 +2,25 @@ import { useEffect, useLayoutEffect, useRef, useState, type FormEvent, type Reac
 import { Icon } from "./student-icons";
 import { isValidConsent, policyVersion, surveyPolicyHref } from "./public-information";
 import {
-  SURVEY_API, answerLabel, draftOf, problemSummary, surveyErrorMessage, surveyGaps, surveyProblems,
+  SURVEY_API, SURVEY_SECTION_ID, answerLabel, draftOf, problemSummary, surveyBody, surveyErrorMessage, surveyGaps, surveyItems, surveyProblems,
   type StudentSurvey, type SurveyAction, type SurveyDraft, type SurveyField, type SurveyResponse,
 } from "./profile-survey";
 import { InterestGroup } from "./InterestChoices";
 import { interestLabels } from "./profile-interests";
-import { PROFILE_SECTIONS, formatUpdatedAt } from "./student-overview-data";
+import { formatUpdatedAt } from "./student-overview-data";
 import { isAdvisorView } from "./advisor-view";
 import { ActingConfirmDialog, surveyConfirm } from "./acting-confirm";
 import "./profile-survey.css";
 
-// "Khảo sát định hướng" on Hồ sơ và bảng điểm (user 2026-10-24): radio answers so nothing is left empty or typed at
-// random, the technologies and free-time interests (checkbox chips, 1 to 5), achievements Có/Không required with the
-// list required after Có. The AI study roadmap needs it, agreed to under the current policy. Stored answers can be
-// deleted (and the consent withdrawn) at any time, also while they wait for the newer questions or policy.
-// A done survey is a short summary (user 2026-11-04: the open form, over a screen long, hid the transcript import below
-// it): "Chỉnh sửa khảo sát" opens the form, Hủy and Lưu khảo sát close it. The form stays open while the survey is not done.
-// A cố vấn học tập or the Khoa working in the student's page fills it in the same way (user 2026-11-10: "Khảo sát định hướng
-// … cố vấn học tập và quản trị viên làm luôn nhé", policy 2026-11-10): no consent box (no consent in the student's name),
-// a confirmation before saving, never Xóa câu trả lời; the API logs it and tells the student.
+// "Khảo sát nhanh" on Định hướng nghề nghiệp (2026-11-14, plan "Một bước để bắt đầu"; the advisor: the old survey was too
+// long and students were made to take it before using EduPath AI). Five items, all choices so nothing is left empty or
+// typed at random (user 2026-10-24): Lĩnh vực quan tâm nhất, Thế mạnh của bạn (1 to 5 technologies), Mục tiêu sau tốt
+// nghiệp, Thời gian tự học mỗi tuần, Tiếng Anh chuyên ngành. Not required: with it, Định hướng nghề nghiệp suggests the
+// positions that match it and the AI writes a closer roadmap. Stored answers can be deleted (and the consent withdrawn) at
+// any time. A done survey is a short summary: "Chỉnh sửa khảo sát" opens the form, Hủy and Lưu khảo sát close it.
+// A cố vấn học tập or the Khoa working in the student's page fills it in the same way (user 2026-11-10, policy 2026-11-10):
+// no consent box (no consent in the student's name), a confirmation before saving, never Xóa câu trả lời; the API logs it
+// and tells the student.
 
 async function send<T>(action: SurveyAction, init: RequestInit & { consent?: boolean } = {}): Promise<T> {
   const { consent, ...request } = init;
@@ -49,7 +49,7 @@ function DeleteSurveyDialog({ busy, error, onClose, onConfirm }: { busy: boolean
   }, []);
   return <dialog ref={dialog} className="sr-confirm-dialog" aria-labelledby="delete-survey-title" aria-busy={busy} onCancel={(event) => { event.preventDefault(); if (!busy) onClose(); }}>
     <h2 id="delete-survey-title">Xóa câu trả lời khảo sát</h2>
-    <p>Xóa toàn bộ câu trả lời khảo sát định hướng và thành tích? Các lộ trình AI đã tạo cũng sẽ bị xóa, và bạn cần làm lại khảo sát trước khi tạo lộ trình mới.</p>
+    <p>Xóa toàn bộ câu trả lời Khảo sát nhanh? Các lộ trình AI đã tạo cũng sẽ bị xóa. Bạn vẫn dùng được mọi trang và vẫn tạo được lộ trình mới khi không có khảo sát.</p>
     {error && <p className="sr-error" role="alert">{error}</p>}
     <div className="sr-actions sr-form-actions">
       <button type="button" className="sr-secondary" disabled={busy} onClick={onClose} autoFocus>Hủy</button>
@@ -71,16 +71,16 @@ export type SurveyUi = {
 };
 
 /**
- * Every required answer is saved, under a consent that still counts, or filled in for the student by a cố vấn học tập or
- * the Khoa (savedBy, policy 2026-11-10; the API's surveyUsable also checks the consent was not withdrawn).
+ * Every answer is saved, under a consent that still counts, or filled in for the student by a cố vấn học tập or the Khoa
+ * (savedBy, policy 2026-11-10; the API's surveyUsable also checks the consent was not withdrawn).
  */
 export const surveyDone = (data: Pick<SurveyResponse, "survey" | "consentVersion">) =>
   data.survey?.complete === true && (isValidConsent(data.consentVersion) || Boolean(data.survey.savedBy));
 
 /**
- * Just loaded: the summary when the survey is done, else the form (answers missing, or waiting for consent to a newer
- * policy). A cố vấn học tập or the Khoa starts on the summary, or a note when nothing is stored, and opens the form with
- * Chỉnh sửa khảo sát or Làm khảo sát thay sinh viên (policy 2026-11-10).
+ * Just loaded: the summary when the survey is done, else the form (nothing stored, answers missing, or waiting for consent
+ * to a newer policy). A cố vấn học tập or the Khoa starts on the summary, or a note when nothing is stored, and opens the
+ * form with Chỉnh sửa khảo sát or Làm khảo sát thay sinh viên (policy 2026-11-10).
  */
 export const loadedUi = (data: SurveyResponse, advisor = isAdvisorView()): SurveyUi => ({
   editing: !advisor && !surveyDone(data), draft: draftOf(data.survey, data.previous), consented: false, attempted: false, message: "", error: "",
@@ -97,8 +97,8 @@ export const cancelledUi = (ui: SurveyUi, data: Pick<SurveyResponse, "survey" | 
 /** "Lưu khảo sát" went through: back to the summary of the saved answers. advisor: saved for the student. */
 export const savedUi = (survey: StudentSurvey | null, advisor = false): SurveyUi => ({
   editing: false, draft: draftOf(survey), consented: false, attempted: false, error: "",
-  message: advisor ? "Đã lưu khảo sát định hướng của sinh viên. EduPath AI sẽ dùng các câu trả lời này khi soạn lộ trình học tập cho sinh viên."
-    : "Đã lưu khảo sát định hướng. EduPath AI sẽ dùng các câu trả lời này khi soạn lộ trình học tập cho bạn.",
+  message: advisor ? "Đã lưu Khảo sát nhanh của sinh viên. EduPath AI dùng các câu trả lời này để gợi ý vị trí nghề nghiệp và soạn lộ trình học tập cho sinh viên."
+    : "Đã lưu Khảo sát nhanh. EduPath AI dùng các câu trả lời này để gợi ý vị trí nghề nghiệp và soạn lộ trình học tập cho bạn.",
 });
 
 /** ", do cố vấn học tập làm thay bạn" after the date of answers filled in for the student (to the student, or to staff). */
@@ -110,27 +110,15 @@ const deletedUi = (): SurveyUi => ({
   message: "Đã xóa câu trả lời khảo sát và các lộ trình AI đã tạo.",
 });
 
-/** The stored answers in short: the questions as a grid of answers, then Thế mạnh and Sở trường as chips, then Thành tích. */
+/** The stored answers in short, in the order of the form: each question's answer, Thế mạnh as chips. */
 function SurveySummary({ data: { questions, interests }, survey }: { data: SurveyResponse; survey: StudentSurvey }) {
-  const chips = (labels: string[], className: string) => labels.length
-    ? <ul className={className}>{labels.map((label) => <li key={label}>{label}</li>)}</ul>
-    : <span className="ps-none">Chưa chọn</span>;
-  const achievements = survey.hasAchievements && survey.achievements ? survey.achievements.split("\n") : [];
-  return <>
-    <dl className="ps-brief">
-      {questions.map((question) => {
-        const answer = answerLabel(question, survey.answers);
-        return <div key={question.id}><dt>{question.label}</dt><dd>{answer ?? <span className="ps-none">Chưa trả lời</span>}</dd></div>;
-      })}
-    </dl>
-    <dl className="ps-lists">
-      <div><dt>Thế mạnh</dt><dd>{chips(interestLabels(interests.tech, survey.interestTech), "ps-chips ps-chips-tech")}</dd></div>
-      <div><dt>Sở trường</dt><dd>{chips(interestLabels(interests.hobbies, survey.interestHobbies), "ps-chips")}</dd></div>
-      <div><dt>Thành tích</dt><dd>{achievements.length
-        ? <ul className="ps-achievement-list">{achievements.map((line, index) => <li key={index}>{line}</li>)}</ul>
-        : "Không có"}</dd></div>
-    </dl>
-  </>;
+  const tech = interestLabels(interests.tech, survey.interestTech);
+  return <dl className="ps-brief">{surveyItems(questions).map((item) => item.kind === "tech"
+    ? <div key="tech" className="ps-brief-wide"><dt>Thế mạnh</dt><dd>{tech.length
+      ? <ul className="ps-chips ps-chips-tech">{tech.map((label) => <li key={label}>{label}</li>)}</ul>
+      : <span className="ps-none">Chưa chọn</span>}</dd></div>
+    : <div key={item.question.id}><dt>{item.question.label}</dt><dd>{answerLabel(item.question, survey.answers) ?? <span className="ps-none">Chưa trả lời</span>}</dd></div>)}
+  </dl>;
 }
 
 type SurveyCardActions = {
@@ -139,6 +127,8 @@ type SurveyCardActions = {
 };
 const noop = () => {};
 const NO_ACTIONS: SurveyCardActions = { edit: noop, cancel: noop, askDelete: noop, save: noop, draft: noop, consent: noop };
+/** Technologies shown before "+ N công nghệ khác" (the chosen ones always show). */
+const TECH_SHOWN = 6;
 
 /** The card of the loaded survey: the summary, or the form while it is being filled in (by the student or for them). */
 export function SurveyCard({ data, ui, busy = false, actions = NO_ACTIONS, refs = {}, children }: {
@@ -147,37 +137,38 @@ export function SurveyCard({ data, ui, busy = false, actions = NO_ACTIONS, refs 
   /** The delete dialog while it is open. */
   children?: ReactNode;
 }) {
-  const { questions, survey, achievementsMax, interests } = data;
+  const { questions, survey, interests } = data;
   const { draft, consented, attempted } = ui;
   const advisor = isAdvisorView();
   // The student agrees when saving; a cố vấn học tập or the Khoa never agrees in the student's name (a note instead).
   const needsConsent = !advisor && !isValidConsent(data.consentVersion);
   const done = surveyDone(data);
+  const items = surveyItems(questions);
   // With nothing stored the student's only view is the form; a cố vấn học tập reads a note and opens the form by its button.
   const formOpen = ui.editing || (!advisor && !survey);
   // Stored answers that no longer count: what to add before they do (no consent to give when working for the student).
   const gaps = surveyGaps(questions, survey, data.consentVersion, !advisor);
   // Nothing may be filled in for a student who deleted the answers and withdrew the consent (API: survey_withdrawn).
   const canAct = !advisor || Boolean(survey) || !data.withdrawn;
-  const problems = surveyProblems(questions, draft, { needsConsent, consented, achievementsMax });
+  const problems = surveyProblems(questions, draft, { needsConsent, consented });
   const shown = new Map<SurveyField, string>(attempted ? problems : []);
   const errorId = (field: SurveyField) => `ps-error-${field.replace(":", "-")}`;
   const fieldError = (field: SurveyField) => shown.has(field) ? <p className="ps-field-error" id={errorId(field)}>{shown.get(field)}</p> : null;
   const setDraft = actions.draft;
   const updated = survey ? formatUpdatedAt(survey.updatedAt) : "—";
 
-  return <section className={`sw-panel ps-survey${done ? "" : " ps-survey-todo"}`} id={PROFILE_SECTIONS.survey} aria-labelledby="ps-title">
+  return <section className="sw-panel ps-survey ps-quick" id={SURVEY_SECTION_ID} aria-labelledby="ps-title">
     <div className="sw-section-heading ps-heading">
       <div>
         <div className="ps-title">
-          <h2 id="ps-title" ref={refs.heading} tabIndex={-1}>Khảo sát định hướng</h2>
-          <span className={`sw-tag ${done ? "sw-tag-green" : "ps-tag-required"}`}>{done ? "Đã hoàn thành" : "Bắt buộc"}</span>
+          <h2 id="ps-title" ref={refs.heading} tabIndex={-1}>Khảo sát nhanh</h2>
+          <span className={`sw-tag ${done ? "sw-tag-green" : "ps-tag-optional"}`}>{done ? "Đã hoàn thành" : "Không bắt buộc · 1 phút"}</span>
         </div>
         {formOpen || !survey
-          ? <p className="sw-muted ps-intro">Trả lời {questions.length} câu hỏi ngắn, cho biết thế mạnh, sở trường và thành tích của bạn. EduPath AI dùng các câu trả lời này để tư vấn lộ trình học tập sát với mục tiêu của bạn{done ? "." : ". Bạn cần hoàn thành khảo sát trước khi tạo Lộ trình AI."}</p>
+          ? <p className="sw-muted ps-intro">Trả lời {items.length} câu để EduPath AI gợi ý thêm vị trí hợp với sở thích, thế mạnh và soạn lộ trình sát hơn.</p>
           : updated !== "—" && <p className="sw-muted ps-updated">Cập nhật lúc {updated}{savedByText(survey.savedBy, advisor)}</p>}
       </div>
-      {/* Like "Chỉnh sửa thông tin" of Mục tiêu học tập; after saving, the message is read with the button that gets the focus. */}
+      {/* After saving, the message is read with the button that gets the focus. */}
       {!formOpen && (survey || advisor) && canAct && <button ref={refs.editButton} type="button" className="sw-text-link" onClick={actions.edit}
         aria-describedby={ui.message ? "ps-message" : undefined}><Icon name="edit" />{survey ? "Chỉnh sửa khảo sát" : "Làm khảo sát thay sinh viên"}</button>}
     </div>
@@ -189,11 +180,20 @@ export function SurveyCard({ data, ui, busy = false, actions = NO_ACTIONS, refs 
     {formOpen ? <form ref={refs.form} noValidate onSubmit={actions.save}>
       <fieldset disabled={busy} className="ps-fields">
         <ol className="ps-questions">
-          {questions.map((question, index) => {
+          {items.map((item) => {
+            if (item.kind === "tech") {
+              return <li key="tech" className="ps-wide">
+                {data.previous?.text && !survey?.interestTech.length && <p className="pi-legacy">Trước đây bạn đã ghi sở thích: “{data.previous.text}”. Hãy chọn thế mạnh của bạn ở danh sách dưới đây.</p>}
+                <InterestGroup name="tech" number={item.number} legend="Thế mạnh của bạn" hint={`Chọn từ 1 đến ${interests.max} công nghệ bạn thành thạo.`}
+                  options={interests.tech} max={interests.max} value={draft.interestTech} error={shown.get("tech") ?? ""} shown={TECH_SHOWN}
+                  onChange={(interestTech) => setDraft({ ...draft, interestTech })} />
+              </li>;
+            }
+            const { question } = item;
             const field: SurveyField = `q:${question.id}`;
             return <li key={question.id} data-field={field}>
               <fieldset className={`ps-question${shown.has(field) ? " ps-invalid" : ""}`} aria-describedby={shown.has(field) ? errorId(field) : undefined}>
-                <legend><span className="ps-number" aria-hidden="true">{index + 1}</span><span>{question.label}<span className="ps-required" aria-hidden="true">*</span></span></legend>
+                <legend><span className="ps-number" aria-hidden="true">{item.number}</span><span>{question.label}<span className="ps-required" aria-hidden="true">*</span></span></legend>
                 <div className="ps-options">{question.options.map((option) => <label key={option.id} className="ps-option">
                   <input type="radio" name={`ps-${question.id}`} value={option.id} checked={draft.answers[question.id] === option.id}
                     onChange={() => setDraft({ ...draft, answers: { ...draft.answers, [question.id]: option.id } })} />
@@ -203,46 +203,12 @@ export function SurveyCard({ data, ui, busy = false, actions = NO_ACTIONS, refs 
               </fieldset>
             </li>;
           })}
-          {data.previous?.text && !survey?.interestTech.length && <li className="pi-legacy ps-wide">Trước đây bạn đã ghi sở thích: “{data.previous.text}”. Hãy chọn theo hai danh sách dưới đây.</li>}
-          <li className="ps-wide">
-            {/* Technologies only since survey-v4 (user 2026-10-31: "Bỏ cái câu tự luận ở thế mạnh của bạn đi"). */}
-            <InterestGroup name="tech" number={questions.length + 1} legend="Thế mạnh của bạn" hint={`Chọn từ 1 đến ${interests.max} công nghệ bạn thành thạo.`}
-              options={interests.tech} max={interests.max} value={draft.interestTech} error={shown.get("tech") ?? ""}
-              onChange={(interestTech) => setDraft({ ...draft, interestTech })} />
-          </li>
-          <li className="ps-wide">
-            <InterestGroup name="hobbies" number={questions.length + 2} legend="Sở trường" hint={`Chọn từ 1 đến ${interests.max} hoạt động bạn làm tốt hoặc hay làm.`}
-              options={interests.hobbies} max={interests.max} value={draft.interestHobbies} error={shown.get("hobbies") ?? ""}
-              onChange={(interestHobbies) => setDraft({ ...draft, interestHobbies })} />
-          </li>
-          <li data-field="hasAchievements">
-            <fieldset className={`ps-question${shown.has("hasAchievements") || shown.has("achievements") ? " ps-invalid" : ""}`}
-              aria-describedby={shown.has("hasAchievements") ? errorId("hasAchievements") : undefined}>
-              <legend><span className="ps-number" aria-hidden="true">{questions.length + 3}</span><span>Thành tích (cuộc thi, giải thưởng, danh hiệu, học bổng)<span className="ps-required" aria-hidden="true">*</span></span></legend>
-              <div className="ps-options">
-                {([[true, "Có"], [false, "Không"]] as const).map(([value, label]) => <label key={label} className="ps-option">
-                  <input type="radio" name="ps-achievements" checked={draft.hasAchievements === value} onChange={() => setDraft({ ...draft, hasAchievements: value })} />
-                  <span>{label}</span>
-                </label>)}
-              </div>
-              {fieldError("hasAchievements")}
-              {draft.hasAchievements && <label className="ps-achievements" data-field="achievements">
-                <span>Liệt kê thành tích của bạn, mỗi dòng một thành tích<span className="ps-required" aria-hidden="true">*</span></span>
-                <textarea rows={4} value={draft.achievements} aria-invalid={shown.has("achievements") || undefined}
-                  aria-describedby={`ps-achievements-hint${shown.has("achievements") ? ` ${errorId("achievements")}` : ""}`}
-                  placeholder={"Ví dụ: Giải Ba Olympic Tin học sinh viên cấp trường 2025\nHọc bổng khuyến khích học tập HK1 2025–2026"}
-                  onChange={(event) => setDraft({ ...draft, achievements: event.target.value })} />
-                <small id="ps-achievements-hint">Không ghi họ tên, mã số sinh viên hay thông tin của người khác. {draft.achievements.trim().length.toLocaleString("vi-VN")}/{achievementsMax.toLocaleString("vi-VN")} ký tự.</small>
-                {fieldError("achievements")}
-              </label>}
-            </fieldset>
-          </li>
         </ol>
         {needsConsent && <div data-field="consent" className={`ps-consent${shown.has("consent") ? " ps-invalid" : ""}`}>
           <label>
             <input type="checkbox" checked={consented} onChange={(event) => actions.consent(event.target.checked)}
               aria-describedby={shown.has("consent") ? errorId("consent") : undefined} />
-            <span>Tôi đồng ý để EduPath AI dùng câu trả lời khảo sát (kể cả thế mạnh, sở trường) và thành tích của tôi để tư vấn lộ trình học tập bằng AI, theo <a href={surveyPolicyHref} target="_blank" rel="noreferrer">Chính sách bảo mật</a>.{data.consentVersion ? " (Chính sách vừa được cập nhật, vui lòng xác nhận lại.)" : ""}</span>
+            <span>Tôi đồng ý để EduPath AI dùng câu trả lời Khảo sát nhanh để gợi ý vị trí nghề nghiệp và tư vấn lộ trình học tập bằng AI, theo <a href={surveyPolicyHref} target="_blank" rel="noreferrer">Chính sách bảo mật</a>.{data.consentVersion ? " (Chính sách vừa được cập nhật, vui lòng xác nhận lại.)" : ""}</span>
           </label>
           {fieldError("consent")}
         </div>}
@@ -258,13 +224,17 @@ export function SurveyCard({ data, ui, busy = false, actions = NO_ACTIONS, refs 
         <button className="sw-primary" disabled={busy}><Icon name="save" /> {busy ? "Đang lưu…" : "Lưu khảo sát"}</button>
       </div>
     </form> : survey && <SurveySummary data={data} survey={survey} />}
-    {!formOpen && advisor && !survey && <p className="sw-advisor-note">{canAct ? "Sinh viên chưa làm Khảo sát định hướng."
+    {!formOpen && advisor && !survey && <p className="sw-advisor-note">{canAct ? "Sinh viên chưa làm Khảo sát nhanh."
       : "Sinh viên đã xóa câu trả lời khảo sát và rút lại sự đồng ý, nên bạn không làm khảo sát thay được."}</p>}
     {children}
   </section>;
 }
 
-export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void }) {
+/**
+ * onSaved: after a save or a delete (Định hướng nghề nghiệp reads its survey matches again). openRequest: a number that
+ * grows each time another part of the page asks for the form ("Chỉnh sửa khảo sát" beside the matches).
+ */
+export default function StudentProfileSurvey({ onSaved, openRequest = 0 }: { onSaved: () => void; openRequest?: number }) {
   const [data, setData] = useState<SurveyResponse | null>(null);
   const [loadError, setLoadError] = useState("");
   const [reload, setReload] = useState(0);
@@ -284,6 +254,11 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
     focusNext.current = null;
     target?.()?.focus();
   });
+  // The first question: its chosen answer, else its first option.
+  const firstField = () => {
+    const first = form.current?.querySelector("li[data-field], li.ps-wide");
+    return first?.querySelector<HTMLElement>("input:checked") ?? first?.querySelector<HTMLElement>("input");
+  };
 
   useEffect(() => {
     let alive = true;
@@ -296,25 +271,31 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
     return () => { alive = false; };
   }, [reload]);
 
-  // The id stays on every state, so Tổng quan can open this section while it loads.
-  if (loadError) return <section className="sw-panel ps-survey" id={PROFILE_SECTIONS.survey} aria-labelledby="ps-title">
-    <div className="sw-section-heading"><h2 id="ps-title" tabIndex={-1}>Khảo sát định hướng</h2></div>
+  // Another part of the page asked for the form: open it (when it may be filled in) and go to its first question.
+  const seenRequest = useRef(openRequest);
+  useEffect(() => {
+    if (openRequest === seenRequest.current || !data) return;
+    seenRequest.current = openRequest;
+    if (isAdvisorView() && !data.survey && data.withdrawn) return;
+    setUi(openedUi);
+    focusNext.current = firstField;
+  }, [openRequest, data]);
+
+  // The id stays on every state, so other pages and buttons can open this section while it loads.
+  if (loadError) return <section className="sw-panel ps-survey ps-quick" id={SURVEY_SECTION_ID} aria-labelledby="ps-title">
+    <div className="sw-section-heading"><h2 id="ps-title" tabIndex={-1}>Khảo sát nhanh</h2></div>
     <p className="sr-error" role="alert">{loadError}<button type="button" onClick={() => setReload((value) => value + 1)}>Thử lại</button></p>
   </section>;
-  if (!data) return <section className="sw-panel ps-survey" id={PROFILE_SECTIONS.survey} aria-busy="true"><p role="status">Đang tải khảo sát định hướng…</p></section>;
+  if (!data) return <section className="sw-panel ps-survey ps-quick" id={SURVEY_SECTION_ID} aria-busy="true"><p role="status">Đang tải Khảo sát nhanh…</p></section>;
 
-  const { questions, survey, achievementsMax } = data;
+  const { questions, survey } = data;
   const advisor = isAdvisorView();
   const needsConsent = !advisor && !isValidConsent(data.consentVersion);
-  const problems = surveyProblems(questions, ui.draft, { needsConsent, consented: ui.consented, achievementsMax });
+  const problems = surveyProblems(questions, ui.draft, { needsConsent, consented: ui.consented });
 
   const edit = () => {
     setUi(openedUi);
-    // The first question: its chosen answer, else its first option.
-    focusNext.current = () => {
-      const first = form.current?.querySelector("li[data-field]");
-      return first?.querySelector<HTMLElement>("input:checked") ?? first?.querySelector<HTMLElement>("input");
-    };
+    focusNext.current = firstField;
   };
   const cancel = () => {
     setUi((current) => cancelledUi(current, data));
@@ -327,7 +308,7 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
     setUi((current) => ({ ...current, attempted: true, message: "" }));
     if (problems.length) {
       const [field] = problems[0]!;
-      form.current?.querySelector<HTMLElement>(`[data-field="${field}"] input, [data-field="${field}"] textarea`)?.focus();
+      form.current?.querySelector<HTMLElement>(`[data-field="${field}"] input`)?.focus();
       return;
     }
     if (advisor) setConfirming(true);
@@ -337,13 +318,9 @@ export default function StudentProfileSurvey({ onSaved }: { onSaved: () => void 
   const submit = async () => {
     setBusy(true);
     setUi((current) => ({ ...current, error: "" }));
-    const { draft } = ui;
     try {
-      const body = {
-        answers: draft.answers, interestTech: draft.interestTech, interestHobbies: draft.interestHobbies,
-        hasAchievements: draft.hasAchievements, achievements: draft.hasAchievements ? draft.achievements : null,
-      };
-      const saved = await send<Pick<SurveyResponse, "survey" | "consentVersion">>("save", { method: "PUT", body: JSON.stringify(body), consent: needsConsent });
+      const saved = await send<Pick<SurveyResponse, "survey" | "consentVersion">>("save",
+        { method: "PUT", body: JSON.stringify(surveyBody(questions, ui.draft)), consent: needsConsent });
       setData({ ...data, survey: saved.survey, previous: null, consentVersion: saved.consentVersion });
       setUi(savedUi(saved.survey, advisor));
       // The form closes into the summary: back to "Chỉnh sửa khảo sát", else the heading.

@@ -3,9 +3,11 @@ import { Icon } from "./student-icons";
 import {
   CAREER_GUIDANCE_API, COMPARE_MAX, FIT_ORDER_TEXT, FIT_RULE_TEXT, FIT_SCORE_LABEL, FIT_STEP, bestFitsHeading, blockedAction, blockedText, careerPicks, compareRows, filterCareers, fitRuleText,
   fitScoreText, fitSummary, gapNote, hasFit, interestReason, matchesInterests, metSkills, missingSkills, nameList, orderedRequirements, requirementName,
-  requirementScoreText, requirementSourcesText, requirementState, surveyInterests, toggleCompare, type CareerFilters, type GuidanceCareer, type GuidanceResponse,
-  type GuidanceRequirement,
+  reassessedOf, requirementScoreText, requirementSourcesText, requirementState, surveyInterests, targetSavedNotice, toggleCompare, type CareerFilters, type GuidanceCareer,
+  type GuidanceResponse, type GuidanceRequirement,
 } from "./career-guidance-data";
+import StudentProfileSurvey from "./StudentProfileSurvey";
+import { SURVEY_SECTION_ID } from "./profile-survey";
 import { meaningClass } from "./display-format";
 import { fitMeaning } from "./student-competency-data";
 import { isAdvisorView } from "./advisor-view";
@@ -13,8 +15,12 @@ import { ActingConfirmDialog, goalsConfirm } from "./acting-confirm";
 import "./career-guidance.css";
 
 // "Định hướng nghề nghiệp" (#career, user 2026-10-24: "làm theo ý bạn muốn nhưng vẫn phải phù hợp với đề tài"): the
-// careers that suit the student's competencies and Khảo sát định hướng, every career with its fit, a side-by-side
+// careers that suit the student's competencies and Khảo sát nhanh, every career with its fit, a side-by-side
 // comparison of up to three careers, and choosing the target career. The system computes the fits; no AI.
+// Since the plan "Một bước để bắt đầu" (2026-11-14, approved preview https://claude.ai/code/artifact/1d5dbbec-1c0b-4aa2-acb0-839de3ae86b6;
+// the advisor: "vị trí nghề nghiệp để bên chỗ định hướng, khi nào người ta muốn định hướng thì người ta mới chọn"), this
+// is the one place the target is chosen, and it is optional; Khảo sát nhanh (5 items, optional) lives here beside the best
+// fit. Choosing the target makes the API assess again when it can (PATCH answer `reassessed`).
 // Read top-down since 2026-10-31 (user: "Giao diện đưa ra quá nhiều thông tin, sinh viên không biết nên đọc gì. Ưu tiên kết
 // quả phù hợp nhất; phân cấp nội dung và giảm các phần phụ không cần thiết"; approved preview
 // https://claude.ai/code/artifact/1207975d-ae6e-444f-97ba-b449810e7555): the best fit with why, then "Theo bảng xếp hạng"
@@ -24,8 +30,9 @@ import "./career-guidance.css";
 // A cố vấn học tập or a Khoa admin working in the student's page chooses the target too, after a confirmation (user
 // 2026-11-10, policy 2026-11-10; acting-confirm.tsx); the API logs it and tells the student (advisors/access.ts).
 
-/** link: the text asks to re-assess, so the notice links to Đánh giá năng lực. */
-type Notice = { tone: "success" | "error"; text: string; link?: boolean } | null;
+/** link: the page the notice links to (Đánh giá năng lực to assess again, Khoảng trống kỹ năng once it is up to date). */
+type Notice = { tone: "success" | "error"; text: string; link?: "competency" | "skill-gap" | null } | null;
+const NOTICE_LINKS = { competency: { href: "#competency", label: "Mở Đánh giá năng lực" }, "skill-gap": { href: "#skill-gap", label: "Xem Khoảng trống kỹ năng" } } as const;
 
 async function readGuidance(): Promise<GuidanceResponse> {
   const response = await fetch(CAREER_GUIDANCE_API, { credentials: "include", cache: "no-store" });
@@ -34,12 +41,13 @@ async function readGuidance(): Promise<GuidanceResponse> {
   return response.json() as Promise<GuidanceResponse>;
 }
 
-async function saveTarget(careerId: string): Promise<void> {
+/** Saves the target; reassessed: the API stored a new assessment for it (plan "Một bước để bắt đầu"). */
+async function saveTarget(careerId: string): Promise<{ reassessed: boolean }> {
   const response = await fetch("/api/student/profile", {
     method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ careerPositionId: careerId }),
   });
-  if (response.ok) return;
   const body = await response.json().catch(() => ({})) as { error?: string };
+  if (response.ok) return { reassessed: reassessedOf(body) };
   if (response.status === 401) window.dispatchEvent(new Event("edupath-session-expired"));
   throw new Error(body.error === "career_unavailable" ? "Vị trí này vừa bị xóa khỏi danh mục. Hãy chọn vị trí nghề nghiệp khác."
     : "Chưa lưu được vị trí nghề nghiệp mục tiêu. Vui lòng thử lại.");
@@ -120,7 +128,7 @@ function TopPick({ career, scored, saving, onDetail, onChoose }: { career: Guida
       <p className="cg-en">{career.nameEn} · {career.categoryName}</p>
       <ul className="cg-why">
         {career.fit && <li className="cg-why-ok"><i aria-hidden="true">✓</i><span><b>Đạt {career.fit.met}/{career.fit.total} kỹ năng yêu cầu</b>{met.length > 0 && `: ${nameList(met, 4)}`}</span></li>}
-        {matchesInterests(career) && <li className="cg-why-like"><i aria-hidden="true">♥</i><span><b>Hợp Khảo sát định hướng của bạn:</b> {interestReason(career).replace(/^Khớp: /, "")}</span></li>}
+        {matchesInterests(career) && <li className="cg-why-like"><i aria-hidden="true">♥</i><span><b>Hợp sở thích và thế mạnh của bạn:</b> {interestReason(career).replace(/^Khớp: /, "")}</span></li>}
         {missing.length > 0 && <li className="cg-why-gap"><i aria-hidden="true">!</i><span><b>Còn thiếu:</b> {nameList(missing)}</span></li>}
       </ul>
       <div className="cg-top-actions">
@@ -284,8 +292,9 @@ function CompareDialog({ careers, onRemove, onClear, onClose }: { careers: Guida
   </dialog>;
 }
 
-export default function StudentCareerGuidance({ onProfileChanged }: { onProfileChanged: () => void }) {
-  const [data, setData] = useState<GuidanceResponse | null>(null);
+/** initial: the guidance already read (a server render in the tests); the page reads it again once mounted. */
+export default function StudentCareerGuidance({ onProfileChanged, initial = null }: { onProfileChanged: () => void; initial?: GuidanceResponse | null }) {
+  const [data, setData] = useState<GuidanceResponse | null>(initial);
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
   const [filters, setFilters] = useState<CareerFilters>({ q: "", field: "" });
@@ -295,6 +304,8 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
   const [detailId, setDetailId] = useState<string | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice>(null);
+  // Grows each time a button of this page asks Khảo sát nhanh for its form (StudentProfileSurvey openRequest).
+  const [surveyRequest, setSurveyRequest] = useState(0);
   const toast = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -311,8 +322,9 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
   const choose = useCallback(async (career: GuidanceCareer) => {
     setSaving(career.id);
     setNotice(null);
+    let reassessed = false;
     try {
-      await saveTarget(career.id);
+      ({ reassessed } = await saveTarget(career.id));
     } catch (failure) {
       setNotice({ tone: "error", text: (failure as Error).message });
       setSaving(null);
@@ -322,17 +334,22 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
     // The page reads again what the server says now, Khoảng trống kỹ năng's career included, rather than guessing it.
     const fresh = await readGuidance().catch(() => null);
     setData((value) => fresh ?? (value && {
-      ...value, targetCareerId: career.id, deletedTargetName: null, gapCurrent: value.gapCareerId === career.id,
+      ...value, targetCareerId: career.id, deletedTargetName: null, gapCurrent: reassessed || value.gapCareerId === career.id,
       careers: value.careers.map((item) => ({ ...item, isTarget: item.id === career.id })),
     }));
-    setNotice(fresh?.gapCareerId === career.id
-      ? { tone: "success", text: `Đã chọn ${career.nameVi} làm vị trí nghề nghiệp mục tiêu. Khoảng trống kỹ năng cũng đang hiển thị vị trí này.` }
-      : { tone: "success", text: `Đã chọn ${career.nameVi} làm vị trí nghề nghiệp mục tiêu. Bấm Đánh giá lại ở trang Đánh giá năng lực để cập nhật Khoảng trống kỹ năng và Lộ trình học tập theo vị trí mới.`, link: true });
+    setNotice({ tone: "success", ...targetSavedNotice(career, reassessed, fresh?.gapCareerId) });
     setSaving(null);
   }, [onProfileChanged]);
   // Working for the student, the choice is confirmed first; the student chooses at once.
   const [confirming, setConfirming] = useState<GuidanceCareer | null>(null);
   const pick = useCallback((career: GuidanceCareer) => { if (isAdvisorView()) setConfirming(career); else void choose(career); }, [choose]);
+  // Khảo sát nhanh saved or deleted: the survey matches are read again, and the profile (the workspace's copy).
+  const surveySaved = useCallback(() => { setRevision((value) => value + 1); onProfileChanged(); }, [onProfileChanged]);
+  // "Làm Khảo sát nhanh", "Chỉnh sửa khảo sát": to the survey beside the best fit, its form open.
+  const openSurvey = () => {
+    document.getElementById(SURVEY_SECTION_ID)?.scrollIntoView({ block: "start" });
+    setSurveyRequest((value) => value + 1);
+  };
 
   // The chosen row's button gives way to "Vị trí nghề nghiệp mục tiêu": keyboard focus goes to the notice instead of the page top.
   useEffect(() => {
@@ -369,7 +386,7 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
   return <div className="cg-page">
     <section className="cg-intro" aria-label="Về trang này">
       <p className="cg-lead">Trang này đánh giá mức phù hợp của bạn với {careers.length} vị trí nghề nghiệp của Khoa, từ điểm kỹ năng trong bảng điểm và Khảo sát
-        định hướng. Kết quả chỉ để tham khảo.</p>
+        nhanh (nếu bạn làm). Kết quả chỉ để tham khảo.</p>
       <p className="cg-define"><b>{FIT_SCORE_LABEL}</b> (gọi tắt là điểm phù hợp, thang 100) là con số cạnh mỗi vị trí nghề nghiệp: cho biết kỹ năng
         hiện tại của bạn đáp ứng yêu cầu kỹ năng của vị trí đó đến đâu. Điểm càng cao, vị trí càng phù hợp với bạn.</p>
       <details className="cg-how"><summary>Cách tính điểm phù hợp kỹ năng</summary>
@@ -383,7 +400,7 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
         {target ? <><strong>{target.nameVi}</strong>
           <span className="cg-target-score"><span className="cg-target-label">{FIT_SCORE_LABEL}:</span><span className="cg-keep"><FitScore career={target} /><FitBadge career={target} /></span></span></>
           : data.deletedTargetName ? <span>{data.deletedTargetName}: vị trí này không còn trong danh mục; bạn nên chọn vị trí nghề nghiệp khác.</span>
-            : <span>chưa chọn. Hãy chọn một vị trí bên dưới.</span>}
+            : <><strong>Chưa chọn</strong><span className="cg-target-hint">Chọn một vị trí bên dưới khi bạn muốn. Không bắt buộc.</span></>}
       </div>
       {target && <a className="sw-text-link" href="#skill-gap">Xem Khoảng trống kỹ năng <Icon name="arrow" /></a>}
       {targetNote && <p className="cg-note cg-note-warn">{targetNote}</p>}
@@ -392,11 +409,15 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
     {data.blocked && <div className="cg-note cg-note-warn" role="note"><p>{blockedText(data.blocked)} Bạn vẫn xem được danh mục vị trí nghề nghiệp và yêu cầu của từng vị trí.</p>
       {unblock && <a className="sw-outline" href={unblock.href}>{unblock.label}</a>}</div>}
 
-    {!data.blocked && <>
-      <div className="cg-level"><h3 id="cg-best-title">{heading.title}</h3><p>{heading.note}</p></div>
-      {picks.top ? <TopPick career={picks.top} scored={picks.scored} saving={saving === picks.top.id} onDetail={openDetail(picks.top)} onChoose={() => pick(picks.top!)} />
-        : <p className="cg-empty">Chưa đủ dữ liệu để gợi ý: các kỹ năng của các vị trí nghề nghiệp chưa được đo bằng học phần bạn đã học.</p>}
+    {!data.blocked && <div className="cg-level"><h3 id="cg-best-title">{heading.title}</h3><p>{heading.note}</p></div>}
+    {/* The best fit with Khảo sát nhanh beside it (plan "Một bước để bắt đầu", mockup E); the survey alone while no fit is computed. */}
+    <div className="cg-top-row">
+      {!data.blocked && (picks.top ? <TopPick career={picks.top} scored={picks.scored} saving={saving === picks.top.id} onDetail={openDetail(picks.top)} onChoose={() => pick(picks.top!)} />
+        : <p className="cg-empty">Chưa đủ dữ liệu để gợi ý: các kỹ năng của các vị trí nghề nghiệp chưa được đo bằng học phần bạn đã học.</p>)}
+      <StudentProfileSurvey onSaved={surveySaved} openRequest={surveyRequest} />
+    </div>
 
+    {!data.blocked && <>
       <div className="cg-level"><h3>Các lựa chọn khác</h3><p>Không lặp lại vị trí đã hiện ở trên.</p></div>
       <div className="cg-pairs">
         <section className="sw-panel cg-pick" aria-labelledby="cg-rank-title">
@@ -407,13 +428,15 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
             : <p className="cg-empty">Chưa có vị trí nghề nghiệp nào khác tính được điểm phù hợp.</p>}
         </section>
         <section className="sw-panel cg-pick cg-pick-like" aria-labelledby="cg-liked-title">
-          <header><h4 id="cg-liked-title">Vị trí nghề nghiệp phù hợp với sở thích và thế mạnh</h4>
+          <header><div className="cg-pick-title"><h4 id="cg-liked-title">Vị trí nghề nghiệp phù hợp với sở thích và thế mạnh</h4>
+            {data.surveyDone && <button type="button" className="cg-link" onClick={openSurvey}>Chỉnh sửa khảo sát</button>}</div>
             <PickBasis
               basis={surveyed ? <>{interests.field && <>lĩnh vực quan tâm nhất <b>{interests.field}</b></>}{interests.field && interests.tech.length > 0 && " và "}
-                {interests.tech.length > 0 && <>thế mạnh <b>{interests.tech.join(", ")}</b></>} bạn chọn trong Khảo sát định hướng.</>
-                : "lĩnh vực quan tâm nhất và thế mạnh (công nghệ thành thạo) bạn chọn trong Khảo sát định hướng."}
+                {interests.tech.length > 0 && <>thế mạnh <b>{interests.tech.join(", ")}</b></>} bạn chọn trong Khảo sát nhanh.</>
+                : "lĩnh vực quan tâm nhất và thế mạnh (công nghệ thành thạo) bạn chọn trong Khảo sát nhanh."}
               order="vị trí khớp lĩnh vực quan tâm xếp trước, rồi vị trí khớp nhiều thế mạnh hơn, rồi điểm phù hợp cao hơn." /></header>
-          {!data.surveyDone ? <div className="cg-empty"><p>Bạn chưa hoàn thành Khảo sát định hướng nên chưa có gợi ý theo sở thích và thế mạnh.</p><a className="sw-outline" href="#profile">Làm khảo sát ở Hồ sơ và bảng điểm</a></div>
+          {!data.surveyDone ? <div className="cg-empty"><p>Làm Khảo sát nhanh (5 câu, khoảng 1 phút, không bắt buộc) để xem các vị trí nghề nghiệp hợp với sở thích và thế mạnh của bạn.</p>
+            <button type="button" className="sw-outline" onClick={openSurvey}>Làm Khảo sát nhanh</button></div>
             : picks.liked.length ? <><PickHead /><ol className="cg-pick-list">{picks.liked.map((career) =>
               <PickRow key={career.id} career={career} marker="♥" line={interestReason(career)} onDetail={openDetail(career)} />)}</ol></>
               : <p className="cg-empty">Không còn vị trí nghề nghiệp nào khác khớp lĩnh vực và thế mạnh bạn chọn. Bạn có thể xem tất cả vị trí bên dưới.</p>}
@@ -454,7 +477,7 @@ export default function StudentCareerGuidance({ onProfileChanged }: { onProfileC
     {(notice || showBar) && <div className="cg-dock">
       {notice && <div ref={toast} tabIndex={-1} className={`cg-toast ${notice.tone === "success" ? "sr-success" : "sr-error"}`}
         role={notice.tone === "success" ? "status" : "alert"}>
-        <p>{notice.text}{notice.link && <> <a href="#competency">Mở Đánh giá năng lực</a></>}</p>
+        <p>{notice.text}{notice.link && <> <a href={NOTICE_LINKS[notice.link].href}>{NOTICE_LINKS[notice.link].label}</a></>}</p>
         <button type="button" className="cg-toast-close" onClick={() => setNotice(null)} aria-label="Đóng thông báo"><Icon name="close" /></button>
       </div>}
       {showBar && <CompareBar chosen={compared} onRemove={removeCompared} onClear={() => setCompare([])} onOpen={() => setCompareOpen(true)} />}

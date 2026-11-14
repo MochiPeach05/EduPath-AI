@@ -54,8 +54,9 @@ describe("profile helpers", () => {
     expect(formatUpdatedAt("2026-10-23T17:00:05.000Z")).toBe("00:00 24/10/2026");
     expect(formatUpdatedAt("not a date")).toBe("—");
   });
-  it("opens the section of Hồ sơ và bảng điểm that holds each required item", () => {
+  it("opens the transcript of Hồ sơ và bảng điểm for the transcript and the specialty, chosen in its import (2026-11-14)", () => {
+    // The target vị trí nghề nghiệp and Khảo sát nhanh live on Định hướng nghề nghiệp, not on this page.
     expect(["transcript", "specialty", "career", "survey", "other"].map(profileSectionOf))
-      .toEqual(["bang-diem", "muc-tieu-hoc-tap", "muc-tieu-hoc-tap", "khao-sat-dinh-huong", undefined]);
+      .toEqual(["bang-diem", "bang-diem", undefined, undefined, undefined]);
   });
 });

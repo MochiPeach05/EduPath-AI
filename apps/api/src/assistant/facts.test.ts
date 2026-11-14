@@ -125,7 +125,7 @@ describe("assistant student sources", () => {
     const titles = context.sources.map((source) => source.title);
     expect(titles).toContain("Mức các kỹ năng của bạn");
     expect(titles).toContain("Lộ trình AI đề xuất cho bạn");
-    expect(titles).toContain("Khảo sát định hướng của bạn (bạn tự khai)");
+    expect(titles).toContain("Khảo sát nhanh của bạn (bạn tự khai)");
     expect(context.sources.find((source) => source.title === "Lộ trình AI đề xuất cho bạn")?.text).toContain("Nhận định: Bạn đang đúng tiến độ.");
   });
 
@@ -153,7 +153,7 @@ describe("assistant student sources", () => {
   it("uses a survey a cố vấn học tập filled in without the student's consent, and not after the student withdrew it (policy 2026-11-10)", async () => {
     const titles = async (options: Parameters<typeof db>[0]) =>
       (await studentSources(db(options), userId, "Học kỳ tới mình nên học gì?", ["roadmap"], ROADMAP_NOW)).sources.map((source) => source.title);
-    const survey = "Khảo sát định hướng của bạn (bạn tự khai)";
+    const survey = "Khảo sát nhanh của bạn (bạn tự khai)";
     expect(await titles({ consent: null, savedBy: "advisor" })).toContain(survey);
     expect(await titles({ consent: "2026-10-11", savedBy: "admin" })).toContain(survey);
     expect(await titles({ consent: null, savedBy: "advisor", withdrawn: true })).not.toContain(survey);

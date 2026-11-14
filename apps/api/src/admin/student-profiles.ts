@@ -6,6 +6,7 @@ import { requireAdminAccess } from "../middleware/authorization.js";
 import { AccountError, type AdminAccountRepository } from "./accounts.js";
 import type { SpecialtyCode } from "../competency-assessment/types.js";
 import { CONSENT_VALID_SINCE } from "../student/consent.js";
+import { SURVEY_QUESTIONS } from "../student/survey.js";
 import { withoutSettledReviews, type TranscriptData } from "../student/transcript-parser.js";
 import { byGivenName, byOrder, byText, orderBy, sortSchema, type OwnOrder, type SortDirection } from "./table-sort.js";
 import { auditActorOf, recordAudit } from "./audit/record.js";
@@ -41,8 +42,8 @@ export interface StudentProfileDetail extends StudentProfileSummary {
   interests: string | null;
   /** When the profile survey was last saved (stu_profile_surveys); the answers stay with the student. */
   surveyUpdatedAt?: string | null;
-  /** The survey has the interest lists (survey-v2) and the student agreed to the current policy for it, or a cố vấn học tập
-   *  or the Khoa filled it in for the student (SURVEY_COMPLETE_SQL). */
+  /** The survey has the answers of survey-v5's questions and the technologies, and the student agreed to the current policy
+   *  for it, or a cố vấn học tập or the Khoa filled it in for the student (SURVEY_COMPLETE_SQL). Optional since 2026-11-14. */
   surveyComplete?: boolean;
   /** The student withdrew the consent for the survey (Xóa câu trả lời) and has not given it again: no one fills it in for them. */
   surveyWithdrawn?: boolean;
@@ -64,26 +65,27 @@ export interface StudentProfileRepository {
   detail(actor: AuthenticatedUser, id: string): Promise<StudentProfileDetail>;
   transcript(actor: AuthenticatedUser, id: string): Promise<AdminTranscriptView>;
 }
-// The survey counts when it holds the interest lists (survey-v3 or later; v4 dropped the written strengths, 050, 051) and the student's consent for it
-// still counts (consent.ts isValidConsent; the constant is code, not input), or a cố vấn học tập or the Khoa filled it in
-// for the student (062 saved_by_role, policy 2026-11-10) and the student has not withdrawn that consent: the rule of
-// student/survey.ts surveyUsable.
+/** The answers a complete survey holds (survey-v5, 2026-11-14: the four questions of SURVEY_QUESTIONS; code, not input). */
+const SURVEY_ANSWER_KEYS = SURVEY_QUESTIONS.map((question) => `'${question.id}'`).join(", ");
+// The survey counts when it holds the technologies (survey-v3 or later; v4 dropped the written strengths, 050, 051) and the
+// answers of survey-v5's questions (Sở trường no longer counts, 2026-11-14), and the student's consent for it still counts
+// (consent.ts isValidConsent; the constant is code, not input), or a cố vấn học tập or the Khoa filled it in for the student
+// (062 saved_by_role, policy 2026-11-10) and the student has not withdrawn that consent: the rule of student/survey.ts
+// isComplete and surveyUsable.
 export const SURVEY_COMPLETE_SQL = `EXISTS (SELECT 1 FROM stu_profile_surveys s WHERE s.user_id = u.id
-    AND s.survey_version NOT IN ('survey-v1', 'survey-v2') AND cardinality(s.interest_tech) > 0 AND cardinality(s.interest_hobbies) > 0
+    AND s.survey_version NOT IN ('survey-v1', 'survey-v2') AND cardinality(s.interest_tech) > 0 AND s.answers ?& ARRAY[${SURVEY_ANSWER_KEYS}]
     AND (EXISTS (SELECT 1 FROM data_consents c WHERE c.user_id = s.user_id AND c.purpose = 'profile_survey' AND c.ended_at IS NULL
       AND c.policy_version >= '${CONSENT_VALID_SINCE}')
       OR (s.saved_by_role IS NOT NULL
         AND (EXISTS (SELECT 1 FROM data_consents c WHERE c.user_id = s.user_id AND c.purpose = 'profile_survey' AND c.ended_at IS NULL)
           OR NOT EXISTS (SELECT 1 FROM data_consents c WHERE c.user_id = s.user_id AND c.purpose = 'profile_survey' AND c.end_reason = 'withdrawn')))))`;
-const surveyComplete = SURVEY_COMPLETE_SQL;
-// Derive completion from saved data so profile edits and transcript deletion stay in sync. Since 2026-10-24 the
-// specialty and the profile survey count too (the student portal asks for both before its AI features); the interests
-// (technologies and free-time interests) are part of the survey.
+// Derive completion from saved data so profile edits and transcript deletion stay in sync. "Hồ sơ đầy đủ" is what every
+// student page needs (2026-11-14, user: "Triển khai theo kế hoạch này đi" on the plan "Một bước để bắt đầu"): the specialty
+// and a stored transcript. The target career and the profile survey (required from 2026-10-24) are optional now: they no
+// longer count.
 const profileStatus = `CASE WHEN p.user_id IS NULL THEN 'missing'
-  WHEN p.career_position_id IS NOT NULL
-    AND p.specialty IS NOT NULL
+  WHEN p.specialty IS NOT NULL
     AND EXISTS (SELECT 1 FROM student_transcripts t WHERE t.user_id = p.user_id)
-    AND ${surveyComplete}
   THEN 'complete' ELSE 'incomplete' END`;
 const summaryColumns = `u.id, COALESCE(p.full_name, u.display_name) AS name, u.email, u.is_active AS "isActive",
   p.cohort_code AS "cohortCode", p.class_name AS "className", ${CLASS_OF} AS "classCode",
@@ -133,7 +135,7 @@ export class PostgresStudentProfileRepository implements StudentProfileRepositor
     const result = await this.pool.query<StudentProfileDetail>(`SELECT ${summaryColumns}, u.username,
       p.career_goal AS "careerGoal", p.career_position_id AS "careerPositionId", p.specialty, p.major_code AS "majorCode",
       (SELECT json_build_object('id',c.id,'nameVi',c.name_vi,'nameEn',c.name_en,'deletedAt',c.deleted_at) FROM career_positions c WHERE c.id=p.career_position_id) AS "careerPosition", p.interests,
-      (SELECT s.updated_at FROM stu_profile_surveys s WHERE s.user_id=u.id) AS "surveyUpdatedAt", ${surveyComplete} AS "surveyComplete",
+      (SELECT s.updated_at FROM stu_profile_surveys s WHERE s.user_id=u.id) AS "surveyUpdatedAt", ${SURVEY_COMPLETE_SQL} AS "surveyComplete",
       (NOT EXISTS (SELECT 1 FROM data_consents c WHERE c.user_id=u.id AND c.purpose='profile_survey' AND c.ended_at IS NULL)
         AND EXISTS (SELECT 1 FROM data_consents c WHERE c.user_id=u.id AND c.purpose='profile_survey' AND c.end_reason='withdrawn')) AS "surveyWithdrawn",
       EXISTS (SELECT 1 FROM student_transcripts t WHERE t.user_id = u.id) AS "hasTranscript", u.created_at AS "accountCreatedAt", u.first_login_at AS "firstLoginAt",

@@ -23,7 +23,7 @@ const patch = (app: express.Express, body: object) => request(app).patch("/stude
 describe("profile interests as choices (pages loaded before they moved into the survey)", () => {
   it("saves both lists together and clears the free text they replace", async () => {
     const { app, query } = setup();
-    await patch(app, { interestTech: ["ai_ml", "web_frontend"], interestHobbies: ["reading"] }).expect(200, { saved: true });
+    await patch(app, { interestTech: ["ai_ml", "web_frontend"], interestHobbies: ["reading"] }).expect(200, { saved: true, reassessed: false });
     expect(query).toHaveBeenCalledWith("UPDATE student_profiles SET interest_tech=$2,interest_hobbies=$3,interests=NULL WHERE user_id=$1",
       ["student-id", ["ai_ml", "web_frontend"], ["reading"]]);
   });

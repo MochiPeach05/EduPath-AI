@@ -242,7 +242,9 @@ describe("Tổng quan dashboard", () => {
     const plain = text(dashboard(empty));
     for (const message of ["Chưa có bảng điểm nên chưa tính được tiến độ.", "Cần bảng điểm và chuyên ngành để đối chiếu với tiêu chuẩn xét tốt nghiệp.",
       "Bạn chưa có kết quả Đánh giá năng lực.", "Chưa có bảng điểm nên chưa vẽ được điểm theo học kỳ.", "Import bảng điểm để xem các môn bạn đang học.",
-      "Lộ trình AI cần kết quả Đánh giá năng lực và Khảo sát định hướng.", "Chưa đủ dữ liệu", "Chưa tính được tiến độ: bạn cần import bảng điểm PDF."]) expect(plain).toContain(message);
+      "Lộ trình AI cần kết quả Đánh giá năng lực.", "Chưa đủ dữ liệu", "Chưa tính được tiến độ: bạn cần import bảng điểm PDF."]) expect(plain).toContain(message);
+    // The AI roadmap no longer needs the survey (plan "Một bước để bắt đầu", 2026-11-14).
+    expect(plain).not.toContain("Làm khảo sát");
     expect(plain).toContain("GPA tích lũy — Cần bảng điểm");
     expect(plain).not.toContain("NaN");
   });
@@ -257,13 +259,30 @@ describe("Tổng quan page", () => {
   const render = (profile: StudentProfile | null, loading: boolean) =>
     renderToStaticMarkup(createElement(StudentOverview, { profile, loading, navigate: () => {}, identity: null }));
 
-  it("shows the loading state and keeps the required-profile notice", () => {
-    const html = render({ ...student, hasTranscript: false, surveyComplete: false, surveyUpdatedAt: null }, false);
+  it("starts a student without a transcript with one card, the specialty and the PDF, and no required-profile gate (2026-11-14)", () => {
+    const html = render({ ...student, specialty: null, careerPositionId: null, hasTranscript: false, surveyComplete: false, surveyUpdatedAt: null }, false);
     expect(html).toContain("Đang tải trang Tổng quan…");
-    expect(html).toContain("Hoàn thành Hồ sơ và bảng điểm để EduPath AI hỗ trợ bạn");
-    expect(html).toContain('<span class="so-gate-count" aria-hidden="true">2/4</span>');
+    expect(html).toContain('<h2 id="so-start-title">Chọn chuyên ngành và import bảng điểm</h2>');
+    expect(html).toContain("Xong bước này bạn dùng được ngay:");
+    for (const page of ["Xét tốt nghiệp", "Đánh giá năng lực", "Định hướng nghề nghiệp", "Lộ trình học tập", "Trợ lý AI"]) expect(html).toContain(`<li>${page}</li>`);
+    // Nothing chosen yet: the student picks a specialty, or Chưa có chuyên ngành, then the PDF.
+    expect(html).toMatch(/<option value=""[^>]*>Chọn chuyên ngành…<\/option><option value="CNPM">Công nghệ phần mềm<\/option>/);
+    expect(html).toContain('<option value="none">Chưa có chuyên ngành</option>');
+    expect(html).toContain("Chọn tệp PDF bảng điểm");
+    for (const absent of ["so-gate", "BẮT BUỘC TRƯỚC KHI SỬ DỤNG", "Hoàn thành hồ sơ", "Vị trí nghề nghiệp mục tiêu", "Khảo sát"]) expect(html).not.toContain(absent);
     // Without the profile yet, no definite answer.
-    expect(render(null, true)).not.toContain("so-gate");
+    expect(render(null, true)).not.toContain("so-start");
+  });
+
+  it("asks the specialty of a transcript imported without one, and nothing of a student who has both", () => {
+    const html = render({ ...student, specialty: null, hasTranscript: true }, false);
+    expect(html).toContain('<h2 id="so-specialty-title">Chọn chuyên ngành của bạn</h2>');
+    expect(html).toContain('<button type="submit" class="sw-primary" disabled="">Lưu chuyên ngành</button>');
+    expect(html).not.toContain("Chưa có chuyên ngành");
+    expect(html).not.toContain("so-start-title");
+    expect(render({ ...student, hasTranscript: true }, false)).not.toContain("so-start");
+    // A major whose cohort has no specialty to choose: nothing to ask.
+    expect(render({ ...student, specialty: null, hasTranscript: true, majorCode: "7340201" }, false)).not.toContain("so-specialty");
   });
 });
 

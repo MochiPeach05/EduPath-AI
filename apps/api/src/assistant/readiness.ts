@@ -1,11 +1,14 @@
 // What the student has done yet, for Trợ lý AI to answer about their own results (2026-10-29, user: "Khi người dùng chưa
 // chạy file đánh giá năng lực, chưa import bảng điểm thì nên trả lời một cách rõ ràng hơn bạn chưa thực hiện đánh giá năng
-// lực nên chúng tôi chưa có cơ sở để tư vấn"): the four items of the Tổng quan gate (transcript, specialty, target career,
-// profile survey) plus a competency assessment and an AI roadmap. A question about the student's own results that these
+// lực nên chúng tôi chưa có cơ sở để tư vấn"): the transcript, the specialty, the target career and the profile survey,
+// plus a competency assessment and an AI roadmap. A question about the student's own results that these
 // cannot answer gets a fixed answer at once, without an AI job; the chat also suggests the next questions from them
 // ("ở trên khung đoạn nhập đoạn chat nên có các câu hỏi đề xuất để sinh viên chọn tiếp"). v2 (2026-10-29, user: "Tôi thấy
 // hiện tại nó trả lời không có human lắm"): the same answers in the warm voice of assistant-v6, short, without [n] in the
-// text; the pages they point to are the sources, numbered in the order the steps mention them.
+// text; the pages they point to are the sources, numbered in the order the steps mention them. v3 (2026-11-14, user:
+// "Triển khai theo kế hoạch này đi" on the plan "Một bước để bắt đầu"): only the specialty and the transcript come before
+// Đánh giá năng lực (chosen together on Hồ sơ và bảng điểm); the target career and the survey (Khảo sát nhanh, on Định
+// hướng nghề nghiệp) are optional, never a step, and Lộ trình AI no longer waits for the survey.
 import type { PoolClient } from "pg";
 import { fold } from "../competency-assessment/specialty.js";
 import type { DatabasePool } from "../db/pool.js";
@@ -19,7 +22,7 @@ type PageSource = { n: number; kind: AssistantSourceKind; title: string; link: s
 export type ReadinessAnswer = { content: string; sources: PageSource[] };
 
 /** prompt_version of the answers written here instead of by the AI. */
-export const READINESS_ANSWER_VERSION = "assistant-readiness-v2";
+export const READINESS_ANSWER_VERSION = "assistant-readiness-v3";
 const MAX_SUGGESTIONS = 6;
 
 export async function readReadiness(db: Db, userId: string): Promise<Readiness> {
@@ -29,8 +32,8 @@ export async function readReadiness(db: Db, userId: string): Promise<Readiness> 
        EXISTS (SELECT 1 FROM student_profiles p WHERE p.user_id=$1 AND p.career_position_id IS NOT NULL) AS career,
        EXISTS (SELECT 1 FROM stu_comp_assessments a WHERE a.user_id=$1) AS assessment,
        EXISTS (SELECT 1 FROM stu_roadmaps r WHERE r.user_id=$1 AND r.status='completed') AS roadmap`, [userId])).rows[0];
-  // The survey counts as on Tổng quan: answered, and agreed to under a policy whose consents still count, or filled in
-  // for the student by a cố vấn học tập or the Khoa (surveyUsable, policy 2026-11-10).
+  // The survey counts when the AI features may use it: answered, and agreed to under a policy whose consents still count,
+  // or filled in for the student by a cố vấn học tập or the Khoa (surveyUsable, policy 2026-11-10).
   const surveyDone = await surveyUsable(db, userId, await readSurvey(db, userId));
   return {
     transcript: row?.transcript === true, specialty: row?.specialty === true, career: row?.career === true,
@@ -76,14 +79,15 @@ function answer(lines: readonly string[], pages: readonly Page[]): ReadinessAnsw
 
 type Step = { text: string; pages: Page[] };
 
-/** The steps still to do before a competency assessment, the assessment last (then the AI roadmap, when asked about). */
+/**
+ * The steps still to do before a competency assessment, the assessment last (then the AI roadmap, when asked about). Only
+ * the specialty and the transcript come first (v3): the target career and the survey are optional.
+ */
 function assessmentSteps(readiness: Readiness, roadmap: boolean): Step[] {
   const steps: Step[] = [];
-  if (!readiness.transcript) steps.push({ text: "Import bảng điểm PDF ở trang Hồ sơ và bảng điểm.", pages: ["profile"] });
-  if (!readiness.specialty && !readiness.career) steps.push({ text: "Chọn chuyên ngành và vị trí nghề nghiệp mục tiêu.", pages: ["profile", "career"] });
+  if (!readiness.transcript && !readiness.specialty) steps.push({ text: "Chọn chuyên ngành và import bảng điểm PDF ở trang Hồ sơ và bảng điểm.", pages: ["profile"] });
+  else if (!readiness.transcript) steps.push({ text: "Import bảng điểm PDF ở trang Hồ sơ và bảng điểm.", pages: ["profile"] });
   else if (!readiness.specialty) steps.push({ text: "Chọn chuyên ngành ở trang Hồ sơ và bảng điểm.", pages: ["profile"] });
-  else if (!readiness.career) steps.push({ text: "Chọn vị trí nghề nghiệp mục tiêu ở trang Định hướng nghề nghiệp.", pages: ["career"] });
-  if (!readiness.survey) steps.push({ text: "Làm Khảo sát định hướng ở trang Hồ sơ và bảng điểm.", pages: ["profile"] });
   steps.push({ text: "Bấm Đánh giá năng lực ở trang Đánh giá năng lực.", pages: ["competency"] });
   if (roadmap && !readiness.roadmap) steps.push({ text: "Bấm Tạo lộ trình ở trang Lộ trình học tập.", pages: ["roadmap"] });
   return steps;
@@ -132,30 +136,31 @@ export function readinessAnswer(readiness: Readiness, intents: readonly Assistan
       `${after} ${MEANWHILE}`,
     ], pages);
   }
+  // v3: Lộ trình AI no longer waits for the survey.
   if (aboutRoadmap && !readiness.roadmap) {
-    return readiness.survey
-      ? answer([
-        "Bạn chưa tạo Lộ trình AI nên chưa có môn nào được đề xuất để mình giải thích. Bạn bấm Tạo lộ trình ở tab Lộ trình AI đề xuất (trang Lộ trình học tập) nhé, "
-          + "có lộ trình rồi mình sẽ giải thích lý do của từng môn.",
-      ], ["roadmap"])
-      : answer([
-        "Bạn chưa tạo Lộ trình AI nên chưa có môn nào được đề xuất để mình giải thích. Lộ trình AI cần Khảo sát định hướng, nên bạn làm khảo sát ở trang Hồ sơ và bảng điểm "
-          + "trước, rồi bấm Tạo lộ trình ở trang Lộ trình học tập nhé. Có lộ trình rồi mình sẽ giải thích lý do của từng môn.",
-      ], ["profile", "roadmap"]);
+    return answer([
+      "Bạn chưa tạo Lộ trình AI nên chưa có môn nào được đề xuất để mình giải thích. Bạn bấm Tạo lộ trình ở tab Lộ trình AI đề xuất (trang Lộ trình học tập) nhé, "
+        + "có lộ trình rồi mình sẽ giải thích lý do của từng môn.",
+    ], ["roadmap"]);
   }
   return null;
 }
 
-/** Up to MAX_SUGGESTIONS next questions: what the student still has to set up first, then questions about their results. */
+/**
+ * Up to MAX_SUGGESTIONS next questions: what the student still has to set up first (the specialty and the transcript), then
+ * questions about their results; the optional target career and survey only once there is an assessment (v3).
+ */
 export function suggestedQuestions(readiness: Readiness): string[] {
   const list: string[] = [];
-  if (!readiness.transcript) list.push("Làm sao để import bảng điểm PDF?");
-  if (!readiness.specialty || !readiness.career) list.push("Làm sao để chọn chuyên ngành và vị trí nghề nghiệp mục tiêu?");
-  if (!readiness.survey) list.push("Khảo sát định hướng dùng để làm gì?");
+  if (!readiness.transcript) list.push("Làm sao để chọn chuyên ngành và import bảng điểm PDF?");
+  else if (!readiness.specialty) list.push("Làm sao để chọn chuyên ngành?");
   if (!readiness.assessment) list.push("Làm sao để chạy Đánh giá năng lực?");
   else if (!readiness.roadmap) list.push("Làm sao để tạo Lộ trình AI?");
   if (readiness.transcript) list.push("Điểm trung bình tích lũy của mình là bao nhiêu?", "Mình còn nợ môn nào không?");
-  if (readiness.assessment) list.push("Mình còn thiếu những kỹ năng nào cho vị trí nghề nghiệp mục tiêu?", "Học kỳ tới mình nên học những môn nào?");
+  if (readiness.assessment && !readiness.career) list.push("Làm sao để chọn vị trí nghề nghiệp mục tiêu?");
+  if (readiness.assessment && readiness.career) list.push("Mình còn thiếu những kỹ năng nào cho vị trí nghề nghiệp mục tiêu?");
+  if (readiness.assessment) list.push("Học kỳ tới mình nên học những môn nào?");
+  if (readiness.assessment && !readiness.survey) list.push("Khảo sát nhanh dùng để làm gì?");
   if (readiness.assessment && readiness.roadmap) list.push("Vì sao lộ trình đề xuất các môn này cho mình?");
   list.push("Điều kiện xét tốt nghiệp của khóa mình là gì?");
   if (readiness.assessment) list.push("Mình nên tự học kỹ năng còn thiếu ở đâu?");

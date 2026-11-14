@@ -54,23 +54,21 @@ describe("readReadiness", () => {
 
 describe("readinessAnswer", () => {
   it("says the assessment is missing and lists every step left for the question of the screenshot", () => {
-    expect(READINESS_ANSWER_VERSION).toBe("assistant-readiness-v2");
+    expect(READINESS_ANSWER_VERSION).toBe("assistant-readiness-v3");
     const answer = ask(none, ROADMAP_QUESTION)!;
+    // v3 (2026-11-14): the specialty and the transcript come first, together; the target career and the survey are no step.
     expect(answer.content.split("\n")).toEqual([
       "Hiện bạn chưa import bảng điểm và chưa làm Đánh giá năng lực, nên mình chưa có cơ sở để tư vấn câu này. Bạn hoàn thành giúp mình mấy bước sau nhé:",
-      "1. Import bảng điểm PDF ở trang Hồ sơ và bảng điểm.",
-      "2. Chọn chuyên ngành và vị trí nghề nghiệp mục tiêu.",
-      "3. Làm Khảo sát định hướng ở trang Hồ sơ và bảng điểm.",
-      "4. Bấm Đánh giá năng lực ở trang Đánh giá năng lực.",
-      "5. Bấm Tạo lộ trình ở trang Lộ trình học tập.",
+      "1. Chọn chuyên ngành và import bảng điểm PDF ở trang Hồ sơ và bảng điểm.",
+      "2. Bấm Đánh giá năng lực ở trang Đánh giá năng lực.",
+      "3. Bấm Tạo lộ trình ở trang Lộ trình học tập.",
       `Xong rồi bạn hỏi lại, mình sẽ giải thích vì sao từng môn được đề xuất. ${MEANWHILE}`,
     ]);
     // The pages the steps mention, in their order; the page shows them under the answer.
     expect(answer.sources).toEqual([
       { n: 1, kind: "guide", title: "Hồ sơ và bảng điểm", link: "#profile" },
-      { n: 2, kind: "guide", title: "Định hướng nghề nghiệp", link: "#career" },
-      { n: 3, kind: "guide", title: "Đánh giá năng lực", link: "#competency" },
-      { n: 4, kind: "guide", title: "Lộ trình học tập", link: "#roadmap" },
+      { n: 2, kind: "guide", title: "Đánh giá năng lực", link: "#competency" },
+      { n: 3, kind: "guide", title: "Lộ trình học tập", link: "#roadmap" },
     ]);
   });
 
@@ -78,14 +76,15 @@ describe("readinessAnswer", () => {
     const onlyAssessment = ask({ ...all, assessment: false, roadmap: false }, "Mình còn thiếu kỹ năng nào cho nghề mục tiêu?")!;
     expect(onlyAssessment.content).toBe("Bạn chỉ còn thiếu bước Đánh giá năng lực nên mình chưa có cơ sở để tư vấn câu này. Bạn bấm Đánh giá năng lực ở trang Đánh giá năng lực nhé, xong rồi hỏi lại mình.");
     expect(links(onlyAssessment)).toEqual(["#competency"]);
-    const noCareer = ask({ ...all, career: false, assessment: false, roadmap: false }, "Học kỳ tới em nên học những môn nào?")!;
-    expect(noCareer.content).toBe("Hiện bạn chưa làm Đánh giá năng lực, nên mình chưa có cơ sở để tư vấn câu này. Bạn hoàn thành giúp mình mấy bước sau nhé:\n"
-      + "1. Chọn vị trí nghề nghiệp mục tiêu ở trang Định hướng nghề nghiệp.\n2. Bấm Đánh giá năng lực ở trang Đánh giá năng lực.\n"
-      + `Xong rồi bạn hỏi lại câu này, mình sẽ trả lời sát với bạn hơn. ${MEANWHILE}`);
-    expect(links(noCareer)).toEqual(["#career", "#competency"]);
+    // v3: no target career and no survey leave only the assessment to do.
+    const noCareer = ask({ ...all, career: false, survey: false, assessment: false, roadmap: false }, "Học kỳ tới em nên học những môn nào?")!;
+    expect(noCareer.content).toBe(onlyAssessment.content);
+    expect(links(noCareer)).toEqual(["#competency"]);
     const noSpecialty = ask({ ...all, specialty: false, survey: false, assessment: false, roadmap: false }, "Mình còn thiếu kỹ năng nào?")!;
-    expect(noSpecialty.content).toContain("1. Chọn chuyên ngành ở trang Hồ sơ và bảng điểm.\n2. Làm Khảo sát định hướng ở trang Hồ sơ và bảng điểm.\n3. Bấm Đánh giá năng lực");
+    expect(noSpecialty.content).toContain("1. Chọn chuyên ngành ở trang Hồ sơ và bảng điểm.\n2. Bấm Đánh giá năng lực");
     expect(links(noSpecialty)).toEqual(["#profile", "#competency"]);
+    const noTranscript = ask({ ...all, transcript: false, assessment: false, roadmap: false }, "Mình còn thiếu kỹ năng nào?")!;
+    expect(noTranscript.content).toContain("1. Import bảng điểm PDF ở trang Hồ sơ và bảng điểm.\n2. Bấm Đánh giá năng lực");
     // With the assessment done but the roadmap asked about, its step follows.
     expect(ask({ ...all, assessment: false, roadmap: false }, ROADMAP_QUESTION)!.content)
       .toContain("1. Bấm Đánh giá năng lực ở trang Đánh giá năng lực.\n2. Bấm Tạo lộ trình ở trang Lộ trình học tập.\nXong rồi bạn hỏi lại, mình sẽ giải thích vì sao từng môn được đề xuất.");
@@ -96,10 +95,10 @@ describe("readinessAnswer", () => {
     expect(answer.content).toBe("Bạn chưa tạo Lộ trình AI nên chưa có môn nào được đề xuất để mình giải thích. Bạn bấm Tạo lộ trình ở tab Lộ trình AI đề xuất (trang Lộ trình học tập) nhé, "
       + "có lộ trình rồi mình sẽ giải thích lý do của từng môn.");
     expect(links(answer)).toEqual(["#roadmap"]);
+    // v3: Lộ trình AI no longer waits for the survey.
     const noSurvey = ask({ ...all, roadmap: false, survey: false }, ROADMAP_QUESTION)!;
-    expect(noSurvey.content).toBe("Bạn chưa tạo Lộ trình AI nên chưa có môn nào được đề xuất để mình giải thích. Lộ trình AI cần Khảo sát định hướng, nên bạn làm khảo sát ở trang Hồ sơ và bảng điểm "
-      + "trước, rồi bấm Tạo lộ trình ở trang Lộ trình học tập nhé. Có lộ trình rồi mình sẽ giải thích lý do của từng môn.");
-    expect(links(noSurvey)).toEqual(["#profile", "#roadmap"]);
+    expect(noSurvey.content).toBe(answer.content);
+    expect(links(noSurvey)).toEqual(["#roadmap"]);
     expect(ask(all, ROADMAP_QUESTION)).toBeNull();
     // Another "vì sao" with an assessment is the AI's (the courses of Khoảng trống kỹ năng need no roadmap).
     expect(ask({ ...all, roadmap: false }, "Vì sao mình nên học môn Kiểm thử phần mềm?")).toBeNull();
@@ -167,9 +166,15 @@ describe("readinessAnswer", () => {
 
 describe("suggestedQuestions", () => {
   it("offers the setup questions first, then questions about the student's own results", () => {
+    // v3: only the specialty and the transcript to set up first; the target career and the survey once there is an assessment.
     expect(suggestedQuestions(none)).toEqual([
-      "Làm sao để import bảng điểm PDF?", "Làm sao để chọn chuyên ngành và vị trí nghề nghiệp mục tiêu?", "Khảo sát định hướng dùng để làm gì?",
-      "Làm sao để chạy Đánh giá năng lực?", "Điều kiện xét tốt nghiệp của khóa mình là gì?", "EduPath AI dùng dữ liệu của mình như thế nào?",
+      "Làm sao để chọn chuyên ngành và import bảng điểm PDF?", "Làm sao để chạy Đánh giá năng lực?",
+      "Điều kiện xét tốt nghiệp của khóa mình là gì?", "EduPath AI dùng dữ liệu của mình như thế nào?",
+    ]);
+    expect(suggestedQuestions({ ...none, transcript: true })[0]).toBe("Làm sao để chọn chuyên ngành?");
+    expect(suggestedQuestions({ ...all, career: false, survey: false })).toEqual([
+      "Điểm trung bình tích lũy của mình là bao nhiêu?", "Mình còn nợ môn nào không?", "Làm sao để chọn vị trí nghề nghiệp mục tiêu?",
+      "Học kỳ tới mình nên học những môn nào?", "Khảo sát nhanh dùng để làm gì?", "Vì sao lộ trình đề xuất các môn này cho mình?",
     ]);
     expect(suggestedQuestions({ ...all, roadmap: false })).toEqual([
       "Làm sao để tạo Lộ trình AI?", "Điểm trung bình tích lũy của mình là bao nhiêu?", "Mình còn nợ môn nào không?",

@@ -33,14 +33,14 @@
 }
 
 .ov-page > .so-student-strip,
-.ov-page > .so-gate { margin-bottom: 0; }
-/* The identity strip and the profile notice sit on this page: their small print at least 12 px here too. */
+.ov-page > .so-start { margin-bottom: 0; }
+/* The identity strip and the "Bắt đầu" card sit on this page: their small print at least 12 px here too. */
 .ov-page .so-student-identity div > span,
 .ov-page .so-student-strip dt,
-.ov-page .so-gate-kicker,
-.ov-page .so-gate-steps small { font-size: var(--ov-fs-label); }
+.ov-page .so-start-kicker { font-size: var(--ov-fs-label); }
 .ov-page .so-student-strip dd,
-.ov-page .so-gate-steps strong { font-size: var(--ov-fs-small); }
+.ov-page .so-start-lead,
+.ov-page .so-start-pages li { font-size: var(--ov-fs-small); }
 
 .ov-page h2 { margin: 0; font-size: var(--ov-fs-title); font-weight: 800; letter-spacing: -0.005em; text-wrap: balance; }
 .ov-sub { margin: 2px 0 0; color: var(--sw-muted); font-size: var(--ov-fs-small); }

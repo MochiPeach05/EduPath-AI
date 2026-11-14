@@ -58,6 +58,60 @@ async function inTransaction<T>(pool: DatabasePool, work: (client: PoolClient) =
   }
 }
 
+/**
+ * Stores a new assessment for the student: the snapshot and the engine outside the write transaction, then, with the
+ * student's row locked, the same transcript, the cooldown and the consent checked again, the row, its AI comment queued,
+ * the old rows pruned. consentVersion: the consent given with this request (recorded); acting: a cố vấn học tập or the
+ * Khoa runs it for the student (no consent recorded or needed, only not withdrawn). Throws AssessmentError.
+ */
+export type AssessmentRunner = (user: AuthenticatedUser, consent: { consentVersion?: string | undefined; acting: boolean })
+  => Promise<Awaited<ReturnType<typeof findAssessment>>>;
+export function createAssessmentRunner(pool: DatabasePool, aiQueue?: CompetencyAiQueueHook, options: CompetencyAssessmentRouterOptions = {}): AssessmentRunner {
+  const loadInputs = options.loadInputs ?? loadAssessmentInputs;
+  const calculate = options.calculate ?? calculateAssessment;
+  const aiEnabled = Boolean(aiQueue?.enabled);
+  return async (user, { consentVersion, acting }) => {
+    const inputs = await loadInputs(pool, user.userId, options.promptVersion ? { promptVersion: options.promptVersion } : {});
+    const result = calculate(inputs);
+    return inTransaction(pool, async (client) => {
+      await lockStudent(client, user);
+      const transcript = await client.query<{ version: string }>("SELECT version FROM student_transcripts WHERE user_id=$1", [user.userId]);
+      if (transcript.rows[0]?.version !== inputs.transcript.version) throw new AssessmentError("transcript_changed", 409);
+      if (await withinCooldown(client, user.userId)) throw new AssessmentError("assessment_too_frequent", 429);
+      // A consent withdrawn since the caller's check stops here.
+      if (consentVersion) await recordConsent(client, user.userId, "competency_assessment");
+      else if (!acting && !isValidConsent(await activeConsentVersion(client, user.userId, "competency_assessment"))) throw new AssessmentError("consent_required", 400);
+      else if (acting && await consentWithdrawn(client, user.userId, "competency_assessment")) throw new AssessmentError("assessment_withdrawn", 409);
+      const id = await insertAssessment(client, { userId: user.userId, transcriptVersion: inputs.transcript.version, result });
+      if (aiEnabled) await aiQueue!.enqueue(client, { assessmentId: id, userId: user.userId, result });
+      await pruneAssessments(client, user.userId);
+      return findAssessment(client, user.userId, id);
+    });
+  };
+}
+
+/**
+ * After a new target career (PATCH /api/student/profile; 2026-11-14, user: "Triển khai theo kế hoạch này đi" on the plan
+ * "Một bước để bắt đầu": "Chọn vị trí xong tự đánh giá lại"): a student who already has a stored assessment, and may be
+ * assessed now without being asked (an active consent that still counts; for a cố vấn học tập or the Khoa acting: not
+ * withdrawn), gets a new one for the new target, as "Đánh giá lại" makes it, so Khoảng trống kỹ năng shows that target at
+ * once. Skipped within the cooldown of the last run. Whether one was stored; never throws (the profile is saved anyway).
+ */
+export async function reassessForNewTarget(pool: DatabasePool, run: AssessmentRunner, user: AuthenticatedUser, acting: boolean): Promise<boolean> {
+  try {
+    const stored = await pool.query("SELECT 1 FROM stu_comp_assessments WHERE user_id=$1 LIMIT 1", [user.userId]);
+    if (!stored.rowCount) return false;
+    if (acting ? await consentWithdrawn(pool, user.userId, "competency_assessment")
+      : !isValidConsent(await activeConsentVersion(pool, user.userId, "competency_assessment"))) return false;
+    if (await withinCooldown(pool, user.userId)) return false;
+    await run(user, { acting });
+    return true;
+  } catch (error) {
+    if (!(error instanceof AssessmentError)) console.error(`[competency] re-assessment after a new target failed (${error instanceof Error ? error.name : "error"})`);
+    return false;
+  }
+}
+
 /** Student competency assessment API (spec §8, contract C4), mounted at /api/student/competency-assessments. */
 export function createCompetencyAssessmentRouter(
   pool: DatabasePool | undefined,
@@ -66,8 +120,7 @@ export function createCompetencyAssessmentRouter(
   options: CompetencyAssessmentRouterOptions = {},
 ) {
   const router = Router();
-  const loadInputs = options.loadInputs ?? loadAssessmentInputs;
-  const calculate = options.calculate ?? calculateAssessment;
+  const run = pool ? createAssessmentRunner(pool, aiQueue, options) : null;
   const aiEnabled = Boolean(aiQueue?.enabled);
   const workerOnline = async () => aiEnabled ? aiQueue!.workerOnline(pool!) : false;
 
@@ -97,22 +150,7 @@ export function createCompetencyAssessmentRouter(
     if (advisor && await consentWithdrawn(pool!, user.userId, "competency_assessment")) { res.status(409).json({ error: "assessment_withdrawn" }); return; }
     // Cheap pre-check so a repeated click does not compute a snapshot; the write transaction re-checks.
     if (await withinCooldown(pool!, user.userId)) { res.status(429).json({ error: "assessment_too_frequent" }); return; }
-    const inputs = await loadInputs(pool!, user.userId, options.promptVersion ? { promptVersion: options.promptVersion } : {});
-    const result = calculate(inputs);
-    const assessment = await inTransaction(pool!, async (client) => {
-      await lockStudent(client, user);
-      const transcript = await client.query<{ version: string }>("SELECT version FROM student_transcripts WHERE user_id=$1", [user.userId]);
-      if (transcript.rows[0]?.version !== inputs.transcript.version) throw new AssessmentError("transcript_changed", 409);
-      if (await withinCooldown(client, user.userId)) throw new AssessmentError("assessment_too_frequent", 429);
-      // A consent withdrawn since the check above stops here.
-      if (consentVersion) await recordConsent(client, user.userId, "competency_assessment");
-      else if (!advisor && !isValidConsent(await activeConsentVersion(client, user.userId, "competency_assessment"))) throw new AssessmentError("consent_required", 400);
-      else if (advisor && await consentWithdrawn(client, user.userId, "competency_assessment")) throw new AssessmentError("assessment_withdrawn", 409);
-      const id = await insertAssessment(client, { userId: user.userId, transcriptVersion: inputs.transcript.version, result });
-      if (aiEnabled) await aiQueue!.enqueue(client, { assessmentId: id, userId: user.userId, result });
-      await pruneAssessments(client, user.userId);
-      return findAssessment(client, user.userId, id);
-    });
+    const assessment = await run!(user, { consentVersion, acting: advisor !== null });
     res.status(201).json({ assessment });
   });
 

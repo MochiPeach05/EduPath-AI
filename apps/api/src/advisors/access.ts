@@ -163,6 +163,14 @@ const GOALS_AFTER = "Bạn xem lại lựa chọn này; nếu chưa đúng ý, b
 const PLAN_AFTER = "Bạn xem lại kế hoạch ở tab Kế hoạch học kỳ; nếu chưa đúng ý, bạn vẫn tự sửa lại được như thường.";
 /** The last sentence of the notification of a Khảo sát định hướng filled in for the student. */
 const SURVEY_AFTER = "Bạn xem lại câu trả lời; nếu chưa đúng, bạn vẫn tự sửa hoặc xóa được như thường.";
+/**
+ * Đánh giá năng lực for the student: its own request (POST /competency-assessments), and since 2026-11-14 also what a new
+ * target career does by itself for a student who has a result (student/router.ts PATCH /profile, logged with
+ * recordActingAction).
+ */
+export const ASSESSMENT_ACTION: ActingAction = {
+  method: "POST", path: /^\/competency-assessments$/, action: "Đánh giá năng lực thay sinh viên", did: "đã chạy Đánh giá năng lực", link: "#competency", key: "assessment",
+};
 export const ACTING_ACTIONS: readonly ActingAction[] = [
   { method: "POST", path: /^\/transcript$/, action: "Import bảng điểm thay sinh viên", did: "đã import bảng điểm", link: "#profile", key: "transcript" },
   // Mục tiêu học tập (user 2026-11-10: "có thể sửa chuyên ngành và nghề nghiệp của sinh viên luôn"): the specialty, the
@@ -177,12 +185,13 @@ export const ACTING_ACTIONS: readonly ActingAction[] = [
   // Kế hoạch học kỳ and Khảo sát định hướng (user 2026-11-10: "Kế hoạch học kỳ, Khảo sát định hướng … cố vấn học tập và
   // quản trị viên làm luôn nhé"), saved as the student saves them. The plan saves after every change, so its log keeps one
   // row per half hour; the survey records no consent in the student's name (student/router.ts). Deleting stays the student's.
+  // The survey is "Khảo sát nhanh" on Định hướng nghề nghiệp since 2026-11-14: the student is told so and sent there.
   { method: "PUT", path: /^\/study-plan$/, action: "Cập nhật Kế hoạch học kỳ thay sinh viên", did: "đã cập nhật Kế hoạch học kỳ",
     link: "#roadmap", key: "plan", after: PLAN_AFTER, logWindow: true },
-  { method: "PUT", path: /^\/survey$/, action: "Làm Khảo sát định hướng thay sinh viên", did: "đã làm Khảo sát định hướng",
-    link: "#profile", key: "survey", after: SURVEY_AFTER },
+  { method: "PUT", path: /^\/survey$/, action: "Làm Khảo sát định hướng thay sinh viên", did: "đã làm Khảo sát nhanh",
+    link: "#career", key: "survey", after: SURVEY_AFTER },
   { method: "DELETE", path: /^\/transcript\/job$/, action: "Hủy lần import bảng điểm đang chạy" },
-  { method: "POST", path: /^\/competency-assessments$/, action: "Đánh giá năng lực thay sinh viên", did: "đã chạy Đánh giá năng lực", link: "#competency", key: "assessment" },
+  ASSESSMENT_ACTION,
   { method: "POST", path: /^\/competency-assessments\/[^/]+\/ai$/, action: "Tạo lại nhận xét năng lực thay sinh viên" },
   { method: "POST", path: /^\/roadmap$/, action: "Tạo Lộ trình AI thay sinh viên", did: "đã tạo Lộ trình AI", link: "#roadmap", key: "roadmap" },
   // The graduation page asks for its advice by itself when it opens: allowed, not logged.
@@ -278,17 +287,9 @@ export function advisorActing(db: Db | undefined, staffEmailDomains: ReadonlySet
         response.once("finish", () => {
           if (response.statusCode >= 400) return;
           const windowKey = `${user.userId}:${action.key ?? action.action}`;
-          if (!action.logWindow || views.due(windowKey, student.user.userId)) {
-            if (action.logWindow) views.mark(windowKey, student.user.userId);
-            void recordAudit(db, auditActorOf(user), {
-              kind: "advisor", action: action.action, summary: studentLabel(student), targetType: "student", targetId: student.user.userId,
-              method: request.method, path,
-            });
-          }
-          if (action.did && action.link && action.key) {
-            void notifySafely(db, student.user.userId,
-              advisorAction(student.actorName, action.did, action.link, vietnamDay(), `${action.key}:${user.userId}`, student.actorKind, action.after));
-          }
+          const log = !action.logWindow || views.due(windowKey, student.user.userId);
+          if (action.logWindow && log) views.mark(windowKey, student.user.userId);
+          recordActingAction(db, { advisor: user, student }, action, request.method, path, { log });
         });
       }
       next();
@@ -296,6 +297,24 @@ export function advisorActing(db: Db | undefined, staffEmailDomains: ReadonlySet
       next(error);
     }
   };
+}
+
+/**
+ * The log row of an action a cố vấn học tập or the Khoa did for the student (log: false skips it) and the student's
+ * notification of it (at most one per account, key and day). advisorActing calls it for the request's own action; a
+ * route calls it for what the request did besides (2026-11-14: a new target career re-assesses, ASSESSMENT_ACTION).
+ */
+export function recordActingAction(db: Db, acting: AdvisorActing, action: ActingAction, method: string, path: string, options: { log?: boolean } = {}): void {
+  const { advisor, student } = acting;
+  if (options.log !== false) {
+    void recordAudit(db, auditActorOf(advisor), {
+      kind: "advisor", action: action.action, summary: studentLabel(student), targetType: "student", targetId: student.user.userId, method, path,
+    });
+  }
+  if (action.did && action.link && action.key) {
+    void notifySafely(db, student.user.userId,
+      advisorAction(student.actorName, action.did, action.link, vietnamDay(), `${action.key}:${advisor.userId}`, student.actorKind, action.after));
+  }
 }
 
 /**

@@ -259,15 +259,14 @@ describe("errors", () => {
     expect(errorMessage("assessment_too_frequent")).toContain("một phút");
     expect(errorMessage("unknown_code")).toBe("Thao tác chưa thành công. Vui lòng thử lại.");
   });
-  it("asks for all three of the checklist before an assessment (2026-10-21)", () => {
-    expect(missingRequirements(true, { careerPositionId: "career-1", specialty: "CNPM" })).toEqual([]);
-    expect(missingRequirements(false, { careerPositionId: null, specialty: null })).toEqual(["bảng điểm", "vị trí nghề nghiệp mục tiêu", "chuyên ngành"]);
-    expect(missingRequirementsMessage(["vị trí nghề nghiệp mục tiêu", "chuyên ngành"]))
-      .toBe("Cần đủ bảng điểm, vị trí nghề nghiệp mục tiêu và chuyên ngành để đánh giá năng lực. Hãy bổ sung vị trí nghề nghiệp mục tiêu và chuyên ngành rồi bấm lại.");
-    expect(missingRequirementsMessage(["bảng điểm", "vị trí nghề nghiệp mục tiêu", "chuyên ngành"])).toContain("bổ sung bảng điểm, vị trí nghề nghiệp mục tiêu và chuyên ngành rồi");
+  it("asks for the transcript and the specialty before an assessment, never the target career (2026-11-14)", () => {
+    expect(missingRequirements(true, { specialty: "CNPM" })).toEqual([]);
+    expect(missingRequirements(false, { specialty: null })).toEqual(["bảng điểm", "chuyên ngành"]);
+    expect(missingRequirementsMessage(["chuyên ngành"])).toBe("Đánh giá năng lực cần bảng điểm và chuyên ngành. Hãy bổ sung chuyên ngành rồi bấm lại.");
+    expect(missingRequirementsMessage(["bảng điểm", "chuyên ngành"])).toContain("bổ sung bảng điểm và chuyên ngành rồi");
     // Values not known yet (loading, an older API without the specialty) are left to the server.
     expect(missingRequirements(null, null)).toEqual([]);
-    expect(missingRequirements(true, { careerPositionId: "career-1" })).toEqual([]);
+    expect(missingRequirements(true, {})).toEqual([]);
   });
 });
 

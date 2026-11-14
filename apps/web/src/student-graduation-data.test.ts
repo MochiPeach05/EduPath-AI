@@ -189,14 +189,14 @@ describe("standard", () => {
     expect(standardMeta(response())).toBe("Khóa K29 · Chuyên ngành Công nghệ phần mềm");
     expect(standardMeta(response({ resolution: "general", profile: { cohortCode: "K27", specialty: null } }))).toBe("Khóa K27 · Tiêu chuẩn chung của khóa");
     expect(standardMeta(response({ resolution: "general", profile: { cohortCode: "K28", specialty: "KCN" } }))).toBe("Khóa K28 · Không theo chuyên ngành");
-    expect(profileLine({ cohortCode: null, specialty: null })).toBe("Khóa trong tài khoản: Chưa có · Chuyên ngành trong hồ sơ: Chưa xác định");
+    expect(profileLine({ cohortCode: null, specialty: null })).toBe("Khóa trong tài khoản: Chưa có · Chuyên ngành trong hồ sơ: Chưa có chuyên ngành");
   });
   it("explains every unresolved standard without naming another cohort", () => {
     const base = { profile: { cohortCode: "K29", specialty: null }, specialtySuggestion: null } as const;
     expect(unresolvedCopy({ ...base, profile: { cohortCode: null, specialty: null }, resolution: "cohort_unknown" }))
       .toMatchObject({ title: "Hồ sơ chưa có khóa học", action: { href: "#profile" } });
     const unset = unresolvedCopy({ ...base, resolution: "specialty_unset", specialtySuggestion: { code: "CNDL", label: "Công nghệ dữ liệu", count: 5 } });
-    expect(unset.title).toBe("Hãy chọn chuyên ngành trong hồ sơ");
+    expect(unset.title).toBe("Hãy chọn chuyên ngành của bạn");
     expect(unset.text).toContain("Khóa K29 có tiêu chuẩn xét tốt nghiệp riêng cho từng chuyên ngành");
     expect(unset.suggestion).toBe("Gợi ý: Công nghệ dữ liệu — bạn đã đạt 5 học phần bắt buộc của chuyên ngành này.");
     expect(unset.action).toEqual({ label: "Cập nhật chuyên ngành", href: "#profile" });

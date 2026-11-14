@@ -1,6 +1,6 @@
 // "Định hướng nghề nghiệp" (#career): every career of the catalog against the student's competencies (the same fit as
-// Khoảng trống kỹ năng shows for the target career) and against Khảo sát định hướng. Computed by the API
-// (apps/api/src/career-guidance), shown here; no AI.
+// Khoảng trống kỹ năng shows for the target career) and against Khảo sát nhanh (the survey, not required since the plan
+// "Một bước để bắt đầu", 2026-11-14). Computed by the API (apps/api/src/career-guidance), shown here; no AI.
 import { careerDataText, careerSummaryText, formatDateTime, formatScore, gapStatusDisplay, gradedCourseText, scoreSourcesText, sortRequirements, type StatusTone } from "./student-competency-data";
 
 export const CAREER_GUIDANCE_API = "/api/student/career-guidance";
@@ -28,7 +28,7 @@ export type GuidanceResponse = {
    * the assessment results and withdrew the consent), or null.
    */
   blocked: string | null; targetCareerId: string | null; fields: { code: string; name: string }[]; careers: GuidanceCareer[];
-  /** Khảo sát định hướng is complete and agreed to under the current policy (as the AI roadmap requires); otherwise no survey match is used. */
+  /** Khảo sát nhanh is complete and agreed to under the current policy (as the AI features use it); otherwise no survey match is used. */
   surveyDone: boolean;
   /** The target career when it was removed from the catalog (Khoảng trống kỹ năng still shows it). */
   deletedTargetName: string | null;
@@ -94,7 +94,7 @@ export function careerPicks(careers: GuidanceCareer[], count = 3): { top: Guidan
 /** The skills the student meets for a career, in the order of Khoảng trống kỹ năng. */
 export const metSkills = (career: GuidanceCareer) => sortRequirements(computed(career)).filter((row) => row.status === "met").map(requirementName);
 
-/** The survey interests the careers match (the field of interest, the technologies), for the heading of "Theo Khảo sát định hướng". */
+/** The survey interests the careers match (the field of interest, the technologies), for the basis of the survey matches. */
 export function surveyInterests(careers: readonly GuidanceCareer[]): { field: string | null; tech: string[] } {
   const field = careers.find((career) => career.interests.field)?.interests.field ?? null;
   const tech = [...new Set(careers.flatMap((career) => career.interests.tech))];
@@ -105,7 +105,7 @@ export function surveyInterests(careers: readonly GuidanceCareer[]): { field: st
 export const nameList = (names: readonly string[], max = 3, noun = "kỹ năng") =>
   names.length <= max ? names.join(", ") : `${names.slice(0, max).join(", ")} và ${names.length - max} ${noun} khác`;
 
-/** "Khớp: lĩnh vực Web · thế mạnh Web front-end": why a career is in "Theo Khảo sát định hướng". */
+/** "Khớp: lĩnh vực Web · thế mạnh Web front-end": why a career is among the survey matches. */
 export const interestReason = (career: Pick<GuidanceCareer, "interests">) =>
   `Khớp: ${[career.interests.field && `lĩnh vực ${career.interests.field}`, career.interests.tech.length > 0 && `thế mạnh ${career.interests.tech.join(", ")}`].filter(Boolean).join(" · ")}`;
 
@@ -168,6 +168,23 @@ export function gapNote(data: Pick<GuidanceResponse, "gapCurrent" | "gapAssessed
   if (!target.fit) return null;
   return `Trang Khoảng trống kỹ năng đang hiển thị lần đánh giá lúc ${assessedAt}, tính trên dữ liệu cũ hơn nên có thể khác mức ở đây. Bấm Đánh giá lại ở trang Đánh giá năng lực để cập nhật.`;
 }
+/**
+ * What the page says after "Chọn làm vị trí nghề nghiệp mục tiêu". reassessed: the API stored a new assessment for the new
+ * target (PATCH /api/student/profile, plan "Một bước để bắt đầu", 2026-11-14), so Khoảng trống kỹ năng shows it already;
+ * else, when the latest assessment is for this career already, nothing to do; else the way to update it. link: the page
+ * the notice links to.
+ */
+export function targetSavedNotice(career: Pick<GuidanceCareer, "id" | "nameVi">, reassessed: boolean, gapCareerId: string | null | undefined):
+  { text: string; link: "skill-gap" | "competency" | null } {
+  const chosen = `Đã chọn ${career.nameVi} làm vị trí nghề nghiệp mục tiêu.`;
+  if (reassessed) return { text: `${chosen} Đã đánh giá lại năng lực với vị trí này. Khoảng trống kỹ năng đã cập nhật.`, link: "skill-gap" };
+  if (gapCareerId === career.id) return { text: `${chosen} Khoảng trống kỹ năng cũng đang hiển thị vị trí này.`, link: null };
+  return { text: `${chosen} Bấm Đánh giá lại ở trang Đánh giá năng lực để cập nhật Khoảng trống kỹ năng và Lộ trình học tập theo vị trí mới.`, link: "competency" };
+}
+
+/** Whether the answer of PATCH /api/student/profile says a new assessment was stored for the new target (false from an older API). */
+export const reassessedOf = (body: unknown) => typeof body === "object" && body !== null && (body as { reassessed?: unknown }).reassessed === true;
+
 /** A requirement's score as Khoảng trống kỹ năng prints it ("—" without one). */
 export const requirementScoreText = (requirement: Pick<GuidanceRequirement, "score">) => (requirement.score === null ? "—" : formatScore(requirement.score));
 /**

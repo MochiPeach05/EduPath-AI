@@ -817,19 +817,19 @@
 
 /* Profile and upcoming features share the same content scale. */
 .sw-shell .sr-profile-layout {
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr);
   gap: 24px;
+}
+
+/* Thông tin học tập alone above the transcript since 2026-11-14 (Mục tiêu học tập is gone): its fields fill the row. */
+.sw-shell .sr-profile-layout .sw-fields {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
 }
 
 .sw-shell .sr-transcript {
   grid-column: 1 / -1;
 }
 
-.sw-shell .sr-editor .sw-muted {
-  margin-top: 18px;
-}
-
-.sw-shell .sr-personal dt,
 .sw-shell .sr-file-info p,
 .sw-shell .sr-summaries dt {
   color: var(--sw-muted);
@@ -1076,298 +1076,78 @@
     animation: none !important;
   }
 }
-/* Required profile (user 2026-10-24): "làm 1 cái gì đó NỔI BẦN BẬT lên" on Tổng quan until Hồ sơ và bảng điểm is complete. */
-.so-gate {
-  position: relative;
+/*
+ * Tổng quan before the first transcript (GVHD 2026-11-13, plan "Một bước để bắt đầu", 2026-11-14): one card, "Bắt đầu",
+ * with the short import (the specialty, the PDF), in place of the red gate of four required items. The same card asks the
+ * specialty of a transcript imported without one. Green marks a start, red stays for the button.
+ */
+.so-start {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 20px 28px;
-  padding: 26px 28px;
-  margin-bottom: 24px;
-  overflow: hidden;
-  border-radius: 14px;
-  color: #fff;
-  /* The site's main red (the active menu item), a touch brighter at the corner (user: "tươi hơn"). */
-  background: linear-gradient(120deg, #d3264e 0%, var(--sw-red) 55%, var(--sw-red) 100%);
-  box-shadow: 0 12px 28px rgb(181 22 57 / 22%);
-}
-
-.so-gate::after {
-  content: "";
-  position: absolute;
-  inset: -90px -70px auto auto;
-  width: 260px;
-  height: 260px;
-  border-radius: 50%;
-  background: rgb(255 255 255 / 7%);
-  pointer-events: none;
-}
-
-.so-gate-icon {
-  display: grid;
-  place-items: center;
-  width: 60px;
-  height: 60px;
-  border-radius: 16px;
-  background: rgb(255 255 255 / 16%);
-  align-self: start;
-}
-
-.so-gate-icon svg {
-  width: 32px;
-  height: 32px;
-}
-
-.so-gate-body {
-  min-width: 0;
-  position: relative;
-  z-index: 1;
-}
-
-.so-gate-kicker {
-  margin: 0 0 6px;
-  color: #ffd5df;
-  font-size: 12px;
-  font-weight: 800;
-  letter-spacing: .12em;
-}
-
-.so-gate h2 {
-  margin: 0 0 8px;
-  color: #fff;
-  font-size: 22px;
-  line-height: 1.35;
-  letter-spacing: -.3px;
-}
-
-.so-gate-body > p:not(.so-gate-kicker) {
-  margin: 0;
-  max-width: 760px;
-  color: #fde7ec;
-  font-size: 13px;
-  line-height: 1.65;
-}
-
-.so-gate-steps {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 10px;
-  padding: 0;
-  margin: 16px 0 0;
-  list-style: none;
-}
-
-.so-gate-steps li {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  min-width: 0;
-  padding: 10px 12px;
-  border: 1px solid rgb(255 255 255 / 24%);
-  border-radius: 10px;
-  background: rgb(255 255 255 / 12%);
-}
-
-.so-gate-steps li.is-done {
-  border-color: transparent;
-  background: rgb(255 255 255 / 94%);
-  color: #1f5f45;
-}
-
-.so-gate-check {
-  flex: none;
-  display: grid;
-  place-items: center;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px 28px;
+  padding: 20px 24px;
+  border: 1px solid var(--sw-border);
+  border-left: 4px solid var(--sw-green);
+  border-radius: var(--sw-radius);
   background: #fff;
-  color: #b51639;
-  font-size: 12px;
-  font-weight: 800;
 }
 
-.so-gate-check svg {
-  width: 14px;
-  height: 14px;
-}
-
-.is-done .so-gate-check {
-  background: #27765b;
-  color: #fff;
-}
-
-.so-gate-steps strong {
-  display: block;
-  font-size: 12.5px;
-  line-height: 1.4;
-}
-
-.so-gate-steps small {
-  display: block;
-  margin-top: 2px;
-  font-size: 12px;
-  line-height: 1.4;
-  opacity: .88;
-}
-
-.so-gate-actions {
-  position: relative;
-  z-index: 1;
+.so-start-intro {
   display: grid;
-  justify-items: center;
-  gap: 10px;
-}
-
-.so-gate-count {
-  font-size: 30px;
-  font-weight: 800;
-  line-height: 1;
-}
-
-.so-gate .so-gate-button.sw-primary {
-  border-color: #fff;
-  background: #fff;
-  color: #a3123a;
-  font-weight: 700;
-  white-space: nowrap;
-  animation: so-gate-pulse 2.4s ease-in-out infinite;
-}
-
-.so-gate .so-gate-button.sw-primary:hover:not(:disabled) {
-  border-color: #ffe9ee;
-  background: #ffe9ee;
-  color: #7d0f2c;
-}
-
-@keyframes so-gate-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgb(255 255 255 / 55%); }
-  50% { box-shadow: 0 0 0 10px rgb(255 255 255 / 0%); }
-}
-
-/* Every other student page while the profile is incomplete. */
-.sw-profile-reminder {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  margin-bottom: 20px;
-  border: 1px solid #f1c4cf;
-  border-left: 4px solid var(--sw-red);
-  border-radius: 8px;
-  background: #fff5f7;
-  color: #6f1029;
-}
-
-.sw-profile-reminder > svg {
-  flex: none;
-  width: 20px;
-  height: 20px;
-  color: var(--sw-red);
-}
-
-.sw-profile-reminder-body {
-  flex: 1;
+  align-content: start;
+  gap: 6px;
   min-width: 0;
 }
 
-.sw-profile-reminder p {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.6;
+.so-start .so-start-kicker {
+  color: var(--sw-green);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 1.2px;
 }
 
-.sw-profile-missing {
+.so-start h2 {
+  margin: 0;
+  font-size: 19px;
+}
+
+.so-start .so-start-lead {
+  color: var(--sw-muted);
+}
+
+.so-start-pages {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin: 8px 0 0;
+  margin: 4px 0 0;
   padding: 0;
   list-style: none;
 }
 
-.sw-profile-missing li {
+.so-start-pages li {
   padding: 3px 10px;
-  border: 1px solid #f1c4cf;
+  border: 1px solid #bfdccf;
   border-radius: 999px;
-  background: #fff;
-  color: var(--sw-red);
-  font-size: 12px;
-  font-weight: 600;
+  background: #e9f4ef;
+  color: #1e5c45;
+  font-size: 12.5px;
+  font-weight: 700;
 }
 
-.sw-profile-reminder .sw-outline {
-  flex: none;
-  white-space: nowrap;
+.so-start-import {
+  min-width: 0;
 }
 
-/* Inside the competency and roadmap pages, whose grids already space their panels. */
-.scomp-page > .sw-profile-reminder,
-.rm-page > .sw-profile-reminder {
-  margin: 0;
-}
-
-/* The gate follows the width of the page content, not of the screen: under the old desktop zoom a 1300–1500px screen
-   left it as little room as a tablet does, and its four steps were squeezed to a word per line; at 90% (styles.css,
-   2026-11-10) a 1200–1280px laptop gives it about 1270–1350px. */
-@container student-content (max-width: 1180px) {
-  .so-gate {
-    grid-template-columns: auto minmax(0, 1fr);
-  }
-
-  .so-gate-actions {
-    grid-column: 1 / -1;
-    grid-template-columns: auto 1fr;
-    justify-items: start;
-    align-items: center;
-  }
-
-  .so-gate-steps {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-  }
-}
-
-@container student-content (max-width: 780px) {
-  .so-gate-steps {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+/* The card follows the width of the page content, not of the screen (as the gate did). */
+@container student-content (max-width: 900px) {
+  .so-start {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 
 @media (max-width: 700px) {
-  .so-gate {
+  .so-start {
     grid-template-columns: minmax(0, 1fr);
-    padding: 22px 20px;
-  }
-
-  .so-gate-icon {
-    width: 48px;
-    height: 48px;
-  }
-
-  .so-gate h2 {
-    font-size: 19px;
-  }
-
-  .so-gate-steps {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .so-gate-actions {
-    grid-template-columns: minmax(0, 1fr);
-    justify-items: stretch;
-  }
-
-  .so-gate-count {
-    display: none;
-  }
-
-  .so-gate .so-gate-button.sw-primary {
-    justify-content: center;
-    white-space: normal;
-  }
-
-  .sw-profile-reminder {
-    flex-wrap: wrap;
+    padding: 18px 16px;
   }
 }

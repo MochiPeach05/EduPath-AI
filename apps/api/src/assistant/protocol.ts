@@ -97,8 +97,11 @@ export const documentEmbeddingText = (title: string, text: string) => embeddingP
  * GPA or the threshold behind it; the newest AI roadmap's source drops the sentences an older roadmap wrote to explain the
  * way by the GPA (roadmap/present.ts shownRoadmapOutput). The system prompt gains one line: name the way the student chose,
  * else the recommended one as a suggestion with the other still open, never explained by the GPA or a threshold.
+ * v13 (2026-11-14, user: "Triển khai theo kế hoạch này đi" on the plan "Một bước để bắt đầu"): the sources say only the
+ * specialty and the transcript come before Đánh giá năng lực (the target career is optional); the survey source is "Khảo
+ * sát nhanh của bạn" with the five answers of survey-v5 and links to Định hướng nghề nghiệp. The system prompt is unchanged.
  */
-export const ASSISTANT_PROMPT_VERSION = "assistant-v12";
+export const ASSISTANT_PROMPT_VERSION = "assistant-v13";
 export const KNOWLEDGE_PROMPT_VERSION = "knowledge-v1";
 /** An answer takes well under a minute; a lost worker frees the job after this lease (the worker extends every 3 min). */
 export const ASSISTANT_LEASE_MINUTES = 5;

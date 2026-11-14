@@ -345,3 +345,210 @@
     padding: 16px;
   }
 }
+
+/*
+ * The first import in two steps (GVHD 2026-11-13, plan "Một bước để bắt đầu", 2026-11-14): 1 the specialty, 2 the PDF;
+ * the confirmation and "Import bảng điểm" under them, the button off until both are there (the hint says what is missing).
+ */
+.ti-steps {
+  display: grid;
+  gap: 18px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ti-step {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+  min-width: 0;
+}
+
+.ti-step-n {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--ep-action, #b51639);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.ti-step-body {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ti-step-body .ti-step-title,
+.ti-step-body .ti-step-loading {
+  padding-top: 2px;
+  color: var(--sw-ink, #242b39);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+}
+
+.ti-step-body .ti-step-loading {
+  color: var(--sw-muted, #647081);
+  font-weight: 500;
+}
+
+/* In the steps the zone is smaller: the specialty sits above it. */
+.ti-first .ti-zone {
+  min-height: 200px;
+  padding: 26px 20px 22px;
+}
+
+/* The PDF chosen for the first import (and in the short import). */
+.ti-chosen {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid #e3e7ec;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.ti-chosen .ti-pending-name {
+  display: grid;
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.ti-chosen-cancel {
+  margin-left: auto;
+}
+
+.ti-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px 14px;
+}
+
+.ti-actions .ti-action-hint {
+  color: var(--sw-muted, #647081);
+  font-size: 13px;
+}
+
+/* The specialty on the transcript bar: "Chuyên ngành: … Đổi", and its choice under the bar. */
+.ti-bar .ti-bar-spec {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 10px;
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed #d5dbe3;
+  color: #4a5464;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.ti-bar-spec strong {
+  color: var(--sw-ink, #242b39);
+}
+
+.ti-bar-below {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid #e3e7ec;
+  border-radius: 10px;
+  background: #fff;
+}
+
+/* The short import of Tổng quan and Xét tốt nghiệp: the specialty and the PDF side by side, then the confirmation. */
+.ti-start {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  border-radius: 10px;
+  outline: none;
+  transition: box-shadow 150ms ease;
+}
+
+.ti-start.is-dragging {
+  box-shadow: 0 0 0 4px rgb(181 22 57 / 12%);
+}
+
+.ti-start-form {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.ti-start-fields {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 12px 16px;
+}
+
+.ti-start-fields > * {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.ti-start-file {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+}
+
+.ti-start-file .ti-chosen {
+  width: 100%;
+}
+
+.ti-start .ti-start-hint,
+.ti-start .ti-start-loading {
+  color: var(--sw-muted, #647081);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.ti-start .ti-file-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: #fff0f2;
+  color: #a11638;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.6;
+}
+
+.ti-start .ti-actions {
+  justify-content: flex-start;
+}
+
+@container ti-import (max-width: 440px) {
+  .ti-step {
+    grid-template-columns: 24px minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .ti-step-n {
+    width: 24px;
+    height: 24px;
+  }
+
+  .ti-actions {
+    justify-content: stretch;
+  }
+
+  .ti-actions .sw-primary {
+    width: 100%;
+  }
+}

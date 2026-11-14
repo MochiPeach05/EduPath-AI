@@ -47,7 +47,10 @@ export type RoadmapResponse = {
   previous: Roadmap | null;
   assessment: { id: string; createdAt: string; hasCareer: boolean } | null;
   stale: boolean;
-  /** The profile survey is answered: a new roadmap needs it (an older API without the field counts as yes). */
+  /**
+   * Khảo sát nhanh is answered and may be used: the AI uses it; a roadmap no longer needs it (plan "Một bước để bắt đầu",
+   * 2026-11-14). An older API without the field counts as yes.
+   */
   surveyDone: boolean;
   aiEnabled: boolean;
   worker: { online: boolean; supportsRoadmap: boolean };
@@ -187,7 +190,8 @@ export const choiceText = (choice: RoadmapChoice) =>
 
 const ERROR_MESSAGES: Record<string, string> = {
   assessment_required: "Bạn cần có kết quả Đánh giá năng lực trước khi tạo lộ trình.",
-  survey_required: "Bạn cần hoàn thành Khảo sát định hướng trong Hồ sơ và bảng điểm trước khi tạo lộ trình.",
+  // An older API only: a roadmap needs no survey since 2026-11-14.
+  survey_required: "Hệ thống đang cập nhật. Hãy tải lại trang rồi bấm Tạo lộ trình lần nữa.",
   roadmap_too_frequent: "Bạn vừa tạo lộ trình. Vui lòng đợi khoảng nửa phút rồi thử lại.",
   queue_full: "Hàng đợi AI đang đầy. Vui lòng thử lại sau ít phút.",
   ai_disabled: "Lộ trình do EduPath AI soạn hiện chưa được bật.",

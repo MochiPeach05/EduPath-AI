@@ -23,8 +23,9 @@ export function isPreconditionError(code: string | null | undefined): code is Pr
 /** Title, explanation and next step for each precondition. */
 export const PRECONDITION_COPY: Record<PreconditionError, { title: string; text: string; action: { label: string; href: string } | null }> = {
   transcript_required: { title: "Cần bảng điểm để bắt đầu", text: "EduPath AI tính năng lực từ kết quả các học phần bạn đã học. Hãy import bảng điểm PDF xuất từ cổng đào tạo, rồi quay lại đây.", action: { label: "Import bảng điểm", href: "#profile" } },
-  career_required: { title: "Cần chọn vị trí nghề nghiệp mục tiêu", text: "Đánh giá năng lực cần đủ bảng điểm, vị trí nghề nghiệp mục tiêu và chuyên ngành. Hãy chọn vị trí nghề nghiệp mục tiêu ở trang Định hướng nghề nghiệp, rồi quay lại đây.", action: { label: "Chọn vị trí nghề nghiệp mục tiêu", href: "#career" } },
-  specialty_required: { title: "Cần chọn chuyên ngành", text: "Đánh giá năng lực cần đủ bảng điểm, vị trí nghề nghiệp mục tiêu và chuyên ngành. Hãy chọn chuyên ngành trong hồ sơ, rồi quay lại đây.", action: { label: "Chọn chuyên ngành", href: "#profile" } },
+  // An older API only: since the plan "Một bước để bắt đầu" (2026-11-14) the assessment needs no target career.
+  career_required: { title: "Cần chọn vị trí nghề nghiệp mục tiêu", text: "Khoảng trống kỹ năng so năng lực của bạn với một vị trí nghề nghiệp mục tiêu. Hãy chọn vị trí nghề nghiệp mục tiêu ở trang Định hướng nghề nghiệp, rồi quay lại đây.", action: { label: "Chọn vị trí nghề nghiệp mục tiêu", href: "#career" } },
+  specialty_required: { title: "Cần chọn chuyên ngành", text: "Đánh giá năng lực cần bảng điểm và chuyên ngành. Hãy chọn chuyên ngành ở Hồ sơ và bảng điểm, rồi quay lại đây.", action: { label: "Chọn chuyên ngành", href: "#profile" } },
   cohort_unknown: { title: "Hồ sơ chưa có khóa học", text: "Hệ thống cần biết bạn thuộc khóa nào để chọn đúng chương trình đào tạo. Thông tin khóa được đồng bộ từ tài khoản trường; nếu mục Khóa học trong hồ sơ còn trống, hãy liên hệ Khoa để được cập nhật.", action: { label: "Xem hồ sơ", href: "#profile" } },
   curriculum_unavailable: { title: "Chưa có chương trình đào tạo cho khóa của bạn", text: "Khoa chưa công bố chương trình đào tạo đang áp dụng cho khóa này trên EduPath AI. Bạn có thể quay lại sau khi chương trình được cập nhật.", action: null },
   curriculum_ambiguous: { title: "Khóa của bạn đang có nhiều chương trình đào tạo", text: "Có hơn một chương trình đào tạo đang áp dụng cho khóa này nên hệ thống chưa chọn được bản đúng. Khoa sẽ rà soát lại; bạn chưa cần làm gì thêm.", action: null },
@@ -57,21 +58,21 @@ export function errorMessage(code: string | null | undefined, fallback = "Thao t
 }
 
 /**
- * The checklist items still missing before an assessment: all three are required (user, 2026-10-21;
- * the server checks the same). A value not known yet (loading, or an older API without the
- * specialty) is left to the server.
+ * The checklist items still missing before an assessment: the transcript and the specialty (plan "Một bước để bắt đầu",
+ * 2026-11-14: the target career is chosen on Định hướng nghề nghiệp when the student wants it, and only Khoảng trống kỹ
+ * năng needs it; the server checks the same). A value not known yet (loading, or an older API without the specialty) is
+ * left to the server.
  */
-export function missingRequirements(hasTranscript: boolean | null, profile: { careerPositionId?: string | null; specialty?: string | null } | null): string[] {
+export function missingRequirements(hasTranscript: boolean | null, profile: { specialty?: string | null } | null): string[] {
   return [
     hasTranscript === false ? "bảng điểm" : null,
-    profile && !profile.careerPositionId ? "vị trí nghề nghiệp mục tiêu" : null,
     profile && profile.specialty !== undefined && !profile.specialty ? "chuyên ngành" : null,
   ].filter((item): item is string => item !== null);
 }
 /** "a", "a và b", "a, b và c". */
 const joinWords = (words: readonly string[]) => words.length < 2 ? words.join("") : `${words.slice(0, -1).join(", ")} và ${words.at(-1)}`;
 export const missingRequirementsMessage = (missing: readonly string[]) =>
-  `Cần đủ bảng điểm, vị trí nghề nghiệp mục tiêu và chuyên ngành để đánh giá năng lực. Hãy bổ sung ${joinWords(missing)} rồi bấm lại.`;
+  `Đánh giá năng lực cần bảng điểm và chuyên ngành. Hãy bổ sung ${joinWords(missing)} rồi bấm lại.`;
 
 /** Why the AI comment failed, in the student's words. */
 const AI_ERROR_MESSAGES: Record<string, string> = {

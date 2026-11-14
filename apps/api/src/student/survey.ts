@@ -2,7 +2,7 @@ import type { PoolClient } from "pg";
 import { z } from "zod";
 import type { DatabasePool } from "../db/pool.js";
 import { activeConsentVersion, consentWithdrawn, isValidConsent } from "./consent.js";
-import { INTEREST_HOBBIES, INTEREST_HOBBY_IDS, INTEREST_TECH, INTEREST_TECH_IDS, interestChoices, interestLabels } from "./interests.js";
+import { INTEREST_TECH, INTEREST_TECH_IDS, interestChoices, interestLabels } from "./interests.js";
 
 // "Khảo sát định hướng" in the student profile (user 2026-10-24): "bổ sung cái vụ sở thích và thành tích làm như 1 cái
 // form luôn á và bộ câu hỏi nên đi kèm câu trả lời dạng radius để tránh việc sv bỏ trống hoặc nhập bừa", and for
@@ -18,44 +18,42 @@ import { INTEREST_HOBBIES, INTEREST_HOBBY_IDS, INTEREST_TECH, INTEREST_TECH_IDS,
 // Since 2026-11-10 (user: "Khảo sát định hướng … cố vấn học tập và quản trị viên làm luôn nhé", policy 2026-11-10) a cố vấn
 // học tập or the Khoa may fill it in for the student (savedBy, migration 062): no consent is recorded in the student's name,
 // and such a survey counts like the student's own unless the student withdrew the consent (surveyUsable).
+// survey-v5 (2026-11-14, user: "Triển khai theo kế hoạch này đi" on the plan "Một bước để bắt đầu", after the thesis
+// advisor's review: "khảo sát thì dài ơi dài … tụi nó nản ko mún xài lun"): the survey is optional, lives on Định hướng
+// nghề nghiệp ("Khảo sát nhanh" on the page) and asks five things only: Lĩnh vực quan tâm nhất, Thế mạnh của bạn (the
+// technologies), Mục tiêu sau tốt nghiệp, Thời gian tự học mỗi tuần and Tiếng Anh chuyên ngành. The other questions, Sở
+// trường and Thành tích are no longer asked, required or given to the AI; saving the survey clears what they held. A
+// survey-v3 or v4 answered all five, so it stays complete.
 
-export const SURVEY_VERSION = "survey-v4";
-/** Characters of the achievements list. */
+export const SURVEY_VERSION = "survey-v5";
+/** Characters of the achievements list (survey-v4 and before; GET /survey still sends it for pages loaded before v5). */
 export const ACHIEVEMENTS_MAX = 1000;
 
 type SurveyQuestion = { id: string; label: string; options: readonly { id: string; label: string }[] };
 
-/** Every question needs one answer. */
+/** Every question needs one answer; the page shows them in this order, "Thế mạnh của bạn" after the first one. */
 export const SURVEY_QUESTIONS = [
+  { id: "field", label: "Lĩnh vực quan tâm nhất", options: [
+    { id: "web", label: "Web" }, { id: "mobile", label: "Di động" }, { id: "data", label: "AI, dữ liệu" }, { id: "security", label: "An ninh mạng" },
+    { id: "cloud", label: "Cloud, DevOps" }, { id: "game", label: "Game" }, { id: "embedded", label: "Nhúng, IoT" }, { id: "unsure", label: "Chưa xác định" }] },
   { id: "goal", label: "Mục tiêu sau tốt nghiệp", options: [
     { id: "work", label: "Đi làm ngay" }, { id: "study", label: "Học lên cao (thạc sĩ, nghiên cứu)" },
     { id: "business", label: "Khởi nghiệp hoặc làm tự do" }, { id: "unsure", label: "Chưa xác định" }] },
-  { id: "environment", label: "Môi trường học tập, làm việc bạn thích", options: [
-    { id: "alone", label: "Làm việc độc lập" }, { id: "team", label: "Làm việc theo nhóm" }, { id: "both", label: "Kết hợp cả hai" }] },
-  { id: "company", label: "Nơi làm việc mong muốn", options: [
-    { id: "large", label: "Công ty lớn, quy trình rõ ràng" }, { id: "startup", label: "Startup năng động" },
-    { id: "public", label: "Cơ quan nhà nước, viện nghiên cứu" }, { id: "unsure", label: "Chưa xác định" }] },
-  { id: "partTime", label: "Đi làm thêm", options: [
-    { id: "no", label: "Không" }, { id: "other", label: "Có, không liên quan CNTT" }, { id: "it", label: "Có, liên quan CNTT" }] },
-  { id: "leadership", label: "Kinh nghiệm dẫn dắt nhóm", options: [
-    { id: "none", label: "Chưa từng" }, { id: "one", label: "1 dự án" }, { id: "few", label: "2–3 dự án" }, { id: "many", label: "Trên 4 dự án" }] },
-  { id: "projects", label: "Dự án ngoài môn học", options: [
-    { id: "none", label: "Chưa có" }, { id: "some", label: "1–2 dự án" }, { id: "many", label: "Từ 3 dự án" }] },
-  { id: "internship", label: "Thực tập", options: [
-    { id: "none", label: "Chưa thực tập" }, { id: "current", label: "Đang thực tập" }, { id: "done", label: "Đã thực tập" }] },
   { id: "selfStudy", label: "Thời gian tự học mỗi tuần", options: [
     { id: "low", label: "Dưới 5 giờ" }, { id: "medium", label: "5–10 giờ" }, { id: "high", label: "Trên 10 giờ" }] },
   { id: "english", label: "Tiếng Anh chuyên ngành", options: [
     { id: "basic", label: "Khó khăn trong việc đọc hiểu" }, { id: "reading", label: "Đọc hiểu tốt" }, { id: "working", label: "Giao tiếp, làm việc được" }] },
-  { id: "field", label: "Lĩnh vực quan tâm nhất", options: [
-    { id: "web", label: "Web" }, { id: "mobile", label: "Di động" }, { id: "data", label: "AI, dữ liệu" }, { id: "security", label: "An ninh mạng" },
-    { id: "cloud", label: "Cloud, DevOps" }, { id: "game", label: "Game" }, { id: "embedded", label: "Nhúng, IoT" }, { id: "unsure", label: "Chưa xác định" }] },
 ] as const satisfies readonly SurveyQuestion[];
+/** Questions of survey-v4 and before that survey-v5 no longer asks: a page loaded before v5 may still send their answers. */
+const LEGACY_QUESTION_IDS = ["environment", "company", "partTime", "leadership", "projects", "internship"] as const;
 
 export type SurveyAnswers = Record<string, string>;
 /** Who filled in the survey for the student (migration 062): the class's cố vấn học tập, or the Khoa (an admin, Ban chủ nhiệm khoa). */
 export type SurveySavedBy = "advisor" | "admin";
-/** interestTech makes "Thế mạnh của bạn", interestHobbies "Sở trường". */
+/**
+ * interestTech makes "Thế mạnh của bạn". interestHobbies ("Sở trường"), hasAchievements and achievements are what a survey
+ * saved before survey-v5 holds (empty after a v5 save); nothing reads them for a feature any more.
+ */
 export type StudentSurvey = {
   version: string; answers: SurveyAnswers; interestTech: string[]; interestHobbies: string[];
   hasAchievements: boolean; achievements: string | null; updatedAt: string;
@@ -64,12 +62,14 @@ export type StudentSurvey = {
   /** Last saved for the student in their page (policy 2026-11-10); null when the student saved it. */
   savedBy: SurveySavedBy | null;
 };
-export type SurveyInput = {
-  answers: SurveyAnswers; interestTech: string[]; interestHobbies: string[]; hasAchievements: boolean; achievements: string | null;
-};
+/** What a save stores: the answers of SURVEY_QUESTIONS and the technologies. */
+export type SurveyInput = { answers: SurveyAnswers; interestTech: string[] };
 
-const answersSchema = z.object(Object.fromEntries(SURVEY_QUESTIONS.map((question) =>
-  [question.id, z.enum(question.options.map((option) => option.id) as [string, ...string[]])]))).strict();
+const answersSchema = z.object({
+  ...Object.fromEntries(SURVEY_QUESTIONS.map((question) => [question.id, z.enum(question.options.map((option) => option.id) as [string, ...string[]])])),
+  // Answers of the questions survey-v5 dropped: accepted and ignored.
+  ...Object.fromEntries(LEGACY_QUESTION_IDS.map((id) => [id, z.string().max(40).optional()])),
+}).strict();
 
 /** One achievement per line: control characters dropped, lines trimmed, empty lines removed. */
 export const cleanAchievements = (value: string) => value.normalize("NFC").replace(/\r\n?/g, "\n")
@@ -78,31 +78,27 @@ export const cleanAchievements = (value: string) => value.normalize("NFC").repla
 const surveySchema = z.object({
   answers: answersSchema,
   interestTech: interestChoices(INTEREST_TECH_IDS),
-  // The description of survey-v3; a page loaded before survey-v4 may still send it. Accepted and ignored.
+  // What a page loaded before survey-v5 (or v4: the strengths description) may still send. Accepted and ignored.
   strengths: z.string().max(2000).optional(),
-  interestHobbies: interestChoices(INTEREST_HOBBY_IDS),
-  hasAchievements: z.boolean(),
+  interestHobbies: z.array(z.string().max(80)).max(20).optional(),
+  hasAchievements: z.boolean().optional(),
   achievements: z.string().max(ACHIEVEMENTS_MAX * 4).nullable().optional(),
 }).strict();
 
 /** PUT /api/student/survey body → the answers to store, or the error code to send (400). */
-export function parseSurveyInput(body: unknown): { value: SurveyInput } | { error: "invalid_survey" | "achievements_required" | "achievements_too_long" } {
+export function parseSurveyInput(body: unknown): { value: SurveyInput } | { error: "invalid_survey" } {
   const parsed = surveySchema.safeParse(body);
   if (!parsed.success) return { error: "invalid_survey" };
-  const { answers, interestTech, interestHobbies, hasAchievements } = parsed.data;
-  if (!hasAchievements) return { value: { answers, interestTech, interestHobbies, hasAchievements, achievements: null } };
-  const achievements = cleanAchievements(parsed.data.achievements ?? "");
-  if (!achievements) return { error: "achievements_required" };
-  if (achievements.length > ACHIEVEMENTS_MAX) return { error: "achievements_too_long" };
-  return { value: { answers, interestTech, interestHobbies, hasAchievements, achievements } };
+  const answers: SurveyAnswers = Object.fromEntries(SURVEY_QUESTIONS.map((question) => [question.id, String(parsed.data.answers[question.id])]));
+  return { value: { answers, interestTech: parsed.data.interestTech } };
 }
 
 /** Before survey-v3 the two lists meant other things ("Công nghệ bạn thích", "Sở thích khi rảnh"): such a survey stays incomplete. */
 const BEFORE_STRENGTHS = new Set(["survey-v1", "survey-v2"]);
-const isComplete = (row: Pick<StudentSurvey, "version" | "answers" | "interestTech" | "interestHobbies">) =>
+const isComplete = (row: Pick<StudentSurvey, "version" | "answers" | "interestTech">) =>
   !BEFORE_STRENGTHS.has(row.version)
   && SURVEY_QUESTIONS.every((question) => question.options.some((option) => option.id === row.answers[question.id]))
-  && row.interestTech.length > 0 && row.interestHobbies.length > 0;
+  && row.interestTech.length > 0;
 
 type SurveyRow = {
   version: string; answers: SurveyAnswers; interest_tech: string[] | null; interest_hobbies: string[] | null;
@@ -125,17 +121,17 @@ export async function readSurvey(db: Pick<DatabasePool, "query"> | PoolClient, u
 /**
  * Caller holds the user's row lock and has checked the consent (the student) or the withdrawal (savedBy: a cố vấn học tập
  * or the Khoa saving it for the student, policy 2026-11-10; the student's own save clears it). The interests chosen in the
- * profile before the move (049) and the free text before that are cleared: the survey holds them now. So is a survey-v3
- * description of the strengths.
+ * profile before the move (049) and the free text before that are cleared: the survey holds them now. So is what survey-v5
+ * no longer asks (2026-11-14): the answers of the dropped questions, Sở trường, Thành tích and a survey-v3 description of
+ * the strengths.
  */
 export async function saveSurvey(client: PoolClient, userId: string, input: SurveyInput,
   savedBy: { userId: string; role: SurveySavedBy } | null = null): Promise<StudentSurvey> {
   const result = await client.query<SurveyRow>(`INSERT INTO stu_profile_surveys(user_id,survey_version,answers,interest_tech,interest_hobbies,has_achievements,achievements,strengths,saved_by,saved_by_role)
-    VALUES($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(user_id) DO UPDATE SET survey_version=EXCLUDED.survey_version,answers=EXCLUDED.answers,
-    interest_tech=EXCLUDED.interest_tech,interest_hobbies=EXCLUDED.interest_hobbies,has_achievements=EXCLUDED.has_achievements,
-    achievements=EXCLUDED.achievements,strengths=NULL,saved_by=EXCLUDED.saved_by,saved_by_role=EXCLUDED.saved_by_role,updated_at=now() RETURNING ${surveyColumns}`,
-  [userId, SURVEY_VERSION, JSON.stringify(input.answers), input.interestTech, input.interestHobbies, input.hasAchievements, input.achievements, null,
-    savedBy?.userId ?? null, savedBy?.role ?? null]);
+    VALUES($1,$2,$3::jsonb,$4,'{}',false,NULL,NULL,$5,$6) ON CONFLICT(user_id) DO UPDATE SET survey_version=EXCLUDED.survey_version,answers=EXCLUDED.answers,
+    interest_tech=EXCLUDED.interest_tech,interest_hobbies='{}',has_achievements=false,
+    achievements=NULL,strengths=NULL,saved_by=EXCLUDED.saved_by,saved_by_role=EXCLUDED.saved_by_role,updated_at=now() RETURNING ${surveyColumns}`,
+  [userId, SURVEY_VERSION, JSON.stringify(input.answers), input.interestTech, savedBy?.userId ?? null, savedBy?.role ?? null]);
   await client.query("UPDATE student_profiles SET interest_tech='{}',interest_hobbies='{}',interests=NULL WHERE user_id=$1", [userId]);
   return fromRow(result.rows[0]!);
 }
@@ -159,10 +155,11 @@ export async function deleteSurvey(client: PoolClient, userId: string): Promise<
 }
 
 /**
- * Whether the AI features (Lộ trình AI, Trợ lý AI, Định hướng nghề nghiệp, the Tổng quan gate) may use the stored survey:
- * complete, and agreed to by the student under a policy whose consents still count, or filled in for the student by a cố
- * vấn học tập or the Khoa (savedBy) while the student has not withdrawn the consent ("Cho làm, báo sinh viên", policy
- * 2026-11-10). The same rule in SQL: SURVEY_COMPLETE_SQL (admin/student-profiles.ts).
+ * Whether the AI features (Lộ trình AI, Trợ lý AI) and Định hướng nghề nghiệp may use the stored survey: complete, and
+ * agreed to by the student under a policy whose consents still count, or filled in for the student by a cố vấn học tập or
+ * the Khoa (savedBy) while the student has not withdrawn the consent ("Cho làm, báo sinh viên", policy 2026-11-10). The
+ * same rule in SQL: SURVEY_COMPLETE_SQL (admin/student-profiles.ts). Nothing requires the survey since 2026-11-14: without
+ * it these features work from the student's results alone.
  */
 export async function surveyUsable(db: Pick<DatabasePool, "query"> | PoolClient, userId: string, survey: StudentSurvey | null): Promise<boolean> {
   if (survey?.complete !== true) return false;
@@ -171,18 +168,16 @@ export async function surveyUsable(db: Pick<DatabasePool, "query"> | PoolClient,
 }
 
 /**
- * What the AI study roadmap reads: each answered question with the label of its answer, the strengths (technologies by
- * label), the "sở trường" by label, and the achievements list.
+ * What the AI study roadmap and Trợ lý AI read: each question of survey-v5 the student answered, with the label of the
+ * answer, and the strengths (technologies by label). A survey saved before v5 gives the same five, never what v5 dropped.
  */
-export type SurveyFacts = { answers: { question: string; answer: string }[]; tech: string[]; hobbies: string[]; achievements: string | null };
-export function surveyFacts(survey: Pick<StudentSurvey, "answers" | "interestTech" | "interestHobbies" | "hasAchievements" | "achievements">): SurveyFacts {
+export type SurveyFacts = { answers: { question: string; answer: string }[]; tech: string[] };
+export function surveyFacts(survey: Pick<StudentSurvey, "answers" | "interestTech">): SurveyFacts {
   return {
     answers: SURVEY_QUESTIONS.flatMap((question) => {
       const option = question.options.find((item) => item.id === survey.answers[question.id]);
       return option ? [{ question: question.label, answer: option.label }] : [];
     }),
     tech: interestLabels(INTEREST_TECH, survey.interestTech),
-    hobbies: interestLabels(INTEREST_HOBBIES, survey.interestHobbies),
-    achievements: survey.hasAchievements ? survey.achievements : null,
   };
 }

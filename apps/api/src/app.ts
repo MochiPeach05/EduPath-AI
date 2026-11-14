@@ -24,7 +24,7 @@ import { createOverviewRouter, refreshWarningNotifications } from "./overview/ro
 import { createStudentNotificationsRouter } from "./notifications/student-router.js";
 import { createAnnouncementsRouter } from "./notifications/admin-router.js";
 import { createStudyPlanRouter } from "./study-plan/router.js";
-import { createCompetencyAssessmentRouter } from "./competency-assessment/router.js";
+import { createAssessmentRunner, createCompetencyAssessmentRouter } from "./competency-assessment/router.js";
 import { createCompetencyAiQueue } from "./competency-assessment/ai/queue.js";
 import { PROMPT_VERSION } from "./competency-assessment/ai/prompt.js";
 import { createCompetencyWorkerRouter } from "./competency-assessment/ai/worker-router.js";
@@ -245,9 +245,12 @@ export function createApp({
   app.use("/api/student/notifications", createStudentNotificationsRouter(databasePool, config.webOrigin));
   app.use("/api/admin/announcements", createAnnouncementsRouter(databasePool, config.webOrigin, { staffEmailDomains: config.staffEmailDomains }));
   // AI comments are queued only when AI_WORKER_KEY is configured; otherwise ai_status is 'disabled'.
-  app.use("/api/student/competency-assessments", createCompetencyAssessmentRouter(databasePool, config.webOrigin,
-    createCompetencyAiQueue({ enabled: Boolean(config.aiWorkerKey) }), { promptVersion: PROMPT_VERSION }));
-  app.use("/api/student", createStudentDataRouter(databasePool, config.webOrigin,Boolean(config.ocrWorkerKey), { afterTranscriptImport, textLayer }));
+  const competencyAiQueue = createCompetencyAiQueue({ enabled: Boolean(config.aiWorkerKey) });
+  const assessmentOptions = { promptVersion: PROMPT_VERSION };
+  app.use("/api/student/competency-assessments", createCompetencyAssessmentRouter(databasePool, config.webOrigin, competencyAiQueue, assessmentOptions));
+  // A new target career re-assesses a student who already has a result (2026-11-14, student/router.ts PATCH /profile).
+  app.use("/api/student", createStudentDataRouter(databasePool, config.webOrigin, Boolean(config.ocrWorkerKey), {
+    afterTranscriptImport, textLayer, reassess: databasePool ? createAssessmentRunner(databasePool, competencyAiQueue, assessmentOptions) : undefined }));
   app.use("/api/admin/students", createStudentProfilesRouter(studentProfileRepository, adminAccountRepository));
   // Quản lý cố vấn học tập (AD-ADV-01…05) and an advisor's Lớp phụ trách (AD-AST-01…05, 09), 2026-11-03.
   app.use("/api/admin/advisors", createAdvisorsRouter(databasePool, config.webOrigin, config.staffEmailDomains));

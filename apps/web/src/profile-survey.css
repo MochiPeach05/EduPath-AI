@@ -1,4 +1,4 @@
-/* "Khảo sát định hướng" on Hồ sơ và bảng điểm (StudentProfileSurvey.tsx). */
+/* "Khảo sát nhanh" on Định hướng nghề nghiệp since 2026-11-14 (StudentProfileSurvey.tsx; was "Khảo sát định hướng" on Hồ sơ và bảng điểm). */
 .sw-shell .ps-survey {
   grid-column: 1 / -1;
   min-width: 0;
@@ -11,11 +11,6 @@
 .ps-survey {
   container: ps-survey / inline-size;
   width: 100%;
-}
-
-.ps-survey-todo {
-  border-color: #f1c4cf;
-  box-shadow: inset 4px 0 0 var(--sw-red);
 }
 
 /* Title and badge on one line; under them the intro (form) or the date of the answers (summary). Two classes: this sheet
@@ -64,13 +59,6 @@
 .ps-gaps ul {
   margin: 4px 0 0;
   padding-left: 20px;
-}
-
-/* After student-workspace.css's .sw-tag in the bundle, so one more class. */
-.ps-survey .ps-tag-required {
-  background: var(--sw-red);
-  color: #fff;
-  border-color: var(--sw-red);
 }
 
 .ps-fields {
@@ -192,37 +180,6 @@
   font-weight: 600;
 }
 
-.ps-achievements {
-  display: grid;
-  gap: 8px;
-  margin-top: 14px;
-  font-size: 13px;
-  color: #616777;
-}
-
-.ps-achievements textarea {
-  min-width: 0;
-  width: 100%;
-  min-height: 96px;
-  padding: 11px 12px;
-  border: 1px solid #dddfe6;
-  border-radius: 6px;
-  background: #fff;
-  color: #252b38;
-  font: inherit;
-  font-size: 14px;
-  resize: vertical;
-}
-
-.ps-achievements textarea[aria-invalid="true"] {
-  border-color: #c4314f;
-}
-
-.ps-achievements small {
-  color: var(--sw-muted);
-  font-size: 12px;
-}
-
 .ps-consent {
   margin-top: 16px;
   padding: 12px 14px;
@@ -275,15 +232,13 @@
   min-width: 0;
 }
 
-.ps-brief dt,
-.ps-lists dt {
+.ps-brief dt {
   color: var(--sw-muted);
   font-size: 12px;
   line-height: 1.5;
 }
 
-.ps-brief dd,
-.ps-lists dd {
+.ps-brief dd {
   min-width: 0;
   margin: 2px 0 0;
   color: var(--sw-ink);
@@ -296,26 +251,6 @@
 .ps-survey .ps-none {
   color: var(--sw-muted);
   font-weight: 500;
-}
-
-.ps-lists {
-  display: grid;
-  gap: 8px;
-  margin: 14px 0 0;
-  padding-top: 14px;
-  border-top: 1px solid var(--sw-border);
-}
-
-.ps-lists > div {
-  display: grid;
-  grid-template-columns: 88px minmax(0, 1fr);
-  align-items: baseline;
-  gap: 4px 16px;
-  min-width: 0;
-}
-
-.ps-lists dd {
-  margin: 0;
 }
 
 .ps-chips {
@@ -345,15 +280,7 @@
   color: #9b1639;
 }
 
-.ps-achievement-list {
-  margin: 0;
-  padding-left: 18px;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.6;
-}
-
-/* A cố vấn học tập's note, apart from Thành tích above it. */
+/* A cố vấn học tập's note, apart from the answers above it. */
 .ps-survey .sw-advisor-note {
   margin-top: 16px;
 }
@@ -377,32 +304,11 @@
 
 /* Phones: one column, each label above its chips or list. */
 @container ps-survey (max-width: 439px) {
-  .ps-brief,
-  .ps-lists > div {
+  .ps-brief {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
-/* "Sở thích" choices inside Thông tin cá nhân (StudentProfileEditor InterestGroup): undo the editor's grid labels and
-   full-width inputs, which would otherwise apply to the chips. */
-.sr-form-fields .pi-group .ps-option {
-  display: inline-flex;
-  gap: 8px;
-  font-size: 13px;
-  color: #3b4456;
-}
-
-.sr-form-fields .pi-group .ps-option:has(input:checked) {
-  color: var(--sw-ink);
-}
-
-.sr-form-fields .pi-group .ps-option input {
-  width: 16px;
-  min-width: 16px;
-  height: 16px;
-  padding: 0;
-  border: 0;
-}
 
 .pi-group .ps-option.pi-full {
   opacity: .5;
@@ -423,4 +329,87 @@
   color: #5c4a10;
   font-size: 12px;
   line-height: 1.6;
+}
+
+/* Khảo sát nhanh (survey-v5, 2026-11-14): five short items in one column, the answers as chips, beside the best fit on
+   Định hướng nghề nghiệp. Not required, so a neutral tag and no red frame while it is not done. */
+.sw-shell .ps-survey.ps-quick {
+  grid-column: auto;
+}
+
+.ps-survey .ps-tag-optional {
+  background: #f1f3f6;
+  color: #596576;
+}
+
+.ps-quick .ps-questions {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+.ps-quick .ps-question {
+  height: auto;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+}
+
+.ps-quick .ps-question.ps-invalid {
+  padding-left: 10px;
+  background: none;
+  box-shadow: inset 3px 0 0 #e7a3b3;
+}
+
+.ps-quick .ps-options {
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.ps-quick .ps-option {
+  flex: 0 1 auto;
+  min-height: 34px;
+  padding: 5px 12px;
+  border-radius: 999px;
+}
+
+.ps-quick .pi-legacy {
+  margin-bottom: 10px;
+}
+
+/* "+ 8 công nghệ khác": the folded rest of Thế mạnh. */
+.pi-more {
+  min-height: 34px;
+  padding: 5px 12px;
+  border: 1px dashed #b9c1cc;
+  border-radius: 999px;
+  background: #fff;
+  color: var(--sw-red);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pi-more:hover {
+  background: var(--sw-soft);
+}
+
+.pi-more:focus-visible {
+  outline: 2px solid var(--sw-red);
+  outline-offset: 2px;
+}
+
+.ps-quick .ps-brief {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ps-brief > .ps-brief-wide {
+  grid-column: 1 / -1;
+}
+
+@container ps-survey (max-width: 439px) {
+  .ps-quick .ps-brief {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

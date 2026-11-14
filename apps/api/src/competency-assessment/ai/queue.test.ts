@@ -44,7 +44,7 @@ describe("createCompetencyAiQueue", () => {
     const aiInput = JSON.parse(params[3] as string);
     expect(Object.keys(aiInput).sort()).toEqual(["checks", "options", "promptVersion", "schema", "system", "think", "user"]);
     expect(aiInput.think).toBe(true);
-    expect(aiInput.promptVersion).toBe("comp-v15");
+    expect(aiInput.promptVersion).toBe("comp-v16");
     // No saved Kế hoạch học kỳ: the comment uses the training plan's terms.
     expect(query.mock.calls.find(([s]) => s.startsWith("SELECT data FROM stu_study_plans"))![1]).toEqual([USER]);
     const last = query.mock.calls.at(-1)!;
@@ -175,7 +175,7 @@ describe("promoteDeferredCompetencyAi (QA 2026-11-10: deferred comments come bac
     expect(log.find(([sql]) => sql.startsWith("SELECT id FROM users"))![0]).toContain("FOR SHARE SKIP LOCKED");
     expect(inserted()).toEqual([ASSESSMENT, SECOND]);
     const aiInput = JSON.parse(log.find(([sql]) => sql.startsWith("INSERT INTO stu_comp_ai_jobs"))![1][3] as string);
-    expect(aiInput.promptVersion).toBe("comp-v15");
+    expect(aiInput.promptVersion).toBe("comp-v16");
     expect(log.filter(([sql]) => sql.includes("SET ai_status='queued'")).map(([, params]) => params)).toEqual([[ASSESSMENT, USER], [SECOND, OTHER]]);
     expect(log.at(-1)![0]).toBe("COMMIT");
     expect(release).toHaveBeenCalledTimes(1);

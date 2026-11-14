@@ -50,8 +50,12 @@ import { numberFactsOf, type CommentChecks, type NamedScore, type NumberFacts } 
  * knowledge beyond the program for Xuất sắc), and rule 13 never lets a comment say nothing is left to learn: careerFit ends
  * with that way on, summary says it briefly, nextSteps hold at least one self-study step beyond the program. Section [4]
  * counts the Bắt buộc and Ưu tiên skills (the comments called four Ưu tiên skills "Bắt buộc").
+ * comp-v16 (2026-11-14, user: "Triển khai theo kế hoạch này đi" on the plan "Một bước để bắt đầu"): the assessment no
+ * longer needs a target career, so a comment is often written without one. careerFit then says no target is chosen and
+ * where to choose one when the student wants, never picking or guessing a career; the data block was already written
+ * for that case (section [4] "Bạn chưa chọn nghề mục tiêu", sections [5] and [6] without the career).
  */
-export const PROMPT_VERSION = "comp-v15";
+export const PROMPT_VERSION = "comp-v16";
 
 /** Gemma reasons before it writes the comment; the worker sends it to Ollama as think:true. */
 const AI_THINK = true;
@@ -263,7 +267,7 @@ const OUTPUT_DESCRIPTION = `Cấu trúc JSON (giới hạn tính theo số ký t
 - groupInsights: tối đa ${L.groupInsights} mục { groupKey: khóa nhóm G…, comment: tối đa ${L.groupComment} ký tự } cho các nhóm năng lực đáng chú ý; nhóm dưới mức Khá thì nêu tên kỹ năng ở dòng "kỹ năng thấp nhất của nhóm" (mục [2]); kỹ năng thuộc nghề mục tiêu (hoặc khi chưa chọn nghề) thì nêu học phần nên làm, kỹ năng ngoài nghề mục tiêu thì chỉ nói là ngoài yêu cầu của nghề.
 - strengths: tối đa ${L.strengths} mục { skillKey: khóa kỹ năng S…, comment: tối đa ${L.skillComment} ký tự } về điểm mạnh, ưu tiên kỹ năng của nghề mục tiêu; chỉ chọn kỹ năng ở dòng "Có thể nêu là điểm mạnh" của mục [3]; minh chứng chỉ là học phần đã học, không lấy học phần đang học hay sắp học.
 - improvements: tối đa ${L.improvements} mục { skillKey, priority: "high" (cần làm sớm) | "medium" (nên làm) | "low" (có thể để sau), courses: tối đa ${L.improvementCourses} mục { courseCode: mã trong danh sách của đúng kỹ năng đó ở mục [6], reason: tối đa ${L.courseReason} ký tự, chỉ dựa trên dòng của học phần đó (học mới, học lại hay học cải thiện, điều kiện, học kỳ) }, comment: tối đa ${L.skillComment} ký tự, nói rõ bạn nên làm gì với học phần đã chọn } về kỹ năng nên cải thiện hoặc nâng lên; chỉ chọn kỹ năng ở dòng "Có thể nêu là cần cải thiện" của mục [3] (khi đã chọn nghề, đó chỉ là kỹ năng của nghề: dưới ngưỡng, hoặc đã đạt ngưỡng nhưng chưa đạt mức Giỏi); kỹ năng không có học phần thì để courses rỗng và gợi ý tự học hoặc một sản phẩm, dự án cụ thể để kiểm chứng.
-- careerFit: { comment: tối đa ${L.careerFit} ký tự } về mức phù hợp với nghề mục tiêu; chép đúng tính chất Bắt buộc hay Ưu tiên của từng kỹ năng như mục [4]; chỉ nêu mức phù hợp bằng chữ, không đưa ra chỉ số hay phần trăm phù hợp; khi mọi kỹ năng của nghề đã đạt ngưỡng, câu cuối nêu hướng học tiếp theo nguyên tắc 13; nếu chưa chọn nghề, nói ngắn gọn và gợi ý chọn nghề.
+- careerFit: { comment: tối đa ${L.careerFit} ký tự } về mức phù hợp với nghề mục tiêu; chép đúng tính chất Bắt buộc hay Ưu tiên của từng kỹ năng như mục [4]; chỉ nêu mức phù hợp bằng chữ, không đưa ra chỉ số hay phần trăm phù hợp; khi mọi kỹ năng của nghề đã đạt ngưỡng, câu cuối nêu hướng học tiếp theo nguyên tắc 13; nếu chưa chọn nghề (mục [4] ghi "Bạn chưa chọn nghề mục tiêu"), nói ngắn gọn rằng kết quả chưa được so với yêu cầu của nghề nào và khi muốn, bạn chọn vị trí nghề nghiệp mục tiêu ở trang Định hướng nghề nghiệp; không tự chọn, đoán hay gợi ý một nghề cụ thể.
 - gaps: tối đa ${L.gaps} mục, chỉ cho kỹ năng trong mục "Ứng viên khoảng trống": { skillKey, priority, explanation: tối đa ${L.gapExplanation} ký tự, courses: tối đa ${L.gapCourses} mục { courseCode: mã trong danh sách của đúng kỹ năng đó, reason: tối đa ${L.courseReason} ký tự, chỉ dựa trên dòng của học phần đó trong mục [5] (học mới, học lại hay học cải thiện, điều kiện, học kỳ) }, selfStudy: tối đa ${L.selfStudy} gợi ý tự học, mỗi gợi ý tối đa ${L.selfStudyItem} ký tự }.
 - progress: tối đa ${L.progress} ký tự, chỉ về tiến độ so với kế hoạch đào tạo (mục [8]); không nhận xét về xét tốt nghiệp.
 - nextSteps: từ ${L.nextStepsMin} đến ${L.nextStepsMax} việc nên làm ngay, mỗi việc tối đa ${L.nextStep} ký tự; mỗi việc gắn với một học phần cụ thể ở mục [5] hoặc [6], hoặc một sản phẩm tự học khi kỹ năng không có học phần; khi đã chọn nghề, chỉ về kỹ năng của nghề.

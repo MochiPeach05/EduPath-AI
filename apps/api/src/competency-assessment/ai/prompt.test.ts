@@ -122,8 +122,8 @@ describe("buildAiInput", () => {
   };
 
   it("uses the spec system prompt verbatim plus the output description", () => {
-    expect(PROMPT_VERSION).toBe("comp-v15");
-    expect(input.promptVersion).toBe("comp-v15");
+    expect(PROMPT_VERSION).toBe("comp-v16");
+    expect(input.promptVersion).toBe("comp-v16");
     expect(input.think).toBe(true);
     expect(input.system).toBe(SYSTEM_PROMPT);
     expect(input.system.startsWith("Bạn là cố vấn học tập của EduPath AI, đồng hành cùng sinh viên ngành Công nghệ Thông tin, Trường Đại học Văn Lang.\n")).toBe(true);
@@ -143,6 +143,10 @@ describe("buildAiInput", () => {
     expect(input.system).toContain("16. Trang in tên kỹ năng làm tiêu đề của mỗi mục strengths, improvements và gaps, nên mỗi mục chỉ nói về đúng kỹ năng đó");
     expect(input.system).toContain('"high" (cần làm sớm) | "medium" (nên làm) | "low" (có thể để sau)');
     expect(noCareer.system).toBe(SYSTEM_PROMPT);
+    // comp-v16 (2026-11-14): without a target career (the assessment no longer needs one), careerFit says where to choose
+    // one and never picks a career itself.
+    expect(input.system).toContain('nếu chưa chọn nghề (mục [4] ghi "Bạn chưa chọn nghề mục tiêu"), nói ngắn gọn rằng kết quả chưa được so với yêu cầu của nghề nào và khi muốn, bạn chọn vị trí nghề nghiệp mục tiêu ở trang Định hướng nghề nghiệp; không tự chọn, đoán hay gợi ý một nghề cụ thể.');
+    expect(sectionOf(noCareer.user, "[4. NGHỀ MỤC TIÊU]")).toBe("[4. NGHỀ MỤC TIÊU]\nBạn chưa chọn nghề mục tiêu.");
   });
 
   it("asks for concrete course advice, only about the target career, and no graduation comments (comp-v4, comp-v5)", () => {
