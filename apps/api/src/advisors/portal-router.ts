@@ -3,7 +3,8 @@
 // the Khoa gave classes; the others get empty lists), and admins and Ban chủ nhiệm khoa every class and every student
 // (AD-AST "QTV & CVHT"): GET /me, /classes, /students, /permissions. Opening a student's page (POST /students/:id/open)
 // checks the student again, is logged (kind 'advisor') and answers the link of the student portal tab, where
-// advisors/access.ts checks every request once more.
+// advisors/access.ts checks every request once more. /roster imports the class lists (danh sách lớp, roster-router.ts,
+// migration 065): the students of a class before they sign in, listed with the others as "Chưa đăng nhập".
 import { Router, type ErrorRequestHandler } from "express";
 import { z } from "zod";
 import type { DatabasePool } from "../db/pool.js";
@@ -12,9 +13,12 @@ import { classCode } from "./class-code.js";
 import { ADVISOR_PERMISSIONS } from "./permissions.js";
 import { ADVISED_STUDENT_STATUSES, AdvisorError } from "./model.js";
 import { PostgresAdvisorRepository, type AdvisorRepository } from "./repository.js";
+import { PostgresRosterRepository, type RosterRepository } from "./roster-repository.js";
+import { createRosterRouter } from "./roster-router.js";
 
 export function createAdvisorPortalRouter(pool: DatabasePool | undefined, webOrigin: string,
-  repository: AdvisorRepository | undefined = pool ? new PostgresAdvisorRepository(pool, new Set()) : undefined) {
+  repository: AdvisorRepository | undefined = pool ? new PostgresAdvisorRepository(pool, new Set()) : undefined,
+  roster: RosterRepository | undefined = pool ? new PostgresRosterRepository(pool) : undefined) {
   const router = Router();
   router.use((_req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); });
   router.use(requireAdminAccess);
@@ -51,6 +55,7 @@ export function createAdvisorPortalRouter(pool: DatabasePool | undefined, webOri
   router.get("/permissions", (_req, res) => {
     res.json(ADVISOR_PERMISSIONS);
   });
+  if (roster) router.use("/roster", createRosterRouter(roster));
   router.post("/students/:id/open", async (req, res) => {
     const id = z.guid().safeParse(req.params.id);
     if (!id.success) throw new AdvisorError("student_not_advised", 403);

@@ -8,6 +8,8 @@ import {
   ADVISOR_PORTAL_API, type AdvisedStudentRow, type AdvisorClass, type AdvisorMe,
 } from "./advisor-types";
 import { STUDENT_STATUS_TEXT, advisorRequest, isStudentStatus, openStudentPage } from "./advisor-admin";
+import { rosterRemovedText, rosterResultText } from "./advisor-roster-types";
+import AdvisorRosterImport, { RosterRemoveDialog } from "./AdvisorRosterImport";
 import "./curricula.css";
 import "./careers.css";
 import "./advisors.css";
@@ -17,7 +19,8 @@ import "./advisors.css";
 // see every class and student (scope "all"), a cố vấn học tập the classes the Khoa assigned (scope "own"): the classes,
 // then their students (search, class and status filters, sorted and paged on the server), each with "Xem chi tiết", which
 // opens the student portal of that student in a tab of its own (advisor-view.ts), then what may be done there, as the API
-// lists it (permissions.ts). Contract: advisor-types.ts.
+// lists it (permissions.ts). Each class's ⋮ menu also imports its class list (danh sách lớp, AdvisorRosterImport.tsx;
+// reviewer note 2026-11-14): its students are listed before they sign in, as "Chưa đăng nhập". Contract: advisor-types.ts.
 
 /** all: every student (admins, Ban chủ nhiệm khoa); own: the classes the signed-in account advises (GET /me). */
 export type StudentScope = AdvisorMe["scope"];
@@ -28,13 +31,13 @@ export const SCOPE_TEXT: Record<StudentScope, { lead: string; classes: string; s
     lead: "Bạn xem được mọi sinh viên của Khoa; cố vấn học tập chỉ xem sinh viên các lớp mình phụ trách.",
     classes: "Lớp", students: "Sinh viên",
     noClass: "Chưa có lớp nào có sinh viên trong EduPath AI.",
-    noStudent: "Chưa có sinh viên nào đăng nhập EduPath AI.",
+    noStudent: "Chưa có sinh viên nào. Chọn Import danh sách sinh viên ở menu ba chấm của một lớp để nhập trước danh sách lớp.",
   },
   own: {
     lead: "Bạn xem được sinh viên của các lớp Khoa phân công cho bạn.",
     classes: "Lớp phụ trách", students: "Sinh viên lớp phụ trách",
     noClass: "Bạn chưa được phân công lớp nào. Khoa thêm lớp phụ trách cho cố vấn ở trang Danh sách cố vấn học tập.",
-    noStudent: "Chưa có sinh viên nào của lớp bạn phụ trách đăng nhập EduPath AI.",
+    noStudent: "Chưa có sinh viên nào của lớp bạn phụ trách. Chọn Import danh sách sinh viên ở menu ba chấm của lớp để nhập trước danh sách lớp.",
   },
 };
 
@@ -54,6 +57,7 @@ const classSort: Record<string, SortRule<AdvisorClass>> = {
   cohort: { value: (row) => row.cohort },
   advisorName: { value: (row) => row.advisorName, by: "name" },
   students: { value: (row) => row.students, by: "number" },
+  signedIn: { value: (row) => (row.students ? row.signedIn / row.students : null), by: "number" },
   withTranscript: { value: (row) => (row.students ? row.withTranscript / row.students : null), by: "number" },
   assessed: { value: (row) => (row.students ? row.assessed / row.students : null), by: "number" },
   surveyDone: { value: (row) => (row.students ? row.surveyDone / row.students : null), by: "number" },
@@ -64,15 +68,17 @@ const classSort: Record<string, SortRule<AdvisorClass>> = {
  * The classes (AD-AST-01; exported for its test). showAdvisor: the column of each class's cố vấn học tập (scope "all").
  * Each row's actions are in the shared ⋮ menu (reviewer note 2026-11-14, user: "Cô đề xuất dùng menu ba chấm để nhóm các
  * thao tác “Xem danh sách sinh viên” và “Import danh sách sinh viên”, giúp giao diện gọn hơn"); the chosen class's row is
- * the current one.
+ * the current one. onImport: the import of a class list, for the classes the account may import (every class listed here:
+ * its own classes, or every class for admins and Ban chủ nhiệm khoa; the API checks it again). Sinh viên counts the whole
+ * class, its class list's students who never signed in too; Đã đăng nhập those with an account.
  */
-export function ClassTable({ classes, sort, sortHeader, selected, onPick, showAdvisor = false }: {
+export function ClassTable({ classes, sort, sortHeader, selected, onPick, onImport, showAdvisor = false }: {
   classes: readonly AdvisorClass[]; sort: TableSort; sortHeader: ReturnType<typeof useTableSort>["sortHeader"]; selected: string;
-  onPick: (className: string) => void; showAdvisor?: boolean;
+  onPick: (className: string) => void; onImport?: (className: string) => void; showAdvisor?: boolean;
 }) {
   return <div className="cm-table-scroll"><table className={`cm-table av-classes-table${showAdvisor ? " av-classes-table-all" : ""}`}>
     <thead><tr>{sortHeader("Khóa", "cohort")}{sortHeader("Lớp", "className")}{showAdvisor && sortHeader("Cố vấn học tập", "advisorName")}{sortHeader("Sinh viên", "students")}
-      {sortHeader("Có bảng điểm", "withTranscript")}{sortHeader("Đã đánh giá năng lực", "assessed")}{sortHeader("Đã làm khảo sát", "surveyDone")}{sortHeader("Có Lộ trình AI", "roadmap")}
+      {sortHeader("Đã đăng nhập", "signedIn")}{sortHeader("Có bảng điểm", "withTranscript")}{sortHeader("Đã đánh giá năng lực", "assessed")}{sortHeader("Đã làm khảo sát", "surveyDone")}{sortHeader("Có Lộ trình AI", "roadmap")}
       <th scope="col">Thao tác</th></tr></thead>
     <tbody>{sortRows(classes, classSort, sort).map(({ row }) => <tr key={row.className} className={row.className === selected ? "av-row-current" : undefined}
       aria-current={row.className === selected ? "true" : undefined}>
@@ -80,12 +86,14 @@ export function ClassTable({ classes, sort, sortHeader, selected, onPick, showAd
       <td><strong>{row.className}</strong></td>
       {showAdvisor && <td>{row.advisorName?.trim() ? row.advisorName : <span className="career-empty">Chưa phân công</span>}</td>}
       <td className="av-num">{row.students.toLocaleString("vi-VN")}</td>
+      <td className="av-num">{share(row.signedIn, row.students)}</td>
       <td className="av-num">{share(row.withTranscript, row.students)}</td>
       <td className="av-num">{share(row.assessed, row.students)}</td>
       <td className="av-num">{share(row.surveyDone, row.students)}</td>
       <td className="av-num">{share(row.roadmap, row.students)}</td>
       <td><ActionMenu label={`Thao tác với lớp ${row.className}`} items={[
         { key: "students", icon: "users", label: "Xem danh sách sinh viên", onSelect: () => onPick(row.className) },
+        ...(onImport ? [{ key: "import", icon: "upload", label: "Import danh sách sinh viên", onSelect: () => onImport(row.className) }] : []),
       ]} /></td>
     </tr>)}</tbody>
   </table></div>;
@@ -98,27 +106,38 @@ function Step({ done, label }: { done: boolean; label: string }) {
   </span>;
 }
 
-/** One page of the students (AD-AST-02…06; exported for its test): "Xem chi tiết" opens the student's own page. */
-export function StudentTable({ students, page, sortHeader, opening, onOpen }: {
+/**
+ * One page of the students (AD-AST-02…06; exported for its test): "Xem chi tiết" opens the student's own page. A student of
+ * a class list who never signed in has no page yet: their row says so (Chưa đăng nhập), with the school email of the list,
+ * and its ⋮ menu removes them from the list (onRemove; the API checks the class and that they never signed in).
+ */
+export function StudentTable({ students, page, sortHeader, opening, onOpen, onRemove }: {
   students: readonly AdvisedStudentRow[]; page: number; sortHeader: ReturnType<typeof useTableSort>["sortHeader"]; opening: string | null;
-  onOpen: (student: AdvisedStudentRow) => void;
+  onOpen: (student: AdvisedStudentRow) => void; onRemove?: (student: AdvisedStudentRow) => void;
 }) {
   return <div className="cm-table-scroll"><table className="cm-table av-students-table">
     <thead><tr>{sortHeader("STT", "stt", "cm-stt")}{sortHeader("Sinh viên", "name")}{sortHeader("Lớp", "className")}{sortHeader("Chuyên ngành", "specialty")}
       {sortHeader("Vị trí mục tiêu", "targetCareer")}{sortHeader("Bảng điểm", "hasTranscript")}{sortHeader("Đánh giá năng lực", "assessed")}
       {sortHeader("Khảo sát", "surveyDone")}{sortHeader("Lộ trình AI", "roadmap")}<th scope="col">Thao tác</th></tr></thead>
-    <tbody>{students.map((student, index) => <tr key={student.userId}>
+    <tbody>{students.map((student, index) => <tr key={student.userId ?? `list-${student.studentCode}`} className={student.userId ? undefined : "av-row-listed"}>
       <td className="cm-stt">{student.stt ?? (page - 1) * 10 + index + 1}</td>
-      <td><strong>{student.name}</strong><small>{student.studentCode ? `MSSV ${student.studentCode}` : "Chưa có MSSV"}</small></td>
-      <td>{student.className}{student.cohort && <small>{student.cohort}</small>}</td>
-      <td>{student.specialty ?? <span className="career-empty">Chưa chọn</span>}</td>
-      <td>{student.targetCareer ?? <span className="career-empty">Chưa chọn</span>}</td>
-      <td><Step done={student.hasTranscript} label="Bảng điểm" /></td>
-      <td><Step done={student.assessed} label="Đánh giá năng lực" /></td>
-      <td><Step done={student.surveyDone} label="Khảo sát nhanh" /></td>
-      <td><Step done={student.roadmap} label="Lộ trình AI" /></td>
-      <td><button type="button" className="am-primary av-open" disabled={opening !== null} onClick={() => onOpen(student)}>
-        <Icon name="eye" /> {opening === student.userId ? "Đang mở…" : "Xem chi tiết"}</button></td>
+      <td><strong>{student.name}</strong><small>{student.studentCode ? `MSSV ${student.studentCode}` : "Chưa có MSSV"}</small>
+        {!student.userId && <>{student.email && <small>{student.email}</small>}<span className="am-state av-state am-not-signed-in av-listed-state">Chưa đăng nhập</span></>}</td>
+      <td className="av-class-code">{student.className}{student.cohort && <small>{student.cohort}</small>}</td>
+      {student.userId ? <>
+        <td>{student.specialty ?? <span className="career-empty">Chưa chọn</span>}</td>
+        <td>{student.targetCareer ?? <span className="career-empty">Chưa chọn</span>}</td>
+        <td><Step done={student.hasTranscript} label="Bảng điểm" /></td>
+        <td><Step done={student.assessed} label="Đánh giá năng lực" /></td>
+        <td><Step done={student.surveyDone} label="Khảo sát nhanh" /></td>
+        <td><Step done={student.roadmap} label="Lộ trình AI" /></td>
+      </> : <td colSpan={6} className="av-listed-note">Chưa có hồ sơ: sinh viên có trong danh sách lớp nhưng chưa đăng nhập EduPath AI.</td>}
+      <td>{student.userId ? <button type="button" className="am-primary av-open" disabled={opening !== null} onClick={() => onOpen(student)}>
+        <Icon name="eye" /> {opening === student.userId ? "Đang mở…" : "Xem chi tiết"}</button>
+        : onRemove ? <ActionMenu label={`Thao tác với sinh viên ${student.name}`} items={[
+          { key: "remove", icon: "trash", label: "Xóa khỏi danh sách lớp", danger: true, onSelect: () => onRemove(student) },
+        ]} note="Sinh viên chưa đăng nhập nên chưa có trang để xem." />
+          : <span className="career-empty" title="Sinh viên chưa đăng nhập nên chưa có trang để xem">Chưa có trang</span>}</td>
     </tr>)}</tbody>
   </table></div>;
 }
@@ -134,7 +153,12 @@ export const withClass = <T extends { class: string }>(filters: T, className: st
 
 function StudentManagement({ scope }: { scope: StudentScope }) {
   const text = SCOPE_TEXT[scope];
-  const classes = useData<{ items: AdvisorClass[] }>(`${ADVISOR_PORTAL_API}/classes`);
+  // An import of a class list changes the classes and the students: both are read again.
+  const [revision, setRevision] = useState(0);
+  const [importing, setImporting] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<AdvisedStudentRow | null>(null);
+  const [notice, setNotice] = useState("");
+  const classes = useData<{ items: AdvisorClass[] }>(`${ADVISOR_PORTAL_API}/classes`, revision);
   const classTable = useTableSort();
   const { draft, setDraft, filters, page, setPage, flush, reset } = useLiveFilters(emptyFilters);
   // The server sorts and pages the students (advisors/portal-router.ts); STT stays the row's number in the list by name.
@@ -143,7 +167,7 @@ function StudentManagement({ scope }: { scope: StudentScope }) {
   if (filters.q) params.set("q", filters.q);
   if (filters.class) params.set("class", filters.class);
   if (filters.status && filters.status !== "all") params.set("status", filters.status);
-  const students = useData<{ items: AdvisedStudentRow[]; total: number }>(`${ADVISOR_PORTAL_API}/students?${params}`);
+  const students = useData<{ items: AdvisedStudentRow[]; total: number }>(`${ADVISOR_PORTAL_API}/students?${params}`, revision);
   const [opening, setOpening] = useState<string | null>(null);
   const [openError, setOpenError] = useState("");
   const [blocked, setBlocked] = useState<{ url: string; name: string } | null>(null);
@@ -154,9 +178,11 @@ function StudentManagement({ scope }: { scope: StudentScope }) {
     studentsPanel.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
   const open = async (student: AdvisedStudentRow) => {
-    setOpening(student.userId); setOpenError(""); setBlocked(null);
+    const userId = student.userId;
+    if (!userId) return;
+    setOpening(userId); setOpenError(""); setBlocked(null);
     try {
-      const url = await openStudentPage(() => advisorRequest<{ url: string }>(`${ADVISOR_PORTAL_API}/students/${encodeURIComponent(student.userId)}/open`,
+      const url = await openStudentPage(() => advisorRequest<{ url: string }>(`${ADVISOR_PORTAL_API}/students/${encodeURIComponent(userId)}/open`,
         { method: "POST", body: "{}" }));
       if (url) setBlocked({ url, name: student.name });
     } catch (failure) { setOpenError((failure as Error).message); }
@@ -168,19 +194,28 @@ function StudentManagement({ scope }: { scope: StudentScope }) {
       <div className="career-list-heading">
         <div>
           <h2 id="av-classes-title">{text.classes}{classes.data && <span className="am-count">{items.length}</span>}</h2>
-          <p>Ở cột Thao tác, chọn Xem danh sách sinh viên để xem sinh viên của một lớp.</p>
+          <p>Ở cột Thao tác, chọn Xem danh sách sinh viên để xem sinh viên của một lớp, hoặc Import danh sách sinh viên để nhập trước danh sách đầy đủ của lớp, kể cả sinh viên chưa đăng nhập EduPath AI.</p>
         </div>
       </div>
+      {notice && <p className="cm-success av-notice av-roster-notice" role="status">{notice}</p>}
       <Status {...classes} />
       {classes.data && (items.length
-        ? <ClassTable classes={items} sort={classTable.sort} sortHeader={classTable.sortHeader} selected={filters.class} onPick={pickClass} showAdvisor={scope === "all"} />
+        ? <ClassTable classes={items} sort={classTable.sort} sortHeader={classTable.sortHeader} selected={filters.class} onPick={pickClass}
+          onImport={(className) => { setNotice(""); setImporting(className); }} showAdvisor={scope === "all"} />
         : <p className="am-empty">{text.noClass}</p>)}
     </section>
+    {importing && <AdvisorRosterImport className={importing} close={() => setImporting(null)} imported={(result) => {
+      setNotice(rosterResultText(importing, result)); setImporting(null); setRevision((value) => value + 1);
+    }} />}
+    {removing && <RosterRemoveDialog student={removing} close={() => setRemoving(null)} removed={() => {
+      setNotice(rosterRemovedText(removing)); setRemoving(null); setRevision((value) => value + 1);
+    }} />}
     <section ref={studentsPanel} className="cm-panel av-students" aria-labelledby="av-students-title">
       <div className="career-list-heading">
         <div>
           <h2 id="av-students-title">{text.students}{students.data && <span className="am-count">{students.data.total}</span>}</h2>
-          <p>Ở trang sinh viên, bạn xem được các mục sinh viên đã cung cấp, có thể import bảng điểm, chọn chuyên ngành và vị trí nghề nghiệp mục tiêu, sửa Kế hoạch học kỳ, làm Khảo sát định hướng, chạy Đánh giá năng lực, Lộ trình AI và hỏi Trợ lý AI thay sinh viên. Mỗi việc làm thay được ghi vào Nhật ký thao tác và báo cho sinh viên.</p>
+          <p>Ở trang sinh viên, bạn xem được các mục sinh viên đã cung cấp, có thể import bảng điểm, chọn chuyên ngành và vị trí nghề nghiệp mục tiêu, sửa Kế hoạch học kỳ, làm Khảo sát định hướng, chạy Đánh giá năng lực, Lộ trình AI và hỏi Trợ lý AI thay sinh viên. Mỗi việc làm thay được ghi vào Nhật ký thao tác và báo cho sinh viên.
+            Sinh viên có trong danh sách lớp nhưng chưa đăng nhập hiện “Chưa đăng nhập”; khi sinh viên đăng nhập lần đầu bằng tài khoản Microsoft của trường, tài khoản được ghép với dòng đó theo MSSV.</p>
         </div>
       </div>
       <CheckedForm className="cm-filters av-student-filters" onSubmit={(event) => { event.preventDefault(); flush(); }}>
@@ -195,7 +230,8 @@ function StudentManagement({ scope }: { scope: StudentScope }) {
       {blocked && <p className="cm-warning av-open-blocked" role="status">Trình duyệt chặn mở thẻ mới. <a href={blocked.url} target="_blank" rel="noopener">Mở trang của {blocked.name}</a></p>}
       <Status {...students} />
       {students.data && <>
-        <StudentTable students={students.data.items} page={page} sortHeader={studentTable.sortHeader} opening={opening} onOpen={(student) => void open(student)} />
+        <StudentTable students={students.data.items} page={page} sortHeader={studentTable.sortHeader} opening={opening} onOpen={(student) => void open(student)}
+          onRemove={(student) => { setNotice(""); setRemoving(student); }} />
         {!students.data.items.length && <p className="am-empty">{filtered ? "Không có sinh viên phù hợp. Thử từ khóa khác hoặc xóa bộ lọc." : text.noStudent}</p>}
         <Pagination total={students.data.total} page={page} setPage={setPage} />
       </>}

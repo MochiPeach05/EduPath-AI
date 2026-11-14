@@ -82,11 +82,22 @@
 .av-step svg { width: 14px; height: 14px; }
 .av-step-done { background: #e6f2ec; color: #1f5f49; }
 .av-step-todo { background: #eef0f4; color: var(--cm-muted); }
+/* A student of a class list who never signed in (2026-11-14): marked Chưa đăng nhập in the sign-in red, one muted line
+   across the step columns instead of six "Chưa". */
+.av-listed-state { display: block; margin-top: 6px; }
+.av-listed-note { color: var(--cm-muted); font-size: 12.5px; line-height: 1.5; }
+/* A class code is one word (71K29CNTT99): kept whole in the tables, which scroll sideways on narrow screens. */
+.av-class-code { white-space: nowrap; }
+.av-roster-notice { margin: 0 24px 16px; }
+.av-roster-table td:nth-child(2) { min-width: 200px; }
+.av-roster-table td small { overflow-wrap: anywhere; }
+.av-sheet { white-space: normal; }
 
 .av-lead { margin: 0; color: var(--cm-muted); font-size: 14px; }
 @media (max-width: 640px) {
   .av-detail-grid,
   .av-form-row { grid-template-columns: minmax(0, 1fr); }
   .av-open-error,
-  .av-open-blocked { margin-inline: 16px; }
+  .av-open-blocked,
+  .av-roster-notice { margin-inline: 16px; }
 }

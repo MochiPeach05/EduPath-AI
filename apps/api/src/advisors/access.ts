@@ -332,8 +332,9 @@ export const ADVISOR_ADMIN_READS: readonly RegExp[] = [
   /^\/(me|summary)\/?$/i,
   // AD-PROF-01…04, AD-AST-06: Sinh viên, only the students of the advisor's classes (admin/student-profiles.ts).
   /^\/students(\/[^/]+(\/transcript)?)?\/?$/i,
-  // AD-AST-01…04, 09: Quản lý sinh viên (advisors/portal-router.ts); opening a student's page is in ADVISOR_ADMIN_WRITES.
-  /^\/advisor-portal\/(me|classes|students|permissions)\/?$/i,
+  // AD-AST-01…04, 09: Quản lý sinh viên (advisors/portal-router.ts) and the sample tệp of a class list (roster-router.ts);
+  // opening a student's page and importing a class list are in ADVISOR_ADMIN_WRITES.
+  /^\/advisor-portal\/(me|classes|students|permissions|roster\/template)\/?$/i,
   // AD-ADV-04, 05: the cố vấn học tập of the Khoa and one of them; not the import template (AD-ADV-01).
   /^\/advisors(\/(?!import\/?$)[^/]+)?\/?$/i,
   // AD-CURR-03…06 and AD-SUB-01, 02; AD-PLAN-03…09, 13; AD-GRAD-03…07, 12: the lists and one programme, plan or
@@ -353,8 +354,17 @@ export const ADVISOR_ADMIN_READS: readonly RegExp[] = [
   // AD-REPORT-11: Nhật ký thao tác, the advisor's own actions (admin/audit/router.ts).
   /^\/audit-log\/?$/i,
 ];
-/** The only admin write of the role 'advisor': opening the page of a student of their classes (AD-AST-05), logged. */
-export const ADVISOR_ADMIN_WRITES: readonly RegExp[] = [/^\/advisor-portal\/students\/[^/]+\/open\/?$/i];
+/**
+ * The admin writes of the role 'advisor': opening the page of a student of their classes (AD-AST-05), logged, importing
+ * the class list of a class they advise (reviewer note 2026-11-14: "Cố vấn có thể import trước danh sách sinh viên đầy đủ
+ * của lớp"; roster-router.ts, where roster-repository.ts refuses the students of any other class), previewed first, and
+ * removing from it a student who never signed in.
+ */
+export const ADVISOR_ADMIN_WRITES: readonly RegExp[] = [
+  /^\/advisor-portal\/students\/[^/]+\/open\/?$/i,
+  /^\/advisor-portal\/roster\/import(\/preview)?\/?$/i,
+  /^\/advisor-portal\/roster\/students\/[^/]+\/?$/i,
+];
 
 /**
  * Mounted on /api/admin before the admin routers: the role 'advisor' reads what ADVISOR_ADMIN_READS lists (else

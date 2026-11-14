@@ -42,11 +42,21 @@ export type AdvisorImportPreview = {
 };
 export type AdvisorImportResult = { added: number; updated: number; unchanged: number; skipped: number; preview: AdvisorImportPreview };
 
-/** advisorName: the cố vấn học tập the Khoa assigned to the class, null when none. */
-export type AdvisorClass = AdvisorClassDetail & { surveyDone: number; roadmap: number; advisorName: string | null };
+/**
+ * advisorName: the cố vấn học tập the Khoa assigned to the class, null when none. students counts the whole class: the
+ * student accounts and the students of its class list (danh sách lớp, migration 065) who never signed in; signedIn the
+ * accounts alone.
+ */
+export type AdvisorClass = AdvisorClassDetail & { signedIn: number; surveyDone: number; roadmap: number; advisorName: string | null };
+/**
+ * A student of the list: an account (signedIn), or a student of a class list who never signed in (userId null, every step
+ * false, email the school email of the list when it has one).
+ */
 export type AdvisedStudentRow = {
   stt: number;
-  userId: string;
+  userId: string | null;
+  signedIn: boolean;
+  email: string | null;
   studentCode: string | null;
   name: string;
   className: string;
@@ -59,7 +69,7 @@ export type AdvisedStudentRow = {
   roadmap: boolean;
   lastLoginAt: string | null;
 };
-export const ADVISED_STUDENT_STATUSES = ["all", "no_transcript", "no_assessment", "no_survey", "no_roadmap", "complete"] as const;
+export const ADVISED_STUDENT_STATUSES = ["all", "not_signed_in", "no_transcript", "no_assessment", "no_survey", "no_roadmap", "complete"] as const;
 export type AdvisedStudentStatus = (typeof ADVISED_STUDENT_STATUSES)[number];
 /**
  * classes: the classes the account advises itself; scope: "all" for admins and Ban chủ nhiệm khoa, who work with every

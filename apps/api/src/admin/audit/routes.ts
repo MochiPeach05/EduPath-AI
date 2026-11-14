@@ -116,6 +116,21 @@ export const AUDIT_ROUTES: readonly AuditRoute[] = [
       return { summary: `Xóa cố vấn học tập ${join(account?.name, account?.email ? `(${str(account.email)})` : "") || params.id}`, ...target("advisor", params.id) };
     } },
   { method: "POST", path: "/advisor-portal/students/:id/open", kind: "advisor", action: "Mở trang sinh viên", skip: "ghi riêng ở advisors/portal-router.ts, loại Cố vấn học tập" },
+  // Danh sách lớp (advisors/roster-router.ts, migration 065): the classes and how many students, never their names.
+  { method: "POST", path: "/advisor-portal/roster/import/preview", kind: "account", action: "Xem trước danh sách sinh viên của lớp", skip: "chỉ đọc tệp để xem trước, chưa lưu gì" },
+  { method: "POST", path: "/advisor-portal/roster/import", kind: "account", action: "Import danh sách sinh viên của lớp",
+    describe: ({ result }) => {
+      const done = obj(result), preview = obj(done.preview), file = str(preview.fileName);
+      const classes = [...new Set(list(preview.items).map(obj).filter((item) => str(item.status) !== "error").map((item) => str(item.className)).filter(Boolean))].sort();
+      return { summary: `Import danh sách sinh viên${classes.length ? ` lớp ${classes.join(", ")}` : ""}${file ? ` từ tệp ${file}` : ""}: thêm ${num(done.added) ?? 0}, `
+        + `cập nhật ${num(done.updated) ?? 0}, không đổi ${num(done.unchanged) ?? 0}, bỏ qua ${num(done.skipped) ?? 0} sinh viên có lỗi` };
+    } },
+  { method: "DELETE", path: "/advisor-portal/roster/students/:code", kind: "account", action: "Xóa sinh viên khỏi danh sách lớp",
+    describe: ({ params, result }) => {
+      const removed = obj(obj(result).removed), className = str(removed.className);
+      return { summary: `Xóa sinh viên MSSV ${str(removed.studentCode) || params.code} (chưa đăng nhập) khỏi danh sách lớp${className ? ` ${className}` : ""}`,
+        ...(className ? target("class", className) : {}) };
+    } },
 
   // Chương trình đào tạo (curricula/router.ts)
   { method: "POST", path: "/curricula/preview", kind: "training", action: "Xem trước CTĐT", skip: "chỉ đọc tệp để xem trước, chưa lưu gì" },

@@ -101,13 +101,16 @@ describe("Danh sách cố vấn học tập page", () => {
 describe("Quản lý sinh viên page (2026-11-03)", () => {
   // advisorName: the class's cố vấn học tập, null when the Khoa has assigned none.
   const classes: AdvisorClass[] = [
-    { className: "71K29CNTT01", cohort: "K29", students: 45, withTranscript: 38, assessed: 30, surveyDone: 20, roadmap: 12, advisorName: "Nguyễn Văn An" },
-    { className: "71K29CNTT02", cohort: "K29", students: 0, withTranscript: 0, assessed: 0, surveyDone: 0, roadmap: 0, advisorName: null },
+    { className: "71K29CNTT01", cohort: "K29", students: 45, signedIn: 40, withTranscript: 38, assessed: 30, surveyDone: 20, roadmap: 12, advisorName: "Nguyễn Văn An" },
+    { className: "71K29CNTT02", cohort: "K29", students: 0, signedIn: 0, withTranscript: 0, assessed: 0, surveyDone: 0, roadmap: 0, advisorName: null },
   ];
 
   it("shows each class with its students and how many did each step, the chosen class marked", () => {
     const html = renderToStaticMarkup(<Classes classes={classes} />);
     expect(html).toContain("<td class=\"av-num\">38/45</td>");
+    // The whole class (its class list's students who never signed in too), then how many signed in (2026-11-14).
+    expect(html).toContain('<td class="av-num">45</td><td class="av-num">40/45</td><td class="av-num">38/45</td>');
+    expect(html.indexOf("<span>Sinh viên</span>")).toBeLessThan(html.indexOf("<span>Đã đăng nhập</span>"));
     // Khóa first, then Lớp (user 2026-11-08).
     expect(html).toMatch(/<tr class="av-row-current" aria-current="true"><td>K\d+<\/td><td><strong>71K29CNTT02<\/strong>/);
     expect(html.indexOf("<span>Khóa</span>")).toBeLessThan(html.indexOf("<span>Lớp</span>"));
@@ -142,7 +145,7 @@ describe("Quản lý sinh viên page (2026-11-03)", () => {
 
   it("lists the students with their steps in words and Xem chi tiết, which opens their page", () => {
     const html = renderToStaticMarkup(<Students students={[{
-      stt: 7, userId: "s1", studentCode: "2374802010994", name: "Sinh viên Thử nghiệm", className: "71K29CNTT01", cohort: "K29", specialty: "Công nghệ phần mềm",
+      stt: 7, userId: "s1", signedIn: true, email: null, studentCode: "2374802010994", name: "Sinh viên Thử nghiệm", className: "71K29CNTT01", cohort: "K29", specialty: "Công nghệ phần mềm",
       targetCareer: null, hasTranscript: true, assessed: false, surveyDone: true, roadmap: false, lastLoginAt: null,
     }]} />);
     expect(html).toContain('<td class="cm-stt">7</td>');

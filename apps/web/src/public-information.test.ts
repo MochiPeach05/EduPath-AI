@@ -112,6 +112,18 @@ describe("public policy, terms and FAQ", () => {
     expect(policyBlocks.find((text) => text.startsWith("Bản cập nhật ngày 10/11/2026"))).toContain("Ngày 14/11/2026, bản này được sửa nội dung mà không cần bạn đồng ý lại");
   });
 
+  it("says what a class list imported before the first sign-in holds and that nothing is done for the student until then (2026-11-14)", () => {
+    const sections = informationPolicies.privacy.categories.find((category) => category.id === "thong-tin")!.sections.map((section) => section.title);
+    expect(sections.indexOf("Thông tin từ danh sách lớp của Khoa")).toBe(sections.indexOf("Thông tin từ tài khoản trường") + 1);
+    const list = policyBlocks.find((text) => text.startsWith("Trước khi bạn đăng nhập lần đầu, cố vấn học tập của lớp bạn"));
+    for (const part of ["mã số sinh viên, họ và tên, lớp và email trường", "không được lưu", "không ai import bảng điểm, chạy AI, làm thay hay gửi thông báo",
+      "được ghép với dòng này theo mã số sinh viên"]) expect(list).toContain(part);
+    expect(policyBlocks.find((text) => text.startsWith("Bản cập nhật ngày 10/11/2026"))).toContain("bổ sung mục Thông tin từ danh sách lớp của Khoa");
+    expect(policyUpdatedAt).toBe("10/11/2026");
+    const profile = frequentlyAskedQuestions.find((faq) => faq.question === "Vì sao hồ sơ đã có sẵn họ tên, mã sinh viên, khóa và lớp?");
+    expect(profile?.answer.at(-1)).toContain("nhập trước danh sách lớp");
+  });
+
   it("renders the support e-mail in FAQ answers as a link", () => {
     const faq = frequentlyAskedQuestions.find((item) => item.note?.includes(supportEmail));
     expect(faq).toBeDefined();

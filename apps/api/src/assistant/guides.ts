@@ -209,6 +209,7 @@ export function portalGuides(): PortalGuide[] {
       "- Khảo sát họ làm thay được dùng cho các chức năng AI của bạn như khảo sát bạn tự làm, cho đến khi bạn sửa lại hoặc rút đồng ý.",
       "- Họ không đồng ý hay rút đồng ý thay bạn, không xóa dữ liệu, và không xem thông báo trong chuông cũng như các cuộc trò chuyện Trợ lý AI do bạn tạo.",
       "- Mỗi lần mở trang của bạn và mỗi việc làm thay đều được ghi vào nhật ký thao tác, và bạn nhận một thông báo trong chuông khi có người làm thay bạn. Khi Khoa đổi phân công lớp, cố vấn cũ không còn xem được trang của bạn.",
+      "- Trước khi bạn đăng nhập lần đầu, họ có thể nhập trước danh sách lớp (mã sinh viên, họ và tên, lớp, email trường); khi đó bạn chỉ có tên trong danh sách, không ai làm thay hay chạy AI cho bạn. Lần đăng nhập đầu tiên, tài khoản của bạn được ghép với tên đó theo mã sinh viên.",
     ]],
     ["luu-va-xoa-du-lieu", "Lưu giữ và xóa dữ liệu", "#profile", [
       "- Bảng điểm: mỗi tài khoản một bảng điểm, giữ đến khi bạn thay bằng bản mới, bấm Xóa bảng điểm hoặc tài khoản bị xóa. Xóa bảng điểm xóa tệp PDF, dữ liệu môn học đã import và các kết quả đánh giá năng lực; thông tin cá nhân vẫn được giữ. Bảng điểm đã xóa không khôi phục được, hãy tự giữ bản PDF gốc.",

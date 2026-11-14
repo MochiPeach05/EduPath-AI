@@ -23,7 +23,7 @@ export type AdvisorRow = {
   unit: string | null;
   /** The classes the advisor advises, in order ("71K29CNTT01"). */
   classes: string[];
-  /** Students of those classes with an account in EduPath AI. */
+  /** Students of those classes: those with an account in EduPath AI and those of the class lists who never signed in. */
   students: number;
   account: AdvisorAccountStatus;
   /** The account's role: "advisor", or an admin-portal role kept by an account that also advises classes. */
@@ -80,13 +80,20 @@ export type AdvisorImportResult = { added: number; updated: number; unchanged: n
 /**
  * One class of the signed-in advisor, or of the Khoa for admins and Ban chủ nhiệm khoa (scope "all")
  * (GET /api/admin/advisor-portal/classes, AD-AST-01). advisorName: the cố vấn học tập the Khoa assigned, null when none.
+ * students: the whole class, its class list's students who never signed in too (migration 065); signedIn: those with an
+ * account.
  */
-export type AdvisorClass = AdvisorClassDetail & { surveyDone: number; roadmap: number; advisorName: string | null };
+export type AdvisorClass = AdvisorClassDetail & { signedIn: number; surveyDone: number; roadmap: number; advisorName: string | null };
 
-/** One student of the advisor's classes (GET /api/admin/advisor-portal/students, AD-AST-02…04). */
+/**
+ * One student of the advisor's classes (GET /api/admin/advisor-portal/students, AD-AST-02…04): an account (signedIn), or a
+ * student of a class list who never signed in (userId null, no step done; email: the school email of the list, if any).
+ */
 export type AdvisedStudentRow = {
   stt: number;
-  userId: string;
+  userId: string | null;
+  signedIn: boolean;
+  email: string | null;
   studentCode: string | null;
   name: string;
   className: string;
@@ -100,8 +107,8 @@ export type AdvisedStudentRow = {
   roadmap: boolean;
   lastLoginAt: string | null;
 };
-/** status filter of the student list: every student, or those still missing one step. */
-export type AdvisedStudentStatus = "all" | "no_transcript" | "no_assessment" | "no_survey" | "no_roadmap" | "complete";
+/** status filter of the student list: every student, those who never signed in, or those still missing one step. */
+export type AdvisedStudentStatus = "all" | "not_signed_in" | "no_transcript" | "no_assessment" | "no_survey" | "no_roadmap" | "complete";
 
 /** GET /api/admin/advisor-portal/permissions (AD-AST-09); the same list as apps/api/src/advisors/permissions.ts. */
 export type AdvisorPermissionItem = { label: string; detail: string };
@@ -138,6 +145,12 @@ export const ADVISOR_ERRORS: Record<string, string> = {
   missing_columns: "Tệp Excel thiếu cột CVHT (họ và tên), EMAIL hoặc MÃ LỚP. Sửa tên cột cho giống tệp mẫu rồi chọn lại tệp.",
   student_list: "Tệp là danh sách sinh viên (có cột MSSV), không phải danh sách cố vấn học tập.",
   too_many_rows: "Tệp có quá nhiều dòng (tối đa 2.000 dòng mỗi trang tính). Chia danh sách thành nhiều tệp rồi import lần lượt.",
+  // Import danh sách sinh viên (advisors/roster.ts); empty_workbook and too_many_rows of a class list come with the API's own message.
+  missing_roster_columns: "Tệp Excel thiếu cột MSSV hoặc cột Họ và tên (hoặc hai cột Họ lót và Tên). Sửa tên cột cho giống tệp mẫu rồi chọn lại tệp.",
+  // Xóa khỏi danh sách lớp (advisors/roster-repository.ts).
+  listed_student_not_found: "Sinh viên này không còn trong danh sách lớp. Vui lòng tải lại trang.",
+  listed_student_signed_in: "Sinh viên đã đăng nhập EduPath AI nên không xóa khỏi danh sách lớp được.",
+  class_not_advised: "Sinh viên này thuộc lớp bạn không phụ trách.",
   student_not_advised: "Sinh viên này không thuộc lớp bạn phụ trách.",
   insufficient_role: "Bạn không có quyền thực hiện thao tác này.",
   read_only_role: "Cố vấn học tập chỉ có quyền xem ở trang quản trị.",

@@ -46,15 +46,25 @@ export const studentSort = {
   targetCareer: byText('"targetCareer"'),
   hasTranscript: byOrder('"hasTranscript"', ["true", "false"]), assessed: byOrder("assessed", ["true", "false"]),
   surveyDone: byOrder('"surveyDone"', ["true", "false"]), roadmap: byOrder("roadmap", ["true", "false"]), lastLoginAt: ['"lastLoginAt"'],
+  signedIn: byOrder('"signedIn"', ["true", "false"]),
 };
-const studentOrder: OwnOrder = [['"className"', "ASC"], ["name", "ASC"], ['"userId"', "ASC"]];
+// A student of a class list without an account has no userId: the MSSV keeps their place in the order.
+const studentOrder: OwnOrder = [['"className"', "ASC"], ["name", "ASC"], ['"studentCode"', "ASC"], ['"userId"', "ASC"]];
 
 /**
- * The active students with their class as a canonical code (class-code.ts), each computed once: a WITH item of the
- * statements that count the students of many classes (advisorColumns, classStats). id is the student's account.
+ * The students of a class list (danh sách lớp, ad_class_students, migration 065) who never signed in: no account has their
+ * MSSV (ss = the list's row). Once a student signs in, their account is the class's member and this row is not.
+ */
+export const LISTED_ONLY = "NOT EXISTS (SELECT 1 FROM student_profiles sp WHERE sp.student_code = ss.student_code)";
+/**
+ * The members of every class, each computed once: the active students with their class as a canonical code (class-code.ts;
+ * the class of their class list's row first) and the students of the class lists who never signed in (id NULL). A WITH item
+ * of the statements that count the students of many classes (advisorColumns, classStats); id is the student's account.
  */
 const CLASS_MEMBERS = `class_members AS MATERIALIZED (SELECT u.id, p.cohort_code, ${CLASS_OF} AS class_name
-    FROM student_profiles p JOIN users u ON u.id = p.user_id WHERE ${ACTIVE_STUDENT})`;
+    FROM student_profiles p JOIN users u ON u.id = p.user_id WHERE ${ACTIVE_STUDENT}
+    UNION ALL
+    SELECT NULL::uuid, substring(ss.class_name FROM 'K[0-9]{2,3}'), ss.class_name FROM ad_class_students ss WHERE ${LISTED_ONLY})`;
 
 /** One advisor as the list shows them (a = ad_advisors, u = their account); the statement starts WITH CLASS_MEMBERS. */
 const advisorColumns = `a.user_id AS "userId", a.full_name AS name, COALESCE(u.email, u.username) AS email, a.staff_code AS "staffCode", a.unit,
@@ -64,14 +74,15 @@ const advisorColumns = `a.user_id AS "userId", a.full_name AS name, COALESCE(u.e
   COALESCE(u.role_override, u.role) AS role, u.last_login_at AS "lastLoginAt"`;
 
 /**
- * Per class: its students, how many of them did each step and the advisor the Khoa assigned. classes: a SELECT of
- * class_name (OWN_CLASSES, EVERY_CLASS). u is a student of the class (class_members: u.id is the account, as
- * SURVEY_COMPLETE_SQL reads it).
+ * Per class: its students (those of its class list who never signed in too), how many of them signed in and did each step
+ * and the advisor the Khoa assigned. classes: a SELECT of class_name (OWN_CLASSES, EVERY_CLASS). u is a student of the class
+ * (class_members: u.id is the account, as SURVEY_COMPLETE_SQL reads it, NULL for a student who never signed in).
  */
 const classStats = (classes: string) => `WITH ${CLASS_MEMBERS}, k AS (${classes})
   SELECT k.class_name AS "className",
     COALESCE(max(u.cohort_code), substring(k.class_name FROM 'K[0-9]{2,3}')) AS cohort,
-    count(u.id)::int AS students,
+    count(u.class_name)::int AS students,
+    count(u.id)::int AS "signedIn",
     count(u.id) FILTER (WHERE EXISTS (SELECT 1 FROM student_transcripts t WHERE t.user_id = u.id))::int AS "withTranscript",
     count(u.id) FILTER (WHERE EXISTS (SELECT 1 FROM stu_comp_assessments s WHERE s.user_id = u.id))::int AS assessed,
     count(u.id) FILTER (WHERE ${SURVEY_COMPLETE_SQL})::int AS "surveyDone",
@@ -83,8 +94,8 @@ const classStats = (classes: string) => `WITH ${CLASS_MEMBERS}, k AS (${classes}
 /** The classes an account advises ($1). */
 const OWN_CLASSES = "SELECT class_name FROM ad_advisor_classes WHERE advisor_user_id = $1";
 /**
- * Every class: those of the active students' profiles and those the Khoa assigned before any student signed in, all as
- * canonical codes (class-code.ts), so CNTT08 of K27 and of K29 are two classes, 71K27CNTT08 and 71K29CNTT08.
+ * Every class: those of the active students' profiles and of the class lists, and those the Khoa assigned before any student
+ * signed in, all as canonical codes (class-code.ts), so CNTT08 of K27 and of K29 are two classes, 71K27CNTT08 and 71K29CNTT08.
  */
 const EVERY_CLASS = `SELECT DISTINCT class_name FROM class_members WHERE class_name IS NOT NULL
   UNION SELECT class_name FROM ad_advisor_classes`;
@@ -334,12 +345,14 @@ export class PostgresAdvisorRepository {
   /**
    * The students of the account's classes (any student for admins), filtered by class, text and step. "complete" (Đã đủ
    * các bước) is a transcript, an assessment and an AI roadmap: the profile survey is optional since 2026-11-14 (plan "Một
-   * bước để bắt đầu"), so it is no step any more; "no_survey" still lists who has not done it.
+   * bước để bắt đầu"), so it is no step any more; "no_survey" still lists who has not done it. The students of the class
+   * lists who never signed in (migration 065) are listed too, without an account and with no step done ("not_signed_in").
    */
   async students(actor: AuthenticatedUser, query: AdvisedStudentQuery): Promise<{ items: AdvisedStudentRow[]; total: number }> {
     const order = orderBy(studentSort, studentOrder, query.sort, query.dir);
     const result = await this.pool.query<{ items: (Omit<AdvisedStudentRow, "specialty"> & { specialty: SpecialtyCode | null })[]; total: number }>(`WITH students AS (
-        SELECT u.id AS "userId", p.student_code AS "studentCode", COALESCE(NULLIF(btrim(p.full_name), ''), u.display_name) AS name,
+        SELECT u.id AS "userId", TRUE AS "signedIn", NULL::text AS email,
+          p.student_code AS "studentCode", COALESCE(NULLIF(btrim(p.full_name), ''), u.display_name) AS name,
           COALESCE(${CLASS_OF}, '') AS "className", COALESCE(p.cohort_code, substring(${CLASS_OF} FROM 'K[0-9]{2,3}')) AS cohort,
           p.specialty, cp.name_vi AS "targetCareer",
           EXISTS (SELECT 1 FROM student_transcripts t WHERE t.user_id = u.id) AS "hasTranscript",
@@ -350,11 +363,16 @@ export class PostgresAdvisorRepository {
         FROM users u JOIN student_profiles p ON p.user_id = u.id
         LEFT JOIN career_positions cp ON cp.id = p.career_position_id AND cp.deleted_at IS NULL
         WHERE ${ACTIVE_STUDENT} AND ($1::uuid IS NULL OR ${CLASS_OF} IN (SELECT class_name FROM ad_advisor_classes WHERE advisor_user_id = $1))
+        UNION ALL
+        SELECT NULL::uuid, FALSE, ss.email, ss.student_code, ss.full_name, ss.class_name, substring(ss.class_name FROM 'K[0-9]{2,3}'),
+          NULL, NULL, FALSE, FALSE, FALSE, FALSE, NULL
+        FROM ad_class_students ss
+        WHERE ${LISTED_ONLY} AND ($1::uuid IS NULL OR ss.class_name IN (SELECT class_name FROM ad_advisor_classes WHERE advisor_user_id = $1))
       ), filtered AS (
         SELECT * FROM students
         WHERE ($2::text IS NULL OR "className" = $2)
           AND ($3 = '' OR strpos(lower(concat_ws(' ', "studentCode", name)), lower($3)) > 0)
-          AND (CASE $4::text WHEN 'no_transcript' THEN NOT "hasTranscript" WHEN 'no_assessment' THEN NOT assessed
+          AND (CASE $4::text WHEN 'not_signed_in' THEN NOT "signedIn" WHEN 'no_transcript' THEN NOT "hasTranscript" WHEN 'no_assessment' THEN NOT assessed
             WHEN 'no_survey' THEN NOT "surveyDone" WHEN 'no_roadmap' THEN NOT roadmap
             WHEN 'complete' THEN "hasTranscript" AND assessed AND roadmap ELSE TRUE END)
       ), numbered AS (SELECT filtered.*, row_number() OVER (ORDER BY ${orderBy(studentSort, studentOrder)})::int AS stt FROM filtered),

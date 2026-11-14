@@ -16,6 +16,12 @@
 //    whose course codes start with 71 too (71IT…);
 //  - anything else, and a class without a cohort, stays as it is.
 // Nothing stored is rewritten: the profile keeps its class and the student pages show it as before.
+//
+// Danh sách lớp (migration 065, reviewer note 2026-11-14): a class list a cố vấn học tập or the Khoa imported names the class
+// a student studies in now, so in SQL the class of the student's row there (ad_class_students, by the MSSV) comes before
+// the profile's. A student moved to another class by a list is that class's student everywhere in the admin portal
+// (Quản lý sinh viên, Sinh viên, Thống kê, Nhật ký, the advisor's right to open their page); their own pages keep the class
+// of their profile.
 
 /** The prefix of the Khoa's classes when nothing says otherwise (71K29CNTT08; the course codes are 71IT…). */
 export const CLASS_PREFIX = "71";
@@ -65,8 +71,9 @@ export function cohortCode(text: string | null | undefined): string | null {
 }
 
 /**
- * classCode in SQL for a student: p names student_profiles (class_name, cohort_code), u names users (display_name).
- * NULL when the profile has no class (classCode: ""); a NULL cohort or display name fails its test, as "" does.
+ * classCode in SQL for a student: p names student_profiles (class_name, cohort_code, student_code), u names users
+ * (display_name). The class of the student's row in a class list (ad_class_students, migration 065) comes first. NULL when
+ * neither has a class (classCode: ""); a NULL cohort or display name fails its test, as "" does.
  */
 export function classCodeSql(p = "p", u = "u"): string {
   const name = `upper(regexp_replace(${p}.class_name, '\\s', '', 'g'))`;
@@ -74,7 +81,8 @@ export function classCodeSql(p = "p", u = "u"): string {
   const display = `upper(${u}.display_name)`;
   const prefix = (rest: string) => `(CASE WHEN substring(${display} FROM '${NAME_CLASS}') = (${rest})
       THEN COALESCE(substring(${display} FROM '${NAME_PREFIX}'), '${CLASS_PREFIX}') ELSE '${CLASS_PREFIX}' END)`;
-  return `(CASE WHEN ${name} ~ '${FULL}' THEN ${name}
+  return `COALESCE((SELECT class_list.class_name FROM ad_class_students class_list WHERE class_list.student_code = ${p}.student_code),
+    CASE WHEN ${name} ~ '${FULL}' THEN ${name}
     WHEN ${name} ~ '${NO_PREFIX}' THEN ${prefix(name)} || ${name}
     WHEN ${name} ~ '${SHORT}' AND ${cohort} ~ '${COHORT}' THEN ${prefix(`${cohort} || ${name}`)} || ${cohort} || ${name}
     ELSE NULLIF(${name}, '') END)`;

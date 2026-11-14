@@ -161,6 +161,7 @@ export function importResultText(result: { added: number; updated: number; uncha
 /** The status filter of the student list, in the order the select shows them. */
 export const STUDENT_STATUS_TEXT: Record<AdvisedStudentStatus, string> = {
   all: "Tất cả sinh viên",
+  not_signed_in: "Chưa đăng nhập EduPath AI",
   no_transcript: "Chưa có bảng điểm",
   no_assessment: "Chưa đánh giá năng lực",
   no_survey: "Chưa làm Khảo sát nhanh",

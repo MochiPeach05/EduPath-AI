@@ -19,7 +19,7 @@ export type AdvisorPermissions = {
 
 export const ADVISOR_PERMISSIONS: AdvisorPermissions = {
   view: [
-    { label: "Quản lý sinh viên", detail: "Cố vấn học tập: các lớp được Khoa phân công và sinh viên của từng lớp; quản trị viên, Ban chủ nhiệm khoa: mọi lớp và mọi sinh viên. Tìm theo MSSV hoặc họ tên, lọc theo lớp và tình trạng hồ sơ." },
+    { label: "Quản lý sinh viên", detail: "Cố vấn học tập: các lớp được Khoa phân công và sinh viên của từng lớp; quản trị viên, Ban chủ nhiệm khoa: mọi lớp và mọi sinh viên. Tìm theo MSSV hoặc họ tên, lọc theo lớp và tình trạng hồ sơ. Import trước danh sách sinh viên đầy đủ của lớp (MSSV, họ và tên, lớp, email trường), kể cả sinh viên chưa đăng nhập EduPath AI, và xóa khỏi danh sách lớp sinh viên chưa đăng nhập (từ 14/11/2026)." },
     { label: "Trang của sinh viên", detail: "Xem chi tiết mở toàn bộ trang sinh viên (hồ sơ, bảng điểm, Khảo sát định hướng, Đánh giá năng lực, Khoảng trống kỹ năng, Định hướng nghề nghiệp, Lộ trình học tập, Xét tốt nghiệp, chương trình và kế hoạch đào tạo) của sinh viên lớp mình phụ trách, hoặc của mọi sinh viên với quản trị viên và Ban chủ nhiệm khoa." },
     { label: "Danh mục của Khoa", detail: "Chương trình đào tạo, kế hoạch đào tạo, tiêu chuẩn xét tốt nghiệp, năng lực, kỹ năng, lĩnh vực và vị trí nghề nghiệp, ở chế độ chỉ xem." },
     { label: "Cố vấn học tập", detail: "Danh sách cố vấn học tập của Khoa và các lớp từng người phụ trách." },
@@ -39,7 +39,8 @@ export const ADVISOR_PERMISSIONS: AdvisorPermissions = {
     { label: "Đồng ý chính sách", detail: "Không đồng ý hay rút đồng ý thay sinh viên." },
     { label: "Xóa dữ liệu", detail: "Không xóa bảng điểm, câu trả lời khảo sát, kết quả đánh giá, lộ trình hay cuộc trò chuyện của sinh viên." },
     { label: "Thông báo của sinh viên", detail: "Không xem, đánh dấu đã đọc hay xóa thông báo trong chuông của sinh viên." },
-    { label: "Trang quản trị", detail: "Vai trò Cố vấn học tập chỉ xem: không thêm, sửa, xóa, import dữ liệu hay tải tệp Excel nguồn, không chạy AI đề xuất liên kết kỹ năng; không xem Tài khoản và Thông báo." },
+    { label: "Trang quản trị", detail: "Vai trò Cố vấn học tập chỉ xem, trừ import danh sách sinh viên và xóa khỏi danh sách sinh viên chưa đăng nhập của lớp mình phụ trách: không thêm, sửa, xóa, import dữ liệu khác hay tải tệp Excel nguồn, không chạy AI đề xuất liên kết kỹ năng; không xem Tài khoản và Thông báo." },
+    { label: "Sinh viên chưa đăng nhập", detail: "Sinh viên chỉ có tên trong danh sách lớp chưa có trang EduPath AI: không ai import bảng điểm, chạy AI, làm thay hay gửi thông báo cho họ cho đến khi họ tự đăng nhập lần đầu." },
   ],
   notes: [
     "Mỗi việc làm thay được ghi vào Nhật ký thao tác (người làm, việc đã làm, sinh viên); Kế hoạch học kỳ tự lưu sau mỗi thay đổi nên được ghi tối đa một dòng mỗi nửa giờ.",
