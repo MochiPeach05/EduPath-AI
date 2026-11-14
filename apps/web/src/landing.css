@@ -68,9 +68,9 @@
   gap: 26px;
   padding: 7px 20px;
   color: #fff;
-  /* Navy #010433 like the footer (user 2026-11-09: "cái trên header cũng đổi thành màu xanh hôm qua của footer"; red
-     before 2026-11-08, #2D334D on 2026-11-08). */
-  background: #010433;
+  /* Red again (user 2026-11-14: "Cái này ở trang chủ sửa về màu đỏ như cũ đi"); it was #2D334D on 2026-11-08 and navy
+     #010433 like the footer from 2026-11-09. The footer stays navy. */
+  background: #b51639;
   font-size: 11px;
 }
 
