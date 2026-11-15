@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { buildCourseAiInput, buildCourseCheckInput } from "./prompt.js";
-import { courseAiContextFromInput, courseCheckContextFromInput, normalizePercents, similarSkill, validateCourseAiOutput, validateCourseCheckOutput } from "./validate.js";
+import { buildCourseAiInput } from "./prompt.js";
+import { courseAiContextFromInput, normalizePercents, similarSkill, validateCourseAiOutput } from "./validate.js";
 import { courseSource, GROUP_CORE, GROUP_SOFT, SKILL_DB, SKILL_DOCKER, SKILL_TEAM, SKILL_WEB } from "./test-fixture.js";
 
 const contextFor = (mode: "links" | "weights" | "full", source = courseSource()) => {
@@ -139,66 +139,5 @@ describe("near-duplicate new skills (v5, 2026-10-22: hợp nhất các kỹ năn
     expect(match("Lập trình Go")).toBeNull();
     expect(match("Phát triển ứng dụng web với React và Node.js")).toBeNull();
     expect(match("")).toBeNull();
-  });
-});
-
-describe("the second pass (comp-check-v1, 2026-10-27)", () => {
-  const item = (skillId: string | null, skillName: string, percent: number, reason: string) =>
-    ({ skillId, skillName, groupId: GROUP_CORE, hasProfile: true, isNewSkill: false, percent, reason });
-  const check = (mode: "links" | "full", entries: { key: string; item: ReturnType<typeof item>; linked: boolean }[]) => {
-    const input = buildCourseCheckInput({ mode, promptVersion: "comp-course-v6", course: ["Mã: X"], groups: [],
-      entries: entries.map((entry) => ({ ...entry, description: "" })) });
-    const context = courseCheckContextFromInput(JSON.parse(JSON.stringify(input)));
-    if (!context) throw new Error("no context");
-    return context;
-  };
-  const proposal = [
-    { key: "S010", item: item(SKILL_DB, "Quản trị cơ sở dữ liệu", 35, "Quản trị hệ quản trị."), linked: false },
-    { key: "S020", item: item(SKILL_WEB, "Giải bài toán tối ưu hóa", 25, "Tối ưu."), linked: false },
-    { key: "S030", item: item(SKILL_TEAM, "Tư duy phản biện và giải quyết vấn đề", 20, "Phân tích."), linked: false },
-    { key: "S040", item: item(SKILL_DOCKER, "Mã hóa và bảo mật dữ liệu", 20, "Bảo mật."), linked: false }
-  ];
-
-  it("drops what the check drops, records why, keeps the rest at the check's percents scaled to 100", () => {
-    const checked = validateCourseCheckOutput({ links: [
-      { skillKey: "S010", keep: true, percent: 60, reason: "Nội dung chính." },
-      { skillKey: "S020", keep: false, percent: 0, reason: "S020 là tối ưu truy vấn, không phải tối ưu hóa." },
-      { skillKey: "S030", keep: false, percent: 0, reason: "Kỹ năng chung." },
-      { skillKey: "S040", keep: true, percent: 30, reason: "Bảo mật cơ sở dữ liệu." },
-      { skillKey: "S999", keep: true, percent: 50, reason: "Khóa lạ bị bỏ qua." }
-    ] }, check("full", proposal));
-    expect(checked.ok).toBe(true);
-    if (!checked.ok) return;
-    expect(checked.result.items.map((entry) => [entry.skillName, entry.percent, entry.reason])).toEqual([
-      ["Quản trị cơ sở dữ liệu", 67, "Quản trị hệ quản trị."], ["Mã hóa và bảo mật dữ liệu", 33, "Bảo mật."]]);
-    expect(checked.result.check).toEqual({ proposed: 4, removed: [
-      { skillName: "Giải bài toán tối ưu hóa", reason: "Giải bài toán tối ưu hóa là tối ưu truy vấn, không phải tối ưu hóa." },
-      { skillName: "Tư duy phản biện và giải quyết vấn đề", reason: "Kỹ năng chung." }] });
-    expect([checked.result.mode, checked.result.dropped, checked.result.returned, checked.result.modelTotal]).toEqual(["full", 2, 5, 90]);
-  });
-
-  it("keeps a skill the answer left out at the first pass's percent; dropping all is a valid empty proposal", () => {
-    const partial = validateCourseCheckOutput({ links: [{ skillKey: "S010", keep: false, percent: 0, reason: "Không." }] }, check("full", proposal));
-    expect(partial.ok && partial.result.items.map((entry) => [entry.skillName, entry.percent])).toEqual([
-      ["Giải bài toán tối ưu hóa", 38], ["Tư duy phản biện và giải quyết vấn đề", 31], ["Mã hóa và bảo mật dữ liệu", 31]]);
-    const none = validateCourseCheckOutput({ links: proposal.map((entry) => ({ skillKey: entry.key, keep: false, percent: 0, reason: "Không phải nội dung chính." })) }, check("full", proposal));
-    expect(none.ok && [none.result.items, none.result.modelTotal, none.result.check?.removed.length]).toEqual([[], null, 4]);
-  });
-
-  it("links: a dropped linked skill stays at 0%, so the review still lists every linked skill", () => {
-    const entries = [{ ...proposal[0]!, linked: true }, proposal[1]!];
-    const checked = validateCourseCheckOutput({ links: [
-      { skillKey: "S010", keep: false, percent: 0, reason: "Trái với học phần." }, { skillKey: "S020", keep: true, percent: 80, reason: "Đúng." }] }, check("links", entries));
-    expect(checked.ok && checked.result.items.map((entry) => [entry.skillName, entry.percent])).toEqual([["Quản trị cơ sở dữ liệu", 0], ["Giải bài toán tối ưu hóa", 100]]);
-    const onlyLinked = validateCourseCheckOutput({ links: [{ skillKey: "S010", keep: false, percent: 0, reason: "Không." }] }, check("links", [{ ...proposal[0]!, linked: true }]));
-    expect(onlyLinked.ok && onlyLinked.result.items.map((entry) => entry.percent)).toEqual([0]);
-  });
-
-  it("fails a malformed answer and reads only a check input back", () => {
-    expect(validateCourseCheckOutput({ links: [{ skillKey: "S010", percent: 10, reason: "" }] }, check("full", proposal)).ok).toBe(false);
-    expect(validateCourseCheckOutput({ checks: [] }, check("full", proposal)).ok).toBe(false);
-    expect(courseCheckContextFromInput(JSON.parse(JSON.stringify(buildCourseAiInput(courseSource(), "full"))))).toBeNull();
-    expect(courseCheckContextFromInput({ stage: "check", mode: "full", entries: [{ key: "S1", linked: false, item: { skillName: "x" } }] })).toBeNull();
-    expect(courseCheckContextFromInput({ stage: "check", mode: "weights", entries: [] })).toBeNull();
   });
 });

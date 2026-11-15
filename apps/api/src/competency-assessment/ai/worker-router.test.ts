@@ -680,46 +680,27 @@ describe("competency course suggestion jobs", () => {
   });
 
   const courseRequeue = (run: ReturnType<typeof setup>["run"]) => run.mock.calls.find(([s]) => s.startsWith("UPDATE ad_comp_ai_suggestions SET status='queued'"));
-  const described: Handler = (s) => (s.includes("COALESCE(NULLIF(cs.scope,''),s.description) AS description")
-    ? { rows: [{ id: SKILL_WEB, description: "Xây dựng giao diện và máy chủ web" }] } : undefined);
-  const both = (...handlers: Handler[]): Handler => (s, p) => handlers.reduce<ReturnType<Handler>>((found, handler) => found ?? handler(s, p), undefined);
   const answer = { links: [{ skillKey: "S001", groupKey: "G1", percent: 100, reason: "Học phần xây dựng ứng dụng web." }], newSkills: [] };
 
-  it("queues the check of a course answer on the same job, then stores the checked proposal (comp-check-v1, 2026-10-27)", async () => {
-    // First pass: nothing is stored yet; the same row is queued again with the check.
-    const first = setup(both(withCourse(courseRow()), described));
-    await request(first.app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success(answer)).expect(200, { ok: true });
-    expect(courseUpdate(first.run)).toBeUndefined();
-    const [id, checkJson, metricsJson, version] = courseRequeue(first.run)![1] as string[];
-    const check = JSON.parse(checkJson!);
-    expect(id).toBe(JOB);
-    expect(check).toMatchObject({ stage: "check", mode: "links", promptVersion: `${COURSE_AI_PROMPT_VERSIONS.links}+comp-check-v1`, think: true });
-    expect(check.user).toContain("S001 | Lập trình web | Chuyên môn | Xây dựng giao diện và máy chủ web | 100% | Học phần xây dựng ứng dụng web.");
-    expect(JSON.parse(metricsJson!)).toEqual({ propose: { eval_count: 900, total_ms: 120000 } });
-    expect(version).toBe(`${COURSE_AI_PROMPT_VERSIONS.links}+comp-check-v1`);
-    expect(first.sql().at(-1)).toBe("COMMIT");
-
-    // The worker repeats the first completion: still ok, nothing written again.
-    const repeated = setup(withCourse(courseRow({ status: "queued", valid: null, ai_input: check })));
-    await request(repeated.app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success(answer)).expect(200, { ok: true });
-    expect([courseUpdate(repeated.run), courseRequeue(repeated.run)]).toEqual([undefined, undefined]);
-
-    // The check comes back: the checked proposal is stored with both metrics and the two prompt versions.
-    const second = setup(withCourse(courseRow({ ai_input: check, metrics: { propose: { eval_count: 900 } } })));
-    await request(second.app).post(`/w/${JOB}/complete`).set("Authorization", AUTH)
-      .send(success({ links: [{ skillKey: "S001", keep: true, percent: 100, reason: "Đúng nội dung chính." }] })).expect(200, { ok: true });
-    const update = courseUpdate(second.run)!;
+  it("stores a course answer at once: no second pass since 2026-11-15 (comp-check-v1 removed)", async () => {
+    const done = setup(withCourse(courseRow()));
+    await request(done.app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success(answer)).expect(200, { ok: true });
+    expect(courseRequeue(done.run)).toBeUndefined();
+    const update = courseUpdate(done.run)!;
     const params = update[1] as unknown[];
     expect(update[0]).toContain("ai_input=NULL");
     expect(params.slice(0, 3)).toEqual([JOB, "completed", null]);
-    expect(JSON.parse(params[3] as string)).toMatchObject({ mode: "links", items: [{ skillName: "Lập trình web", hasProfile: true, percent: 100 }], check: { proposed: 1, removed: [] } });
-    expect(JSON.parse(params[4] as string)).toEqual({ propose: { eval_count: 900 }, check: { eval_count: 900, total_ms: 120000 } });
-    expect(params[8]).toBe(`${COURSE_AI_PROMPT_VERSIONS.links}+comp-check-v1`);
+    const stored = JSON.parse(params[3] as string);
+    expect(stored).toMatchObject({ mode: "links", items: [{ skillName: "Lập trình web", hasProfile: true, percent: 100 }] });
+    expect(stored).not.toHaveProperty("check");
+    expect(JSON.parse(params[4] as string)).toEqual({ eval_count: 900, total_ms: 120000 });
+    expect(params[8]).toBe(COURSE_AI_PROMPT_VERSIONS.links);
+    expect(done.sql().at(-1)).toBe("COMMIT");
 
-    // A malformed check fails the job, like a malformed first pass.
-    const badCheck = setup(withCourse(courseRow({ ai_input: check })));
-    await request(badCheck.app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success({ checks: [] })).expect(200);
-    expect((courseUpdate(badCheck.run)![1] as unknown[]).slice(0, 3)).toEqual([JOB, "failed", "invalid_ai_output"]);
+    // A row still waiting for its check from before the removal has no key maps: it fails, and the admin runs it again.
+    const legacy = setup(withCourse(courseRow({ ai_input: { stage: "check", mode: "links", entries: [], promptVersion: "comp-link-v7+comp-check-v1" } })));
+    await request(legacy.app).post(`/w/${JOB}/complete`).set("Authorization", AUTH).send(success(answer)).expect(200, { ok: true });
+    expect((courseUpdate(legacy.run)![1] as unknown[]).slice(0, 3)).toEqual([JOB, "failed", "invalid_ai_output"]);
   });
 
   it("stores an empty course answer at once, fails an invalid one, and refuses a cancelled job", async () => {

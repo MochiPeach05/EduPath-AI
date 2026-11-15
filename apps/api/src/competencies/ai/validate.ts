@@ -33,11 +33,6 @@ export type StoredCourseAiResult = {
   dropped: number;
   /** The model's own total before scaling to 100 (null when it gave no percent). */
   modelTotal: number | null;
-  /**
-   * The second pass (comp-check-v1, 2026-10-27): how many skills the first pass proposed and the ones the
-   * check dropped, with its reason. Absent on proposals made before it and on weights proposals.
-   */
-  check?: { proposed: number; removed: { skillName: string; reason: string }[] };
 };
 type CourseAiContext = { mode: CourseAiMode; skills: SkillKey[]; groups: GroupKey[]; linked: { id: string; name: string }[] };
 type CourseAiValidation =
@@ -55,73 +50,8 @@ const linksOutput = z.object({
 const weightsOutput = z.object({ weights: z.array(z.object({ skillKey: key, percent, reason: raw }).strict()).max(300) }).strict();
 const fullOutput = z.object({ links: z.array(z.object({ skillKey: key, groupKey: key, percent, reason: raw }).strict()).max(L.links) }).strict();
 
-const checkOutput = z.object({ links: z.array(z.object({ skillKey: key, keep: z.boolean(), percent: percent.optional(), reason: raw }).strict()).max(300) }).strict();
-
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
-
-/* ------------------------------------------------- second pass (comp-check-v1) */
-
-type CourseCheckContext = { mode: "links" | "full"; entries: { key: string; item: StoredCourseAiItem; linked: boolean }[] };
-
-/** The proposal a check job verifies, read back from its stored ai_input; null for any other input. */
-export function courseCheckContextFromInput(input: unknown): CourseCheckContext | null {
-  if (!isRecord(input) || input.stage !== "check" || (input.mode !== "links" && input.mode !== "full") || !Array.isArray(input.entries)) return null;
-  const entries: CourseCheckContext["entries"] = [];
-  for (const entry of input.entries) {
-    if (!isRecord(entry) || typeof entry.key !== "string" || typeof entry.linked !== "boolean" || !isRecord(entry.item)) return null;
-    const item = entry.item;
-    if (!(item.skillId === null || typeof item.skillId === "string") || typeof item.skillName !== "string"
-      || !(item.groupId === null || typeof item.groupId === "string") || typeof item.hasProfile !== "boolean" || typeof item.isNewSkill !== "boolean"
-      || !(item.percent === null || typeof item.percent === "number") || typeof item.reason !== "string") return null;
-    entries.push({ key: entry.key, linked: entry.linked, item: { skillId: item.skillId, skillName: item.skillName, groupId: item.groupId,
-      hasProfile: item.hasProfile, isNewSkill: item.isNewSkill, percent: item.percent, reason: item.reason } });
-  }
-  return { mode: input.mode, entries };
-}
-
-/**
- * The checked proposal: a skill the model drops leaves it (a linked one stays at 0%, links mode); one it keeps,
- * or leaves out of its answer, stays with the first pass's reason and the percent the check gave (the first
- * pass's otherwise). Percents are scaled to exactly 100 again. Dropping everything is a valid empty proposal.
- */
-export function validateCourseCheckOutput(output: unknown, context: CourseCheckContext): CourseAiValidation {
-  const parsed = checkOutput.safeParse(output);
-  if (!parsed.success) return { ok: false, reason: "schema", path: parsed.error.issues[0]?.path.join(".") ?? "" };
-  const names = new Map(context.entries.map((entry) => [entry.key, entry.item.skillName] as const));
-  const reasonOf = (value: string) => {
-    const reason = sanitizeText(cleanKeyText(value, names), L.reason);
-    return hasForbiddenContent(reason) ? "" : reason;
-  };
-  const answers = new Map<string, { keep: boolean; percent: number | undefined; reason: string }>();
-  for (const answer of parsed.data.links) {
-    if (!names.has(answer.skillKey) || answers.has(answer.skillKey)) continue;
-    answers.set(answer.skillKey, { keep: answer.keep, percent: answer.percent, reason: answer.reason });
-  }
-  const kept: { item: StoredCourseAiItem; percent: number }[] = [];
-  const removed: { skillName: string; reason: string }[] = [];
-  for (const entry of context.entries) {
-    const answer = answers.get(entry.key);
-    const given = answer && typeof answer.percent === "number" && Number.isFinite(answer.percent) ? answer.percent : null;
-    if (answer && !answer.keep) {
-      removed.push({ skillName: entry.item.skillName, reason: reasonOf(answer.reason) });
-      if (entry.linked) kept.push({ item: entry.item, percent: 0 });
-      continue;
-    }
-    kept.push({ item: entry.item, percent: given ?? entry.item.percent ?? 0 });
-  }
-  const modelTotal = kept.reduce((sum, entry) => sum + entry.percent, 0);
-  // All zeros (only linked skills left, at 0%) stay zeros instead of being split evenly.
-  const percents = modelTotal > 0 ? normalizePercents(kept.map((entry) => entry.percent)) : kept.map(() => 0);
-  return { ok: true, result: {
-    mode: context.mode,
-    items: kept.map((entry, index) => ({ ...entry.item, percent: percents[index]! })),
-    returned: parsed.data.links.length,
-    dropped: context.entries.length - kept.length,
-    modelTotal: kept.length ? modelTotal : null,
-    check: { proposed: context.entries.length, removed }
-  } };
-}
 
 /** Key maps read back from the stored ai_input; null when it is malformed. */
 export function courseAiContextFromInput(input: unknown): CourseAiContext | null {
