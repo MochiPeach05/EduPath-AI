@@ -51,7 +51,6 @@ export const reviewLabels = (codes: readonly string[] | undefined): string[] =>
   [...new Set((codes ?? []).map((code) => REVIEW_LABELS[code] ?? "ô khác dạng thường gặp"))];
 /** Transcript warnings that report rows (marked or skipped); the native parser's fixed notes are not among them. */
 export const isRowWarning = (warning: string) => /^Có \d+ dòng/.test(warning);
-export const INFERRED_RESULT_NOTE = "suy ra từ điểm chữ";
 
 const key = (code: string) => code.trim().toUpperCase();
 const failedText = /^(không|khong|chưa|chua|ko)\s*đạt|^(rớt|trượt)|^[✗✘×x]$/;

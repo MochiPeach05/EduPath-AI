@@ -314,15 +314,6 @@
     font-weight: 600
 }
 
-.sr-result-note {
-    display: block;
-    margin-top: 2px;
-    font-size: 12px;
-    font-weight: 400;
-    line-height: 1.4;
-    color: #647081
-}
-
 .sr-summaries {
     display: grid;
     grid-template-columns: 1fr 1fr;

@@ -11,7 +11,6 @@ import { GRADUATION_API } from "./student-graduation-data";
 import { Icon } from "./student-icons";
 import { useLiveData } from "./use-live-data";
 import type { Transcript } from "./StudentTranscript";
-import { INFERRED_RESULT_NOTE } from "./transcript-results";
 import {
   graduationCourseAliases, physicalEducationFills, physicalEducationProgress, planTermCredits, studentPlanOutcome, transcriptCourseStates,
 } from "./student-plan-results";
@@ -177,7 +176,6 @@ function PlanContents({ id, fromCurriculum, facts, revision, retry }: {
       (!term || item.termCode === term) &&
       searchTerm(`${item.code} ${item.name}`).includes(searchTerm(query)),
   );
-  const showsInferred = rows.some((item) => outcome(item)?.inferred);
   return (
     <section className="sw-panel sp-content">
       <div className="sp-heading">
@@ -237,12 +235,6 @@ function PlanContents({ id, fromCurriculum, facts, revision, retry }: {
       </p>
       {transcript.loading && <p role="status">Đang đối chiếu bảng điểm…</p>}
       {transcript.error && <p role="alert">{transcript.error} <button className="sw-outline" onClick={() => setTranscriptRevision((n) => n + 1)}>Thử lại</button></p>}
-      {showsInferred && (
-        <p className="sc-muted">
-          Kết quả ghi “{INFERRED_RESULT_NOTE}” là do ô Kết quả trong PDF để
-          trống: điểm A+ đến D được tính là Đạt, F là Chưa đạt.
-        </p>
-      )}
       {data.terms
         .filter((t) => !term || term === t.code)
         .map((t) => {

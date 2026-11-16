@@ -2,7 +2,7 @@ import { Fragment, useId, useReducer, useState } from "react";
 import { decimalText, meaningClass, termName, type Meaning } from "./display-format";
 import { Icon } from "./student-icons";
 import type { Transcript } from "./StudentTranscript";
-import { INFERRED_RESULT_NOTE, attemptOutcome, isFailLetter, isNoScoreMark, isRowWarning, reviewLabels, transcriptCreditCheck, type CreditCheck } from "./transcript-results";
+import { attemptOutcome, isFailLetter, isNoScoreMark, isRowWarning, reviewLabels, transcriptCreditCheck, type CreditCheck } from "./transcript-results";
 import { academicSections, foldText, printedSemesterGpa } from "./student-overview-data";
 import { convertibleText, countedText, otherSpecialtyNotes, type ConvertibleCourses, type CountedOtherSpecialty } from "./convertible-courses";
 import "./student-records.css";
@@ -121,13 +121,13 @@ function resultClass(result: string | null): string | undefined {
   return undefined;
 }
 /** The printed result as read, MT as an exemption, or, for a blank cell, the
-    result decided from the official letter grade with a short text note. */
+    result decided from the official letter grade (no note under it since 2026-11-16). */
 function ResultCell({ course }: { course: Course }) {
   const outcome = attemptOutcome(course);
   if (outcome.exempt) return <td className="sr-result-pass">Đạt (miễn thi)</td>;
   if (course.result?.trim()) return <td className={resultClass(course.result)}>{course.result}</td>;
   if (!outcome.inferred) return <td>—</td>;
-  return <td className={`sr-result-${outcome.status}`}>{outcome.status === "pass" ? "Đạt" : "Không đạt"}<small className="sr-result-note">{INFERRED_RESULT_NOTE}</small></td>;
+  return <td className={`sr-result-${outcome.status}`}>{outcome.status === "pass" ? "Đạt" : "Không đạt"}</td>;
 }
 const credits = (n: number) => `${n.toLocaleString("vi-VN")} TC`;
 /** Passed credits (without GDTC/GDQP) disagree with the printed "Tổng số tín chỉ tích lũy". */

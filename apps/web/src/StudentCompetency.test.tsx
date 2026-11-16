@@ -233,7 +233,8 @@ describe("StudentCompetency — Đánh giá năng lực", () => {
     const html = withAi("completed");
     expect(html.indexOf("Sắp học (1)")).toBeGreaterThan(html.indexOf("Kiến thức chuyên môn (4)"));
     expect(html).toContain("Không phải điểm yếu");
-    expect(html).toContain("suy ra từ điểm chữ");
+    // User 2026-11-16: "Xóa cái chữ suy ra từ điểm chữ đi": no note under a course result any more.
+    expect(html).not.toContain("<small>suy ra từ điểm chữ</small>");
   });
   it("lists a skill in several groups under each one and names them in its details (2026-10-22)", () => {
     const assessment = fixtureAssessment("completed");

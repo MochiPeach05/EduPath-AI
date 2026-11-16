@@ -34,7 +34,6 @@ import {
 } from "./student-plan-results";
 import { useLiveData } from "./use-live-data";
 import type { Transcript } from "./StudentTranscript";
-import { INFERRED_RESULT_NOTE } from "./transcript-results";
 import "./student-curriculum.css";
 
 const endpoint = "/api/student/curricula";
@@ -170,7 +169,6 @@ function CurriculumContent({
   const fills = physicalEducationFills(data.courses, new Set(data.courses.map((c) => c.code.trim().toUpperCase())),
     transcript.data?.transcript?.data.sections ?? [], states);
   const result = (c: StudentCourse) => filledResult(c.code, states, fills) ?? courseResult(c.code, states, aliases);
-  const showsInferred = courses.some((c) => result(c)?.inferred);
   const groups = new Map(data.groups.map((g) => [g.id, g.label]));
   // Quotas of the student's own standard apply to the CTĐT of the same cohort only.
   const standard = graduation.data?.standard ?? null;
@@ -349,12 +347,6 @@ function CurriculumContent({
         </div>
         {transcript.loading && <p className="sc-muted" role="status">Đang đối chiếu bảng điểm…</p>}
         {transcript.error && <p role="alert">{transcript.error} <button className="sw-outline" onClick={retry}>Thử lại</button></p>}
-        {showsInferred && (
-          <p className="sc-muted sc-result-legend">
-            Kết quả ghi “{INFERRED_RESULT_NOTE}” là do ô Kết quả trong PDF để
-            trống: điểm A+ đến D được tính là Đạt, F là Chưa đạt.
-          </p>
-        )}
         <div
           className="sc-table-wrap"
           tabIndex={0}

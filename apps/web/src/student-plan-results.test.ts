@@ -40,7 +40,7 @@ describe("course states with the graduation page's vocabulary (audit 2026-10-25)
     expect(shown("71ITSE30203")).toBe("✗ Chưa đạt");
     expect(shown("71ITGR40206")).toBe("◐ Đang học | Đang học");
     expect(shown("71ITSE30303")).toBe("? Chưa rõ kết quả | Chưa rõ kết quả");
-    expect(shown("71ITSE30403")).toBe("✓ Đã đạt | suy ra từ điểm chữ");
+    expect(shown("71ITSE30403")).toBe("✓ Đã đạt"); // inferred from the letter grade: no note since 2026-11-16
     expect(courseResult("71ITXX00000", map)).toBeUndefined();
   });
 
@@ -67,7 +67,7 @@ describe("course states with the graduation page's vocabulary (audit 2026-10-25)
     const aliases = graduationCourseAliases(evaluation);
     expect(courseResult("DIT0070", map, aliases)).toEqual({ state: "passed", inferred: false, via: { code: "71ITIS30103", transfer: true } });
     expect(display(courseResult("DIT0070", map, aliases))).toBe("⇄ Đã học trả nợ | Đã học trả nợ (mã 71ITIS30103) — cần chuyển điểm");
-    expect(display(courseResult("dit0091", map, aliases))).toBe("✓ Đã đạt | học với mã 71ITDS30103 | suy ra từ điểm chữ");
+    expect(display(courseResult("dit0091", map, aliases))).toBe("✓ Đã đạt | học với mã 71ITDS30103");
     // Without the graduation data the page keeps the transcript's own result.
     expect(display(courseResult("DIT0070", map))).toBe("✗ Chưa đạt");
     // An older server sends only the credit transfers.

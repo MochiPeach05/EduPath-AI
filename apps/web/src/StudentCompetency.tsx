@@ -482,7 +482,7 @@ function SkillRow({ skill, courses, groups, terms }: { skill: SkillResult; cours
               <td>{course?.name ?? "—"}{note && <small>{note}</small>}</td>
               <td className="scomp-num">{formatNumber(course?.credits)}</td>
               <td className="scomp-num">{course?.score10 === null || course?.score10 === undefined ? (course?.letter ?? "—") : `${formatNumber(course.score10)}${course.letter ? ` · ${course.letter}` : ""}`}</td>
-              <td>{course ? (course.state === "not_taken" ? "Chưa đăng ký" : COURSE_STATE_LABELS[course.state]) : "—"}{course?.inferred && <small>suy ra từ điểm chữ</small>}</td>
+              <td>{course ? (course.state === "not_taken" ? "Chưa đăng ký" : COURSE_STATE_LABELS[course.state]) : "—"}</td>
               <td className="scomp-num">{course ? course.attempts.toLocaleString("vi-VN") : "—"}</td>
               <td className="scomp-num">{formatNumber(row.weight)}</td>
               <td>{evidenceTerm(row, course, terms)}</td>

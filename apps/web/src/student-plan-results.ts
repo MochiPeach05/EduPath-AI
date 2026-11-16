@@ -5,7 +5,7 @@
 import { isConditionOnlyCourse } from "./student-curriculum-types";
 import { COURSE_STATES, type GraduationEvaluationExtras, type Tone } from "./student-graduation-data";
 import type { GradCourseState, GraduationEvaluation } from "./student-graduation-types";
-import { attemptOutcome, INFERRED_RESULT_NOTE } from "./transcript-results";
+import { attemptOutcome } from "./transcript-results";
 
 type ResultCourse = Parameters<typeof attemptOutcome>[0];
 /** A course state that rests on transcript rows ("not taken" has none). */
@@ -84,15 +84,14 @@ export type CourseResultDisplay = { glyph: string; label: string; tone: Tone; no
  * readers; the label is also written out unless it is a plain ✓ Đã đạt or ✗ Chưa đạt.
  */
 export function courseResultDisplay(view: CourseResultView): CourseResultDisplay {
-  const inferred = view.inferred ? [INFERRED_RESULT_NOTE] : [];
   if (view.via?.transfer) {
-    return { glyph: "⇄", label: "Đã học trả nợ", tone: "info", notes: [`Đã học trả nợ (mã ${view.via.code}) — cần chuyển điểm`, ...inferred] };
+    return { glyph: "⇄", label: "Đã học trả nợ", tone: "info", notes: [`Đã học trả nợ (mã ${view.via.code}) — cần chuyển điểm`] };
   }
   const { glyph, label, tone } = COURSE_STATES[view.state];
   const taken = view.filledBy ? filledByNote(view.filledBy, view.state) : null;
   // A GDTC course being studied through its elective says so once: "Đang học: Cờ vua (71PEKC10062)".
   const written = view.state === "passed" || view.state === "failed" || (taken && view.state === "in_progress") ? [] : [label];
-  return { glyph, label, tone, notes: [...written, ...(view.via ? [`học với mã ${view.via.code}`] : []), ...(taken ? [taken] : []), ...inferred] };
+  return { glyph, label, tone, notes: [...written, ...(view.via ? [`học với mã ${view.via.code}`] : []), ...(taken ? [taken] : [])] };
 }
 
 /* ------------------------------------------------- GDTC filled by PE */

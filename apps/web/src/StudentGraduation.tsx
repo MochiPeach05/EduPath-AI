@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "./student-icons";
 import { useLiveData } from "./use-live-data";
-import { INFERRED_RESULT_NOTE } from "./transcript-results";
 import { readGraduation } from "./student-graduation-api";
 import {
   ADVICE_API, ADVICE_POLL_MS, COURSE_FILTERS, COURSE_STATES, GRADUATION_API, INLINE_COURSES, IN_PLACE_OF_NOTE, OUTSIDE_STANDARD_NOTE,
@@ -396,7 +395,6 @@ function CourseRow({ course, options }: { course: CourseView; options: TableOpti
       <td className="sg-score-cell" data-label="Điểm">{score ? <><strong>{score.main}</strong>{score.detail && <small>{score.detail}</small>}</> : "—"}</td>
       <td className="sg-state-cell" data-label="Trạng thái">
         {row && state ? <span className={`sg-state ${toneClass(state.tone)}`}><span aria-hidden="true">{state.glyph}</span> {courseStateText(row)}</span> : <span className="sg-tone-neutral">—</span>}
-        {row?.inferred && <small>{INFERRED_RESULT_NOTE}</small>}
         {course.improvement && <small className="sg-tone-info">{course.improvement === "failed" ? "Nên học lại để nâng điểm trung bình" : "Có thể học cải thiện để nâng điểm trung bình"}</small>}
       </td>
     </>}

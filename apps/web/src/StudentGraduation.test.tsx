@@ -423,12 +423,12 @@ describe("StudentGraduation comparison", () => {
     expect(html).toContain("<small>Được tính vào nhóm này thay cho một học phần giáo dục thể chất tự chọn</small>");
     expect(render(ready(graduation()))).not.toContain("không thuộc tiêu chuẩn");
   });
-  it("labels every course state with a glyph and marks letter-grade inferences", () => {
+  it("labels every course state with a glyph, without a note for letter-grade inferences (2026-11-16)", () => {
     const html = render(ready(graduation({ evaluation: evaluation("fail", {
       groups: [{ ...groups("fail")[0]!, courses: [...mandatoryCourses, row("71ITBS20103", "Toán rời rạc", "BB", "exempt", { letter: "MT", score10: null, score4: null }), row("71ITBS20203", "Xác suất", "BB", "graded_unknown", { score10: 6, score4: 2 })] }, ...groups("fail").slice(1)],
     }) })));
     for (const label of ["✓</span> Đã đạt", "✓</span> Miễn thi (MT)", "✗</span> Chưa đạt (đã học 2 lần)", "◐</span> Đang học", "?</span> Chưa rõ kết quả", "○</span> Chưa học"]) expect(html).toContain(label);
-    expect(html).toContain("<small>suy ra từ điểm chữ</small>");
+    expect(html).not.toContain("suy ra từ điểm chữ</small>");
     expect(html).toContain("<strong>3,5 / 4</strong><small>8,2 / 10 · B+</small>");
     expect(html).toContain("<strong>MT</strong><small>Miễn thi</small>");
     expect(html).toContain("Môn điều kiện (*): cần đạt nhưng không tính vào tín chỉ tích lũy và điểm trung bình");

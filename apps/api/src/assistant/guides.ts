@@ -99,7 +99,7 @@ export function portalGuides(): PortalGuide[] {
       "- Dấu ✗ màu đỏ: môn đã có kết quả nhưng chưa đạt.",
       "- Ô trống hoặc dấu gạch (—): môn chưa có trong bảng điểm; điều này không có nghĩa là bạn đã học và trượt môn đó.",
       "Kết quả in trên bảng điểm luôn được dùng trước. Điểm chữ MT (miễn thi) được tính là đạt, kể cả khi không có điểm hệ 10 hay hệ 4. VT (vắng thi), CT (cấm thi) và DC là chưa đạt, không có điểm. Môn học nhiều lần chỉ cần một lần đạt hoặc được miễn thi là được đánh dấu đạt.",
-      "Nếu ô Kết quả trong PDF để trống, EduPath AI suy ra kết quả từ điểm chữ: từ A+ đến D là đạt, F là chưa đạt; những môn này có ghi chú kết quả được suy ra từ điểm chữ.",
+      "Nếu ô Kết quả trong PDF để trống, EduPath AI suy ra kết quả từ điểm chữ: từ A+ đến D là đạt, F là chưa đạt.",
       "Nếu kết quả khác với dự kiến, hãy kiểm tra mã học phần và bảo đảm bảng điểm đã cập nhật đủ các học kỳ, gồm cả phần điểm bảo lưu.",
     ]],
     ["chuyen-nganh-nghe-muc-tieu", "Chọn chuyên ngành và vị trí nghề nghiệp mục tiêu", "#career", [

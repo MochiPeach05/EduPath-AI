@@ -427,10 +427,6 @@
 .sc-result-cell .sc-result-note { margin-top: 4px; font-size: 12px; line-height: 1.35; overflow-wrap: anywhere; }
 .sc-table thead th.sc-result-cell,
 .sc-table tbody td.sc-result-cell { width: 120px; }
-.sc-catalog > .sc-result-legend { margin: 0; padding: 0 24px 16px; }
-@media (max-width: 600px) {
-  .sc-catalog > .sc-result-legend { padding: 0 16px 16px; }
-}
 /* The student's own CTĐT/KHĐT (own-program.tsx, user 2026-11-10: no choice, as on Xét tốt nghiệp): the line under the
    title saying which one is shown and why, and the card in its place when there is none (.sg-unresolved's look). */
 .sc-own-note {

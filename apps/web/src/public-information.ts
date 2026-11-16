@@ -74,7 +74,7 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
     answer: [
       "Dấu ✓ màu xanh cho biết môn đó đã đạt theo bảng điểm bạn tải lên. Dấu ✗ màu đỏ cho biết môn đã có kết quả nhưng chưa đạt. Nếu môn chưa có trong bảng điểm thì ô để trống hoặc có dấu gạch (—); điều này không có nghĩa là bạn đã học và trượt môn đó.",
       "Điểm chữ MT (miễn thi) được tính là đã đạt, kể cả khi không có điểm số hệ 10 hoặc hệ 4. Khi một môn có nhiều lần học trong bảng điểm, chỉ cần có một lần đạt hoặc được miễn thi thì môn đó được đánh dấu đạt.",
-      "Nếu ô Kết quả trong bảng điểm PDF để trống, EduPath AI suy ra kết quả từ điểm chữ: từ A+ đến D là đạt, F là chưa đạt. Những môn này có ghi chú là kết quả được suy ra từ điểm chữ."
+      "Nếu ô Kết quả trong bảng điểm PDF để trống, EduPath AI suy ra kết quả từ điểm chữ: từ A+ đến D là đạt, F là chưa đạt."
     ],
     note: "Nếu kết quả khác với dự kiến của bạn, hãy kiểm tra mã học phần và bảo đảm bảng điểm đã cập nhật đủ các học kỳ, bao gồm phần điểm bảo lưu."
   },

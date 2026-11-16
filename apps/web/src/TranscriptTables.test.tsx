@@ -107,6 +107,13 @@ describe("TranscriptTables", () => {
     for (const head of ["STT", "Mã môn học", "Tên môn học", "Tín chỉ", "Hệ 10", "Hệ 4", "Điểm chữ", "Kết quả"]) expect(html).toContain(`>${head}</th>`);
     expect(html).toContain('class="sr-result-pass">Đạt</td>');
     expect(html).toContain('class="sr-result-fail">Không đạt</td>');
+    // A blank result cell: Đạt / Không đạt from the letter grade, with no note under it (user 2026-11-16).
+    const blank = data();
+    blank.sections[0]!.courses = blank.sections[0]!.courses.map((course) => ({ ...course, result: null }));
+    const inferred = render(blank);
+    expect(inferred).toContain('class="sr-result-pass">Đạt</td>');
+    expect(inferred).toContain('class="sr-result-fail">Không đạt</td>');
+    expect(inferred).not.toContain("suy ra từ điểm chữ</small>");
     expect(html).toContain("Cần kiểm tra: mã môn khác dạng thường gặp");
     // Decimal commas, like every other page (user review 2026-10-30): the printed "2.55" and the numbers of each row.
     expect(html).toContain("<dt>Điểm TB học kỳ (Hệ 4)</dt><dd>2,55</dd>");
