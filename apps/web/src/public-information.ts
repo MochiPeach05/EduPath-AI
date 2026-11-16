@@ -55,7 +55,7 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
     answer: ["Hãy tải bảng điểm dưới dạng PDF từ cổng đào tạo của trường. Tệp cần có dung lượng tối đa 5 MB, không quá 20 trang và không được khóa bằng mật khẩu; bản PDF xuất trực tiếp sẽ dễ đọc hơn ảnh chụp hoặc bản scan."],
     steps: [
       "Đăng nhập EduPath AI và mở Hồ sơ và bảng điểm. Khi chưa có bảng điểm, bạn cũng import được ngay ở Tổng quan hoặc Xét tốt nghiệp.",
-      "Ở phần Bảng điểm của tôi, chọn chuyên ngành của bạn (chọn Chưa có chuyên ngành nếu bạn chưa được chia chuyên ngành), rồi chọn hoặc kéo thả tệp PDF bảng điểm vào vùng tải lên.",
+      "Ở phần Bảng điểm của tôi, chọn chuyên ngành của bạn (sinh viên khóa 28 trở về trước chưa được chia chuyên ngành thì chọn Chưa có chuyên ngành), rồi chọn hoặc kéo thả tệp PDF bảng điểm vào vùng tải lên.",
       "Tích ô xác nhận đây là bảng điểm của bạn và đồng ý để EduPath AI xử lý bảng điểm, bấm Import bảng điểm (hoặc Cập nhật bảng điểm nếu đã có bản cũ) và theo dõi thanh tiến trình cho đến khi có thông báo đã lưu.",
       "Đối chiếu mã môn, tên môn, tín chỉ, điểm và kết quả từng học kỳ với PDF gốc."
     ],

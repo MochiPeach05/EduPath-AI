@@ -161,7 +161,10 @@ describe("the first import: the specialty, then the PDF (GVHD 2026-11-13, plan \
     vi.stubGlobal("window", { location: { pathname: "/dashboard", search: "", hash: "#overview" } });
     const html = renderToStaticMarkup(createElement(StudentTranscript, { profile: { ...k29, specialty: "CNDL" }, mode: "start", submitLabel: "Import và xét tốt nghiệp" }));
     expect(html).toContain('<option value="CNDL" selected="">Công nghệ dữ liệu</option>');
-    expect(html).toContain('<option value="none">Chưa có chuyên ngành</option>');
+    // "Chưa có chuyên ngành" only for K28 and earlier (user 2026-11-16).
+    expect(html).not.toContain("Chưa có chuyên ngành");
+    const k28 = renderToStaticMarkup(createElement(StudentTranscript, { profile: { ...k29, cohortCode: "K28" }, mode: "start" }));
+    expect(k28).toContain('<option value="none">Chưa có chuyên ngành</option>');
     expect(html).toMatch(/<button type="button" class="sw-outline ti-start-choose" disabled="" aria-describedby="[^"]+-file">.*Chọn tệp PDF bảng điểm<\/button>/);
     expect(html).toContain("Cùng với khóa K29, dùng để chọn tiêu chuẩn xét tốt nghiệp và học phần chuyên ngành khi đánh giá năng lực.");
     // The confirmation and the button come with the PDF; no section, heading or tables of Hồ sơ và bảng điểm.

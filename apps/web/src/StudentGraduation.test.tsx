@@ -202,7 +202,8 @@ describe("StudentGraduation result", () => {
     expect(html).toContain('<h2 id="sg-start-title" class="sg-title">Cần chuyên ngành và bảng điểm của bạn</h2>');
     expect(html).toContain("EduPath AI chọn tiêu chuẩn xét tốt nghiệp theo khóa K29 và chuyên ngành bạn chọn, rồi đối chiếu với bảng điểm.");
     expect(html).toContain('<option value="CNPM" selected="">Công nghệ phần mềm</option>');
-    expect(html).toContain('<option value="none">Chưa có chuyên ngành</option>');
+    // K29: no "Chưa có chuyên ngành" any more (user 2026-11-16: only K28 and earlier).
+    expect(html).not.toContain("Chưa có chuyên ngành");
     expect(html).toContain("Chọn tệp PDF bảng điểm");
     expect(html.indexOf("sg-start-title")).toBeLessThan(html.indexOf("sg-standard-title"));
     expect(html).not.toContain("Kết quả xét tốt nghiệp tính đến thời điểm hiện tại");

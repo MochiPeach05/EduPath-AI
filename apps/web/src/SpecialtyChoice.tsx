@@ -6,21 +6,34 @@ import "./specialty-choice.css";
 
 // Chuyên ngành is chosen where the transcript is imported (GVHD 2026-11-13: "chọn chuyên ngành trong giao diện import bảng
 // điểm luôn, bên ngoài em thiết kế giao diện rất rối để chọn chuyên ngành"; plan "Một bước để bắt đầu", user 2026-11-14:
-// "Triển khai theo kế hoạch này đi"). The choices are the specialties of the student's major and cohort, and "Chưa có
-// chuyên ngành" for a student of year 1–2 not yet placed in one: the profile then keeps none (null), as "Chưa xác định"
-// did. Since policy 2026-11-10 a cố vấn học tập or a Khoa admin may change it for the student, after a confirmation.
+// "Triển khai theo kế hoạch này đi"). The choices are the specialties of the student's major and cohort, and, for K28 and
+// earlier only, "Chưa có chuyên ngành" (user 2026-11-16: "Từ K29 trở lên không có mục chọn chưa có chuyên ngành nữa chỉ có
+// k28 trở về trước mới có thôi"): the profile then keeps none (null), as "Chưa xác định" did. Since policy 2026-11-10 a
+// cố vấn học tập or a Khoa admin may change it for the student, after a confirmation.
 
 /** The choice "Chưa có chuyên ngành": no specialty in the profile (null). */
 export const NO_SPECIALTY = "none";
+/** The last cohort that may have no specialty: from K29 on, every student of a major with specialties has one. */
+export const LAST_COHORT_WITHOUT_SPECIALTY = 28;
 /** "" = nothing chosen yet, NO_SPECIALTY, or a specialty code. */
 export type SpecialtyPick = string;
 /** What the choice needs from the profile: its specialty (absent on an older API), the cohort and the major of the MSSV. */
 export type SpecialtyProfile = { specialty?: string | null; cohortCode?: string | null; majorCode?: string | null };
 
-/** The choices of the student's major and cohort, then "Chưa có chuyên ngành" (withNone). */
+/**
+ * Whether "Chưa có chuyên ngành" is a choice: for K28 and earlier, for a cohort the account does not know, and for a major
+ * whose cohort has no specialty to choose (then it is the only choice, so the transcript can still be imported).
+ */
+export function offersNoSpecialty(profile: SpecialtyProfile | null): boolean {
+  const cohort = Number(/^K(\d{2,3})$/.exec((profile?.cohortCode ?? "").trim().toUpperCase())?.[1] ?? Number.NaN);
+  if (!Number.isFinite(cohort) || cohort <= LAST_COHORT_WITHOUT_SPECIALTY) return true;
+  return specialtiesFor(profile?.cohortCode, profile?.majorCode).length === 0;
+}
+
+/** The choices of the student's major and cohort, then "Chưa có chuyên ngành" (withNone, where offersNoSpecialty allows it). */
 export function specialtyOptions(profile: SpecialtyProfile | null, withNone = true): { value: string; label: string }[] {
   const options = specialtiesFor(profile?.cohortCode, profile?.majorCode).map((item) => ({ value: item.code, label: item.label }));
-  return withNone ? [...options, { value: NO_SPECIALTY, label: "Chưa có chuyên ngành" }] : options;
+  return withNone && offersNoSpecialty(profile) ? [...options, { value: NO_SPECIALTY, label: "Chưa có chuyên ngành" }] : options;
 }
 /** What the choice starts from: the profile's specialty, else nothing (no specialty may also mean "not chosen yet"). */
 export const initialPick = (specialty: string | null | undefined): SpecialtyPick => specialty || "";

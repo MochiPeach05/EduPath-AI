@@ -2,7 +2,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import SpecialtyChoice, {
-  NO_SPECIALTY, SpecialtyForm, initialPick, pickChanges, pickedSpecialty, saveSpecialty, specialtyErrorMessage, specialtyOptions, specialtyText,
+  NO_SPECIALTY, SpecialtyForm, initialPick, offersNoSpecialty, pickChanges, pickedSpecialty, saveSpecialty, specialtyErrorMessage, specialtyOptions, specialtyText,
 } from "./SpecialtyChoice";
 
 // The specialty chosen where the transcript is imported (GVHD 2026-11-13, plan "Một bước để bắt đầu", 2026-11-14).
@@ -13,13 +13,20 @@ const k29 = { cohortCode: "K29", majorCode: "7480201", specialty: null };
 afterEach(() => { vi.unstubAllGlobals(); });
 
 describe("the choices", () => {
-  it("offers the specialties of the major and the cohort, then Chưa có chuyên ngành", () => {
-    expect(specialtyOptions(k29).map((option) => option.label)).toEqual(["Công nghệ phần mềm", "Công nghệ dữ liệu", "Trí tuệ nhân tạo", "Chưa có chuyên ngành"]);
+  it("offers the specialties of the major and the cohort, then Chưa có chuyên ngành for K28 and earlier only (2026-11-16)", () => {
+    // User 2026-11-16: "Từ K29 trở lên không có mục chọn chưa có chuyên ngành nữa chỉ có k28 trở về trước mới có thôi".
+    expect(specialtyOptions(k29).map((option) => option.label)).toEqual(["Công nghệ phần mềm", "Công nghệ dữ liệu", "Trí tuệ nhân tạo"]);
+    for (const cohortCode of ["K30", "K31", "K32"]) expect(specialtyOptions({ ...k29, cohortCode }).map((option) => option.value)).toEqual(["CNPM", "CNDL", "TTNT"]);
+    expect(specialtyOptions({ ...k29, cohortCode: "K28" }).map((option) => option.value)).toEqual(["CNPM", "CNDL", "TTNT", "KCN", NO_SPECIALTY]);
     expect(specialtyOptions({ ...k29, cohortCode: "K27" }).map((option) => option.value)).toEqual(["CNPM", "CNDL", "TTNT", "ANM", "KCN", NO_SPECIALTY]);
-    expect(specialtyOptions({ ...k29, majorCode: "7480104" }, false).map((option) => option.label))
+    expect(specialtyOptions({ ...k29, cohortCode: "K28" }, false).map((option) => option.value)).not.toContain(NO_SPECIALTY);
+    expect(specialtyOptions({ ...k29, majorCode: "7480104" }).map((option) => option.label))
       .toEqual(["Hệ thống thông tin – Chuyển đổi số", "Hệ thống thông tin – Địa lý"]);
-    // A major without specialties of its own: only the way out.
+    // A cohort the account does not know, and a major without specialties of its own: the way out stays.
+    expect(specialtyOptions({ ...k29, cohortCode: null }).map((option) => option.value).at(-1)).toBe(NO_SPECIALTY);
     expect(specialtyOptions({ ...k29, majorCode: "7340201" })).toEqual([{ value: NO_SPECIALTY, label: "Chưa có chuyên ngành" }]);
+    expect(offersNoSpecialty(k29)).toBe(false);
+    expect(offersNoSpecialty({ ...k29, cohortCode: "K28" })).toBe(true);
   });
 
   it("starts from the profile, stores none for Chưa có chuyên ngành, and saves only a change", () => {
@@ -43,8 +50,10 @@ describe("the choice drawn", () => {
     const html = renderToStaticMarkup(createElement(SpecialtyChoice, { profile: k29, value: "CNDL", onChange: noop }));
     expect(html).toMatch(/^<fieldset class="spc spc-cards" aria-describedby="[^"]+-hint"><legend class="spc-label">Chuyên ngành của bạn<span class="spc-required" aria-hidden="true"> \*<\/span><\/legend>/);
     expect(html).toMatch(/<label class="spc-option is-on"><input type="radio" required="" name="[^"]+" checked="" value="CNDL"\/><span>Công nghệ dữ liệu<\/span><\/label>/);
-    expect(html).toMatch(/<label class="spc-option spc-none"><input type="radio" required="" name="[^"]+" value="none"\/><span>Chưa có chuyên ngành<\/span><\/label>/);
+    expect(html).not.toContain("Chưa có chuyên ngành");
     expect(html).toContain("Cùng với khóa K29, dùng để chọn tiêu chuẩn xét tốt nghiệp và học phần chuyên ngành khi đánh giá năng lực. Đổi lại được bất cứ lúc nào.");
+    const k28 = renderToStaticMarkup(createElement(SpecialtyChoice, { profile: { ...k29, cohortCode: "K28" }, value: "", onChange: noop }));
+    expect(k28).toMatch(/<label class="spc-option spc-none"><input type="radio" required="" name="[^"]+" value="none"\/><span>Chưa có chuyên ngành<\/span><\/label>/);
   });
 
   it("draws a select with a first line to choose from when nothing is chosen yet, and says why a save was refused", () => {

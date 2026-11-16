@@ -265,9 +265,9 @@ describe("Tổng quan page", () => {
     expect(html).toContain('<h2 id="so-start-title">Chọn chuyên ngành và import bảng điểm</h2>');
     expect(html).toContain("Xong bước này bạn dùng được ngay:");
     for (const page of ["Xét tốt nghiệp", "Đánh giá năng lực", "Định hướng nghề nghiệp", "Lộ trình học tập", "Trợ lý AI"]) expect(html).toContain(`<li>${page}</li>`);
-    // Nothing chosen yet: the student picks a specialty, or Chưa có chuyên ngành, then the PDF.
+    // Nothing chosen yet: the student picks a specialty, then the PDF (K29: no "Chưa có chuyên ngành", user 2026-11-16).
     expect(html).toMatch(/<option value=""[^>]*>Chọn chuyên ngành…<\/option><option value="CNPM">Công nghệ phần mềm<\/option>/);
-    expect(html).toContain('<option value="none">Chưa có chuyên ngành</option>');
+    expect(html).not.toContain("Chưa có chuyên ngành");
     expect(html).toContain("Chọn tệp PDF bảng điểm");
     for (const absent of ["so-gate", "BẮT BUỘC TRƯỚC KHI SỬ DỤNG", "Hoàn thành hồ sơ", "Vị trí nghề nghiệp mục tiêu", "Khảo sát"]) expect(html).not.toContain(absent);
     // Without the profile yet, no definite answer.

@@ -87,7 +87,7 @@ export function portalGuides(): PortalGuide[] {
     ["import-bang-diem", "Import bảng điểm PDF", "#profile", [
       "Bảng điểm là dữ liệu gốc của mọi kết quả trên EduPath AI. Cách import:",
       "- Tải bảng điểm dạng PDF từ cổng đào tạo của trường: tối đa 5 MB, không quá 20 trang, không khóa bằng mật khẩu; bản PDF xuất trực tiếp dễ đọc hơn ảnh chụp hoặc bản scan.",
-      "- Mở Hồ sơ và bảng điểm (khi chưa có bảng điểm, cũng làm được ở Tổng quan hoặc Xét tốt nghiệp). Ở phần Bảng điểm của tôi, chọn chuyên ngành của bạn (Chưa có chuyên ngành nếu bạn chưa được chia chuyên ngành), rồi chọn hoặc kéo thả tệp PDF vào vùng tải lên.",
+      "- Mở Hồ sơ và bảng điểm (khi chưa có bảng điểm, cũng làm được ở Tổng quan hoặc Xét tốt nghiệp). Ở phần Bảng điểm của tôi, chọn chuyên ngành của bạn (sinh viên khóa 28 trở về trước chưa được chia chuyên ngành thì chọn Chưa có chuyên ngành), rồi chọn hoặc kéo thả tệp PDF vào vùng tải lên.",
       "- Tích ô xác nhận đây là bảng điểm của bạn và đồng ý để EduPath AI xử lý bảng điểm, rồi bấm Import bảng điểm (hoặc Cập nhật bảng điểm nếu đã có bản cũ).",
       "- Theo dõi thanh tiến trình. Đang chờ xử lý là PDF đã được nhận nhưng chưa bắt đầu đọc; Đang đọc bảng điểm là các dòng môn học đang được xử lý. Việc import chỉ xong khi có thông báo đã lưu và bảng môn học hiện bên dưới. Không cần tải lại cùng một tệp khi lần trước vẫn đang chạy; chọn nhầm tệp thì bấm Hủy xử lý.",
       "- Đối chiếu mã môn, tên môn, tín chỉ, điểm và kết quả từng học kỳ với PDF gốc, vì việc đọc tự động có thể nhầm.",
@@ -104,7 +104,7 @@ export function portalGuides(): PortalGuide[] {
     ]],
     ["chuyen-nganh-nghe-muc-tieu", "Chọn chuyên ngành và vị trí nghề nghiệp mục tiêu", "#career", [
       "Chuyên ngành và vị trí nghề nghiệp mục tiêu quyết định học phần được xét, tiêu chuẩn xét tốt nghiệp và Khoảng trống kỹ năng của bạn.",
-      "- Chuyên ngành: chọn khi import bảng điểm (bước 1 của khung import). Đã có bảng điểm thì bấm Đổi ở dòng Chuyên ngành trên thanh bảng điểm trong Hồ sơ và bảng điểm. Danh sách chỉ có các chuyên ngành của ngành và khóa của bạn, cùng lựa chọn Chưa có chuyên ngành.",
+      "- Chuyên ngành: chọn khi import bảng điểm (bước 1 của khung import). Đã có bảng điểm thì bấm Đổi ở dòng Chuyên ngành trên thanh bảng điểm trong Hồ sơ và bảng điểm. Danh sách chỉ có các chuyên ngành của ngành và khóa của bạn; lựa chọn Chưa có chuyên ngành chỉ có ở khóa 28 trở về trước.",
       `- Các chuyên ngành theo ngành: ${specialtiesText()}.`,
       "- Vị trí nghề nghiệp mục tiêu (không bắt buộc): chọn ở trang Định hướng nghề nghiệp bằng nút Chọn làm vị trí nghề nghiệp mục tiêu; mục tiêu được lưu ngay. Muốn đổi, kể cả khi chưa có bảng điểm, bấm Đổi vị trí nghề nghiệp cạnh vị trí mục tiêu ở đầu trang rồi bấm Chọn làm mục tiêu ở vị trí mới. Chỉ trang Khoảng trống kỹ năng cần vị trí này; Xét tốt nghiệp và Đánh giá năng lực không cần.",
       "Sau khi đổi chuyên ngành, hãy bấm Đánh giá lại ở trang Đánh giá năng lực. Khi bạn chọn vị trí nghề nghiệp mục tiêu khác, EduPath AI tự đánh giá lại nếu bạn đã đánh giá trước đó, để Khoảng trống kỹ năng và Lộ trình học tập theo vị trí mới. Khóa và lớp lấy từ tài khoản trường, không sửa được trên EduPath AI.",
