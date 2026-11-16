@@ -6,7 +6,7 @@
 // code that applies them (levels and career thresholds, the expected term calendar, the specialties, the question limit),
 // so a change there reaches the guide, and its embedding, at the next knowledge refresh.
 // 2026-10-28: the FAQ still gives the career thresholds of comp-calc-v9 (Ưu tiên 70, Bắt buộc 85); the guides follow
-// CAREER_THRESHOLDS (comp-calc-v10: Khá 62,5 and Giỏi 80). The policy does not describe Trợ lý AI yet: its guide follows
+// CAREER_THRESHOLDS (comp-calc-v10: Khá 62,5 and Giỏi 80; comp-calc-v25: Khá 62,5 for both). The policy does not describe Trợ lý AI yet: its guide follows
 // migration 055 and assistant/chat.ts, facts.ts and validate.ts.
 import { CAREER_THRESHOLDS, LEVEL_THRESHOLDS } from "../competency-assessment/constants.js";
 import { SPECIALTIES } from "../competency-assessment/specialty.js";
@@ -41,9 +41,11 @@ const LEVEL_NAMES: [number, string][] = [
 const levelName = (threshold: number) => LEVEL_NAMES.find(([value]) => value === threshold)?.[1] ?? formatNumber(threshold);
 const levelScale = () =>
   `${LEVEL_NAMES.map(([value, name]) => `${name} từ ${formatNumber(value)}`).join("; ")}; Yếu dưới ${formatNumber(LEVEL_THRESHOLDS.basic)}`;
-const careerThresholds = () =>
-  `kỹ năng Bắt buộc cần từ ${formatNumber(CAREER_THRESHOLDS.required)} điểm (mức ${levelName(CAREER_THRESHOLDS.required)}), kỹ năng Ưu tiên cần từ `
-  + `${formatNumber(CAREER_THRESHOLDS.preferred)} điểm (mức ${levelName(CAREER_THRESHOLDS.preferred)})`;
+/** One threshold for both kinds since comp-calc-v25 (user 2026-11-16: every career skill needs Khá). */
+const careerThresholds = () => CAREER_THRESHOLDS.required === CAREER_THRESHOLDS.preferred
+  ? `kỹ năng Bắt buộc và kỹ năng Ưu tiên đều cần từ ${formatNumber(CAREER_THRESHOLDS.required)} điểm (mức ${levelName(CAREER_THRESHOLDS.required)})`
+  :`kỹ năng Bắt buộc cần từ ${formatNumber(CAREER_THRESHOLDS.required)} điểm (mức ${levelName(CAREER_THRESHOLDS.required)}), kỹ năng Ưu tiên cần từ `
+    + `${formatNumber(CAREER_THRESHOLDS.preferred)} điểm (mức ${levelName(CAREER_THRESHOLDS.preferred)})`;
 
 /** "Công nghệ thông tin: Công nghệ phần mềm, …, An ninh Mạng và IoTs (chỉ K27), …; Hệ thống thông tin: …". */
 function specialtiesText(): string {

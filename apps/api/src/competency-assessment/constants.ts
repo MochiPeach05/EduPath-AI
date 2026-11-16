@@ -119,7 +119,13 @@ import type { Confidence, FitCode, GapStatus } from "./types.js";
  * crossSpecialtyCourses), on Xét tốt nghiệp, Theo dõi tiến độ, the plan projection and here. Only students with such a
  * course see a change.
  */
-export const CALC_VERSION = "comp-calc-v24";
+/**
+ * v25 (user 2026-11-16: "kỹ năng Bắt buộc cần đạt mức Giỏi, kỹ năng Ưu tiên cần đạt mức Khá cao quá nhỉ tôi nghĩ cài ở tất cả
+ * ở mức khá hiện tại là được rồi"): every career skill needs Khá (62,5), "Bắt buộc" too (Giỏi 80 since v10). "Bắt buộc" still
+ * counts twice in the "điểm phù hợp", and a career's met skills below Giỏi are still deepened. Stored results keep their
+ * thresholds until "Đánh giá lại"; Khoảng trống kỹ năng says so (web requiredThresholdOutdated).
+ */
+export const CALC_VERSION = "comp-calc-v25";
 /**
  * The graduation evaluation uses no skill level, so it keeps the version of its last change:
  * comp-calc-v10 changed only levels and must not re-date every student's graduation advice. Neither does v24: it changes
@@ -143,8 +149,11 @@ export const COVERAGE_BANDS = { medium: 0.3, high: 0.7 } as const;
 /** Evidence amount is Σ(credits × weight) of the studied courses (MT included). */
 export const EVIDENCE_BANDS = { medium: 1, high: 2.5 } as const;
 
-/** Career requirement thresholds: "Ưu tiên" needs level Khá, "Bắt buộc" needs Giỏi (v10; Khá 70 and Thành thạo 85 before). */
-export const CAREER_THRESHOLDS = { required: LEVEL_THRESHOLDS.proficient, preferred: LEVEL_THRESHOLDS.good } as const;
+/**
+ * Career requirement thresholds: "Bắt buộc" and "Ưu tiên" both need level Khá (v25; v10–v24: Bắt buộc Giỏi 80, Ưu tiên Khá;
+ * before v10: 85 and 70). "Bắt buộc" weighs through its coefficient only.
+ */
+export const CAREER_THRESHOLDS = { required: LEVEL_THRESHOLDS.good, preferred: LEVEL_THRESHOLDS.good } as const;
 export const CAREER_COEFFICIENTS = { required: 2, preferred: 1 } as const;
 
 /** A 'below' requirement earns at most this much, scaled from FIT_BELOW_FLOOR up to the threshold. */

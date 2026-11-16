@@ -125,7 +125,7 @@ export function validateCareerSuggestionOutput(output: unknown, context: CareerS
       items.push({ skillId: null, skillName: name, isNewSkill: true, ...body, isRequired: false });
     }
   }
-  // Bắt buộc means a competency threshold of 85 for students: keep the first few, in the model's order.
+  // Bắt buộc counts twice in a student's "điểm phù hợp" (one threshold, Khá, for both kinds since comp-calc-v25): keep the first few, in the model's order.
   let required = 0;
   for (const item of items) {
     if (!item.isRequired) continue;

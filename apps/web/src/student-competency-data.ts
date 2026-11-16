@@ -697,22 +697,39 @@ export function levelSummary(result: Pick<AssessmentResult, "groups" | "skills">
   });
 }
 
+/** " (mức Khá)" after a threshold that opens a level, else "". */
+const thresholdLevelName = (value: number) => {
+  const level = LEVEL_SCALE.find((item) => item.code !== "needs_work" && LEVEL_THRESHOLDS[item.code] === value);
+  return level ? ` (mức ${level.label})` : "";
+};
+
 /**
- * "Ngưỡng đạt: …" of the gap page, read from the stored thresholds: a result computed before
- * comp-calc-v10 still says Ưu tiên 70 and Bắt buộc 85 (no level starts there) until the student runs it again.
+ * "Ngưỡng đạt: …" of the gap page, read from the stored thresholds, so a result keeps the ones it was computed with until the
+ * student runs it again: Ưu tiên 70 and Bắt buộc 85 before comp-calc-v10 (no level starts there), 62,5 and 80 from v10, Khá
+ * 62,5 for both since v25 (user 2026-11-16: "cài ở tất cả ở mức khá").
  */
-export function careerThresholdsLine(career: Pick<CareerResult, "requirements">): string {
-  // A career with one kind of requirement: the other threshold of the same version (v10: 62,5/80; before: 70/85).
+export function careerThresholdsLine(career: Pick<CareerResult, "requirements">, calcVersion?: string | null): string {
+  const version = Number(/^comp-calc-v(\d+)$/.exec(calcVersion ?? "")?.[1]);
+  // A career with one kind of requirement: the other threshold of the same version (v25: 62,5/62,5; v10: 62,5/80; before: 70/85).
   const pairs = [{ preferred: LEVEL_THRESHOLDS.good, required: LEVEL_THRESHOLDS.proficient }, { preferred: 70, required: 85 }];
   const stored = (required: boolean) => career.requirements.find((req) => req.isRequired === required)?.threshold;
-  const pair = pairs.find((item) => item.preferred === stored(false) || item.required === stored(true)) ?? pairs[0]!;
+  const pair = version >= 25 ? { preferred: LEVEL_THRESHOLDS.good, required: LEVEL_THRESHOLDS.good }
+    : pairs.find((item) => item.preferred === stored(false) || item.required === stored(true)) ?? pairs[0]!;
   const of = (required: boolean, fallback: number) => stored(required) ?? fallback;
-  const named = (value: number) => {
-    const level = LEVEL_SCALE.find((item) => item.code !== "needs_work" && LEVEL_THRESHOLDS[item.code] === value);
-    return level ? ` (mức ${level.label})` : "";
-  };
   const preferred = of(false, pair.preferred), required = of(true, pair.required);
-  return `Ngưỡng đạt: kỹ năng Ưu tiên từ ${formatScore(preferred)}${named(preferred)}, kỹ năng Bắt buộc từ ${formatScore(required)}${named(required)}.`;
+  if (preferred === required) return `Ngưỡng đạt: kỹ năng Bắt buộc và Ưu tiên đều từ ${formatScore(required)}${thresholdLevelName(required)}.`;
+  return `Ngưỡng đạt: kỹ năng Ưu tiên từ ${formatScore(preferred)}${thresholdLevelName(preferred)}, kỹ năng Bắt buộc từ ${formatScore(required)}${thresholdLevelName(required)}.`;
+}
+
+/**
+ * comp-calc-v25 (user 2026-11-16): every career skill needs Khá (62,5), Bắt buộc too. A result stored before keeps its higher
+ * Bắt buộc threshold (80 from v10, 85 before) until "Đánh giá lại": the note that says so, or null.
+ */
+export function requiredThresholdOutdatedText(result: Pick<AssessmentResult, "career">): string | null {
+  const stored = result.career?.requirements.find((req) => req.isRequired && req.threshold > LEVEL_THRESHOLDS.good + 1e-9)?.threshold;
+  if (stored === undefined) return null;
+  return `Kết quả này được tính khi kỹ năng Bắt buộc còn cần từ ${formatScore(stored)} điểm${thresholdLevelName(stored)}. `
+    + `Nay mọi kỹ năng của vị trí nghề nghiệp chỉ cần từ ${formatScore(LEVEL_THRESHOLDS.good)}${thresholdLevelName(LEVEL_THRESHOLDS.good)}. Bấm “Đánh giá lại” để cập nhật.`;
 }
 
 /* ------------------------------------------------- level chart ("Bảng phân tích mức độ thành thạo") */

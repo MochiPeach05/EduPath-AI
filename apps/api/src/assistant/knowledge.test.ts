@@ -196,7 +196,7 @@ describe("knowledgeChunksFrom", () => {
       "Vị trí nghề nghiệp NN014: Lập trình viên phía máy chủ (tiếng Anh: Backend Developer).",
       "Lĩnh vực: Phát triển phần mềm.",
       "Mô tả: Phát triển API phía máy chủ.",
-      "Trên trang Khoảng trống kỹ năng, kỹ năng Bắt buộc đạt khi từ 80 điểm (mức Giỏi), kỹ năng Ưu tiên khi từ 62,5 điểm (mức Khá).",
+      "Trên trang Khoảng trống kỹ năng, kỹ năng Bắt buộc và kỹ năng Ưu tiên đều đạt khi từ 62,5 điểm (mức Khá).",
       "Yêu cầu kỹ năng của vị trí nghề nghiệp:",
       "- SQL (Bắt buộc)",
       "- API (Ưu tiên): Thiết kế REST API.",
@@ -270,8 +270,8 @@ describe("knowledgeChunksFrom", () => {
     for (const guide of guides) expect(guide.link).toMatch(/^#[a-z-]+$/);
     expect(chunkOf(chunks, "guide", "tro-ly-ai").link).toBe("#assistant");
     expect(chunkOf(chunks, "guide", "tro-ly-ai").content).toContain("tối đa 1.000 ký tự");
-    // The thresholds the engine applies (comp-calc-v10), not the FAQ's older 70/85.
-    expect(chunkOf(chunks, "guide", "khoang-trong-ky-nang").content).toContain("kỹ năng Bắt buộc cần từ 80 điểm (mức Giỏi), kỹ năng Ưu tiên cần từ 62,5 điểm (mức Khá)");
+    // The thresholds the engine applies: one for both kinds since comp-calc-v25 (Bắt buộc 80 from v10 to v24).
+    expect(chunkOf(chunks, "guide", "khoang-trong-ky-nang").content).toContain("kỹ năng Bắt buộc và kỹ năng Ưu tiên đều cần từ 62,5 điểm (mức Khá)");
   });
 
   it("keeps every chunk within the limits, with unique keys, in the order of the source kinds", () => {

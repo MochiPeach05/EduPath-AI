@@ -7,7 +7,7 @@ import { specialtyLabel, type AiStatus, type AssessmentResult, type AssessmentSt
 import {
   CHART_LEVELS, COMPETENCY_API, CONFIDENCE_LABELS, COURSE_STATE_LABELS, EMPTY_SKILL_FILTERS, FIT_LABELS, FIT_SCALE, LEVEL_COLUMNS, LEVEL_LABELS, LEVEL_SCALE, LEVEL_THRESHOLDS, PRECONDITION_COPY, PRIORITY_LABELS, UNSCORED_STATES,
   aiErrorMessage, aiReasoned, aiStateCopy, bucketSkills, canRegenerate, careerDataText, careerSkillKeys, careerThresholdsLine, chartLevelLabel, choiceLabel, confidentStrengths, courseTermText, currentImprovements, courseStanding, dataUsedLine, displayLevel, eligibilityDisplay, errorMessage, filterSkills, fitLevelOf, fitScoreOf, fitStep, formatDateTime,
-  careerSummaryText, formatDifference, formatNumber, formatPercent, formatScore, gapHistory, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isOverdue, isPreconditionError, levelChart, levelSentence, levelStep, nextCourseCount, nextTermOf, noCreditSkill, overallIsPooled, overdueText, countsFromStudyTerm, thesisWayAdvised, thesisPlanOutdatedText, lateBeforeStudyTerm, physicalEducationOutdated, levelSummary, levelText, mapAiOutput, missingRequirements, skillGroupKeys, missingRequirementsMessage, modelLabel, modelPlace, needsSelfStudy,
+  careerSummaryText, formatDifference, formatNumber, formatPercent, formatScore, gapHistory, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isOverdue, isPreconditionError, levelChart, levelSentence, levelStep, nextCourseCount, nextTermOf, noCreditSkill, overallIsPooled, overdueText, countsFromStudyTerm, thesisWayAdvised, thesisPlanOutdatedText, lateBeforeStudyTerm, physicalEducationOutdated, requiredThresholdOutdatedText, levelSummary, levelText, mapAiOutput, missingRequirements, skillGroupKeys, missingRequirementsMessage, modelLabel, modelPlace, needsSelfStudy,
   plannedCourseNote, plansFor, relatedSkillNames, scoreDifference, shouldPoll, skillName, sortRequirements, studyTermOf, upcomingText, withCurrentLevels, type ChartLevel, type DisplayLevel, type FitLevel, type LevelBar, type LevelSegment, type MappedAiOutput, type PreconditionError, type SkillFilters, type StatusTone,
   fitMeaning, historyTermName, levelMeaning, noGapText, scoreSources, scoreSourcesText,
   careerRaise, failedCommentText, hasCompetencyContent, hasGapContent, normalizePreviousComment, ownComment, previousComment, previousCommentNote,
@@ -643,7 +643,7 @@ function GapSummary({ result, targetName = null }: { result: AssessmentResult; t
       </li>)}</ul>
         : career.requirements.length ? <NoGapLines career={career} /> : <p className="scomp-meta">{NO_REQUIREMENTS_TEXT}</p>}
     </div>
-    <p className="scomp-meta">{careerThresholdsLine(career)} Kỹ năng chưa có điểm (chưa học, sắp học, cần tự học, chưa đủ dữ liệu) tính 0 điểm khi tính mức phù hợp{career.requirements.some((req) => req.status === "upcoming") ? "; điểm sẽ tăng khi bạn học các học phần sắp học." : "."}</p>
+    <p className="scomp-meta">{careerThresholdsLine(career, result.meta.calcVersion)} Kỹ năng chưa có điểm (chưa học, sắp học, cần tự học, chưa đủ dữ liệu) tính 0 điểm khi tính mức phù hợp{career.requirements.some((req) => req.status === "upcoming") ? "; điểm sẽ tăng khi bạn học các học phần sắp học." : "."}</p>
     <FitScale career={career} />
   </Section>;
 }
@@ -1085,6 +1085,8 @@ export default function StudentCompetency({ profile, view = "competency", notice
   const peOutdated = result ? physicalEducationOutdated(result) : null;
   // comp-calc-v23: a course of the thesis group the student placed in Kế hoạch học kỳ that this result leaves out.
   const thesisPlanNote = result ? thesisPlanOutdatedText(result, data?.thesisPlanOutdated) : null;
+  // comp-calc-v25 (user 2026-11-16): Bắt buộc needs Khá like Ưu tiên; an older result asks for Đánh giá lại where the thresholds show.
+  const thresholdNote = result && view === "gap" ? requiredThresholdOutdatedText(result) : null;
   const mapped = useMemo(() => assessment && result && assessment.ai.status === "completed" ? mapAiOutput(assessment.ai.output, result) : null, [assessment, result]);
   // The result was computed for meta.specialty / meta.career; say so when the profile changed since. The target career
   // matters only to Khoảng trống kỹ năng. profile.specialty is undefined only while an older API is serving: skip that
@@ -1113,6 +1115,7 @@ export default function StudentCompetency({ profile, view = "competency", notice
       {profileChanged && !noTarget && <p className="scomp-meta">Hồ sơ đã thay đổi sau lần đánh giá này. Bấm “Đánh giá lại” để cập nhật kết quả.</p>}
       {result && !thesisWayAdvised(result.meta.calcVersion) && <p className="scomp-meta">Kết quả này được tính trước khi hệ thống đề xuất một phương án cho nhóm đồ án tốt nghiệp (Đồ án tốt nghiệp, hoặc Chuyên đề tốt nghiệp thay thế). Bấm “Đánh giá lại” để cập nhật gợi ý học phần.</p>}
       {result && thesisPlanNote && <p className="scomp-meta">{thesisPlanNote}</p>}
+      {thresholdNote && <p className="scomp-meta">{thresholdNote}</p>}
       {result && view === "competency" && !lateBeforeStudyTerm(result.meta.calcVersion) && <p className="scomp-meta">Kết quả này được tính trước khi hệ thống sửa cách tính tiến độ: môn của học kỳ đang học không còn bị tính là chậm, tín chỉ môn điều kiện (GDTC, GDQP) không được cộng, và nhóm tự chọn ghi đúng số tín chỉ còn thiếu. Bấm “Đánh giá lại” để cập nhật.</p>}
       {result && peOutdated && <p className="scomp-meta">Kết quả này được tính trước khi hệ thống ghi nhận học phần giáo dục thể chất bạn đã học ({peOutdated.join(", ")}) cho các học phần Giáo dục thể chất trong chương trình đào tạo. Bấm “Đánh giá lại” để cập nhật.</p>}
       {assessment && <p className="scomp-data-line">{dataUsedLine(assessment)}</p>}

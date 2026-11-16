@@ -550,9 +550,15 @@ function skillChunks(skill: SkillRow, courses: readonly CourseRef[], careers: re
   ]);
 }
 
-const thresholdLine = () => `Trên trang Khoảng trống kỹ năng, kỹ năng Bắt buộc đạt khi từ ${formatNumber(CAREER_THRESHOLDS.required)} điểm `
-  + `(mức ${CAREER_THRESHOLDS.required === LEVEL_THRESHOLDS.proficient ? "Giỏi" : formatNumber(CAREER_THRESHOLDS.required)}), kỹ năng Ưu tiên khi từ `
-  + `${formatNumber(CAREER_THRESHOLDS.preferred)} điểm (mức ${CAREER_THRESHOLDS.preferred === LEVEL_THRESHOLDS.good ? "Khá" : formatNumber(CAREER_THRESHOLDS.preferred)}).`;
+/** The level a career threshold opens, by its name on the student pages. */
+const thresholdLevel = (value: number) => value === LEVEL_THRESHOLDS.proficient ? "Giỏi" : value === LEVEL_THRESHOLDS.good ? "Khá" : formatNumber(value);
+/** One threshold for both kinds since comp-calc-v25 (user 2026-11-16: every career skill needs Khá). */
+const thresholdLine = () => CAREER_THRESHOLDS.required === CAREER_THRESHOLDS.preferred
+  ? `Trên trang Khoảng trống kỹ năng, kỹ năng Bắt buộc và kỹ năng Ưu tiên đều đạt khi từ ${formatNumber(CAREER_THRESHOLDS.required)} điểm `
+    + `(mức ${thresholdLevel(CAREER_THRESHOLDS.required)}).`
+  : `Trên trang Khoảng trống kỹ năng, kỹ năng Bắt buộc đạt khi từ ${formatNumber(CAREER_THRESHOLDS.required)} điểm `
+    + `(mức ${thresholdLevel(CAREER_THRESHOLDS.required)}), kỹ năng Ưu tiên khi từ `
+    + `${formatNumber(CAREER_THRESHOLDS.preferred)} điểm (mức ${thresholdLevel(CAREER_THRESHOLDS.preferred)}).`;
 
 function careerChunks(career: CareerRow): KnowledgeChunkInput[] {
   const code = clean(career.code, 40);

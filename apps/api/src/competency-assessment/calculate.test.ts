@@ -389,10 +389,10 @@ describe("career gaps and fit (spec §7.5–§7.7)", () => {
   const result = calculateAssessment(inputs);
   const row = (name: string) => result.career!.requirements.find((item) => item.title === name)!;
 
-  it("gives the statuses with thresholds 80/62,5 and deficit bands; an elective not chosen is Cần tự học (v14)", () => {
-    expect(row("Kiểm thử phần mềm")).toMatchObject({ status: "met", threshold: 80, coefficient: 2, priorityLabel: "Bắt buộc", fitCredit: 1 });
+  it("gives the statuses with threshold 62,5 for Bắt buộc and Ưu tiên (v25) and deficit bands; an elective not chosen is Cần tự học (v14)", () => {
+    expect(row("Kiểm thử phần mềm")).toMatchObject({ status: "met", threshold: 62.5, coefficient: 2, priorityLabel: "Bắt buộc", fitCredit: 1 });
     expect(row("Lập trình di động")).toMatchObject({ status: "below", threshold: 62.5, score: 56, deficit: 6.5, deficitBand: "moderate", deficitBandLabel: "Thiếu vừa" });
-    expect(row("Học máy nhập môn")).toMatchObject({ status: "below", deficit: 33, deficitBand: "large" });
+    expect(row("Học máy nhập môn")).toMatchObject({ status: "below", deficit: 15.5, deficitBand: "large" });
     expect(row("Thuyết trình")).toMatchObject({ status: "upcoming", statusLabel: "Sắp học", upcomingTerm: "HK253", fitCredit: null });
     // Only an elective of a group whose credits are filled teaches it: "Cần tự học" like another specialty (v14), not "Chưa học".
     expect(row("Phân tích dữ liệu lớn")).toMatchObject({ status: "no_data", noDataReason: "elective_not_chosen", deficitBand: null, fitCredit: null, selfStudy: true });
@@ -400,7 +400,7 @@ describe("career gaps and fit (spec §7.5–§7.7)", () => {
   });
 
   it("computes the non-saturating fit index, the data share and the count lines", () => {
-    const fit = (2 * 1 + 1 * 0.5 * (56 - 40) / 22.5 + 2 * 0.5 * (47 - 40) / 40) / 5;
+    const fit = (2 * 1 + 1 * 0.5 * (56 - 40) / 22.5 + 2 * 0.5 * (47 - 40) / 22.5) / 5;
     expect(result.career!.fit).toBeCloseTo(fit, 4);
     expect(result.career).toMatchObject({
       // Điểm phù hợp (v15): (2 × 88 + 56 + 2 × 47 + 0 for Phân tích dữ liệu lớn, Cần tự học + 0 for Thuyết trình, Sắp
@@ -442,7 +442,7 @@ describe("career gaps and fit (spec §7.5–§7.7)", () => {
 
   it("suggests improving passed courses below the threshold and lists self-study skills", () => {
     expect(row("Học máy nhập môn").improveCourses.map((course) => [course.code, course.kind, course.reason])).toEqual([
-      ["71ITAI40103", "improve", "Đã đạt nhưng điểm học phần 47/100 thấp hơn ngưỡng 80"],
+      ["71ITAI40103", "improve", "Đã đạt nhưng điểm học phần 47/100 thấp hơn ngưỡng 62,5"],
     ]);
     expect(row("Lập trình di động").supportCourses).toEqual([]);
     expect(result.selfStudy.map((item) => [item.name, item.reason])).toEqual([
@@ -589,11 +589,12 @@ describe("skill plans (comp-calc-v6, purpose since v7)", () => {
     expect(both.career!.requirements.map((item) => item.status)).toEqual(["below", "below"]);
     expect(both.skillPlans).toEqual([]);
     expect(both.career!.requirements[0]).toMatchObject({ status: "below", improveCourses: [{ code: "71ITAI40103" }] });
-    // Met for Ưu tiên but below Bắt buộc: a career gap, not a skill to deepen.
+    // One threshold for both kinds since v25 (Khá, user 2026-11-16): met for Ưu tiên is met for Bắt buộc too (72,37 was below
+    // Bắt buộc's 80 before), no course to improve, and below Giỏi it is a skill to deepen.
     const twice = calculateAssessment(syntheticInputs({ career: career([[SKILL.programming, true], [SKILL.programming, false]]) }));
-    expect(twice.career!.requirements.map((item) => item.status)).toEqual(["below", "met"]);
-    expect(twice.skillPlans).toEqual([]);
-    expect(twice.career!.requirements[0]!.improveCourses.map((course) => course.code)).toEqual(["71ITSE30103", "71ITBS10203", "71ITSE30503"]);
+    expect(twice.career!.requirements.map((item) => [item.status, item.threshold])).toEqual([["met", 62.5], ["met", 62.5]]);
+    expect(twice.career!.requirements[0]!.improveCourses).toEqual([]);
+    expect(twice.skillPlans.map((item) => [item.name, item.purpose])).toEqual([["Lập trình cơ bản", "deepen"]]);
     // No requirement status to deepen (its skill name is gone: no data), and Học máy nhập môn is not met.
     const unnamed = career([[SKILL.machineLearning, true]]);
     unnamed.requirements[0] = { ...unnamed.requirements[0]!, skillName: null };
@@ -693,7 +694,7 @@ describe("thesis replacement courses are never suggested off that path (comp-cal
     const thesis = planned(gpa("2,79"), ["71ITGR40206"]);
     expect(thesis.excludedThesisReplacements).toEqual(["71ITGR40203", "71ITIS30403"]);
     expect(presenting(thesis)).toEqual(["71ITGR40206", "71ITIN40304"]);
-    expect(thesis.meta.calcVersion).toBe("comp-calc-v24");
+    expect(thesis.meta.calcVersion).toBe("comp-calc-v25");
     // From 2,80 the thesis is recommended; a replacement course placed by the student wins.
     const replacement = planned(gpa("2,85"), ["71ITGR40203"]);
     expect(replacement.excludedThesisReplacements).toEqual(["71ITGR40206"]);
@@ -1080,7 +1081,7 @@ describe("the real codes of the graduation standard (comp-calc-v22, user 2026-11
     expect(byName(real, "Phát triển web")).toMatchObject({ status: "scored" });
     // Graduation reads the CTĐT as filed both ways: the same groups, credits and GPA.
     expect(real.graduation).toEqual(filed.graduation);
-    expect(real.meta.calcVersion).toBe("comp-calc-v24");
+    expect(real.meta.calcVersion).toBe("comp-calc-v25");
   });
 });
 

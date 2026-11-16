@@ -3,7 +3,7 @@ import {
   aiStateCopy, bucketSkills, canRegenerate, cleanKeyText, confidentStrengths, countAxis, dataUsedLine, displayLevel, FIT_SCALE, fitLabelOf, fitLevelOf, fitDataShareOf, fitScoreOf, fitStep, gapHistory, levelChart, levelSummary, levelText, overallIsPooled, thesisWayAdvised, thesisPlanOutdatedText, lateBeforeStudyTerm, physicalEducationOutdated, deficitText, eligibilityDisplay, errorMessage, filterSkills, formatScore,
   careerDataText, careerSummaryText, choiceLabel, courseTermText, formatDifference, gapStatusDisplay, groupEvidenceCounts, historySentence, historyYears, isGap, isOverdue, isPreconditionError, PRIORITY_LABELS, levelStep, mapAiOutput, missingRequirements, missingRequirementsMessage, modelLabel, needsSelfStudy, nextCourseCount, nextTermOf, plannedCourseNote, plansFor, relatedSkillNames, shownScore, skillGroupKeys,
   scoreDifference, shouldPoll, sortRequirements, studyTermOf, termLabel, upcomingText, CHART_LEVELS, EMPTY_SKILL_FILTERS, LEVEL_COLUMNS,
-  careerThresholdsLine, chartLevelLabel, currentImprovements, LEVEL_SCALE, levelOfScore, withCurrentLevels,
+  careerThresholdsLine, chartLevelLabel, currentImprovements, LEVEL_SCALE, levelOfScore, requiredThresholdOutdatedText, withCurrentLevels,
   careerRaise, careerSkillKeys, hasCompetencyContent, hasGapContent, normalizePreviousComment, ownComment, previousComment, aiReasoned,
 } from "./student-competency-data";
 import { fixtureAiOutput, fixtureAssessment, fixtureResult } from "./student-competency.fixture";
@@ -51,6 +51,23 @@ describe("levels named like the transcript's classification (comp-calc-v10, user
     const preferredOnly = (preferred: number) => ({ requirements: career.requirements.filter((req) => !req.isRequired).map((req) => ({ ...req, threshold: preferred })) });
     expect(careerThresholdsLine(preferredOnly(70))).toBe("Ngưỡng đạt: kỹ năng Ưu tiên từ 70, kỹ năng Bắt buộc từ 85.");
     expect(careerThresholdsLine(preferredOnly(62.5))).toBe("Ngưỡng đạt: kỹ năng Ưu tiên từ 62,5 (mức Khá), kỹ năng Bắt buộc từ 80 (mức Giỏi).");
+    // comp-calc-v25 (user 2026-11-16: "cài ở tất cả ở mức khá"): one threshold, Khá, for both kinds; a v25 career with Ưu tiên
+    // skills only reads it from its version.
+    expect(careerThresholdsLine(at(62.5, 62.5), "comp-calc-v25")).toBe("Ngưỡng đạt: kỹ năng Bắt buộc và Ưu tiên đều từ 62,5 (mức Khá).");
+    expect(careerThresholdsLine(at(62.5, 62.5))).toBe("Ngưỡng đạt: kỹ năng Bắt buộc và Ưu tiên đều từ 62,5 (mức Khá).");
+    expect(careerThresholdsLine(preferredOnly(62.5), "comp-calc-v25")).toBe("Ngưỡng đạt: kỹ năng Bắt buộc và Ưu tiên đều từ 62,5 (mức Khá).");
+    expect(careerThresholdsLine(preferredOnly(62.5), "comp-calc-v24")).toBe("Ngưỡng đạt: kỹ năng Ưu tiên từ 62,5 (mức Khá), kỹ năng Bắt buộc từ 80 (mức Giỏi).");
+    expect(careerThresholdsLine(at(62.5, 80), "comp-calc-v24")).toBe("Ngưỡng đạt: kỹ năng Ưu tiên từ 62,5 (mức Khá), kỹ năng Bắt buộc từ 80 (mức Giỏi).");
+  });
+  it("asks a result stored with a higher Bắt buộc threshold to be run again (comp-calc-v25)", () => {
+    const career = fixtureResult.career!;
+    const at = (preferred: number, required: number) => ({ career: { ...career, requirements: career.requirements.map((req) => ({ ...req, threshold: req.isRequired ? required : preferred })) } });
+    expect(requiredThresholdOutdatedText(at(62.5, 80))).toBe("Kết quả này được tính khi kỹ năng Bắt buộc còn cần từ 80 điểm (mức Giỏi). "
+      + "Nay mọi kỹ năng của vị trí nghề nghiệp chỉ cần từ 62,5 (mức Khá). Bấm “Đánh giá lại” để cập nhật.");
+    expect(requiredThresholdOutdatedText(at(70, 85))).toContain("Bắt buộc còn cần từ 85 điểm. Nay");
+    expect(requiredThresholdOutdatedText(at(62.5, 62.5))).toBeNull();
+    expect(requiredThresholdOutdatedText({ career: { ...career, requirements: career.requirements.filter((req) => !req.isRequired) } })).toBeNull();
+    expect(requiredThresholdOutdatedText({ career: null })).toBeNull();
   });
 });
 
