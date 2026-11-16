@@ -340,6 +340,10 @@ describe("learning resources", () => {
     expect(resourceKey("TCP/IP (giao thức mạng)")).toBe("tcp/ip");
     expect(resourceKey("Hệ thống thông tin địa lý (GIS)")).toBe("he thong thong tin dia ly");
     expect(resourceKey("(GIS)")).toBe("(gis)");
+    // A renamed skill: its old names find the list of its name now.
+    expect(resourceKey("Thiết kế giao diện dễ tiếp cận")).toBe("thiet ke giao dien de tiep can");
+    expect(resourceKey("Accessibility")).toBe(resourceKey("Thiết kế giao diện dễ tiếp cận"));
+    expect(resourceKey("Accessibility (giao diện hỗ trợ người khuyết tật)")).toBe(resourceKey("Thiết kế giao diện dễ tiếp cận"));
     expect(linesOf(chunks[0]!)).toEqual([
       "Tài liệu tự học cho kỹ năng Docker (danh sách EduPath AI tuyển chọn, kiểm tra ngày 28/10/2026).",
       "Tài liệu:",

@@ -741,13 +741,19 @@ const RESOURCE_WORDS: Record<string, string> = {
 };
 const resourceWord = (value: string | null) => (value ? RESOURCE_WORDS[value.trim().toLowerCase()] ?? clean(value, 60) : "");
 /**
+ * Old names of renamed skills → the key of their name now, so a result stored before the rename still finds the list (user
+ * 2026-11-16: "Accessibility sửa lại là Thiết kế giao diện dễ tiếp cận đi").
+ */
+const RENAMED_SKILL_KEYS = new Map([[fold("Accessibility"), fold("Thiết kế giao diện dễ tiếp cận")]]);
+/**
  * The resource key of a skill: its name folded (no accents, lower case), so a lookup by name needs no catalog id. A gloss in
  * brackets is left out (user 2026-11-16: "IAM" became "IAM (quản lý tài khoản và phân quyền)"), so a list keeps its key and a
  * result stored with the name before the gloss still finds it.
  */
 export const resourceKey = (skill: string) => {
   const bare = skill.includes("(") ? skill.replace(/\s*\([^)]*\)/g, " ").replace(/\s+/g, " ").trim() : skill;
-  const key = fold(bare || skill);
+  const folded = fold(bare || skill);
+  const key = RENAMED_SKILL_KEYS.get(folded) ?? folded;
   return key.length <= 200 ? key : `${key.slice(0, 180)}~${createHash("sha256").update(key).digest("hex").slice(0, 12)}`;
 };
 
