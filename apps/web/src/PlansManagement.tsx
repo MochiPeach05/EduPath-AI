@@ -778,6 +778,7 @@ function ImportPlan({
       onClose={onClose}
     >
       <div className="cm-dialog-body pm-import">
+        <p>1. Chọn tệp Excel → 2. Xem trước và rà soát → 3. Lưu vào hệ thống</p>
         <p>
           Chọn kế hoạch hoàn chỉnh theo mẫu Khoa. Tên tệp bất kỳ; ngành và khóa
           được đọc từ nội dung.

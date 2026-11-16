@@ -322,6 +322,7 @@ function ImportDialog({
       busy={busy}
     >
       <div className="cm-dialog-body cm-form">
+        <p>1. Chọn tệp Excel → 2. Xem trước và rà soát → 3. Lưu vào hệ thống</p>
         <p>
           Chọn tệp Excel (.xls, .xlsx) hoặc ZIP, tối đa 5 MB.
         </p>
