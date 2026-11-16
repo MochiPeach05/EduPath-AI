@@ -335,6 +335,11 @@ describe("learning resources", () => {
     expect(chunks).toHaveLength(1);
     expect(chunks[0]).toMatchObject({ sourceKey: resourceKey("Docker"), title: "Tài liệu tự học: Docker", link: null });
     expect(resourceKey("Docker")).toBe("docker");
+    // A gloss in brackets is not part of the key (2026-11-16): the renamed skill and a result stored with its old name meet.
+    expect(resourceKey("IAM (quản lý tài khoản và phân quyền)")).toBe(resourceKey("IAM"));
+    expect(resourceKey("TCP/IP (giao thức mạng)")).toBe("tcp/ip");
+    expect(resourceKey("Hệ thống thông tin địa lý (GIS)")).toBe("he thong thong tin dia ly");
+    expect(resourceKey("(GIS)")).toBe("(gis)");
     expect(linesOf(chunks[0]!)).toEqual([
       "Tài liệu tự học cho kỹ năng Docker (danh sách EduPath AI tuyển chọn, kiểm tra ngày 28/10/2026).",
       "Tài liệu:",

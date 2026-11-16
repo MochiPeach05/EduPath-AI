@@ -2,7 +2,7 @@
   "checkedAt": "2026-10-28",
   "skills": [
     {
-      "skill": "Accessibility",
+      "skill": "Accessibility (giao diện hỗ trợ người khuyết tật)",
       "resources": [
         {
           "title": "Accessibility",
@@ -72,7 +72,7 @@
       ]
     },
     {
-      "skill": "API",
+      "skill": "API (giao tiếp giữa các phần mềm)",
       "resources": [
         {
           "title": "What is an API? A Beginner's Guide to APIs",
@@ -422,7 +422,7 @@
       ]
     },
     {
-      "skill": "ETL/ELT",
+      "skill": "ETL/ELT (trích xuất, chuyển đổi và nạp dữ liệu)",
       "resources": [
         {
           "title": "Extract, transform, load (ETL)",
@@ -772,7 +772,7 @@
       ]
     },
     {
-      "skill": "IAM",
+      "skill": "IAM (quản lý tài khoản và phân quyền)",
       "resources": [
         {
           "title": "Describe identity concepts",
@@ -1377,7 +1377,7 @@
       ]
     },
     {
-      "skill": "LLM/NLP",
+      "skill": "LLM/NLP (mô hình ngôn ngữ lớn, xử lý ngôn ngữ tự nhiên)",
       "resources": [
         {
           "title": "Hugging Face LLM Course",
@@ -1517,7 +1517,7 @@
       ]
     },
     {
-      "skill": "MLOps",
+      "skill": "MLOps (vận hành mô hình học máy)",
       "resources": [
         {
           "title": "MLOps: Continuous delivery and automation pipelines in machine learning",
@@ -2657,7 +2657,7 @@
       ]
     },
     {
-      "skill": "REST API",
+      "skill": "REST API (xây dựng dịch vụ web)",
       "resources": [
         {
           "title": "Web API Design Best Practices",
@@ -2727,7 +2727,7 @@
       ]
     },
     {
-      "skill": "SIEM",
+      "skill": "SIEM (giám sát sự kiện bảo mật)",
       "resources": [
         {
           "title": "Introduction to Microsoft Sentinel",
@@ -2867,7 +2867,7 @@
       ]
     },
     {
-      "skill": "TCP/IP",
+      "skill": "TCP/IP (giao thức mạng)",
       "resources": [
         {
           "title": "TCP/IP addressing and subnetting",
@@ -3417,7 +3417,7 @@
       ]
     },
     {
-      "skill": "UML/BPMN",
+      "skill": "UML/BPMN (vẽ sơ đồ hệ thống và quy trình)",
       "resources": [
         {
           "title": "What is Unified Modeling Language (UML)?",

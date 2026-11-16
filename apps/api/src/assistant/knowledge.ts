@@ -740,9 +740,14 @@ const RESOURCE_WORDS: Record<string, string> = {
   "co-ban": "cơ bản", "trung-cap": "trung cấp", "nang-cao": "nâng cao",
 };
 const resourceWord = (value: string | null) => (value ? RESOURCE_WORDS[value.trim().toLowerCase()] ?? clean(value, 60) : "");
-/** The resource key of a skill: its name folded (no accents, lower case), so a lookup by name needs no catalog id. */
+/**
+ * The resource key of a skill: its name folded (no accents, lower case), so a lookup by name needs no catalog id. A gloss in
+ * brackets is left out (user 2026-11-16: "IAM" became "IAM (quản lý tài khoản và phân quyền)"), so a list keeps its key and a
+ * result stored with the name before the gloss still finds it.
+ */
 export const resourceKey = (skill: string) => {
-  const key = fold(skill);
+  const bare = skill.includes("(") ? skill.replace(/\s*\([^)]*\)/g, " ").replace(/\s+/g, " ").trim() : skill;
+  const key = fold(bare || skill);
   return key.length <= 200 ? key : `${key.slice(0, 180)}~${createHash("sha256").update(key).digest("hex").slice(0, 12)}`;
 };
 
