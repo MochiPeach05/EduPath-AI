@@ -1164,7 +1164,7 @@ export default function StudentCompetency({ profile, view = "competency", notice
       <GraduationSection />
     </>)}
     {consentOpen && <ConsentDialog busy={busy === "run"} onClose={() => setConsentOpen(false)} onConfirm={confirmConsent} />}
-    {careerOpen && <CareerTargetDialog onClose={() => setCareerOpen(false)} onSaved={targetSaved} />}
+    {careerOpen && <CareerTargetDialog currentId={profile?.careerPositionId ?? null} onClose={() => setCareerOpen(false)} onSaved={targetSaved} />}
     {deleteOpen && <DeleteDialog busy={busy === "delete"} error={deleteError} onClose={() => setDeleteOpen(false)} onConfirm={() => void remove()} />}
     {actingConfirm && <ActingConfirmDialog {...assessmentConfirm(Boolean(assessment))} onClose={() => setActingConfirm(false)}
       onConfirm={() => { setActingConfirm(false); void run(false); }} />}

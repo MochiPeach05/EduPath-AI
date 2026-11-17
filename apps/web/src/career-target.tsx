@@ -5,13 +5,25 @@ import { meaningClass } from "./display-format";
 import { fitMeaning } from "./student-competency-data";
 
 // The target vị trí nghề nghiệp, shared by Định hướng nghề nghiệp and the "Đổi vị trí nghề nghiệp mục tiêu" popup of Khoảng trống kỹ năng
-// (user 2026-11-17): reading the fits, saving the target, and the fit's score, badge and target tag as both draw them.
+// (user 2026-11-17): reading the fits (and the plain list of the popup), saving the target, and the fit's score, badge and target tag.
 
 export async function readGuidance(): Promise<GuidanceResponse> {
   const response = await fetch(CAREER_GUIDANCE_API, { credentials: "include", cache: "no-store" });
   if (response.status === 401) window.dispatchEvent(new Event("edupath-session-expired"));
   if (!response.ok) throw new Error("Chưa tải được thông tin định hướng nghề nghiệp. Vui lòng thử lại.");
   return response.json() as Promise<GuidanceResponse>;
+}
+
+/** A vị trí of the catalog as GET /api/student/careers lists it (by name, no fit): the popup of Khoảng trống kỹ năng. */
+export type CareerListItem = { id: string; nameVi: string; nameEn: string; categoryName: string | null };
+
+/** Every vị trí nghề nghiệp of the catalog, without computing any fit (user 2026-11-17: the fit belongs to Định hướng nghề nghiệp). */
+export async function readCareerList(): Promise<CareerListItem[]> {
+  const response = await fetch("/api/student/careers", { credentials: "include", cache: "no-store" });
+  if (response.status === 401) window.dispatchEvent(new Event("edupath-session-expired"));
+  if (!response.ok) throw new Error("Chưa tải được danh sách vị trí nghề nghiệp. Vui lòng thử lại.");
+  const body = await response.json() as { items?: CareerListItem[] };
+  return (body.items ?? []).map(({ id, nameVi, nameEn, categoryName }) => ({ id, nameVi, nameEn, categoryName: categoryName ?? null }));
 }
 
 /** Saves the target; reassessed: the API stored a new assessment for it (plan "Một bước để bắt đầu"). */

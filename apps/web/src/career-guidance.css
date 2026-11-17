@@ -294,5 +294,8 @@
 /* "Đổi vị trí nghề nghiệp mục tiêu" on Khoảng trống kỹ năng (CareerTargetDialog, user 2026-11-17): every vị trí in a popup. */
 .ctd-dialog { width: min(860px, calc(100vw - 32px)); }
 .ctd-search { grid-template-columns: minmax(0, 1fr); }
+/* No fit column here (user 2026-11-17: the fit belongs to Định hướng nghề nghiệp): the name, then the button or the target tag. */
+.ctd-list, .ctd-list > li { grid-template-columns: minmax(0, 1fr) auto; }
+.ctd-list > li { grid-template-columns: subgrid; }
 .ctd-footer p { margin: 0; color: #616777; font-size: 13px; line-height: 1.6; }
 .ctd-footer .sw-text-link { min-height: 0; padding: 0; font-size: 13px; }
