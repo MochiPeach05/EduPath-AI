@@ -20,6 +20,7 @@ import "./student-curriculum.css";
 import "./student-graduation.css";
 import "./student-records.css";
 import { isAdvisorView } from "./advisor-view";
+import CareerTargetDialog from "./CareerTargetDialog";
 import { ActingConfirmDialog, assessmentConfirm } from "./acting-confirm";
 import "./student-competency.css";
 
@@ -922,18 +923,20 @@ function PreviousComment({ comment, view, note }: { comment: PreviousAiComment; 
  * What the assessment is computed from: the transcript and the specialty (plan "Một bước để bắt đầu", 2026-11-14), and on
  * Khoảng trống kỹ năng the target career too, chosen on Định hướng nghề nghiệp.
  */
-function Checklist({ hasTranscript, transcriptFailed, profile, suggestion, view }: { hasTranscript: boolean | null; transcriptFailed: boolean; profile: Profile | null; suggestion: string | null; view: CompetencyView }) {
+/** onCareer: "Đổi"/"Chọn" of the target opens the popup of this page (user 2026-11-17) instead of going to Định hướng nghề nghiệp. */
+function Checklist({ hasTranscript, transcriptFailed, profile, suggestion, view, onCareer }: { hasTranscript: boolean | null; transcriptFailed: boolean; profile: Profile | null; suggestion: string | null; view: CompetencyView; onCareer?: () => void }) {
   const specialty = profile?.specialty ?? null;
-  const items: { label: string; done: boolean | null; value: string; note?: string | null; href: string; edit: string; add: string }[] = [
+  const items: { label: string; done: boolean | null; value: string; note?: string | null; href: string; edit: string; add: string; action?: () => void }[] = [
     { label: "Bảng điểm", done: hasTranscript, value: transcriptFailed ? "Chưa kiểm tra được — thử tải lại trang" : hasTranscript === null ? "Đang kiểm tra…" : hasTranscript ? "Đã import" : "Chưa có bảng điểm", href: "#profile", edit: "Chỉnh sửa", add: "Bổ sung" },
     { label: "Chuyên ngành", done: profile ? Boolean(specialty) : null, value: profile ? (specialty ? specialtyLabel(specialty) : "Chưa chọn") : "Đang tải…", note: !specialty ? suggestion : null, href: "#profile", edit: "Chỉnh sửa", add: "Bổ sung" },
-    ...(view === "gap" ? [{ label: "Vị trí nghề nghiệp mục tiêu", done: profile ? Boolean(profile.careerPositionId) : null, value: profile?.careerPosition?.nameVi ?? (profile ? "Chưa chọn" : "Đang tải…"), href: "#career", edit: "Đổi", add: "Chọn" }] : []),
+    ...(view === "gap" ? [{ label: "Vị trí nghề nghiệp mục tiêu", done: profile ? Boolean(profile.careerPositionId) : null, value: profile?.careerPosition?.nameVi ?? (profile ? "Chưa chọn" : "Đang tải…"), href: "#career", edit: "Đổi", add: "Chọn", action: onCareer }] : []),
   ];
   return <ul className="scomp-checklist" aria-label="Điều kiện đánh giá">{items.map((item) => <li key={item.label}>
     <span className={`so-check ${item.done ? "so-check-done" : ""}`} aria-hidden="true">{item.done ? <Icon name="check" /> : null}</span>
     <span className="scomp-check-text"><strong>{item.label}</strong><span>{item.value}</span>{item.note && <span className="scomp-suggestion">{item.note}</span>}</span>
     <span className="sr-only">{item.done === null ? "Chưa xác định" : item.done ? "Đã có" : "Chưa có"}</span>
-    <a className="sw-text-link" href={item.href}>{item.done ? item.edit : item.add}</a>
+    {item.action ? <button type="button" className="sw-text-link" onClick={item.action} aria-haspopup="dialog">{item.done ? item.edit : item.add}</button>
+      : <a className="sw-text-link" href={item.href}>{item.done ? item.edit : item.add}</a>}
   </li>)}</ul>;
 }
 
@@ -953,7 +956,8 @@ const HEADER_COPY: Record<CompetencyView, { title: string; resultTitle: string; 
 };
 
 /** notice: shown under the result panel when the workspace passes one (it passed "Hồ sơ của bạn chưa đầy đủ" until 2026-11-14). */
-export default function StudentCompetency({ profile, view = "competency", notice }: { profile: Profile | null; view?: CompetencyView; notice?: ReactNode }) {
+/** onProfileChanged: the workspace reads the profile again (the target chosen in the popup of Khoảng trống kỹ năng). */
+export default function StudentCompetency({ profile, view = "competency", notice, onProfileChanged }: { profile: Profile | null; view?: CompetencyView; notice?: ReactNode; onProfileChanged?: () => void }) {
   const [revision, setRevision] = useState(0);
   const live = useLiveData(`${COMPETENCY_API}/latest`, revision, readLatest);
   const transcript = useLiveData("/api/student/transcript", 0, readTranscriptPresence);
@@ -969,6 +973,16 @@ export default function StudentCompetency({ profile, view = "competency", notice
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [actingConfirm, setActingConfirm] = useState(false);
   const [deleteError, setDeleteError] = useState("");
+  // "Đổi vị trí nghề nghiệp mục tiêu" (user 2026-11-17): the popup, and what the page says once a target is saved.
+  const [careerOpen, setCareerOpen] = useState(false);
+  const [targetNotice, setTargetNotice] = useState("");
+  const targetSaved = (text: string, reassessed: boolean) => {
+    setCareerOpen(false);
+    setTargetNotice(text);
+    onProfileChanged?.();
+    // The API stored a new assessment for the new target: the page reads it like after "Đánh giá lại".
+    if (reassessed) setRevision((value) => value + 1);
+  };
 
   // The newest comment this page session has shown (the assessment's own, or the older one the API sent): "Đánh giá lại"
   // answers with the new assessment alone, so the page keeps showing it, dimmed, until the new comment is ready.
@@ -1111,7 +1125,9 @@ export default function StudentCompetency({ profile, view = "competency", notice
           {assessment && view === "competency" && !isAdvisorView() && <button type="button" className="sr-secondary sr-danger" disabled={busy !== null} onClick={() => { setDeleteError(""); setDeleteOpen(true); }}><Icon name="trash" />Xóa kết quả đánh giá</button>}
         </div>
       </div>
-      <Checklist hasTranscript={hasTranscript} transcriptFailed={!transcript.loading && Boolean(transcript.error)} profile={profile} suggestion={result?.specialtySuggestion?.text ?? null} view={view} />
+      <Checklist hasTranscript={hasTranscript} transcriptFailed={!transcript.loading && Boolean(transcript.error)} profile={profile} suggestion={result?.specialtySuggestion?.text ?? null} view={view}
+        onCareer={view === "gap" ? () => { setTargetNotice(""); setCareerOpen(true); } : undefined} />
+      {targetNotice && <div className="sr-success" role="status">{targetNotice}</div>}
       {profileChanged && !noTarget && <p className="scomp-meta">Hồ sơ đã thay đổi sau lần đánh giá này. Bấm “Đánh giá lại” để cập nhật kết quả.</p>}
       {result && !thesisWayAdvised(result.meta.calcVersion) && <p className="scomp-meta">Kết quả này được tính trước khi hệ thống đề xuất một phương án cho nhóm đồ án tốt nghiệp (Đồ án tốt nghiệp, hoặc Chuyên đề tốt nghiệp thay thế). Bấm “Đánh giá lại” để cập nhật gợi ý học phần.</p>}
       {result && thesisPlanNote && <p className="scomp-meta">{thesisPlanNote}</p>}
@@ -1148,6 +1164,7 @@ export default function StudentCompetency({ profile, view = "competency", notice
       <GraduationSection />
     </>)}
     {consentOpen && <ConsentDialog busy={busy === "run"} onClose={() => setConsentOpen(false)} onConfirm={confirmConsent} />}
+    {careerOpen && <CareerTargetDialog onClose={() => setCareerOpen(false)} onSaved={targetSaved} />}
     {deleteOpen && <DeleteDialog busy={busy === "delete"} error={deleteError} onClose={() => setDeleteOpen(false)} onConfirm={() => void remove()} />}
     {actingConfirm && <ActingConfirmDialog {...assessmentConfirm(Boolean(assessment))} onClose={() => setActingConfirm(false)}
       onConfirm={() => { setActingConfirm(false); void run(false); }} />}

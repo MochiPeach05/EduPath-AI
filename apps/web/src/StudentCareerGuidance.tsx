@@ -1,17 +1,17 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Icon } from "./student-icons";
 import {
-  CAREER_GUIDANCE_API, COMPARE_MAX, FIT_ORDER_TEXT, FIT_RULE_TEXT, FIT_SCORE_LABEL, FIT_STEP, bestFitsHeading, blockedAction, blockedText, careerPicks, compareRows, filterCareers, fitRuleText,
-  fitScoreText, fitSummary, gapNote, hasFit, interestReason, matchesInterests, metSkills, missingSkills, nameList, orderedRequirements, requirementName,
-  reassessedOf, requirementScoreText, requirementSourcesText, requirementState, surveyInterests, targetSavedNotice, toggleCompare, type CareerFilters, type GuidanceCareer,
+  COMPARE_MAX, FIT_ORDER_TEXT, FIT_RULE_TEXT, FIT_SCORE_LABEL, bestFitsHeading, blockedAction, blockedText, careerPicks, compareRows, filterCareers, fitRuleText,
+  fitSummary, gapNote, hasFit, interestReason, matchesInterests, metSkills, missingSkills, nameList, orderedRequirements, requirementName,
+  requirementScoreText, requirementSourcesText, requirementState, surveyInterests, targetSavedNotice, toggleCompare, type CareerFilters, type GuidanceCareer,
   type GuidanceResponse, type GuidanceRequirement,
 } from "./career-guidance-data";
 import StudentProfileSurvey from "./StudentProfileSurvey";
 import { SURVEY_SECTION_ID } from "./profile-survey";
-import { meaningClass } from "./display-format";
 import { fitMeaning } from "./student-competency-data";
 import { isAdvisorView } from "./advisor-view";
 import { ActingConfirmDialog, goalsConfirm } from "./acting-confirm";
+import { FitBadge, FitScore, TargetTag, readGuidance, saveTarget, useModal } from "./career-target";
 import "./career-guidance.css";
 
 // "Định hướng nghề nghiệp" (#career, user 2026-10-24: "làm theo ý bạn muốn nhưng vẫn phải phù hợp với đề tài"): the
@@ -19,7 +19,7 @@ import "./career-guidance.css";
 // comparison of up to three careers, and choosing the target career. The system computes the fits; no AI.
 // Since the plan "Một bước để bắt đầu" (2026-11-14, approved preview https://claude.ai/code/artifact/1d5dbbec-1c0b-4aa2-acb0-839de3ae86b6;
 // the advisor: "vị trí nghề nghiệp để bên chỗ định hướng, khi nào người ta muốn định hướng thì người ta mới chọn"), this
-// is the one place the target is chosen, and it is optional; Khảo sát nhanh (5 items, optional) lives here beside the best
+// is where the target is chosen (Khoảng trống kỹ năng also changes it in its own popup since 2026-11-17, CareerTargetDialog), and it is optional; Khảo sát nhanh (5 items, optional) lives here beside the best
 // fit. Choosing the target makes the API assess again when it can (PATCH answer `reassessed`).
 // Read top-down since 2026-10-31 (user: "Giao diện đưa ra quá nhiều thông tin, sinh viên không biết nên đọc gì. Ưu tiên kết
 // quả phù hợp nhất; phân cấp nội dung và giảm các phần phụ không cần thiết"; approved preview
@@ -34,44 +34,6 @@ import "./career-guidance.css";
 type Notice = { tone: "success" | "error"; text: string; link?: "competency" | "skill-gap" | null } | null;
 const NOTICE_LINKS = { competency: { href: "#competency", label: "Mở Đánh giá năng lực" }, "skill-gap": { href: "#skill-gap", label: "Xem Khoảng trống kỹ năng" } } as const;
 
-async function readGuidance(): Promise<GuidanceResponse> {
-  const response = await fetch(CAREER_GUIDANCE_API, { credentials: "include", cache: "no-store" });
-  if (response.status === 401) window.dispatchEvent(new Event("edupath-session-expired"));
-  if (!response.ok) throw new Error("Chưa tải được thông tin định hướng nghề nghiệp. Vui lòng thử lại.");
-  return response.json() as Promise<GuidanceResponse>;
-}
-
-/** Saves the target; reassessed: the API stored a new assessment for it (plan "Một bước để bắt đầu"). */
-async function saveTarget(careerId: string): Promise<{ reassessed: boolean }> {
-  const response = await fetch("/api/student/profile", {
-    method: "PATCH", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ careerPositionId: careerId }),
-  });
-  const body = await response.json().catch(() => ({})) as { error?: string };
-  if (response.ok) return { reassessed: reassessedOf(body) };
-  if (response.status === 401) window.dispatchEvent(new Event("edupath-session-expired"));
-  throw new Error(body.error === "career_unavailable" ? "Vị trí này vừa bị xóa khỏi danh mục. Hãy chọn vị trí nghề nghiệp khác."
-    : "Chưa lưu được vị trí nghề nghiệp mục tiêu. Vui lòng thử lại.");
-}
-
-/** The fit in the colour of its word, as on Khoảng trống kỹ năng (fitMeaning: Ít phù hợp amber, never green). */
-function FitBadge({ career, compact = false }: { career: GuidanceCareer; compact?: boolean }) {
-  if (!career.fit) return <span className="cg-fit cg-fit-0">Chưa tính</span>;
-  const step = FIT_STEP[career.fit.code];
-  const meaning = fitMeaning(career.fit.code);
-  return <span className={`cg-fit cg-fit-${step}${compact ? " cg-fit-compact" : ""}${meaning !== "none" ? ` ${meaningClass(meaning)}` : ""}`}>
-    <span className="cg-pips" aria-hidden="true">{[1, 2, 3, 4, 5].map((pip) => <i key={pip} className={pip <= step ? "is-on" : undefined} />)}</span>
-    {career.fit.label}
-  </span>;
-}
-
-/** The điểm phù hợp kỹ năng out of 100; `named` reads its name to screen readers where the name is shown only as a column title. */
-function FitScore({ career, named = false }: { career: GuidanceCareer; named?: boolean }) {
-  const name = named && <span className="sr-only">{FIT_SCORE_LABEL} </span>;
-  return hasFit(career)
-    ? <strong className="cg-score">{name}{fitScoreText(career.fit!.score!)}<small>/100</small></strong>
-    : <strong className="cg-score cg-score-none">{name}—</strong>;
-}
-
 function InterestTags({ career }: { career: GuidanceCareer }) {
   if (!matchesInterests(career)) return null;
   return <p className="cg-interest">
@@ -85,13 +47,6 @@ function StateChip({ requirement }: { requirement: GuidanceRequirement }) {
   const state = requirementState(requirement);
   return <span className={`cg-state cg-state-${state.tone}`}><span aria-hidden="true">{state.glyph}</span> {state.text}</span>;
 }
-
-/**
- * The student's target among the vị trí nghề nghiệp. `action` stands in for the "Chọn làm vị trí nghề nghiệp mục tiêu" button, so it takes the
- * buttons' height and corners and lines up with the button beside it (advisor 2026-10-31: the label "bị lệch").
- */
-const TargetTag = ({ action = false }: { action?: boolean }) =>
-  <span className={`cg-target-tag${action ? " cg-target-tag-action" : ""}`}><Icon name="check" />Vị trí nghề nghiệp mục tiêu</span>;
 
 /**
  * "+ So sánh" (advisor 2026-10-31: "Luồng chọn tối đa 3 vị trí để so sánh khó hiểu; người dùng không biết cần bấm ở đâu"): adds
@@ -167,18 +122,6 @@ const PickHead = () => <div className="cg-pick-head" aria-hidden="true"><span />
 /** "Căn cứ" and "Thứ tự" under the title of a short list (advisor 2026-10-31: "bổ sung mô tả căn cứ đánh giá và thứ tự sắp xếp"). */
 const PickBasis = ({ basis, order }: { basis: ReactNode; order: ReactNode }) =>
   <dl className="cg-basis"><div><dt>Căn cứ:</dt><dd>{basis}</dd></div><div><dt>Thứ tự:</dt><dd>{order}</dd></div></dl>;
-
-/** A modal that opens over the page, gives focus back to what opened it, and closes with Esc through onClose. */
-function useModal() {
-  const dialog = useRef<HTMLDialogElement>(null);
-  useLayoutEffect(() => {
-    const opener = document.activeElement as HTMLElement | null;
-    const element = dialog.current;
-    element?.showModal();
-    return () => { element?.close(); if (opener?.isConnected) opener.focus(); };
-  }, []);
-  return dialog;
-}
 
 function DetailDialog({ career, saving, compared, compareFull, onCompare, onChoose, onClose }: {
   career: GuidanceCareer; saving: boolean; compared: boolean; compareFull: boolean; onCompare: () => void; onChoose: () => void; onClose: () => void;

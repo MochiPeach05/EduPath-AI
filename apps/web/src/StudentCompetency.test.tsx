@@ -513,8 +513,8 @@ describe("StudentCompetency — Khoảng trống kỹ năng", () => {
     for (const id of ["sgap-summary", "scomp-career", "sgap-history"]) expect(html).not.toContain(`id="${id}"`);
     expect(html.indexOf('id="sgap-no-target-title"')).toBeLessThan(html.indexOf('id="scomp-courses"'));
     expect(html).not.toContain("Hồ sơ đã thay đổi sau lần đánh giá này");
-    // The checklist of this page names the target, which is chosen on Định hướng nghề nghiệp.
-    expect(html).toMatch(/<strong>Vị trí nghề nghiệp mục tiêu<\/strong><span>Chưa chọn<\/span>.*?<a class="sw-text-link" href="#career">Chọn<\/a>/);
+    // The checklist of this page names the target; its Chọn opens the popup of this page (user 2026-11-17), not Định hướng nghề nghiệp.
+    expect(html).toMatch(/<strong>Vị trí nghề nghiệp mục tiêu<\/strong><span>Chưa chọn<\/span>.*?<button type="button" class="sw-text-link" aria-haspopup="dialog">Chọn<\/button>/);
     // Before any assessment: choose, then assess.
     const first = render({ assessment: null, aiEnabled: false, workerOnline: false }, { view: "gap", target: false });
     expect(first).toContain("Hãy chọn vị trí ở Định hướng nghề nghiệp, rồi bấm “Đánh giá năng lực” để xem kỹ năng còn thiếu.");
@@ -552,8 +552,12 @@ describe("StudentCompetency — audit of 2026-10-25", () => {
     expect(html).toContain('href="#skill-gap">Xem Khoảng trống kỹ năng');
     const none = withResult((result) => ({ ...result, career: null }));
     expect(none).toContain('<a class="sw-text-link" href="#career">Chọn vị trí nghề nghiệp mục tiêu');
-    // The target is chosen on Định hướng nghề nghiệp (2026-11-14): its link on Khoảng trống kỹ năng, by the checklist.
-    expect(withResult((result) => ({ ...result, career: null }), "gap")).toContain('<a class="sw-text-link" href="#career">Đổi</a>');
+    // Khoảng trống kỹ năng changes the target in its own popup (user 2026-11-17: "có thể hiện 1 popup đổi ở trang này luôn"); the other
+    // items of its checklist stay links.
+    const gap = withResult((result) => ({ ...result, career: null }), "gap");
+    expect(gap).toContain('<button type="button" class="sw-text-link" aria-haspopup="dialog">Đổi</button>');
+    expect(gap).toContain('<a class="sw-text-link" href="#profile">Chỉnh sửa</a>');
+    expect(gap).not.toContain('href="#career">Đổi');
   });
 
   it("explains Chưa học and names a planned evidence course Sắp học after the term being studied", () => {

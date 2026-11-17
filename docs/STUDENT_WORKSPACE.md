@@ -15,7 +15,7 @@ Giảng viên hướng dẫn góp ý ngày 13/11: bắt chọn 3 mục rồi th�
 | Xét tốt nghiệp | Bảng điểm, chuyên ngành (import ngay trên trang khi chưa có) | |
 | Đánh giá năng lực | Bảng điểm, chuyên ngành | Vị trí nghề nghiệp mục tiêu |
 | Định hướng nghề nghiệp | Bảng điểm, chuyên ngành | Chọn vị trí mục tiêu, Khảo sát nhanh ngay trên trang |
-| Khoảng trống kỹ năng | Đánh giá năng lực, vị trí nghề nghiệp mục tiêu (chưa có: nút mở Định hướng) | |
+| Khoảng trống kỹ năng | Đánh giá năng lực, vị trí nghề nghiệp mục tiêu (chưa có: nút mở Định hướng) | Đổi vị trí mục tiêu bằng hộp chọn ngay trên trang (17/11) |
 | Lộ trình AI | Đánh giá năng lực | Khảo sát nhanh |
 | CTĐT, Kế hoạch đào tạo, Trợ lý AI | Không đòi gì | |
 

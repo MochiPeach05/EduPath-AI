@@ -128,7 +128,7 @@ export function portalGuides(): PortalGuide[] {
       "Mọi con số do hệ thống tính; AI chỉ viết nhận xét để bạn tham khảo.",
     ]],
     ["khoang-trong-ky-nang", "Đọc trang Khoảng trống kỹ năng", "#skill-gap", [
-      "Khoảng trống kỹ năng so năng lực của bạn với yêu cầu của vị trí nghề nghiệp mục tiêu, từ lần Đánh giá năng lực mới nhất. Chưa chọn vị trí thì trang hiện nút Mở Định hướng nghề nghiệp để chọn.",
+      "Khoảng trống kỹ năng so năng lực của bạn với yêu cầu của vị trí nghề nghiệp mục tiêu, từ lần Đánh giá năng lực mới nhất. Chưa chọn vị trí thì trang hiện nút Mở Định hướng nghề nghiệp để chọn. Nút Đổi (chưa chọn: Chọn) cạnh Vị trí nghề nghiệp mục tiêu ở đầu trang mở hộp chọn vị trí ngay trên trang, kèm điểm phù hợp kỹ năng của từng vị trí.",
       `- Mỗi kỹ năng của vị trí nghề nghiệp là Bắt buộc hoặc Ưu tiên: ${careerThresholds()}.`,
       "- Trạng thái từng kỹ năng: Đạt ngưỡng; Dưới ngưỡng · thiếu N điểm; Chưa học; Sắp học (kèm học kỳ); Cần tự học (chỉ học phần của chuyên ngành khác hoặc học phần tự chọn bạn không chọn mới rèn luyện kỹ năng này); Chưa đủ dữ liệu (chương trình đào tạo chưa có học phần nào đo kỹ năng này). Kỹ năng còn thiếu là kỹ năng dưới ngưỡng, chưa học, cần tự học hoặc chưa đủ dữ liệu.",
       `- Điểm phù hợp (0–100) là trung bình điểm các kỹ năng của vị trí nghề nghiệp, kỹ năng Bắt buộc tính gấp đôi; kỹ năng chưa có điểm, kể cả Sắp học, tính 0. Mức phù hợp: Rất phù hợp từ ${formatNumber(LEVEL_THRESHOLDS.excellent)}, Phù hợp từ ${formatNumber(LEVEL_THRESHOLDS.proficient)}, Trung bình từ ${formatNumber(LEVEL_THRESHOLDS.good)}, Ít phù hợp từ ${formatNumber(LEVEL_THRESHOLDS.basic)}, Không phù hợp dưới ${formatNumber(LEVEL_THRESHOLDS.basic)}.`,

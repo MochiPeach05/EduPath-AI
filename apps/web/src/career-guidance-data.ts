@@ -182,6 +182,14 @@ export function targetSavedNotice(career: Pick<GuidanceCareer, "id" | "nameVi">,
   return { text: `${chosen} Bấm Đánh giá lại ở trang Đánh giá năng lực để cập nhật Khoảng trống kỹ năng và Lộ trình học tập theo vị trí mới.`, link: "competency" };
 }
 
+/**
+ * What Khoảng trống kỹ năng says after its "Đổi vị trí nghề nghiệp mục tiêu" popup saved a target (user 2026-11-17). reassessed: the page
+ * shows the new assessment already; otherwise its own note (Hồ sơ đã thay đổi… / Đánh giá năng lực) says what to do next.
+ */
+export const gapTargetSavedText = (name: string, reassessed: boolean) => (reassessed
+  ? `Đã chọn ${name} làm vị trí nghề nghiệp mục tiêu và đánh giá lại năng lực với vị trí này.`
+  : `Đã chọn ${name} làm vị trí nghề nghiệp mục tiêu.`);
+
 /** Whether the answer of PATCH /api/student/profile says a new assessment was stored for the new target (false from an older API). */
 export const reassessedOf = (body: unknown) => typeof body === "object" && body !== null && (body as { reassessed?: unknown }).reassessed === true;
 
