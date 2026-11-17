@@ -32,6 +32,7 @@ const StudentAssistant = lazyPage(() => import("./StudentAssistant"));
 
 const pages = [
   { id: "overview", label: "Tổng quan", icon: "home" },
+  { id: "graduation", label: "Xét tốt nghiệp", icon: "shield" },
   { id: "profile", label: "Hồ sơ và bảng điểm", icon: "user" },
   { id: "competency", label: "Đánh giá năng lực", icon: "chart" },
   { id: "skill-gap", label: "Khoảng trống kỹ năng", icon: "target" },
@@ -39,13 +40,13 @@ const pages = [
   { id: "roadmap", label: "Lộ trình học tập", icon: "route" },
   { id: "curriculum", label: "Chương trình đào tạo", icon: "book" },
   { id: "plans", label: "Kế hoạch đào tạo", icon: "clock" },
-  { id: "graduation", label: "Xét tốt nghiệp", icon: "shield" },
   { id: "assistant", label: "Trợ lý AI", icon: "spark" }
 ] as const;
 export type StudentPage = typeof pages[number]["id"];
 type Page = StudentPage;
-// The main nav carries the core journey, Điều kiện xét tốt nghiệp just before Trợ lý AI (user, 2026-10-25: moved out of
-// the account menu, then ahead of Trợ lý AI); profile, curriculum and plans live in the account menu.
+// The main nav carries the core journey, Xét tốt nghiệp right after Tổng quan (user 2026-11-17: "Cho cái trang menu xét tốt nghiệp
+// sang bên cạnh trang tổng quan đi"; 2026-10-25: moved out of the account menu, ahead of Trợ lý AI); profile, curriculum and plans
+// live in the account menu.
 const navPageIds = new Set<Page>(["overview", "competency", "skill-gap", "career", "roadmap", "assistant", "graduation"]);
 const navPages = pages.filter(p => navPageIds.has(p.id));
 const accountPages = pages.filter(p => !navPageIds.has(p.id));
