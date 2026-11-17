@@ -6,12 +6,14 @@ Người dùng (31/10/2026) duyệt bản xem trước 2 (https://claude.ai/code
 
 Ngày 7/11/2026 nhóm menu đổi tên thành "Thống kê", và người dùng yêu cầu "cho CVHT xem nữa". Cố vấn học tập (vai trò `advisor`) xem và xuất Excel mọi trang Thống kê, nhưng chỉ tính sinh viên các lớp mình phụ trách (`advisedStudentIds`, `scopeOf` trong `apps/api/src/admin/reports/router.ts`). Giới hạn này theo chính sách 03/11/2026: cố vấn chỉ xem sinh viên lớp mình. `/options` trả thêm `scope: { classes }` để trang ghi rõ phạm vi. Nhật ký thao tác của cố vấn gồm thao tác của chính họ và mọi thao tác liên quan đến sinh viên các lớp họ phụ trách (`VISIBLE` trong `admin/audit/router.ts`; người dùng chọn "Của mình + lớp mình", 7/11). Các trang không còn hiện mã AD-REPORT-xx. Các vai trò khác vẫn xem toàn bộ, `scope: null`.
 
+Ngày 17/11/2026 người dùng yêu cầu "Thống kê đổi thành tổng quan và tổng quan đổi thành thống kê": nhóm menu nay tên là **Tổng quan** (dòng chữ nhỏ trên tiêu đề các trang báo cáo là "TỔNG QUAN"), trang đầu tiên của nhóm tên là **Thống kê**; địa chỉ vẫn là `/quantri/tong-quan`.
+
 Sau đó người dùng yêu cầu: "mọi phần đều có xem trung bình toàn khóa với từng khóa". Vì vậy mọi số liệu tổng hợp trả về dạng `CohortSplit`, gồm `all` (toàn khóa) và `byCohort` (từng khóa, khóa cũ trước). Trang có công tắc "Toàn khóa | Từng khóa" ở mỗi phần.
 
 ## Chức năng
 | Mã | Trang | Ghi chú |
 | --- | --- | --- |
-| 01 | Tổng quan (`/quantri/tong-quan`, trang mở đầu) | GPA trung bình, xếp loại học lực, bảng điểm trung bình theo khóa / ngành / chuyên ngành, độ thành thạo kỹ năng theo nhóm năng lực, độ phù hợp với nghề, tiến độ theo khóa; nút nhỏ "Thao tác gần đây" |
+| 01 | Thống kê (`/quantri/tong-quan`, trang mở đầu; tên Tổng quan đến 16/11) | GPA trung bình, xếp loại học lực, bảng điểm trung bình theo khóa / ngành / chuyên ngành, độ thành thạo kỹ năng theo nhóm năng lực, độ phù hợp với nghề, tiến độ theo khóa; nút nhỏ "Thao tác gần đây" |
 | 02, 03 | Tiến độ | Trạng thái giống trang Tổng quan của sinh viên; xuất Excel |
 | 04, 05 | Nguy cơ | Đúng các mục "Cảnh báo chậm tiến độ" của sinh viên; xuất Excel |
 | 06, 07 | Kỹ năng thiếu | Theo nghề mục tiêu; bấm một kỹ năng để xem sinh viên; xuất Excel |

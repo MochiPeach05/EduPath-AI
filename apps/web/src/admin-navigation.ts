@@ -1,15 +1,16 @@
 import { canManageAdvisors, type AppRole } from "./types";
 
 export const adminNavigation = [
-  // AD-REPORT-01…11 (2026-10-31): the reports come first and Tổng quan is the page /quantri opens.
-  { path: "/quantri/tong-quan", label: "Tổng quan", eyebrow: "THỐNG KÊ", icon: "home" },
-  { path: "/quantri/bao-cao-tien-do", label: "Tiến độ", eyebrow: "THỐNG KÊ", icon: "route" },
-  { path: "/quantri/bao-cao-nguy-co", label: "Nguy cơ", eyebrow: "THỐNG KÊ", icon: "bell" },
+  // AD-REPORT-01…11 (2026-10-31): the reports come first and their first page is the one /quantri opens. User 2026-11-17: "Thống kê đổi
+  // thành tổng quan và tổng quan đổi thành thống kê": the group is Tổng quan and its first page Thống kê (the address stays /quantri/tong-quan).
+  { path: "/quantri/tong-quan", label: "Thống kê", eyebrow: "TỔNG QUAN", icon: "chart" },
+  { path: "/quantri/bao-cao-tien-do", label: "Tiến độ", eyebrow: "TỔNG QUAN", icon: "route" },
+  { path: "/quantri/bao-cao-nguy-co", label: "Nguy cơ", eyebrow: "TỔNG QUAN", icon: "bell" },
   // "Kỹ năng" and "Vị trí nghề nghiệp" already name the catalog pages of Quản lý nghề nghiệp, so the reports say what they count.
-  { path: "/quantri/bao-cao-ky-nang", label: "Kỹ năng thiếu", eyebrow: "THỐNG KÊ", icon: "spark" },
-  { path: "/quantri/bao-cao-nghe-nghiep", label: "Vị trí mục tiêu", eyebrow: "THỐNG KÊ", icon: "target" },
-  { path: "/quantri/bao-cao-mon-hoc", label: "Môn đề xuất", eyebrow: "THỐNG KÊ", icon: "book" },
-  { path: "/quantri/nhat-ky", label: "Nhật ký", eyebrow: "THỐNG KÊ", icon: "clock" },
+  { path: "/quantri/bao-cao-ky-nang", label: "Kỹ năng thiếu", eyebrow: "TỔNG QUAN", icon: "spark" },
+  { path: "/quantri/bao-cao-nghe-nghiep", label: "Vị trí mục tiêu", eyebrow: "TỔNG QUAN", icon: "target" },
+  { path: "/quantri/bao-cao-mon-hoc", label: "Môn đề xuất", eyebrow: "TỔNG QUAN", icon: "book" },
+  { path: "/quantri/nhat-ky", label: "Nhật ký", eyebrow: "TỔNG QUAN", icon: "clock" },
   { path: "/quantri/tai-khoan", label: "Tài khoản", eyebrow: "QUẢN LÝ TÀI KHOẢN", icon: "users" },
   { path: "/quantri/sinh-vien", label: "Sinh viên", eyebrow: "QUẢN LÝ HỒ SƠ SINH VIÊN", icon: "profile" },
   // AD-ADV-01…05 and AD-AST-01…09 (2026-11-03): the faculty's cố vấn học tập, then Quản lý sinh viên, where an advisor sees
@@ -40,7 +41,7 @@ export type AdminPage = (typeof adminNavigation)[number];
  * first page is in adminNavigation; its pages keep their own paths, titles and breadcrumbs.
  */
 const adminNavigationGroups = [
-  { id: "reports", label: "Thống kê", icon: "chart", paths: ["/quantri/tong-quan", "/quantri/bao-cao-tien-do", "/quantri/bao-cao-nguy-co", "/quantri/bao-cao-ky-nang", "/quantri/bao-cao-nghe-nghiep", "/quantri/bao-cao-mon-hoc", "/quantri/nhat-ky"] },
+  { id: "reports", label: "Tổng quan", icon: "home", paths: ["/quantri/tong-quan", "/quantri/bao-cao-tien-do", "/quantri/bao-cao-nguy-co", "/quantri/bao-cao-ky-nang", "/quantri/bao-cao-nghe-nghiep", "/quantri/bao-cao-mon-hoc", "/quantri/nhat-ky"] },
   { id: "advisors", label: "Cố vấn học tập", icon: "compass", paths: ["/quantri/co-van-hoc-tap", "/quantri/quan-ly-sinh-vien"] },
   // In the order they are set up: fields, then the shared skills, then the careers that use both.
   { id: "careers", label: "Quản lý nghề nghiệp", icon: "briefcase", paths: ["/quantri/linh-vuc-nghe-nghiep", "/quantri/ky-nang", "/quantri/vi-tri-nghe-nghiep"] },
