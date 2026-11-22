@@ -8,12 +8,12 @@ const actor = { userId: "3f2b8c1e-5d4a-4b6f-9a1e-2c3d4e5f6a7b", tenantId: "tenan
 const row = { id: "e1", at: "2026-10-31T02:12:00.000Z", actorName: "Phạm Thu Trang", actorRole: "faculty_board", kind: "report",
   action: "Xuất Excel", summary: "Xuất Excel: Sinh viên có nguy cơ chậm tiến độ (khóa 29, 18 dòng)" };
 
-function setup(role: AppRole | null = "faculty_board", options: { active?: boolean; now?: () => number } = {}) {
+function setup(role: AppRole | null = "faculty_board", options: { active?: boolean; now?: () => number; counts?: Record<string, unknown> } = {}) {
   const query = vi.fn(async (sql: string) => {
     // The role check of the account (the list's own subquery of an advisor's students also reads users).
     if (sql.includes("FROM users WHERE id=$1")) return { rowCount: options.active === false ? 0 : 1, rows: [] };
     if (sql.startsWith("DELETE FROM ad_audit_log")) return { rowCount: 0, rows: [] };
-    return { rowCount: 1, rows: [{ items: [row], total: 1, actors: ["Lê Quốc Bảo", "Phạm Thu Trang"] }] };
+    return { rowCount: 1, rows: [{ items: [row], total: 1, actors: ["Lê Quốc Bảo", "Phạm Thu Trang"], ...options.counts }] };
   });
   const app = express();
   app.use((req, _res, next) => { req.session = { user: role ? { ...actor, role } : undefined } as typeof req.session; next(); });
@@ -39,9 +39,35 @@ describe("audit log API", () => {
     const { app } = setup(role);
     const response = await request(app).get("/audit-log").expect(200);
     expect(response.headers["cache-control"]).toBe("no-store");
+    // A log without rows answers no counts (json_agg over nothing is null): empty lists, never null.
     expect(response.body).toEqual({
       items: [{ ...row, actorRole: "Ban chủ nhiệm khoa" }], total: 1, page: 1, pageSize: 20, actors: ["Lê Quốc Bảo", "Phạm Thu Trang"],
+      days: [], kinds: [], actorCounts: [],
     });
+  });
+
+  it("counts the listed rows by day, kind and actor (2026-11-22)", async () => {
+    const days = [{ date: "2026-10-30", count: 0, access: 0, report: 0 }, { date: "2026-10-31", count: 3, access: 1, report: 2 }];
+    const { app, listCalls } = setup("admin", { counts: {
+      days, kinds: [{ kind: "report", count: 2 }, { kind: "access", count: 1 }],
+      actorCounts: [{ name: "Phạm Thu Trang", role: "faculty_board", count: 2 }, { name: "Lê Quốc Bảo", role: null, count: 1 }],
+    } });
+    const response = await request(app).get("/audit-log").query({ q: "xuất", kind: "report", actor: "Phạm Thu Trang" }).expect(200);
+    expect(response.body.days).toEqual(days);
+    expect(response.body.kinds).toEqual([{ kind: "report", count: 2 }, { kind: "access", count: 1 }]);
+    // The role in words, like the entries.
+    expect(response.body.actorCounts).toEqual([{ name: "Phạm Thu Trang", role: "Ban chủ nhiệm khoa", count: 2 }, { name: "Lê Quốc Bảo", role: null, count: 1 }]);
+    const sql = String(listCalls()[0]![0]);
+    // The last 7 Vietnam days of the listed rows, every day present.
+    expect(sql).toContain("FROM filtered f WHERE f.at >= ((now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - 6)::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh' GROUP BY 1");
+    expect(sql).toContain("generate_series(((now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date - 6)::timestamp, (now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date::timestamp, interval '1 day')");
+    // A facet leaves its own choice out: kinds under the search and the actor, actors under the search and the kind.
+    const kinds = sql.slice(sql.indexOf("SELECT l.kind, count(*)::int AS count"), sql.indexOf("AS kinds"));
+    expect(kinds).toContain("($1 = '' OR strpos(l.search_text, $1) > 0) AND ($3::text IS NULL OR");
+    expect(kinds).not.toContain("$2");
+    const actors = sql.slice(sql.indexOf("(array_agg(l.actor_role ORDER BY l.created_at DESC))[1] AS role"), sql.indexOf('AS "actorCounts"'));
+    expect(actors).toContain("($1 = '' OR strpos(l.search_text, $1) > 0) AND ($2::text IS NULL OR l.kind = $2)");
+    expect(actors).not.toContain("$3");
   });
 
   it("filters by folded text, kind and actor, pages with bounds", async () => {
@@ -64,8 +90,8 @@ describe("audit log API", () => {
     await request(app).get("/audit-log").expect(200);
     const [sql, values] = listCalls()[0]!;
     expect(values).toEqual(["", null, null, 20, 0, actor.userId]);
-    // The rows and the names to filter by follow the same rule.
-    expect(String(sql).split("$6::uuid IS NULL OR l.actor_user_id = $6 OR (l.target_type = 'student' AND l.target_id IN (")).toHaveLength(3);
+    // The rows, the names to filter by and the counts by kind and by actor follow the same rule (the days count the rows).
+    expect(String(sql).split("$6::uuid IS NULL OR l.actor_user_id = $6 OR (l.target_type = 'student' AND l.target_id IN (")).toHaveLength(5);
     expect(String(sql)).toContain("SELECT class_name FROM ad_advisor_classes WHERE advisor_user_id = $6");
     const admin = setup("admin");
     await request(admin.app).get("/audit-log").expect(200);

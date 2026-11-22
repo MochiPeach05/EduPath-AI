@@ -14,8 +14,9 @@ import { requireAdminAccess } from "../../middleware/authorization.js";
 import { recordAudit } from "../audit/record.js";
 import {
   careersReport, courseStudents, coursesReport, dashboardReport, filterRows, type Filters, PROGRESS_SORTS, progressReport, progressRows, reportOptions,
-  RISK_SORTS, riskReport, riskRows, skillsReport, skillStudents,
+  RISK_LABELS, RISK_SORTS, riskReport, riskRows, skillsReport, skillStudents,
 } from "./aggregate.js";
+import type { RiskKind } from "./types.js";
 import { createReportRowSource, type ReportRowSource } from "./cache.js";
 import { progressWorkbook, riskWorkbook, skillsWorkbook, STATUS_LABELS, vietnamDate } from "./excel.js";
 
@@ -43,19 +44,23 @@ const pageShape = {
 };
 const filtersQuery = z.object(filterShape).strict();
 const progressQuery = z.object({ ...filterShape, ...pageShape, status: optional(z.enum(["on_track", "late", "unknown", "no_transcript"])), sort: optional(z.enum(PROGRESS_SORTS)) }).strict();
-const riskQuery = z.object({ ...filterShape, ...pageShape, level: optional(z.enum(["risk", "warn"])), sort: optional(z.enum(RISK_SORTS)) }).strict();
+const riskKinds = ["failed_course", "pace", "gpa_below", "late_course", "elective_short"] as const satisfies readonly RiskKind[];
+const riskQuery = z.object({
+  ...filterShape, ...pageShape, level: optional(z.enum(["risk", "warn"])), kind: optional(z.enum(riskKinds)), sort: optional(z.enum(RISK_SORTS)),
+}).strict();
 const skillsQuery = z.object({ ...filterShape, career: optional(z.string().trim().min(1).max(200)) }).strict();
 const skillStudentsQuery = z.object({ ...filterShape, career: optional(z.string().trim().min(1).max(200)), skill: z.string().trim().min(1).max(200) }).strict();
 const courseStudentsQuery = z.object({ ...filterShape, code: z.string().trim().min(1).max(32) }).strict();
 
 /** The filters in words, for the Excel notes and the log: ["khóa K29", "ngành Công nghệ thông tin", …]. */
-export function filterWords(query: Filters & { status?: string | undefined; level?: string | undefined; career?: string | undefined }): string[] {
+export function filterWords(query: Filters & { status?: string | undefined; level?: string | undefined; kind?: RiskKind | undefined; career?: string | undefined }): string[] {
   const words: string[] = [];
   if (query.cohort) words.push(`khóa ${query.cohort}`);
   if (query.major) words.push(`ngành ${MAJORS.find((major) => major.code === query.major)?.label ?? query.major}`);
   if (query.specialty) words.push(`chuyên ngành ${SPECIALTIES.find((item) => item.code === query.specialty)?.label ?? query.specialty}`);
   if (query.status) words.push(`tình trạng ${STATUS_LABELS[query.status as keyof typeof STATUS_LABELS] ?? query.status}`);
   if (query.level) words.push(query.level === "risk" ? "mức Nguy cơ" : "mức Cần chú ý");
+  if (query.kind) words.push(`lý do ${RISK_LABELS[query.kind]}`);
   if (query.career) words.push(`vị trí nghề nghiệp ${query.career}`);
   if (query.q) words.push(`tìm "${query.q}"`);
   return words;

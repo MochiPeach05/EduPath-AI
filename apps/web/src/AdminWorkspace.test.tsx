@@ -104,13 +104,22 @@ describe("admin workspace", () => {
     expect(html).not.toContain(">Cố vấn</h1>");
   });
 
-  it("opens on Thống kê, the first report of Tổng quan, with the shared filter bar (2026-10-31; names swapped 2026-11-17)", () => {
+  it("opens on Thống kê, the first report of Tổng quan, with the filters on the title's row (2026-10-31; names swapped 2026-11-17; head 2026-11-22)", () => {
     const html = render("/quantri");
     expect(html).toContain(">Thống kê</h1>");
     expect(html).toContain(">TỔNG QUAN</p>");
-    expect(html).toContain('aria-label="Tìm kiếm và lọc dữ liệu thống kê"');
+    // The report page draws the workspace's eyebrow and title itself, once, with the filters and Cách tính beside them.
+    expect(html).toContain('<div class="am-page-heading rp-heading"><div class="rp-heading-text"><p class="admin-eyebrow">TỔNG QUAN</p><h1 tabindex="-1">Thống kê</h1><p class="rp-head-meta">');
+    expect(html.match(/<h1/g)).toHaveLength(1);
+    expect(html.match(/class="am-page-heading/g)).toHaveLength(1);
+    expect(html).toContain('aria-label="Lọc dữ liệu thống kê"');
+    expect(html).toContain("Cách tính</button>");
     expect(html).toContain('<a href="/quantri/tong-quan" aria-current="page">');
-    expect(render("/quantri/nhat-ky")).toContain("Tìm trong nhật ký");
+    const log = render("/quantri/nhat-ky");
+    expect(log).toContain('<h1 tabindex="-1">Nhật ký</h1><p class="rp-head-meta">Ai đã làm gì, lúc nào.</p>');
+    expect(log).not.toContain('aria-label="Lọc dữ liệu thống kê"');
+    // Every other page keeps the workspace's own heading.
+    expect(render("/quantri/co-van-hoc-tap")).toContain('<div class="am-page-heading"><div><p class="admin-eyebrow">');
   });
 
   it("gives a cố vấn học tập the pages of the CVHT rows and opens Quản lý sinh viên (2026-11-03)", () => {

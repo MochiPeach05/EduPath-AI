@@ -9,10 +9,18 @@
 /** "HK261" and "HK1 2026–2027" (term-name.ts). */
 export type ReportTerm = { code: string; label: string };
 
-/** One aggregate for the whole scope and the same aggregate for each cohort present in it, oldest cohort first. */
+/**
+ * One aggregate for the whole scope and the same aggregate for each cohort present in it, oldest cohort first. The charts
+ * that compare cohorts (dashboard.progress, progress.counts, progress.credits, risk.counts) keep every cohort of the major
+ * and specialty filters in `byCohort` when one cohort is chosen (2026-11-22); `all` still counts the chosen cohort only.
+ */
 export type CohortSplit<T> = { all: T; byCohort: ({ cohort: string } & T)[] };
 
-/** Query of every report: the shared filter bar (AD-REPORT-10: search and filters, one row since the function-list merge of 2026-10-31). */
+/**
+ * Query of every report: Khóa, Ngành, Chuyên ngành of the page head, and `q`, "Tìm sinh viên" of the student lists. Since
+ * 2026-11-22 `q` narrows the list of Tiến độ and Nguy cơ only (their counts and charts keep the whole scope), and the
+ * pages without a list do not send it.
+ */
 export type ReportFilters = { cohort?: string; major?: string; specialty?: string; q?: string };
 
 /** GET /api/admin/reports/options: the choices of the filter bar. */
@@ -64,10 +72,12 @@ export type GpaBandLabel = "Xuất sắc" | "Giỏi" | "Khá" | "Trung bình" | 
  */
 export type GpaBands = { bands: { label: GpaBandLabel; range: string; students: number }[]; withTranscript: number; withData: number };
 
-/** One row of "Bảng điểm trung bình": every figure says its base, and figures of one kind share it. */
+/** One row of "Bảng thống kê" ("Bảng điểm trung bình" until 2026-11-21): every figure says its base, and figures of one kind share it. */
 export type AverageRow = {
   key: string;
   label: string;
+  /** Every student of the group (the rows of "Bảng thống kê" add up to the total row, 2026-11-22). */
+  students: number;
   /** Students of the group with a stored transcript, and those whose transcript has data. */
   withTranscript: number;
   withData: number;
@@ -83,6 +93,10 @@ export type AverageRow = {
   competencyLevel: string | null;
   fit: number | null;
   fitLabel: string | null;
+  /** Students of the group marked Trễ kế hoạch, and those whose "Cảnh báo chậm tiến độ" has a risk item / only warn items. */
+  late: number;
+  risk: number;
+  warn: number;
 };
 export type AverageTable = { by: "cohort" | "major" | "specialty"; rows: AverageRow[]; all: AverageRow };
 
@@ -138,8 +152,16 @@ export type ProgressStudent = ReportStudentBase & {
   risk: "risk" | "warn" | null;
 };
 
+/**
+ * "Tín chỉ so với kế hoạch" (2026-11-22): means over the students whose credits can be compared with the KHĐT (a
+ * transcript with data, passed credits and the plan's credits up to the term before the one being studied), so the three
+ * means share one base: credits passed, credits planned so far, credits of the whole programme.
+ */
+export type CreditAverages = { students: number; passed: number | null; expected: number | null; total: number | null };
+
 export type ProgressReport = ReportHead & {
   counts: CohortSplit<ProgressCounts>;
+  credits: CohortSplit<CreditAverages>;
   page: ReportPage<ProgressStudent>;
 };
 
@@ -202,5 +224,16 @@ export type CourseStudents = { code: string; name: string; items: CourseStudent[
 
 export type AuditKind = "account" | "training" | "career" | "competency" | "notify" | "report" | "access" | "advisor" | "other";
 export type AuditEntry = { id: string; at: string; actorName: string; actorRole: string | null; kind: AuditKind; action: string; summary: string };
-/** GET /api/admin/audit-log?q&kind&actor&page&pageSize (newest first, kept 1 year). */
-export type AuditPage = ReportPage<AuditEntry> & { actors: string[] };
+/**
+ * GET /api/admin/audit-log?q&kind&actor&page&pageSize (newest first, kept 1 year). Since 2026-11-22 the page also counts
+ * what it lists: `days` are the last 7 days in Vietnam time, oldest first ("2026-11-15"), under every filter, each with
+ * how many of its rows are "Xem dữ liệu sinh viên" (access) and "Xuất báo cáo" (report); `kinds` counts each kind under
+ * the search and the chosen actor, `actorCounts` each actor under the search and the chosen kind (a facet leaves its own
+ * choice out, so the other values keep their counts).
+ */
+export type AuditPage = ReportPage<AuditEntry> & {
+  actors: string[];
+  days: { date: string; count: number; access: number; report: number }[];
+  kinds: { kind: AuditKind; count: number }[];
+  actorCounts: { name: string; role: string | null; count: number }[];
+};

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  averageTables, calendarTerm, careersReport, cohortSplit, compareCohorts, compareNames, competencyGroupsOf, courseStudents, coursesReport, dashboardReport,
+  averageTables, calendarTerm, careersReport, cohortSplit, compareCohorts, compareNames, competencyGroupsOf, courseStudents, coursesReport, creditAveragesOf, dashboardReport,
   filterRows, fitSummaryOf, fitWord, gpaBandOf, gpaBandsOf, gpaPoints, kpisOf, levelWord, progressReport, reportOptions, riskReport, skillsReport, skillStudents,
 } from "./aggregate.js";
 import { competency, reportRow } from "./test-rows.js";
@@ -85,6 +85,21 @@ describe("Tổng quan (AD-REPORT-01)", () => {
     });
     expect(byMajor!.rows.map((row) => row.label)).toEqual(["Công nghệ thông tin"]);
     expect(bySpecialty!.rows.map((row) => row.label)).toEqual(["Công nghệ phần mềm"]);
+  });
+
+  it("counts every student of a group, the late ones and those with a warning, so the rows add up to the total row (2026-11-22)", () => {
+    const late = reportRow({ cohort: "K29", status: "late", risk: { level: "warn", items: [{ kind: "pace", level: "warn", text: "Còn thiếu 6 tín chỉ so với kế hoạch." }] } });
+    // A cohort whose only student has no transcript yet is listed too: it has a student to count.
+    const k31 = reportRow({ cohort: "K31", hasTranscript: false, status: "no_transcript", gpa: null, lastTermGpa: null, passedCredits: null });
+    const [byCohort] = averageTables([a, b, none, late, k31]);
+    expect(byCohort!.rows.map((row) => [row.key, row.students, row.withTranscript, row.late, row.risk, row.warn])).toEqual([
+      ["K29", 2, 2, 1, 1, 1], ["K30", 2, 1, 0, 0, 1], ["K31", 1, 0, 0, 0, 0],
+    ]);
+    expect(byCohort!.rows[2]).toMatchObject({ gpa: null, competency: null, fit: null });
+    expect(byCohort!.all).toMatchObject({ students: 5, withTranscript: 3, late: 1, risk: 1, warn: 2 });
+    for (const key of ["students", "withTranscript", "late", "risk", "warn"] as const) {
+      expect(byCohort!.rows.reduce((sum, row) => sum + row[key], 0)).toBe(byCohort!.all[key]);
+    }
   });
 
   it("averages the competency groups and names the weakest and strongest skills once", () => {
@@ -172,6 +187,55 @@ describe("Tiến độ and Nguy cơ (AD-REPORT-02, 04)", () => {
     expect(report.counts.byCohort.map((entry) => entry.cohort)).toEqual(["K29", "K30", "K31"]);
   });
 
+  it("averages the credits passed and planned over the students who can be compared with the plan (2026-11-22)", () => {
+    const people = [
+      reportRow({ cohort: "K29", passedCredits: 90, expectedCredits: 100, totalCredits: 150 }),
+      reportRow({ cohort: "K29", passedCredits: 110, expectedCredits: 100, totalCredits: 152 }),
+      // No plan to compare with, a transcript without data, no transcript: none of them moves a mean.
+      reportRow({ cohort: "K29", status: "unknown", passedCredits: 40, expectedCredits: null, totalCredits: null }),
+      reportRow({ cohort: "K30", status: "unknown", gpa: null, passedCredits: 0, expectedCredits: 60 }),
+      reportRow({ cohort: "K30", hasTranscript: false, status: "no_transcript", gpa: null, passedCredits: null, expectedCredits: null }),
+    ];
+    expect(creditAveragesOf(people)).toEqual({ students: 2, passed: 100, expected: 100, total: 151 });
+    const report = progressReport(people, {}, GEN, NOW);
+    expect(report.credits.all).toEqual({ students: 2, passed: 100, expected: 100, total: 151 });
+    expect(report.credits.byCohort).toEqual([
+      { cohort: "K29", students: 2, passed: 100, expected: 100, total: 151 }, { cohort: "K30", students: 0, passed: null, expected: null, total: null },
+    ]);
+    expect(progressReport(people, { cohort: "K30" }, GEN, NOW).credits.all.students).toBe(0);
+  });
+
+  it("searches the list only: the counts above it keep the whole scope (2026-11-22)", () => {
+    const found = progressReport(rows, { q: "chau" }, GEN, NOW);
+    expect(found.page.items.map((item) => item.name)).toEqual(["Võ Minh Châu"]);
+    expect(found.counts.all).toEqual({ total: 4, onTrack: 1, late: 1, unknown: 1, noTranscript: 1 });
+    expect(found.scope.students).toBe(4);
+    expect(found.credits.all.students).toBe(3);
+    const risk = riskReport(rows, { q: "chau" }, GEN, NOW);
+    expect(risk.page.items.map((item) => item.name)).toEqual(["Võ Minh Châu"]);
+    expect(risk.counts.all).toEqual({ total: 2, risk: 1, warn: 1 });
+    // The other filters still narrow everything.
+    expect(progressReport(rows, { q: "chau", cohort: "K29" }, GEN, NOW)).toMatchObject({ counts: { all: { total: 1 } }, page: { total: 0 } });
+  });
+
+  it("keeps every cohort in the charts that compare cohorts when one cohort is chosen (2026-11-22)", () => {
+    const k30 = progressReport(rows, { cohort: "K30" }, GEN, NOW);
+    expect(k30.counts.all).toEqual({ total: 2, onTrack: 1, late: 0, unknown: 1, noTranscript: 0 });
+    expect(k30.counts.byCohort.map((entry) => [entry.cohort, entry.total])).toEqual([["K29", 1], ["K30", 2], ["K31", 1]]);
+    expect(k30.credits.byCohort.map((entry) => entry.cohort)).toEqual(["K29", "K30", "K31"]);
+    expect(k30.page.items.map((item) => item.cohort)).toEqual(["K30", "K30"]);
+    const risk = riskReport(rows, { cohort: "K30" }, GEN, NOW);
+    expect(risk.counts.all).toEqual({ total: 1, risk: 1, warn: 0 });
+    expect(risk.counts.byCohort.map((entry) => [entry.cohort, entry.total])).toEqual([["K29", 1], ["K30", 1], ["K31", 0]]);
+    // The reasons stay those of the chosen cohort, and the other filters narrow the cohorts compared.
+    expect(risk.reasons.byCohort.map((entry) => entry.cohort)).toEqual(["K30"]);
+    expect(progressReport(rows, { cohort: "K30", major: "7480104" }, GEN, NOW).counts.byCohort).toEqual([]);
+    const board = dashboardReport(rows, { cohort: "K29" }, GEN, NOW);
+    expect(board.progress.all.total).toBe(1);
+    expect(board.progress.byCohort.map((entry) => entry.cohort)).toEqual(["K29", "K30", "K31"]);
+    expect(board.kpis.byCohort.map((entry) => entry.cohort)).toEqual(["K29"]);
+  });
+
   it("sort names in Vietnamese order: D before Đ, A before Ă before Â", () => {
     const people = ["Mai Văn Đạt", "Trần Văn Dũng", "Đỗ Minh Đức", "Bùi Quốc Duy", "Huỳnh Ngọc Ân", "Lê Hoàng Anh", "Võ Thị Ăn"].map((name, index) => ({ name, studentCode: `990${index}` }));
     expect([...people].sort(compareNames).map((person) => person.name)).toEqual([
@@ -196,6 +260,17 @@ describe("Tiến độ and Nguy cơ (AD-REPORT-02, 04)", () => {
     ]);
     expect(report.reasons.byCohort.find((entry) => entry.cohort === "K29")!.items.find((item) => item.kind === "late_course")!.students).toBe(1);
     expect(riskReport(rows, { level: "warn" }, GEN, NOW).page.items).toHaveLength(1);
+  });
+
+  it("lists the students of one reason and keeps the counts of every reason (2026-11-22)", () => {
+    const report = riskReport(rows, { kind: "gpa_below" }, GEN, NOW);
+    expect(report.page.items.map((item) => item.name)).toEqual(["Võ Minh Châu"]);
+    // The student's other reasons stay on the card; the tiles and the reason list still count every flagged student.
+    expect(report.page.items[0]!.reasons.map((reason) => reason.kind)).toEqual(["failed_course", "gpa_below"]);
+    expect(report.counts.all).toEqual({ total: 2, risk: 1, warn: 1 });
+    expect(report.reasons.all.items.find((item) => item.kind === "late_course")!.students).toBe(1);
+    expect(riskReport(rows, { kind: "late_course", level: "risk" }, GEN, NOW).page.total).toBe(0);
+    expect(riskReport(rows, { kind: "pace" }, GEN, NOW).page.total).toBe(0);
   });
 });
 

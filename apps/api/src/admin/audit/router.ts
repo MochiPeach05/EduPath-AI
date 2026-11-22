@@ -29,7 +29,15 @@ const VISIBLE = `($6::uuid IS NULL OR l.actor_user_id = $6 OR (l.target_type = '
   SELECT su.id::text FROM users su JOIN student_profiles sp ON sp.user_id = su.id
   WHERE ${classCodeSql("sp", "su")} IN (SELECT class_name FROM ad_advisor_classes WHERE advisor_user_id = $6))))`;
 
+/** The log's days are Vietnam days (the pages print Vietnam time). */
+const LOCAL_DAY = "(now() AT TIME ZONE 'Asia/Ho_Chi_Minh')::date";
+
 type Row = { id: string; at: string | Date; actorName: string; actorRole: string | null; kind: AuditKind; action: string; summary: string };
+type Counts = {
+  days: AuditPage["days"] | null;
+  kinds: AuditPage["kinds"] | null;
+  actorCounts: { name: string; role: string | null; count: number }[] | null;
+};
 
 export function createAuditLogRouter(pool: Pick<DatabasePool, "query"> | undefined, options: { now?: () => number } = {}) {
   const now = options.now ?? Date.now;
@@ -70,22 +78,43 @@ export function createAuditLogRouter(pool: Pick<DatabasePool, "query"> | undefin
       lastCleanup = now();
       await pool!.query("DELETE FROM ad_audit_log WHERE created_at < now() - interval '1 year'");
     }
-    const result = await pool!.query<{ items: Row[]; total: number; actors: string[] }>(`WITH filtered AS (
+    // The counts beside the list (2026-11-22): `days` counts the listed rows (every filter) on each of the last 7 Vietnam
+    // days; `kinds` and "actorCounts" are facets, each without its own choice so the other values keep their counts.
+    const result = await pool!.query<{ items: Row[]; total: number; actors: string[] } & Counts>(`WITH filtered AS (
         SELECT l.id, l.created_at AS at, ${ACTOR} AS "actorName", l.actor_role AS "actorRole", l.kind, l.action, l.summary FROM ${LOGGED}
         WHERE ($1 = '' OR strpos(l.search_text, $1) > 0) AND ($2::text IS NULL OR l.kind = $2) AND ($3::text IS NULL OR ${ACTOR} = $3)
           AND ${VISIBLE}
-      ), paged AS (SELECT * FROM filtered ORDER BY ${order} LIMIT $4 OFFSET $5)
+      ), paged AS (SELECT * FROM filtered ORDER BY ${order} LIMIT $4 OFFSET $5),
+      recent AS (
+        SELECT (f.at AT TIME ZONE 'Asia/Ho_Chi_Minh')::date AS day, count(*)::int AS count,
+          (count(*) FILTER (WHERE f.kind = 'access'))::int AS access, (count(*) FILTER (WHERE f.kind = 'report'))::int AS report
+        FROM filtered f WHERE f.at >= (${LOCAL_DAY} - 6)::timestamp AT TIME ZONE 'Asia/Ho_Chi_Minh' GROUP BY 1
+      )
       SELECT COALESCE((SELECT json_agg(paged ORDER BY ${order}) FROM paged), '[]'::json) AS items,
         (SELECT count(*)::int FROM filtered) AS total,
         COALESCE((SELECT json_agg(name ORDER BY ${vietnameseOrder("name")}) FROM (SELECT DISTINCT ${ACTOR} AS name FROM ${LOGGED}
-          WHERE ${VISIBLE}) names), '[]'::json) AS actors`,
+          WHERE ${VISIBLE}) names), '[]'::json) AS actors,
+        (SELECT json_agg(json_build_object('date', to_char(d.day, 'YYYY-MM-DD'), 'count', COALESCE(r.count, 0),
+            'access', COALESCE(r.access, 0), 'report', COALESCE(r.report, 0)) ORDER BY d.day)
+          FROM generate_series((${LOCAL_DAY} - 6)::timestamp, ${LOCAL_DAY}::timestamp, interval '1 day') AS d(day)
+            LEFT JOIN recent r ON r.day = d.day::date) AS days,
+        (SELECT json_agg(json_build_object('kind', k.kind, 'count', k.count) ORDER BY k.count DESC, k.kind) FROM (
+          SELECT l.kind, count(*)::int AS count FROM ${LOGGED}
+          WHERE ($1 = '' OR strpos(l.search_text, $1) > 0) AND ($3::text IS NULL OR ${ACTOR} = $3) AND ${VISIBLE} GROUP BY l.kind) k) AS kinds,
+        (SELECT json_agg(json_build_object('name', a.name, 'role', a.role, 'count', a.count) ORDER BY a.count DESC, a.name) FROM (
+          SELECT ${ACTOR} AS name, (array_agg(l.actor_role ORDER BY l.created_at DESC))[1] AS role, count(*)::int AS count FROM ${LOGGED}
+          WHERE ($1 = '' OR strpos(l.search_text, $1) > 0) AND ($2::text IS NULL OR l.kind = $2) AND ${VISIBLE} GROUP BY 1) a) AS "actorCounts"`,
     [foldText(q), kind ?? null, actor || null, pageSize, (page - 1) * pageSize, advisor]);
-    const row = result.rows[0] ?? { items: [], total: 0, actors: [] };
+    const row = result.rows[0] ?? { items: [], total: 0, actors: [], days: null, kinds: null, actorCounts: null };
     const items: AuditEntry[] = row.items.map((item) => ({
       id: item.id, at: new Date(item.at).toISOString(), actorName: item.actorName, actorRole: item.actorRole ? roleLabel(item.actorRole) : null,
       kind: item.kind, action: item.action, summary: item.summary,
     }));
-    const body: AuditPage = { items, total: row.total, page, pageSize, actors: row.actors };
+    const body: AuditPage = {
+      items, total: row.total, page, pageSize, actors: row.actors,
+      days: row.days ?? [], kinds: row.kinds ?? [],
+      actorCounts: (row.actorCounts ?? []).map((item) => ({ name: item.name, role: item.role ? roleLabel(item.role) : null, count: item.count })),
+    };
     response.json(body);
   });
   return router;

@@ -57,7 +57,7 @@ trình và trả lời câu hỏi.
 
 | Nhóm | Nội dung |
 |---|---|
-| Báo cáo | Tổng quan, Tiến độ, Nguy cơ, Kỹ năng thiếu, Vị trí mục tiêu, Môn đề xuất, Nhật ký thao tác; xem toàn khóa hoặc từng khóa; xuất Excel |
+| Tổng quan | Thống kê, Tiến độ, Nguy cơ, Kỹ năng thiếu, Vị trí mục tiêu, Môn đề xuất, Nhật ký; lọc theo khóa, ngành, chuyên ngành; xuất Excel |
 | Tài khoản, Sinh viên | Phân quyền, khóa/mở tài khoản, tạo trước tài khoản; hồ sơ và bảng điểm của sinh viên |
 | Cố vấn học tập | Danh sách cố vấn và lớp phụ trách, import từ file phân công của Khoa. Quản lý sinh viên: mở trang của sinh viên và làm thay |
 | Quản lý đào tạo | Chương trình đào tạo, kế hoạch đào tạo, tiêu chuẩn xét tốt nghiệp theo khóa và chuyên ngành, nhập từ file Excel của Khoa |

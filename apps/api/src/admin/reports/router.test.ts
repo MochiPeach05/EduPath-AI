@@ -123,8 +123,15 @@ describe("reports API", () => {
     const progress = (await request(app).get("/r/progress?status=late&page=1&pageSize=10").expect(200)).body;
     expect(progress.page).toMatchObject({ total: 1, page: 1, pageSize: 10, items: [{ name: "Nguyễn Văn An", status: "late", gpa: 2.4 }] });
     expect(progress.counts.all).toEqual({ total: 3, onTrack: 1, late: 1, unknown: 0, noTranscript: 1 });
+    expect(progress.credits.all).toEqual({ students: 2, passed: 100, expected: 100, total: 150 });
     const risk = (await request(app).get("/r/risk").expect(200)).body;
     expect(risk.page.items.map((item: { name: string; level: string }) => [item.name, item.level])).toEqual([["Nguyễn Văn An", "risk"]]);
+    // One reason (2026-11-22): the students who have it; the counts keep every flagged student.
+    expect((await request(app).get("/r/risk?kind=failed_course").expect(200)).body.page.total).toBe(1);
+    const other = (await request(app).get("/r/risk?kind=gpa_below").expect(200)).body;
+    expect(other.page.total).toBe(0);
+    expect(other.counts.all.total).toBe(1);
+    await request(app).get("/r/risk?kind=grades").expect(400, { error: "invalid_query" });
   });
 
   it("names the students of a skill and of a course", async () => {
@@ -160,12 +167,15 @@ describe("reports API", () => {
     const risk = await request(app).get("/r/risk.xlsx").buffer(true).parse(binary).expect(200);
     expect(risk.headers["content-disposition"]).toContain("Sinh-vien-co-nguy-co-2026-10-31.xlsx");
     expect((await workbookOf(risk.body as Buffer)).getWorksheet("Dữ liệu")!.getRow(2).getCell(6).value).toBe("Nguy cơ");
+    const byReason = await request(app).get("/r/risk.xlsx?kind=failed_course&level=risk").buffer(true).parse(binary).expect(200);
+    expect((await workbookOf(byReason.body as Buffer)).getWorksheet("Dữ liệu")!.rowCount).toBe(2);
     const skills = await request(app).get("/r/skills.xlsx").buffer(true).parse(binary).expect(200);
     const skillBook = await workbookOf(skills.body as Buffer);
     expect(skillBook.worksheets.map((sheet) => sheet.name)).toEqual(["Dữ liệu", "Theo khóa", "Sinh viên", "Ghi chú"]);
     expect(skillBook.getWorksheet("Sinh viên")!.getRow(2).getCell(6).value).toBe("Cần tự học ngoài chương trình");
     expect(record.mock.calls.map(([, , entry]) => entry.summary)).toEqual([
-      "Sinh viên theo tiến độ (khóa K29, 1 dòng)", "Sinh viên có nguy cơ chậm tiến độ (1 dòng)", "Kỹ năng còn thiếu (1 sinh viên, 1 kỹ năng thiếu)",
+      "Sinh viên theo tiến độ (khóa K29, 1 dòng)", "Sinh viên có nguy cơ chậm tiến độ (1 dòng)",
+      "Sinh viên có nguy cơ chậm tiến độ (mức Nguy cơ, lý do Môn bắt buộc chưa đạt, 1 dòng)", "Kỹ năng còn thiếu (1 sinh viên, 1 kỹ năng thiếu)",
     ]);
   });
 });

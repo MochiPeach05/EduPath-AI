@@ -12,7 +12,7 @@ import { TERM_CALENDAR, vietnamToday } from "../../roadmap/window.js";
 import { termName } from "../../term-name.js";
 import { hasTranscriptData, type ReportRow } from "./rows.js";
 import type {
-  AverageRow, AverageTable, CareerRow, CareersReport, CohortSplit, CompetencyGroups, CourseHow, CourseRow, CoursesReport, CourseStudents,
+  AverageRow, AverageTable, CareerRow, CareersReport, CohortSplit, CompetencyGroups, CourseHow, CourseRow, CoursesReport, CourseStudents, CreditAverages,
   DashboardKpis, DashboardReport, FitSummary, GpaBandLabel, GpaBands, GpaPoint, ProgressCounts, ProgressReport, ProgressStatus,
   ProgressStudent, ReportHead, ReportOptions, ReportPage, ReportScope, ReportStudentBase, ReportTerm, RiskKind,
   RiskReport, RiskStudent, SkillAverage, SkillGapRow, SkillGapStatus, SkillsReport, SkillStudents,
@@ -183,7 +183,7 @@ export function gpaBandsOf(rows: readonly ReportRow[]): GpaBands {
 }
 
 /**
- * One row of "Bảng điểm trung bình". Same denominator within a row for each kind of figure: GPA, latest term GPA, credits
+ * One row of "Bảng thống kê" ("Bảng điểm trung bình" until 2026-11-21). Same denominator within a row for each kind of figure: GPA, latest term GPA, credits
  * and "GPA dưới 2,00" over the transcripts with data (withData), competency and fit over the stored assessments (assessed,
  * as the KPIs count them). A transcript without data counts in withTranscript only.
  */
@@ -193,20 +193,22 @@ function averageRow(key: string, label: string, rows: readonly ReportRow[]): Ave
   const competency = mean(assessed.map((row) => row.competency!.overall));
   const fit = mean(assessed.map((row) => row.competency!.career?.fitScore ?? null));
   return {
-    key, label, withTranscript: rows.filter((row) => row.hasTranscript).length, withData: withData.length,
+    key, label, students: rows.length, withTranscript: rows.filter((row) => row.hasTranscript).length, withData: withData.length,
     gpa: mean(withData.map((row) => row.gpa)), lastTermGpa: mean(withData.map((row) => row.lastTermGpa)), credits: mean(withData.map((row) => row.passedCredits)),
     below2: withData.filter((row) => row.gpa! < 2).length,
     assessed: assessed.length, competency, competencyLevel: levelWord(competency), fit, fitLabel: fitWord(fit),
+    late: rows.filter((row) => row.status === "late").length,
+    risk: rows.filter((row) => row.risk.level === "risk").length, warn: rows.filter((row) => row.risk.level === "warn").length,
   };
 }
 
 /**
- * The table "Bảng điểm trung bình" by cohort, major and specialty, each with its total row; a group is listed when one of
- * its students uploaded a transcript or has an assessment (so the rows add up to the total row).
+ * The table "Bảng thống kê" by cohort, major and specialty, each with its total row; every group that has a student is
+ * listed (since 2026-11-22 the table counts the students too, so the rows add up to the total row in every column).
  */
 export function averageTables(rows: readonly ReportRow[]): AverageTable[] {
   const table = (by: AverageTable["by"], keyOf: (row: ReportRow) => string, labelOf: (key: string) => string, order: (a: string, b: string) => number): AverageTable => {
-    const keys = [...new Set(rows.filter((row) => row.hasTranscript || row.competency !== null).map(keyOf))].sort(order);
+    const keys = [...new Set(rows.map(keyOf))].sort(order);
     return { by, rows: keys.map((key) => averageRow(key, labelOf(key), rows.filter((row) => keyOf(row) === key))), all: averageRow("all", "Tất cả", rows) };
   };
   const NONE = "none";
@@ -259,6 +261,16 @@ export function progressCountsOf(rows: readonly ReportRow[]): ProgressCounts {
   return { total: rows.length, onTrack: count("on_track"), late: count("late"), unknown: count("unknown"), noTranscript: count("no_transcript") };
 }
 
+/**
+ * The charts that compare cohorts ("Tiến độ học tập theo khóa", "Số sinh viên theo khóa", "Tín chỉ so với kế hoạch",
+ * "Theo khóa" of Nguy cơ) keep every cohort of the major and specialty filters when one cohort is chosen (2026-11-22):
+ * the page marks the chosen one, and `all` still counts the chosen cohort only.
+ */
+function acrossCohorts<T extends object>(all: readonly ReportRow[], filters: Filters, scoped: readonly ReportRow[], aggregate: (rows: readonly ReportRow[]) => T): CohortSplit<T> {
+  const everyCohort = filters.cohort ? filterRows(all, { major: filters.major, specialty: filters.specialty }) : scoped;
+  return { all: aggregate(scoped), byCohort: cohortSplit(everyCohort, aggregate).byCohort };
+}
+
 export function dashboardReport(all: readonly ReportRow[], filters: Filters, generatedAt: string, now: Date): DashboardReport {
   const rows = filterRows(all, filters);
   return {
@@ -269,7 +281,7 @@ export function dashboardReport(all: readonly ReportRow[], filters: Filters, gen
     averages: averageTables(rows),
     competencyGroups: cohortSplit(rows, competencyGroupsOf),
     fit: cohortSplit(rows, fitSummaryOf),
-    progress: cohortSplit(rows, progressCountsOf),
+    progress: acrossCohorts(all, filters, rows, progressCountsOf),
   };
 }
 
@@ -300,11 +312,30 @@ export function progressRows(all: readonly ReportRow[], query: ProgressQuery): R
   }
 }
 
+/**
+ * "Tín chỉ so với kế hoạch": the mean credits passed, planned so far and of the whole programme over the students who
+ * have all of them to compare (a transcript with data and a plan to compare with), so the three means share one base.
+ */
+export function creditAveragesOf(rows: readonly ReportRow[]): CreditAverages {
+  const comparable = rows.filter((row) => hasTranscriptData(row) && row.passedCredits !== null && row.expectedCredits !== null);
+  return {
+    students: comparable.length, passed: mean(comparable.map((row) => row.passedCredits)), expected: mean(comparable.map((row) => row.expectedCredits)),
+    total: mean(comparable.map((row) => row.totalCredits)),
+  };
+}
+
+/**
+ * The search box sits on the student list since 2026-11-22 ("Tìm sinh viên" in the list card), so `q` narrows the list
+ * only: the counts and charts above it keep the whole scope of the cohort, major and specialty filters while a name is typed.
+ */
+const withoutSearch = (filters: Filters): Filters => ({ cohort: filters.cohort, major: filters.major, specialty: filters.specialty });
+
 export function progressReport(all: readonly ReportRow[], query: ProgressQuery, generatedAt: string, now: Date): ProgressReport {
-  const scoped = filterRows(all, query);
+  const scoped = filterRows(all, withoutSearch(query));
   return {
     ...headOf(scoped, generatedAt, now),
-    counts: cohortSplit(scoped, progressCountsOf),
+    counts: acrossCohorts(all, query, scoped, progressCountsOf),
+    credits: acrossCohorts(all, query, scoped, creditAveragesOf),
     page: paginate(progressRows(all, query).map(progressStudent), query.page ?? 1, query.pageSize ?? 20),
   };
 }
@@ -318,12 +349,14 @@ export const RISK_LABELS: Record<RiskKind, string> = {
 };
 const RISK_ORDER: readonly RiskKind[] = ["failed_course", "pace", "gpa_below", "late_course", "elective_short"];
 export const RISK_SORTS = ["name", "studentCode", "cohort", "level", "gpa", "reasons"] as const;
-export type RiskQuery = Filters & { level?: "risk" | "warn" | undefined; sort?: (typeof RISK_SORTS)[number] | undefined; dir?: Dir | undefined; page?: number | undefined; pageSize?: number | undefined };
+/** `kind` (2026-11-22): only the students who have that reason among theirs. */
+export type RiskQuery = Filters & { level?: "risk" | "warn" | undefined; kind?: RiskKind | undefined; sort?: (typeof RISK_SORTS)[number] | undefined; dir?: Dir | undefined; page?: number | undefined; pageSize?: number | undefined };
 
 export const riskStudent = (row: ReportRow): RiskStudent => ({ ...baseOf(row), level: row.risk.level!, reasons: row.risk.items, gpa: row.gpa });
 
 export function riskRows(all: readonly ReportRow[], query: RiskQuery): ReportRow[] {
-  const rows = filterRows(all, query).filter((row) => row.risk.level !== null && (!query.level || row.risk.level === query.level));
+  const rows = filterRows(all, query).filter((row) => row.risk.level !== null && (!query.level || row.risk.level === query.level)
+    && (!query.kind || row.risk.items.some((item) => item.kind === query.kind)));
   const dir = query.dir ?? "asc";
   switch (query.sort ?? "level") {
     case "name": return dir === "asc" ? [...rows].sort(compareNames) : [...rows].sort((a, b) => compareNames(b, a));
@@ -336,11 +369,11 @@ export function riskRows(all: readonly ReportRow[], query: RiskQuery): ReportRow
 }
 
 export function riskReport(all: readonly ReportRow[], query: RiskQuery, generatedAt: string, now: Date): RiskReport {
-  const scoped = filterRows(all, query);
+  const scoped = filterRows(all, withoutSearch(query));
   const flagged = (rows: readonly ReportRow[]) => rows.filter((row) => row.risk.level !== null);
   return {
     ...headOf(scoped, generatedAt, now),
-    counts: cohortSplit(scoped, (rows) => ({
+    counts: acrossCohorts(all, query, scoped, (rows) => ({
       total: flagged(rows).length, risk: rows.filter((row) => row.risk.level === "risk").length, warn: rows.filter((row) => row.risk.level === "warn").length,
     })),
     reasons: cohortSplit(scoped, (rows) => ({
