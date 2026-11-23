@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Router, type Request } from "express";
 import type { AppConfig } from "../config.js";
 import { sendGraphMail, testMailMessage, type SendMail } from "../mail/graph-mail.js";
+import type { MailGrantStore } from "../mail/grants.js";
 import { personName } from "../users/person-name.js";
 import type { UserRepository } from "../users/user-repository.js";
 import type { MailConsentClient, MailConsentGrant } from "./mail-consent-client.js";
@@ -29,6 +30,8 @@ interface AuthRouterDependencies {
   mailConsentClient?: MailConsentClient;
   /** How a message is sent (Microsoft Graph by default; tests pass a fake). */
   sendMail?: SendMail;
+  /** Where the permission is kept for the announcement emails (AD-NOTI-04); without it the consent only sends the test. */
+  mailGrants?: MailGrantStore;
   now?: () => Date;
 }
 
@@ -107,14 +110,16 @@ export function createAuthRouter({
   authActivity,
   mailConsentClient,
   sendMail = sendGraphMail,
+  mailGrants,
   now = () => new Date()
 }: AuthRouterDependencies): Router {
   const router = Router();
 
   /**
-   * Bước thử gửi email (AD-NOTI-04, 2026-11-23): a staff member who can send announcements asks Microsoft for the
-   * Mail.Send permission. The answer is the address of Microsoft's consent page; the callback below sends one message to
-   * the member's own mailbox and keeps no permission. One test at a time per session: a new one replaces the last.
+   * "Cho phép gửi email" (AD-NOTI-04, 2026-11-23): a staff member who can send announcements asks Microsoft for the
+   * Mail.Send permission. The answer is the address of Microsoft's consent page; the callback below stores the permission
+   * encrypted (mail/grants.ts; the test step of the same day kept none) and sends one message to the member's own mailbox
+   * as proof. One request at a time per session: a new one replaces the last.
    */
   router.post("/microsoft/mail-consent", async (request, response) => {
     if (!isSameOrigin(request, config.webOrigin)) {
@@ -171,6 +176,14 @@ export function createAuthRouter({
     if (grant.tenantId !== user.tenantId || grant.objectId !== user.objectId) return mailTestRedirect(config, "other_account");
     const to = grant.email ?? grant.username ?? user.email ?? user.username;
     if (!to) return mailTestRedirect(config, "failed", "no_mailbox");
+    if (mailGrants) {
+      try {
+        await mailGrants.save({ userId: user.userId, address: to, tenantId: user.tenantId, cache: grant.cache });
+      } catch (error) {
+        console.error(`[MAIL] The mail permission was not stored (${(error as { code?: string } | null)?.code ?? "error"})`);
+        return mailTestRedirect(config, "failed", "grant_not_saved");
+      }
+    }
     // "Chào Đào Văn Hòa": the name part of a school display name "MSSV - Họ tên - Lớp" (first test, 23/11/2026).
     const result = await sendMail(grant.accessToken, testMailMessage(to, personName(user.name), now(), config.webOrigin));
     if (!result.ok) {

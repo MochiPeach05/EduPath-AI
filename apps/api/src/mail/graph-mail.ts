@@ -39,7 +39,8 @@ export async function sendGraphMail(accessToken: string, message: MailMessage, f
   return { ok: false, status: response.status, code: typeof code === "string" && SAFE_CODE.test(code) ? code : `http_${response.status}` };
 }
 
-const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
+/** Text made safe inside HTML. */
+export const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (character) => `&#${character.charCodeAt(0)};`);
 
 /** "09:15 23/11/2026" in Vietnam time, as every page writes a moment. */
 export function vietnamTime(at: Date): string {

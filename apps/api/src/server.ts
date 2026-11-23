@@ -2,6 +2,10 @@ import "dotenv/config";
 import { createApp } from "./app.js";
 import { MsalMicrosoftAuthClient } from "./auth/microsoft-auth-client.js";
 import { MsalMailConsentClient } from "./auth/mail-consent-client.js";
+import { mailGrantKey } from "./mail/grant-crypto.js";
+import { sendGraphMail } from "./mail/graph-mail.js";
+import { PostgresMailGrantStore } from "./mail/grants.js";
+import { startMailWorker } from "./mail/worker.js";
 import { loadConfig } from "./config.js";
 import { runDatabaseMigrations } from "./db/migrate.js";
 import { createDatabasePool } from "./db/pool.js";
@@ -34,13 +38,17 @@ async function startServer(): Promise<void> {
     }
 
     const microsoftAuthClient = new MsalMicrosoftAuthClient(config);
+    // Announcement emails (AD-NOTI-04, 2026-11-23): the senders' permissions are kept encrypted with a key from SESSION_SECRET.
+    const mailConsentClient = new MsalMailConsentClient(config);
+    const mailGrants = databasePool ? new PostgresMailGrantStore(databasePool, mailGrantKey(config.session.secret)) : undefined;
     const userRepository = databasePool
       ? new PostgresUserRepository(databasePool)
       : new MemoryUserRepository();
     const app = createApp({
       config,
       microsoftAuthClient,
-      mailConsentClient: new MsalMailConsentClient(config),
+      mailConsentClient,
+      ...(mailGrants ? { mailGrants } : {}),
       userRepository,
       ...(databasePool ? {
         databasePool,
@@ -52,6 +60,10 @@ async function startServer(): Promise<void> {
     });
 
     let cloudWorker: ReturnType<typeof startCloudAiWorker> | null = null;
+    // The announcement emails go out from this process, a few every 15 seconds (mail/worker.ts).
+    const mailWorker = databasePool && mailGrants
+      ? startMailWorker({ db: databasePool, client: mailConsentClient, grants: mailGrants, sendMail: sendGraphMail, webOrigin: config.webOrigin })
+      : null;
     const server = app.listen(config.port, () => {
       console.log(`EduPath API listening on http://localhost:${config.port}`);
       // AI_PROVIDER=cloudflare (user 2026-11-08): this process runs the AI jobs on Cloudflare Workers AI, no PC needed.
@@ -74,6 +86,7 @@ async function startServer(): Promise<void> {
     const shutdown = (signal: string) => {
       console.log(`[SERVER] Received ${signal}; shutting down`);
       cloudWorker?.stop();
+      mailWorker?.stop();
       server.close(() => {
         void (databasePool?.end() ?? Promise.resolve()).finally(() => process.exit(0));
       });

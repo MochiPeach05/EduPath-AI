@@ -13,8 +13,9 @@ import type {
 import type { UserRepository } from "./users/user-repository.js";
 import { MemoryUserRepository } from "./users/memory-user-repository.js";
 import type { DatabasePool } from "./db/pool.js";
-import type { MailConsentClient, MailConsentGrant } from "./auth/mail-consent-client.js";
+import type { MailConsentClient, MailConsentGrant, MailToken } from "./auth/mail-consent-client.js";
 import type { MailMessage, MailResult } from "./mail/graph-mail.js";
+import type { MailGrant, MailGrantStore } from "./mail/grants.js";
 
 const clientId = "11111111-1111-4111-8111-111111111111";
 const tenantId = "22222222-2222-4222-8222-222222222222";
@@ -515,14 +516,35 @@ class FakeMailConsentClient implements MailConsentClient {
     if (this.failure) throw this.failure;
     return {
       accessToken: "graph-token", tenantId, objectId: "33333333-3333-4333-8333-333333333333", nonce,
-      email: "test@example.edu", username: "test@example.edu", ...this.grant
+      email: "test@example.edu", username: "test@example.edu", cache: "made-up-token-cache", ...this.grant
     };
   }
+
+  public async acquireToken(): Promise<MailToken> {
+    return { accessToken: "graph-token", cache: "made-up-token-cache" };
+  }
+}
+
+/** The senders' permissions in memory (mail/grants.ts keeps them encrypted in ad_mail_senders). */
+class FakeMailGrantStore implements MailGrantStore {
+  public grants = new Map<string, MailGrant>();
+  public failure: Error | null = null;
+  public async save(grant: MailGrant) {
+    if (this.failure) throw this.failure;
+    this.grants.set(grant.userId, grant);
+  }
+  public async load(userId: string) { return this.grants.get(userId) ?? null; }
+  public async remove(userId: string) { return this.grants.delete(userId); }
+  public async status(userId: string) {
+    const grant = this.grants.get(userId);
+    return grant ? { address: grant.address, grantedAt: "2026-11-23T02:00:00.000Z", lastError: null } : null;
+  }
+  public async markFailed() { return undefined; }
 }
 
 describe("the email test of AD-NOTI-04: Microsoft's Mail.Send, asked for at run time (2026-11-23)", () => {
   const page = `${config.webOrigin}/quantri/gui-thong-bao`;
-  async function setup(role: AppRole | "student-login" = "admin", withMail = true) {
+  async function setup(role: AppRole | "student-login" = "admin", withMail = true, mailGrants?: MailGrantStore) {
     const client = new FakeMicrosoftAuthClient();
     // A school display name, as Microsoft gives it: "MSSV - Họ tên - Lớp" (made-up).
     client.nextName = "2374802019001 - Trần Minh An - 71K29CNTT08";
@@ -535,10 +557,11 @@ describe("the email test of AD-NOTI-04: Microsoft's Mail.Send, asked for at run 
       return { ok: true };
     });
     const agent = request.agent(createApp({
-      config, microsoftAuthClient: client, userRepository: repository, ...(withMail ? { mailConsentClient: mail } : {}), sendMail
+      config, microsoftAuthClient: client, userRepository: repository, ...(withMail ? { mailConsentClient: mail } : {}), sendMail,
+      ...(mailGrants ? { mailGrants } : {})
     }));
     await login(agent, client, role === "student-login" ? "/dashboard" : "/quantri");
-    return { agent, mail, sendMail, sent };
+    return { agent, mail, sendMail, sent, repository };
   }
   async function start(agent: ReturnType<typeof request.agent>) {
     const response = await agent.post("/api/auth/microsoft/mail-consent").set("Origin", config.webOrigin).expect(200);
@@ -603,6 +626,17 @@ describe("the email test of AD-NOTI-04: Microsoft's Mail.Send, asked for at run 
     mail.failure = null;
     sendMail.mockResolvedValueOnce({ ok: false, status: 404, code: "MailboxNotEnabledForRESTAPI" });
     expect(await back(agent, { state: await start(agent), code: "c" })).toBe(`${page}?emailTest=send_failed&code=MailboxNotEnabledForRESTAPI`);
+  });
+
+  it("keeps the permission for the announcement emails, and sends nothing when it cannot be kept", async () => {
+    const grants = new FakeMailGrantStore();
+    const { agent, sent } = await setup("admin", true, grants);
+    expect(await back(agent, { state: await start(agent), code: "c" })).toBe(`${page}?emailTest=sent`);
+    expect([...grants.grants.values()]).toEqual([{ userId: expect.any(String), address: "test@example.edu", tenantId, cache: "made-up-token-cache" }]);
+    expect(sent).toHaveLength(1);
+    grants.failure = Object.assign(new Error("db down"), { code: "57P01" });
+    expect(await back(agent, { state: await start(agent), code: "c" })).toBe(`${page}?emailTest=failed&code=grant_not_saved`);
+    expect(sent).toHaveLength(1);
   });
 
   it("drops a test left more than ten minutes on Microsoft's page", async () => {

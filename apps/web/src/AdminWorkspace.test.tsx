@@ -30,7 +30,7 @@ describe("admin workspace", () => {
     // Quản lý sinh viên is always an admin's page (every student, 2026-11-03), before GET advisor-portal/me answers too.
     expect(sidebarNames(render("/quantri/tai-khoan"))).toEqual(
       ["Tổng quan", "Thống kê", "Tiến độ", "Nguy cơ", "Kỹ năng thiếu", "Vị trí mục tiêu", "Môn đề xuất", "Nhật ký", "Tài khoản", "Sinh viên", "Cố vấn học tập", "Danh sách", "Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp", "Quản lý nghề nghiệp", "Lĩnh vực", "Kỹ năng", "Vị trí nghề nghiệp",
-        "Quản lý năng lực", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học", "Quản lý thông báo", "Gửi thông báo", "Đã gửi"]);
+        "Quản lý năng lực", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học", "Quản lý thông báo", "Gửi thông báo", "Đã gửi", "Cài đặt thông báo"]);
   });
 
   it("keeps Quản lý năng lực closed elsewhere and open on its pages", () => {
@@ -76,7 +76,7 @@ describe("admin workspace", () => {
     const openGroups = (html: string) => [...html.matchAll(/aria-expanded="true" aria-controls="admin-navigation-(\w+)"/g)].map(match => match[1]);
     const careerPages = ["/quantri/linh-vuc-nghe-nghiep", "/quantri/ky-nang", "/quantri/vi-tri-nghe-nghiep"];
     const competencyPages = ["/quantri/nhom-nang-luc", "/quantri/cau-hinh-nang-luc", "/quantri/cau-hinh-mon-hoc"];
-    const announcementPages = ["/quantri/gui-thong-bao", "/quantri/thong-bao-da-gui"];
+    const announcementPages = ["/quantri/gui-thong-bao", "/quantri/thong-bao-da-gui", "/quantri/cai-dat-thong-bao"];
     const advisorPages = ["/quantri/co-van-hoc-tap", "/quantri/quan-ly-sinh-vien"];
     const reportPages = adminNavigation.filter(item => item.eyebrow === "TỔNG QUAN").map(item => item.path as string);
     for (const { path } of adminNavigation) {

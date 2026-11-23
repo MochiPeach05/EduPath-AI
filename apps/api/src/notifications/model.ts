@@ -1,7 +1,7 @@
 // Notifications of the student portal's bell (STU-PROG-04…09) and the faculty's announcements (AD-NOTI-01/02), 2026-10-30
 // (user: "Ok triển khai đi"; contract: apps/web/src/notification-types.ts, migration 056). A notification is written by
 // the system (an AI job finished, a progress warning, a catalog update) or by the faculty (an announcement), and lives
-// in EduPath AI only; email comes later.
+// in EduPath AI; since 2026-11-23 an announcement may also go by email (AD-NOTI-04, mail/).
 
 export type NotificationType = "ai" | "warn" | "khoa" | "sys";
 export const NOTIFICATION_KINDS = [
@@ -67,7 +67,11 @@ export const presentNotification = (row: NotificationRow) => ({
 });
 
 export type AnnouncementTarget = { cohorts: string[]; majors: string[] };
+/** The messages of an announcement sent with email (AD-NOTI-05, migration 066), by outcome. */
+export type AnnouncementEmailCounts = { total: number; sent: number; pending: number; failed: number; cancelled: number; noAddress: number };
 export type AnnouncementRow = {
   id: string; title: string; body: string; link: string | null; target: AnnouncementTarget; recipients: number; read: number;
   createdAt: Date | string; createdBy: string | null; withdrawnAt: Date | string | null;
+  /** Sent with email (2026-11-23): from which mailbox, and how its messages went. */
+  emailRequested?: boolean; emailFrom?: string | null; email?: AnnouncementEmailCounts | null;
 };

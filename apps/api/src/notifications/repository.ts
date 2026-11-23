@@ -9,6 +9,7 @@ import {
   type NotificationRow, type NotificationType,
 } from "./model.js";
 import { notifyMany } from "./notify.js";
+import { cancelPendingEmails, EMAIL_SUMMARY, purgeEmails, queueAnnouncementEmails, RECIPIENT_ADDRESS } from "../mail/outbox.js";
 
 type Db = Pick<DatabasePool, "query"> | Pick<PoolClient, "query">;
 
@@ -79,6 +80,8 @@ export async function purgeNotifications(db: Db): Promise<void> {
   await db.query("DELETE FROM stu_notifications WHERE created_at<now()-make_interval(days => $1)", [RETENTION_DAYS]);
   await db.query("DELETE FROM stu_notifications WHERE deleted_at<now()-interval '1 day' AND kind<>'warning'");
   await db.query("DELETE FROM stu_notifications n USING ad_announcements a WHERE n.announcement_id=a.id AND a.withdrawn_at IS NOT NULL");
+  // The emails of the announcements (addresses and outcomes) are kept as long as the notifications.
+  await purgeEmails(db);
 }
 
 /** Runs purgeNotifications at most once per interval in this process (the bell's poll triggers it). */
@@ -126,10 +129,13 @@ export const majorName = (code: string) => MAJORS.find((major) => major.code ===
 const otherMajor = (code: string) => Number(!MAJORS.some((major) => major.code === code));
 const facultyMajorsFirst = (a: string, b: string) => otherMajor(a) - otherMajor(b) || a.localeCompare(b);
 
-export async function reachCount(db: Db, target: AnnouncementTarget, staffDomains: readonly string[]): Promise<number> {
-  const result = await db.query<{ count: number }>(
-    `SELECT count(*)::int AS count ${recipientsFrom} WHERE ${recipientsWhere(1)}`, [target.cohorts, target.majors, staffDomains]);
-  return result.rows[0]?.count ?? 0;
+/** Who an announcement reaches, and how many of them have a school mailbox for its email (AD-NOTI-04). */
+export async function reachCount(db: Db, target: AnnouncementTarget, staffDomains: readonly string[]): Promise<{ count: number; withEmail: number }> {
+  const result = await db.query<{ count: number; withEmail: number }>(
+    `SELECT count(*)::int AS count,count(${RECIPIENT_ADDRESS})::int AS "withEmail" ${recipientsFrom} WHERE ${recipientsWhere(1)}`,
+    [target.cohorts, target.majors, staffDomains]);
+  const row = result.rows[0];
+  return { count: row?.count ?? 0, withEmail: row?.withEmail ?? row?.count ?? 0 };
 }
 
 export function targetLabel(target: AnnouncementTarget): string {
@@ -139,7 +145,8 @@ export function targetLabel(target: AnnouncementTarget): string {
 
 const announcementColumns = `a.id,a.title,a.body,a.link,a.target,a.recipients,a.created_at AS "createdAt",a.withdrawn_at AS "withdrawnAt",
   u.display_name AS "createdBy",
-  (SELECT count(*)::int FROM stu_notifications n WHERE n.announcement_id=a.id AND n.read_at IS NOT NULL) AS read`;
+  (SELECT count(*)::int FROM stu_notifications n WHERE n.announcement_id=a.id AND n.read_at IS NOT NULL) AS read,
+  a.email_requested AS "emailRequested",a.email_from AS "emailFrom",${EMAIL_SUMMARY} AS email`;
 
 export const ANNOUNCEMENT_SORT = {
   title: byText("a.title"),
@@ -156,20 +163,23 @@ export async function listAnnouncements(db: Db, sort?: string, dir?: SortDirecti
   return result.rows;
 }
 
-async function findAnnouncement(db: Db, id: string): Promise<AnnouncementRow | null> {
+export async function findAnnouncement(db: Db, id: string): Promise<AnnouncementRow | null> {
   const result = await db.query<AnnouncementRow>(
     `SELECT ${announcementColumns} FROM ad_announcements a LEFT JOIN users u ON u.id=a.created_by WHERE a.id=$1`, [id]);
   return result.rows[0] ?? null;
 }
 
 export type AnnouncementInput = { title: string; body: string; link: string | null; target: AnnouncementTarget };
+/** Email with the announcement (AD-NOTI-04): from the actor's school mailbox, whose permission the caller checked. */
+export type AnnouncementEmail = { senderId: string; from: string };
 
 /**
  * Sends an announcement inside the caller's transaction: the announcement, then one notification per recipient (type
- * "khoa", kind "announcement", source_key "announcement:<id>"). null when it reaches nobody.
+ * "khoa", kind "announcement", source_key "announcement:<id>"), and with `email` one queued message per recipient (the
+ * mail worker sends them). null when it reaches nobody.
  */
 export async function sendAnnouncement(client: Pick<PoolClient, "query">, actorId: string, input: AnnouncementInput,
-  staffDomains: readonly string[]): Promise<AnnouncementRow | null> {
+  staffDomains: readonly string[], email: AnnouncementEmail | null = null): Promise<AnnouncementRow | null> {
   const recipients = (await client.query<{ id: string }>(
     `SELECT u.id ${recipientsFrom} WHERE ${recipientsWhere(1)} ORDER BY u.id`, [input.target.cohorts, input.target.majors, staffDomains])).rows.map((row) => row.id);
   if (!recipients.length) return null;
@@ -180,13 +190,21 @@ export async function sendAnnouncement(client: Pick<PoolClient, "query">, actorI
   await notifyMany(client, recipients, {
     type: "khoa", kind: "announcement", title: input.title, body: input.body, link: input.link, sourceKey: `announcement:${id}`, announcementId: id,
   });
+  if (email) {
+    await client.query("UPDATE ad_announcements SET email_requested=true,email_sender_id=$2,email_from=$3 WHERE id=$1", [id, email.senderId, email.from]);
+    await queueAnnouncementEmails(client, id, recipients);
+  }
   return findAnnouncement(client, id);
 }
 
-/** Withdraws an announcement and takes it out of every bell; "missing" or "withdrawn" (already) otherwise. */
+/**
+ * Withdraws an announcement and takes it out of every bell, and cancels its emails that have not gone out (a sent email
+ * cannot be recalled); "missing" or "withdrawn" (already) otherwise.
+ */
 export async function withdrawAnnouncement(client: Pick<PoolClient, "query">, id: string): Promise<AnnouncementRow | "missing" | "withdrawn"> {
   const updated = await client.query("UPDATE ad_announcements SET withdrawn_at=now() WHERE id=$1 AND withdrawn_at IS NULL", [id]);
   if (!updated.rowCount) return (await client.query("SELECT 1 FROM ad_announcements WHERE id=$1", [id])).rowCount ? "withdrawn" : "missing";
   await client.query("UPDATE stu_notifications SET deleted_at=now() WHERE announcement_id=$1 AND deleted_at IS NULL", [id]);
+  await cancelPendingEmails(client, id);
   return (await findAnnouncement(client, id)) ?? "missing";
 }

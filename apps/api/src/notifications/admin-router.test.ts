@@ -1,7 +1,10 @@
 import express from "express";
 import request from "supertest";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { MailConsentClient } from "../auth/mail-consent-client.js";
 import type { DatabasePool } from "../db/pool.js";
+import type { MailMessage, MailResult } from "../mail/graph-mail.js";
+import type { MailGrant, MailGrantStore, MailSenderStatus } from "../mail/grants.js";
 import { createAnnouncementsRouter } from "./admin-router.js";
 
 // The faculty's announcements (AD-NOTI-01/02) over a fake database. Synthetic ids only.
@@ -16,7 +19,8 @@ const announcement = (extra: Record<string, unknown> = {}) => ({
 });
 
 type Rows = (sql: string, params: unknown[]) => { rowCount: number; rows: unknown[] } | undefined;
-function setup(options: { role?: string; admin?: boolean; rows?: Rows } = {}) {
+type Mail = { client: MailConsentClient; grants: MailGrantStore; sendMail: (token: string, message: MailMessage) => Promise<MailResult> };
+function setup(options: { role?: string; admin?: boolean; rows?: Rows; mail?: Mail } = {}) {
   const query = vi.fn(async (sql: string, params: unknown[] = []) => {
     if (sql.startsWith("SELECT id FROM users WHERE id=$1 AND entra_tenant_id=$2 AND is_active")) {
       return options.admin === false ? { rowCount: 0, rows: [] } : { rowCount: 1, rows: [{ id: ADMIN }] };
@@ -27,8 +31,11 @@ function setup(options: { role?: string; admin?: boolean; rows?: Rows } = {}) {
   const pool = { query, connect: vi.fn(async () => ({ query, release })) } as unknown as DatabasePool;
   const app = express();
   app.use(express.json());
-  app.use((req, _res, next) => { Object.assign(req, { session: { user: { userId: ADMIN, tenantId: "t", role: options.role ?? "admin" } } }); next(); });
-  app.use("/a", createAnnouncementsRouter(pool, origin, { staffEmailDomains: new Set(["vlu.edu.vn"]) }));
+  app.use((req, _res, next) => {
+    Object.assign(req, { session: { user: { userId: ADMIN, tenantId: "t", role: options.role ?? "admin", name: "Nguyễn Văn Cán Bộ" } } });
+    next();
+  });
+  app.use("/a", createAnnouncementsRouter(pool, origin, { staffEmailDomains: new Set(["vlu.edu.vn"]), ...(options.mail ? { mail: options.mail } : {}) }));
   return { app, query, release, sql: () => query.mock.calls.map(([text, params]) => [String(text), params] as const) };
 }
 
@@ -44,12 +51,12 @@ describe("announcements API", () => {
   it("offers the cohorts and majors of the students, and counts who an announcement reaches", async () => {
     const { app, sql } = setup({
       rows: (text) => (text.startsWith("SELECT DISTINCT p.cohort_code") ? { rowCount: 3, rows: [{ cohort: "K30", major: "7480201" }, { cohort: "K9", major: "7480104" }, { cohort: null, major: null }] }
-        : text.startsWith("SELECT count(*)::int AS count") ? { rowCount: 1, rows: [{ count: 312 }] } : undefined),
+        : text.startsWith("SELECT count(*)::int AS count") ? { rowCount: 1, rows: [{ count: 312, withEmail: 300 }] } : undefined),
     });
     expect((await request(app).get("/a/options").expect(200)).body).toEqual({
       cohorts: ["K9", "K30"], majors: [{ code: "7480104", name: "Hệ thống thông tin" }, { code: "7480201", name: "Công nghệ thông tin" }],
     });
-    await request(app).get("/a/reach?cohorts=K29,K30&majors=7480201").expect(200, { count: 312 });
+    await request(app).get("/a/reach?cohorts=K29,K30&majors=7480201").expect(200, { count: 312, withEmail: 300 });
     const reach = sql().find(([text]) => text.startsWith("SELECT count(*)::int AS count"))!;
     expect(reach[0]).toContain("COALESCE(u.role_override,u.role)='student'");
     expect(reach[1]).toEqual([["K29", "K30"], ["7480201"], ["vlu.edu.vn"]]);
@@ -110,6 +117,8 @@ describe("announcements API", () => {
     const first = await request(app).post(`/a/${ANN}/withdraw`).set("Origin", origin).send({}).expect(200);
     expect(first.body.announcement.withdrawnAt).toBe("2026-10-30T03:00:00.000Z");
     expect(sql().some(([text, params]) => text.startsWith("UPDATE stu_notifications SET deleted_at=now() WHERE announcement_id=$1") && (params as unknown[])[0] === ANN)).toBe(true);
+    // Its emails that have not gone out are cancelled; a sent email cannot be recalled.
+    expect(sql().some(([text, params]) => text.startsWith("UPDATE ad_announcement_emails SET status='cancelled'") && (params as unknown[])[0] === ANN)).toBe(true);
     await request(app).post(`/a/${ANN}/withdraw`).set("Origin", origin).send({}).expect(409, { error: "already_withdrawn" });
   });
 
@@ -119,5 +128,142 @@ describe("announcements API", () => {
     expect(sql().find(([text]) => text.includes("FROM ad_announcements a LEFT JOIN users u"))![0])
       .toContain("(SELECT count(*) FROM stu_notifications n WHERE n.announcement_id=a.id AND n.read_at IS NOT NULL) DESC NULLS LAST");
     await request(app).get("/a?sort=nope").expect(400, { error: "invalid_input" });
+  });
+});
+
+// AD-NOTI-04/05/06 (2026-11-23): email from the sender's school mailbox, its outcome, and Cài đặt thông báo. Made-up
+// addresses and tokens only; nothing reaches Microsoft.
+function mailFakes(options: { status?: MailSenderStatus | null; grant?: MailGrant | null; acquire?: () => Promise<{ accessToken: string; cache: string }>; result?: MailResult } = {}) {
+  const grant: MailGrant = { userId: ADMIN, address: "can.bo@example.edu", tenantId: "t", cache: "cache-1" };
+  const grants: MailGrantStore = {
+    save: vi.fn(async () => undefined),
+    load: vi.fn(async () => (options.grant === undefined ? grant : options.grant)),
+    remove: vi.fn(async () => true),
+    status: vi.fn(async () => (options.status === undefined ? { address: grant.address, grantedAt: "2026-11-23T02:00:00.000Z", lastError: null } : options.status)),
+    markFailed: vi.fn(async () => undefined),
+  };
+  const client: MailConsentClient = {
+    getConsentUrl: vi.fn(), exchangeCode: vi.fn(),
+    acquireToken: vi.fn(options.acquire ?? (async () => ({ accessToken: "graph-token", cache: "cache-2" }))),
+  };
+  const sent: MailMessage[] = [];
+  const sendMail = vi.fn(async (_token: string, message: MailMessage) => { sent.push(message); return options.result ?? { ok: true as const }; });
+  return { mail: { client, grants, sendMail }, grants, client, sendMail, sent };
+}
+
+describe("announcement emails and notification settings", () => {
+  it("says whether email can be sent and from which mailbox, and forgets the permission on request", async () => {
+    expect((await request(setup().app).get("/a/mail-sender").expect(200)).body).toEqual({ available: false, sender: null });
+    const fakes = mailFakes();
+    const { app } = setup({ mail: fakes.mail });
+    expect((await request(app).get("/a/mail-sender").expect(200)).body).toEqual({
+      available: true, sender: { address: "can.bo@example.edu", grantedAt: "2026-11-23T02:00:00.000Z", lastError: null },
+    });
+    await request(app).delete("/a/mail-sender").expect(403, { error: "invalid_origin" });
+    await request(app).delete("/a/mail-sender").set("Origin", origin).expect(204);
+    expect(fakes.grants.remove).toHaveBeenCalledWith(ADMIN);
+    await request(setup().app).delete("/a/mail-sender").set("Origin", origin).expect(503, { error: "mail_unavailable" });
+  });
+
+  it("sends the draft, or a plain test message, to the member's own mailbox only", async () => {
+    const fakes = mailFakes();
+    const { app } = setup({ mail: fakes.mail });
+    const draft = await request(app).post("/a/mail-sender/test").set("Origin", origin)
+      .send({ title: " Lịch đăng ký học phần ", body: "Mở từ 01/12.", link: "#plans" }).expect(200);
+    expect(draft.body).toEqual({ sent: true, to: "can.bo@example.edu", preview: true });
+    expect(fakes.sendMail).toHaveBeenCalledWith("graph-token", expect.anything());
+    expect(fakes.sent[0]).toMatchObject({ to: "can.bo@example.edu", subject: "[EduPath AI] Lịch đăng ký học phần" });
+    expect(fakes.sent[0]!.html).toContain("Chào Nguyễn Văn Cán Bộ,");
+    expect(fakes.sent[0]!.html).toContain("https://edupath.example/dashboard#plans");
+    // The renewed permission is kept.
+    expect(fakes.grants.save).toHaveBeenCalledWith(expect.objectContaining({ cache: "cache-2" }));
+    expect((await request(app).post("/a/mail-sender/test").set("Origin", origin).send({}).expect(200)).body.preview).toBe(false);
+    expect(fakes.sent[1]!.subject).toBe("[EduPath AI] Thư thử gửi thông báo qua email");
+    // Anything but the draft's fields is refused: the address is never the caller's choice.
+    await request(app).post("/a/mail-sender/test").set("Origin", origin).send({ to: "khac@example.edu" }).expect(400, { error: "invalid_input" });
+  });
+
+  it("asks to allow EduPath AI again when there is no usable permission, and passes a refusal on", async () => {
+    const unreadable = mailFakes({ grant: null });
+    await request(setup({ mail: unreadable.mail }).app).post("/a/mail-sender/test").set("Origin", origin).send({})
+      .expect(409, { error: "mail_grant_required" });
+    expect(unreadable.grants.markFailed).toHaveBeenCalledWith(ADMIN, "grant_required");
+    const refused = mailFakes({ acquire: async () => { throw Object.assign(new Error("again"), { errorCode: "grant_required" }); } });
+    await request(setup({ mail: refused.mail }).app).post("/a/mail-sender/test").set("Origin", origin).send({}).expect(409, { error: "mail_grant_required" });
+    expect(refused.grants.markFailed).toHaveBeenCalledWith(ADMIN, "grant_required");
+    const failing = mailFakes({ result: { ok: false, status: 403, code: "ErrorAccessDenied" } });
+    await request(setup({ mail: failing.mail }).app).post("/a/mail-sender/test").set("Origin", origin).send({})
+      .expect(502, { error: "send_failed", code: "ErrorAccessDenied" });
+  });
+
+  it("sends an announcement by email only from a usable permission, and queues one message per recipient", async () => {
+    const rows: Rows = (text) => (text.startsWith("SELECT u.id FROM users u") ? { rowCount: 2, rows: [{ id: A }, { id: B }] }
+      : text.startsWith("WITH r AS (SELECT u.id AS user_id") ? { rowCount: 1, rows: [{ queued: 1, noAddress: 1 }] }
+      : text.includes("WHERE a.id=$1") ? { rowCount: 1, rows: [announcement({
+        emailRequested: true, emailFrom: "can.bo@example.edu", email: { total: 2, sent: 0, pending: 1, failed: 0, cancelled: 0, noAddress: 1 },
+      })] } : undefined);
+    const send = (app: express.Express) => request(app).post("/a").set("Origin", origin).send({ title: "Lịch đăng ký học phần", body: "Mở từ 01/12.", email: true });
+    await send(setup({ rows }).app).expect(503, { error: "mail_unavailable" });
+    await send(setup({ rows, mail: mailFakes({ status: null }).mail }).app).expect(409, { error: "mail_grant_required" });
+    await send(setup({ rows, mail: mailFakes({ status: { address: "can.bo@example.edu", grantedAt: "2026-11-23T02:00:00.000Z", lastError: "grant_required" } }).mail }).app)
+      .expect(409, { error: "mail_grant_required" });
+    const { app, sql } = setup({ rows, mail: mailFakes().mail });
+    const response = await send(app).expect(201);
+    expect(response.body.announcement.email).toEqual({ from: "can.bo@example.edu", total: 2, sent: 0, pending: 1, failed: 0, cancelled: 0, noAddress: 1 });
+    const marked = sql().find(([text]) => text.startsWith("UPDATE ad_announcements SET email_requested=true"))!;
+    expect((marked[1] as unknown[]).slice(1)).toEqual([ADMIN, "can.bo@example.edu"]);
+    const queued = sql().find(([text]) => text.startsWith("WITH r AS (SELECT u.id AS user_id"))!;
+    expect((queued[1] as unknown[])[1]).toEqual([A, B]);
+    const statements = sql().map(([text]) => text);
+    expect(statements.indexOf(queued[0])).toBeLessThan(statements.lastIndexOf("COMMIT"));
+    // Without email nothing is queued, and the announcement says so.
+    const plain = setup({ rows: (text) => (text.startsWith("SELECT u.id FROM users u") ? { rowCount: 1, rows: [{ id: A }] }
+      : text.includes("WHERE a.id=$1") ? { rowCount: 1, rows: [announcement()] } : undefined) });
+    expect((await request(plain.app).post("/a").set("Origin", origin).send({ title: "T", body: "B" }).expect(201)).body.announcement.email).toBeNull();
+    expect(plain.sql().some(([text]) => text.startsWith("WITH r AS (SELECT u.id AS user_id") || text.startsWith("UPDATE ad_announcements SET email_requested"))).toBe(false);
+  });
+
+  it("lists the messages that did not go out and sends the failed ones again", async () => {
+    let withdrawn = false;
+    const rows: Rows = (text) => (text.startsWith("SELECT COALESCE(NULLIF(btrim(p.full_name),''),u.display_name,'') AS name") ? { rowCount: 2, rows: [
+      { name: "Trần Minh An", studentCode: "2374802019001", address: "an@example.edu", status: "failed", error: "ErrorInvalidRecipients", at: new Date("2026-11-23T03:00:00Z") },
+      { name: "Lê Thu Hà", studentCode: "2374802019002", address: null, status: "no_address", error: null, at: new Date("2026-11-23T02:00:00Z") },
+    ] } : text.startsWith("UPDATE ad_announcement_emails SET status='pending',attempts=0") ? { rowCount: 1, rows: [] }
+      : text.includes("WHERE a.id=$1") ? { rowCount: 1, rows: [announcement({ withdrawnAt: withdrawn ? new Date("2026-11-23T04:00:00Z") : null })] } : undefined);
+    const fakes = mailFakes();
+    const { app, sql } = setup({ rows, mail: fakes.mail });
+    expect((await request(app).get(`/a/${ANN}/emails`).expect(200)).body.items).toEqual([
+      { name: "Trần Minh An", studentCode: "2374802019001", address: "an@example.edu", status: "failed", error: "ErrorInvalidRecipients", at: "2026-11-23T03:00:00.000Z" },
+      { name: "Lê Thu Hà", studentCode: "2374802019002", address: null, status: "no_address", error: null, at: "2026-11-23T02:00:00.000Z" },
+    ]);
+    const retried = await request(app).post(`/a/${ANN}/emails/retry`).set("Origin", origin).send({}).expect(200);
+    expect(retried.body.requeued).toBe(1);
+    // They go from the mailbox of the member who asks.
+    const sender = sql().find(([text]) => text.startsWith("UPDATE ad_announcements SET email_sender_id=$2"))!;
+    expect(sender[1]).toEqual([ANN, ADMIN, "can.bo@example.edu"]);
+    withdrawn = true;
+    await request(app).post(`/a/${ANN}/emails/retry`).set("Origin", origin).send({}).expect(409, { error: "already_withdrawn" });
+    await request(setup({ mail: fakes.mail }).app).get(`/a/${ANN}/emails`).expect(404, { error: "not_found" });
+  });
+
+  it("turns a kind of automatic notification off and on, never the faculty's announcements", async () => {
+    let saved: unknown[] = [];
+    const { app } = setup({
+      rows: (text, params) => {
+        if (text.startsWith("INSERT INTO ad_notification_settings")) { saved = params; return { rowCount: 1, rows: [] }; }
+        if (text.startsWith("SELECT s.setting,s.enabled")) {
+          return saved.length ? { rowCount: 1, rows: [{ setting: saved[0], enabled: saved[1], updatedAt: new Date("2026-11-23T05:00:00Z"), updatedBy: "Nguyễn Văn Cán Bộ" }] } : { rowCount: 0, rows: [] };
+        }
+        return undefined;
+      },
+    });
+    const listed = (await request(app).get("/a/settings").expect(200)).body.items as { key: string; enabled: boolean }[];
+    expect(listed.map((item) => item.key)).toEqual(["transcript", "assessment_comment", "roadmap", "graduation_advice", "warning", "catalog_updated"]);
+    expect(listed.every((item) => item.enabled)).toBe(true);
+    const turned = await request(app).put("/a/settings/roadmap").set("Origin", origin).send({ enabled: false }).expect(200);
+    expect(turned.body.setting).toMatchObject({ key: "roadmap", label: "Lộ trình AI", enabled: false, updatedAt: "2026-11-23T05:00:00.000Z", updatedBy: "Nguyễn Văn Cán Bộ" });
+    expect(saved).toEqual(["roadmap", false, ADMIN]);
+    await request(app).put("/a/settings/announcement").set("Origin", origin).send({ enabled: false }).expect(400, { error: "invalid_input" });
+    await request(app).put("/a/settings/roadmap").set("Origin", origin).send({ enabled: "no" }).expect(400, { error: "invalid_input" });
   });
 });

@@ -37,7 +37,8 @@ import { createNeuronBudget } from "./ai-worker/budget.js";
 import type { AppConfig } from "./config.js";
 import { createAuthRouter } from "./auth/router.js";
 import type { MailConsentClient } from "./auth/mail-consent-client.js";
-import type { SendMail } from "./mail/graph-mail.js";
+import { sendGraphMail, type SendMail } from "./mail/graph-mail.js";
+import type { MailGrantStore } from "./mail/grants.js";
 import type { MicrosoftAuthClient } from "./auth/types.js";
 import type { UserRepository } from "./users/user-repository.js";
 import type { AuthActivity } from "./auth/activity.js";
@@ -66,6 +67,8 @@ interface CreateAppDependencies {
   /** The email test of AD-NOTI-04 (Microsoft's Mail.Send consent) and how it sends; see auth/router.ts. */
   mailConsentClient?: MailConsentClient;
   sendMail?: SendMail;
+  /** The senders' stored permissions (mail/grants.ts): with mailConsentClient, announcements may go by email. */
+  mailGrants?: MailGrantStore;
 }
 
 const webDistPath = fileURLToPath(new URL("../../web/dist/", import.meta.url));
@@ -80,7 +83,8 @@ export function createApp({
   authActivity,
   studentProfileRepository,
   mailConsentClient,
-  sendMail
+  sendMail,
+  mailGrants
 }: CreateAppDependencies) {
   const app = express();
 
@@ -183,7 +187,7 @@ export function createApp({
     "/api/auth",
     createAuthRouter({
       config, microsoftAuthClient, userRepository, ...(authActivity ? { authActivity } : {}),
-      ...(mailConsentClient ? { mailConsentClient } : {}), ...(sendMail ? { sendMail } : {})
+      ...(mailConsentClient ? { mailConsentClient } : {}), ...(sendMail ? { sendMail } : {}), ...(mailGrants ? { mailGrants } : {})
     })
   );
 
@@ -253,7 +257,10 @@ export function createApp({
   app.use("/api/student/overview", createOverviewRouter(databasePool, { reference: referenceCache }));
   // The bell of the student portal (STU-PROG-04…09) and the faculty's announcements to it (AD-NOTI-01/02).
   app.use("/api/student/notifications", createStudentNotificationsRouter(databasePool, config.webOrigin));
-  app.use("/api/admin/announcements", createAnnouncementsRouter(databasePool, config.webOrigin, { staffEmailDomains: config.staffEmailDomains }));
+  app.use("/api/admin/announcements", createAnnouncementsRouter(databasePool, config.webOrigin, {
+    staffEmailDomains: config.staffEmailDomains,
+    ...(mailConsentClient && mailGrants ? { mail: { client: mailConsentClient, grants: mailGrants, sendMail: sendMail ?? sendGraphMail } } : {})
+  }));
   // AI comments are queued only when AI_WORKER_KEY is configured; otherwise ai_status is 'disabled'.
   const competencyAiQueue = createCompetencyAiQueue({ enabled: Boolean(config.aiWorkerKey) });
   const assessmentOptions = { promptVersion: PROMPT_VERSION };

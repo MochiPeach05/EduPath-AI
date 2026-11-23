@@ -1,23 +1,29 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { ActionMenu, Modal, Pagination, Status, useData } from "./admin-ui";
 import { Icon, RequiredLabel } from "./admin-account-shared";
 import { CheckedForm } from "./CheckedForm";
 import { majorOptions } from "./majors";
 import { sortRows, useTableSort, type SortRule } from "./table-sort";
-import { ANNOUNCEMENTS_API, ANNOUNCEMENT_BODY_MAX, ANNOUNCEMENT_TITLE_MAX, type Announcement, type AnnouncementTarget } from "./notification-types";
+import {
+  ANNOUNCEMENTS_API, ANNOUNCEMENT_BODY_MAX, ANNOUNCEMENT_TITLE_MAX, type Announcement, type AnnouncementEmail, type AnnouncementTarget, type EmailProblem,
+  type MailSender, type NotificationSetting,
+} from "./notification-types";
 import { SESSION_EXPIRED_EVENT, adminErrorText } from "./admin-errors";
 import { formatVnDateTime } from "./display-format";
 import "./curricula.css";
 import "./careers.css";
 import "./announcements.css";
 
-// Quản lý thông báo (AD-NOTI-01, 02; 2026-10-30): the faculty writes an announcement to cohorts and majors (none chosen:
-// every student) and it shows at once in the bell of those students; "Đã gửi" counts who has read each one and withdraws
-// one from every bell. Email to the students' school address comes later (user: "tương lai sẽ làm thêm chức năng gửi về
-// mail thật của sinh viên luôn nữa cơ mà không phải hiện tại"). Contract: notification-types.ts.
+// Quản lý thông báo (AD-NOTI-01…06): the faculty writes an announcement to cohorts and majors (none chosen: every student)
+// and it shows at once in the bell of those students; "Đã gửi" counts who has read each one and withdraws one from every
+// bell. Since 2026-11-23 an announcement may also go by email (AD-NOTI-04; user: "Làm cả 04, 05, 06", "Chỉ sinh viên đã có
+// tài khoản", "Dùng mặc định"): from the sender's own school mailbox, once they allowed EduPath AI on Microsoft's page, one
+// message per student and about 25 a minute; "Đã gửi" shows how many went out and sends the failed ones again (AD-NOTI-05),
+// and "Cài đặt thông báo" turns the kinds of automatic notifications off and on (AD-NOTI-06). Contract: notification-types.ts.
 
 export const COMPOSE_PATH = "/quantri/gui-thong-bao";
 export const SENT_PATH = "/quantri/thong-bao-da-gui";
+export const SETTINGS_PATH = "/quantri/cai-dat-thong-bao";
 
 /** The choices of "Gửi đến": cohorts and the faculty's majors (programme codes of the MSSV, as student profiles hold them). */
 export type AnnouncementOptions = { cohorts: string[]; majors: { code: string; name: string }[] };
@@ -34,6 +40,8 @@ export const PORTAL_PAGES: readonly { link: string; label: string }[] = [
   { link: "#curriculum", label: "Chương trình đào tạo" }, { link: "#plans", label: "Kế hoạch đào tạo" },
   { link: "#graduation", label: "Xét tốt nghiệp" }, { link: "#assistant", label: "Trợ lý AI" },
 ];
+/** The server sends 6 messages every 15 seconds (apps/api/src/mail/worker.ts); the pages say "khoảng 25 thư mỗi phút". */
+export const EMAILS_PER_MINUTE = 24;
 
 /* ------------------------------------------------------------------ requests */
 
@@ -48,10 +56,19 @@ const failures: Record<string, string> = {
   forbidden: "Bạn không có quyền thực hiện thao tác này.",
   insufficient_role: "Bạn không còn quyền thực hiện thao tác này.",
   invalid_origin: "Yêu cầu không hợp lệ. Vui lòng tải lại trang.",
+  mail_unavailable: "Máy chủ chưa bật chức năng gửi email.",
+  mail_grant_required: "Bạn cần cho phép EduPath AI gửi thư từ hộp thư trường của mình trước (nút “Cho phép gửi từ hộp thư của tôi” ở trang Gửi thông báo).",
+  send_failed: "Microsoft không gửi được thư. Vui lòng thử lại sau.",
 };
+/** Microsoft's own code when it is a plain one, shown so the team can look it up; null otherwise. */
+export const plainCode = (value: unknown) => (typeof value === "string" && /^[A-Za-z0-9_.-]{1,80}$/.test(value) ? value : null);
+const withCode = (text: string, code: string | null) => (code ? `${text} Mã lỗi: ${code}.` : text);
 export class AnnouncementRequestError extends Error {
   // A code without a text of this page is worded by its status (admin-errors.ts; status 0: no answer).
-  constructor(readonly code: string, readonly status: number) { super(adminErrorText(status, { error: code }, failures)); this.name = "AnnouncementRequestError"; }
+  constructor(readonly code: string, readonly status: number, readonly detail: string | null = null) {
+    super(withCode(adminErrorText(status, { error: code }, failures), detail));
+    this.name = "AnnouncementRequestError";
+  }
 }
 async function announcementRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   let response: Response;
@@ -66,9 +83,10 @@ async function announcementRequest<T>(path: string, init: RequestInit = {}): Pro
   }
   if (response.status === 401) window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
   if (!response.ok) {
-    const body = await response.json().catch(() => ({})) as { error?: string };
-    throw new AnnouncementRequestError(body.error ?? (response.status === 403 ? "forbidden" : "request_failed"), response.status);
+    const body = await response.json().catch(() => ({})) as { error?: string; code?: unknown };
+    throw new AnnouncementRequestError(body.error ?? (response.status === 403 ? "forbidden" : "request_failed"), response.status, plainCode(body.code));
   }
+  if (response.status === 204) return undefined as T;
   return await response.json() as T;
 }
 
@@ -97,9 +115,9 @@ export function targetText(target: AnnouncementTarget, options: AnnouncementOpti
   const parts = [target.cohorts.join(", "), majors.join(", ")].filter(Boolean);
   return parts.length ? parts.join(" · ") : "Tất cả sinh viên";
 }
+const number = (value: number) => value.toLocaleString("vi-VN");
 /** "204/312": students who read it out of those who received it. */
-export const readText = (announcement: Pick<Announcement, "read" | "recipients">) =>
-  `${announcement.read.toLocaleString("vi-VN")}/${announcement.recipients.toLocaleString("vi-VN")}`;
+export const readText = (announcement: Pick<Announcement, "read" | "recipients">) => `${number(announcement.read)}/${number(announcement.recipients)}`;
 /** The share read, 0–100, for the small bar beside it. */
 export const readShare = (announcement: Pick<Announcement, "read" | "recipients">) =>
   (announcement.recipients > 0 ? Math.min(100, Math.round((announcement.read / announcement.recipients) * 100)) : 0);
@@ -116,13 +134,56 @@ export function reachText(count: number | null, failed: boolean): { text: string
   if (failed) return { text: "Chưa tính được số sinh viên nhận. Bạn vẫn gửi được; hệ thống sẽ đếm lại khi gửi.", tone: "muted" };
   if (count === null) return { text: "Đang đếm số sinh viên nhận…", tone: "muted" };
   if (count === 0) return { text: "Không có sinh viên nào thuộc nhóm đã chọn. Hãy chọn khóa hoặc ngành khác.", tone: "warn" };
-  return { text: `Khoảng ${count.toLocaleString("vi-VN")} sinh viên nhận được thông báo này.`, tone: "ok" };
+  return { text: `Khoảng ${number(count)} sinh viên nhận được thông báo này.`, tone: "ok" };
+}
+/** How many of them also get the email: "300 sinh viên nhận thêm email; 12 sinh viên chưa có địa chỉ email nên chỉ nhận ở chuông." */
+export function emailReachText(count: number | null, withEmail: number | null): string | null {
+  if (count === null || withEmail === null || count === 0) return null;
+  const missing = Math.max(0, count - withEmail);
+  const head = `${number(withEmail)} sinh viên nhận thêm email`;
+  return missing ? `${head}; ${number(missing)} sinh viên chưa có địa chỉ email nên chỉ nhận ở chuông.` : `${head}.`;
+}
+/** Minutes the server needs for n messages. */
+export const emailMinutes = (n: number) => Math.max(1, Math.ceil(n / EMAILS_PER_MINUTE));
+/** The students an email can reach: every message except those of accounts without an address. */
+const deliverable = (email: AnnouncementEmail) => Math.max(0, email.total - email.noAddress);
+/** "298/300" sent of those with an address, the share for the bar, and what else to say ("Đang gửi 2", "1 lỗi"…). */
+export function emailSummary(email: AnnouncementEmail): { sent: string; share: number; notes: string[]; trouble: boolean } {
+  const total = deliverable(email);
+  const notes = [
+    email.pending ? `Đang gửi ${number(email.pending)}` : "",
+    email.failed ? `${number(email.failed)} lỗi` : "",
+    email.noAddress ? `${number(email.noAddress)} chưa có email` : "",
+    email.cancelled ? `${number(email.cancelled)} đã hủy` : "",
+  ].filter(Boolean);
+  return { sent: `${number(email.sent)}/${number(total)}`, share: total ? Math.min(100, Math.round((email.sent / total) * 100)) : 0, notes, trouble: email.failed > 0 };
+}
+/** Why a message did not go out, in words; Microsoft's own code when there is no better text. */
+export function emailErrorText(status: EmailProblem["status"], code: string | null): string {
+  if (status === "no_address") return "Tài khoản chưa có địa chỉ email";
+  switch (code) {
+    case "grant_required": return "Quyền gửi thư từ hộp thư của người gửi đã hết hạn hoặc bị thu hồi";
+    case "sender_missing": return "Tài khoản người gửi không còn";
+    case "ErrorInvalidRecipients": case "ErrorInvalidRecipient": case "ErrorRecipientNotFound": return "Địa chỉ email không nhận được thư";
+    case "ErrorTooManyRequests": case "ApplicationThrottled": case "MailboxConcurrency": case "http_429": return "Microsoft giới hạn số thư gửi; đã thử lại nhiều lần";
+    case "network_error": return "Không kết nối được Microsoft; đã thử lại nhiều lần";
+    case "token_failed": return "Không lấy được quyền gửi thư từ Microsoft";
+    default: {
+      const safe = plainCode(code);
+      if (safe && /^http_5\d\d$/.test(safe)) return "Máy chủ Microsoft gặp lỗi; đã thử lại nhiều lần";
+      return safe ? `Microsoft không gửi được thư (mã ${safe})` : "Microsoft không gửi được thư";
+    }
+  }
 }
 
 /* ------------------------------------------------------------------ pages */
 
-export default function AnnouncementsManagement({ canManage, section, navigate }: { canManage: boolean; section: "compose" | "sent"; navigate?: (path: string) => void }) {
-  return section === "compose" ? <ComposeAnnouncement canManage={canManage} navigate={navigate} /> : <SentAnnouncements canManage={canManage} navigate={navigate} />;
+export default function AnnouncementsManagement({ canManage, section, navigate }: {
+  canManage: boolean; section: "compose" | "sent" | "settings"; navigate?: (path: string) => void;
+}) {
+  if (section === "compose") return <ComposeAnnouncement canManage={canManage} navigate={navigate} />;
+  if (section === "sent") return <SentAnnouncements canManage={canManage} navigate={navigate} />;
+  return <NotificationSettings canManage={canManage} />;
 }
 
 /** The choices of "Gửi đến": GET /options, else FALLBACK_OPTIONS. */
@@ -143,7 +204,7 @@ function useAnnouncementOptions(): AnnouncementOptions {
 }
 
 /** The student's view of the announcement while it is written. */
-export function AnnouncementPreview({ title, body, link }: { title: string; body: string; link: string | null }) {
+export function AnnouncementPreview({ title, body, link, email = false }: { title: string; body: string; link: string | null; email?: boolean }) {
   const button = openLabel(link);
   return <aside className="cm-panel an-preview" aria-labelledby="an-preview-title">
     <h2 id="an-preview-title">Sinh viên sẽ thấy</h2>
@@ -155,28 +216,32 @@ export function AnnouncementPreview({ title, body, link }: { title: string; body
     <p className="an-preview-body">{body.trim() || "Nội dung sẽ hiện ở đây khi sinh viên mở thông báo."}</p>
     {button && <span className="an-preview-button">{button}</span>}
     <p className="an-preview-note">Sinh viên thấy thông báo ở chuông trên thanh đầu trang, lọc được theo "Từ Khoa", đánh dấu đã đọc hoặc xóa. Thông báo tự xóa sau 90 ngày.</p>
+    {email && <p className="an-preview-note an-preview-email"><Icon name="mail" /><span>Email gửi kèm có tiêu đề “[EduPath AI] {title.trim() || "Tiêu đề thông báo"}”, cùng nội dung và nút mở EduPath AI.</span></p>}
   </aside>;
 }
 
-/** Where the email test of AD-NOTI-04 starts (auth/router.ts): the address of Microsoft's consent page for Mail.Send. */
+/** Where the member allows EduPath AI to send from their mailbox (auth/router.ts): the address of Microsoft's consent page. */
 export const MAIL_CONSENT_API = "/api/auth/microsoft/mail-consent";
 
 /**
- * The outcome of the email test the server puts in the address after Microsoft's page (?emailTest=…&code=…), as the
- * page says it; null for any other address. The code is Microsoft's or Graph's own, shown so the team can look it up.
+ * What Microsoft's page came back with (?emailTest=…&code=…), as the page says it; null for any other address. The code is
+ * Microsoft's or Graph's own, shown so the team can look it up. "sent": the permission is kept and a test message went to
+ * the member's own mailbox.
  */
 export function emailTestOutcome(search: string): { ok: boolean; text: string } | null {
   const params = new URLSearchParams(search);
-  const raw = params.get("code");
-  const code = raw && /^[A-Za-z0-9_.-]{1,80}$/.test(raw) ? ` (mã ${raw})` : "";
+  const raw = plainCode(params.get("code"));
+  const code = raw ? ` (mã ${raw})` : "";
   switch (params.get("emailTest")) {
-    case "sent": return { ok: true, text: "Đã gửi thư thử đến hộp thư trường của bạn. Mở Outlook để kiểm tra; thư có thể đến sau 1–2 phút, nếu chưa thấy hãy xem cả mục Email rác. Nhận được thư nghĩa là EduPath AI gửi được email từ hộp thư của bạn." };
-    case "denied": return { ok: false, text: `Microsoft chưa cấp quyền gửi thư${code}. Nếu trang Microsoft báo cần quản trị viên phê duyệt thì trường đang chặn quyền này: cần bộ phận IT của trường cấp quyền, hoặc chuyển sang gửi bằng Gmail. Nếu bạn chỉ bấm Hủy, hãy thử lại và chọn Chấp nhận.` };
+    case "sent": return { ok: true, text: "Đã cho phép EduPath AI gửi thư từ hộp thư trường của bạn và đã gửi một thư thử đến chính bạn. Mở Outlook để kiểm tra; thư có thể đến sau 1–2 phút, nếu chưa thấy hãy xem cả mục Email rác. Giờ bạn có thể chọn gửi thông báo qua email." };
+    case "denied": return { ok: false, text: `Microsoft chưa cấp quyền gửi thư${code}. Nếu trang Microsoft báo cần quản trị viên phê duyệt thì trường đang chặn quyền này và cần bộ phận IT của trường cấp quyền. Nếu bạn chỉ bấm Hủy, hãy thử lại và chọn Chấp nhận.` };
     case "other_account": return { ok: false, text: "Bạn đã chọn một tài khoản Microsoft khác tài khoản đang đăng nhập EduPath AI nên chưa có thư nào được gửi. Hãy thử lại và chọn đúng tài khoản trường của bạn." };
-    case "send_failed": return { ok: false, text: `Microsoft đã cấp quyền nhưng không gửi được thư${code}. Tài khoản này có thể chưa có hộp thư Outlook của trường.` };
-    case "expired": return { ok: false, text: "Lần thử bị hủy vì để quá 10 phút ở trang Microsoft. Hãy bấm gửi thư thử một lần nữa." };
+    case "send_failed": return { ok: false, text: `Microsoft đã cấp quyền nhưng không gửi được thư thử${code}. Tài khoản này có thể chưa có hộp thư Outlook của trường.` };
+    case "expired": return { ok: false, text: "Yêu cầu bị hủy vì để quá 10 phút ở trang Microsoft. Hãy bấm cho phép một lần nữa." };
     case "signed_out": return { ok: false, text: "Phiên đăng nhập EduPath AI đã hết trong lúc ở trang Microsoft nên chưa gửi thư. Hãy đăng nhập lại rồi thử lại." };
-    case "failed": return { ok: false, text: `Chưa xin được quyền gửi thư của Microsoft${code}. Hãy thử lại.` };
+    case "failed": return raw === "grant_not_saved"
+      ? { ok: false, text: "Microsoft đã cấp quyền nhưng EduPath AI chưa lưu được quyền này. Hãy thử lại." }
+      : { ok: false, text: `Chưa xin được quyền gửi thư của Microsoft${code}. Hãy thử lại.` };
     default: return null;
   }
 }
@@ -186,49 +251,134 @@ const MAIL_CONSENT_ERRORS: Readonly<Record<string, string>> = {
   mail_unavailable: "Máy chủ chưa bật chức năng gửi email.",
 };
 
+/** Opens Microsoft's page where the member allows EduPath AI to send from their mailbox; the error's text when it cannot. */
+async function openMailConsent(): Promise<string> {
+  try {
+    const response = await fetch(MAIL_CONSENT_API, { method: "POST", credentials: "include", cache: "no-store", headers: { "Content-Type": "application/json" }, body: "{}" });
+    if (response.status === 401) window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+    const body = await response.json().catch(() => ({})) as { url?: unknown };
+    if (!response.ok || typeof body.url !== "string") return adminErrorText(response.status, body, MAIL_CONSENT_ERRORS);
+    window.location.assign(body.url);
+    return "";
+  } catch {
+    return "Không mở được trang Microsoft. Vui lòng thử lại.";
+  }
+}
+
+/** The member's permission to send email, as GET /mail-sender says it. */
+export type MailSenderView = { loading: boolean; failed: boolean; available: boolean; sender: MailSender | null; reload: () => void };
+function useMailSender(): MailSenderView {
+  const [state, setState] = useState<Omit<MailSenderView, "reload">>({ loading: true, failed: false, available: false, sender: null });
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    const controller = new AbortController();
+    setState((current) => ({ ...current, loading: true, failed: false }));
+    announcementRequest<{ available?: unknown; sender?: MailSender | null }>("/mail-sender", { signal: controller.signal }).then((data) => {
+      if (controller.signal.aborted) return;
+      const sender = data.sender && typeof data.sender.address === "string" ? data.sender : null;
+      setState({ loading: false, failed: false, available: data.available === true, sender });
+    }, () => { if (!controller.signal.aborted) setState({ loading: false, failed: true, available: false, sender: null }); });
+    return () => controller.abort();
+  }, [revision]);
+  return { ...state, reload: () => setRevision((n) => n + 1) };
+}
+
 /**
- * Email trường của sinh viên (AD-NOTI-04), bước thử 2026-11-23 (người dùng: "Trước tiên làm bước thử đã đi"): before any
- * message reaches a student, the staff member checks that Microsoft lets EduPath AI send from their school mailbox. The
- * button opens Microsoft's consent page; the server sends one message to the member's own mailbox and keeps no
- * permission, then brings the member back here with the outcome (emailTestOutcome).
+ * Kênh gửi: email trường của sinh viên (AD-NOTI-04). Usable once the member allowed EduPath AI on Microsoft's page; the
+ * test message goes to the member's own mailbox only (the draft, when it has a title and a text).
  */
-function EmailTest() {
+export function EmailChannel({ mail, checked, onCheck, draft, reach }: {
+  mail: MailSenderView; checked: boolean; onCheck: (on: boolean) => void; draft: { title: string; body: string; link: string | null }; reach: string | null;
+}) {
+  const [busy, setBusy] = useState<"consent" | "test" | null>(null);
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const [revoking, setRevoking] = useState(false);
+  const sender = mail.sender;
+  const usable = Boolean(sender && !sender.lastError);
+  const consent = async () => {
+    setBusy("consent"); setNotice(null);
+    const failure = await openMailConsent();
+    // Without a failure the browser is on its way to Microsoft's page: the button stays busy.
+    if (failure) { setNotice({ ok: false, text: failure }); setBusy(null); }
+  };
+  const test = async () => {
+    setBusy("test"); setNotice(null);
+    try {
+      const sent = await announcementRequest<{ to: string; preview: boolean }>("/mail-sender/test", {
+        method: "POST", body: JSON.stringify({ title: draft.title.trim(), body: draft.body.trim(), link: draft.link }),
+      });
+      setNotice({ ok: true, text: `Đã gửi ${sent.preview ? "bản thông báo đang soạn" : "thư thử"} đến ${sent.to}. Thư có thể đến sau 1–2 phút; nếu chưa thấy, hãy xem cả mục Email rác.` });
+    } catch (failure) {
+      if (failure instanceof AnnouncementRequestError && failure.code === "mail_grant_required") mail.reload();
+      setNotice({ ok: false, text: (failure as Error).message });
+    } finally { setBusy(null); }
+  };
+  let text: ReactNode;
+  if (mail.loading) text = "Đang kiểm tra quyền gửi email…";
+  else if (mail.failed) text = "Chưa kiểm tra được quyền gửi email.";
+  else if (!mail.available) text = "Máy chủ chưa bật chức năng gửi email.";
+  else if (!sender) text = "Email được gửi từ hộp thư trường của chính bạn. Bấm nút bên dưới, Microsoft sẽ hỏi bạn cho phép EduPath AI gửi thư; EduPath AI gửi kèm một thư thử đến chính bạn.";
+  else if (sender.lastError) text = `Microsoft cần bạn cho phép lại để gửi thư từ hộp thư ${sender.address}. Email chưa gửi của bạn đã chuyển thành lỗi; sau khi cho phép lại, bạn gửi lại được ở trang Đã gửi.`;
+  else text = <>Gửi từ hộp thư <strong>{sender.address}</strong>. Mỗi sinh viên nhận một email riêng, gửi dần khoảng 25 thư mỗi phút; email đã gửi không thu hồi được.</>;
+  return <div className="an-email">
+    <label className="cm-check"><input type="checkbox" checked={checked && usable} disabled={!usable} onChange={(event) => onCheck(event.target.checked)} /> Email trường của sinh viên</label>
+    <p className={`an-email-text${sender?.lastError ? " an-email-warn" : ""}`}>{text}</p>
+    {checked && usable && reach && <p className="an-reach an-reach-ok">{reach}</p>}
+    <div className="an-email-actions">
+      {mail.failed && <button type="button" className="am-outline" onClick={mail.reload}><Icon name="refresh" /> Thử lại</button>}
+      {!mail.loading && mail.available && !usable && <button type="button" className="am-outline" disabled={busy !== null} onClick={() => void consent()}>
+        <Icon name="mail" /> {busy === "consent" ? "Đang mở trang Microsoft…" : sender ? "Cho phép lại" : "Cho phép gửi từ hộp thư của tôi"}</button>}
+      {usable && <>
+        <button type="button" className="am-outline" disabled={busy !== null} onClick={() => void test()}><Icon name="mail" /> {busy === "test" ? "Đang gửi thư thử…" : "Gửi email thử cho chính tôi"}</button>
+        <button type="button" className="am-outline" disabled={busy !== null} onClick={() => setRevoking(true)}><Icon name="lock" /> Thu hồi quyền</button>
+      </>}
+    </div>
+    {usable && <small className="an-email-hint">Thư thử chỉ đến hộp thư của bạn; khi đã có tiêu đề và nội dung, thư thử chính là thông báo đang soạn.</small>}
+    {notice && <p className={notice.ok ? "an-email-ok" : "admin-error"} role={notice.ok ? "status" : "alert"}>{notice.text}</p>}
+    {revoking && sender && <RevokeMailDialog address={sender.address} close={() => setRevoking(false)} done={() => {
+      setRevoking(false); onCheck(false); mail.reload();
+      setNotice({ ok: true, text: "Đã thu hồi quyền gửi email từ hộp thư của bạn." });
+    }} />}
+  </div>;
+}
+
+function RevokeMailDialog({ address, close, done }: { address: string; close: () => void; done: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const start = async () => {
-    setBusy(true); setError("");
-    try {
-      const response = await fetch(MAIL_CONSENT_API, { method: "POST", credentials: "include", cache: "no-store", headers: { "Content-Type": "application/json" }, body: "{}" });
-      if (response.status === 401) window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
-      const body = await response.json().catch(() => ({})) as { url?: unknown };
-      if (!response.ok || typeof body.url !== "string") throw new Error(adminErrorText(response.status, body, MAIL_CONSENT_ERRORS));
-      window.location.assign(body.url);
-    } catch (failure) {
-      setError(failure instanceof Error && failure.message ? failure.message : "Không mở được trang Microsoft. Vui lòng thử lại.");
-      setBusy(false);
-    }
-  };
-  return <div className="an-email">
-    <p className="an-email-text"><strong>Email trường của sinh viên</strong>
-      <span>Trước khi gửi thông báo qua email, hãy gửi một thư thử. Microsoft sẽ hỏi bạn cho phép EduPath AI gửi thư từ hộp thư trường của bạn; thư thử chỉ đến chính bạn và EduPath AI không lưu quyền này.</span></p>
-    <button type="button" className="am-outline" disabled={busy} onClick={() => void start()}><Icon name="mail" /> {busy ? "Đang mở trang Microsoft…" : "Gửi email thử cho chính tôi"}</button>
-    {error && <p className="admin-error" role="alert">{error}</p>}
-  </div>;
+  return <Modal title="Thu hồi quyền gửi email" size="sm" busy={busy} onClose={close}>
+    <div className="cm-dialog-body cm-form">
+      <strong>{address}</strong>
+      <p>EduPath AI sẽ xóa ngay quyền gửi thư từ hộp thư này. Email chưa gửi của các thông báo bạn đã gửi sẽ chuyển thành lỗi; bạn gửi lại được ở trang Đã gửi sau khi cho phép lại.</p>
+      <p>Quyền bạn đã đồng ý ở trang Microsoft vẫn hiện trong mục ứng dụng của tài khoản Microsoft; bạn có thể gỡ ở đó nếu muốn.</p>
+      {error && <p className="admin-error" role="alert">{error}</p>}
+      <div className="cm-actions cm-dialog-actions">
+        <button type="button" className="am-outline" disabled={busy} onClick={close}><Icon name="close" /> Hủy</button>
+        <button type="button" className="am-primary am-delete" disabled={busy} onClick={async () => {
+          setBusy(true); setError("");
+          try { await announcementRequest("/mail-sender", { method: "DELETE" }); done(); }
+          catch (failure) { setError((failure as Error).message); setBusy(false); }
+        }}><Icon name="lock" /> {busy ? "Đang thu hồi…" : "Thu hồi quyền"}</button>
+      </div>
+    </div>
+  </Modal>;
 }
 
 function ComposeAnnouncement({ canManage, navigate }: { canManage: boolean; navigate?: (path: string) => void }) {
   const options = useAnnouncementOptions();
+  const mail = useMailSender();
   const [target, setTarget] = useState<AnnouncementTarget>({ cohorts: [], majors: [] });
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [link, setLink] = useState("");
+  const [wantEmail, setWantEmail] = useState(false);
   const [count, setCount] = useState<number | null>(null);
+  const [withEmail, setWithEmail] = useState<number | null>(null);
   const [countFailed, setCountFailed] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [sent, setSent] = useState<Announcement | null>(null);
-  // The email test's outcome, once, when Microsoft's page sends the member back (?emailTest=…); a reload does not repeat it.
+  // What Microsoft's page came back with, once (?emailTest=…); a reload does not repeat it.
   const [emailTest] = useState(() => (typeof window === "undefined" ? null : emailTestOutcome(window.location.search)));
   useEffect(() => {
     if (!emailTest) return;
@@ -249,26 +399,33 @@ function ComposeAnnouncement({ canManage, navigate }: { canManage: boolean; navi
   // The number of students is counted again a moment after the choice changes.
   useEffect(() => {
     const controller = new AbortController();
-    setCount(null); setCountFailed(false);
+    setCount(null); setWithEmail(null); setCountFailed(false);
     const timer = setTimeout(() => {
-      announcementRequest<{ count: number }>(`/reach${query ? `?${query}` : ""}`, { signal: controller.signal })
-        .then(({ count: next }) => { if (!controller.signal.aborted) setCount(next); }, () => { if (!controller.signal.aborted) setCountFailed(true); });
+      announcementRequest<{ count: number; withEmail?: number }>(`/reach${query ? `?${query}` : ""}`, { signal: controller.signal })
+        .then(({ count: next, withEmail: reachable }) => {
+          if (controller.signal.aborted) return;
+          setCount(next); setWithEmail(typeof reachable === "number" ? reachable : null);
+        }, () => { if (!controller.signal.aborted) setCountFailed(true); });
     }, 250);
     return () => { clearTimeout(timer); controller.abort(); };
   }, [query]);
   const everyone = !target.cohorts.length && !target.majors.length;
   const reach = reachText(count, countFailed);
+  const emailOn = wantEmail && Boolean(mail.sender && !mail.sender.lastError);
   const reset = () => { setTitle(""); setBody(""); setLink(""); setError(""); };
   const send = async () => {
     setBusy(true); setError("");
     try {
       const { announcement } = await announcementRequest<{ announcement: Announcement }>("", {
         method: "POST",
-        body: JSON.stringify({ title: title.trim(), body: body.trim(), link: link || null, cohorts: target.cohorts, majors: target.majors }),
+        body: JSON.stringify({ title: title.trim(), body: body.trim(), link: link || null, cohorts: target.cohorts, majors: target.majors, email: emailOn }),
       });
-      setSent(announcement); setConfirming(false); reset();
-    } catch (failure) { setError((failure as Error).message); setConfirming(false); }
-    finally { setBusy(false); }
+      // Email is chosen again for each announcement: a sent email cannot be withdrawn.
+      setSent(announcement); setConfirming(false); setWantEmail(false); reset();
+    } catch (failure) {
+      if (failure instanceof AnnouncementRequestError && failure.code === "mail_grant_required") mail.reload();
+      setError((failure as Error).message); setConfirming(false);
+    } finally { setBusy(false); }
   };
   return <section className="cm-workspace an-workspace">
     {emailTest && (emailTest.ok
@@ -276,14 +433,15 @@ function ComposeAnnouncement({ canManage, navigate }: { canManage: boolean; navi
       : <p className="admin-error" role="alert">{emailTest.text}</p>)}
     {sent && <div className="an-success" role="status">
       <Icon name="check" />
-      <p>Đã gửi <strong>“{sent.title}”</strong> tới {sent.recipients.toLocaleString("vi-VN")} sinh viên ({sent.targetLabel}).</p>
+      <p>Đã gửi <strong>“{sent.title}”</strong> tới {number(sent.recipients)} sinh viên ({sent.targetLabel}).
+        {sent.email ? ` Email đang được gửi dần từ hộp thư ${sent.email.from ?? "của bạn"}, khoảng 25 thư mỗi phút; xem tiến độ ở trang Đã gửi.` : ""}</p>
       {navigate && <button type="button" className="am-outline" onClick={() => navigate(SENT_PATH)}>Xem thông báo đã gửi</button>}
     </div>}
     <div className="an-compose">
       <section className="cm-panel an-form-panel" aria-labelledby="an-compose-title">
         <div className="an-panel-head">
           <h2 id="an-compose-title">Soạn thông báo</h2>
-          <p>Thông báo hiện ngay ở chuông thông báo của các sinh viên được chọn.</p>
+          <p>Thông báo hiện ngay ở chuông thông báo của các sinh viên được chọn, và đến email trường của họ nếu bạn chọn kênh email.</p>
         </div>
         {!canManage && <p className="an-readonly" role="note">Bạn chỉ có quyền xem. Quản trị viên mới gửi được thông báo.</p>}
         <CheckedForm className="cm-form an-form" onSubmit={(event) => {
@@ -309,11 +467,11 @@ function ComposeAnnouncement({ canManage, navigate }: { canManage: boolean; navi
             </fieldset>
             <label><RequiredLabel>Tiêu đề</RequiredLabel>
               <input required maxLength={ANNOUNCEMENT_TITLE_MAX} value={title} placeholder="Ví dụ: Lịch đăng ký học phần học kỳ 2 năm học 2026–2027" onChange={(event) => setTitle(event.target.value)} />
-              <small className="an-counter">{title.length.toLocaleString("vi-VN")}/{ANNOUNCEMENT_TITLE_MAX.toLocaleString("vi-VN")} ký tự</small>
+              <small className="an-counter">{number(title.length)}/{number(ANNOUNCEMENT_TITLE_MAX)} ký tự</small>
             </label>
             <label><RequiredLabel>Nội dung</RequiredLabel>
               <textarea required maxLength={ANNOUNCEMENT_BODY_MAX} rows={6} value={body} placeholder="Nội dung sinh viên đọc khi mở thông báo" onChange={(event) => setBody(event.target.value)} />
-              <small className="an-counter">{body.length.toLocaleString("vi-VN")}/{ANNOUNCEMENT_BODY_MAX.toLocaleString("vi-VN")} ký tự</small>
+              <small className="an-counter">{number(body.length)}/{number(ANNOUNCEMENT_BODY_MAX)} ký tự</small>
             </label>
             <label>Trang liên quan (không bắt buộc)
               <select value={link} onChange={(event) => setLink(event.target.value)}>
@@ -324,7 +482,7 @@ function ComposeAnnouncement({ canManage, navigate }: { canManage: boolean; navi
             <fieldset className="an-channels">
               <legend>Kênh gửi</legend>
               <label className="cm-check"><input type="checkbox" checked disabled readOnly /> Trong EduPath AI (chuông thông báo của sinh viên)</label>
-              <EmailTest />
+              <EmailChannel mail={mail} checked={emailOn} onCheck={setWantEmail} draft={{ title, body, link: link || null }} reach={emailReachText(count, withEmail)} />
             </fieldset>
           </fieldset>
           {error && <p className="admin-error" role="alert">{error}</p>}
@@ -334,12 +492,15 @@ function ComposeAnnouncement({ canManage, navigate }: { canManage: boolean; navi
           </div>
         </CheckedForm>
       </section>
-      <AnnouncementPreview title={title} body={body} link={link || null} />
+      <AnnouncementPreview title={title} body={body} link={link || null} email={emailOn} />
     </div>
     {confirming && <Modal title="Gửi thông báo" size="sm" busy={busy} onClose={() => setConfirming(false)}>
       <div className="cm-dialog-body cm-form">
-        <strong>{count === null ? "Gửi tới các sinh viên được chọn?" : `Gửi tới ${count.toLocaleString("vi-VN")} sinh viên?`}</strong>
+        <strong>{count === null ? "Gửi tới các sinh viên được chọn?" : `Gửi tới ${number(count)} sinh viên?`}</strong>
         <p>“{title.trim()}” sẽ hiện ngay ở chuông thông báo của {everyone ? "tất cả sinh viên" : `sinh viên ${targetText(target, options)}`}. Bạn có thể thu hồi ở trang Đã gửi.</p>
+        {emailOn && <p className="an-confirm-email"><Icon name="mail" /><span>
+          Kèm email từ hộp thư <strong>{mail.sender?.address}</strong>{withEmail !== null ? ` tới ${number(withEmail)} sinh viên có địa chỉ email` : ""}, gửi dần khoảng 25 thư mỗi phút
+          {withEmail ? ` (xong sau khoảng ${number(emailMinutes(withEmail))} phút)` : ""}. Email đã gửi không thu hồi được.</span></p>}
         <div className="cm-actions cm-dialog-actions">
           <button type="button" className="am-outline" disabled={busy} onClick={() => setConfirming(false)}><Icon name="close" /> Hủy</button>
           <button type="button" className="am-primary" disabled={busy} onClick={() => void send()}><Icon name="bell" /> {busy ? "Đang gửi…" : "Gửi thông báo"}</button>
@@ -355,7 +516,20 @@ const sentSort: Record<string, SortRule<Announcement>> = {
   target: { value: (row) => row.targetLabel },
   createdAt: { value: (row) => row.createdAt, by: "date" },
   read: { value: (row) => (row.recipients > 0 ? row.read / row.recipients : 0), by: "number" },
+  // Announcements without email after those with, whatever went out.
+  email: { value: (row) => (row.email ? row.email.sent / Math.max(1, deliverable(row.email)) : -1), by: "number" },
 };
+
+/** The email column: "298/300" sent, a bar, and what else happened ("Đang gửi 2 · 1 lỗi"). */
+function EmailCell({ email }: { email: AnnouncementEmail | null | undefined }) {
+  if (!email) return <span className="an-muted">Không gửi</span>;
+  const summary = emailSummary(email);
+  return <span className="an-read">
+    <span>{summary.sent}</span>
+    <span className="an-meter" aria-hidden="true"><i style={{ width: `${summary.share}%` }} /></span>
+    {summary.notes.length > 0 && <small className={`an-email-note${summary.trouble ? " an-email-note-bad" : ""}`}>{summary.notes.join(" · ")}</small>}
+  </span>;
+}
 
 /** The sent announcements: the table, its detail and the withdrawal. */
 export function SentTable({ items, canManage, sortHeader, sort, page, onDetail, onWithdraw }: {
@@ -363,13 +537,14 @@ export function SentTable({ items, canManage, sortHeader, sort, page, onDetail, 
   page: number; onDetail: (row: Announcement) => void; onWithdraw: (row: Announcement) => void;
 }) {
   return <div className="cm-table-scroll"><table className="cm-table an-table">
-    <thead><tr>{sortHeader("STT", "stt", "cm-stt")}{sortHeader("Tiêu đề", "title")}{sortHeader("Gửi đến", "target")}{sortHeader("Thời gian", "createdAt")}{sortHeader("Đã đọc", "read")}<th scope="col">Thao tác</th></tr></thead>
+    <thead><tr>{sortHeader("STT", "stt", "cm-stt")}{sortHeader("Tiêu đề", "title")}{sortHeader("Gửi đến", "target")}{sortHeader("Thời gian", "createdAt")}{sortHeader("Đã đọc", "read")}{sortHeader("Email", "email")}<th scope="col">Thao tác</th></tr></thead>
     <tbody>{sortRows(items, sentSort, sort).slice((page - 1) * 10, page * 10).map(({ row, stt }) => <tr key={row.id} className={row.withdrawnAt ? "an-withdrawn" : undefined}>
       <td className="cm-stt">{stt}</td>
       <td><strong>{row.title}</strong>{row.withdrawnAt && <span className="an-tag">Đã thu hồi</span>}</td>
       <td>{row.targetLabel}</td>
       <td className="an-num">{sentTime(row.createdAt)}</td>
       <td className="an-num"><span className="an-read"><span>{readText(row)}</span><span className="an-meter" aria-hidden="true"><i style={{ width: `${readShare(row)}%` }} /></span></span></td>
+      <td className="an-num"><EmailCell email={row.email} /></td>
       <td><ActionMenu label={`Thao tác với thông báo ${row.title}`} items={[
         { key: "detail", icon: "eye", label: "Xem chi tiết", onSelect: () => onDetail(row) },
         ...(canManage ? [{ key: "withdraw", icon: "trash", label: "Thu hồi thông báo", danger: true, disabled: Boolean(row.withdrawnAt), onSelect: () => onWithdraw(row) }] : []),
@@ -387,12 +562,14 @@ function SentAnnouncements({ canManage, navigate }: { canManage: boolean; naviga
   const [mode, setMode] = useState<"detail" | "withdraw" | null>(null);
   const close = () => { setMode(null); setSelected(null); };
   const items = remote.data?.items ?? [];
+  // The open announcement as the list last read it (the list refreshes every 30 seconds while emails go out).
+  const current = selected ? items.find((row) => row.id === selected.id) ?? selected : null;
   return <section className="cm-workspace career-workspace an-workspace">
     <section className="cm-panel">
       <div className="career-list-heading">
         <div>
           <h2>Thông báo đã gửi{remote.data && <span className="am-count">{items.length}</span>}</h2>
-          <p>Những thông báo Khoa đã gửi tới chuông của sinh viên, số sinh viên đã đọc, và thu hồi khi cần.</p>
+          <p>Những thông báo Khoa đã gửi tới chuông và email của sinh viên, số sinh viên đã đọc, số email đã gửi, và thu hồi khi cần.</p>
         </div>
         {canManage && navigate && <button className="am-primary" onClick={() => navigate(COMPOSE_PATH)}><Icon name="plus" /> Gửi thông báo</button>}
       </div>
@@ -404,34 +581,105 @@ function SentAnnouncements({ canManage, navigate }: { canManage: boolean; naviga
         <Pagination total={items.length} page={page} setPage={setPage} />
       </>}
     </section>
-    {mode === "detail" && selected && <Modal title="Chi tiết thông báo" onClose={close}>
-      <div className="cm-dialog-body cm-form an-detail">
-        <dl>
-          <div><dt>Tiêu đề</dt><dd>{selected.title}</dd></div>
-          <div><dt>Nội dung</dt><dd className="an-detail-body">{selected.body}</dd></div>
-          <div><dt>Trang liên quan</dt><dd>{selected.link ? pageLabel(selected.link) ?? selected.link : "Không có"}</dd></div>
-          <div><dt>Gửi đến</dt><dd>{selected.targetLabel}</dd></div>
-          <div><dt>Đã đọc</dt><dd>{readText(selected)} sinh viên ({readShare(selected)}%)</dd></div>
-          <div><dt>Thời gian gửi</dt><dd>{sentTime(selected.createdAt)}{selected.createdBy ? ` · ${selected.createdBy}` : ""}</dd></div>
-          {selected.withdrawnAt && <div><dt>Thu hồi lúc</dt><dd>{sentTime(selected.withdrawnAt)}</dd></div>}
-        </dl>
-        <div className="cm-actions cm-dialog-actions">
-          <button className="am-outline" onClick={close}><Icon name="close" /> Đóng</button>
-          {canManage && !selected.withdrawnAt && <button className="am-primary am-delete" onClick={() => setMode("withdraw")}><Icon name="trash" /> Thu hồi thông báo</button>}
-        </div>
-      </div>
-    </Modal>}
-    {canManage && mode === "withdraw" && selected && <WithdrawDialog announcement={selected} close={close} done={() => { close(); setRevision((n) => n + 1); }} />}
+    {mode === "detail" && current && <AnnouncementDetail announcement={current} canManage={canManage} close={close} onWithdraw={() => setMode("withdraw")}
+      onChanged={(next) => { setSelected(next); setRevision((n) => n + 1); }} />}
+    {canManage && mode === "withdraw" && current && <WithdrawDialog announcement={current} close={close} done={() => { close(); setRevision((n) => n + 1); }} />}
   </section>;
+}
+
+function AnnouncementDetail({ announcement, canManage, close, onWithdraw, onChanged }: {
+  announcement: Announcement; canManage: boolean; close: () => void; onWithdraw: () => void; onChanged: (next: Announcement) => void;
+}) {
+  return <Modal title="Chi tiết thông báo" onClose={close}>
+    <div className="cm-dialog-body cm-form an-detail">
+      <dl>
+        <div><dt>Tiêu đề</dt><dd>{announcement.title}</dd></div>
+        <div><dt>Nội dung</dt><dd className="an-detail-body">{announcement.body}</dd></div>
+        <div><dt>Trang liên quan</dt><dd>{announcement.link ? pageLabel(announcement.link) ?? announcement.link : "Không có"}</dd></div>
+        <div><dt>Gửi đến</dt><dd>{announcement.targetLabel}</dd></div>
+        <div><dt>Đã đọc</dt><dd>{readText(announcement)} sinh viên ({readShare(announcement)}%)</dd></div>
+        <div><dt>Thời gian gửi</dt><dd>{sentTime(announcement.createdAt)}{announcement.createdBy ? ` · ${announcement.createdBy}` : ""}</dd></div>
+        {announcement.withdrawnAt && <div><dt>Thu hồi lúc</dt><dd>{sentTime(announcement.withdrawnAt)}</dd></div>}
+        <div><dt>Email</dt><dd>{announcement.email
+          ? <EmailDetail announcement={announcement} email={announcement.email} canManage={canManage} onChanged={onChanged} />
+          : "Không gửi email"}</dd></div>
+      </dl>
+      <div className="cm-actions cm-dialog-actions">
+        <button className="am-outline" onClick={close}><Icon name="close" /> Đóng</button>
+        {canManage && !announcement.withdrawnAt && <button className="am-primary am-delete" onClick={onWithdraw}><Icon name="trash" /> Thu hồi thông báo</button>}
+      </div>
+    </div>
+  </Modal>;
+}
+
+/** AD-NOTI-05: how the emails went, the ones that did not go out and why, and "Gửi lại thư lỗi". */
+function EmailDetail({ announcement, email, canManage, onChanged }: {
+  announcement: Announcement; email: AnnouncementEmail; canManage: boolean; onChanged: (next: Announcement) => void;
+}) {
+  const [revision, setRevision] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const summary = emailSummary(email);
+  const retry = async () => {
+    setBusy(true); setMessage(null);
+    try {
+      const result = await announcementRequest<{ announcement: Announcement; requeued: number }>(`/${encodeURIComponent(announcement.id)}/emails/retry`, { method: "POST", body: "{}" });
+      setMessage(result.requeued
+        ? { ok: true, text: `Đã xếp ${number(result.requeued)} email để gửi lại từ hộp thư ${result.announcement.email?.from ?? "của bạn"}.` }
+        : { ok: true, text: "Không còn email lỗi nào để gửi lại." });
+      onChanged(result.announcement);
+      setRevision((n) => n + 1);
+    } catch (failure) { setMessage({ ok: false, text: (failure as Error).message }); }
+    finally { setBusy(false); }
+  };
+  return <div className="an-email-detail">
+    <p>Gửi từ {email.from ?? "hộp thư của cán bộ Khoa"} · đã gửi {summary.sent} sinh viên{summary.notes.length ? ` · ${summary.notes.join(" · ")}` : ""}.</p>
+    {email.failed + email.noAddress > 0 && <EmailProblems id={announcement.id} revision={revision} />}
+    {canManage && email.failed > 0 && !announcement.withdrawnAt && <button type="button" className="am-outline" disabled={busy} onClick={() => void retry()}>
+      <Icon name="refresh" /> {busy ? "Đang xếp lại…" : "Gửi lại thư lỗi"}</button>}
+    {message && <p className={message.ok ? "an-email-ok" : "admin-error"} role={message.ok ? "status" : "alert"}>{message.text}</p>}
+  </div>;
+}
+
+/** The messages of an announcement that did not go out (GET /:id/emails). */
+export function EmailProblemList({ items }: { items: EmailProblem[] }) {
+  if (!items.length) return <p className="an-muted">Không có email lỗi.</p>;
+  return <div className="an-problems"><table>
+    <thead><tr><th scope="col">Sinh viên</th><th scope="col">MSSV</th><th scope="col">Lý do</th></tr></thead>
+    <tbody>{items.map((item, index) => <tr key={`${item.studentCode ?? item.name}-${index}`}>
+      <td>{item.name || "Không rõ tên"}{item.address && <small>{item.address}</small>}</td>
+      <td className="an-num">{item.studentCode ?? "—"}</td>
+      <td>{emailErrorText(item.status, item.error)}</td>
+    </tr>)}</tbody>
+  </table></div>;
+}
+function EmailProblems({ id, revision }: { id: string; revision: number }) {
+  const remote = useData<{ items: EmailProblem[] }>(`${ANNOUNCEMENTS_API}/${encodeURIComponent(id)}/emails`, revision);
+  return <>
+    <Status {...remote} />
+    {remote.data && <EmailProblemList items={remote.data.items} />}
+  </>;
+}
+
+/** What withdrawing does to the emails: "2 email chưa gửi sẽ bị hủy; 298 email đã gửi không thu hồi được." or null. */
+export function withdrawEmailText(email: AnnouncementEmail | null | undefined): string | null {
+  if (!email) return null;
+  const parts = [
+    email.pending ? `${number(email.pending)} email chưa gửi sẽ bị hủy` : "",
+    email.sent ? `${number(email.sent)} email đã gửi không thu hồi được` : "",
+  ].filter(Boolean);
+  return parts.length ? `${parts.join("; ")}.` : null;
 }
 
 function WithdrawDialog({ announcement, close, done }: { announcement: Announcement; close: () => void; done: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const email = withdrawEmailText(announcement.email);
   return <Modal title="Thu hồi thông báo" onClose={close} busy={busy} size="sm">
     <div className="cm-dialog-body cm-form">
       <strong>{announcement.title}</strong>
-      <p>Thông báo sẽ biến mất khỏi chuông của {announcement.recipients.toLocaleString("vi-VN")} sinh viên ({announcement.targetLabel}). Việc thu hồi không hoàn tác được.</p>
+      <p>Thông báo sẽ biến mất khỏi chuông của {number(announcement.recipients)} sinh viên ({announcement.targetLabel}). Việc thu hồi không hoàn tác được.</p>
+      {email && <p className="an-confirm-email"><Icon name="mail" /><span>{email}</span></p>}
       {error && <p className="admin-error" role="alert">{error}</p>}
       <div className="cm-actions cm-dialog-actions">
         <button className="am-outline" disabled={busy} onClick={close}><Icon name="close" /> Hủy</button>
@@ -444,4 +692,74 @@ function WithdrawDialog({ announcement, close, done }: { announcement: Announcem
       </div>
     </div>
   </Modal>;
+}
+
+/* ------------------------------------------------------------------ Cài đặt thông báo (AD-NOTI-06) */
+
+/** The notifications always written, whatever the settings say (the API has no setting for them). */
+export const ALWAYS_ON_NOTIFICATIONS: readonly { label: string; detail: string }[] = [
+  { label: "Thông báo của Khoa", detail: "Thông báo gửi từ trang Gửi thông báo. Muốn ngừng một thông báo, hãy thu hồi nó ở trang Đã gửi." },
+  { label: "Việc làm thay sinh viên", detail: "Sinh viên luôn được báo khi cố vấn học tập, quản trị viên hoặc Ban chủ nhiệm khoa làm thay mình." },
+];
+
+/** "Đang bật cả 6 loại thông báo." or "Đang tắt 1 trong 6 loại thông báo." */
+export const settingsSummary = (items: readonly Pick<NotificationSetting, "enabled">[]) => {
+  const off = items.filter((item) => !item.enabled).length;
+  return off ? `Đang tắt ${number(off)} trong ${number(items.length)} loại thông báo tự động.` : `Đang bật cả ${number(items.length)} loại thông báo tự động.`;
+};
+
+export function SettingsList({ items, canManage, saving, onToggle }: {
+  items: NotificationSetting[]; canManage: boolean; saving: string | null; onToggle: (item: NotificationSetting) => void;
+}) {
+  return <ul className="an-settings-list">
+    {items.map((item) => <li key={item.key}>
+      <div className="an-setting-text">
+        <strong id={`an-setting-${item.key}`}>{item.label}</strong>
+        <p id={`an-setting-${item.key}-detail`}>{item.detail}</p>
+        {item.updatedAt && <small>{item.enabled ? "Bật" : "Tắt"} lúc {sentTime(item.updatedAt)}{item.updatedBy ? ` · ${item.updatedBy}` : ""}</small>}
+      </div>
+      <button type="button" role="switch" className="an-switch" aria-checked={item.enabled} aria-labelledby={`an-setting-${item.key}`}
+        aria-describedby={`an-setting-${item.key}-detail`} disabled={!canManage || saving !== null} onClick={() => onToggle(item)}>
+        <span className="an-switch-track" aria-hidden="true" /><span className="an-switch-label">{saving === item.key ? "Đang lưu…" : item.enabled ? "Bật" : "Tắt"}</span>
+      </button>
+    </li>)}
+    {ALWAYS_ON_NOTIFICATIONS.map((item) => <li key={item.label} className="an-setting-fixed">
+      <div className="an-setting-text"><strong>{item.label}</strong><p>{item.detail}</p></div>
+      <span className="an-always">Luôn bật</span>
+    </li>)}
+  </ul>;
+}
+
+function NotificationSettings({ canManage }: { canManage: boolean }) {
+  const remote = useData<{ items: NotificationSetting[] }>(`${ANNOUNCEMENTS_API}/settings`);
+  const [saved, setSaved] = useState<Record<string, NotificationSetting>>({});
+  const [saving, setSaving] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const items = (remote.data?.items ?? []).map((item) => saved[item.key] ?? item);
+  const toggle = async (item: NotificationSetting) => {
+    setSaving(item.key); setError("");
+    try {
+      const { setting } = await announcementRequest<{ setting: NotificationSetting }>(`/settings/${encodeURIComponent(item.key)}`, {
+        method: "PUT", body: JSON.stringify({ enabled: !item.enabled }),
+      });
+      setSaved((current) => ({ ...current, [setting.key]: setting }));
+    } catch (failure) { setError((failure as Error).message); }
+    finally { setSaving(null); }
+  };
+  return <section className="cm-workspace an-workspace">
+    <section className="cm-panel an-settings" aria-labelledby="an-settings-title">
+      <div className="an-panel-head">
+        <h2 id="an-settings-title">Thông báo tự động gửi sinh viên</h2>
+        <p>Bật hoặc tắt từng loại thông báo EduPath AI tự gửi vào chuông thông báo của sinh viên. Tắt một loại chỉ dừng thông báo mới; thông báo sinh viên đã nhận vẫn giữ nguyên.</p>
+      </div>
+      {!canManage && <p className="an-readonly" role="note">Bạn chỉ có quyền xem. Quản trị viên mới thay đổi được cài đặt.</p>}
+      <Status {...remote} />
+      {remote.data && <>
+        <p className="an-settings-count" role="status">{settingsSummary(items)}</p>
+        <SettingsList items={items} canManage={canManage} saving={saving} onToggle={(item) => void toggle(item)} />
+        <p className="an-hint">Thông báo tự động chỉ hiện trong chuông thông báo. Email chỉ được gửi cho thông báo của Khoa, khi người gửi chọn kênh email.</p>
+      </>}
+      {error && <p className="admin-error" role="alert">{error}</p>}
+    </section>
+  </section>;
 }

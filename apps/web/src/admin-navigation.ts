@@ -30,9 +30,11 @@ export const adminNavigation = [
   { path: "/quantri/nhom-nang-luc", label: "Nhóm năng lực", eyebrow: "QUẢN LÝ NĂNG LỰC", icon: "book" },
   { path: "/quantri/cau-hinh-nang-luc", label: "Cấu hình năng lực", eyebrow: "QUẢN LÝ NĂNG LỰC", icon: "profile" },
   { path: "/quantri/cau-hinh-mon-hoc", label: "Cấu hình môn học", eyebrow: "QUẢN LÝ NĂNG LỰC", icon: "chart" },
-  // AD-NOTI-01/02 (2026-10-30): the faculty's announcements to the students' bell; email comes later.
+  // AD-NOTI-01/02 (2026-10-30): the faculty's announcements to the students' bell, and since 2026-11-23 by email too
+  // (AD-NOTI-04/05); AD-NOTI-06 Cài đặt thông báo turns the kinds of automatic notifications off and on.
   { path: "/quantri/gui-thong-bao", label: "Gửi thông báo", eyebrow: "QUẢN LÝ THÔNG BÁO", icon: "bell" },
-  { path: "/quantri/thong-bao-da-gui", label: "Đã gửi", eyebrow: "QUẢN LÝ THÔNG BÁO", icon: "clock" }
+  { path: "/quantri/thong-bao-da-gui", label: "Đã gửi", eyebrow: "QUẢN LÝ THÔNG BÁO", icon: "clock" },
+  { path: "/quantri/cai-dat-thong-bao", label: "Cài đặt thông báo", eyebrow: "QUẢN LÝ THÔNG BÁO", icon: "settings" }
 ] as const;
 export type AdminPage = (typeof adminNavigation)[number];
 
@@ -46,7 +48,7 @@ const adminNavigationGroups = [
   // In the order they are set up: fields, then the shared skills, then the careers that use both.
   { id: "careers", label: "Quản lý nghề nghiệp", icon: "briefcase", paths: ["/quantri/linh-vuc-nghe-nghiep", "/quantri/ky-nang", "/quantri/vi-tri-nghe-nghiep"] },
   { id: "competencies", label: "Quản lý năng lực", icon: "target", paths: ["/quantri/nhom-nang-luc", "/quantri/cau-hinh-nang-luc", "/quantri/cau-hinh-mon-hoc"] },
-  { id: "announcements", label: "Quản lý thông báo", icon: "bell", paths: ["/quantri/gui-thong-bao", "/quantri/thong-bao-da-gui"] }
+  { id: "announcements", label: "Quản lý thông báo", icon: "bell", paths: ["/quantri/gui-thong-bao", "/quantri/thong-bao-da-gui", "/quantri/cai-dat-thong-bao"] }
 ] as const;
 
 /** Pages that moved: an old link opens the page that replaced it. */

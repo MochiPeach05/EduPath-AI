@@ -7,6 +7,7 @@ import type { PoolClient } from "pg";
 import type { DatabasePool } from "../db/pool.js";
 import { BODY_MAX, isPortalPage, openLabel, TITLE_MAX, type NotificationKind, type NotificationType } from "./model.js";
 import { personName } from "../users/person-name.js";
+import { kindTurnedOff } from "./settings.js";
 
 type Db = Pick<DatabasePool, "query"> | Pick<PoolClient, "query">;
 
@@ -36,11 +37,15 @@ export function notificationValues(userId: string, input: NotificationInput) {
     input.sourceKey ? clip(input.sourceKey, 300) : null, input.announcementId ?? null];
 }
 
-/** Writes one notification; false when its source_key already has one for this student. */
+/**
+ * Writes one notification; false when its source_key already has one for this student, or when an admin turned its kind
+ * off (Cài đặt thông báo, AD-NOTI-06, settings.ts).
+ */
 export async function notify(db: Db, userId: string, input: NotificationInput): Promise<boolean> {
   const result = await db.query(
     `INSERT INTO stu_notifications(id,user_id,type,kind,title,body,link,link_label,source_key,announcement_id)
-      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (user_id,source_key) WHERE source_key IS NOT NULL DO NOTHING`,
+      SELECT $1::uuid,$2::uuid,$3::text,$4::text,$5::text,$6::text,$7::text,$8::text,$9::text,$10::uuid WHERE NOT ${kindTurnedOff("$4::text")}
+      ON CONFLICT (user_id,source_key) WHERE source_key IS NOT NULL DO NOTHING`,
     notificationValues(userId, input));
   return Boolean(result.rowCount);
 }
@@ -55,6 +60,7 @@ export async function notifyMany(db: Db, userIds: readonly string[], input: Noti
       SELECT x.id,x.user_id,x.type,x.kind,x.title,x.body,x.link,x.link_label,x.source_key,x.announcement_id
       FROM unnest($1::uuid[],$2::uuid[],$3::text[],$4::text[],$5::text[],$6::text[],$7::text[],$8::text[],$9::text[],$10::uuid[])
         AS x(id,user_id,type,kind,title,body,link,link_label,source_key,announcement_id)
+      WHERE NOT ${kindTurnedOff("x.kind")}
       ON CONFLICT (user_id,source_key) WHERE source_key IS NOT NULL DO NOTHING`,
     [column(0), column(1), column(2), column(3), column(4), column(5), column(6), column(7), column(8), column(9)]);
   return result.rowCount ?? 0;

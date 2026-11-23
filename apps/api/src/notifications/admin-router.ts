@@ -1,19 +1,30 @@
-// Faculty announcements (AD-NOTI-01 "Gửi thông báo cho sinh viên", AD-NOTI-02 "Xem thông báo đã gửi"), mounted at
-// /api/admin/announcements (contract: apps/web/src/notification-types.ts). An announcement reaches the active student
-// accounts of the chosen cohorts and majors (none chosen: every student) as a notification in their bell; email later.
+// Faculty announcements (AD-NOTI-01 "Gửi thông báo cho sinh viên", AD-NOTI-02/03 "Xem thông báo đã gửi", AD-NOTI-04/05
+// email and its outcome, AD-NOTI-06 "Cài đặt thông báo"), mounted at /api/admin/announcements (contract:
+// apps/web/src/notification-types.ts). An announcement reaches the active student accounts of the chosen cohorts and majors
+// (none chosen: every student) as a notification in their bell. Since 2026-11-23 the sender may also send it by email
+// (user: "Làm cả 04, 05, 06", "Chỉ sinh viên đã có tài khoản", "Dùng mặc định"): from their own school mailbox through
+// Microsoft Graph, once they allowed EduPath AI on Microsoft's page (auth/router.ts), one message per student, sent by the
+// mail worker (mail/worker.ts).
 import { Router, type ErrorRequestHandler } from "express";
 import type { PoolClient } from "pg";
 import { z } from "zod";
 import { adminRoles, type AuthenticatedUser } from "../auth/types.js";
+import type { MailConsentClient, MailToken } from "../auth/mail-consent-client.js";
 import type { DatabasePool } from "../db/pool.js";
+import { testMailMessage, type SendMail } from "../mail/graph-mail.js";
+import type { MailGrantStore } from "../mail/grants.js";
+import { announcementMailMessage } from "../mail/messages.js";
+import { emailProblems, retryFailedEmails } from "../mail/outbox.js";
 import { requireAdminAccess } from "../middleware/authorization.js";
+import { personName } from "../users/person-name.js";
 import { ANNOUNCEMENT_BODY_MAX, ANNOUNCEMENT_TITLE_MAX, isPortalPage, type AnnouncementRow, type AnnouncementTarget } from "./model.js";
 import {
-  ANNOUNCEMENT_SORT, announcementOptions, listAnnouncements, reachCount, sendAnnouncement, targetLabel, withdrawAnnouncement,
+  ANNOUNCEMENT_SORT, announcementOptions, findAnnouncement, listAnnouncements, reachCount, sendAnnouncement, targetLabel, withdrawAnnouncement,
 } from "./repository.js";
+import { listNotificationSettings, NOTIFICATION_SETTING_KEYS, saveNotificationSetting } from "./settings.js";
 
 class AnnouncementError extends Error {
-  constructor(readonly code: string, readonly status: number) { super(code); }
+  constructor(readonly code: string, readonly status: number, readonly detail: Record<string, string> = {}) { super(code); }
 }
 
 const id = z.guid();
@@ -37,17 +48,34 @@ const sendBody = z.object({
   link: z.string().max(40).nullable().optional(),
   cohorts: z.array(cohort).max(30).default([]),
   majors: z.array(major).max(10).default([]),
+  /** Also by email, from the sender's school mailbox (AD-NOTI-04). */
+  email: z.boolean().default(false),
 }).strict();
+/** "Gửi email thử cho chính tôi": the draft, when it has a title and a text, as a student would receive it. */
+const testBody = z.object({
+  title: z.string().max(ANNOUNCEMENT_TITLE_MAX * 2).optional(),
+  body: z.string().max(ANNOUNCEMENT_BODY_MAX * 2).optional(),
+  link: z.string().max(40).nullable().optional(),
+}).strict();
+const settingBody = z.object({ enabled: z.boolean() }).strict();
 
 const iso = (value: Date | string | null) => (value === null ? null : new Date(value).toISOString());
 const unique = (values: readonly string[]) => [...new Set(values)].sort();
+const count = (value: unknown) => (typeof value === "number" ? value : Number(value) || 0);
 export const presentAnnouncement = (row: AnnouncementRow) => {
   const target: AnnouncementTarget = { cohorts: row.target?.cohorts ?? [], majors: row.target?.majors ?? [] };
+  const email = row.emailRequested ? {
+    from: row.emailFrom ?? null, total: count(row.email?.total), sent: count(row.email?.sent), pending: count(row.email?.pending),
+    failed: count(row.email?.failed), cancelled: count(row.email?.cancelled), noAddress: count(row.email?.noAddress),
+  } : null;
   return {
     id: row.id, title: row.title, body: row.body, link: row.link, target, targetLabel: targetLabel(target),
     recipients: row.recipients, read: row.read ?? 0, createdAt: iso(row.createdAt)!, createdBy: row.createdBy ?? null, withdrawnAt: iso(row.withdrawnAt),
+    email,
   };
 };
+const cleanTitle = (text: string | undefined) => (text ?? "").replace(/\s+/g, " ").trim();
+const cleanBody = (text: string | undefined) => (text ?? "").replace(/\r\n?/g, "\n").trim();
 
 /** The admin is still an active account of an admin role (as the other admin routers check). */
 async function access(db: Pick<DatabasePool, "query"> | PoolClient, actor: AuthenticatedUser, lock = false) {
@@ -60,11 +88,14 @@ async function access(db: Pick<DatabasePool, "query"> | PoolClient, actor: Authe
 export type AnnouncementsRouterOptions = {
   /** Staff mailbox domains (config.staffEmailDomains): such accounts never use the student portal, so they receive nothing. */
   staffEmailDomains?: ReadonlySet<string>;
+  /** Email (AD-NOTI-04): Microsoft's tokens, the senders' stored permissions and how a message is sent. Without it: bell only. */
+  mail?: { client: MailConsentClient; grants: MailGrantStore; sendMail: SendMail };
 };
 
 export function createAnnouncementsRouter(pool: DatabasePool | undefined, webOrigin: string, options: AnnouncementsRouterOptions = {}) {
   const router = Router();
   const staff = [...(options.staffEmailDomains ?? [])].map((domain) => domain.toLowerCase());
+  const mail = options.mail;
 
   router.use((_req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); });
   router.use(requireAdminAccess);
@@ -74,6 +105,14 @@ export function createAnnouncementsRouter(pool: DatabasePool | undefined, webOri
     await access(pool, req.session.user!);
     next();
   });
+
+  /** The member's permission to send from their mailbox, usable now (allowed, and Microsoft did not ask to allow again). */
+  const usableSender = async (userId: string) => {
+    if (!mail) throw new AnnouncementError("mail_unavailable", 503);
+    const sender = await mail.grants.status(userId);
+    if (!sender || sender.lastError) throw new AnnouncementError("mail_grant_required", 409);
+    return sender;
+  };
 
   router.get("/", async (req, res) => {
     const query = listQuery.parse(req.query);
@@ -88,25 +127,74 @@ export function createAnnouncementsRouter(pool: DatabasePool | undefined, webOri
 
   router.get("/reach", async (req, res) => {
     const query = reachQuery.parse(req.query);
-    res.json({ count: await reachCount(pool!, { cohorts: unique(query.cohorts), majors: unique(query.majors) }, staff) });
+    res.json(await reachCount(pool!, { cohorts: unique(query.cohorts), majors: unique(query.majors) }, staff));
+  });
+
+  /** Whether email can be sent at all, and from which mailbox the member allowed it. */
+  router.get("/mail-sender", async (req, res) => {
+    z.object({}).strict().parse(req.query);
+    res.json({ available: Boolean(mail), sender: mail ? await mail.grants.status(req.session.user!.userId) : null });
+  });
+
+  /** "Thu hồi quyền gửi email": EduPath AI forgets the member's permission at once. */
+  router.delete("/mail-sender", async (req, res) => {
+    if (!mail) throw new AnnouncementError("mail_unavailable", 503);
+    await mail.grants.remove(req.session.user!.userId);
+    res.status(204).end();
+  });
+
+  /** "Gửi email thử cho chính tôi": one message to the member's own mailbox, the draft when it has a title and a text. */
+  router.post("/mail-sender/test", async (req, res) => {
+    const input = testBody.parse(req.body ?? {});
+    if (!mail) throw new AnnouncementError("mail_unavailable", 503);
+    const user = req.session.user!;
+    const grant = await mail.grants.load(user.userId);
+    if (!grant) {
+      // A stored permission that can no longer be read (SESSION_SECRET changed) asks to allow again, like a refused one.
+      await mail.grants.markFailed(user.userId, "grant_required");
+      throw new AnnouncementError("mail_grant_required", 409);
+    }
+    let token: MailToken;
+    try {
+      token = await mail.client.acquireToken(grant.tenantId, grant.cache);
+    } catch (error) {
+      if ((error as { errorCode?: unknown } | null)?.errorCode === "grant_required") {
+        await mail.grants.markFailed(user.userId, "grant_required");
+        throw new AnnouncementError("mail_grant_required", 409);
+      }
+      throw new AnnouncementError("send_failed", 502, { code: "token_failed" });
+    }
+    if (token.cache !== grant.cache) await mail.grants.save({ ...grant, cache: token.cache });
+    const title = cleanTitle(input.title), body = cleanBody(input.body);
+    const link = isPortalPage(input.link) ? input.link : null;
+    const preview = Boolean(title && body);
+    const name = personName(user.name);
+    const message = preview
+      ? announcementMailMessage({ to: grant.address, name, title, body, link }, webOrigin)
+      : testMailMessage(grant.address, name, new Date(), webOrigin);
+    const result = await mail.sendMail(token.accessToken, message);
+    if (!result.ok) throw new AnnouncementError("send_failed", 502, { code: result.code });
+    res.json({ sent: true, to: grant.address, preview });
   });
 
   router.post("/", async (req, res) => {
     const parsed = sendBody.safeParse(req.body ?? {});
     if (!parsed.success) throw new AnnouncementError("invalid_input", 400);
-    const title = parsed.data.title.replace(/\s+/g, " ").trim();
-    const body = parsed.data.body.replace(/\r\n?/g, "\n").trim();
+    const title = cleanTitle(parsed.data.title);
+    const body = cleanBody(parsed.data.body);
     if (!title) throw new AnnouncementError("title_required", 400);
     if (!body) throw new AnnouncementError("body_required", 400);
     if (Array.from(title).length > ANNOUNCEMENT_TITLE_MAX || Array.from(body).length > ANNOUNCEMENT_BODY_MAX) throw new AnnouncementError("invalid_input", 400);
     const link = parsed.data.link?.trim() || null;
     if (link !== null && !isPortalPage(link)) throw new AnnouncementError("invalid_input", 400);
     const target = { cohorts: unique(parsed.data.cohorts), majors: unique(parsed.data.majors) };
+    const user = req.session.user!;
+    const email = parsed.data.email ? { senderId: user.userId, from: (await usableSender(user.userId)).address } : null;
     const client = await pool!.connect();
     try {
       await client.query("BEGIN");
-      await access(client, req.session.user!, true);
-      const sent = await sendAnnouncement(client, req.session.user!.userId, { title, body, link, target }, staff);
+      await access(client, user, true);
+      const sent = await sendAnnouncement(client, user.userId, { title, body, link, target }, staff, email);
       if (!sent) throw new AnnouncementError("no_recipients", 400);
       await client.query("COMMIT");
       res.status(201).json({ announcement: presentAnnouncement(sent) });
@@ -138,9 +226,53 @@ export function createAnnouncementsRouter(pool: DatabasePool | undefined, webOri
     }
   });
 
+  /** AD-NOTI-05: the messages of an announcement that did not go out, and why. */
+  router.get("/:id/emails", async (req, res) => {
+    z.object({}).strict().parse(req.query);
+    const announcementId = id.parse(req.params.id);
+    if (!await findAnnouncement(pool!, announcementId)) throw new AnnouncementError("not_found", 404);
+    res.json({ items: await emailProblems(pool!, announcementId) });
+  });
+
+  /** "Gửi lại thư lỗi": the failed messages go again, from the mailbox of the member who asks. */
+  router.post("/:id/emails/retry", async (req, res) => {
+    z.object({}).strict().parse(req.body ?? {});
+    const announcementId = id.parse(req.params.id);
+    const user = req.session.user!;
+    const sender = await usableSender(user.userId);
+    const client = await pool!.connect();
+    try {
+      await client.query("BEGIN");
+      await access(client, user, true);
+      const found = await findAnnouncement(client, announcementId);
+      if (!found) throw new AnnouncementError("not_found", 404);
+      if (found.withdrawnAt) throw new AnnouncementError("already_withdrawn", 409);
+      const requeued = await retryFailedEmails(client, announcementId, user.userId, sender.address);
+      await client.query("COMMIT");
+      res.json({ announcement: presentAnnouncement((await findAnnouncement(pool!, announcementId))!), requeued });
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  });
+
+  /** AD-NOTI-06 Cài đặt thông báo: the kinds of automatic notifications and whether each is on. */
+  router.get("/settings", async (req, res) => {
+    z.object({}).strict().parse(req.query);
+    res.json({ items: await listNotificationSettings(pool!) });
+  });
+
+  router.put("/settings/:setting", async (req, res) => {
+    const setting = z.enum(NOTIFICATION_SETTING_KEYS).parse(req.params.setting);
+    const { enabled } = settingBody.parse(req.body ?? {});
+    res.json({ setting: await saveNotificationSetting(pool!, setting, enabled, req.session.user!.userId) });
+  });
+
   router.use((_req, res) => { res.status(404).json({ error: "not_found" }); });
   const errors: ErrorRequestHandler = (error, _req, res, next) => {
-    if (error instanceof AnnouncementError) { res.status(error.status).json({ error: error.code }); return; }
+    if (error instanceof AnnouncementError) { res.status(error.status).json({ error: error.code, ...error.detail }); return; }
     if (error instanceof z.ZodError) { res.status(400).json({ error: "invalid_input" }); return; }
     next(error);
   };

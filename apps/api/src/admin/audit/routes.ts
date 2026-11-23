@@ -288,10 +288,25 @@ export const AUDIT_ROUTES: readonly AuditRoute[] = [
   // Thông báo của Khoa (notifications/admin-router.ts)
   { method: "POST", path: "/announcements/:id/withdraw", kind: "notify", action: "Thu hồi thông báo",
     describe: ({ params, result }) => ({ summary: `Thu hồi thông báo "${str(obj(obj(result).announcement).title) || params.id}"`, ...target("announcement", params.id) }) },
+  { method: "POST", path: "/announcements/mail-sender/test", kind: "notify", action: "Gửi email thử",
+    describe: ({ result }) => (obj(result).preview === true ? "Gửi bản thông báo đang soạn đến email của chính mình để xem trước" : "Gửi email thử đến hộp thư của chính mình") },
+  { method: "DELETE", path: "/announcements/mail-sender", kind: "notify", action: "Thu hồi quyền gửi email",
+    describe: () => "Thu hồi quyền gửi email thông báo từ hộp thư trường của mình" },
+  { method: "POST", path: "/announcements/:id/emails/retry", kind: "notify", action: "Gửi lại email lỗi",
+    describe: ({ params, result }) => {
+      const requeued = num(obj(result).requeued);
+      return { summary: `Gửi lại ${requeued === null ? "các" : requeued} email lỗi của thông báo "${str(obj(obj(result).announcement).title) || params.id}"`, ...target("announcement", params.id) };
+    } },
+  { method: "PUT", path: "/announcements/settings/:setting", kind: "notify", action: "Cập nhật cài đặt thông báo",
+    describe: ({ body, result }) => {
+      const setting = obj(obj(result).setting);
+      return `${body.enabled === false ? "Tắt" : "Bật"} thông báo "${str(setting.label) || "?"}" gửi sinh viên`;
+    } },
   { method: "POST", path: "/announcements", kind: "notify", action: "Gửi thông báo",
     describe: ({ body, result }) => {
       const sent = obj(obj(result).announcement), recipients = num(sent.recipients);
-      return { summary: `Gửi thông báo "${str(sent.title) || str(body.title)}"${recipients === null ? "" : ` cho ${recipients} sinh viên`}`, ...target("announcement", sent.id) };
+      const email = body.email === true ? " (kèm email)" : "";
+      return { summary: `Gửi thông báo "${str(sent.title) || str(body.title)}"${recipients === null ? "" : ` cho ${recipients} sinh viên`}${email}`, ...target("announcement", sent.id) };
     } },
 ];
 

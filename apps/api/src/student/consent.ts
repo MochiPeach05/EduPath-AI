@@ -23,10 +23,12 @@ import type { DatabasePool } from "../db/pool.js";
 // luôn nhé"): they may edit Kế hoạch học kỳ and fill in Khảo sát định hướng too; no consent is recorded in the student's
 // name, and a survey they fill in counts for the AI features like the student's own until the student edits it or
 // withdraws the consent (student/survey.ts surveyUsable).
+// 2026-11-23 (user: "Cập nhật, không hỏi lại"): the Khoa's announcements may go to the student's school address too
+// (AD-NOTI-04, mail/worker.ts); no one is asked again.
 // Must equal `policyVersion` in apps/web/src/public-information.ts (checked by consent.test.ts).
-export const TRANSCRIPT_POLICY_VERSION = "2026-11-10";
+export const TRANSCRIPT_POLICY_VERSION = "2026-11-23";
 /**
- * The oldest policy version whose consents still count, so 2026-10-26, 2026-10-28, 2026-10-29, 2026-10-31, 2026-11-03, 2026-11-08 and 2026-11-10 ask no one again (user,
+ * The oldest policy version whose consents still count, so 2026-10-26, 2026-10-28, 2026-10-29, 2026-10-31, 2026-11-03, 2026-11-08, 2026-11-10 and 2026-11-23 ask no one again (user,
  * 2026-10-26: "không để lại ghi chú gì hết"); new consents are recorded under TRANSCRIPT_POLICY_VERSION. Must equal
  * `consentValidSince` in apps/web/src/public-information.ts (checked by consent.test.ts).
  */

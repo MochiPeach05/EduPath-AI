@@ -84,7 +84,6 @@ describe("public policy, terms and FAQ", () => {
   });
 
   it("says the cố vấn học tập and the Khoa's staff may choose the goals, edit the plan and fill in the survey for the student (policy 2026-11-10)", () => {
-    expect(policyUpdatedAt).toBe("10/11/2026");
     for (const text of [...policyBlocks, ...faqBlocks]) {
       expect(text).not.toMatch(/không chọn chuyên ngành|không sửa [Kk]ế hoạch học kỳ|không làm hay sửa [Kk]hảo sát|không sửa hay xóa được khảo sát|tự làm Khảo sát định hướng và đồng ý/);
     }
@@ -119,9 +118,17 @@ describe("public policy, terms and FAQ", () => {
     for (const part of ["mã số sinh viên, họ và tên, lớp và email trường", "không được lưu", "không ai import bảng điểm, chạy AI, làm thay hay gửi thông báo",
       "được ghép với dòng này theo mã số sinh viên"]) expect(list).toContain(part);
     expect(policyBlocks.find((text) => text.startsWith("Bản cập nhật ngày 10/11/2026"))).toContain("bổ sung mục Thông tin từ danh sách lớp của Khoa");
-    expect(policyUpdatedAt).toBe("10/11/2026");
     const profile = frequentlyAskedQuestions.find((faq) => faq.question === "Vì sao hồ sơ đã có sẵn họ tên, mã sinh viên, khóa và lớp?");
     expect(profile?.answer.at(-1)).toContain("nhập trước danh sách lớp");
+  });
+
+  it("says the Khoa may send its announcements to the school address too, how long the outcome is kept, without asking again (2026-11-23)", () => {
+    expect(policyUpdatedAt).toBe("23/11/2026");
+    expect(policyBlocks).toContain("Gửi thông báo của Khoa đến chuông thông báo trên EduPath AI và, khi cán bộ Khoa chọn, đến email trường của bạn.");
+    expect(policyBlocks.find((text) => text.startsWith("Microsoft: "))).toContain("gửi email thông báo của Khoa đến email trường của bạn từ hộp thư trường của cán bộ Khoa");
+    expect(policyBlocks.find((text) => text.startsWith("Email thông báo của Khoa:"))).toContain("90 ngày");
+    const update = policyBlocks.find((text) => text.startsWith("Bản cập nhật ngày 23/11/2026"));
+    for (const part of ["chỉ đến sinh viên đã có tài khoản EduPath AI", "90 ngày", "Bạn không cần đồng ý lại."]) expect(update).toContain(part);
   });
 
   it("renders the support e-mail in FAQ answers as a link", () => {
