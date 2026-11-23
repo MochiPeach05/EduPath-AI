@@ -15,6 +15,15 @@ const messages: Record<string, string> = {
   admin_required: "Tài khoản này chưa được cấp quyền quản trị EduPath AI. Vui lòng sử dụng tài khoản có quyền quản trị."
 };
 
+/** The address's query without the sign-in error (?authError=…), every other parameter kept in its order: "" when none is left. */
+export function withoutAuthError(search: string): string {
+  const params = new URLSearchParams(search);
+  if (!params.has("authError")) return search;
+  params.delete("authError");
+  const rest = params.toString();
+  return rest ? `?${rest}` : "";
+}
+
 function ShieldIcon() {
   return <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
     <path d="m16 3 11 4v9c0 6-6 11-11 13C11 27 5 22 5 16V7l11-4Z" stroke="currentColor" strokeWidth="1.8" />
@@ -54,7 +63,12 @@ export default function AdminPortal() {
     }).then((result) => {
       if (!controller.signal.aborted) {
         setState(result);
-        if (result.kind === "authenticated" && window.location.search) window.history.replaceState({}, "", window.location.pathname);
+        // Only the sign-in error is dropped once signed in: the page's own parameters stay, so a report's filters, the
+        // student a "Xem hồ sơ" link opens in a new tab and the email test's outcome survive a full page load (2026-11-23).
+        if (result.kind === "authenticated") {
+          const search = withoutAuthError(window.location.search);
+          if (search !== window.location.search) window.history.replaceState({}, "", `${window.location.pathname}${search}${window.location.hash}`);
+        }
       }
     }).catch((error: unknown) => {
       // No answer, or a server error: worded as on every admin page (admin-errors.ts).

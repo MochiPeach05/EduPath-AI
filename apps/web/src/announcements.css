@@ -68,3 +68,9 @@
   .an-form-panel { padding: 18px 16px; }
   .an-preview { padding: 18px 16px; }
 }
+
+/* Email trường của sinh viên (AD-NOTI-04): the test of Microsoft's permission to send from the member's own mailbox. */
+.an-email { display: grid; gap: 10px; justify-items: start; padding: 12px 14px; border: 1px solid var(--cm-line); border-radius: 10px; background: #fafbfd; }
+.an-email-text { display: grid; gap: 2px; margin: 0; font-size: 13.5px; }
+.an-email-text span { color: var(--cm-muted); font-size: 12.5px; }
+.an-email .admin-error { margin: 0; }

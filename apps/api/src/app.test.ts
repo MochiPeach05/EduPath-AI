@@ -13,6 +13,8 @@ import type {
 import type { UserRepository } from "./users/user-repository.js";
 import { MemoryUserRepository } from "./users/memory-user-repository.js";
 import type { DatabasePool } from "./db/pool.js";
+import type { MailConsentClient, MailConsentGrant } from "./auth/mail-consent-client.js";
+import type { MailMessage, MailResult } from "./mail/graph-mail.js";
 
 const clientId = "11111111-1111-4111-8111-111111111111";
 const tenantId = "22222222-2222-4222-8222-222222222222";
@@ -490,5 +492,125 @@ describe("the reference rows the student pages share (db/reference-cache.ts, 202
     await agent.get("/api/admin/careers");
     await agent.get("/api/student/career-guidance").expect(200);
     expect(catalogReads()).toBe(2);
+  });
+});
+
+class FakeMailConsentClient implements MailConsentClient {
+  public consentArgs: { tenantId: string; loginHint: string | null } | null = null;
+  public exchanges = 0;
+  public grant: Partial<MailConsentGrant> = {};
+  public failure: Error | null = null;
+
+  public async getConsentUrl(transaction: AuthTransaction, tenant: string, loginHint: string | null): Promise<string> {
+    this.consentArgs = { tenantId: tenant, loginHint };
+    const url = new URL(`https://login.microsoftonline.com/${tenant}/oauth2/v2.0/authorize`);
+    url.searchParams.set("state", transaction.state);
+    url.searchParams.set("scope", "openid profile email https://graph.microsoft.com/Mail.Send");
+    return url.toString();
+  }
+
+  public async exchangeCode(_code: string, _codeVerifier: string, nonce: string): Promise<MailConsentGrant> {
+    this.exchanges += 1;
+    if (this.failure) throw this.failure;
+    return {
+      accessToken: "graph-token", tenantId, objectId: "33333333-3333-4333-8333-333333333333", nonce,
+      email: "test@example.edu", username: "test@example.edu", ...this.grant
+    };
+  }
+}
+
+describe("the email test of AD-NOTI-04: Microsoft's Mail.Send, asked for at run time (2026-11-23)", () => {
+  const page = `${config.webOrigin}/quantri/gui-thong-bao`;
+  async function setup(role: AppRole | "student-login" = "admin", withMail = true) {
+    const client = new FakeMicrosoftAuthClient();
+    const repository = new FakeUserRepository();
+    if (role !== "student-login") repository.roleOverride = role;
+    const mail = new FakeMailConsentClient();
+    const sent: { token: string; message: MailMessage }[] = [];
+    const sendMail = vi.fn(async (token: string, message: MailMessage): Promise<MailResult> => {
+      sent.push({ token, message });
+      return { ok: true };
+    });
+    const agent = request.agent(createApp({
+      config, microsoftAuthClient: client, userRepository: repository, ...(withMail ? { mailConsentClient: mail } : {}), sendMail
+    }));
+    await login(agent, client, role === "student-login" ? "/dashboard" : "/quantri");
+    return { agent, mail, sendMail, sent };
+  }
+  async function start(agent: ReturnType<typeof request.agent>) {
+    const response = await agent.post("/api/auth/microsoft/mail-consent").set("Origin", config.webOrigin).expect(200);
+    return new URL(response.body.url).searchParams.get("state")!;
+  }
+  const back = async (agent: ReturnType<typeof request.agent>, query: Record<string, string>) =>
+    (await agent.get("/api/auth/microsoft/callback").query(query).expect(302)).headers.location as string;
+
+  it("asks for Mail.Send on the member's own tenant and account, then sends one message to that mailbox", async () => {
+    const { agent, mail, sent } = await setup();
+    const state = await start(agent);
+    expect(mail.consentArgs).toEqual({ tenantId, loginHint: "test@example.edu" });
+    expect(await back(agent, { state, code: "mail-code" })).toBe(`${page}?emailTest=sent`);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.token).toBe("graph-token");
+    expect(sent[0]!.message).toMatchObject({ to: "test@example.edu", subject: "[EduPath AI] Thư thử gửi thông báo qua email" });
+    // The member stays signed in, and the same answer cannot send again.
+    await agent.get("/api/admin/me").expect(200);
+    expect(await back(agent, { state, code: "mail-code" })).toContain("authError=invalid_state");
+    expect(sent).toHaveLength(1);
+    await agent.get("/api/admin/me").expect(200);
+  });
+
+  it("is only for staff who can send announcements, from the portal's own pages", async () => {
+    const anonymous = request.agent(createApp({
+      config, microsoftAuthClient: new FakeMicrosoftAuthClient(), userRepository: new FakeUserRepository(), mailConsentClient: new FakeMailConsentClient()
+    }));
+    await anonymous.post("/api/auth/microsoft/mail-consent").set("Origin", config.webOrigin).expect(401, { error: "authentication_required" });
+    const student = await setup("student-login");
+    await student.agent.post("/api/auth/microsoft/mail-consent").set("Origin", config.webOrigin).expect(403, { error: "insufficient_role" });
+    const advisor = await setup("advisor");
+    await advisor.agent.post("/api/auth/microsoft/mail-consent").set("Origin", config.webOrigin).expect(403, { error: "insufficient_role" });
+    const admin = await setup();
+    await admin.agent.post("/api/auth/microsoft/mail-consent").set("Origin", "https://example.org").expect(403, { error: "invalid_origin" });
+    const off = await setup("admin", false);
+    await off.agent.post("/api/auth/microsoft/mail-consent").set("Origin", config.webOrigin).expect(503, { error: "mail_unavailable" });
+  });
+
+  it("sends nothing for another account, a cancelled or blocked consent, or a wrong nonce", async () => {
+    const { agent, mail, sendMail } = await setup();
+    mail.grant = { objectId: "44444444-4444-4444-8444-444444444444" };
+    expect(await back(agent, { state: await start(agent), code: "c" })).toBe(`${page}?emailTest=other_account`);
+    // Microsoft's error comes back on the callback; only its AADSTS code is passed to the page.
+    expect(await back(agent, { state: await start(agent), error: "access_denied", error_description: "AADSTS65004: User declined to consent to access the app." }))
+      .toBe(`${page}?emailTest=denied&code=AADSTS65004`);
+    expect(await back(agent, { state: await start(agent), error: "invalid_request", error_description: "something else" }))
+      .toBe(`${page}?emailTest=failed&code=invalid_request`);
+    mail.grant = { nonce: "another-nonce" };
+    expect(await back(agent, { state: await start(agent), code: "c" })).toBe(`${page}?emailTest=failed&code=invalid_nonce`);
+    expect(mail.exchanges).toBe(2);
+    expect(sendMail).not.toHaveBeenCalled();
+  });
+
+  it("says why Microsoft or Graph refused", async () => {
+    const { agent, mail, sendMail } = await setup();
+    mail.failure = Object.assign(new Error("AADSTS65001: The user or administrator has not consented to use the application."), { errorCode: "invalid_grant" });
+    expect(await back(agent, { state: await start(agent), code: "c" })).toBe(`${page}?emailTest=failed&code=AADSTS65001`);
+    mail.failure = Object.assign(new Error("network down"), { errorCode: "network_error" });
+    expect(await back(agent, { state: await start(agent), code: "c" })).toBe(`${page}?emailTest=failed&code=network_error`);
+    mail.failure = null;
+    sendMail.mockResolvedValueOnce({ ok: false, status: 404, code: "MailboxNotEnabledForRESTAPI" });
+    expect(await back(agent, { state: await start(agent), code: "c" })).toBe(`${page}?emailTest=send_failed&code=MailboxNotEnabledForRESTAPI`);
+  });
+
+  it("drops a test left more than ten minutes on Microsoft's page", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    try {
+      vi.setSystemTime(new Date("2026-11-23T02:00:00Z"));
+      const { agent, sendMail } = await setup();
+      const state = await start(agent);
+      vi.setSystemTime(new Date("2026-11-23T02:11:00Z"));
+      expect(await back(agent, { state, code: "c" })).toBe(`${page}?emailTest=expired`);
+      expect(sendMail).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

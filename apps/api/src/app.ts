@@ -36,6 +36,8 @@ import { postgresTextLayerJobs, startTextLayerReader, textLayerPython } from "./
 import { createNeuronBudget } from "./ai-worker/budget.js";
 import type { AppConfig } from "./config.js";
 import { createAuthRouter } from "./auth/router.js";
+import type { MailConsentClient } from "./auth/mail-consent-client.js";
+import type { SendMail } from "./mail/graph-mail.js";
 import type { MicrosoftAuthClient } from "./auth/types.js";
 import type { UserRepository } from "./users/user-repository.js";
 import type { AuthActivity } from "./auth/activity.js";
@@ -61,6 +63,9 @@ interface CreateAppDependencies {
   userRepository: UserRepository;
   sessionStore?: Store;
   adminAccountRepository?: AdminAccountRepository;
+  /** The email test of AD-NOTI-04 (Microsoft's Mail.Send consent) and how it sends; see auth/router.ts. */
+  mailConsentClient?: MailConsentClient;
+  sendMail?: SendMail;
 }
 
 const webDistPath = fileURLToPath(new URL("../../web/dist/", import.meta.url));
@@ -73,7 +78,9 @@ export function createApp({
   sessionStore,
   adminAccountRepository,
   authActivity,
-  studentProfileRepository
+  studentProfileRepository,
+  mailConsentClient,
+  sendMail
 }: CreateAppDependencies) {
   const app = express();
 
@@ -174,7 +181,10 @@ export function createApp({
 
   app.use(
     "/api/auth",
-    createAuthRouter({ config, microsoftAuthClient, userRepository, ...(authActivity ? { authActivity } : {}) })
+    createAuthRouter({
+      config, microsoftAuthClient, userRepository, ...(authActivity ? { authActivity } : {}),
+      ...(mailConsentClient ? { mailConsentClient } : {}), ...(sendMail ? { sendMail } : {})
+    })
   );
 
   app.get(

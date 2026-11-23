@@ -34,7 +34,15 @@ Mỗi chủ đề chỉ hiện một thông báo, bản mới nhất (`NOTIFICAT
 - Chọn đối tượng theo khóa và ngành (danh sách từ hồ sơ sinh viên), xem trước số người nhận, tiêu đề tối đa 120 ký tự, nội dung tối đa 1000 ký tự, trang liên quan.
 - Gửi: một giao dịch ghi thông báo của Khoa và thông báo cho từng sinh viên nhận (tài khoản sinh viên đang hoạt động, trừ hộp thư cán bộ).
 - Danh sách đã gửi có số đã đọc trên số nhận, sắp xếp theo cột; Thu hồi gỡ thông báo khỏi chuông của mọi sinh viên.
-- Kênh email: để sau. Trang chỉ hiện kênh chuông trong EduPath AI; ô "Email sinh viên – Sắp có" đã bỏ ngày 09/11/2026 (người dùng: không để chữ "đang triển khai", "sắp có" trên web).
+- Kênh email (AD-NOTI-04): mới có bước thử, xem mục dưới. Thông báo vẫn chỉ đến chuông trong EduPath AI; ô "Email sinh viên – Sắp có" đã bỏ ngày 09/11/2026 (người dùng: không để chữ "đang triển khai", "sắp có" trên web).
+
+## Email qua Microsoft Graph: bước thử (23/11/2026)
+Người dùng chọn cách A (gửi từ hộp thư trường của người bấm Gửi, qua Microsoft Graph) và yêu cầu "Trước tiên làm bước thử đã đi". Nhóm chưa vào được trang đăng ký app trên Microsoft Entra, nên quyền `Mail.Send` (dạng Delegated) được xin lúc chạy (incremental consent), không cần sửa app.
+- Render gói free chặn cổng SMTP (25, 465, 587) từ 26/9/2025, nên thư đi qua HTTPS: `POST https://graph.microsoft.com/v1.0/me/sendMail`, `saveToSentItems: false` (`apps/api/src/mail/graph-mail.ts`).
+- Nút "Gửi email thử cho chính tôi" ở mục Kênh gửi của trang Gửi thông báo, chỉ cho tài khoản gửi được thông báo (không cho cố vấn học tập và sinh viên). `POST /api/auth/microsoft/mail-consent` tạo state, nonce và PKCE, lưu vào `session.mailConsent`, trả địa chỉ trang xin quyền của Microsoft trên tenant của chính tài khoản đó, có gợi ý tài khoản (UPN).
+- Microsoft trả về địa chỉ callback đăng nhập sẵn có `/api/auth/microsoft/callback`; state trùng `session.mailConsent` thì đi nhánh email, không đụng phiên đăng nhập. Máy chủ đổi mã lấy token bằng một MSAL client mới (`apps/api/src/auth/mail-consent-client.ts`), kiểm tra nonce và đúng tài khoản đang đăng nhập, gửi một thư vào hộp thư của chính người đó rồi bỏ token: không lưu quyền, không gửi gì cho sinh viên.
+- Kết quả về trang `/quantri/gui-thong-bao?emailTest=…`: `sent`, `denied` (Hủy, hoặc trường bắt quản trị viên phê duyệt; kèm mã AADSTS), `other_account`, `send_failed` (kèm mã lỗi của Graph), `expired` (quá 10 phút), `signed_out`, `failed`. Trang hiện kết quả một lần rồi xóa tham số khỏi địa chỉ.
+- Giới hạn của Exchange Online cho mỗi hộp thư: 10.000 người nhận một ngày, 30 thư một phút.
 
 ## Giao diện
 - Sinh viên: chuông trên thanh đầu trang (`StudentNotifications.tsx`): số chưa đọc, 5 thông báo mới nhất, "Xem tất cả" mở danh sách đầy đủ có lọc, chi tiết, đánh dấu, xóa và hoàn tác.

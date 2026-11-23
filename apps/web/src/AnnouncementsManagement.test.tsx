@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import AnnouncementsManagement, {
-  AnnouncementPreview, FALLBACK_OPTIONS, PORTAL_PAGES, SentTable, majorText, openLabel, pageLabel, reachQuery, reachText, readShare, readText, sentTime, targetText, toggleValue,
+  AnnouncementPreview, FALLBACK_OPTIONS, MAIL_CONSENT_API, PORTAL_PAGES, SentTable, emailTestOutcome, majorText, openLabel, pageLabel, reachQuery, reachText, readShare, readText, sentTime, targetText, toggleValue,
 } from "./AnnouncementsManagement";
 import { useTableSort } from "./table-sort";
 import type { Announcement } from "./notification-types";
@@ -101,5 +101,46 @@ describe("sent list", () => {
     expect(html).toContain("204/312");
     expect(html).toContain('class="an-withdrawn"');
     expect(html).toContain('class="an-tag">Đã thu hồi</span>');
+  });
+});
+
+describe("the email test of AD-NOTI-04: Microsoft's Mail.Send from the member's own mailbox (2026-11-23)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const at = (search: string) => ({
+    location: { search, href: `http://localhost:5173/quantri/gui-thong-bao${search}` },
+    history: { state: null, replaceState: vi.fn() },
+  });
+
+  it("offers a test under Kênh gửi, after the bell, inside the form an account without rights cannot use", () => {
+    expect(MAIL_CONSENT_API).toBe("/api/auth/microsoft/mail-consent");
+    const html = renderToStaticMarkup(<AnnouncementsManagement canManage section="compose" />);
+    expect(html).toContain("<strong>Email trường của sinh viên</strong>");
+    expect(html).toMatch(/<button type="button" class="am-outline"><svg[^>]*>.*?<\/svg> Gửi email thử cho chính tôi<\/button>/);
+    expect(html.indexOf("Trong EduPath AI (chuông thông báo của sinh viên)")).toBeLessThan(html.indexOf("Gửi email thử cho chính tôi"));
+    const viewer = renderToStaticMarkup(<AnnouncementsManagement canManage={false} section="compose" />);
+    expect(viewer.indexOf('<fieldset class="cm-fields" disabled="">')).toBeLessThan(viewer.indexOf("Gửi email thử cho chính tôi"));
+  });
+
+  it("says each outcome Microsoft's page can come back with, passing on only plain codes", () => {
+    expect(emailTestOutcome("?emailTest=sent")).toMatchObject({ ok: true, text: expect.stringContaining("Đã gửi thư thử đến hộp thư trường của bạn.") });
+    expect(emailTestOutcome("?emailTest=denied&code=AADSTS65004")).toEqual({
+      ok: false, text: expect.stringContaining("Microsoft chưa cấp quyền gửi thư (mã AADSTS65004). Nếu trang Microsoft báo cần quản trị viên phê duyệt"),
+    });
+    expect(emailTestOutcome("?emailTest=send_failed&code=MailboxNotEnabledForRESTAPI")!.text).toContain("(mã MailboxNotEnabledForRESTAPI)");
+    for (const outcome of ["other_account", "expired", "signed_out", "failed"]) expect(emailTestOutcome(`?emailTest=${outcome}`)).toMatchObject({ ok: false });
+    expect(emailTestOutcome("?emailTest=failed&code=%3Cb%3E")!.text).toBe("Chưa xin được quyền gửi thư của Microsoft. Hãy thử lại.");
+    expect(emailTestOutcome("?emailTest=other")).toBeNull();
+    expect(emailTestOutcome("")).toBeNull();
+  });
+
+  it("shows the outcome above the form when the member comes back", () => {
+    vi.stubGlobal("window", at("?emailTest=denied&code=AADSTS65004"));
+    const denied = renderToStaticMarkup(<AnnouncementsManagement canManage section="compose" />);
+    expect(denied).toContain('<p class="admin-error" role="alert">Microsoft chưa cấp quyền gửi thư (mã AADSTS65004).');
+    expect(denied.indexOf("Microsoft chưa cấp quyền gửi thư")).toBeLessThan(denied.indexOf("Soạn thông báo"));
+    vi.stubGlobal("window", at("?emailTest=sent"));
+    expect(renderToStaticMarkup(<AnnouncementsManagement canManage section="compose" />)).toMatch(/<div class="an-success" role="status"><svg[^>]*>.*?<\/svg><p>Đã gửi thư thử/);
+    vi.stubGlobal("window", at(""));
+    expect(renderToStaticMarkup(<AnnouncementsManagement canManage section="compose" />)).not.toContain("thư thử đến hộp thư");
   });
 });

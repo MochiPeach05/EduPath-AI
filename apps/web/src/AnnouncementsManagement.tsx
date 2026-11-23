@@ -158,6 +158,64 @@ export function AnnouncementPreview({ title, body, link }: { title: string; body
   </aside>;
 }
 
+/** Where the email test of AD-NOTI-04 starts (auth/router.ts): the address of Microsoft's consent page for Mail.Send. */
+export const MAIL_CONSENT_API = "/api/auth/microsoft/mail-consent";
+
+/**
+ * The outcome of the email test the server puts in the address after Microsoft's page (?emailTest=…&code=…), as the
+ * page says it; null for any other address. The code is Microsoft's or Graph's own, shown so the team can look it up.
+ */
+export function emailTestOutcome(search: string): { ok: boolean; text: string } | null {
+  const params = new URLSearchParams(search);
+  const raw = params.get("code");
+  const code = raw && /^[A-Za-z0-9_.-]{1,80}$/.test(raw) ? ` (mã ${raw})` : "";
+  switch (params.get("emailTest")) {
+    case "sent": return { ok: true, text: "Đã gửi thư thử đến hộp thư trường của bạn. Mở Outlook để kiểm tra; thư có thể đến sau 1–2 phút, nếu chưa thấy hãy xem cả mục Email rác. Nhận được thư nghĩa là EduPath AI gửi được email từ hộp thư của bạn." };
+    case "denied": return { ok: false, text: `Microsoft chưa cấp quyền gửi thư${code}. Nếu trang Microsoft báo cần quản trị viên phê duyệt thì trường đang chặn quyền này: cần bộ phận IT của trường cấp quyền, hoặc chuyển sang gửi bằng Gmail. Nếu bạn chỉ bấm Hủy, hãy thử lại và chọn Chấp nhận.` };
+    case "other_account": return { ok: false, text: "Bạn đã chọn một tài khoản Microsoft khác tài khoản đang đăng nhập EduPath AI nên chưa có thư nào được gửi. Hãy thử lại và chọn đúng tài khoản trường của bạn." };
+    case "send_failed": return { ok: false, text: `Microsoft đã cấp quyền nhưng không gửi được thư${code}. Tài khoản này có thể chưa có hộp thư Outlook của trường.` };
+    case "expired": return { ok: false, text: "Lần thử bị hủy vì để quá 10 phút ở trang Microsoft. Hãy bấm gửi thư thử một lần nữa." };
+    case "signed_out": return { ok: false, text: "Phiên đăng nhập EduPath AI đã hết trong lúc ở trang Microsoft nên chưa gửi thư. Hãy đăng nhập lại rồi thử lại." };
+    case "failed": return { ok: false, text: `Chưa xin được quyền gửi thư của Microsoft${code}. Hãy thử lại.` };
+    default: return null;
+  }
+}
+
+const MAIL_CONSENT_ERRORS: Readonly<Record<string, string>> = {
+  insufficient_role: "Tài khoản của bạn không gửi được thông báo.",
+  mail_unavailable: "Máy chủ chưa bật chức năng gửi email.",
+};
+
+/**
+ * Email trường của sinh viên (AD-NOTI-04), bước thử 2026-11-23 (người dùng: "Trước tiên làm bước thử đã đi"): before any
+ * message reaches a student, the staff member checks that Microsoft lets EduPath AI send from their school mailbox. The
+ * button opens Microsoft's consent page; the server sends one message to the member's own mailbox and keeps no
+ * permission, then brings the member back here with the outcome (emailTestOutcome).
+ */
+function EmailTest() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const start = async () => {
+    setBusy(true); setError("");
+    try {
+      const response = await fetch(MAIL_CONSENT_API, { method: "POST", credentials: "include", cache: "no-store", headers: { "Content-Type": "application/json" }, body: "{}" });
+      if (response.status === 401) window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+      const body = await response.json().catch(() => ({})) as { url?: unknown };
+      if (!response.ok || typeof body.url !== "string") throw new Error(adminErrorText(response.status, body, MAIL_CONSENT_ERRORS));
+      window.location.assign(body.url);
+    } catch (failure) {
+      setError(failure instanceof Error && failure.message ? failure.message : "Không mở được trang Microsoft. Vui lòng thử lại.");
+      setBusy(false);
+    }
+  };
+  return <div className="an-email">
+    <p className="an-email-text"><strong>Email trường của sinh viên</strong>
+      <span>Trước khi gửi thông báo qua email, hãy gửi một thư thử. Microsoft sẽ hỏi bạn cho phép EduPath AI gửi thư từ hộp thư trường của bạn; thư thử chỉ đến chính bạn và EduPath AI không lưu quyền này.</span></p>
+    <button type="button" className="am-outline" disabled={busy} onClick={() => void start()}><Icon name="mail" /> {busy ? "Đang mở trang Microsoft…" : "Gửi email thử cho chính tôi"}</button>
+    {error && <p className="admin-error" role="alert">{error}</p>}
+  </div>;
+}
+
 function ComposeAnnouncement({ canManage, navigate }: { canManage: boolean; navigate?: (path: string) => void }) {
   const options = useAnnouncementOptions();
   const [target, setTarget] = useState<AnnouncementTarget>({ cohorts: [], majors: [] });
@@ -170,6 +228,15 @@ function ComposeAnnouncement({ canManage, navigate }: { canManage: boolean; navi
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [sent, setSent] = useState<Announcement | null>(null);
+  // The email test's outcome, once, when Microsoft's page sends the member back (?emailTest=…); a reload does not repeat it.
+  const [emailTest] = useState(() => (typeof window === "undefined" ? null : emailTestOutcome(window.location.search)));
+  useEffect(() => {
+    if (!emailTest) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("emailTest");
+    url.searchParams.delete("code");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [emailTest]);
   // Picks made on the fallback list keep only what GET /options offers once it answers.
   useEffect(() => {
     setTarget((current) => {
@@ -204,6 +271,9 @@ function ComposeAnnouncement({ canManage, navigate }: { canManage: boolean; navi
     finally { setBusy(false); }
   };
   return <section className="cm-workspace an-workspace">
+    {emailTest && (emailTest.ok
+      ? <div className="an-success" role="status"><Icon name="check" /><p>{emailTest.text}</p></div>
+      : <p className="admin-error" role="alert">{emailTest.text}</p>)}
     {sent && <div className="an-success" role="status">
       <Icon name="check" />
       <p>Đã gửi <strong>“{sent.title}”</strong> tới {sent.recipients.toLocaleString("vi-VN")} sinh viên ({sent.targetLabel}).</p>
@@ -254,6 +324,7 @@ function ComposeAnnouncement({ canManage, navigate }: { canManage: boolean; navi
             <fieldset className="an-channels">
               <legend>Kênh gửi</legend>
               <label className="cm-check"><input type="checkbox" checked disabled readOnly /> Trong EduPath AI (chuông thông báo của sinh viên)</label>
+              <EmailTest />
             </fieldset>
           </fieldset>
           {error && <p className="admin-error" role="alert">{error}</p>}
