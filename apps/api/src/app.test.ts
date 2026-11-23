@@ -54,6 +54,7 @@ class FakeMicrosoftAuthClient implements MicrosoftAuthClient {
   public transaction: AuthTransaction | null = null;
   public nextRoles: string[] = [];
   public nextEmail = "test@example.edu";
+  public nextName = "Test User";
   public exchangeCount = 0;
 
   public async getAuthorizationUrl(transaction: AuthTransaction): Promise<string> {
@@ -74,7 +75,7 @@ class FakeMicrosoftAuthClient implements MicrosoftAuthClient {
       tenantId,
       objectId: "33333333-3333-4333-8333-333333333333",
       subject: "subject",
-      name: "Test User",
+      name: this.nextName,
       email: this.nextEmail,
       username: this.nextEmail,
       loginHint: "test-login-hint",
@@ -523,6 +524,8 @@ describe("the email test of AD-NOTI-04: Microsoft's Mail.Send, asked for at run 
   const page = `${config.webOrigin}/quantri/gui-thong-bao`;
   async function setup(role: AppRole | "student-login" = "admin", withMail = true) {
     const client = new FakeMicrosoftAuthClient();
+    // A school display name, as Microsoft gives it: "MSSV - Họ tên - Lớp" (made-up).
+    client.nextName = "2374802019001 - Trần Minh An - 71K29CNTT08";
     const repository = new FakeUserRepository();
     if (role !== "student-login") repository.roleOverride = role;
     const mail = new FakeMailConsentClient();
@@ -552,6 +555,8 @@ describe("the email test of AD-NOTI-04: Microsoft's Mail.Send, asked for at run 
     expect(sent).toHaveLength(1);
     expect(sent[0]!.token).toBe("graph-token");
     expect(sent[0]!.message).toMatchObject({ to: "test@example.edu", subject: "[EduPath AI] Thư thử gửi thông báo qua email" });
+    // The greeting names the person, not the whole display name (first real test, 23/11/2026).
+    expect(sent[0]!.message.html).toContain("Chào Trần Minh An,");
     // The member stays signed in, and the same answer cannot send again.
     await agent.get("/api/admin/me").expect(200);
     expect(await back(agent, { state, code: "mail-code" })).toContain("authError=invalid_state");

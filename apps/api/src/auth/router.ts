@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { Router, type Request } from "express";
 import type { AppConfig } from "../config.js";
 import { sendGraphMail, testMailMessage, type SendMail } from "../mail/graph-mail.js";
+import { personName } from "../users/person-name.js";
 import type { UserRepository } from "../users/user-repository.js";
 import type { MailConsentClient, MailConsentGrant } from "./mail-consent-client.js";
 import type { AuthTransaction, MicrosoftAuthClient } from "./types.js";
@@ -170,7 +171,8 @@ export function createAuthRouter({
     if (grant.tenantId !== user.tenantId || grant.objectId !== user.objectId) return mailTestRedirect(config, "other_account");
     const to = grant.email ?? grant.username ?? user.email ?? user.username;
     if (!to) return mailTestRedirect(config, "failed", "no_mailbox");
-    const result = await sendMail(grant.accessToken, testMailMessage(to, user.name, now(), config.webOrigin));
+    // "Chào Đào Văn Hòa": the name part of a school display name "MSSV - Họ tên - Lớp" (first test, 23/11/2026).
+    const result = await sendMail(grant.accessToken, testMailMessage(to, personName(user.name), now(), config.webOrigin));
     if (!result.ok) {
       console.error(`[MAIL] Microsoft Graph refused the test message (${result.code})`);
       return mailTestRedirect(config, "send_failed", result.code);
