@@ -124,11 +124,12 @@ describe("public policy, terms and FAQ", () => {
 
   it("says the Khoa may send its announcements to the school address too, how long the outcome is kept, without asking again (2026-11-23)", () => {
     expect(policyUpdatedAt).toBe("23/11/2026");
-    expect(policyBlocks).toContain("Gửi thông báo của Khoa đến chuông thông báo trên EduPath AI và, khi cán bộ Khoa chọn, đến email trường của bạn.");
-    expect(policyBlocks.find((text) => text.startsWith("Microsoft: "))).toContain("gửi email thông báo của Khoa đến email trường của bạn từ hộp thư trường của cán bộ Khoa");
-    expect(policyBlocks.find((text) => text.startsWith("Email thông báo của Khoa:"))).toContain("90 ngày");
+    expect(policyBlocks).toContain("Gửi thông báo đến chuông thông báo trên EduPath AI và, khi Khoa chọn, đến email trường của bạn: thông báo của Khoa và những loại thông báo tự động Khoa bật gửi email.");
+    expect(policyBlocks.find((text) => text.startsWith("Microsoft: "))).toContain("gửi email thông báo đến email trường của bạn từ hộp thư trường của cán bộ Khoa");
+    expect(policyBlocks.find((text) => text.startsWith("Email thông báo:"))).toContain("90 ngày");
     const update = policyBlocks.find((text) => text.startsWith("Bản cập nhật ngày 23/11/2026"));
-    for (const part of ["chỉ đến sinh viên đã có tài khoản EduPath AI", "90 ngày", "Bạn không cần đồng ý lại."]) expect(update).toContain(part);
+    for (const part of ["những loại thông báo tự động Khoa bật gửi email", "không lưu trong mục Thư đã gửi của họ", "chỉ đến sinh viên đã có tài khoản EduPath AI",
+      "90 ngày", "Bạn không cần đồng ý lại."]) expect(update).toContain(part);
   });
 
   it("renders the support e-mail in FAQ answers as a link", () => {

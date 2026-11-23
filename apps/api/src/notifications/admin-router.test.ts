@@ -246,24 +246,100 @@ describe("announcement emails and notification settings", () => {
     await request(setup({ mail: fakes.mail }).app).get(`/a/${ANN}/emails`).expect(404, { error: "not_found" });
   });
 
-  it("turns a kind of automatic notification off and on, never the faculty's announcements", async () => {
-    let saved: unknown[] = [];
-    const { app } = setup({
-      rows: (text, params) => {
-        if (text.startsWith("INSERT INTO ad_notification_settings")) { saved = params; return { rowCount: 1, rows: [] }; }
-        if (text.startsWith("SELECT s.setting,s.enabled")) {
-          return saved.length ? { rowCount: 1, rows: [{ setting: saved[0], enabled: saved[1], updatedAt: new Date("2026-11-23T05:00:00Z"), updatedBy: "Nguyễn Văn Cán Bộ" }] } : { rowCount: 0, rows: [] };
-        }
-        return undefined;
-      },
-    });
-    const listed = (await request(app).get("/a/settings").expect(200)).body.items as { key: string; enabled: boolean }[];
-    expect(listed.map((item) => item.key)).toEqual(["transcript", "assessment_comment", "roadmap", "graduation_advice", "warning", "catalog_updated"]);
-    expect(listed.every((item) => item.enabled)).toBe(true);
+  it("turns a kind of automatic notification off and on, never the faculty's announcements nor the bell of an action done for a student", async () => {
+    const db = settingsDb();
+    const { app } = setup({ rows: db.rows });
+    const listed = (await request(app).get("/a/settings").expect(200)).body;
+    expect(listed.items.map((item: { key: string }) => item.key)).toEqual(["transcript", "assessment_comment", "roadmap", "graduation_advice", "warning", "catalog_updated", "advisor_action"]);
+    expect(listed.items.every((item: { enabled: boolean; email: boolean }) => item.enabled && !item.email)).toBe(true);
+    expect(listed.items.find((item: { key: string }) => item.key === "advisor_action").bellLocked).toBe(true);
+    // The emails of the last 30 days, per kind.
+    expect(listed.items.find((item: { key: string }) => item.key === "roadmap").emails).toEqual({ sent: 12, pending: 1, failed: 2, noAddress: 0 });
+    expect(listed.mail).toEqual({ available: false, sender: null, me: null });
     const turned = await request(app).put("/a/settings/roadmap").set("Origin", origin).send({ enabled: false }).expect(200);
-    expect(turned.body.setting).toMatchObject({ key: "roadmap", label: "Lộ trình AI", enabled: false, updatedAt: "2026-11-23T05:00:00.000Z", updatedBy: "Nguyễn Văn Cán Bộ" });
-    expect(saved).toEqual(["roadmap", false, ADMIN]);
+    // Named as the admin portal names a person, never "MSSV - Họ tên - Lớp".
+    expect(turned.body.setting).toMatchObject({ key: "roadmap", label: "Lộ trình AI", enabled: false, email: false, updatedAt: "2026-11-23T05:00:00.000Z", updatedBy: "Nguyễn Văn Cán Bộ" });
+    expect(db.state.saved).toEqual([["roadmap", false, null, ADMIN]]);
+    // The bell off takes the email off too, and what has not gone out is cancelled.
+    expect(db.state.cancelled).toEqual(["roadmap"]);
     await request(app).put("/a/settings/announcement").set("Origin", origin).send({ enabled: false }).expect(400, { error: "invalid_input" });
     await request(app).put("/a/settings/roadmap").set("Origin", origin).send({ enabled: "no" }).expect(400, { error: "invalid_input" });
+    await request(app).put("/a/settings/roadmap").set("Origin", origin).send({}).expect(400, { error: "invalid_input" });
+    await request(app).put("/a/settings/advisor_action").set("Origin", origin).send({ enabled: false }).expect(400, { error: "bell_locked" });
+  });
+
+  it("sends a kind by email from the mailbox of the admin who turns the first one on, once they allowed EduPath AI", async () => {
+    await request(setup({ rows: settingsDb().rows }).app).put("/a/settings/roadmap").set("Origin", origin).send({ email: true }).expect(503, { error: "mail_unavailable" });
+    const without = settingsDb();
+    await request(setup({ rows: without.rows, mail: mailFakes({ status: null }).mail }).app).put("/a/settings/roadmap").set("Origin", origin).send({ email: true })
+      .expect(409, { error: "mail_grant_required" });
+    expect(without.state.sender).toBeNull();
+
+    const db = settingsDb();
+    const { app } = setup({ rows: db.rows, mail: mailFakes().mail });
+    const on = await request(app).put("/a/settings/roadmap").set("Origin", origin).send({ email: true }).expect(200);
+    expect(on.body.setting).toMatchObject({ key: "roadmap", enabled: true, email: true });
+    expect(db.state.sender).toBe(ADMIN);
+    expect(on.body.mail).toEqual({
+      available: true, sender: { name: "Nguyễn Văn Cán Bộ", address: "can.bo@example.edu", lastError: null, mine: true },
+      me: { address: "can.bo@example.edu", grantedAt: "2026-11-23T02:00:00.000Z", lastError: null },
+    });
+    // An email goes only with the bell notification.
+    await request(app).put("/a/settings/warning").set("Origin", origin).send({ enabled: false, email: true }).expect(400, { error: "invalid_input" });
+    await request(app).put("/a/settings/warning").set("Origin", origin).send({ enabled: false }).expect(200);
+    await request(app).put("/a/settings/warning").set("Origin", origin).send({ email: true }).expect(409, { error: "bell_off" });
+    // The email of an action done for a student may go on, its bell stays.
+    expect((await request(app).put("/a/settings/advisor_action").set("Origin", origin).send({ email: true }).expect(200)).body.setting)
+      .toMatchObject({ key: "advisor_action", enabled: true, email: true });
+    db.state.cancelled = [];
+    await request(app).put("/a/settings/roadmap").set("Origin", origin).send({ email: false }).expect(200);
+    expect(db.state.cancelled).toEqual(["roadmap"]);
+  });
+
+  it("lets another admin send from their own mailbox, and sends the failed automatic emails again", async () => {
+    const db = settingsDb();
+    await request(setup({ rows: db.rows, mail: mailFakes({ status: null }).mail }).app).post("/a/settings/mail-sender").set("Origin", origin).send({})
+      .expect(409, { error: "mail_grant_required" });
+    await request(setup({ rows: db.rows, mail: mailFakes().mail }).app).post("/a/settings/retry-emails").set("Origin", origin).send({})
+      .expect(409, { error: "mail_grant_required" });
+    const { app } = setup({ rows: db.rows, mail: mailFakes().mail });
+    expect((await request(app).post("/a/settings/mail-sender").set("Origin", origin).send({}).expect(200)).body.mail.sender).toMatchObject({ mine: true });
+    expect(db.state.sender).toBe(ADMIN);
+    const retried = await request(app).post("/a/settings/retry-emails").set("Origin", origin).send({}).expect(200);
+    expect(retried.body.requeued).toBe(2);
+    expect(db.state.requeuedFrom).toEqual([ADMIN]);
+    await request(app).post("/a/settings/retry-emails").set("Origin", origin).send({ all: true }).expect(400, { error: "invalid_input" });
   });
 });
+
+/** A fake of Cài đặt thông báo's tables that keeps what was saved (made-up names and addresses). */
+function settingsDb() {
+  const state = {
+    settings: new Map<string, { enabled: boolean; email: boolean }>(), saved: [] as unknown[][], cancelled: [] as unknown[],
+    sender: null as string | null, requeuedFrom: [] as unknown[],
+  };
+  const rows: Rows = (text, params) => {
+    if (text.startsWith("INSERT INTO ad_notification_settings")) {
+      const [key, enabled, email] = params as [string, boolean | null, boolean | null];
+      state.saved.push(params);
+      const prior = state.settings.get(key) ?? { enabled: true, email: false };
+      const nextEnabled = enabled ?? prior.enabled;
+      const next = { enabled: nextEnabled, email: (email ?? prior.email) && nextEnabled };
+      state.settings.set(key, next);
+      return { rowCount: 1, rows: [{ email: next.email }] };
+    }
+    if (text.startsWith("SELECT s.setting,s.enabled")) {
+      return { rowCount: state.settings.size, rows: [...state.settings].map(([setting, value]) => ({
+        setting, ...value, updatedAt: new Date("2026-11-23T05:00:00Z"), updatedBy: "2374802010145 - Nguyễn Văn Cán Bộ - 71K29CNTT08" })) };
+    }
+    if (text.startsWith("SELECT (CASE WHEN e.kind")) return { rowCount: 1, rows: [{ setting: "roadmap", sent: 12, pending: 1, failed: 2, noAddress: 0 }] };
+    if (text.startsWith("UPDATE stu_notification_emails SET status='cancelled'")) { state.cancelled.push(params[0]); return { rowCount: 0, rows: [] }; }
+    if (text.startsWith("SELECT m.sender_id")) {
+      return state.sender ? { rowCount: 1, rows: [{ userId: state.sender, name: "2374802010145 - Nguyễn Văn Cán Bộ - 71K29CNTT08", address: "can.bo@example.edu", lastError: null }] } : { rowCount: 0, rows: [] };
+    }
+    if (text.startsWith("INSERT INTO ad_notification_mail")) { state.sender = params[0] as string; return { rowCount: 1, rows: [] }; }
+    if (text.startsWith("UPDATE stu_notification_emails SET status='pending',attempts=0")) { state.requeuedFrom.push(params[0]); return { rowCount: 2, rows: [] }; }
+    return undefined;
+  };
+  return { state, rows };
+}

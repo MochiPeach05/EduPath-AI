@@ -639,6 +639,20 @@ describe("the email test of AD-NOTI-04: Microsoft's Mail.Send, asked for at run 
     expect(sent).toHaveLength(1);
   });
 
+  it("leads back to Cài đặt thông báo when the permission was asked for there", async () => {
+    const { agent, sent } = await setup("admin", true, new FakeMailGrantStore());
+    const response = await agent.post("/api/auth/microsoft/mail-consent").set("Origin", config.webOrigin).send({ page: "settings" }).expect(200);
+    const state = new URL(response.body.url).searchParams.get("state")!;
+    expect(await back(agent, { state, code: "c" })).toBe(`${config.webOrigin}/quantri/cai-dat-thong-bao?emailTest=sent`);
+    expect(sent).toHaveLength(1);
+    // Any other page asked for is Gửi thông báo, and a refusal leads back to the page too.
+    const other = await agent.post("/api/auth/microsoft/mail-consent").set("Origin", config.webOrigin).send({ page: "https://example.org" }).expect(200);
+    expect(await back(agent, { state: new URL(other.body.url).searchParams.get("state")!, error: "access_denied" })).toBe(`${page}?emailTest=denied&code=access_denied`);
+    const settings = await agent.post("/api/auth/microsoft/mail-consent").set("Origin", config.webOrigin).send({ page: "settings" }).expect(200);
+    expect(await back(agent, { state: new URL(settings.body.url).searchParams.get("state")!, error: "access_denied" }))
+      .toBe(`${config.webOrigin}/quantri/cai-dat-thong-bao?emailTest=denied&code=access_denied`);
+  });
+
   it("drops a test left more than ten minutes on Microsoft's page", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     try {

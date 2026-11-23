@@ -35,10 +35,14 @@ interface AuthRouterDependencies {
   now?: () => Date;
 }
 
-/** Where the email test ends: the page Gửi thông báo with its outcome (?emailTest=sent, …&code=AADSTS65004). */
-const MAIL_TEST_PAGE = "/quantri/gui-thong-bao";
-function mailTestRedirect(config: AppConfig, outcome: string, code?: string | null): string {
-  const url = new URL(MAIL_TEST_PAGE, `${config.webOrigin}/`);
+/**
+ * Where Microsoft's consent page ends: the page the member started from (Gửi thông báo, or Cài đặt thông báo since
+ * 2026-11-23) with its outcome (?emailTest=sent, …&code=AADSTS65004).
+ */
+const MAIL_CONSENT_PAGES = { compose: "/quantri/gui-thong-bao", settings: "/quantri/cai-dat-thong-bao" } as const;
+type MailConsentPage = keyof typeof MAIL_CONSENT_PAGES;
+function mailTestRedirect(config: AppConfig, outcome: string, code?: string | null, page: MailConsentPage = "compose"): string {
+  const url = new URL(MAIL_CONSENT_PAGES[page], `${config.webOrigin}/`);
   url.searchParams.set("emailTest", outcome);
   if (code && /^[A-Za-z0-9_.-]{1,80}$/.test(code)) url.searchParams.set("code", code);
   return url.toString();
@@ -141,6 +145,8 @@ export function createAuthRouter({
     }
     const transaction = createAuthTransaction("/quantri");
     request.session.mailConsent = transaction;
+    // { page: "settings" } from Cài đặt thông báo: Microsoft's answer leads back there.
+    request.session.mailConsentPage = (request.body as { page?: unknown } | undefined)?.page === "settings" ? "settings" : "compose";
     // The account's UPN preselects it on Microsoft's page (the opaque login_hint claim only when there is no UPN).
     const url = await mailConsentClient.getConsentUrl(transaction, user.tenantId, user.username ?? user.email ?? request.session.logoutHint ?? null);
     await saveSession(request);
@@ -148,19 +154,20 @@ export function createAuthRouter({
   });
 
   /** The rest of the email test once Microsoft sends the member back: the outcome page's address. */
-  async function finishMailTest(request: Request, transaction: AuthTransaction): Promise<string> {
+  async function finishMailTest(request: Request, transaction: AuthTransaction, page: MailConsentPage): Promise<string> {
+    const back = (outcome: string, code?: string | null) => mailTestRedirect(config, outcome, code, page);
     const microsoftError = request.query.error;
     if (typeof microsoftError === "string") {
       // access_denied: the member cancelled, or the school lets only an administrator grant the permission.
-      return mailTestRedirect(config, microsoftError === "access_denied" ? "denied" : "failed",
+      return back(microsoftError === "access_denied" ? "denied" : "failed",
         aadstsCode(request.query.error_description) ?? microsoftError);
     }
-    if (!isAuthTransactionFresh(transaction)) return mailTestRedirect(config, "expired");
+    if (!isAuthTransactionFresh(transaction)) return back("expired");
     const user = request.session.user;
-    if (!user || !canManageAdmin(user.role)) return mailTestRedirect(config, "signed_out");
+    if (!user || !canManageAdmin(user.role)) return back("signed_out");
     const code = request.query.code;
-    if (typeof code !== "string" || code.length === 0) return mailTestRedirect(config, "failed", "missing_code");
-    if (!mailConsentClient) return mailTestRedirect(config, "failed", "mail_unavailable");
+    if (typeof code !== "string" || code.length === 0) return back("failed", "missing_code");
+    if (!mailConsentClient) return back("failed", "mail_unavailable");
 
     let grant: MailConsentGrant;
     try {
@@ -169,28 +176,28 @@ export function createAuthRouter({
       const reason = aadstsCode(error instanceof Error ? error.message : null)
         ?? (error && typeof error === "object" && "errorCode" in error && typeof error.errorCode === "string" ? error.errorCode : "exchange_failed");
       console.error(`[MAIL] Microsoft did not exchange the consent code (${reason})`);
-      return mailTestRedirect(config, "failed", reason);
+      return back("failed", reason);
     }
-    if (!grant.nonce || !isSafeEqual(grant.nonce, transaction.nonce)) return mailTestRedirect(config, "failed", "invalid_nonce");
+    if (!grant.nonce || !isSafeEqual(grant.nonce, transaction.nonce)) return back("failed", "invalid_nonce");
     // Only the account signed in to EduPath AI: a message never leaves another mailbox picked on Microsoft's page.
-    if (grant.tenantId !== user.tenantId || grant.objectId !== user.objectId) return mailTestRedirect(config, "other_account");
+    if (grant.tenantId !== user.tenantId || grant.objectId !== user.objectId) return back("other_account");
     const to = grant.email ?? grant.username ?? user.email ?? user.username;
-    if (!to) return mailTestRedirect(config, "failed", "no_mailbox");
+    if (!to) return back("failed", "no_mailbox");
     if (mailGrants) {
       try {
         await mailGrants.save({ userId: user.userId, address: to, tenantId: user.tenantId, cache: grant.cache });
       } catch (error) {
         console.error(`[MAIL] The mail permission was not stored (${(error as { code?: string } | null)?.code ?? "error"})`);
-        return mailTestRedirect(config, "failed", "grant_not_saved");
+        return back("failed", "grant_not_saved");
       }
     }
     // "Chào Đào Văn Hòa": the name part of a school display name "MSSV - Họ tên - Lớp" (first test, 23/11/2026).
     const result = await sendMail(grant.accessToken, testMailMessage(to, personName(user.name), now(), config.webOrigin));
     if (!result.ok) {
       console.error(`[MAIL] Microsoft Graph refused the test message (${result.code})`);
-      return mailTestRedirect(config, "send_failed", result.code);
+      return back("send_failed", result.code);
     }
-    return mailTestRedirect(config, "sent");
+    return back("sent");
   }
 
   router.get("/microsoft/start", async (request, response) => {
@@ -206,8 +213,10 @@ export function createAuthRouter({
     // The email test comes back on the login's address too; its state is the session's mailConsent, never a login's.
     const mailConsent = request.session.mailConsent;
     if (mailConsent && isSafeEqual(request.query.state, mailConsent.state)) {
+      const page = request.session.mailConsentPage === "settings" ? "settings" : "compose";
       delete request.session.mailConsent;
-      const target = await finishMailTest(request, mailConsent);
+      delete request.session.mailConsentPage;
+      const target = await finishMailTest(request, mailConsent, page);
       await saveSession(request);
       response.redirect(target);
       return;

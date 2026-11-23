@@ -9,6 +9,7 @@ import {
   type NotificationRow, type NotificationType,
 } from "./model.js";
 import { notifyMany } from "./notify.js";
+import { purgeNotificationEmails } from "../mail/notification-outbox.js";
 import { cancelPendingEmails, EMAIL_SUMMARY, purgeEmails, queueAnnouncementEmails, RECIPIENT_ADDRESS } from "../mail/outbox.js";
 
 type Db = Pick<DatabasePool, "query"> | Pick<PoolClient, "query">;
@@ -80,8 +81,9 @@ export async function purgeNotifications(db: Db): Promise<void> {
   await db.query("DELETE FROM stu_notifications WHERE created_at<now()-make_interval(days => $1)", [RETENTION_DAYS]);
   await db.query("DELETE FROM stu_notifications WHERE deleted_at<now()-interval '1 day' AND kind<>'warning'");
   await db.query("DELETE FROM stu_notifications n USING ad_announcements a WHERE n.announcement_id=a.id AND a.withdrawn_at IS NOT NULL");
-  // The emails of the announcements (addresses and outcomes) are kept as long as the notifications.
+  // The emails (addresses and outcomes) are kept as long as the notifications.
   await purgeEmails(db);
+  await purgeNotificationEmails(db);
 }
 
 /** Runs purgeNotifications at most once per interval in this process (the bell's poll triggers it). */

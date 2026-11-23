@@ -21,7 +21,10 @@ import { ANNOUNCEMENT_BODY_MAX, ANNOUNCEMENT_TITLE_MAX, isPortalPage, type Annou
 import {
   ANNOUNCEMENT_SORT, announcementOptions, findAnnouncement, listAnnouncements, reachCount, sendAnnouncement, targetLabel, withdrawAnnouncement,
 } from "./repository.js";
-import { listNotificationSettings, NOTIFICATION_SETTING_KEYS, saveNotificationSetting } from "./settings.js";
+import {
+  autoMailSender, listNotificationSettings, NOTIFICATION_SETTING_KEYS, NOTIFICATION_SETTINGS, retryFailedNotificationEmails, saveNotificationSetting,
+  setAutoMailSender, usableAutoSender,
+} from "./settings.js";
 
 class AnnouncementError extends Error {
   constructor(readonly code: string, readonly status: number, readonly detail: Record<string, string> = {}) { super(code); }
@@ -57,7 +60,9 @@ const testBody = z.object({
   body: z.string().max(ANNOUNCEMENT_BODY_MAX * 2).optional(),
   link: z.string().max(40).nullable().optional(),
 }).strict();
-const settingBody = z.object({ enabled: z.boolean() }).strict();
+/** A kind's bell notification and/or its email (Cài đặt thông báo); at least one of them. */
+const settingBody = z.object({ enabled: z.boolean().optional(), email: z.boolean().optional() }).strict()
+  .refine((body) => body.enabled !== undefined || body.email !== undefined);
 
 const iso = (value: Date | string | null) => (value === null ? null : new Date(value).toISOString());
 const unique = (values: readonly string[]) => [...new Set(values)].sort();
@@ -258,16 +263,71 @@ export function createAnnouncementsRouter(pool: DatabasePool | undefined, webOri
     }
   });
 
-  /** AD-NOTI-06 Cài đặt thông báo: the kinds of automatic notifications and whether each is on. */
+  /**
+   * Whose mailbox sends the automatic notifications' emails, as the settings page shows it (lastError "grant_required"
+   * also when that member took the permission back), and the caller's own permission.
+   */
+  const autoMailState = async (userId: string) => {
+    if (!mail) return { available: false, sender: null, me: null };
+    const sender = await autoMailSender(pool!);
+    return {
+      available: true,
+      sender: sender ? { name: sender.name, address: sender.address, lastError: sender.address ? sender.lastError : "grant_required", mine: sender.userId === userId } : null,
+      me: await mail.grants.status(userId),
+    };
+  };
+  /** The caller's permission, usable now; else 409 (allow EduPath AI on Microsoft's page first, or again). */
+  const usableOwnGrant = async (userId: string) => {
+    if (!mail) throw new AnnouncementError("mail_unavailable", 503);
+    const mine = await mail.grants.status(userId);
+    if (!mine || mine.lastError) throw new AnnouncementError("mail_grant_required", 409);
+  };
+
+  /** AD-NOTI-06 Cài đặt thông báo: the kinds of automatic notifications, whether each is on and goes by email. */
   router.get("/settings", async (req, res) => {
     z.object({}).strict().parse(req.query);
-    res.json({ items: await listNotificationSettings(pool!) });
+    res.json({ items: await listNotificationSettings(pool!), mail: await autoMailState(req.session.user!.userId) });
   });
 
+  /**
+   * Turns a kind's bell notification and/or its email on or off. The first email turned on while no working mailbox is
+   * named makes the caller's mailbox the sender (it needs their permission).
+   */
   router.put("/settings/:setting", async (req, res) => {
-    const setting = z.enum(NOTIFICATION_SETTING_KEYS).parse(req.params.setting);
-    const { enabled } = settingBody.parse(req.body ?? {});
-    res.json({ setting: await saveNotificationSetting(pool!, setting, enabled, req.session.user!.userId) });
+    const key = z.enum(NOTIFICATION_SETTING_KEYS).parse(req.params.setting);
+    const change = settingBody.parse(req.body ?? {});
+    const user = req.session.user!;
+    if (NOTIFICATION_SETTINGS.find((item) => item.key === key)!.bellLocked && change.enabled === false) throw new AnnouncementError("bell_locked", 400);
+    if (change.email === true) {
+      if (change.enabled === false) throw new AnnouncementError("invalid_input", 400);
+      if (!mail) throw new AnnouncementError("mail_unavailable", 503);
+      const current = (await listNotificationSettings(pool!)).find((item) => item.key === key)!;
+      if (!current.enabled && change.enabled !== true) throw new AnnouncementError("bell_off", 409);
+      if (!usableAutoSender(await autoMailSender(pool!))) {
+        await usableOwnGrant(user.userId);
+        await setAutoMailSender(pool!, user.userId, user.userId);
+      }
+    }
+    res.json({ setting: await saveNotificationSetting(pool!, key, change, user.userId), mail: await autoMailState(user.userId) });
+  });
+
+  /** "Dùng hộp thư của tôi": the automatic emails leave from the caller's mailbox from now on, the queued ones too. */
+  router.post("/settings/mail-sender", async (req, res) => {
+    z.object({}).strict().parse(req.body ?? {});
+    const user = req.session.user!;
+    await usableOwnGrant(user.userId);
+    await setAutoMailSender(pool!, user.userId, user.userId);
+    res.json({ mail: await autoMailState(user.userId) });
+  });
+
+  /** "Gửi lại email lỗi": the failed automatic emails of the last 30 days go again from the named mailbox. */
+  router.post("/settings/retry-emails", async (req, res) => {
+    z.object({}).strict().parse(req.body ?? {});
+    if (!mail) throw new AnnouncementError("mail_unavailable", 503);
+    const sender = await autoMailSender(pool!);
+    if (!sender || !usableAutoSender(sender)) throw new AnnouncementError("mail_grant_required", 409);
+    const requeued = await retryFailedNotificationEmails(pool!, sender.userId);
+    res.json({ requeued, items: await listNotificationSettings(pool!) });
   });
 
   router.use((_req, res) => { res.status(404).json({ error: "not_found" }); });

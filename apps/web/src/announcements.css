@@ -100,8 +100,19 @@
 .an-settings { padding: 24px; display: grid; gap: 12px; }
 .an-settings .an-panel-head p { margin-bottom: 4px; }
 .an-settings-count { margin: 0; font-size: 13px; font-weight: 650; }
-.an-settings-list { display: grid; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--cm-line); }
-.an-settings-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; padding: 14px 0; border-bottom: 1px solid var(--cm-line); }
+/* Each kind: its text, then the bell's switch and the email's, under the column names of .an-settings-head. */
+.an-settings-head, .an-settings-list li { display: grid; grid-template-columns: minmax(0, 1fr) 150px 120px; gap: 16px; align-items: center; }
+.an-settings-head { padding: 0 0 8px; border-bottom: 1px solid var(--cm-line); color: var(--cm-muted); font-size: 12px; font-weight: 700; letter-spacing: .02em; }
+.an-settings-list { display: grid; margin: 0; padding: 0; list-style: none; }
+.an-settings-list li { padding: 14px 0; border-bottom: 1px solid var(--cm-line); }
+.an-setting-control { display: flex; align-items: center; min-width: 0; }
+.an-setting-stats { color: var(--cm-ink); }
+/* Email thông báo tự động: whose mailbox sends, and what to do. */
+.an-automail { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 20px; padding: 14px 16px; border: 1px solid var(--cm-line); border-radius: 10px; background: #fafbfd; }
+.an-automail-warn { border-color: #f0c98a; background: var(--cm-warn-bg); }
+.an-automail-text { display: grid; gap: 3px; flex: 1 1 360px; min-width: 0; }
+.an-automail-text strong { font-size: 14px; }
+.an-automail-text .an-email-text { margin: 0; }
 .an-setting-text { display: grid; gap: 2px; min-width: 0; }
 .an-setting-text strong { font-size: 14px; }
 .an-setting-text p { margin: 0; color: var(--cm-muted); font-size: 13px; }
@@ -123,7 +134,14 @@
 .an-settings-list .an-switch:focus-visible { outline: 2px solid var(--cm-accent); outline-offset: 2px; }
 .an-always { padding: 3px 10px; border-radius: 999px; background: #eef0f4; color: var(--cm-muted); font-size: 12px; font-weight: 700; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) { .an-switch-track, .an-switch-track::after { transition: none; } }
+@media (max-width: 720px) {
+  /* Phones: the text above, the two switches side by side, each with its column's name. */
+  .an-settings-head { display: none; }
+  .an-settings-list li { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px 16px; }
+  .an-settings-list .an-setting-text { grid-column: 1 / -1; }
+  .an-setting-control { display: grid; gap: 4px; justify-items: start; }
+  .an-setting-control::before { content: attr(data-label); color: var(--cm-muted); font-size: 12px; font-weight: 650; }
+}
 @media (max-width: 560px) {
   .an-settings { padding: 18px 16px; }
-  .an-settings-list li { grid-template-columns: minmax(0, 1fr); gap: 8px; }
 }

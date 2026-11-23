@@ -63,17 +63,20 @@ export async function claimDueEmails(db: Db, senderId: string, limit: number): P
   return result.rows;
 }
 
-export async function markEmailSent(db: Db, id: string): Promise<void> {
-  await db.query("UPDATE ad_announcement_emails SET status='sent',sent_at=now(),error=NULL,updated_at=now() WHERE id=$1", [id]);
+/** The two queues the worker sends from: the announcements' (066) and the automatic notifications' (067). */
+export type EmailTable = "ad_announcement_emails" | "stu_notification_emails";
+
+export async function markEmailSent(db: Db, id: string, table: EmailTable = "ad_announcement_emails"): Promise<void> {
+  await db.query(`UPDATE ${table} SET status='sent',sent_at=now(),error=NULL,updated_at=now() WHERE id=$1`, [id]);
 }
 
-export async function markEmailRetry(db: Db, id: string, code: string, minutes: number): Promise<void> {
-  await db.query(`UPDATE ad_announcement_emails SET status='pending',error=$2,next_attempt_at=now()+make_interval(mins => $3),updated_at=now()
+export async function markEmailRetry(db: Db, id: string, code: string, minutes: number, table: EmailTable = "ad_announcement_emails"): Promise<void> {
+  await db.query(`UPDATE ${table} SET status='pending',error=$2,next_attempt_at=now()+make_interval(mins => $3),updated_at=now()
     WHERE id=$1`, [id, code.slice(0, 80), minutes]);
 }
 
-export async function markEmailFailed(db: Db, id: string, code: string): Promise<void> {
-  await db.query("UPDATE ad_announcement_emails SET status='failed',error=$2,updated_at=now() WHERE id=$1", [id, code.slice(0, 80)]);
+export async function markEmailFailed(db: Db, id: string, code: string, table: EmailTable = "ad_announcement_emails"): Promise<void> {
+  await db.query(`UPDATE ${table} SET status='failed',error=$2,updated_at=now() WHERE id=$1`, [id, code.slice(0, 80)]);
 }
 
 /** Every due message of a sender fails with `code` (the sender's permission is gone); returns how many. */

@@ -6,6 +6,7 @@ Người dùng (30/10/2026): thông báo gồm "AI đã chạy xong ở mục n�
 - `stu_notifications`: một dòng mỗi thông báo của một sinh viên: `type` (ai, warn, khoa, sys), `kind`, tiêu đề, nội dung, trang liên quan (`#page`) và nhãn nút, `source_key` (duy nhất theo sinh viên: mỗi sự kiện chỉ báo một lần), `announcement_id`, `read_at`, `deleted_at`.
 - `ad_announcements`: thông báo Khoa gửi: tiêu đề, nội dung, trang liên quan, đối tượng `{cohorts, majors}` (mã chương trình), số người nhận, người gửi, `withdrawn_at`.
 - Migration 066 (23/11/2026, email và cài đặt): `ad_announcements` thêm `email_requested`, `email_sender_id`, `email_from`; `ad_mail_senders` (quyền gửi thư của từng cán bộ, token cache của MSAL đã mã hóa AES-256-GCM bằng khóa suy ra từ `SESSION_SECRET`, `last_error`); `ad_announcement_emails` (mỗi sinh viên nhận một dòng: địa chỉ, trạng thái `pending`/`sending`/`sent`/`failed`/`cancelled`/`no_address`, số lần thử, mã lỗi); `ad_notification_settings` (loại thông báo tự động bị tắt).
+- Migration 067 (23/11/2026, email của thông báo tự động): `ad_notification_settings.email_enabled` và khóa `advisor_action` (chuông luôn bật, chỉ đổi email); `ad_notification_mail` (một dòng: hộp thư của ai gửi email tự động); `stu_notification_emails` (mỗi thông báo tự động được gửi email một dòng: loại, người gửi, địa chỉ, trạng thái, số lần thử, mã lỗi).
 - Migration chạy tự động khi Render khởi động (`DATABASE_AUTO_MIGRATE`).
 
 ## Ai tạo thông báo (`apps/api/src/notifications/notify.ts`)
@@ -20,7 +21,7 @@ Người dùng (30/10/2026): thông báo gồm "AI đã chạy xong ở mục n�
 | announcement | Khoa gửi (AD-NOTI-01) | trang Khoa chọn |
 | advisor_action | Cố vấn học tập hoặc cán bộ Khoa làm thay sinh viên | trang liên quan |
 
-Cài đặt thông báo (AD-NOTI-06, 23/11/2026, `apps/api/src/notifications/settings.ts`): quản trị viên tắt được 6 loại thông báo tự động (Đọc bảng điểm, Nhận xét năng lực của AI, Lộ trình AI, Nhận xét xét tốt nghiệp của AI, Cảnh báo chậm tiến độ, Khoa cập nhật dữ liệu học tập). `notify()` và `notifyMany()` bỏ qua loại đang tắt ngay trong câu INSERT; tắt chỉ dừng thông báo mới, thông báo đã có vẫn giữ. Thông báo của Khoa và thông báo việc làm thay luôn được ghi (chính sách hứa báo cho sinh viên mỗi khi có người làm thay).
+Cài đặt thông báo (AD-NOTI-06, 23/11/2026, `apps/api/src/notifications/settings.ts`; email theo từng loại thêm cùng tối, xem mục "Email của thông báo tự động"): quản trị viên tắt được 6 loại thông báo tự động (Đọc bảng điểm, Nhận xét năng lực của AI, Lộ trình AI, Nhận xét xét tốt nghiệp của AI, Cảnh báo chậm tiến độ, Khoa cập nhật dữ liệu học tập). `notify()` và `notifyMany()` bỏ qua loại đang tắt ngay trong câu INSERT; tắt chỉ dừng thông báo mới, thông báo đã có vẫn giữ. Thông báo của Khoa và thông báo việc làm thay luôn được ghi (chính sách hứa báo cho sinh viên mỗi khi có người làm thay).
 
 Thông báo được ghi trong cùng giao dịch với công việc khi có thể; lỗi ghi thông báo chỉ được ghi log, không làm hỏng công việc. Câu trả lời của Trợ lý AI không tạo thông báo.
 
@@ -61,6 +62,16 @@ Người dùng duyệt: "Làm cả 04, 05, 06", "Chỉ sinh viên đã có tài 
 - Nhật ký thao tác ghi: gửi thông báo "(kèm email)", gửi email thử, thu hồi quyền gửi email, gửi lại email lỗi, cập nhật cài đặt thông báo.
 - Không thử với sinh viên thật: kiểm tra bằng "Gửi email thử cho chính tôi".
 
+## Email của thông báo tự động (Cài đặt thông báo, tối 23/11/2026)
+Người dùng: "Phần cài đặt thông báo thêm 1 chức năng nữa ngoài có thể cập nhật thông báo cho thông báo ở trang sinh viên thì có thể gửi tới email những thông báo này nữa".
+- Trang Cài đặt thông báo có hai cột công tắc: Trong EduPath AI (chuông) và Email, cho 6 loại thông báo tự động và "Việc làm thay sinh viên" (chuông luôn bật, chỉ bật/tắt email). "Thông báo của Khoa" ghi "Chọn khi gửi" vì email chọn ở trang Gửi thông báo. Email mặc định tắt; bật email có hộp xác nhận; tắt chuông thì email cũng tắt; tắt email hủy các thư chưa gửi của loại đó.
+- Hộp thư gửi: một hộp thư cho mọi email tự động (`ad_notification_mail`), là hộp thư của quản trị viên bật email đầu tiên khi chưa có hộp thư dùng được, hoặc của người bấm "Dùng hộp thư của tôi" (thư đang chờ chuyển sang hộp thư mới). Cần quyền Mail.Send đã lưu của người đó; nút "Cho phép gửi từ hộp thư của tôi" ở trang này xin quyền rồi quay về đúng trang (`POST /api/auth/microsoft/mail-consent` với `{ page: "settings" }`). Microsoft đòi cho phép lại thì khung "Email thông báo tự động" báo vàng và có nút "Cho phép lại" / "Dùng hộp thư của tôi".
+- Xếp thư: `notify()` và `notifyMany()` sau khi ghi thông báo mới chạy thêm một câu INSERT vào `stu_notification_emails` cho những dòng vừa ghi, chỉ khi loại đó bật email và đã có hộp thư gửi (`apps/api/src/mail/notification-outbox.ts`); thông báo trùng source_key không ghi lại nên không gửi email lần hai; thông báo của Khoa không đi đường này.
+- Worker dùng chung với email thông báo của Khoa: mỗi hộp thư tối đa 6 thư một lượt 15 giây cho cả hai hàng đợi (thông báo của Khoa trước), thử lại và báo lỗi như trên; dọn hàng đợi mỗi phút: thông báo sinh viên đã xóa thì hủy thư, không còn người gửi thì `sender_missing`.
+- Thư tự động (`notificationMailMessage`): tiêu đề "[EduPath AI] <tiêu đề thông báo>", lời chào, nội dung, nút như trong chuông ("Mở Lộ trình học tập trên EduPath AI"), dòng cuối ghi thư do EduPath AI gửi tự động.
+- Kết quả (AD-NOTI-05): mỗi loại ghi số email 30 ngày qua (đã gửi, đang gửi, lỗi, chưa có email); khung trên có tổng và nút "Gửi lại email lỗi (N)" (`POST /settings/retry-emails`, từ hộp thư đang gửi). Dòng email bị xóa sau 90 ngày cùng lúc dọn thông báo.
+- Chính sách 2026-11-23 sửa cùng bản (không hỏi lại): mục đích gửi thông báo của Khoa và các loại thông báo tự động Khoa bật gửi email; thư không lưu trong Thư đã gửi của cán bộ, thư trả lời về hộp thư đó.
+
 ## Giao diện
 - Sinh viên: chuông trên thanh đầu trang (`StudentNotifications.tsx`): số chưa đọc, 5 thông báo mới nhất, "Xem tất cả" mở danh sách đầy đủ có lọc, chi tiết, đánh dấu, xóa và hoàn tác.
-- Quản trị: nhóm Quản lý thông báo của menu quản trị (`AnnouncementsManagement.tsx`): Gửi thông báo, Đã gửi, Cài đặt thông báo (`/quantri/cai-dat-thong-bao`, công tắc cho từng loại thông báo tự động; hai loại luôn bật hiện "Luôn bật").
+- Quản trị: nhóm Quản lý thông báo của menu quản trị (`AnnouncementsManagement.tsx`): Gửi thông báo, Đã gửi, Cài đặt thông báo (`/quantri/cai-dat-thong-bao`: khung Email thông báo tự động, công tắc Trong EduPath AI và Email cho từng loại; chuông của Việc làm thay sinh viên và Thông báo của Khoa hiện "Luôn bật").

@@ -10,7 +10,10 @@
  * (Mail.Send, allowed once on Microsoft's page: POST /api/auth/microsoft/mail-consent). One message per student, about 25
  * a minute, tried again on a passing failure, not kept in the sender's Sent Items; a sent email cannot be withdrawn. The
  * addresses and outcomes are kept 90 days. AD-NOTI-06 Cài đặt thông báo turns each kind of automatic notification off and
- * on; the faculty's announcements and the notifications of a cố vấn học tập's actions are always written.
+ * on; the faculty's announcements and the notifications of a cố vấn học tập's actions are always written. Since the same
+ * evening (user: "ngoài có thể cập nhật thông báo cho thông báo ở trang sinh viên thì có thể gửi tới email những thông báo
+ * này nữa") each kind may also go by email, off by default, from one school mailbox: the admin who turns the first email
+ * on, or who presses "Dùng hộp thư của tôi".
  *
  * Student, /api/student/notifications:
  * GET    /?filter=all|unread|ai|warn|khoa|sys&limit=50&order=newest|unread → { items: StudentNotification[]; unread: number }
@@ -33,12 +36,15 @@
  * GET    /mail-sender                                 → MailSenderState                                    (whether email can be sent, and from which mailbox the caller allowed it)
  * DELETE /mail-sender                                 → 204                                                (EduPath AI forgets the caller's permission)
  * POST   /mail-sender/test { title?, body?, link? }   → { sent: true; to: string; preview: boolean }       (one message to the caller's own mailbox: the draft when it has a title and a text)
- * GET    /settings                                    → { items: NotificationSetting[] }
- * PUT    /settings/:key { enabled }                   → { setting: NotificationSetting }
+ * GET    /settings                                    → { items: NotificationSetting[]; mail: AutoMailState }
+ * PUT    /settings/:key { enabled?, email? }          → { setting: NotificationSetting; mail: AutoMailState }    (the bell off takes the email off; the first email on without a working sender makes the caller's mailbox the sender)
+ * POST   /settings/mail-sender {}                     → { mail: AutoMailState }                            ("Dùng hộp thư của tôi")
+ * POST   /settings/retry-emails {}                    → { requeued: number; items: NotificationSetting[] } (the failed automatic emails of the last 30 days)
  *
  * Errors: { error } with 400 invalid_input | title_required | body_required | no_recipients, 401 authentication_required,
  * 403 insufficient_role | invalid_origin | account_unavailable, 404 not_found, 409 already_withdrawn | mail_grant_required
- * (allow EduPath AI on Microsoft's page first, or again), 502 send_failed (with code, Microsoft's own), 503
+ * (allow EduPath AI on Microsoft's page first, or again) | bell_off (turn the notification on before its email), 400
+ * bell_locked (Việc làm thay sinh viên is always in the bell), 502 send_failed (with code, Microsoft's own), 503
  * database_required | mail_unavailable (the server sends no email).
  * Lists return the newest `limit` (50 by default); there is no paging past it. The bell shows one notification per topic, the
  * newest (user review 2026-10-30: "có 2 cặp trùng nhau"): a new run of an AI job replaces the notification of the run
@@ -134,13 +140,31 @@ export type EmailProblem = {
   at: string;
 };
 
-/** AD-NOTI-06: the kinds of automatic notifications an admin may turn off (no stored choice means on). */
-export type NotificationSettingKey = "transcript" | "assessment_comment" | "roadmap" | "graduation_advice" | "warning" | "catalog_updated";
+/**
+ * AD-NOTI-06: the kinds of automatic notifications an admin may turn off (no stored choice means on) or send by email too
+ * (off by default). advisor_action (Việc làm thay sinh viên) is always in the bell (bellLocked): only its email changes.
+ */
+export type NotificationSettingKey = "transcript" | "assessment_comment" | "roadmap" | "graduation_advice" | "warning" | "catalog_updated" | "advisor_action";
+/** A kind's emails of the last 30 days. */
+export type EmailStats = { sent: number; pending: number; failed: number; noAddress: number };
 export type NotificationSetting = {
   key: NotificationSettingKey;
   label: string;
   detail: string;
+  bellLocked: boolean;
   enabled: boolean;
+  /** Also sent to the students' school mailbox. */
+  email: boolean;
   updatedAt: string | null;
   updatedBy: string | null;
+  emails: EmailStats;
+};
+/**
+ * Whose mailbox sends the automatic emails (sender; lastError "grant_required" when Microsoft asks that member to allow
+ * EduPath AI again or the permission was taken back), and the caller's own permission (me).
+ */
+export type AutoMailState = {
+  available: boolean;
+  sender: { name: string | null; address: string | null; lastError: string | null; mine: boolean } | null;
+  me: MailSender | null;
 };

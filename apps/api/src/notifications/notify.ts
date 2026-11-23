@@ -7,6 +7,7 @@ import type { PoolClient } from "pg";
 import type { DatabasePool } from "../db/pool.js";
 import { BODY_MAX, isPortalPage, openLabel, TITLE_MAX, type NotificationKind, type NotificationType } from "./model.js";
 import { personName } from "../users/person-name.js";
+import { queueNotificationEmails } from "../mail/notification-outbox.js";
 import { kindTurnedOff } from "./settings.js";
 
 type Db = Pick<DatabasePool, "query"> | Pick<PoolClient, "query">;
@@ -39,15 +40,19 @@ export function notificationValues(userId: string, input: NotificationInput) {
 
 /**
  * Writes one notification; false when its source_key already has one for this student, or when an admin turned its kind
- * off (Cài đặt thông báo, AD-NOTI-06, settings.ts).
+ * off (Cài đặt thông báo, AD-NOTI-06, settings.ts). A notification written while its kind's email is on also queues its
+ * email (mail/notification-outbox.ts); an announcement's email is chosen when it is sent, never here.
  */
 export async function notify(db: Db, userId: string, input: NotificationInput): Promise<boolean> {
+  const values = notificationValues(userId, input);
   const result = await db.query(
     `INSERT INTO stu_notifications(id,user_id,type,kind,title,body,link,link_label,source_key,announcement_id)
       SELECT $1::uuid,$2::uuid,$3::text,$4::text,$5::text,$6::text,$7::text,$8::text,$9::text,$10::uuid WHERE NOT ${kindTurnedOff("$4::text")}
       ON CONFLICT (user_id,source_key) WHERE source_key IS NOT NULL DO NOTHING`,
-    notificationValues(userId, input));
-  return Boolean(result.rowCount);
+    values);
+  if (!result.rowCount) return false;
+  if (input.kind !== "announcement") await queueNotificationEmails(db, [values[0] as string]);
+  return true;
 }
 
 /** The same notification for many students in one statement (an announcement, a catalog update); returns rows written. */
@@ -63,7 +68,10 @@ export async function notifyMany(db: Db, userIds: readonly string[], input: Noti
       WHERE NOT ${kindTurnedOff("x.kind")}
       ON CONFLICT (user_id,source_key) WHERE source_key IS NOT NULL DO NOTHING`,
     [column(0), column(1), column(2), column(3), column(4), column(5), column(6), column(7), column(8), column(9)]);
-  return result.rowCount ?? 0;
+  const written = result.rowCount ?? 0;
+  // Only the rows written carry these new ids, so a student who already had the notification gets no second email.
+  if (written && input.kind !== "announcement") await queueNotificationEmails(db, column(0) as string[]);
+  return written;
 }
 
 const errorCode = (error: unknown) => {

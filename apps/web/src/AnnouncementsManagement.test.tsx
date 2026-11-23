@@ -1,12 +1,13 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import AnnouncementsManagement, {
-  ALWAYS_ON_NOTIFICATIONS, AnnouncementPreview, AnnouncementRequestError, EmailChannel, EmailProblemList, FALLBACK_OPTIONS, MAIL_CONSENT_API, PORTAL_PAGES, SentTable,
-  SettingsList, emailErrorText, emailMinutes, emailReachText, emailSummary, emailTestOutcome, majorText, openLabel, pageLabel, reachQuery, reachText, readShare,
-  readText, sentTime, settingsSummary, targetText, toggleValue, withdrawEmailText, type MailSenderView,
+  ANNOUNCEMENT_ROW, AnnouncementPreview, AnnouncementRequestError, AutoMailPanel, EmailChannel, EmailProblemList, FALLBACK_OPTIONS, MAIL_CONSENT_API, PORTAL_PAGES,
+  SentTable, SettingsList, autoSenderReady, emailErrorText, emailMinutes, emailReachText, emailStatsText, emailSummary, emailTestOutcome, majorText,
+  nextSenderAddress, openLabel, ownGrantReady, pageLabel, reachQuery, reachText, readShare, readText, sentTime, settingsSummary, targetText, toggleValue,
+  withdrawEmailText, type MailSenderView,
 } from "./AnnouncementsManagement";
 import { useTableSort } from "./table-sort";
-import type { Announcement, AnnouncementEmail, NotificationSetting } from "./notification-types";
+import type { Announcement, AnnouncementEmail, AutoMailState, NotificationSetting } from "./notification-types";
 
 // Synthetic announcements only.
 const sent = (extra: Partial<Announcement> = {}): Announcement => ({
@@ -200,27 +201,99 @@ describe("announcement emails (AD-NOTI-04/05, 2026-11-23)", () => {
 });
 
 describe("Cài đặt thông báo (AD-NOTI-06, 2026-11-23)", () => {
-  const setting = (key: NotificationSetting["key"], enabled = true, extra: Partial<NotificationSetting> = {}): NotificationSetting =>
-    ({ key, label: `Loại ${key}`, detail: `Mô tả ${key}`, enabled, updatedAt: null, updatedBy: null, ...extra });
+  const setting = (key: NotificationSetting["key"], enabled = true, extra: Partial<NotificationSetting> = {}): NotificationSetting => ({
+    key, label: `Loại ${key}`, detail: `Mô tả ${key}`, bellLocked: false, enabled, email: false, updatedAt: null, updatedBy: null,
+    emails: { sent: 0, pending: 0, failed: 0, noAddress: 0 }, ...extra,
+  });
+  const list = (items: NotificationSetting[], options: { canManage?: boolean; emailReady?: boolean; saving?: string | null } = {}) =>
+    renderToStaticMarkup(<SettingsList items={items} canManage={options.canManage ?? true} saving={options.saving ?? null} emailReady={options.emailReady ?? true}
+      onBell={() => undefined} onEmail={() => undefined} />);
 
-  it("shows a switch per kind of automatic notification, and the kinds that are always on", () => {
-    const items = [setting("transcript"), setting("roadmap", false, { updatedAt: "2026-11-23T05:00:00.000Z", updatedBy: "Quản trị viên mẫu" })];
-    const html = renderToStaticMarkup(<SettingsList items={items} canManage saving={null} onToggle={() => undefined} />);
-    expect(html).toContain('<button type="button" role="switch" class="an-switch" aria-checked="true" aria-labelledby="an-setting-transcript" aria-describedby="an-setting-transcript-detail">');
-    expect(html).toContain('aria-checked="false" aria-labelledby="an-setting-roadmap"');
-    expect(html).toContain("<small>Tắt lúc 12:00 23/11/2026 · Quản trị viên mẫu</small>");
-    for (const item of ALWAYS_ON_NOTIFICATIONS) expect(html).toContain(`<strong>${item.label}</strong>`);
-    expect(html.match(/Luôn bật/g)).toHaveLength(ALWAYS_ON_NOTIFICATIONS.length);
-    expect(settingsSummary(items)).toBe("Đang tắt 1 trong 2 loại thông báo tự động.");
+  it("shows a bell switch and an email switch per kind, then the faculty's announcements", () => {
+    const items = [
+      setting("transcript"),
+      setting("roadmap", false, { updatedAt: "2026-11-23T05:00:00.000Z", updatedBy: "Quản trị viên mẫu" }),
+      setting("warning", true, { email: true, emails: { sent: 12, pending: 0, failed: 1, noAddress: 2 } }),
+      setting("advisor_action", true, { bellLocked: true }),
+    ];
+    const html = list(items);
+    expect(html).toContain('<button type="button" role="switch" class="an-switch" aria-checked="true" aria-label="Loại transcript: thông báo trong EduPath AI">');
+    expect(html).toContain('aria-checked="false" aria-label="Loại roadmap: thông báo trong EduPath AI">');
+    expect(html).toContain('aria-checked="true" aria-label="Loại warning: gửi kèm email">');
+    expect(html).toContain("<small>Cập nhật lúc 12:00 23/11/2026 · Quản trị viên mẫu</small>");
+    expect(html).toContain('<small class="an-setting-stats">Email 30 ngày qua: 12 đã gửi · 1 lỗi · 2 chưa có email</small>');
+    // Việc làm thay sinh viên is always in the bell; its email has a switch.
+    expect(html).toContain('<div class="an-setting-control" data-label="Trong EduPath AI"><span class="an-always">Luôn bật</span></div>');
+    expect(html).toContain('aria-label="Loại advisor_action: gửi kèm email"');
+    expect(html).not.toContain('aria-label="Loại advisor_action: thông báo trong EduPath AI"');
+    expect(html).toContain(`<strong>${ANNOUNCEMENT_ROW.label}</strong>`);
+    expect(html).toContain('<span class="an-always">Chọn khi gửi</span>');
+    expect(settingsSummary(items)).toBe("Đang tắt 1 trong 4 loại thông báo tự động; 1 loại gửi kèm email.");
     expect(settingsSummary([setting("warning")])).toBe("Đang bật cả 1 loại thông báo tự động.");
-    // A read-only account sees the switches without using them.
-    expect(renderToStaticMarkup(<SettingsList items={items} canManage={false} saving={null} onToggle={() => undefined} />)).toContain('aria-describedby="an-setting-transcript-detail" disabled="">');
+    expect(emailStatsText({ sent: 0, pending: 0, failed: 0, noAddress: 0 })).toBeNull();
+  });
+
+  it("lets the email go on only with the bell on and a mailbox that can send, and off always", () => {
+    const emailSwitch = (html: string, key: string) => new RegExp(`aria-label="Loại ${key}: gửi kèm email"( disabled="")?>`).exec(html)?.[1] === undefined;
+    const items = [setting("transcript"), setting("roadmap", false), setting("warning", true, { email: true })];
+    const ready = list(items);
+    expect(emailSwitch(ready, "transcript")).toBe(true);
+    expect(emailSwitch(ready, "roadmap")).toBe(false);
+    const noMailbox = list(items, { emailReady: false });
+    expect(emailSwitch(noMailbox, "transcript")).toBe(false);
+    // An email already on can still be turned off.
+    expect(emailSwitch(noMailbox, "warning")).toBe(true);
+    // A read-only account sees the switches without using them; a save under way holds them all.
+    const viewer = list(items, { canManage: false });
+    for (const key of ["transcript", "warning"]) expect(emailSwitch(viewer, key)).toBe(false);
+    expect(viewer).toContain('aria-label="Loại transcript: thông báo trong EduPath AI" disabled="">');
+    expect(list(items, { saving: "warning:email" })).toContain('aria-label="Loại warning: gửi kèm email" disabled=""><span class="an-switch-track" aria-hidden="true"></span><span class="an-switch-label">Đang lưu…</span>');
+  });
+
+  const mail = (extra: Partial<AutoMailState> = {}): AutoMailState => ({ available: true, sender: null, me: null, ...extra });
+  const me = { address: "can.bo@example.edu", grantedAt: "2026-11-23T02:00:00.000Z", lastError: null };
+  const panel = (state: AutoMailState, failed = 0) => renderToStaticMarkup(<AutoMailPanel mail={state} stats={{ sent: 40, pending: 2, failed, noAddress: 0 }}
+    canManage busy={null} onConsent={() => undefined} onUseMine={() => undefined} onRetry={() => undefined} />);
+
+  it("says whose mailbox sends the automatic emails and what to do when there is none or it must be allowed again", () => {
+    const none = panel(mail());
+    expect(none).toContain("Hãy cho phép EduPath AI gửi thư từ hộp thư trường của bạn");
+    expect(none).toContain("Cho phép gửi từ hộp thư của tôi</button>");
+    expect(none).toContain("30 ngày qua: 40 đã gửi · 2 đang gửi.");
+    const allowed = panel(mail({ me }));
+    expect(allowed).toContain("email sẽ gửi từ hộp thư <strong>can.bo@example.edu</strong> của bạn");
+    expect(allowed).toContain("Dùng hộp thư của tôi</button>");
+    expect(allowed).not.toContain("Cho phép gửi từ hộp thư của tôi");
+
+    const sender = { name: "Nguyễn Văn Cán Bộ", address: "khoa@example.edu", lastError: null, mine: false };
+    const theirs = panel(mail({ sender, me }), 3);
+    expect(theirs).toContain("Gửi từ hộp thư <strong>khoa@example.edu</strong> (Nguyễn Văn Cán Bộ).");
+    expect(theirs).toContain("Dùng hộp thư của tôi</button>");
+    expect(theirs).toContain("Gửi lại email lỗi (3)</button>");
+    const own = panel(mail({ sender: { ...sender, address: "can.bo@example.edu", mine: true }, me }));
+    expect(own).toContain("Gửi từ hộp thư <strong>can.bo@example.edu</strong> của bạn.");
+    expect(own).not.toContain("<button");
+
+    const broken = panel(mail({ sender: { ...sender, mine: true, lastError: "grant_required" }, me: { ...me, lastError: "grant_required" } }), 3);
+    expect(broken).toContain('class="an-automail an-automail-warn"');
+    expect(broken).toContain("Hộp thư khoa@example.edu của bạn cần được cho phép lại nên email tự động đang chưa gửi được.");
+    expect(broken).toContain("Cho phép lại</button>");
+    // Nothing goes again until the mailbox works.
+    expect(broken).not.toContain("Gửi lại email lỗi");
+    expect(panel(mail({ available: false }))).toContain("Máy chủ chưa bật chức năng gửi email.");
+
+    expect(autoSenderReady(mail({ sender }))).toBe(true);
+    expect(autoSenderReady(mail({ sender: { ...sender, address: null } }))).toBe(false);
+    expect(ownGrantReady(mail({ me }))).toBe(true);
+    expect(nextSenderAddress(mail({ sender, me }))).toBe("khoa@example.edu");
+    expect(nextSenderAddress(mail({ sender: { ...sender, lastError: "grant_required" }, me }))).toBe("can.bo@example.edu");
+    expect(nextSenderAddress(mail())).toBeNull();
   });
 
   it("opens on the settings while they load", () => {
     const html = renderToStaticMarkup(<AnnouncementsManagement canManage section="settings" />);
     expect(html).toContain("Thông báo tự động gửi sinh viên");
-    expect(html).toContain("Tắt một loại chỉ dừng thông báo mới");
+    expect(html).toContain("chọn loại nào gửi kèm email trường của sinh viên");
     expect(html).toContain("Đang tải dữ liệu…");
   });
 });

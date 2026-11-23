@@ -299,8 +299,20 @@ export const AUDIT_ROUTES: readonly AuditRoute[] = [
     } },
   { method: "PUT", path: "/announcements/settings/:setting", kind: "notify", action: "Cập nhật cài đặt thông báo",
     describe: ({ body, result }) => {
-      const setting = obj(obj(result).setting);
-      return `${body.enabled === false ? "Tắt" : "Bật"} thông báo "${str(setting.label) || "?"}" gửi sinh viên`;
+      const label = str(obj(obj(result).setting).label) || "?";
+      const parts = [
+        typeof body.enabled === "boolean" ? `${body.enabled ? "Bật" : "Tắt"} thông báo "${label}" gửi sinh viên` : "",
+        typeof body.email === "boolean" ? `${body.email ? "bật" : "tắt"} gửi email thông báo "${label}"` : "",
+      ].filter(Boolean);
+      const text = parts.join(", ");
+      return text.charAt(0).toUpperCase() + text.slice(1);
+    } },
+  { method: "POST", path: "/announcements/settings/mail-sender", kind: "notify", action: "Đổi hộp thư gửi email thông báo",
+    describe: () => "Dùng hộp thư trường của mình để gửi email thông báo tự động" },
+  { method: "POST", path: "/announcements/settings/retry-emails", kind: "notify", action: "Gửi lại email lỗi",
+    describe: ({ result }) => {
+      const requeued = num(obj(result).requeued);
+      return `Gửi lại ${requeued === null ? "các" : requeued} email thông báo tự động bị lỗi`;
     } },
   { method: "POST", path: "/announcements", kind: "notify", action: "Gửi thông báo",
     describe: ({ body, result }) => {

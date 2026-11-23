@@ -245,7 +245,9 @@ export const frequentlyAskedQuestions: FrequentlyAskedQuestion[] = [
 // dropped questions are no longer asked or given to the AI; Lộ trình AI needs no survey and Đánh giá năng lực no target
 // career. Collecting less needs no new consent, so no one is asked again.
 // 2026-11-23: the Khoa may send its announcements to the students' school address too, from the sender's school mailbox
-// through Microsoft (AD-NOTI-04; user: "Cập nhật, không hỏi lại"; no one is asked again).
+// through Microsoft (AD-NOTI-04; user: "Cập nhật, không hỏi lại"; no one is asked again). Amended the same evening, same
+// version (user: "ngoài có thể cập nhật thông báo cho thông báo ở trang sinh viên thì có thể gửi tới email những thông báo
+// này nữa"): the kinds of automatic notifications an admin turns on in Cài đặt thông báo go by email too.
 export const policyVersion = "2026-11-23";
 export const policyUpdatedAt = policyVersion.split("-").reverse().join("/");
 // Consents given under this version or later still count, so policies 2026-10-26, 2026-10-28, 2026-10-29, 2026-10-31,
@@ -381,7 +383,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
               "Soạn lộ trình học tập cho học kỳ tới bằng AI và đề xuất học phần cho Kế hoạch học kỳ, dựa trên kết quả đánh giá năng lực và Khảo sát nhanh (nếu bạn đã làm), khi bạn yêu cầu.",
               "Trả lời câu hỏi của bạn trong Trợ lý AI, kể cả tra cứu điểm trong bảng điểm, khi bạn gửi câu hỏi.",
               "Giúp Khoa hỗ trợ, tư vấn học tập và quản lý đào tạo.",
-              "Gửi thông báo của Khoa đến chuông thông báo trên EduPath AI và, khi cán bộ Khoa chọn, đến email trường của bạn.",
+              "Gửi thông báo đến chuông thông báo trên EduPath AI và, khi Khoa chọn, đến email trường của bạn: thông báo của Khoa và những loại thông báo tự động Khoa bật gửi email.",
               "Giúp cố vấn học tập của lớp bạn, quản trị viên của Khoa và Ban chủ nhiệm khoa theo dõi và tư vấn học tập cho bạn, kể cả làm thay bạn các việc nêu ở mục Chia sẻ thông tin.",
               "Bảo vệ tài khoản và xử lý khi có sự cố."
             ]]
@@ -587,7 +589,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
             paragraphs: [
               "Để EduPath AI hoạt động, nhà trường sử dụng dịch vụ của:",
               [
-                "Microsoft: dịch vụ đăng nhập bằng tài khoản trường, và từ ngày 23/11/2026 gửi email thông báo của Khoa đến email trường của bạn từ hộp thư trường của cán bộ Khoa gửi thông báo.",
+                "Microsoft: dịch vụ đăng nhập bằng tài khoản trường, và từ ngày 23/11/2026 gửi email thông báo đến email trường của bạn từ hộp thư trường của cán bộ Khoa.",
                 "Nhà cung cấp dịch vụ lưu trữ đám mây: nơi vận hành EduPath AI và lưu trữ dữ liệu.",
                 "Cloudflare (Workers AI, từ ngày 08/11/2026): chạy các mô hình AI và đọc chữ trên bảng điểm dạng scan; chỉ xử lý dữ liệu trong lúc tạo kết quả, không lưu lại và không dùng để huấn luyện mô hình AI."
               ],
@@ -628,7 +630,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
                 "Dữ liệu gửi cho mô hình AI: được xóa sau khi xử lý xong.",
                 "Lịch sử đăng nhập và lịch sử đồng ý: trong thời gian tài khoản còn tồn tại.",
                 "Nhật ký thao tác của cán bộ (xem bảng điểm, xuất báo cáo, mở trang của bạn và việc làm thay bạn): một năm.",
-                "Email thông báo của Khoa: EduPath AI giữ địa chỉ nhận và kết quả gửi 90 ngày; email đã gửi nằm trong hộp thư trường của bạn và không thu hồi được."
+                "Email thông báo: EduPath AI giữ địa chỉ nhận và kết quả gửi 90 ngày; email đã gửi nằm trong hộp thư trường của bạn và không thu hồi được."
               ],
               `Khi không còn sử dụng EduPath AI, chẳng hạn sau khi tốt nghiệp, bạn có thể tự xóa bảng điểm và gửi email đến ${supportEmail} để đề nghị xóa tài khoản.`
             ]
@@ -726,7 +728,7 @@ export const informationPolicies: Record<PolicyKind, { title: string; categories
               "Bản cập nhật ngày 31/10/2026 cho phép quản trị viên của Khoa Công nghệ Thông tin xem tiến độ học tập, điểm trung bình, kết quả đánh giá năng lực (điểm kỹ năng, kỹ năng còn thiếu, nghề mục tiêu và mức phù hợp) và các môn Lộ trình AI đề xuất cho sinh viên trong các báo cáo thống kê của Khoa (kèm họ tên và mã số sinh viên, xuất được ra tệp Excel), để hỗ trợ học tập. Câu trả lời khảo sát và thành tích không có trong báo cáo. Mỗi lần quản trị viên xem bảng điểm hoặc xuất báo cáo có tên sinh viên đều được ghi vào nhật ký thao tác. Bản này cũng bỏ phần tự mô tả thế mạnh khỏi Khảo sát định hướng: mô tả đã lưu không còn được hiển thị hay dùng cho AI, và được xóa khi bạn lưu lại khảo sát. Sự đồng ý bạn đã đưa ra theo bản ngày 25/10/2026 vẫn còn hiệu lực.",
               "Bản cập nhật ngày 03/11/2026 bổ sung cố vấn học tập: cố vấn được Khoa phân công cho lớp của bạn xem được trang EduPath AI của bạn (trừ thông báo trong chuông và các cuộc trò chuyện Trợ lý AI do bạn tạo) và có thể làm thay bạn việc import bảng điểm, đánh giá năng lực, tạo Lộ trình AI, lời khuyên xét tốt nghiệp và hỏi Trợ lý AI, kể cả khi bạn chưa đồng ý cho các việc này. Quản trị viên của Khoa và Ban chủ nhiệm khoa cũng làm được như vậy với trang của mọi sinh viên. Mỗi việc làm thay được ghi vào nhật ký thao tác và báo cho bạn qua chuông thông báo; bạn vẫn xóa được kết quả. Sự đồng ý bạn đã đưa ra theo bản ngày 25/10/2026 vẫn còn hiệu lực.",
               "Bản cập nhật ngày 10/11/2026 cho phép cố vấn học tập của lớp bạn, quản trị viên của Khoa và Ban chủ nhiệm khoa chọn chuyên ngành và vị trí nghề nghiệp mục tiêu, sửa Kế hoạch học kỳ và làm Khảo sát định hướng thay bạn, có ghi vào nhật ký thao tác và báo cho bạn qua chuông thông báo như các việc làm thay khác. Khảo sát họ làm thay được dùng cho các chức năng AI của bạn như khảo sát bạn tự làm, cho đến khi bạn sửa lại hoặc rút đồng ý. Ngày 14/11/2026, bản này được sửa nội dung mà không cần bạn đồng ý lại, vì EduPath AI thu thập ít hơn và bớt yêu cầu: Khảo sát định hướng thành Khảo sát nhanh ở trang Định hướng nghề nghiệp, còn 5 câu và không bắt buộc; sở trường, thành tích và các câu bỏ đi không còn được hỏi hay gửi cho AI; Lộ trình AI tạo được khi chưa làm khảo sát; Đánh giá năng lực không còn cần vị trí nghề nghiệp mục tiêu. Cũng ngày 14/11/2026, bản này bổ sung mục Thông tin từ danh sách lớp của Khoa: trước khi bạn đăng nhập lần đầu, cố vấn học tập và cán bộ Khoa có thể nhập trước danh sách lớp gồm mã số sinh viên, họ và tên, lớp và email trường của bạn.",
-              "Bản cập nhật ngày 23/11/2026 cho phép Khoa gửi thông báo đến email trường của bạn, ngoài chuông thông báo trên EduPath AI. Email được gửi qua Microsoft từ hộp thư trường của cán bộ Khoa gửi thông báo, chỉ đến sinh viên đã có tài khoản EduPath AI; EduPath AI giữ địa chỉ nhận và kết quả gửi 90 ngày. Bạn không cần đồng ý lại."
+              "Bản cập nhật ngày 23/11/2026 cho phép Khoa gửi thông báo đến email trường của bạn, ngoài chuông thông báo trên EduPath AI: thông báo của Khoa và những loại thông báo tự động Khoa bật gửi email (như đọc xong bảng điểm, Lộ trình AI, cảnh báo chậm tiến độ hay việc cố vấn học tập làm thay bạn). Email được gửi qua Microsoft từ hộp thư trường của cán bộ Khoa, không lưu trong mục Thư đã gửi của họ, và chỉ đến sinh viên đã có tài khoản EduPath AI; thư bạn trả lời sẽ đến hộp thư đó. EduPath AI giữ địa chỉ nhận và kết quả gửi 90 ngày. Bạn không cần đồng ý lại."
             ]
           }
         ]

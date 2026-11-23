@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { advisorAction, notify, notifyInTransaction, notifyWarnings, transcriptFailed, transcriptReady } from "./notify.js";
+import { advisorAction, notify, notifyInTransaction, notifyMany, notifyWarnings, transcriptFailed, transcriptReady } from "./notify.js";
 
 // Writing notifications (migration 056): idempotent by source_key, never breaking the job that reports. Synthetic ids only.
 const USER = "11111111-1111-4111-8111-111111111111";
@@ -7,9 +7,11 @@ const USER = "11111111-1111-4111-8111-111111111111";
 function fakeDb(rowCount = 1, fail = false) {
   const query = vi.fn(async (sql: string) => {
     if (fail && sql.startsWith("INSERT INTO stu_notifications")) throw Object.assign(new Error("boom"), { code: "23514" });
-    return { rowCount: sql.startsWith("INSERT") ? rowCount : 0, rows: [] };
+    return { rowCount: sql.startsWith("INSERT INTO stu_notifications") ? rowCount : 0, rows: [] };
   });
-  return { query, sql: () => query.mock.calls.map(([text]) => String(text)), params: (index: number) => query.mock.calls[index]?.[1] as unknown[] };
+  // The notification rows written; the email queued after each (Cài đặt thông báo, 2026-11-23) is a statement of its own.
+  const inserts = () => query.mock.calls.filter(([text]) => String(text).startsWith("INSERT INTO stu_notifications("));
+  return { query, inserts, sql: () => query.mock.calls.map(([text]) => String(text)), params: (index: number) => inserts()[index]?.[1] as unknown[] };
 }
 
 afterEach(() => vi.restoreAllMocks());
@@ -25,6 +27,29 @@ describe("notify", () => {
     const outside = fakeDb(0);
     expect(await notify(outside, USER, { type: "khoa", kind: "announcement", title: "T", body: "B", link: "https://example.com" })).toBe(false);
     expect(outside.params(0).slice(6, 8)).toEqual([null, null]);
+  });
+
+  it("queues the email of a notification just written, when its kind's email is on; never of an announcement", async () => {
+    const db = fakeDb();
+    await notify(db, USER, { type: "ai", kind: "roadmap_ready", title: "T", body: "B", sourceKey: "roadmap:2" });
+    const queue = db.sql()[1]!;
+    expect(queue).toContain("INSERT INTO stu_notification_emails(");
+    expect(queue).toContain("WHERE n.id=ANY($1::uuid[]) AND m.sender_id IS NOT NULL AND EXISTS (SELECT 1 FROM ad_notification_settings s WHERE s.email_enabled");
+    expect(queue).toContain("ON CONFLICT (notification_id) DO NOTHING");
+    // The id of the row just written, so a student who already had the notification gets no second email.
+    expect(db.query.mock.calls[1]![1]).toEqual([[db.params(0)[0]]]);
+
+    const again = fakeDb(0);
+    await notify(again, USER, { type: "ai", kind: "roadmap_ready", title: "T", body: "B", sourceKey: "roadmap:2" });
+    expect(again.sql()).toHaveLength(1);
+    const announcement = fakeDb();
+    await notify(announcement, USER, { type: "khoa", kind: "announcement", title: "T", body: "B" });
+    expect(announcement.sql()).toHaveLength(1);
+
+    const many = fakeDb(2);
+    await notifyMany(many, [USER, "22222222-2222-4222-8222-222222222222"], { type: "sys", kind: "catalog_updated", title: "T", body: "B", sourceKey: "catalog:1" });
+    expect(many.sql()[1]).toContain("INSERT INTO stu_notification_emails(");
+    expect((many.query.mock.calls[1]![1] as unknown[][])[0]).toHaveLength(2);
   });
 
   it("writes nothing of a kind an admin turned off in Cài đặt thông báo (AD-NOTI-06)", async () => {
@@ -45,7 +70,8 @@ describe("notify", () => {
   it("writes under a savepoint inside a transaction and swallows its failure", async () => {
     const ok = fakeDb();
     await notifyInTransaction(ok, USER, transcriptReady(40, 10));
-    expect(ok.sql()).toEqual(["SAVEPOINT edupath_notify", expect.stringContaining("INSERT INTO stu_notifications"), "RELEASE SAVEPOINT edupath_notify"]);
+    expect(ok.sql()).toEqual(["SAVEPOINT edupath_notify", expect.stringContaining("INSERT INTO stu_notifications("),
+      expect.stringContaining("INSERT INTO stu_notification_emails("), "RELEASE SAVEPOINT edupath_notify"]);
 
     const failing = fakeDb(1, true);
     const log = vi.spyOn(console, "error").mockImplementation(() => undefined);
@@ -73,7 +99,7 @@ describe("notifyWarnings", () => {
       { kind: "late_course", key: "71ITIS30303", level: "warn", text: "Phân tích thiết kế hệ thống trễ kế hoạch.", action: { label: "Mở", link: "javascript:alert(1)" } },
     ]);
     expect(written).toBe(2);
-    expect(db.query).toHaveBeenCalledTimes(2);
+    expect(db.inserts()).toHaveLength(2);
     const first = db.params(0);
     expect(first.slice(2, 9)).toEqual(["warn", "warning", "Có môn bắt buộc chưa đạt", "Môn bắt buộc chưa đạt: Phát triển ứng dụng di động.", "#roadmap", "Thêm vào Kế hoạch học kỳ", "warning:failed_course:71ITSE30603"]);
     // A link outside the portal is dropped with its label.
@@ -90,7 +116,7 @@ describe("notifyWarnings", () => {
       { kind: "elective_short", key: "elective:Tự do:HK252", level: "warn", text: "Tự do (HK2 2025–2026): còn thiếu 2 môn.", strong: ["Tự do"] },
       { kind: "pace", key: "pace", level: "risk", text: "Còn 40 tín chỉ…", strong: ["40 tín chỉ"] },
     ]);
-    expect(db.query.mock.calls.map((_, index) => db.params(index)[4])).toEqual([
+    expect(db.inserts().map((_, index) => db.params(index)[4])).toEqual([
       "Môn bắt buộc chưa đạt: Lập trình Web", "Môn trễ so với kế hoạch: Cơ sở dữ liệu", "Còn 4 môn khác trễ so với kế hoạch",
       "Nhóm tự chọn TC1 còn thiếu 3 TC", "Tự do còn thiếu 2 môn", "Nguy cơ chậm tiến độ tốt nghiệp",
     ]);

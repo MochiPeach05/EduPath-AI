@@ -5,8 +5,8 @@ import { CheckedForm } from "./CheckedForm";
 import { majorOptions } from "./majors";
 import { sortRows, useTableSort, type SortRule } from "./table-sort";
 import {
-  ANNOUNCEMENTS_API, ANNOUNCEMENT_BODY_MAX, ANNOUNCEMENT_TITLE_MAX, type Announcement, type AnnouncementEmail, type AnnouncementTarget, type EmailProblem,
-  type MailSender, type NotificationSetting,
+  ANNOUNCEMENTS_API, ANNOUNCEMENT_BODY_MAX, ANNOUNCEMENT_TITLE_MAX, type Announcement, type AnnouncementEmail, type AnnouncementTarget, type AutoMailState,
+  type EmailProblem, type EmailStats, type MailSender, type NotificationSetting,
 } from "./notification-types";
 import { SESSION_EXPIRED_EVENT, adminErrorText } from "./admin-errors";
 import { formatVnDateTime } from "./display-format";
@@ -59,6 +59,8 @@ const failures: Record<string, string> = {
   mail_unavailable: "Máy chủ chưa bật chức năng gửi email.",
   mail_grant_required: "Bạn cần cho phép EduPath AI gửi thư từ hộp thư trường của mình trước (nút “Cho phép gửi từ hộp thư của tôi” ở trang Gửi thông báo).",
   send_failed: "Microsoft không gửi được thư. Vui lòng thử lại sau.",
+  bell_off: "Hãy bật thông báo này trước khi bật email.",
+  bell_locked: "Thông báo việc làm thay sinh viên luôn hiện trong chuông của sinh viên.",
 };
 /** Microsoft's own code when it is a plain one, shown so the team can look it up; null otherwise. */
 export const plainCode = (value: unknown) => (typeof value === "string" && /^[A-Za-z0-9_.-]{1,80}$/.test(value) ? value : null);
@@ -246,15 +248,39 @@ export function emailTestOutcome(search: string): { ok: boolean; text: string } 
   }
 }
 
+/** What Microsoft's page came back with, once (?emailTest=…), taken out of the address so a reload does not repeat it. */
+function useEmailTestOutcome() {
+  const [outcome] = useState(() => (typeof window === "undefined" ? null : emailTestOutcome(window.location.search)));
+  useEffect(() => {
+    if (!outcome) return;
+    const url = new URL(window.location.href);
+    url.searchParams.delete("emailTest");
+    url.searchParams.delete("code");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [outcome]);
+  return outcome;
+}
+function EmailTestBanner({ outcome }: { outcome: { ok: boolean; text: string } | null }) {
+  if (!outcome) return null;
+  return outcome.ok
+    ? <div className="an-success" role="status"><Icon name="check" /><p>{outcome.text}</p></div>
+    : <p className="admin-error" role="alert">{outcome.text}</p>;
+}
+
 const MAIL_CONSENT_ERRORS: Readonly<Record<string, string>> = {
   insufficient_role: "Tài khoản của bạn không gửi được thông báo.",
   mail_unavailable: "Máy chủ chưa bật chức năng gửi email.",
 };
 
-/** Opens Microsoft's page where the member allows EduPath AI to send from their mailbox; the error's text when it cannot. */
-async function openMailConsent(): Promise<string> {
+/**
+ * Opens Microsoft's page where the member allows EduPath AI to send from their mailbox, coming back to `page` (Gửi thông
+ * báo or Cài đặt thông báo); the error's text when it cannot.
+ */
+async function openMailConsent(page: "compose" | "settings" = "compose"): Promise<string> {
   try {
-    const response = await fetch(MAIL_CONSENT_API, { method: "POST", credentials: "include", cache: "no-store", headers: { "Content-Type": "application/json" }, body: "{}" });
+    const response = await fetch(MAIL_CONSENT_API, {
+      method: "POST", credentials: "include", cache: "no-store", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ page }),
+    });
     if (response.status === 401) window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
     const body = await response.json().catch(() => ({})) as { url?: unknown };
     if (!response.ok || typeof body.url !== "string") return adminErrorText(response.status, body, MAIL_CONSENT_ERRORS);
@@ -378,15 +404,7 @@ function ComposeAnnouncement({ canManage, navigate }: { canManage: boolean; navi
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [sent, setSent] = useState<Announcement | null>(null);
-  // What Microsoft's page came back with, once (?emailTest=…); a reload does not repeat it.
-  const [emailTest] = useState(() => (typeof window === "undefined" ? null : emailTestOutcome(window.location.search)));
-  useEffect(() => {
-    if (!emailTest) return;
-    const url = new URL(window.location.href);
-    url.searchParams.delete("emailTest");
-    url.searchParams.delete("code");
-    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
-  }, [emailTest]);
+  const emailTest = useEmailTestOutcome();
   // Picks made on the fallback list keep only what GET /options offers once it answers.
   useEffect(() => {
     setTarget((current) => {
@@ -428,9 +446,7 @@ function ComposeAnnouncement({ canManage, navigate }: { canManage: boolean; navi
     } finally { setBusy(false); }
   };
   return <section className="cm-workspace an-workspace">
-    {emailTest && (emailTest.ok
-      ? <div className="an-success" role="status"><Icon name="check" /><p>{emailTest.text}</p></div>
-      : <p className="admin-error" role="alert">{emailTest.text}</p>)}
+    <EmailTestBanner outcome={emailTest} />
     {sent && <div className="an-success" role="status">
       <Icon name="check" />
       <p>Đã gửi <strong>“{sent.title}”</strong> tới {number(sent.recipients)} sinh viên ({sent.targetLabel}).
@@ -696,70 +712,205 @@ function WithdrawDialog({ announcement, close, done }: { announcement: Announcem
 
 /* ------------------------------------------------------------------ Cài đặt thông báo (AD-NOTI-06) */
 
-/** The notifications always written, whatever the settings say (the API has no setting for them). */
-export const ALWAYS_ON_NOTIFICATIONS: readonly { label: string; detail: string }[] = [
-  { label: "Thông báo của Khoa", detail: "Thông báo gửi từ trang Gửi thông báo. Muốn ngừng một thông báo, hãy thu hồi nó ở trang Đã gửi." },
-  { label: "Việc làm thay sinh viên", detail: "Sinh viên luôn được báo khi cố vấn học tập, quản trị viên hoặc Ban chủ nhiệm khoa làm thay mình." },
-];
-
-/** "Đang bật cả 6 loại thông báo." or "Đang tắt 1 trong 6 loại thông báo." */
-export const settingsSummary = (items: readonly Pick<NotificationSetting, "enabled">[]) => {
-  const off = items.filter((item) => !item.enabled).length;
-  return off ? `Đang tắt ${number(off)} trong ${number(items.length)} loại thông báo tự động.` : `Đang bật cả ${number(items.length)} loại thông báo tự động.`;
+/** The faculty's announcements: always in the bell, their email chosen when each is sent (the API has no setting for them). */
+export const ANNOUNCEMENT_ROW = {
+  label: "Thông báo của Khoa",
+  detail: "Thông báo gửi từ trang Gửi thông báo; email được chọn khi gửi từng thông báo. Muốn ngừng một thông báo, hãy thu hồi nó ở trang Đã gửi.",
 };
 
-export function SettingsList({ items, canManage, saving, onToggle }: {
-  items: NotificationSetting[]; canManage: boolean; saving: string | null; onToggle: (item: NotificationSetting) => void;
+/** "Đang bật cả 7 loại thông báo tự động." or "Đang tắt 1 trong 7 loại thông báo tự động; 2 loại gửi kèm email." */
+export const settingsSummary = (items: readonly Pick<NotificationSetting, "enabled" | "email">[]) => {
+  const off = items.filter((item) => !item.enabled).length;
+  const emailed = items.filter((item) => item.email).length;
+  const head = off ? `Đang tắt ${number(off)} trong ${number(items.length)} loại thông báo tự động` : `Đang bật cả ${number(items.length)} loại thông báo tự động`;
+  return `${head}${emailed ? `; ${number(emailed)} loại gửi kèm email` : ""}.`;
+};
+
+/** "12 đã gửi · 1 lỗi": a kind's emails of the last 30 days; null when there were none. */
+export function emailStatsText(stats: EmailStats): string | null {
+  const parts = [
+    stats.sent ? `${number(stats.sent)} đã gửi` : "", stats.pending ? `${number(stats.pending)} đang gửi` : "",
+    stats.failed ? `${number(stats.failed)} lỗi` : "", stats.noAddress ? `${number(stats.noAddress)} chưa có email` : "",
+  ].filter(Boolean);
+  return parts.length ? parts.join(" · ") : null;
+}
+const sumStats = (items: readonly NotificationSetting[]): EmailStats => items.reduce((total, item) => ({
+  sent: total.sent + item.emails.sent, pending: total.pending + item.emails.pending, failed: total.failed + item.emails.failed,
+  noAddress: total.noAddress + item.emails.noAddress,
+}), { sent: 0, pending: 0, failed: 0, noAddress: 0 });
+
+/** The automatic emails can leave now: a named sender whose permission works. */
+export const autoSenderReady = (mail: AutoMailState) => Boolean(mail.sender?.address && !mail.sender.lastError);
+/** The caller's own permission works (they can become the sender). */
+export const ownGrantReady = (mail: AutoMailState) => Boolean(mail.me && !mail.me.lastError);
+/** The mailbox an email turned on now would leave from: the sender's, else the caller's (who then becomes the sender). */
+export const nextSenderAddress = (mail: AutoMailState) => (autoSenderReady(mail) ? mail.sender!.address : ownGrantReady(mail) ? mail.me!.address : null);
+
+function Switch({ on, label, busy, disabled, onClick }: { on: boolean; label: string; busy: boolean; disabled: boolean; onClick: () => void }) {
+  return <button type="button" role="switch" className="an-switch" aria-checked={on} aria-label={label} disabled={disabled} onClick={onClick}>
+    <span className="an-switch-track" aria-hidden="true" /><span className="an-switch-label">{busy ? "Đang lưu…" : on ? "Bật" : "Tắt"}</span>
+  </button>;
+}
+
+/**
+ * The kinds of automatic notifications: a switch for the bell and one for the email of each (Việc làm thay sinh viên is
+ * always in the bell), then the faculty's announcements, always on with their email chosen when sent.
+ */
+export function SettingsList({ items, canManage, saving, emailReady, onBell, onEmail }: {
+  items: NotificationSetting[]; canManage: boolean; saving: string | null; emailReady: boolean;
+  onBell: (item: NotificationSetting) => void; onEmail: (item: NotificationSetting) => void;
 }) {
-  return <ul className="an-settings-list">
-    {items.map((item) => <li key={item.key}>
-      <div className="an-setting-text">
-        <strong id={`an-setting-${item.key}`}>{item.label}</strong>
-        <p id={`an-setting-${item.key}-detail`}>{item.detail}</p>
-        {item.updatedAt && <small>{item.enabled ? "Bật" : "Tắt"} lúc {sentTime(item.updatedAt)}{item.updatedBy ? ` · ${item.updatedBy}` : ""}</small>}
-      </div>
-      <button type="button" role="switch" className="an-switch" aria-checked={item.enabled} aria-labelledby={`an-setting-${item.key}`}
-        aria-describedby={`an-setting-${item.key}-detail`} disabled={!canManage || saving !== null} onClick={() => onToggle(item)}>
-        <span className="an-switch-track" aria-hidden="true" /><span className="an-switch-label">{saving === item.key ? "Đang lưu…" : item.enabled ? "Bật" : "Tắt"}</span>
-      </button>
-    </li>)}
-    {ALWAYS_ON_NOTIFICATIONS.map((item) => <li key={item.label} className="an-setting-fixed">
-      <div className="an-setting-text"><strong>{item.label}</strong><p>{item.detail}</p></div>
-      <span className="an-always">Luôn bật</span>
-    </li>)}
-  </ul>;
+  return <>
+    <div className="an-settings-head" aria-hidden="true"><span>Loại thông báo</span><span>Trong EduPath AI</span><span>Email</span></div>
+    <ul className="an-settings-list">
+      {items.map((item) => {
+        const stats = emailStatsText(item.emails);
+        // Off can always be pressed; on needs the bell on and a mailbox that can send.
+        const emailOff = !canManage || saving !== null || (!item.email && (!item.enabled || !emailReady));
+        return <li key={item.key}>
+          <div className="an-setting-text">
+            <strong>{item.label}</strong>
+            <p>{item.detail}</p>
+            {item.updatedAt && <small>Cập nhật lúc {sentTime(item.updatedAt)}{item.updatedBy ? ` · ${item.updatedBy}` : ""}</small>}
+            {stats && <small className="an-setting-stats">Email 30 ngày qua: {stats}</small>}
+          </div>
+          <div className="an-setting-control" data-label="Trong EduPath AI">{item.bellLocked
+            ? <span className="an-always">Luôn bật</span>
+            : <Switch on={item.enabled} label={`${item.label}: thông báo trong EduPath AI`} busy={saving === `${item.key}:bell`}
+              disabled={!canManage || saving !== null} onClick={() => onBell(item)} />}</div>
+          <div className="an-setting-control" data-label="Email">
+            <Switch on={item.email} label={`${item.label}: gửi kèm email`} busy={saving === `${item.key}:email`} disabled={emailOff} onClick={() => onEmail(item)} />
+          </div>
+        </li>;
+      })}
+      <li className="an-setting-fixed">
+        <div className="an-setting-text"><strong>{ANNOUNCEMENT_ROW.label}</strong><p>{ANNOUNCEMENT_ROW.detail}</p></div>
+        <div className="an-setting-control" data-label="Trong EduPath AI"><span className="an-always">Luôn bật</span></div>
+        <div className="an-setting-control" data-label="Email"><span className="an-always">Chọn khi gửi</span></div>
+      </li>
+    </ul>
+  </>;
+}
+
+/**
+ * Whose school mailbox sends the automatic emails, what to do when there is none or it needs Microsoft's permission
+ * again, and how the emails of the last 30 days went.
+ */
+export function AutoMailPanel({ mail, stats, canManage, busy, onConsent, onUseMine, onRetry }: {
+  mail: AutoMailState; stats: EmailStats; canManage: boolean; busy: "consent" | "mine" | "retry" | null;
+  onConsent: () => void; onUseMine: () => void; onRetry: () => void;
+}) {
+  if (!mail.available) return <div className="an-automail"><p className="an-email-text">Máy chủ chưa bật chức năng gửi email.</p></div>;
+  const sender = mail.sender;
+  const ready = autoSenderReady(mail);
+  const mine = ownGrantReady(mail);
+  let text: ReactNode;
+  if (!sender) {
+    text = mine
+      ? <>Chưa chọn hộp thư gửi. Khi bạn bật Email ở một loại thông báo, email sẽ gửi từ hộp thư <strong>{mail.me!.address}</strong> của bạn.</>
+      : "Chưa chọn hộp thư gửi. Hãy cho phép EduPath AI gửi thư từ hộp thư trường của bạn, rồi bật Email ở những loại thông báo muốn gửi.";
+  } else if (!ready) {
+    text = `Hộp thư ${sender.address ?? "gửi email"}${sender.mine ? " của bạn" : sender.name ? ` (${sender.name})` : ""} cần được cho phép lại nên email tự động đang chưa gửi được.`;
+  } else {
+    text = <>Gửi từ hộp thư <strong>{sender.address}</strong>{sender.mine ? " của bạn" : sender.name ? ` (${sender.name})` : ""}. Mỗi sinh viên nhận một email riêng, gửi dần khoảng 25 thư mỗi phút; email đã gửi không thu hồi được.</>;
+  }
+  const totals = emailStatsText(stats);
+  const consentLabel = sender?.mine ? "Cho phép lại" : "Cho phép gửi từ hộp thư của tôi";
+  return <div className={`an-automail${sender && !ready ? " an-automail-warn" : ""}`}>
+    <div className="an-automail-text">
+      <strong>Email thông báo tự động</strong>
+      <p className={`an-email-text${sender && !ready ? " an-email-warn" : ""}`}>{text}</p>
+      <small className="an-email-hint">{totals ? `30 ngày qua: ${totals}.` : "30 ngày qua chưa gửi email tự động nào."}</small>
+    </div>
+    <div className="an-email-actions">
+      {!mine && (!ready || !sender?.mine) && <button type="button" className="am-outline" disabled={!canManage || busy !== null} onClick={onConsent}>
+        <Icon name="mail" /> {busy === "consent" ? "Đang mở trang Microsoft…" : consentLabel}</button>}
+      {mine && (!sender || !sender.mine) && <button type="button" className="am-outline" disabled={!canManage || busy !== null} onClick={onUseMine}>
+        <Icon name="user" /> {busy === "mine" ? "Đang đổi…" : "Dùng hộp thư của tôi"}</button>}
+      {ready && stats.failed > 0 && <button type="button" className="am-outline" disabled={!canManage || busy !== null} onClick={onRetry}>
+        <Icon name="refresh" /> {busy === "retry" ? "Đang xếp lại…" : `Gửi lại email lỗi (${number(stats.failed)})`}</button>}
+    </div>
+  </div>;
 }
 
 function NotificationSettings({ canManage }: { canManage: boolean }) {
-  const remote = useData<{ items: NotificationSetting[] }>(`${ANNOUNCEMENTS_API}/settings`);
+  const remote = useData<{ items: NotificationSetting[]; mail?: AutoMailState }>(`${ANNOUNCEMENTS_API}/settings`);
   const [saved, setSaved] = useState<Record<string, NotificationSetting>>({});
+  const [mailState, setMailState] = useState<AutoMailState | null>(null);
   const [saving, setSaving] = useState<string | null>(null);
+  const [busy, setBusy] = useState<"consent" | "mine" | "retry" | null>(null);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [confirming, setConfirming] = useState<NotificationSetting | null>(null);
+  const emailTest = useEmailTestOutcome();
   const items = (remote.data?.items ?? []).map((item) => saved[item.key] ?? item);
-  const toggle = async (item: NotificationSetting) => {
-    setSaving(item.key); setError("");
+  const mail: AutoMailState = mailState ?? remote.data?.mail ?? { available: false, sender: null, me: null };
+  const save = async (item: NotificationSetting, change: { enabled?: boolean; email?: boolean }, slot: string) => {
+    setSaving(slot); setError(""); setNotice("");
     try {
-      const { setting } = await announcementRequest<{ setting: NotificationSetting }>(`/settings/${encodeURIComponent(item.key)}`, {
-        method: "PUT", body: JSON.stringify({ enabled: !item.enabled }),
+      const result = await announcementRequest<{ setting: NotificationSetting; mail?: AutoMailState }>(`/settings/${encodeURIComponent(item.key)}`, {
+        method: "PUT", body: JSON.stringify(change),
       });
-      setSaved((current) => ({ ...current, [setting.key]: setting }));
+      setSaved((current) => ({ ...current, [result.setting.key]: result.setting }));
+      if (result.mail) setMailState(result.mail);
     } catch (failure) { setError((failure as Error).message); }
     finally { setSaving(null); }
   };
+  const run = async (kind: "mine" | "retry") => {
+    setBusy(kind); setError(""); setNotice("");
+    try {
+      if (kind === "mine") {
+        const result = await announcementRequest<{ mail: AutoMailState }>("/settings/mail-sender", { method: "POST", body: "{}" });
+        setMailState(result.mail);
+        setNotice("Từ giờ email thông báo tự động gửi từ hộp thư của bạn, kể cả những email đang chờ gửi.");
+      } else {
+        const result = await announcementRequest<{ requeued: number; items: NotificationSetting[] }>("/settings/retry-emails", { method: "POST", body: "{}" });
+        setSaved(Object.fromEntries(result.items.map((item) => [item.key, item])));
+        setNotice(result.requeued ? `Đã xếp ${number(result.requeued)} email để gửi lại.` : "Không còn email lỗi nào để gửi lại.");
+      }
+    } catch (failure) { setError((failure as Error).message); }
+    finally { setBusy(null); }
+  };
+  const consent = async () => {
+    setBusy("consent"); setError(""); setNotice("");
+    const failure = await openMailConsent("settings");
+    // Without a failure the browser is on its way to Microsoft's page: the button stays busy.
+    if (failure) { setError(failure); setBusy(null); }
+  };
+  const from = nextSenderAddress(mail);
   return <section className="cm-workspace an-workspace">
+    <EmailTestBanner outcome={emailTest} />
     <section className="cm-panel an-settings" aria-labelledby="an-settings-title">
       <div className="an-panel-head">
         <h2 id="an-settings-title">Thông báo tự động gửi sinh viên</h2>
-        <p>Bật hoặc tắt từng loại thông báo EduPath AI tự gửi vào chuông thông báo của sinh viên. Tắt một loại chỉ dừng thông báo mới; thông báo sinh viên đã nhận vẫn giữ nguyên.</p>
+        <p>Bật hoặc tắt từng loại thông báo EduPath AI tự gửi vào chuông thông báo của sinh viên, và chọn loại nào gửi kèm email trường của sinh viên. Tắt chỉ dừng thông báo mới; thông báo sinh viên đã nhận vẫn giữ nguyên.</p>
       </div>
       {!canManage && <p className="an-readonly" role="note">Bạn chỉ có quyền xem. Quản trị viên mới thay đổi được cài đặt.</p>}
       <Status {...remote} />
       {remote.data && <>
+        <AutoMailPanel mail={mail} stats={sumStats(items)} canManage={canManage} busy={busy}
+          onConsent={() => void consent()} onUseMine={() => void run("mine")} onRetry={() => void run("retry")} />
         <p className="an-settings-count" role="status">{settingsSummary(items)}</p>
-        <SettingsList items={items} canManage={canManage} saving={saving} onToggle={(item) => void toggle(item)} />
-        <p className="an-hint">Thông báo tự động chỉ hiện trong chuông thông báo. Email chỉ được gửi cho thông báo của Khoa, khi người gửi chọn kênh email.</p>
+        <SettingsList items={items} canManage={canManage} saving={saving} emailReady={mail.available && Boolean(from)}
+          onBell={(item) => void save(item, { enabled: !item.enabled }, `${item.key}:bell`)}
+          onEmail={(item) => (item.email ? void save(item, { email: false }, `${item.key}:email`) : setConfirming(item))} />
+        {notice && <p className="an-email-ok" role="status">{notice}</p>}
       </>}
       {error && <p className="admin-error" role="alert">{error}</p>}
     </section>
+    {confirming && <Modal title="Gửi kèm email" size="sm" busy={saving !== null} onClose={() => setConfirming(null)}>
+      <div className="cm-dialog-body cm-form">
+        <strong>{confirming.label}</strong>
+        <p>Từ giờ, mỗi thông báo “{confirming.label}” mới cũng được gửi đến email trường của sinh viên{from ? `, từ hộp thư ${from}` : ""}.</p>
+        <p className="an-confirm-email"><Icon name="mail" /><span>Mỗi sinh viên nhận một email riêng, gửi dần khoảng 25 thư mỗi phút. Email đã gửi không thu hồi được; tắt Email chỉ hủy những email chưa gửi.</span></p>
+        <div className="cm-actions cm-dialog-actions">
+          <button type="button" className="am-outline" disabled={saving !== null} onClick={() => setConfirming(null)}><Icon name="close" /> Hủy</button>
+          <button type="button" className="am-primary" disabled={saving !== null} onClick={async () => {
+            await save(confirming, { email: true }, `${confirming.key}:email`);
+            setConfirming(null);
+          }}><Icon name="mail" /> {saving ? "Đang bật…" : "Bật email"}</button>
+        </div>
+      </div>
+    </Modal>}
   </section>;
 }
