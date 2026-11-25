@@ -1,13 +1,14 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ActionMenu, Modal, Pagination, Status, useData } from "./admin-ui";
 import { Icon, RequiredLabel } from "./admin-account-shared";
 import { CheckedForm } from "./CheckedForm";
 import { majorOptions } from "./majors";
 import { sortRows, useTableSort, type SortRule } from "./table-sort";
 import {
-  ANNOUNCEMENTS_API, ANNOUNCEMENT_BODY_MAX, ANNOUNCEMENT_TITLE_MAX, type Announcement, type AnnouncementEmail, type AnnouncementTarget, type AutoMailState,
-  type EmailProblem, type EmailStats, type MailSender, type NotificationSetting,
+  ANNOUNCEMENTS_API, ANNOUNCEMENT_BODY_MAX, ANNOUNCEMENT_STUDENTS_MAX, ANNOUNCEMENT_TITLE_MAX, type Announcement, type AnnouncementEmail, type AnnouncementTarget,
+  type AutoMailState, type EmailProblem, type EmailStats, type MailSender, type NotificationSetting, type RecipientStudent,
 } from "./notification-types";
+import { nameInitials } from "./person-name";
 import { SESSION_EXPIRED_EVENT, adminErrorText } from "./admin-errors";
 import { formatVnDateTime } from "./display-format";
 import "./curricula.css";
@@ -20,6 +21,9 @@ import "./announcements.css";
 // tài khoản", "Dùng mặc định"): from the sender's own school mailbox, once they allowed EduPath AI on Microsoft's page, one
 // message per student and about 25 a minute; "Đã gửi" shows how many went out and sends the failed ones again (AD-NOTI-05),
 // and "Cài đặt thông báo" turns the kinds of automatic notifications off and on (AD-NOTI-06). Contract: notification-types.ts.
+// 2026-11-25 (user: "Sửa lại giao diện gửi thông báo đẹp hơn và thêm tính năng có thể gửi tới từng bạn sinh viên mình chọn
+// nữa"): the compose page is three steps (Người nhận, Nội dung, Kênh gửi) beside a rail with the summary, the send button and
+// the student's view (bell or email); the recipients are a group (cohorts, majors) or students picked one by one.
 
 export const COMPOSE_PATH = "/quantri/gui-thong-bao";
 export const SENT_PATH = "/quantri/thong-bao-da-gui";
@@ -205,23 +209,6 @@ function useAnnouncementOptions(): AnnouncementOptions {
   return options;
 }
 
-/** The student's view of the announcement while it is written. */
-export function AnnouncementPreview({ title, body, link, email = false }: { title: string; body: string; link: string | null; email?: boolean }) {
-  const button = openLabel(link);
-  return <aside className="cm-panel an-preview" aria-labelledby="an-preview-title">
-    <h2 id="an-preview-title">Sinh viên sẽ thấy</h2>
-    <div className="an-note-row">
-      <span className="an-note-icon" aria-hidden="true">K</span>
-      <span className="an-note-text"><strong>{title.trim() || "Tiêu đề thông báo"}</strong><small>Từ Khoa · Vừa xong · chưa đọc</small></span>
-      <span className="an-note-dot" aria-hidden="true" />
-    </div>
-    <p className="an-preview-body">{body.trim() || "Nội dung sẽ hiện ở đây khi sinh viên mở thông báo."}</p>
-    {button && <span className="an-preview-button">{button}</span>}
-    <p className="an-preview-note">Sinh viên thấy thông báo ở chuông trên thanh đầu trang, lọc được theo "Từ Khoa", đánh dấu đã đọc hoặc xóa. Thông báo tự xóa sau 90 ngày.</p>
-    {email && <p className="an-preview-note an-preview-email"><Icon name="mail" /><span>Email gửi kèm có tiêu đề “[EduPath AI] {title.trim() || "Tiêu đề thông báo"}”, cùng nội dung và nút mở EduPath AI.</span></p>}
-  </aside>;
-}
-
 /** Where the member allows EduPath AI to send from their mailbox (auth/router.ts): the address of Microsoft's consent page. */
 export const MAIL_CONSENT_API = "/api/auth/microsoft/mail-consent";
 
@@ -346,10 +333,17 @@ export function EmailChannel({ mail, checked, onCheck, draft, reach }: {
   else if (!sender) text = "Email được gửi từ hộp thư trường của chính bạn. Bấm nút bên dưới, Microsoft sẽ hỏi bạn cho phép EduPath AI gửi thư; EduPath AI gửi kèm một thư thử đến chính bạn.";
   else if (sender.lastError) text = `Microsoft cần bạn cho phép lại để gửi thư từ hộp thư ${sender.address}. Email chưa gửi của bạn đã chuyển thành lỗi; sau khi cho phép lại, bạn gửi lại được ở trang Đã gửi.`;
   else text = <>Gửi từ hộp thư <strong>{sender.address}</strong>. Mỗi sinh viên nhận một email riêng, gửi dần khoảng 25 thư mỗi phút; email đã gửi không thu hồi được.</>;
-  return <div className="an-email">
-    <label className="cm-check"><input type="checkbox" checked={checked && usable} disabled={!usable} onChange={(event) => onCheck(event.target.checked)} /> Email trường của sinh viên</label>
+  const on = checked && usable;
+  const state = mail.loading ? "Đang kiểm tra quyền gửi…" : mail.failed ? "Chưa kiểm tra được" : !mail.available ? "Máy chủ chưa bật email"
+    : !sender ? "Cần cho phép một lần" : sender.lastError ? "Cần cho phép lại" : on ? "Gửi kèm thông báo này" : "Không gửi email";
+  return <div className={`an-channel an-email${on ? " an-channel-on" : ""}`}>
+    <div className="an-channel-head">
+      <span className="an-channel-icon" aria-hidden="true"><Icon name="mail" /></span>
+      <span className="an-channel-title"><strong>Email trường của sinh viên</strong><small>{state}</small></span>
+      <Switch on={on} label="Gửi kèm email trường của sinh viên" busy={false} disabled={!usable} onClick={() => onCheck(!on)} />
+    </div>
     <p className={`an-email-text${sender?.lastError ? " an-email-warn" : ""}`}>{text}</p>
-    {checked && usable && reach && <p className="an-reach an-reach-ok">{reach}</p>}
+    {on && reach && <p className="an-reach an-reach-ok">{reach}</p>}
     <div className="an-email-actions">
       {mail.failed && <button type="button" className="am-outline" onClick={mail.reload}><Icon name="refresh" /> Thử lại</button>}
       {!mail.loading && mail.available && !usable && <button type="button" className="am-outline" disabled={busy !== null} onClick={() => void consent()}>
@@ -389,10 +383,203 @@ function RevokeMailDialog({ address, close, done }: { address: string; close: ()
   </Modal>;
 }
 
+/* ------------------------------------------------------------------ Chọn từng sinh viên (2026-11-25) */
+
+/** "MSSV 2374802019901 · 71K29CNTT99": what tells two students of one name apart; "Chưa cập nhật MSSV" without a code. */
+export function studentLine(student: Pick<RecipientStudent, "studentCode" | "className">): string {
+  return [student.studentCode ? `MSSV ${student.studentCode}` : "Chưa cập nhật MSSV", student.className].filter(Boolean).join(" · ");
+}
+/** "Lương Khánh Vy, Tạ Minh Đức và 1 sinh viên khác": the picked students as the summary and the confirm dialog name them. */
+export function pickedSummary(picked: readonly Pick<RecipientStudent, "name">[], shown = 2): string {
+  if (!picked.length) return "Chưa chọn sinh viên nào";
+  const names = picked.slice(0, Math.max(1, shown)).map((student) => student.name);
+  const rest = picked.length - names.length;
+  if (rest > 0) return `${names.join(", ")} và ${number(rest)} sinh viên khác`;
+  return names.length > 1 ? `${names.slice(0, -1).join(", ")} và ${names[names.length - 1]}` : names[0]!;
+}
+/** Who an announcement reached: "3 sinh viên được chọn", or "80 sinh viên (K29 · Công nghệ thông tin)". */
+export const reachedText = (announcement: Pick<Announcement, "recipients" | "target" | "targetLabel">) =>
+  (announcement.target.students?.length || announcement.target.picked
+    ? `${number(announcement.recipients)} sinh viên được chọn` : `${number(announcement.recipients)} sinh viên (${announcement.targetLabel})`);
+/** The count line of "Chọn từng sinh viên": exact, never "Khoảng". */
+export function pickedReachText(count: number): { text: string; tone: "warn" | "ok" } {
+  return count
+    ? { text: `${number(count)} sinh viên được chọn nhận được thông báo này.`, tone: "ok" }
+    : { text: "Chưa chọn sinh viên nào. Tìm và đánh dấu những sinh viên cần gửi.", tone: "warn" };
+}
+/** Students listed per search (the API allows up to 50). */
+export const STUDENT_RESULTS = 20;
+/** The line above the search results: loading (results null), failed, none, the first ones, or how many match. */
+export function searchStatus(query: string, results: number | null, failed: boolean): string {
+  if (failed) return "Chưa tìm được sinh viên. Vui lòng thử lại.";
+  if (results === null) return "Đang tìm sinh viên…";
+  if (!results) return query.trim() ? "Không có sinh viên phù hợp. Thử từ khóa khác." : "Chưa có sinh viên nào nhận được thông báo.";
+  if (!query.trim()) return `${number(results)} sinh viên đầu tiên theo tên. Gõ họ tên, MSSV hoặc lớp để tìm sinh viên khác.`;
+  return results >= STUDENT_RESULTS ? `${number(results)} sinh viên phù hợp đầu tiên; gõ thêm để thu hẹp.` : `${number(results)} sinh viên phù hợp.`;
+}
+
+/**
+ * "Chọn từng sinh viên": a search over the students an announcement can reach (GET /students: name, MSSV or class, tones
+ * ignored), a list to tick, and the picked students kept whole (the results change with every search), at most 200.
+ */
+export function StudentPicker({ picked, onChange, disabled }: { picked: RecipientStudent[]; onChange: (next: RecipientStudent[]) => void; disabled: boolean }) {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<RecipientStudent[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  // The list is asked again a moment after typing stops; the last answer stays on screen meanwhile.
+  useEffect(() => {
+    const controller = new AbortController();
+    setLoading(true); setFailed(false);
+    const timer = setTimeout(() => {
+      const params = new URLSearchParams({ limit: String(STUDENT_RESULTS) });
+      const words = query.trim().slice(0, 80);
+      if (words) params.set("q", words);
+      announcementRequest<{ items?: RecipientStudent[] }>(`/students?${params}`, { signal: controller.signal })
+        .then((data) => {
+          if (controller.signal.aborted) return;
+          setResults(Array.isArray(data.items) ? data.items : []); setLoading(false);
+        }, () => { if (!controller.signal.aborted) { setResults(null); setFailed(true); setLoading(false); } });
+    }, 300);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [query, attempt]);
+  const ids = new Set(picked.map((student) => student.id));
+  const full = picked.length >= ANNOUNCEMENT_STUDENTS_MAX;
+  const toggle = (student: RecipientStudent) => onChange(ids.has(student.id)
+    ? picked.filter((item) => item.id !== student.id)
+    : full ? picked : [...picked, student]);
+  const search = useRef<HTMLInputElement>(null);
+  const pickedList = useRef<HTMLUListElement>(null);
+  // Keyboard focus after the next render: the button that was pressed is gone by then.
+  const focusNext = useRef<(() => HTMLElement | null | undefined) | null>(null);
+  useEffect(() => { const target = focusNext.current; focusNext.current = null; target?.()?.focus(); });
+  const unpick = (student: RecipientStudent, index: number) => {
+    // The next student's ×, else the previous one, else the search box once nobody is left.
+    focusNext.current = () => pickedList.current?.querySelectorAll<HTMLElement>(".an-chip-x")[Math.min(index, picked.length - 2)] ?? search.current;
+    toggle(student);
+  };
+  const status = loading ? "Đang tìm sinh viên…" : searchStatus(query, results?.length ?? null, failed);
+  // Enter in the search box or on a result's checkbox never sends the announcement (browsers submit the form on Enter in a
+  // checkbox; Space ticks it). Buttons keep their Enter.
+  return <div className="an-picker" onKeyDown={(event) => { if (event.key === "Enter" && event.target instanceof HTMLInputElement) event.preventDefault(); }}>
+    <div className="an-picker-find">
+      <label className="an-search-label" htmlFor="an-student-search">Tìm sinh viên</label>
+      <div className="an-search-box">
+        <Icon name="search" />
+        <input id="an-student-search" ref={search} type="search" maxLength={80} autoComplete="off" placeholder="Họ tên, MSSV hoặc lớp…" value={query}
+          onChange={(event) => setQuery(event.target.value)} />
+      </div>
+      <div className="an-find-status">
+        <p className="an-hint" role="status" aria-live="polite">{status}</p>
+        {failed && <button type="button" className="am-outline an-small-btn" onClick={() => { setAttempt((n) => n + 1); search.current?.focus(); }}><Icon name="refresh" /> Thử lại</button>}
+      </div>
+      {results && results.length > 0 && <ul className={`an-results${loading ? " an-results-stale" : ""}`} aria-label="Kết quả tìm sinh viên">
+        {results.map((student) => {
+          const on = ids.has(student.id);
+          return <li key={student.id}>
+            <label className={`an-pick-row${on ? " an-pick-on" : ""}`}>
+              <input type="checkbox" checked={on} disabled={disabled || (!on && full)} onChange={() => toggle(student)} />
+              <span className="an-avatar" aria-hidden="true">{nameInitials(student.name) || "SV"}</span>
+              <span className="an-pick-text"><strong>{student.name}</strong><small>{studentLine(student)}</small></span>
+              {!student.hasEmail && <span className="an-nomail">Chưa có email</span>}
+            </label>
+          </li>;
+        })}
+      </ul>}
+    </div>
+    <div className="an-picked-box">
+      <div className="an-picked-head">
+        <strong>Đã chọn {number(picked.length)} sinh viên</strong>
+        {picked.length > 0 && <button type="button" className="am-outline an-small-btn" disabled={disabled}
+          onClick={() => { focusNext.current = () => search.current; onChange([]); }}>Bỏ chọn tất cả</button>}
+      </div>
+      {picked.length
+        ? <ul className="an-picked" ref={pickedList} aria-label="Sinh viên đã chọn">{picked.map((student, index) => <li key={student.id}>
+          <span className="an-avatar an-avatar-sm" aria-hidden="true">{nameInitials(student.name) || "SV"}</span>
+          <span className="an-pick-text"><strong>{student.name}</strong><small>{studentLine(student)}{student.hasEmail ? "" : " · chưa có email"}</small></span>
+          <button type="button" className="an-chip-x" aria-label={`Bỏ chọn ${student.name}`} title="Bỏ chọn" disabled={disabled} onClick={() => unpick(student, index)}><Icon name="close" /></button>
+        </li>)}</ul>
+        : <p className="an-picked-empty">Chưa chọn sinh viên nào. Đánh dấu sinh viên trong danh sách kết quả để thêm vào đây.</p>}
+      {full && <p className="an-hint an-hint-warn">Đã đủ {number(ANNOUNCEMENT_STUDENTS_MAX)} sinh viên, mức tối đa cho một thông báo.</p>}
+    </div>
+  </div>;
+}
+
+/** A section of the compose page: its step number, title, one line of help and, on the right, what it currently says. */
+function StepHead({ step, id, title, text, meta }: { step: number; id: string; title: string; text: string; meta?: ReactNode }) {
+  return <header className="an-step-head">
+    <span className="an-step-no" aria-hidden="true">{step}</span>
+    <div className="an-step-title"><h2 id={id}>{title}</h2><p>{text}</p></div>
+    {meta ? <span className="an-step-meta">{meta}</span> : null}
+  </header>;
+}
+
+/** The paragraphs of the email as messages.ts writes them: a blank line starts a new one; a single break stays inside. */
+const mailParagraphs = (text: string) => text.replace(/\r\n?/g, "\n").split(/\n{2,}/).map((part) => part.trim()).filter(Boolean);
+
+/** The email a student receives (mail/messages.ts announcementMailMessage), for the preview. */
+export function EmailPreview({ title, body, link, from, on }: { title: string; body: string; link: string | null; from: string | null; on: boolean }) {
+  const heading = title.trim() || "Tiêu đề thông báo";
+  const button = openLabel(link);
+  const text = body.trim() || "Nội dung sẽ hiện ở đây khi sinh viên mở thư.";
+  return <div className="an-mail">
+    {!on && <p className="an-preview-off">Chưa bật kênh email: sinh viên chỉ nhận thông báo ở chuông.</p>}
+    <div className="an-mail-frame">
+      <dl className="an-mail-head">
+        <div><dt>Tiêu đề</dt><dd><strong>[EduPath AI] {heading}</strong></dd></div>
+        <div><dt>Từ</dt><dd>{from ?? "Hộp thư trường của bạn"}</dd></div>
+        <div><dt>Đến</dt><dd>Email trường của từng sinh viên</dd></div>
+      </dl>
+      <div className="an-mail-body">
+        <p>Chào [họ tên sinh viên],</p>
+        {mailParagraphs(text).map((part, index) => <p key={index}>{part}</p>)}
+        <span className="an-mail-button">{button ? `${button} trên EduPath AI` : "Mở EduPath AI"}</span>
+        <p className="an-mail-foot">Thông báo của Khoa Công nghệ Thông tin, Trường Đại học Văn Lang, gửi qua EduPath AI. Bạn cũng xem được thông báo này ở chuông thông báo trên EduPath AI.</p>
+      </div>
+    </div>
+  </div>;
+}
+
+/** The student's view while the announcement is written: the bell (an unread row, then the opened notification) or the email. */
+export function AnnouncementPreview({ title, body, link, email = false, from = null }: {
+  title: string; body: string; link: string | null; email?: boolean; from?: string | null;
+}) {
+  const [view, setView] = useState<"bell" | "email">("bell");
+  const heading = title.trim() || "Tiêu đề thông báo";
+  const text = body.trim() || "Nội dung sẽ hiện ở đây khi sinh viên mở thông báo.";
+  const button = openLabel(link);
+  return <section className="cm-panel an-preview" aria-labelledby="an-preview-title">
+    <div className="an-preview-head">
+      <h2 id="an-preview-title">Sinh viên sẽ thấy</h2>
+      <div className="an-seg an-seg-sm" role="group" aria-label="Xem trước">
+        <button type="button" aria-pressed={view === "bell"} onClick={() => setView("bell")}><Icon name="bell" /> Chuông</button>
+        <button type="button" aria-pressed={view === "email"} onClick={() => setView("email")}><Icon name="mail" /> Email</button>
+      </div>
+    </div>
+    {view === "bell" ? <div className="an-bell">
+      <div className="an-note-row">
+        <span className="an-note-icon" aria-hidden="true">K</span>
+        <span className="an-note-text"><strong>{heading}</strong><small>Từ Khoa · Vừa xong · chưa đọc</small></span>
+        <span className="an-note-dot" aria-hidden="true" />
+      </div>
+      <div className="an-bell-detail">
+        <span className="an-bell-chip">Từ Khoa · Vừa xong</span>
+        <h3>{heading}</h3>
+        <p className="an-preview-body">{text}</p>
+        {button && <span className="an-preview-button">{button}</span>}
+      </div>
+      <p className="an-preview-note">Sinh viên thấy thông báo ở chuông trên thanh đầu trang, lọc được theo "Từ Khoa", đánh dấu đã đọc hoặc xóa. Thông báo tự xóa sau 90 ngày.</p>
+    </div> : <EmailPreview title={title} body={body} link={link} from={from} on={email} />}
+  </section>;
+}
+
 function ComposeAnnouncement({ canManage, navigate }: { canManage: boolean; navigate?: (path: string) => void }) {
   const options = useAnnouncementOptions();
   const mail = useMailSender();
+  const [mode, setMode] = useState<"group" | "students">("group");
   const [target, setTarget] = useState<AnnouncementTarget>({ cohorts: [], majors: [] });
+  const [picked, setPicked] = useState<RecipientStudent[]>([]);
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [link, setLink] = useState("");
@@ -427,16 +614,23 @@ function ComposeAnnouncement({ canManage, navigate }: { canManage: boolean; navi
     }, 250);
     return () => { clearTimeout(timer); controller.abort(); };
   }, [query]);
+  const byStudent = mode === "students";
   const everyone = !target.cohorts.length && !target.majors.length;
-  const reach = reachText(count, countFailed);
+  const reach = byStudent ? pickedReachText(picked.length) : reachText(count, countFailed);
+  // Picked students are counted here; a group is counted by GET /reach.
+  const recipients = byStudent ? picked.length : count;
+  const reachable = byStudent ? picked.filter((student) => student.hasEmail).length : withEmail;
+  const nobody = recipients === 0;
+  const recipientsText = byStudent ? pickedSummary(picked) : targetText(target, options);
   const emailOn = wantEmail && Boolean(mail.sender && !mail.sender.lastError);
   const reset = () => { setTitle(""); setBody(""); setLink(""); setError(""); };
   const send = async () => {
     setBusy(true); setError("");
     try {
+      const audience = byStudent ? { students: picked.map((student) => student.id) } : { cohorts: target.cohorts, majors: target.majors };
       const { announcement } = await announcementRequest<{ announcement: Announcement }>("", {
         method: "POST",
-        body: JSON.stringify({ title: title.trim(), body: body.trim(), link: link || null, cohorts: target.cohorts, majors: target.majors, email: emailOn }),
+        body: JSON.stringify({ title: title.trim(), body: body.trim(), link: link || null, ...audience, email: emailOn }),
       });
       // Email is chosen again for each announcement: a sent email cannot be withdrawn.
       setSent(announcement); setConfirming(false); setWantEmail(false); reset();
@@ -445,78 +639,116 @@ function ComposeAnnouncement({ canManage, navigate }: { canManage: boolean; navi
       setError((failure as Error).message); setConfirming(false);
     } finally { setBusy(false); }
   };
+  const pendingText = countFailed ? "Chưa đếm được" : "Đang đếm…";
+  const countText = recipients === null ? pendingText : `${number(recipients)} sinh viên`;
   return <section className="cm-workspace an-workspace">
     <EmailTestBanner outcome={emailTest} />
     {sent && <div className="an-success" role="status">
       <Icon name="check" />
-      <p>Đã gửi <strong>“{sent.title}”</strong> tới {number(sent.recipients)} sinh viên ({sent.targetLabel}).
+      <p>Đã gửi <strong>“{sent.title}”</strong> tới {reachedText(sent)}.
         {sent.email ? ` Email đang được gửi dần từ hộp thư ${sent.email.from ?? "của bạn"}, khoảng 25 thư mỗi phút; xem tiến độ ở trang Đã gửi.` : ""}</p>
       {navigate && <button type="button" className="am-outline" onClick={() => navigate(SENT_PATH)}>Xem thông báo đã gửi</button>}
     </div>}
+    {!canManage && <p className="an-readonly" role="note">Bạn chỉ có quyền xem. Quản trị viên mới gửi được thông báo.</p>}
     <div className="an-compose">
-      <section className="cm-panel an-form-panel" aria-labelledby="an-compose-title">
-        <div className="an-panel-head">
-          <h2 id="an-compose-title">Soạn thông báo</h2>
-          <p>Thông báo hiện ngay ở chuông thông báo của các sinh viên được chọn, và đến email trường của họ nếu bạn chọn kênh email.</p>
-        </div>
-        {!canManage && <p className="an-readonly" role="note">Bạn chỉ có quyền xem. Quản trị viên mới gửi được thông báo.</p>}
-        <CheckedForm className="cm-form an-form" onSubmit={(event) => {
-          event.preventDefault();
-          setSent(null);
-          if (count === 0) { setError(failures.no_recipients!); return; }
-          setError(""); setConfirming(true);
-        }}>
-          <fieldset className="cm-fields" disabled={!canManage || busy}>
-            <fieldset className="an-targets">
-              <legend>Gửi đến</legend>
-              <div className="an-chip-row" role="group" aria-label="Khóa">
-                <button type="button" aria-pressed={everyone} onClick={() => setTarget({ cohorts: [], majors: [] })}>Tất cả sinh viên</button>
-                {options.cohorts.map((cohort) => <button key={cohort} type="button" aria-pressed={target.cohorts.includes(cohort)}
-                  onClick={() => setTarget((current) => ({ ...current, cohorts: options.cohorts.filter((item) => toggleValue(current.cohorts, cohort).includes(item)) }))}>{cohort}</button>)}
-              </div>
-              <div className="an-chip-row" role="group" aria-label="Ngành">
-                {options.majors.map((major) => <button key={major.code} type="button" aria-pressed={target.majors.includes(major.code)}
-                  onClick={() => setTarget((current) => ({ ...current, majors: options.majors.map((item) => item.code).filter((code) => toggleValue(current.majors, major.code).includes(code)) }))}>{major.name}</button>)}
-              </div>
-              <p className="an-hint">Chọn khóa, ngành hoặc cả hai; không chọn gì là gửi cho tất cả sinh viên.</p>
-              <p className={`an-reach an-reach-${reach.tone}`} aria-live="polite">{reach.text}</p>
-            </fieldset>
+      <CheckedForm id="an-compose-form" className="cm-form an-form" onSubmit={(event) => {
+        event.preventDefault();
+        setSent(null);
+        if (nobody) { setError(byStudent ? "Hãy chọn ít nhất một sinh viên." : failures.no_recipients!); return; }
+        setError(""); setConfirming(true);
+      }}>
+        <fieldset className="cm-fields an-steps" disabled={!canManage || busy}>
+          <section className="cm-panel an-step" aria-labelledby="an-step-recipients">
+            <StepHead step={1} id="an-step-recipients" title="Người nhận" text="Gửi cho cả khóa, ngành hoặc chọn từng sinh viên." meta={countText} />
+            <div className="an-seg" role="group" aria-label="Cách chọn người nhận">
+              <button type="button" aria-pressed={!byStudent} onClick={() => setMode("group")}><Icon name="users" /> Theo khóa, ngành</button>
+              <button type="button" aria-pressed={byStudent} onClick={() => setMode("students")}><Icon name="user" /> Chọn từng sinh viên</button>
+            </div>
+            {byStudent
+              ? <StudentPicker picked={picked} onChange={setPicked} disabled={!canManage || busy} />
+              : <fieldset className="an-targets">
+                <legend className="sr-only">Khóa và ngành</legend>
+                <div className="an-chip-group">
+                  <span className="an-chip-label">Khóa</span>
+                  <div className="an-chip-row" role="group" aria-label="Khóa">
+                    <button type="button" aria-pressed={everyone} onClick={() => setTarget({ cohorts: [], majors: [] })}>Tất cả sinh viên</button>
+                    {options.cohorts.map((cohort) => <button key={cohort} type="button" aria-pressed={target.cohorts.includes(cohort)}
+                      onClick={() => setTarget((current) => ({ ...current, cohorts: options.cohorts.filter((item) => toggleValue(current.cohorts, cohort).includes(item)) }))}>{cohort}</button>)}
+                  </div>
+                </div>
+                <div className="an-chip-group">
+                  <span className="an-chip-label">Ngành</span>
+                  <div className="an-chip-row" role="group" aria-label="Ngành">
+                    {options.majors.map((major) => <button key={major.code} type="button" aria-pressed={target.majors.includes(major.code)}
+                      onClick={() => setTarget((current) => ({ ...current, majors: options.majors.map((item) => item.code).filter((code) => toggleValue(current.majors, major.code).includes(code)) }))}>{major.name}</button>)}
+                  </div>
+                </div>
+                <p className="an-hint">Chọn khóa, ngành hoặc cả hai; không chọn gì là gửi cho tất cả sinh viên.</p>
+              </fieldset>}
+            <p className={`an-reach an-reach-${reach.tone}`} aria-live="polite">{reach.text}</p>
+          </section>
+          <section className="cm-panel an-step" aria-labelledby="an-step-content">
+            <StepHead step={2} id="an-step-content" title="Nội dung" text="Tiêu đề hiện trong chuông và là tiêu đề email; nội dung sinh viên đọc khi mở thông báo." />
             <label><RequiredLabel>Tiêu đề</RequiredLabel>
-              <input required maxLength={ANNOUNCEMENT_TITLE_MAX} value={title} placeholder="Ví dụ: Lịch đăng ký học phần học kỳ 2 năm học 2026–2027" onChange={(event) => setTitle(event.target.value)} />
+              <input id="an-title" required maxLength={ANNOUNCEMENT_TITLE_MAX} value={title} placeholder="Ví dụ: Lịch đăng ký học phần học kỳ 2 năm học 2026–2027" onChange={(event) => setTitle(event.target.value)} />
               <small className="an-counter">{number(title.length)}/{number(ANNOUNCEMENT_TITLE_MAX)} ký tự</small>
             </label>
             <label><RequiredLabel>Nội dung</RequiredLabel>
-              <textarea required maxLength={ANNOUNCEMENT_BODY_MAX} rows={6} value={body} placeholder="Nội dung sinh viên đọc khi mở thông báo" onChange={(event) => setBody(event.target.value)} />
+              <textarea id="an-body" required maxLength={ANNOUNCEMENT_BODY_MAX} rows={6} value={body} placeholder="Nội dung sinh viên đọc khi mở thông báo" onChange={(event) => setBody(event.target.value)} />
               <small className="an-counter">{number(body.length)}/{number(ANNOUNCEMENT_BODY_MAX)} ký tự</small>
             </label>
             <label>Trang liên quan (không bắt buộc)
-              <select value={link} onChange={(event) => setLink(event.target.value)}>
+              <select id="an-link" value={link} onChange={(event) => setLink(event.target.value)}>
                 <option value="">Không có</option>
                 {PORTAL_PAGES.map((page) => <option key={page.link} value={page.link}>{page.label}</option>)}
               </select>
+              <small className="an-field-hint">Sinh viên bấm nút trong thông báo để mở trang này.</small>
             </label>
-            <fieldset className="an-channels">
-              <legend>Kênh gửi</legend>
-              <label className="cm-check"><input type="checkbox" checked disabled readOnly /> Trong EduPath AI (chuông thông báo của sinh viên)</label>
-              <EmailChannel mail={mail} checked={emailOn} onCheck={setWantEmail} draft={{ title, body, link: link || null }} reach={emailReachText(count, withEmail)} />
-            </fieldset>
-          </fieldset>
+          </section>
+          <section className="cm-panel an-step" aria-labelledby="an-step-channels">
+            <StepHead step={3} id="an-step-channels" title="Kênh gửi" text="Thông báo luôn hiện trong EduPath AI; email trường là tùy chọn."
+              meta={emailOn ? "Chuông và email" : "Chuông"} />
+            <div className="an-channels-grid">
+              <div className="an-channel an-channel-on">
+                <div className="an-channel-head">
+                  <span className="an-channel-icon" aria-hidden="true"><Icon name="bell" /></span>
+                  <span className="an-channel-title"><strong>Trong EduPath AI</strong><small>Chuông của sinh viên</small></span>
+                  <span className="an-always">Luôn bật</span>
+                </div>
+                <p className="an-email-text">Hiện ngay ở chuông của các sinh viên nhận, lọc được theo "Từ Khoa"; tự xóa sau 90 ngày.</p>
+              </div>
+              <EmailChannel mail={mail} checked={emailOn} onCheck={setWantEmail} draft={{ title, body, link: link || null }}
+                reach={recipients === null ? null : emailReachText(recipients, reachable)} />
+            </div>
+          </section>
+        </fieldset>
+      </CheckedForm>
+      <aside className="an-rail" aria-label="Tóm tắt và xem trước">
+        <section className="cm-panel an-summary" aria-labelledby="an-summary-title">
+          <h2 id="an-summary-title">Tóm tắt</h2>
+          <dl>
+            <div><dt>Người nhận</dt><dd>{recipientsText}</dd></div>
+            <div><dt>Số sinh viên</dt><dd>{countText}</dd></div>
+            <div><dt>Kênh gửi</dt><dd>{emailOn ? "Chuông thông báo và email trường" : "Chuông thông báo"}</dd></div>
+            {emailOn && <div><dt>Email</dt><dd>{reachable === null ? pendingText : `${number(reachable)} sinh viên có email`}, từ {mail.sender?.address}</dd></div>}
+            <div><dt>Tiêu đề</dt><dd className={title.trim() ? undefined : "an-muted"}>{title.trim() || "Chưa nhập"}</dd></div>
+          </dl>
           {error && <p className="admin-error" role="alert">{error}</p>}
-          <div className="cm-actions">
-            <button className="am-primary" disabled={!canManage || busy || count === 0}><Icon name="bell" /> Gửi thông báo</button>
+          <div className="an-summary-actions">
+            <button type="submit" form="an-compose-form" className="am-primary" disabled={!canManage || busy || nobody}><Icon name="bell" /> Gửi thông báo</button>
             <button type="button" className="am-outline" disabled={!canManage || busy || (!title && !body && !link)} onClick={reset}><Icon name="close" /> Xóa nội dung</button>
           </div>
-        </CheckedForm>
-      </section>
-      <AnnouncementPreview title={title} body={body} link={link || null} email={emailOn} />
+        </section>
+        <AnnouncementPreview title={title} body={body} link={link || null} email={emailOn} from={mail.sender?.address ?? null} />
+      </aside>
     </div>
     {confirming && <Modal title="Gửi thông báo" size="sm" busy={busy} onClose={() => setConfirming(false)}>
       <div className="cm-dialog-body cm-form">
-        <strong>{count === null ? "Gửi tới các sinh viên được chọn?" : `Gửi tới ${number(count)} sinh viên?`}</strong>
-        <p>“{title.trim()}” sẽ hiện ngay ở chuông thông báo của {everyone ? "tất cả sinh viên" : `sinh viên ${targetText(target, options)}`}. Bạn có thể thu hồi ở trang Đã gửi.</p>
+        <strong>{recipients === null ? "Gửi tới các sinh viên được chọn?" : `Gửi tới ${number(recipients)} sinh viên?`}</strong>
+        <p>“{title.trim()}” sẽ hiện ngay ở chuông thông báo của {byStudent ? pickedSummary(picked, 3) : everyone ? "tất cả sinh viên" : `sinh viên ${targetText(target, options)}`}. Bạn có thể thu hồi ở trang Đã gửi.</p>
         {emailOn && <p className="an-confirm-email"><Icon name="mail" /><span>
-          Kèm email từ hộp thư <strong>{mail.sender?.address}</strong>{withEmail !== null ? ` tới ${number(withEmail)} sinh viên có địa chỉ email` : ""}, gửi dần khoảng 25 thư mỗi phút
-          {withEmail ? ` (xong sau khoảng ${number(emailMinutes(withEmail))} phút)` : ""}. Email đã gửi không thu hồi được.</span></p>}
+          Kèm email từ hộp thư <strong>{mail.sender?.address}</strong>{reachable !== null ? ` tới ${number(reachable)} sinh viên có địa chỉ email` : ""}, gửi dần khoảng 25 thư mỗi phút
+          {reachable ? ` (xong sau khoảng ${number(emailMinutes(reachable))} phút)` : ""}. Email đã gửi không thu hồi được.</span></p>}
         <div className="cm-actions cm-dialog-actions">
           <button type="button" className="am-outline" disabled={busy} onClick={() => setConfirming(false)}><Icon name="close" /> Hủy</button>
           <button type="button" className="am-primary" disabled={busy} onClick={() => void send()}><Icon name="bell" /> {busy ? "Đang gửi…" : "Gửi thông báo"}</button>
@@ -612,7 +844,8 @@ function AnnouncementDetail({ announcement, canManage, close, onWithdraw, onChan
         <div><dt>Tiêu đề</dt><dd>{announcement.title}</dd></div>
         <div><dt>Nội dung</dt><dd className="an-detail-body">{announcement.body}</dd></div>
         <div><dt>Trang liên quan</dt><dd>{announcement.link ? pageLabel(announcement.link) ?? announcement.link : "Không có"}</dd></div>
-        <div><dt>Gửi đến</dt><dd>{announcement.targetLabel}</dd></div>
+        <div><dt>Gửi đến</dt><dd>{announcement.targetLabel}{announcement.target.students?.length ? <PickedRecipients id={announcement.id} />
+          : announcement.target.picked ? <small className="an-detail-note">Danh sách sinh viên được chọn đã xóa sau 90 ngày, như thông báo trong chuông.</small> : null}</dd></div>
         <div><dt>Đã đọc</dt><dd>{readText(announcement)} sinh viên ({readShare(announcement)}%)</dd></div>
         <div><dt>Thời gian gửi</dt><dd>{sentTime(announcement.createdAt)}{announcement.createdBy ? ` · ${announcement.createdBy}` : ""}</dd></div>
         {announcement.withdrawnAt && <div><dt>Thu hồi lúc</dt><dd>{sentTime(announcement.withdrawnAt)}</dd></div>}
@@ -657,6 +890,23 @@ function EmailDetail({ announcement, email, canManage, onChanged }: {
   </div>;
 }
 
+/** The students an announcement was sent to by picking them (GET /:id/recipients), as they are now. */
+export function RecipientList({ items }: { items: RecipientStudent[] }) {
+  if (!items.length) return <p className="an-muted">Không còn tài khoản sinh viên nào trong danh sách này.</p>;
+  return <div className="an-problems an-recipients"><table>
+    <thead><tr><th scope="col">Sinh viên</th><th scope="col">MSSV</th><th scope="col">Lớp</th></tr></thead>
+    <tbody>{items.map((item) => <tr key={item.id}>
+      <td>{item.name}{item.hasEmail ? null : <small>Chưa có email</small>}</td>
+      <td className="an-num">{item.studentCode ?? "—"}</td>
+      <td className="an-num">{item.className ?? "—"}</td>
+    </tr>)}</tbody>
+  </table></div>;
+}
+function PickedRecipients({ id }: { id: string }) {
+  const remote = useData<{ items: RecipientStudent[] }>(`${ANNOUNCEMENTS_API}/${encodeURIComponent(id)}/recipients`);
+  return <div className="an-recipients-box"><Status {...remote} />{remote.data && <RecipientList items={remote.data.items} />}</div>;
+}
+
 /** The messages of an announcement that did not go out (GET /:id/emails). */
 export function EmailProblemList({ items }: { items: EmailProblem[] }) {
   if (!items.length) return <p className="an-muted">Không có email lỗi.</p>;
@@ -694,7 +944,7 @@ function WithdrawDialog({ announcement, close, done }: { announcement: Announcem
   return <Modal title="Thu hồi thông báo" onClose={close} busy={busy} size="sm">
     <div className="cm-dialog-body cm-form">
       <strong>{announcement.title}</strong>
-      <p>Thông báo sẽ biến mất khỏi chuông của {number(announcement.recipients)} sinh viên ({announcement.targetLabel}). Việc thu hồi không hoàn tác được.</p>
+      <p>Thông báo sẽ biến mất khỏi chuông của {reachedText(announcement)}. Việc thu hồi không hoàn tác được.</p>
       {email && <p className="an-confirm-email"><Icon name="mail" /><span>{email}</span></p>}
       {error && <p className="admin-error" role="alert">{error}</p>}
       <div className="cm-actions cm-dialog-actions">

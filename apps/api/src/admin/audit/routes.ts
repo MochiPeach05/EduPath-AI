@@ -318,7 +318,9 @@ export const AUDIT_ROUTES: readonly AuditRoute[] = [
     describe: ({ body, result }) => {
       const sent = obj(obj(result).announcement), recipients = num(sent.recipients);
       const email = body.email === true ? " (kèm email)" : "";
-      return { summary: `Gửi thông báo "${str(sent.title) || str(body.title)}"${recipients === null ? "" : ` cho ${recipients} sinh viên`}${email}`, ...target("announcement", sent.id) };
+      // Sent to students picked one by one (2026-11-25); their names are never written to the log.
+      const picked = Array.isArray(body.students) && body.students.length > 0 ? " được chọn" : "";
+      return { summary: `Gửi thông báo "${str(sent.title) || str(body.title)}"${recipients === null ? "" : ` cho ${recipients} sinh viên${picked}`}${email}`, ...target("announcement", sent.id) };
     } },
 ];
 

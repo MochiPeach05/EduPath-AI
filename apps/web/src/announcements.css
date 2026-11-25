@@ -1,18 +1,55 @@
-/* Quản lý thông báo (AnnouncementsManagement.tsx, 2026-10-30): compose form beside the student's view, and the sent list.
-   Built on the admin catalog styles (curricula.css, careers.css); only what those lack is here. */
+/* Cấu hình thông báo (AnnouncementsManagement.tsx). Built on the admin catalog styles (curricula.css, careers.css); only
+   what those lack is here. admin-workspace.css (loaded later) resets every .am-shell button font and gives every button in
+   .cm-workspace 44px: the buttons drawn here use selectors of at least two classes so their own sizes hold. A button that
+   also carries am-outline or am-primary meets ui-controls.css (:root :is(...), 0,2,0, loaded later) and needs three.
+
+   Gửi thông báo, redesigned 2026-11-25 (user: "Sửa lại giao diện gửi thông báo đẹp hơn và thêm tính năng có thể gửi tới
+   từng bạn sinh viên mình chọn nữa"): three numbered step panels (1 Người nhận, 2 Nội dung, 3 Kênh gửi; the order is the
+   order the staff work in) beside a sticky rail holding the summary, the send button and the student's view. */
 
 .an-workspace { gap: 20px; }
-.an-compose { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(280px, 1fr); gap: 20px; align-items: start; }
-.an-form-panel { padding: 24px; }
+.an-compose { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(300px, 1fr); gap: 20px; align-items: start; }
+.an-form { gap: 0; }
+.an-steps { gap: 16px; }
 .an-panel-head h2 { margin: 0 0 4px; font-size: 20px; }
 .an-panel-head p { margin: 0 0 18px; color: var(--cm-muted); font-size: 13.5px; }
-.an-readonly { margin: 0 0 16px; padding: 10px 12px; border-radius: 8px; background: var(--cm-warn-bg); color: var(--cm-warn); font-size: 13px; }
+.an-readonly { margin: 0; padding: 10px 12px; border-radius: 8px; background: var(--cm-warn-bg); color: var(--cm-warn); font-size: 13px; }
 
-/* Gửi đến */
-.an-targets, .an-channels { display: grid; gap: 10px; margin: 0; padding: 0; border: 0; min-width: 0; }
-.an-targets legend, .an-channels legend { margin-bottom: 8px; padding: 0; color: var(--cm-muted); font-size: 13px; }
-.an-chip-row { display: flex; flex-wrap: wrap; gap: 6px; }
-/* .an-targets: admin-workspace.css (loaded later) resets every .am-shell button font. */
+/* A step: number, title and help on the left, what it currently says on the right. Narrow steps stack their content. */
+.an-step { display: grid; gap: 16px; padding: 22px 24px; container-type: inline-size; }
+.an-step-head { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto; gap: 12px; align-items: start; }
+.an-step-no {
+  width: 32px; height: 32px; display: grid; place-items: center; border-radius: 50%; background: #fbf0f3; color: var(--cm-accent);
+  font-size: 14px; font-weight: 800; font-variant-numeric: tabular-nums;
+}
+.an-step-title { min-width: 0; }
+.an-step-title h2 { margin: 0; font-size: 17px; line-height: 1.35; }
+.an-step-title p { margin: 2px 0 0; color: var(--cm-muted); font-size: 13px; line-height: 1.5; }
+.an-step-meta {
+  align-self: center; padding: 4px 11px; border-radius: 999px; background: var(--cm-soft); border: 1px solid var(--cm-line);
+  color: var(--cm-ink); font-size: 12.5px; font-weight: 700; white-space: nowrap; font-variant-numeric: tabular-nums;
+}
+
+/* Segmented control: Theo khóa, ngành | Chọn từng sinh viên, and Chuông | Email in the preview. */
+.an-seg {
+  display: inline-flex; flex-wrap: wrap; gap: 4px; justify-self: start; max-width: 100%; padding: 4px;
+  border: 1px solid var(--cm-line); border-radius: 10px; background: var(--cm-soft);
+}
+.an-workspace .an-seg button {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 38px; padding: 6px 14px; border: 0; border-radius: 7px;
+  background: transparent; color: var(--cm-muted); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer;
+}
+.an-workspace .an-seg button:hover:not(:disabled) { color: var(--cm-ink); }
+.an-workspace .an-seg button[aria-pressed="true"] { background: #fff; color: var(--cm-accent); box-shadow: 0 1px 2px rgba(16, 24, 40, .12); }
+.an-workspace .an-seg button svg { width: 17px; height: 17px; }
+.an-workspace .an-seg-sm button { min-height: 32px; padding: 4px 11px; font-size: 12.5px; }
+.an-workspace .an-seg-sm button svg { width: 15px; height: 15px; }
+
+/* Theo khóa, ngành */
+.an-targets, .an-channels { display: grid; gap: 12px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.an-chip-group { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 10px; align-items: start; }
+.an-chip-label { padding-top: 8px; color: var(--cm-muted); font-size: 12.5px; font-weight: 700; }
+.an-chip-row { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
 .an-targets .an-chip-row button {
   min-height: 34px; padding: 5px 12px; border: 1px solid #bfc6d2; border-radius: 999px; background: #fff; color: var(--cm-ink);
   font: inherit; font-size: 13px; font-weight: 650; cursor: pointer;
@@ -21,25 +58,137 @@
 .an-targets .an-chip-row button[aria-pressed="true"] { border-color: #e8b4c1; background: #fbf0f3; color: var(--cm-accent); }
 .an-targets .an-chip-row button:disabled { cursor: not-allowed; opacity: .6; }
 .an-hint { margin: 0; color: var(--cm-muted); font-size: 12.5px; }
-.an-reach { margin: 0; padding: 8px 12px; border-radius: 8px; background: var(--cm-soft); font-size: 13px; }
+.an-hint-warn { color: var(--cm-warn); font-weight: 600; }
+.an-reach { margin: 0; padding: 9px 12px; border-radius: 8px; background: var(--cm-soft); font-size: 13px; }
 .an-reach-ok { color: var(--cm-ink); }
 .an-reach-warn { background: var(--cm-warn-bg); color: var(--cm-warn); font-weight: 600; }
 .an-reach-muted { color: var(--cm-muted); }
 .an-counter { justify-self: end; color: var(--cm-muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-.an-form textarea { min-height: 140px; }
+.an-field-hint { color: var(--cm-muted); font-size: 12px; }
+.an-form textarea { min-height: 150px; }
+
+/* Chọn từng sinh viên: the search and its results beside the picked students (stacked in a narrow step). */
+.an-picker { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+@container (max-width: 620px) { .an-picker { grid-template-columns: minmax(0, 1fr); } }
+.an-picker-find, .an-picked-box { display: grid; gap: 10px; min-width: 0; align-content: start; }
+.an-search-label { color: var(--cm-muted); font-size: 13px; }
+.an-search-box { position: relative; min-width: 0; }
+.an-search-box svg { position: absolute; left: 12px; top: 50%; width: 18px; height: 18px; transform: translateY(-50%); color: var(--cm-muted); pointer-events: none; }
+.an-workspace .an-search-box input { padding-left: 40px; }
+.an-find-status { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.an-find-status .an-hint { flex: 1 1 200px; }
+.an-results {
+  display: grid; gap: 2px; align-content: start; max-height: 336px; margin: 0; padding: 4px; overflow-y: auto; list-style: none;
+  border: 1px solid var(--cm-line); border-radius: 10px; background: #fff;
+}
+.an-results-stale { opacity: .6; }
+.an-workspace .an-pick-row {
+  display: grid; grid-template-columns: 18px 34px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 10px;
+  border-radius: 8px; color: var(--cm-ink); font-size: 13.5px; line-height: 1.4; cursor: pointer;
+}
+.an-workspace .an-pick-row:hover { background: #f8f9fb; }
+.an-workspace .an-pick-on, .an-workspace .an-pick-on:hover { background: #fbf0f3; }
+.an-workspace .an-pick-row input[type="checkbox"] {
+  width: 18px; height: 18px; min-height: 18px; margin: 0; padding: 0; accent-color: var(--cm-accent); cursor: pointer;
+}
+.an-workspace .an-pick-row input[type="checkbox"]:disabled { cursor: not-allowed; }
+.an-avatar {
+  width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: #eef0f4; color: #3d4656;
+  font-size: 12px; font-weight: 800; letter-spacing: .02em;
+}
+.an-pick-on .an-avatar { background: #fff; color: var(--cm-accent); }
+.an-avatar-sm { width: 30px; height: 30px; font-size: 11px; }
+.an-pick-text { display: grid; gap: 1px; min-width: 0; }
+.an-pick-text strong { font-size: 13.5px; font-weight: 700; overflow-wrap: anywhere; }
+.an-pick-text small { color: var(--cm-muted); font-size: 12px; overflow-wrap: anywhere; }
+.an-nomail {
+  padding: 2px 8px; border-radius: 999px; background: var(--cm-warn-bg); color: var(--cm-warn); font-size: 11.5px; font-weight: 700;
+  white-space: nowrap;
+}
+@container (max-width: 480px) {
+  .an-workspace .an-pick-row { grid-template-columns: 18px 34px minmax(0, 1fr); }
+  .an-nomail { grid-column: 3; justify-self: start; }
+}
+.an-picked-box { padding: 14px; border: 1px solid var(--cm-line); border-radius: 10px; background: var(--cm-soft); }
+.an-picked-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; min-height: 34px; }
+.an-picked-head strong { font-size: 14px; color: var(--cm-ink); font-variant-numeric: tabular-nums; }
+.an-workspace .am-outline.an-small-btn { --ep-button-height: 34px; min-height: 34px; padding: 4px 12px; font-size: 12.5px; }
+.an-workspace .am-outline.an-small-btn > svg { width: 15px; height: 15px; }
+.an-picked { display: grid; gap: 6px; max-height: 336px; margin: 0; padding: 0; overflow-y: auto; list-style: none; }
+.an-picked li {
+  display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 6px 6px 6px 8px;
+  border: 1px solid var(--cm-line); border-radius: 8px; background: #fff;
+}
+.an-workspace .an-picked .an-chip-x {
+  width: 30px; height: 30px; min-height: 30px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 6px;
+  background: transparent; color: var(--cm-muted); cursor: pointer;
+}
+.an-workspace .an-picked .an-chip-x:hover:not(:disabled) { background: #fbf0f3; color: var(--cm-accent); }
+.an-workspace .an-picked .an-chip-x svg { width: 16px; height: 16px; }
+.an-picked-empty { margin: 0; color: var(--cm-muted); font-size: 13px; }
+
+/* Kênh gửi: the bell (always) and the email (optional) as two cards. */
+.an-channels-grid { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); gap: 12px; align-items: start; }
+@container (max-width: 620px) { .an-channels-grid { grid-template-columns: minmax(0, 1fr); } }
+.an-channel { display: grid; gap: 10px; min-width: 0; padding: 14px 16px; border: 1px solid var(--cm-line); border-radius: 10px; background: #fff; }
+.an-channel-on { border-color: #e8b4c1; background: #fffafb; }
+.an-channel-head { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto; gap: 10px; align-items: center; }
+.an-channel-icon { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; background: #fbf0f3; color: var(--cm-accent); }
+.an-channel-icon svg { width: 18px; height: 18px; }
+.an-channel-title { display: grid; gap: 1px; min-width: 0; }
+.an-channel-title strong { color: var(--cm-ink); font-size: 14px; overflow-wrap: anywhere; }
+.an-channel-title small { color: var(--cm-muted); font-size: 12px; }
+.an-channel .an-switch {
+  display: inline-flex; align-items: center; gap: 8px; min-height: 32px; padding: 2px 4px; border: 0; border-radius: 8px; background: none;
+  color: var(--cm-ink); font: inherit; font-size: 13px; font-weight: 650; cursor: pointer;
+}
+.an-channel .an-switch:disabled { cursor: not-allowed; opacity: .6; }
+.an-channel .an-switch-label { min-width: 2.4em; }
+
+/* The rail: summary with the send button, then the student's view; it follows the page while the form scrolls. */
+.an-rail {
+  display: grid; gap: 16px; min-width: 0; position: sticky; top: calc(var(--am-header-height, 80px) + 16px);
+  max-height: calc(100 * var(--ep-vh, 1vh) - var(--am-header-height, 80px) - 32px); overflow-y: auto; overscroll-behavior: contain;
+}
+.an-summary { display: grid; gap: 14px; padding: 20px 22px; }
+.an-summary h2 { margin: 0; font-size: 16px; }
+.an-summary dl { display: grid; gap: 10px; margin: 0; }
+.an-summary dl div { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; font-size: 13px; }
+.an-summary dt { color: var(--cm-muted); }
+.an-summary dd { margin: 0; color: var(--cm-ink); font-weight: 650; overflow-wrap: anywhere; }
+.an-summary dd.an-muted { color: var(--cm-muted); font-weight: 500; }
+.an-summary .admin-error { margin: 0; }
+.an-summary-actions { display: grid; gap: 8px; }
+.an-workspace .an-summary-actions button { width: 100%; justify-content: center; }
 
 /* The student's view */
-.an-preview { display: grid; gap: 12px; padding: 20px 22px; position: sticky; top: calc(var(--am-header-height, 80px) + 16px); }
+.an-preview { display: grid; gap: 14px; padding: 20px 22px; }
+.an-preview-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
 .an-preview h2 { margin: 0; font-size: 16px; }
-.an-note-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) 10px; gap: 10px; align-items: start; padding: 10px; border: 1px solid var(--cm-line); border-radius: 10px; }
+.an-bell { display: grid; gap: 12px; }
+.an-note-row { display: grid; grid-template-columns: 34px minmax(0, 1fr) 10px; gap: 10px; align-items: start; padding: 10px; border: 1px solid var(--cm-line); border-radius: 10px; background: #fff; }
 .an-note-icon { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 10px; background: #fbf0f3; color: var(--cm-accent); font-size: 13px; font-weight: 800; }
 .an-note-text { display: grid; gap: 1px; min-width: 0; }
 .an-note-text strong { font-size: 13.5px; line-height: 1.35; overflow-wrap: anywhere; }
 .an-note-text small { color: var(--cm-muted); font-size: 12px; }
 .an-note-dot { width: 9px; height: 9px; margin-top: 6px; border-radius: 50%; background: var(--cm-accent); }
+.an-bell-detail { display: grid; gap: 8px; justify-items: start; padding: 14px; border: 1px solid var(--cm-line); border-radius: 10px; background: #fff; }
+.an-bell-chip { padding: 2px 9px; border-radius: 999px; background: #fbf0f3; color: var(--cm-accent); font-size: 11.5px; font-weight: 700; }
+.an-bell-detail h3 { margin: 0; font-size: 15px; line-height: 1.4; overflow-wrap: anywhere; }
 .an-preview-body { margin: 0; color: var(--cm-ink); font-size: 13.5px; white-space: pre-line; overflow-wrap: anywhere; }
 .an-preview-button { justify-self: start; padding: 6px 12px; border-radius: 8px; background: var(--cm-accent); color: #fff; font-size: 13px; font-weight: 700; }
 .an-preview-note { margin: 0; color: var(--cm-muted); font-size: 12.5px; }
+.an-mail { display: grid; gap: 10px; }
+.an-preview-off { margin: 0; padding: 8px 12px; border-radius: 8px; background: var(--cm-warn-bg); color: var(--cm-warn); font-size: 12.5px; }
+.an-mail-frame { border: 1px solid var(--cm-line); border-radius: 10px; overflow: hidden; background: #fff; }
+.an-mail-head { display: grid; gap: 3px; margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--cm-line); background: #f7f8fa; font-size: 12.5px; }
+.an-mail-head div { display: grid; grid-template-columns: 56px minmax(0, 1fr); gap: 8px; }
+.an-mail-head dt { color: var(--cm-muted); }
+.an-mail-head dd { margin: 0; color: var(--cm-ink); overflow-wrap: anywhere; }
+.an-mail-body { display: grid; gap: 10px; justify-items: start; padding: 16px 16px 18px; color: #1f2330; font-family: "Segoe UI", Arial, sans-serif; font-size: 14px; }
+.an-preview .an-mail-body p { margin: 0; line-height: 1.55; white-space: pre-line; overflow-wrap: anywhere; }
+.an-mail-button { padding: 8px 14px; border-radius: 8px; background: #b51639; color: #fff; font-size: 13.5px; font-weight: 700; }
+.an-preview .an-mail-body .an-mail-foot { color: #667085; font-size: 12px; }
 
 .an-success { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 12px 16px; border: 1px solid #b8dccb; border-radius: 12px; background: #e6f2ec; color: #1f5f49; }
 .an-success p { flex: 1; margin: 0; min-width: 220px; }
@@ -59,18 +208,24 @@
 .an-detail dt { color: var(--cm-muted); font-size: 12.5px; }
 .an-detail dd { margin: 0; overflow-wrap: anywhere; }
 .an-detail-body { white-space: pre-line; }
+.an-recipients-box { display: grid; gap: 8px; margin-top: 8px; }
+.an-detail-note { display: block; margin-top: 4px; color: var(--cm-muted); font-size: 12.5px; }
 
 @media (max-width: 980px) {
   .an-compose { grid-template-columns: minmax(0, 1fr); }
-  .an-preview { position: static; }
+  .an-rail { position: static; max-height: none; overflow: visible; }
 }
 @media (max-width: 560px) {
-  .an-form-panel { padding: 18px 16px; }
-  .an-preview { padding: 18px 16px; }
+  .an-step { padding: 18px 16px; }
+  .an-step-head { grid-template-columns: 28px minmax(0, 1fr); }
+  .an-step-no { width: 28px; height: 28px; font-size: 13px; }
+  .an-step-meta { grid-column: 2; justify-self: start; }
+  .an-chip-group { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .an-chip-label { padding-top: 0; }
+  .an-summary, .an-preview { padding: 18px 16px; }
 }
 
 /* Email trường của sinh viên (AD-NOTI-04, 2026-11-23): sent from the member's own mailbox once they allowed it. */
-.an-email { display: grid; gap: 8px; padding: 12px 14px; border: 1px solid var(--cm-line); border-radius: 10px; background: #fafbfd; min-width: 0; }
 .an-email-text { margin: 0; color: var(--cm-muted); font-size: 12.5px; overflow-wrap: anywhere; }
 .an-email-text strong { color: var(--cm-ink); }
 .an-email-warn { color: var(--cm-warn); font-weight: 600; }

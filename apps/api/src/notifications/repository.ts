@@ -1,11 +1,15 @@
 // Storage of the notifications (stu_notifications) and the faculty's announcements (ad_announcements), migration 056.
 import { randomUUID } from "node:crypto";
 import type { PoolClient } from "pg";
-import { orderBy, byText, type SortDirection } from "../admin/table-sort.js";
+import { foldText } from "../admin/audit/record.js";
+import { foldSql } from "../admin/fold-sql.js";
+import { orderBy, byText, vietnameseOrder, type SortDirection } from "../admin/table-sort.js";
+import { CLASS_OF } from "../advisors/class-code.js";
+import { personName } from "../users/person-name.js";
 import { MAJORS } from "../curricula/majors.js";
 import type { DatabasePool } from "../db/pool.js";
 import {
-  notificationColumns, NOTIFICATION_TOPIC, RESTORE_MINUTES, RETENTION_DAYS, type AnnouncementRow, type AnnouncementTarget, type NotificationOrder,
+  ANNOUNCEMENT_STUDENTS_MAX, notificationColumns, NOTIFICATION_TOPIC, RESTORE_MINUTES, RETENTION_DAYS, type AnnouncementRow, type AnnouncementTarget, type NotificationOrder,
   type NotificationRow, type NotificationType,
 } from "./model.js";
 import { notifyMany } from "./notify.js";
@@ -79,6 +83,9 @@ export async function restoreNotification(db: Db, userId: string, id: string): P
  */
 export async function purgeNotifications(db: Db): Promise<void> {
   await db.query("DELETE FROM stu_notifications WHERE created_at<now()-make_interval(days => $1)", [RETENTION_DAYS]);
+  // Who was picked one by one is kept as long as their notifications; then only how many (review 25/11/2026).
+  await db.query(`UPDATE ad_announcements SET target=(target-'students')||jsonb_build_object('picked',jsonb_array_length(target->'students'))
+    WHERE jsonb_typeof(target->'students')='array' AND created_at<now()-make_interval(days => $1)`, [RETENTION_DAYS]);
   await db.query("DELETE FROM stu_notifications WHERE deleted_at<now()-interval '1 day' AND kind<>'warning'");
   await db.query("DELETE FROM stu_notifications n USING ad_announcements a WHERE n.announcement_id=a.id AND a.withdrawn_at IS NOT NULL");
   // The emails (addresses and outcomes) are kept as long as the notifications.
@@ -101,19 +108,24 @@ export function createNotificationHousekeeping(intervalMs = 60 * 60 * 1000) {
 /* ------------------------------------------------------------------------ */
 /* Faculty side: announcements */
 
-/** The students an announcement reaches: active student accounts (no staff mailbox) of the chosen cohorts and majors. */
+/**
+ * The students an announcement reaches: active student accounts (no staff mailbox) of the chosen cohorts and majors, or
+ * the picked students among them. Four parameters from `first`: cohorts, majors, staff domains, picked account ids.
+ */
 function recipientsWhere(first: number) {
   return `u.is_active AND COALESCE(u.role_override,u.role)='student'
     AND (cardinality($${first}::text[])=0 OR p.cohort_code=ANY($${first}::text[]))
     AND (cardinality($${first + 1}::text[])=0 OR p.major_code::text=ANY($${first + 1}::text[]))
     AND NOT (lower(split_part(COALESCE(u.email,''),'@',2))=ANY($${first + 2}::text[])
-      OR lower(split_part(COALESCE(u.username,''),'@',2))=ANY($${first + 2}::text[]))`;
+      OR lower(split_part(COALESCE(u.username,''),'@',2))=ANY($${first + 2}::text[]))
+    AND (cardinality($${first + 3}::uuid[])=0 OR u.id=ANY($${first + 3}::uuid[]))`;
 }
 const recipientsFrom = "FROM users u LEFT JOIN student_profiles p ON p.user_id=u.id";
+const targetParams = (target: AnnouncementTarget, staffDomains: readonly string[]) => [target.cohorts, target.majors, staffDomains, target.students ?? []];
 
 export async function announcementOptions(db: Db, staffDomains: readonly string[]) {
   const result = await db.query<{ cohort: string | null; major: string | null }>(
-    `SELECT DISTINCT p.cohort_code AS cohort,p.major_code::text AS major ${recipientsFrom} WHERE ${recipientsWhere(1)}`, [[], [], staffDomains]);
+    `SELECT DISTINCT p.cohort_code AS cohort,p.major_code::text AS major ${recipientsFrom} WHERE ${recipientsWhere(1)}`, [[], [], staffDomains, []]);
   const cohorts = [...new Set(result.rows.map((row) => row.cohort).filter((value): value is string => Boolean(value)))]
     .sort((a, b) => Number(a.replace(/\D/g, "")) - Number(b.replace(/\D/g, "")) || a.localeCompare(b));
   const majors = [...new Set(result.rows.map((row) => row.major?.trim()).filter((value): value is string => Boolean(value)))]
@@ -135,12 +147,49 @@ const facultyMajorsFirst = (a: string, b: string) => otherMajor(a) - otherMajor(
 export async function reachCount(db: Db, target: AnnouncementTarget, staffDomains: readonly string[]): Promise<{ count: number; withEmail: number }> {
   const result = await db.query<{ count: number; withEmail: number }>(
     `SELECT count(*)::int AS count,count(${RECIPIENT_ADDRESS})::int AS "withEmail" ${recipientsFrom} WHERE ${recipientsWhere(1)}`,
-    [target.cohorts, target.majors, staffDomains]);
+    targetParams(target, staffDomains));
   const row = result.rows[0];
   return { count: row?.count ?? 0, withEmail: row?.withEmail ?? row?.count ?? 0 };
 }
 
+/**
+ * A student as "Chọn sinh viên" lists one (2026-11-25): the name as the admin lists show it, MSSV, class in its canonical
+ * form (71K29CNTT08) and whether the account has an address for the email.
+ */
+export type RecipientStudent = { id: string; name: string; studentCode: string | null; className: string | null; cohort: string | null; hasEmail: boolean };
+const STUDENT_NAME = "COALESCE(NULLIF(btrim(p.full_name),''),u.display_name)";
+const studentColumns = `u.id,${STUDENT_NAME} AS name,p.student_code AS "studentCode",${CLASS_OF} AS "className",p.cohort_code AS cohort,
+  (${RECIPIENT_ADDRESS} IS NOT NULL) AS "hasEmail"`;
+// By given name, then the whole name, as the admin's student list orders people.
+const studentOrder = `${vietnameseOrder(`NULLIF(regexp_replace(btrim(${STUDENT_NAME}), '^.*\\s', ''), '')`)},${vietnameseOrder(STUDENT_NAME)},u.id`;
+/** An account named "MSSV - Họ tên - Lớp" by Microsoft is shown by the name alone. */
+const presentStudent = (row: RecipientStudent): RecipientStudent => ({ ...row, name: personName(row.name) || row.name });
+
+/**
+ * The students an announcement may be sent to whose name, MSSV, class or address holds every word typed (tones and case
+ * ignored: "hoa" finds "Hòa"), the first `limit` by name; no word typed lists the first students.
+ */
+export async function searchRecipients(db: Db, term: string, staffDomains: readonly string[], limit: number): Promise<RecipientStudent[]> {
+  const words = foldText(term).split(" ").filter(Boolean).slice(0, 8);
+  const haystack = foldSql(`concat_ws(' ',p.full_name,u.display_name,p.student_code,${CLASS_OF},u.email)`);
+  const result = await db.query<RecipientStudent>(
+    `SELECT ${studentColumns} ${recipientsFrom}
+      WHERE ${recipientsWhere(1)} AND NOT EXISTS (SELECT 1 FROM unnest($5::text[]) AS word WHERE strpos(${haystack},word)=0)
+      ORDER BY ${studentOrder} LIMIT $6`, [[], [], staffDomains, [], words, limit]);
+  return result.rows.map(presentStudent);
+}
+
+/** The students an announcement was sent to by picking them (their accounts as they are now), by name. */
+export async function announcementStudents(db: Db, ids: readonly string[]): Promise<RecipientStudent[]> {
+  if (!ids.length) return [];
+  const result = await db.query<RecipientStudent>(
+    `SELECT ${studentColumns} ${recipientsFrom} WHERE u.id=ANY($1::uuid[]) ORDER BY ${studentOrder} LIMIT ${ANNOUNCEMENT_STUDENTS_MAX}`, [ids]);
+  return result.rows.map(presentStudent);
+}
+
 export function targetLabel(target: AnnouncementTarget): string {
+  const picked = target.students?.length || target.picked || 0;
+  if (picked) return `${picked.toLocaleString("vi-VN")} sinh viên được chọn`;
   if (!target.cohorts.length && !target.majors.length) return "Tất cả sinh viên";
   return [target.cohorts.join(", "), [...target.majors].sort(facultyMajorsFirst).map(majorName).join(", ")].filter(Boolean).join(" · ");
 }
@@ -183,12 +232,15 @@ export type AnnouncementEmail = { senderId: string; from: string };
 export async function sendAnnouncement(client: Pick<PoolClient, "query">, actorId: string, input: AnnouncementInput,
   staffDomains: readonly string[], email: AnnouncementEmail | null = null): Promise<AnnouncementRow | null> {
   const recipients = (await client.query<{ id: string }>(
-    `SELECT u.id ${recipientsFrom} WHERE ${recipientsWhere(1)} ORDER BY u.id`, [input.target.cohorts, input.target.majors, staffDomains])).rows.map((row) => row.id);
+    `SELECT u.id ${recipientsFrom} WHERE ${recipientsWhere(1)} ORDER BY u.id`, targetParams(input.target, staffDomains))).rows.map((row) => row.id);
   if (!recipients.length) return null;
   const id = randomUUID();
+  // Picked students: the announcement keeps those it really reached (an account locked meanwhile is left out).
+  const target: AnnouncementTarget = input.target.students?.length
+    ? { cohorts: [], majors: [], students: recipients } : { cohorts: input.target.cohorts, majors: input.target.majors };
   await client.query(
     `INSERT INTO ad_announcements(id,title,body,link,target,recipients,created_by) VALUES($1,$2,$3,$4,$5::jsonb,$6,$7)`,
-    [id, input.title, input.body, input.link, JSON.stringify(input.target), recipients.length, actorId]);
+    [id, input.title, input.body, input.link, JSON.stringify(target), recipients.length, actorId]);
   await notifyMany(client, recipients, {
     type: "khoa", kind: "announcement", title: input.title, body: input.body, link: input.link, sourceKey: `announcement:${id}`, announcementId: id,
   });

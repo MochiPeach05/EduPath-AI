@@ -35,12 +35,19 @@ Mỗi chủ đề chỉ hiện một thông báo, bản mới nhất (`NOTIFICAT
 - Dọn dẹp chạy tối đa mỗi giờ một lần, khi chuông đọc số chưa đọc.
 - Chính sách bảo mật chưa nhắc thông báo và thời gian lưu 90 ngày: cần người dùng duyệt nội dung bổ sung.
 - Dòng email của thông báo (địa chỉ nhận và kết quả gửi) bị xóa sau 90 ngày, cùng lúc dọn thông báo; chính sách 2026-11-23 có ghi thời gian này.
+- Danh sách sinh viên được chọn của một thông báo (`target.students`) cũng chỉ giữ 90 ngày như thông báo trong chuông; sau đó chỉ còn số lượng (`target.picked`), nhãn vẫn là "N sinh viên được chọn" và chi tiết ở trang Đã gửi ghi danh sách đã xóa (rà soát 25/11/2026).
 
 ## Khoa gửi thông báo `/api/admin/announcements`
 - Chọn đối tượng theo khóa và ngành (danh sách từ hồ sơ sinh viên), xem trước số người nhận, tiêu đề tối đa 120 ký tự, nội dung tối đa 1000 ký tự, trang liên quan.
 - Gửi: một giao dịch ghi thông báo của Khoa và thông báo cho từng sinh viên nhận (tài khoản sinh viên đang hoạt động, trừ hộp thư cán bộ).
 - Danh sách đã gửi có số đã đọc trên số nhận, sắp xếp theo cột; Thu hồi gỡ thông báo khỏi chuông của mọi sinh viên.
 - Kênh email (AD-NOTI-04/05, 23/11/2026): xem mục "Email của thông báo" bên dưới.
+
+## Gửi thông báo: giao diện mới và chọn từng sinh viên (25/11/2026)
+Người dùng: "Sửa lại giao diện gửi thông báo đẹp hơn và thêm tính năng có thể gửi tới từng bạn sinh viên mình chọn nữa".
+- Trang Gửi thông báo chia 3 bước có số (1 Người nhận, 2 Nội dung, 3 Kênh gửi); cột phải bám theo trang gồm khung Tóm tắt (người nhận, số sinh viên, kênh, email, tiêu đề) với nút Gửi thông báo và Xóa nội dung, và khung Sinh viên sẽ thấy có hai thẻ Chuông và Email (email xem trước đúng như máy chủ viết: tiêu đề "[EduPath AI] …", lời chào, đoạn văn, nút trang liên quan, chân thư). Kênh gửi là hai thẻ: Trong EduPath AI (luôn bật) và Email trường (công tắc). Điện thoại: một cột, Tóm tắt và xem trước nằm sau biểu mẫu.
+- Người nhận có hai cách: Theo khóa, ngành (như trước) hoặc Chọn từng sinh viên: ô tìm theo họ tên, MSSV, lớp hoặc địa chỉ (bỏ dấu, không phân biệt hoa thường, đủ mọi từ gõ vào; `GET /api/admin/announcements/students?q=&limit=20`, `apps/api/src/admin/fold-sql.ts`), danh sách đánh dấu (ghi "Chưa có email" khi tài khoản không có địa chỉ), và danh sách đã chọn có nút bỏ từng người hoặc bỏ tất cả; tối đa 200 sinh viên. Chỉ tìm thấy tài khoản sinh viên đang hoạt động, không phải hộp thư cán bộ.
+- Gửi: `POST /` nhận `students` (mã tài khoản), không đi cùng khóa hoặc ngành; máy chủ kiểm lại ai còn nhận được và lưu đúng những sinh viên đã nhận trong `target.students` của thông báo; nhãn "3 sinh viên được chọn". Chi tiết thông báo ở trang Đã gửi liệt kê các sinh viên này (`GET /:id/recipients`: họ tên, MSSV, lớp). Nhật ký thao tác ghi "cho 3 sinh viên được chọn", không ghi tên.
 
 ## Email qua Microsoft Graph: bước thử (23/11/2026)
 Người dùng chọn cách A (gửi từ hộp thư trường của người bấm Gửi, qua Microsoft Graph) và yêu cầu "Trước tiên làm bước thử đã đi". Nhóm chưa vào được trang đăng ký app trên Microsoft Entra, nên quyền `Mail.Send` (dạng Delegated) được xin lúc chạy (incremental consent), không cần sửa app.

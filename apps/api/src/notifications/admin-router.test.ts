@@ -59,7 +59,7 @@ describe("announcements API", () => {
     await request(app).get("/a/reach?cohorts=K29,K30&majors=7480201").expect(200, { count: 312, withEmail: 300 });
     const reach = sql().find(([text]) => text.startsWith("SELECT count(*)::int AS count"))!;
     expect(reach[0]).toContain("COALESCE(u.role_override,u.role)='student'");
-    expect(reach[1]).toEqual([["K29", "K30"], ["7480201"], ["vlu.edu.vn"]]);
+    expect(reach[1]).toEqual([["K29", "K30"], ["7480201"], ["vlu.edu.vn"], []]);
     await request(app).get("/a/reach?cohorts=29").expect(400, { error: "invalid_input" });
   });
 
@@ -128,6 +128,82 @@ describe("announcements API", () => {
     expect(sql().find(([text]) => text.includes("FROM ad_announcements a LEFT JOIN users u"))![0])
       .toContain("(SELECT count(*) FROM stu_notifications n WHERE n.announcement_id=a.id AND n.read_at IS NOT NULL) DESC NULLS LAST");
     await request(app).get("/a?sort=nope").expect(400, { error: "invalid_input" });
+  });
+});
+
+// "Chọn sinh viên" (2026-11-25): an announcement for students picked one by one. Made-up students only.
+describe("an announcement for picked students", () => {
+  const picked = (id: string, extra: Record<string, unknown> = {}) => ({ id, name: "Trần Minh An", studentCode: "2374802019001", className: "71K29CNTT08", cohort: "K29", hasEmail: true, ...extra });
+
+  it("finds students by every word typed, without tones or case, and names them as the admin lists do", async () => {
+    const { app, sql } = setup({
+      rows: (text) => (text.startsWith("SELECT u.id,COALESCE(NULLIF(btrim(p.full_name),''),u.display_name) AS name") ? { rowCount: 2, rows: [
+        picked(A), picked(B, { name: "2374802019002 - Lê Thu Hà - 71K29CNTT08", studentCode: "2374802019002", hasEmail: false }),
+      ] } : undefined),
+    });
+    const found = await request(app).get("/a/students").query({ q: "  Hà  LÊ ", limit: 5 }).expect(200);
+    expect(found.body.items).toEqual([picked(A), picked(B, { name: "Lê Thu Hà", studentCode: "2374802019002", hasEmail: false })]);
+    const [text, params] = sql().find(([statement]) => statement.startsWith("SELECT u.id,COALESCE(NULLIF(btrim(p.full_name),''),u.display_name) AS name"))!;
+    // Only accounts an announcement can reach: active students, no staff mailbox.
+    expect(text).toContain("u.is_active AND COALESCE(u.role_override,u.role)='student'");
+    expect(text).toContain("NOT EXISTS (SELECT 1 FROM unnest($5::text[]) AS word WHERE strpos(lower(translate(concat_ws(' ',p.full_name,u.display_name,p.student_code,");
+    expect(params).toEqual([[], [], ["vlu.edu.vn"], [], ["ha", "le"], 5]);
+    // Nothing typed lists the first twenty.
+    await request(app).get("/a/students").expect(200);
+    expect(sql().at(-1)![1]).toEqual([[], [], ["vlu.edu.vn"], [], [], 20]);
+    await request(app).get("/a/students?limit=500").expect(400, { error: "invalid_input" });
+    await request(app).get("/a/students?cohort=K29").expect(400, { error: "invalid_input" });
+  });
+
+  it("sends to the picked students that can still be reached, and keeps who they were", async () => {
+    const { app, sql } = setup({
+      // B's account was locked meanwhile: only A is reached.
+      rows: (text) => (text.startsWith("SELECT u.id FROM users u") ? { rowCount: 1, rows: [{ id: A }] }
+        : text.includes("WHERE a.id=$1") ? { rowCount: 1, rows: [announcement({ target: { cohorts: [], majors: [], students: [A] }, recipients: 1, read: 0 })] } : undefined),
+    });
+    const response = await request(app).post("/a").set("Origin", origin).send({ title: "Nhắc lịch gặp cố vấn", body: "Chiều thứ Sáu.", students: [A, B, A] }).expect(201);
+    expect(response.body.announcement).toMatchObject({ target: { cohorts: [], majors: [], students: [A] }, targetLabel: "1 sinh viên được chọn", recipients: 1 });
+    const chosen = sql().find(([text]) => text.startsWith("SELECT u.id FROM users u"))!;
+    expect(chosen[0]).toContain("(cardinality($4::uuid[])=0 OR u.id=ANY($4::uuid[]))");
+    expect(chosen[1]).toEqual([[], [], ["vlu.edu.vn"], [A, B]]);
+    const inserted = sql().find(([text]) => text.startsWith("INSERT INTO ad_announcements"))!;
+    expect((inserted[1] as unknown[])[4]).toBe(JSON.stringify({ cohorts: [], majors: [], students: [A] }));
+    expect((inserted[1] as unknown[])[5]).toBe(1);
+    const fanOut = sql().find(([text]) => text.startsWith("INSERT INTO stu_notifications"))!;
+    expect((fanOut[1] as unknown[][])[1]).toEqual([A]);
+  });
+
+  it("refuses picked students together with a cohort or a major, more than 200, and nobody reachable", async () => {
+    const { app } = setup();
+    const send = (body: Record<string, unknown>) => request(app).post("/a").set("Origin", origin).send({ title: "T", body: "B", ...body });
+    await send({ students: [A], cohorts: ["K29"] }).expect(400, { error: "invalid_input" });
+    await send({ students: [A], majors: ["7480201"] }).expect(400, { error: "invalid_input" });
+    await send({ students: ["not-an-id"] }).expect(400, { error: "invalid_input" });
+    await send({ students: Array.from({ length: 201 }, (_, index) => `22222222-2222-4222-8222-${String(index).padStart(12, "0")}`) }).expect(400, { error: "invalid_input" });
+    await send({ students: [A] }).expect(400, { error: "no_recipients" });
+  });
+
+  it("keeps the label of a picked announcement whose list was cleared after 90 days, and lists nobody", async () => {
+    const cleared = announcement({ target: { cohorts: [], majors: [], picked: 3 }, recipients: 3 });
+    const { app, sql } = setup({ rows: (text) => (text.includes("FROM ad_announcements a LEFT JOIN users u") ? { rowCount: 1, rows: [cleared] } : undefined) });
+    const listed = (await request(app).get("/a").expect(200)).body.items[0];
+    expect(listed).toMatchObject({ target: { cohorts: [], majors: [], picked: 3 }, targetLabel: "3 sinh viên được chọn" });
+    expect(listed.target.students).toBeUndefined();
+    await request(app).get(`/a/${ANN}/recipients`).expect(200, { items: [] });
+    expect(sql().some(([text]) => text.includes("WHERE u.id=ANY($1::uuid[])"))).toBe(false);
+  });
+
+  it("lists the students an announcement was sent to by picking them", async () => {
+    const rows: Rows = (text) => (text.includes("WHERE a.id=$1") ? { rowCount: 1, rows: [announcement({ target: { cohorts: [], majors: [], students: [A, B] } })] }
+      : text.includes("WHERE u.id=ANY($1::uuid[])") ? { rowCount: 2, rows: [picked(A), picked(B, { name: "Lê Thu Hà" })] } : undefined);
+    const { app, sql } = setup({ rows });
+    expect((await request(app).get(`/a/${ANN}/recipients`).expect(200)).body.items.map((item: { name: string }) => item.name)).toEqual(["Trần Minh An", "Lê Thu Hà"]);
+    expect(sql().find(([text]) => text.includes("WHERE u.id=ANY($1::uuid[])"))![1]).toEqual([[A, B]]);
+    // One sent to cohorts and majors has no such list, and asks the database for none.
+    const group = setup({ rows: (text) => (text.includes("WHERE a.id=$1") ? { rowCount: 1, rows: [announcement()] } : undefined) });
+    await request(group.app).get(`/a/${ANN}/recipients`).expect(200, { items: [] });
+    expect(group.sql().some(([text]) => text.includes("WHERE u.id=ANY($1::uuid[])"))).toBe(false);
+    await request(setup().app).get(`/a/${ANN}/recipients`).expect(404, { error: "not_found" });
   });
 });
 

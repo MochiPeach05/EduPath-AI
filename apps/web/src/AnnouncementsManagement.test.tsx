@@ -1,13 +1,13 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import AnnouncementsManagement, {
-  ANNOUNCEMENT_ROW, AnnouncementPreview, AnnouncementRequestError, AutoMailPanel, EmailChannel, EmailProblemList, FALLBACK_OPTIONS, MAIL_CONSENT_API, PORTAL_PAGES,
-  SentTable, SettingsList, autoSenderReady, emailErrorText, emailMinutes, emailReachText, emailStatsText, emailSummary, emailTestOutcome, majorText,
-  nextSenderAddress, openLabel, ownGrantReady, pageLabel, reachQuery, reachText, readShare, readText, sentTime, settingsSummary, targetText, toggleValue,
-  withdrawEmailText, type MailSenderView,
+  ANNOUNCEMENT_ROW, AnnouncementPreview, AnnouncementRequestError, AutoMailPanel, EmailChannel, EmailPreview, EmailProblemList, FALLBACK_OPTIONS, MAIL_CONSENT_API,
+  PORTAL_PAGES, RecipientList, STUDENT_RESULTS, SentTable, SettingsList, StudentPicker, autoSenderReady, emailErrorText, emailMinutes, emailReachText,
+  emailStatsText, emailSummary, emailTestOutcome, majorText, nextSenderAddress, openLabel, ownGrantReady, pageLabel, pickedReachText, pickedSummary, reachQuery,
+  reachText, reachedText, readShare, readText, searchStatus, sentTime, settingsSummary, studentLine, targetText, toggleValue, withdrawEmailText, type MailSenderView,
 } from "./AnnouncementsManagement";
 import { useTableSort } from "./table-sort";
-import type { Announcement, AnnouncementEmail, AutoMailState, NotificationSetting } from "./notification-types";
+import type { Announcement, AnnouncementEmail, AutoMailState, NotificationSetting, RecipientStudent } from "./notification-types";
 
 // Synthetic announcements only.
 const sent = (extra: Partial<Announcement> = {}): Announcement => ({
@@ -56,39 +56,123 @@ describe("announcement texts", () => {
   });
 });
 
-describe("compose page", () => {
-  it("offers every student first, the cohorts and the majors, the counters and the channels", () => {
+describe("compose page (redesigned 2026-11-25)", () => {
+  it("is three steps, recipients by group first, beside the summary with the send button and the student's view", () => {
     const html = renderToStaticMarkup(<AnnouncementsManagement canManage section="compose" />);
+    const order = ["Người nhận", "Nội dung", "Kênh gửi", "Tóm tắt", "Sinh viên sẽ thấy"].map((text) => html.indexOf(`>${text}</h2>`));
+    expect(order.every((at) => at > 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+    expect(html).toContain('<span class="an-step-no" aria-hidden="true">1</span>');
+    // The two ways of choosing recipients, the group one first.
+    expect(html).toContain('<div class="an-seg" role="group" aria-label="Cách chọn người nhận">');
+    expect(html).toMatch(/aria-pressed="true"><svg[^>]*>.*?<\/svg> Theo khóa, ngành<\/button>/);
+    expect(html).toMatch(/aria-pressed="false"><svg[^>]*>.*?<\/svg> Chọn từng sinh viên<\/button>/);
     expect(html).toContain('aria-pressed="true">Tất cả sinh viên</button>');
     for (const cohort of FALLBACK_OPTIONS.cohorts) expect(html).toContain(`aria-pressed="false">${cohort}</button>`);
     expect(html).toContain("Công nghệ thông tin");
     expect(html).toContain("0/120 ký tự");
     expect(html).toContain("0/1.000 ký tự");
-    expect(html).toContain("Trong EduPath AI (chuông thông báo của sinh viên)");
-    // Email waits for GET /mail-sender: its box is there, not ticked and not usable yet.
-    expect(html).toContain('<input type="checkbox" disabled=""/> Email trường của sinh viên</label>');
-    expect(html).toContain("Đang kiểm tra quyền gửi email…");
+    expect(html).toContain("<strong>Trong EduPath AI</strong>");
+    expect(html).toContain('<span class="an-always">Luôn bật</span>');
+    // Email waits for GET /mail-sender: its switch is there, off and not usable yet.
+    expect(html).toContain('<strong>Email trường của sinh viên</strong><small>Đang kiểm tra quyền gửi…</small>');
+    expect(html).toContain('role="switch" class="an-switch" aria-checked="false" aria-label="Gửi kèm email trường của sinh viên" disabled=""');
+    // The send button lives in the summary and sends the form by its id.
+    expect(html).toContain('<form id="an-compose-form"');
+    expect(html).toMatch(/<button type="submit" form="an-compose-form" class="am-primary"><svg[^>]*>.*?<\/svg> Gửi thông báo<\/button>/);
+    expect(html).toContain("<dt>Người nhận</dt><dd>Tất cả sinh viên</dd>");
+    expect(html).toContain('<dt>Tiêu đề</dt><dd class="an-muted">Chưa nhập</dd>');
     expect(html).not.toContain("Sắp có");
-    expect(html).not.toContain("Email sinh viên");
-    expect(html).toContain("Gửi thông báo");
-    expect(html).toContain("Sinh viên sẽ thấy");
     expect(html).not.toContain("Bạn chỉ có quyền xem");
   });
 
   it("lets a read-only account look without sending", () => {
     const html = renderToStaticMarkup(<AnnouncementsManagement canManage={false} section="compose" />);
     expect(html).toContain("Bạn chỉ có quyền xem. Quản trị viên mới gửi được thông báo.");
-    expect(html).toContain("<fieldset class=\"cm-fields\" disabled=\"\">");
+    expect(html).toContain('<fieldset class="cm-fields an-steps" disabled="">');
+    expect(html).toMatch(/<button type="submit" form="an-compose-form" class="am-primary" disabled="">/);
   });
 
-  it("shows the student's view of what is written", () => {
+  it("shows the student's view of what is written: the bell first, the email on its tab", () => {
     const html = renderToStaticMarkup(<AnnouncementPreview title="Lịch đăng ký học phần" body={"Dòng 1\nDòng 2"} link="#plans" />);
     expect(html).toContain("Lịch đăng ký học phần");
     expect(html).toContain("Từ Khoa · Vừa xong · chưa đọc");
-    expect(html).toContain("Mở Kế hoạch đào tạo");
+    expect(html).toContain('<span class="an-preview-button">Mở Kế hoạch đào tạo</span>');
+    expect(html).toMatch(/aria-pressed="true"><svg[^>]*>.*?<\/svg> Chuông<\/button>/);
     const blank = renderToStaticMarkup(<AnnouncementPreview title=" " body="" link={null} />);
     expect(blank).toContain("Tiêu đề thông báo");
     expect(blank).not.toContain("an-preview-button");
+  });
+
+  it("previews the email as the server writes it: subject, greeting, paragraphs, the page's button and the footer", () => {
+    const html = renderToStaticMarkup(<EmailPreview title=" Lịch đăng ký " body={"Mở từ 01/12.\nHạn 05/12.\n\nXem kế hoạch."} link="#plans" from="can.bo@example.edu" on />);
+    expect(html).toContain("<dd><strong>[EduPath AI] Lịch đăng ký</strong></dd>");
+    expect(html).toContain("<dd>can.bo@example.edu</dd>");
+    expect(html).toContain("<p>Chào [họ tên sinh viên],</p><p>Mở từ 01/12.\nHạn 05/12.</p><p>Xem kế hoạch.</p>");
+    expect(html).toContain('<span class="an-mail-button">Mở Kế hoạch đào tạo trên EduPath AI</span>');
+    expect(html).not.toContain("Chưa bật kênh email");
+    const off = renderToStaticMarkup(<EmailPreview title="" body="" link={null} from={null} on={false} />);
+    expect(off).toContain("Chưa bật kênh email: sinh viên chỉ nhận thông báo ở chuông.");
+    expect(off).toContain('<span class="an-mail-button">Mở EduPath AI</span>');
+    expect(off).toContain("<dd>Hộp thư trường của bạn</dd>");
+  });
+});
+
+describe("Chọn từng sinh viên (2026-11-25)", () => {
+  const student = (id: string, extra: Partial<RecipientStudent> = {}): RecipientStudent =>
+    ({ id, name: "Lương Khánh Vy", studentCode: "2374802019901", className: "71K29CNTT99", cohort: "K29", hasEmail: true, ...extra });
+
+  it("tells students apart by MSSV and class, and names the picked ones in short", () => {
+    expect(studentLine(student("a"))).toBe("MSSV 2374802019901 · 71K29CNTT99");
+    expect(studentLine(student("a", { studentCode: null, className: null }))).toBe("Chưa cập nhật MSSV");
+    const picked = [student("a"), student("b", { name: "Tạ Minh Đức" }), student("c", { name: "Hồ Quang Minh" })];
+    expect(pickedSummary([])).toBe("Chưa chọn sinh viên nào");
+    expect(pickedSummary(picked.slice(0, 1))).toBe("Lương Khánh Vy");
+    expect(pickedSummary(picked.slice(0, 2))).toBe("Lương Khánh Vy và Tạ Minh Đức");
+    expect(pickedSummary(picked)).toBe("Lương Khánh Vy, Tạ Minh Đức và 1 sinh viên khác");
+    expect(pickedSummary(picked, 3)).toBe("Lương Khánh Vy, Tạ Minh Đức và Hồ Quang Minh");
+    expect(pickedReachText(0)).toEqual({ text: "Chưa chọn sinh viên nào. Tìm và đánh dấu những sinh viên cần gửi.", tone: "warn" });
+    expect(pickedReachText(1200)).toEqual({ text: "1.200 sinh viên được chọn nhận được thông báo này.", tone: "ok" });
+  });
+
+  it("says who an announcement reached once, whether its list of picked students is still kept or not", () => {
+    expect(reachedText({ recipients: 3, target: { cohorts: [], majors: [], students: ["a", "b", "c"] }, targetLabel: "3 sinh viên được chọn" })).toBe("3 sinh viên được chọn");
+    expect(reachedText({ recipients: 3, target: { cohorts: [], majors: [], picked: 3 }, targetLabel: "3 sinh viên được chọn" })).toBe("3 sinh viên được chọn");
+    expect(reachedText({ recipients: 1200, target: { cohorts: ["K29"], majors: [] }, targetLabel: "K29" })).toBe("1.200 sinh viên (K29)");
+  });
+
+  it("says what the search found", () => {
+    expect(searchStatus("", null, false)).toBe("Đang tìm sinh viên…");
+    expect(searchStatus("", 20, false)).toBe("20 sinh viên đầu tiên theo tên. Gõ họ tên, MSSV hoặc lớp để tìm sinh viên khác.");
+    expect(searchStatus("minh", 3, false)).toBe("3 sinh viên phù hợp.");
+    expect(searchStatus("minh", STUDENT_RESULTS, false)).toBe("20 sinh viên phù hợp đầu tiên; gõ thêm để thu hẹp.");
+    expect(searchStatus("zz", 0, false)).toBe("Không có sinh viên phù hợp. Thử từ khóa khác.");
+    expect(searchStatus("", 0, false)).toBe("Chưa có sinh viên nào nhận được thông báo.");
+    expect(searchStatus("minh", null, true)).toBe("Chưa tìm được sinh viên. Vui lòng thử lại.");
+  });
+
+  it("shows the search, the picked students each with a way to take them out, and nothing picked yet", () => {
+    const html = renderToStaticMarkup(<StudentPicker picked={[student("a"), student("b", { name: "Tạ Minh Đức", hasEmail: false })]} onChange={() => undefined} disabled={false} />);
+    expect(html).toContain('<label class="an-search-label" for="an-student-search">Tìm sinh viên</label>');
+    expect(html).toContain('placeholder="Họ tên, MSSV hoặc lớp…"');
+    expect(html).toContain('<p class="an-hint" role="status" aria-live="polite">Đang tìm sinh viên…</p>');
+    expect(html).toContain("<strong>Đã chọn 2 sinh viên</strong>");
+    expect(html).toContain('<span class="an-avatar an-avatar-sm" aria-hidden="true">KV</span>');
+    expect(html).toContain("<small>MSSV 2374802019901 · 71K29CNTT99 · chưa có email</small>");
+    expect(html).toContain('aria-label="Bỏ chọn Tạ Minh Đức"');
+    expect(html).toContain("Bỏ chọn tất cả</button>");
+    const none = renderToStaticMarkup(<StudentPicker picked={[]} onChange={() => undefined} disabled={false} />);
+    expect(none).toContain("Chưa chọn sinh viên nào. Đánh dấu sinh viên trong danh sách kết quả để thêm vào đây.");
+    expect(none).not.toContain("Bỏ chọn tất cả");
+    const full = renderToStaticMarkup(<StudentPicker picked={Array.from({ length: 200 }, (_, index) => student(`s${index}`))} onChange={() => undefined} disabled={false} />);
+    expect(full).toContain("Đã đủ 200 sinh viên, mức tối đa cho một thông báo.");
+  });
+
+  it("lists the students an announcement was sent to by picking them", () => {
+    const html = renderToStaticMarkup(<RecipientList items={[student("a"), student("b", { name: "Tạ Minh Đức", studentCode: null, className: null, hasEmail: false })]} />);
+    expect(html).toContain("<td>Lương Khánh Vy</td><td class=\"an-num\">2374802019901</td><td class=\"an-num\">71K29CNTT99</td>");
+    expect(html).toContain("<td>Tạ Minh Đức<small>Chưa có email</small></td><td class=\"an-num\">—</td><td class=\"an-num\">—</td>");
+    expect(renderToStaticMarkup(<RecipientList items={[]} />)).toContain("Không còn tài khoản sinh viên nào trong danh sách này.");
   });
 });
 
@@ -168,14 +252,17 @@ describe("announcement emails (AD-NOTI-04/05, 2026-11-23)", () => {
     draft={{ title: "T", body: "B", link: null }} reach="300 sinh viên nhận thêm email." />);
 
   it("asks the member to allow EduPath AI first, then offers email, a test to themself and taking the permission back", () => {
+    const off = (html: string) => html.includes('aria-checked="false" aria-label="Gửi kèm email trường của sinh viên" disabled=""');
     const first = channel(view());
-    expect(first).toContain('<input type="checkbox" disabled=""/> Email trường của sinh viên');
+    expect(off(first)).toBe(true);
+    expect(first).toContain("<small>Cần cho phép một lần</small>");
     expect(first).toContain("Microsoft sẽ hỏi bạn cho phép EduPath AI gửi thư");
     expect(first).toMatch(/<svg[^>]*>.*?<\/svg> Cho phép gửi từ hộp thư của tôi<\/button>/);
     expect(first).not.toContain("Gửi email thử cho chính tôi");
 
     const ready = channel(view({ sender: { address: "can.bo@example.edu", grantedAt: "2026-11-23T02:00:00.000Z", lastError: null } }), true);
-    expect(ready).toContain('<input type="checkbox" checked=""/> Email trường của sinh viên');
+    expect(ready).toContain('aria-checked="true" aria-label="Gửi kèm email trường của sinh viên">');
+    expect(ready).toContain('class="an-channel an-email an-channel-on"');
     expect(ready).toContain("Gửi từ hộp thư <strong>can.bo@example.edu</strong>. Mỗi sinh viên nhận một email riêng, gửi dần khoảng 25 thư mỗi phút; email đã gửi không thu hồi được.");
     expect(ready).toContain('<p class="an-reach an-reach-ok">300 sinh viên nhận thêm email.</p>');
     expect(ready).toContain("Gửi email thử cho chính tôi");
@@ -183,20 +270,20 @@ describe("announcement emails (AD-NOTI-04/05, 2026-11-23)", () => {
     expect(ready).not.toContain("Cho phép gửi từ hộp thư của tôi");
 
     const again = channel(view({ sender: { address: "can.bo@example.edu", grantedAt: "2026-11-23T02:00:00.000Z", lastError: "grant_required" } }), true);
-    expect(again).toContain('<input type="checkbox" disabled=""/>');
+    expect(off(again)).toBe(true);
+    expect(again).toContain("<small>Cần cho phép lại</small>");
     expect(again).toContain('<p class="an-email-text an-email-warn">Microsoft cần bạn cho phép lại');
     expect(again).toContain("Cho phép lại</button>");
     expect(again).not.toContain("an-reach-ok");
 
     expect(channel(view({ available: false }))).toContain("Máy chủ chưa bật chức năng gửi email.");
-    expect(channel(view({ available: false }))).not.toContain("<button");
+    expect(channel(view({ available: false }))).not.toContain("am-outline");
     expect(channel(view({ available: false, failed: true }))).toContain("Thử lại</button>");
   });
 
-  it("shows the student the email that goes with the announcement", () => {
-    const html = renderToStaticMarkup(<AnnouncementPreview title="Lịch đăng ký" body="B" link={null} email />);
-    expect(html).toContain("Email gửi kèm có tiêu đề “[EduPath AI] Lịch đăng ký”, cùng nội dung và nút mở EduPath AI.");
-    expect(renderToStaticMarkup(<AnnouncementPreview title="Lịch đăng ký" body="B" link={null} />)).not.toContain("Email gửi kèm");
+  it("offers the email on the preview's own tab", () => {
+    const html = renderToStaticMarkup(<AnnouncementPreview title="Lịch đăng ký" body="B" link={null} email from="can.bo@example.edu" />);
+    expect(html).toMatch(/aria-pressed="false"><svg[^>]*>.*?<\/svg> Email<\/button>/);
   });
 });
 
@@ -331,7 +418,7 @@ describe("the email test of AD-NOTI-04: Microsoft's Mail.Send from the member's 
     vi.stubGlobal("window", at("?emailTest=denied&code=AADSTS65004"));
     const denied = renderToStaticMarkup(<AnnouncementsManagement canManage section="compose" />);
     expect(denied).toContain('<p class="admin-error" role="alert">Microsoft chưa cấp quyền gửi thư (mã AADSTS65004).');
-    expect(denied.indexOf("Microsoft chưa cấp quyền gửi thư")).toBeLessThan(denied.indexOf("Soạn thông báo"));
+    expect(denied.indexOf("Microsoft chưa cấp quyền gửi thư")).toBeLessThan(denied.indexOf("Người nhận"));
     vi.stubGlobal("window", at("?emailTest=sent"));
     expect(renderToStaticMarkup(<AnnouncementsManagement canManage section="compose" />)).toMatch(/<div class="an-success" role="status"><svg[^>]*>.*?<\/svg><p>Đã cho phép EduPath AI/);
     vi.stubGlobal("window", at(""));

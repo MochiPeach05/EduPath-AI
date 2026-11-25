@@ -66,7 +66,18 @@ export const presentNotification = (row: NotificationRow) => ({
   read: row.readAt !== null, createdAt: iso(row.createdAt),
 });
 
-export type AnnouncementTarget = { cohorts: string[]; majors: string[] };
+/**
+ * Who an announcement is for: cohorts and majors (none of either: every student), or since 2026-11-25 (user: "thêm tính
+ * năng có thể gửi tới từng bạn sinh viên mình chọn") the students picked one by one, as account ids; then cohorts and
+ * majors are empty.
+ */
+export type AnnouncementTarget = {
+  cohorts: string[]; majors: string[]; students?: string[];
+  /** How many students were picked, once their list was cleared after RETENTION_DAYS (purgeNotifications). */
+  picked?: number;
+};
+/** The most students one announcement may be sent to by picking them. */
+export const ANNOUNCEMENT_STUDENTS_MAX = 200;
 /** The messages of an announcement sent with email (AD-NOTI-05, migration 066), by outcome. */
 export type AnnouncementEmailCounts = { total: number; sent: number; pending: number; failed: number; cancelled: number; noAddress: number };
 export type AnnouncementRow = {

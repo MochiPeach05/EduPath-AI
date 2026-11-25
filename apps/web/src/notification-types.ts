@@ -29,7 +29,9 @@
  * GET    /?sort=createdAt&order=desc                  → { items: Announcement[] }
  * GET    /options                                     → { cohorts: string[]; majors: { code: string; name: string }[] }  (of the students on file)
  * GET    /reach?cohorts=K29,K30&majors=7480201        → { count: number; withEmail: number }               (students who would receive it, and those of them with an address; majors are programme codes from /options)
- * POST   / { title, body, link, cohorts, majors, email } → 201 { announcement: Announcement }             (email: also by email, from the caller's mailbox)
+ * GET    /students?q=hoa&limit=20                     → { items: RecipientStudent[] }                      ("Chọn sinh viên", 2026-11-25: every word typed in the name, MSSV, class or address, tones and case ignored; by given name)
+ * POST   / { title, body, link, cohorts, majors, students, email } → 201 { announcement: Announcement }   (students: account ids picked one by one, at most 200, then no cohort and no major; email: also by email, from the caller's mailbox)
+ * GET    /:id/recipients                              → { items: RecipientStudent[] }                      (the picked students of an announcement; none for a group one)
  * POST   /:id/withdraw {}                             → { announcement: Announcement }                     (removes it from every bell and cancels the emails not sent yet)
  * GET    /:id/emails                                  → { items: EmailProblem[] }                          (the messages that did not go out)
  * POST   /:id/emails/retry {}                         → { announcement: Announcement; requeued: number }   (the failed ones again, from the caller's mailbox)
@@ -91,7 +93,16 @@ export type StudentNotification = {
   createdAt: string;
 };
 
-export type AnnouncementTarget = { cohorts: string[]; majors: string[] };
+/** Cohorts and majors (none of either: every student), or the students picked one by one (account ids). */
+export type AnnouncementTarget = {
+  cohorts: string[]; majors: string[]; students?: string[];
+  /** How many students were picked, once their list was cleared after 90 days. */
+  picked?: number;
+};
+/** The most students one announcement may be sent to by picking them. */
+export const ANNOUNCEMENT_STUDENTS_MAX = 200;
+/** A student in "Chọn sinh viên": the name as the admin lists show it, MSSV, class (71K29CNTT08), and whether an email can reach them. */
+export type RecipientStudent = { id: string; name: string; studentCode: string | null; className: string | null; cohort: string | null; hasEmail: boolean };
 export type Announcement = {
   id: string;
   title: string;
@@ -99,7 +110,7 @@ export type Announcement = {
   link: string | null;
   /** Empty lists mean every student. */
   target: AnnouncementTarget;
-  /** "Tất cả sinh viên" or "K29 · Công nghệ thông tin". */
+  /** "Tất cả sinh viên", "K29 · Công nghệ thông tin" or "3 sinh viên được chọn". */
   targetLabel: string;
   recipients: number;
   read: number;

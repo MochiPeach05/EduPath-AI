@@ -1,7 +1,8 @@
 // Faculty announcements (AD-NOTI-01 "Gửi thông báo cho sinh viên", AD-NOTI-02/03 "Xem thông báo đã gửi", AD-NOTI-04/05
 // email and its outcome, AD-NOTI-06 "Cài đặt thông báo"), mounted at /api/admin/announcements (contract:
 // apps/web/src/notification-types.ts). An announcement reaches the active student accounts of the chosen cohorts and majors
-// (none chosen: every student) as a notification in their bell. Since 2026-11-23 the sender may also send it by email
+// (none chosen: every student), or since 2026-11-25 the students picked one by one (user: "thêm tính năng có thể gửi tới
+// từng bạn sinh viên mình chọn"), as a notification in their bell. Since 2026-11-23 the sender may also send it by email
 // (user: "Làm cả 04, 05, 06", "Chỉ sinh viên đã có tài khoản", "Dùng mặc định"): from their own school mailbox through
 // Microsoft Graph, once they allowed EduPath AI on Microsoft's page (auth/router.ts), one message per student, sent by the
 // mail worker (mail/worker.ts).
@@ -17,9 +18,12 @@ import { announcementMailMessage } from "../mail/messages.js";
 import { emailProblems, retryFailedEmails } from "../mail/outbox.js";
 import { requireAdminAccess } from "../middleware/authorization.js";
 import { personName } from "../users/person-name.js";
-import { ANNOUNCEMENT_BODY_MAX, ANNOUNCEMENT_TITLE_MAX, isPortalPage, type AnnouncementRow, type AnnouncementTarget } from "./model.js";
 import {
-  ANNOUNCEMENT_SORT, announcementOptions, findAnnouncement, listAnnouncements, reachCount, sendAnnouncement, targetLabel, withdrawAnnouncement,
+  ANNOUNCEMENT_BODY_MAX, ANNOUNCEMENT_STUDENTS_MAX, ANNOUNCEMENT_TITLE_MAX, isPortalPage, type AnnouncementRow, type AnnouncementTarget,
+} from "./model.js";
+import {
+  ANNOUNCEMENT_SORT, announcementOptions, announcementStudents, findAnnouncement, listAnnouncements, reachCount, searchRecipients, sendAnnouncement,
+  targetLabel, withdrawAnnouncement,
 } from "./repository.js";
 import {
   autoMailSender, listNotificationSettings, NOTIFICATION_SETTING_KEYS, NOTIFICATION_SETTINGS, retryFailedNotificationEmails, saveNotificationSetting,
@@ -51,9 +55,13 @@ const sendBody = z.object({
   link: z.string().max(40).nullable().optional(),
   cohorts: z.array(cohort).max(30).default([]),
   majors: z.array(major).max(10).default([]),
+  /** The students picked one by one (account ids); then no cohort and no major is given. */
+  students: z.array(id).max(ANNOUNCEMENT_STUDENTS_MAX).default([]),
   /** Also by email, from the sender's school mailbox (AD-NOTI-04). */
   email: z.boolean().default(false),
 }).strict();
+/** "Chọn sinh viên": the words typed (name, MSSV, class) and how many students to list. */
+const studentsQuery = z.object({ q: z.string().max(80).optional(), limit: z.coerce.number().int().min(1).max(50).optional() }).strict();
 /** "Gửi email thử cho chính tôi": the draft, when it has a title and a text, as a student would receive it. */
 const testBody = z.object({
   title: z.string().max(ANNOUNCEMENT_TITLE_MAX * 2).optional(),
@@ -68,7 +76,10 @@ const iso = (value: Date | string | null) => (value === null ? null : new Date(v
 const unique = (values: readonly string[]) => [...new Set(values)].sort();
 const count = (value: unknown) => (typeof value === "number" ? value : Number(value) || 0);
 export const presentAnnouncement = (row: AnnouncementRow) => {
-  const target: AnnouncementTarget = { cohorts: row.target?.cohorts ?? [], majors: row.target?.majors ?? [] };
+  const target: AnnouncementTarget = {
+    cohorts: row.target?.cohorts ?? [], majors: row.target?.majors ?? [], ...(row.target?.students?.length ? { students: row.target.students } : {}),
+    ...(row.target?.picked ? { picked: row.target.picked } : {}),
+  };
   const email = row.emailRequested ? {
     from: row.emailFrom ?? null, total: count(row.email?.total), sent: count(row.email?.sent), pending: count(row.email?.pending),
     failed: count(row.email?.failed), cancelled: count(row.email?.cancelled), noAddress: count(row.email?.noAddress),
@@ -135,6 +146,12 @@ export function createAnnouncementsRouter(pool: DatabasePool | undefined, webOri
     res.json(await reachCount(pool!, { cohorts: unique(query.cohorts), majors: unique(query.majors) }, staff));
   });
 
+  /** "Chọn sinh viên": the students an announcement may be sent to that match the words typed. */
+  router.get("/students", async (req, res) => {
+    const query = studentsQuery.parse(req.query);
+    res.json({ items: await searchRecipients(pool!, query.q ?? "", staff, query.limit ?? 20) });
+  });
+
   /** Whether email can be sent at all, and from which mailbox the member allowed it. */
   router.get("/mail-sender", async (req, res) => {
     z.object({}).strict().parse(req.query);
@@ -192,7 +209,11 @@ export function createAnnouncementsRouter(pool: DatabasePool | undefined, webOri
     if (Array.from(title).length > ANNOUNCEMENT_TITLE_MAX || Array.from(body).length > ANNOUNCEMENT_BODY_MAX) throw new AnnouncementError("invalid_input", 400);
     const link = parsed.data.link?.trim() || null;
     if (link !== null && !isPortalPage(link)) throw new AnnouncementError("invalid_input", 400);
-    const target = { cohorts: unique(parsed.data.cohorts), majors: unique(parsed.data.majors) };
+    const students = [...new Set(parsed.data.students)];
+    // Either a group (cohorts, majors) or picked students, never both.
+    if (students.length && (parsed.data.cohorts.length || parsed.data.majors.length)) throw new AnnouncementError("invalid_input", 400);
+    const target: AnnouncementTarget = students.length
+      ? { cohorts: [], majors: [], students } : { cohorts: unique(parsed.data.cohorts), majors: unique(parsed.data.majors) };
     const user = req.session.user!;
     const email = parsed.data.email ? { senderId: user.userId, from: (await usableSender(user.userId)).address } : null;
     const client = await pool!.connect();
@@ -229,6 +250,14 @@ export function createAnnouncementsRouter(pool: DatabasePool | undefined, webOri
     } finally {
       client.release();
     }
+  });
+
+  /** The students an announcement was sent to by picking them (none for one sent to cohorts and majors). */
+  router.get("/:id/recipients", async (req, res) => {
+    z.object({}).strict().parse(req.query);
+    const found = await findAnnouncement(pool!, id.parse(req.params.id));
+    if (!found) throw new AnnouncementError("not_found", 404);
+    res.json({ items: await announcementStudents(pool!, found.target?.students ?? []) });
   });
 
   /** AD-NOTI-05: the messages of an announcement that did not go out, and why. */
