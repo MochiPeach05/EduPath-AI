@@ -288,6 +288,31 @@ export const AUDIT_ROUTES: readonly AuditRoute[] = [
   // Thông báo của Khoa (notifications/admin-router.ts)
   { method: "POST", path: "/announcements/:id/withdraw", kind: "notify", action: "Thu hồi thông báo",
     describe: ({ params, result }) => ({ summary: `Thu hồi thông báo "${str(obj(obj(result).announcement).title) || params.id}"`, ...target("announcement", params.id) }) },
+  // Lịch đăng ký học tập (2026-11-25): its windows and their reminders.
+  { method: "POST", path: "/announcements/registration/preview", kind: "notify", action: "Xem trước lời nhắc đăng ký", skip: "a preview: nothing is stored" },
+  { method: "POST", path: "/announcements/registration/:id/remind", kind: "notify", action: "Gửi nhắc đăng ký",
+    describe: ({ params, result }) => {
+      const item = obj(obj(result).item), sent = num(item.recipients);
+      return { summary: `Gửi nhắc ${str(item.kindLabel).toLowerCase()} ${str(item.termLabel)}: ${str(item.round)}${sent ? ` cho ${sent} sinh viên` : ""}`, ...target("registration_window", params.id) };
+    } },
+  { method: "POST", path: "/announcements/registration/:id/withdraw", kind: "notify", action: "Thu hồi lần nhắc đăng ký",
+    describe: ({ params, result }) => {
+      const item = obj(obj(result).item);
+      return { summary: `Thu hồi lần nhắc ${str(item.kindLabel).toLowerCase()} ${str(item.termLabel)}: ${str(item.round)}`, ...target("registration_window", params.id) };
+    } },
+  { method: "POST", path: "/announcements/registration", kind: "notify", action: "Thêm đợt đăng ký",
+    describe: ({ result }) => {
+      const item = obj(obj(result).item), cohorts = list(item.cohorts).map(str).filter(Boolean);
+      return { summary: `Thêm ${str(item.kindLabel).toLowerCase()} ${str(item.termLabel)}: ${str(item.round)} (${cohorts.length ? cohorts.join(", ") : "tất cả sinh viên"}) vào Lịch đăng ký`,
+        ...target("registration_window", item.id) };
+    } },
+  { method: "PUT", path: "/announcements/registration/:id", kind: "notify", action: "Sửa đợt đăng ký",
+    describe: ({ params, result }) => {
+      const item = obj(obj(result).item);
+      return { summary: `Sửa ${str(item.kindLabel).toLowerCase()} ${str(item.termLabel)}: ${str(item.round)} trong Lịch đăng ký`, ...target("registration_window", params.id) };
+    } },
+  { method: "DELETE", path: "/announcements/registration/:id", kind: "notify", action: "Xóa đợt đăng ký",
+    describe: ({ params }) => ({ summary: "Xóa một đợt khỏi Lịch đăng ký", ...target("registration_window", params.id) }) },
   { method: "POST", path: "/announcements/mail-sender/test", kind: "notify", action: "Gửi email thử",
     describe: ({ result }) => (obj(result).preview === true ? "Gửi bản thông báo đang soạn đến email của chính mình để xem trước" : "Gửi email thử đến hộp thư của chính mình") },
   { method: "DELETE", path: "/announcements/mail-sender", kind: "notify", action: "Thu hồi quyền gửi email",

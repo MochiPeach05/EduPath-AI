@@ -221,6 +221,12 @@ export async function findAnnouncement(db: Db, id: string): Promise<Announcement
   return result.rows[0] ?? null;
 }
 
+/** The accounts a target reaches now (active students, no staff mailbox), by id: an announcement's or a registration reminder's. */
+export async function reachableStudentIds(db: Db, target: AnnouncementTarget, staffDomains: readonly string[]): Promise<string[]> {
+  return (await db.query<{ id: string }>(
+    `SELECT u.id ${recipientsFrom} WHERE ${recipientsWhere(1)} ORDER BY u.id`, targetParams(target, staffDomains))).rows.map((row) => row.id);
+}
+
 export type AnnouncementInput = {
   title: string; body: string; link: string | null; target: AnnouncementTarget;
   /** The Khoa (default) or EduPath AI: the bell's "Từ Khoa" or "Hệ thống", and the email's last line. */
@@ -236,8 +242,7 @@ export type AnnouncementEmail = { senderId: string; from: string };
  */
 export async function sendAnnouncement(client: Pick<PoolClient, "query">, actorId: string, input: AnnouncementInput,
   staffDomains: readonly string[], email: AnnouncementEmail | null = null): Promise<AnnouncementRow | null> {
-  const recipients = (await client.query<{ id: string }>(
-    `SELECT u.id ${recipientsFrom} WHERE ${recipientsWhere(1)} ORDER BY u.id`, targetParams(input.target, staffDomains))).rows.map((row) => row.id);
+  const recipients = await reachableStudentIds(client, input.target, staffDomains);
   if (!recipients.length) return null;
   const id = randomUUID();
   // Picked students: the announcement keeps those it really reached (an account locked meanwhile is left out).

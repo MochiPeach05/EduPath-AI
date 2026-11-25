@@ -66,6 +66,10 @@ const failures: Record<string, string> = {
   send_failed: "Microsoft không gửi được thư. Vui lòng thử lại sau.",
   bell_off: "Hãy bật thông báo này trước khi bật email.",
   bell_locked: "Thông báo việc làm thay sinh viên luôn hiện trong chuông của sinh viên.",
+  window_times: "Thời gian kết thúc phải sau thời gian bắt đầu.",
+  already_reminded: "Đợt này đã gửi lời nhắc nên không sửa hay gửi lại được.",
+  window_closed: "Đợt đăng ký này đã kết thúc nên không gửi lời nhắc được nữa.",
+  not_sent: "Đợt này chưa gửi lời nhắc nào.",
 };
 /** Microsoft's own code when it is a plain one, shown so the team can look it up; null otherwise. */
 export const plainCode = (value: unknown) => (typeof value === "string" && /^[A-Za-z0-9_.-]{1,80}$/.test(value) ? value : null);
@@ -77,7 +81,7 @@ export class AnnouncementRequestError extends Error {
     this.name = "AnnouncementRequestError";
   }
 }
-async function announcementRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+export async function announcementRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`${ANNOUNCEMENTS_API}${path}`, {
@@ -194,7 +198,7 @@ export default function AnnouncementsManagement({ canManage, section, navigate }
 }
 
 /** The choices of "Gửi đến": GET /options, else FALLBACK_OPTIONS. */
-function useAnnouncementOptions(): AnnouncementOptions {
+export function useAnnouncementOptions(): AnnouncementOptions {
   const [options, setOptions] = useState<AnnouncementOptions>(FALLBACK_OPTIONS);
   useEffect(() => {
     const controller = new AbortController();
