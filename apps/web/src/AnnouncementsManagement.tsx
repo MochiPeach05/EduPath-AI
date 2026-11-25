@@ -5,7 +5,8 @@ import { CheckedForm } from "./CheckedForm";
 import { majorOptions } from "./majors";
 import { sortRows, useTableSort, type SortRule } from "./table-sort";
 import {
-  ANNOUNCEMENTS_API, ANNOUNCEMENT_BODY_MAX, ANNOUNCEMENT_STUDENTS_MAX, ANNOUNCEMENT_TITLE_MAX, type Announcement, type AnnouncementEmail, type AnnouncementTarget,
+  ANNOUNCEMENTS_API, ANNOUNCEMENT_BODY_MAX, ANNOUNCEMENT_STUDENTS_MAX, ANNOUNCEMENT_TITLE_MAX, type Announcement, type AnnouncementEmail, type AnnouncementSender,
+  type AnnouncementTarget,
   type AutoMailState, type EmailProblem, type EmailStats, type MailSender, type NotificationSetting, type RecipientStudent,
 } from "./notification-types";
 import { nameInitials } from "./person-name";
@@ -301,7 +302,8 @@ function useMailSender(): MailSenderView {
  * test message goes to the member's own mailbox only (the draft, when it has a title and a text).
  */
 export function EmailChannel({ mail, checked, onCheck, draft, reach }: {
-  mail: MailSenderView; checked: boolean; onCheck: (on: boolean) => void; draft: { title: string; body: string; link: string | null }; reach: string | null;
+  mail: MailSenderView; checked: boolean; onCheck: (on: boolean) => void; draft: { title: string; body: string; link: string | null; sender?: AnnouncementSender };
+  reach: string | null;
 }) {
   const [busy, setBusy] = useState<"consent" | "test" | null>(null);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
@@ -318,7 +320,7 @@ export function EmailChannel({ mail, checked, onCheck, draft, reach }: {
     setBusy("test"); setNotice(null);
     try {
       const sent = await announcementRequest<{ to: string; preview: boolean }>("/mail-sender/test", {
-        method: "POST", body: JSON.stringify({ title: draft.title.trim(), body: draft.body.trim(), link: draft.link }),
+        method: "POST", body: JSON.stringify({ title: draft.title.trim(), body: draft.body.trim(), link: draft.link, sender: draft.sender ?? "khoa" }),
       });
       setNotice({ ok: true, text: `Đã gửi ${sent.preview ? "bản thông báo đang soạn" : "thư thử"} đến ${sent.to}. Thư có thể đến sau 1–2 phút; nếu chưa thấy, hãy xem cả mục Email rác.` });
     } catch (failure) {
@@ -515,11 +517,24 @@ function StepHead({ step, id, title, text, meta }: { step: number; id: string; t
   </header>;
 }
 
+/** How each sender appears: the bell's icon and label, the page's name for it, and the email's last line (mail/messages.ts). */
+export const SENDERS: Readonly<Record<AnnouncementSender, { glyph: string; bell: string; name: string; foot: string }>> = {
+  khoa: {
+    glyph: "K", bell: "Từ Khoa", name: "Khoa Công nghệ Thông tin",
+    foot: "Thông báo của Khoa Công nghệ Thông tin, Trường Đại học Văn Lang, gửi qua EduPath AI. Bạn cũng xem được thông báo này ở chuông thông báo trên EduPath AI.",
+  },
+  edupath: {
+    glyph: "i", bell: "Hệ thống", name: "EduPath AI",
+    foot: "Thông báo do EduPath AI gửi. Bạn cũng xem được thông báo này ở chuông thông báo trên EduPath AI.",
+  },
+};
 /** The paragraphs of the email as messages.ts writes them: a blank line starts a new one; a single break stays inside. */
 const mailParagraphs = (text: string) => text.replace(/\r\n?/g, "\n").split(/\n{2,}/).map((part) => part.trim()).filter(Boolean);
 
 /** The email a student receives (mail/messages.ts announcementMailMessage), for the preview. */
-export function EmailPreview({ title, body, link, from, on }: { title: string; body: string; link: string | null; from: string | null; on: boolean }) {
+export function EmailPreview({ title, body, link, from, on, sender = "khoa" }: {
+  title: string; body: string; link: string | null; from: string | null; on: boolean; sender?: AnnouncementSender;
+}) {
   const heading = title.trim() || "Tiêu đề thông báo";
   const button = openLabel(link);
   const text = body.trim() || "Nội dung sẽ hiện ở đây khi sinh viên mở thư.";
@@ -535,17 +550,18 @@ export function EmailPreview({ title, body, link, from, on }: { title: string; b
         <p>Chào [họ tên sinh viên],</p>
         {mailParagraphs(text).map((part, index) => <p key={index}>{part}</p>)}
         <span className="an-mail-button">{button ? `${button} trên EduPath AI` : "Mở EduPath AI"}</span>
-        <p className="an-mail-foot">Thông báo của Khoa Công nghệ Thông tin, Trường Đại học Văn Lang, gửi qua EduPath AI. Bạn cũng xem được thông báo này ở chuông thông báo trên EduPath AI.</p>
+        <p className="an-mail-foot">{SENDERS[sender].foot}</p>
       </div>
     </div>
   </div>;
 }
 
 /** The student's view while the announcement is written: the bell (an unread row, then the opened notification) or the email. */
-export function AnnouncementPreview({ title, body, link, email = false, from = null }: {
-  title: string; body: string; link: string | null; email?: boolean; from?: string | null;
+export function AnnouncementPreview({ title, body, link, email = false, from = null, sender = "khoa" }: {
+  title: string; body: string; link: string | null; email?: boolean; from?: string | null; sender?: AnnouncementSender;
 }) {
   const [view, setView] = useState<"bell" | "email">("bell");
+  const who = SENDERS[sender];
   const heading = title.trim() || "Tiêu đề thông báo";
   const text = body.trim() || "Nội dung sẽ hiện ở đây khi sinh viên mở thông báo.";
   const button = openLabel(link);
@@ -559,18 +575,18 @@ export function AnnouncementPreview({ title, body, link, email = false, from = n
     </div>
     {view === "bell" ? <div className="an-bell">
       <div className="an-note-row">
-        <span className="an-note-icon" aria-hidden="true">K</span>
-        <span className="an-note-text"><strong>{heading}</strong><small>Từ Khoa · Vừa xong · chưa đọc</small></span>
+        <span className={`an-note-icon an-note-icon-${sender}`} aria-hidden="true">{who.glyph}</span>
+        <span className="an-note-text"><strong>{heading}</strong><small>{who.bell} · Vừa xong · chưa đọc</small></span>
         <span className="an-note-dot" aria-hidden="true" />
       </div>
       <div className="an-bell-detail">
-        <span className="an-bell-chip">Từ Khoa · Vừa xong</span>
+        <span className={`an-bell-chip an-bell-chip-${sender}`}>{who.bell} · Vừa xong</span>
         <h3>{heading}</h3>
         <p className="an-preview-body">{text}</p>
         {button && <span className="an-preview-button">{button}</span>}
       </div>
-      <p className="an-preview-note">Sinh viên thấy thông báo ở chuông trên thanh đầu trang, lọc được theo "Từ Khoa", đánh dấu đã đọc hoặc xóa. Thông báo tự xóa sau 90 ngày.</p>
-    </div> : <EmailPreview title={title} body={body} link={link} from={from} on={email} />}
+      <p className="an-preview-note">Sinh viên thấy thông báo ở chuông trên thanh đầu trang, lọc được theo "{who.bell}", đánh dấu đã đọc hoặc xóa. Thông báo tự xóa sau 90 ngày.</p>
+    </div> : <EmailPreview title={title} body={body} link={link} from={from} on={email} sender={sender} />}
   </section>;
 }
 
@@ -591,6 +607,7 @@ function ComposeAnnouncement({ canManage, navigate }: { canManage: boolean; navi
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [sent, setSent] = useState<Announcement | null>(null);
+  const [sender, setSender] = useState<AnnouncementSender>("khoa");
   const emailTest = useEmailTestOutcome();
   // Picks made on the fallback list keep only what GET /options offers once it answers.
   useEffect(() => {
@@ -630,7 +647,7 @@ function ComposeAnnouncement({ canManage, navigate }: { canManage: boolean; navi
       const audience = byStudent ? { students: picked.map((student) => student.id) } : { cohorts: target.cohorts, majors: target.majors };
       const { announcement } = await announcementRequest<{ announcement: Announcement }>("", {
         method: "POST",
-        body: JSON.stringify({ title: title.trim(), body: body.trim(), link: link || null, ...audience, email: emailOn }),
+        body: JSON.stringify({ title: title.trim(), body: body.trim(), link: link || null, ...audience, email: emailOn, sender }),
       });
       // Email is chosen again for each announcement: a sent email cannot be withdrawn.
       setSent(announcement); setConfirming(false); setWantEmail(false); reset();
@@ -689,6 +706,15 @@ function ComposeAnnouncement({ canManage, navigate }: { canManage: boolean; navi
           </section>
           <section className="cm-panel an-step" aria-labelledby="an-step-content">
             <StepHead step={2} id="an-step-content" title="Nội dung" text="Tiêu đề hiện trong chuông và là tiêu đề email; nội dung sinh viên đọc khi mở thông báo." />
+            <div className="an-sender">
+              <span className="an-search-label" id="an-sender-label">Người gửi</span>
+              <div className="an-seg" role="group" aria-labelledby="an-sender-label">
+                {(["khoa", "edupath"] as const).map((key) => <button key={key} type="button" aria-pressed={sender === key} onClick={() => setSender(key)}>{SENDERS[key].name}</button>)}
+              </div>
+              <small className="an-field-hint">{sender === "edupath"
+                ? "Sinh viên thấy thông báo là của EduPath AI: chuông ghi “Hệ thống”, email kết thúc bằng dòng của EduPath AI. Nội dung không nên xưng là Khoa."
+                : "Sinh viên thấy thông báo là của Khoa: chuông ghi “Từ Khoa”."}</small>
+            </div>
             <label><RequiredLabel>Tiêu đề</RequiredLabel>
               <input id="an-title" required maxLength={ANNOUNCEMENT_TITLE_MAX} value={title} placeholder="Ví dụ: Lịch đăng ký học phần học kỳ 2 năm học 2026–2027" onChange={(event) => setTitle(event.target.value)} />
               <small className="an-counter">{number(title.length)}/{number(ANNOUNCEMENT_TITLE_MAX)} ký tự</small>
@@ -715,9 +741,9 @@ function ComposeAnnouncement({ canManage, navigate }: { canManage: boolean; navi
                   <span className="an-channel-title"><strong>Trong EduPath AI</strong><small>Chuông của sinh viên</small></span>
                   <span className="an-always">Luôn bật</span>
                 </div>
-                <p className="an-email-text">Hiện ngay ở chuông của các sinh viên nhận, lọc được theo "Từ Khoa"; tự xóa sau 90 ngày.</p>
+                <p className="an-email-text">Hiện ngay ở chuông của các sinh viên nhận, lọc được theo "{SENDERS[sender].bell}"; tự xóa sau 90 ngày.</p>
               </div>
-              <EmailChannel mail={mail} checked={emailOn} onCheck={setWantEmail} draft={{ title, body, link: link || null }}
+              <EmailChannel mail={mail} checked={emailOn} onCheck={setWantEmail} draft={{ title, body, link: link || null, sender }}
                 reach={recipients === null ? null : emailReachText(recipients, reachable)} />
             </div>
           </section>
@@ -727,6 +753,7 @@ function ComposeAnnouncement({ canManage, navigate }: { canManage: boolean; navi
         <section className="cm-panel an-summary" aria-labelledby="an-summary-title">
           <h2 id="an-summary-title">Tóm tắt</h2>
           <dl>
+            <div><dt>Người gửi</dt><dd>{SENDERS[sender].name}</dd></div>
             <div><dt>Người nhận</dt><dd>{recipientsText}</dd></div>
             <div><dt>Số sinh viên</dt><dd>{countText}</dd></div>
             <div><dt>Kênh gửi</dt><dd>{emailOn ? "Chuông thông báo và email trường" : "Chuông thông báo"}</dd></div>
@@ -739,7 +766,7 @@ function ComposeAnnouncement({ canManage, navigate }: { canManage: boolean; navi
             <button type="button" className="am-outline" disabled={!canManage || busy || (!title && !body && !link)} onClick={reset}><Icon name="close" /> Xóa nội dung</button>
           </div>
         </section>
-        <AnnouncementPreview title={title} body={body} link={link || null} email={emailOn} from={mail.sender?.address ?? null} />
+        <AnnouncementPreview title={title} body={body} link={link || null} email={emailOn} from={mail.sender?.address ?? null} sender={sender} />
       </aside>
     </div>
     {confirming && <Modal title="Gửi thông báo" size="sm" busy={busy} onClose={() => setConfirming(false)}>
@@ -788,7 +815,7 @@ export function SentTable({ items, canManage, sortHeader, sort, page, onDetail, 
     <thead><tr>{sortHeader("STT", "stt", "cm-stt")}{sortHeader("Tiêu đề", "title")}{sortHeader("Gửi đến", "target")}{sortHeader("Thời gian", "createdAt")}{sortHeader("Đã đọc", "read")}{sortHeader("Email", "email")}<th scope="col">Thao tác</th></tr></thead>
     <tbody>{sortRows(items, sentSort, sort).slice((page - 1) * 10, page * 10).map(({ row, stt }) => <tr key={row.id} className={row.withdrawnAt ? "an-withdrawn" : undefined}>
       <td className="cm-stt">{stt}</td>
-      <td><strong>{row.title}</strong>{row.withdrawnAt && <span className="an-tag">Đã thu hồi</span>}</td>
+      <td><strong>{row.title}</strong>{row.sender === "edupath" && <span className="an-tag an-tag-edupath">EduPath AI</span>}{row.withdrawnAt && <span className="an-tag">Đã thu hồi</span>}</td>
       <td>{row.targetLabel}</td>
       <td className="an-num">{sentTime(row.createdAt)}</td>
       <td className="an-num"><span className="an-read"><span>{readText(row)}</span><span className="an-meter" aria-hidden="true"><i style={{ width: `${readShare(row)}%` }} /></span></span></td>
@@ -847,6 +874,7 @@ function AnnouncementDetail({ announcement, canManage, close, onWithdraw, onChan
         <div><dt>Gửi đến</dt><dd>{announcement.targetLabel}{announcement.target.students?.length ? <PickedRecipients id={announcement.id} />
           : announcement.target.picked ? <small className="an-detail-note">Danh sách sinh viên được chọn đã xóa sau 90 ngày, như thông báo trong chuông.</small> : null}</dd></div>
         <div><dt>Đã đọc</dt><dd>{readText(announcement)} sinh viên ({readShare(announcement)}%)</dd></div>
+        <div><dt>Người gửi</dt><dd>{SENDERS[announcement.sender ?? "khoa"].name}</dd></div>
         <div><dt>Thời gian gửi</dt><dd>{sentTime(announcement.createdAt)}{announcement.createdBy ? ` · ${announcement.createdBy}` : ""}</dd></div>
         {announcement.withdrawnAt && <div><dt>Thu hồi lúc</dt><dd>{sentTime(announcement.withdrawnAt)}</dd></div>}
         <div><dt>Email</dt><dd>{announcement.email

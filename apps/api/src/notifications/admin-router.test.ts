@@ -95,7 +95,7 @@ describe("announcements API", () => {
     const statements = sql().map(([text]) => text);
     expect(statements[statements.indexOf("BEGIN") + 1]).toContain("FOR SHARE");
     const inserted = sql().find(([text]) => text.startsWith("INSERT INTO ad_announcements"))!;
-    expect(inserted[1]).toEqual([expect.any(String), "Lịch đăng ký học phần", "Mở từ 01/12.", "#plans", JSON.stringify({ cohorts: ["K29"], majors: ["7480201"] }), 2, ADMIN]);
+    expect(inserted[1]).toEqual([expect.any(String), "Lịch đăng ký học phần", "Mở từ 01/12.", "#plans", JSON.stringify({ cohorts: ["K29"], majors: ["7480201"] }), 2, ADMIN, "khoa"]);
     const fanOut = sql().find(([text]) => text.startsWith("INSERT INTO stu_notifications"))!;
     const params = fanOut[1] as unknown[][];
     expect(params[1]).toEqual([A, B]);
@@ -105,6 +105,23 @@ describe("announcements API", () => {
     expect(params[8]).toEqual([`announcement:${inserted[1]![0]}`, `announcement:${inserted[1]![0]}`]);
     expect(statements.at(-1)).toBe("COMMIT");
     expect(release).toHaveBeenCalledOnce();
+  });
+
+  it("sends under EduPath AI's name when asked: the bell says Hệ thống, never Từ Khoa (2026-11-25)", async () => {
+    const { app, sql } = setup({
+      rows: (text) => (text.startsWith("SELECT u.id FROM users u") ? { rowCount: 1, rows: [{ id: A }] }
+        : text.includes("WHERE a.id=$1") ? { rowCount: 1, rows: [announcement({ sender: "edupath", recipients: 1 })] } : undefined),
+    });
+    const response = await request(app).post("/a").set("Origin", origin).send({ title: "Nhắc đăng ký học phần", body: "Nội dung.", sender: "edupath" }).expect(201);
+    expect(response.body.announcement.sender).toBe("edupath");
+    const inserted = sql().find(([text]) => text.startsWith("INSERT INTO ad_announcements"))!;
+    expect((inserted[1] as unknown[])[7]).toBe("edupath");
+    const fanOut = sql().find(([text]) => text.startsWith("INSERT INTO stu_notifications"))!;
+    expect((fanOut[1] as unknown[][])[2]).toEqual(["sys"]);
+    await request(app).post("/a").set("Origin", origin).send({ title: "T", body: "B", sender: "phong-dao-tao" }).expect(400, { error: "invalid_input" });
+    // An older row without the column reads as the Khoa's.
+    const old = setup({ rows: (text) => (text.includes("FROM ad_announcements a LEFT JOIN users u") ? { rowCount: 1, rows: [announcement()] } : undefined) });
+    expect((await request(old.app).get("/a").expect(200)).body.items[0].sender).toBe("khoa");
   });
 
   it("withdraws an announcement once and takes it out of every bell", async () => {

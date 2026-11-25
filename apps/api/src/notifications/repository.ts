@@ -9,7 +9,8 @@ import { personName } from "../users/person-name.js";
 import { MAJORS } from "../curricula/majors.js";
 import type { DatabasePool } from "../db/pool.js";
 import {
-  ANNOUNCEMENT_STUDENTS_MAX, notificationColumns, NOTIFICATION_TOPIC, RESTORE_MINUTES, RETENTION_DAYS, type AnnouncementRow, type AnnouncementTarget, type NotificationOrder,
+  ANNOUNCEMENT_STUDENTS_MAX, notificationColumns, NOTIFICATION_TOPIC, RESTORE_MINUTES, RETENTION_DAYS, type AnnouncementRow, type AnnouncementSender, type AnnouncementTarget,
+  type NotificationOrder,
   type NotificationRow, type NotificationType,
 } from "./model.js";
 import { notifyMany } from "./notify.js";
@@ -197,7 +198,7 @@ export function targetLabel(target: AnnouncementTarget): string {
 const announcementColumns = `a.id,a.title,a.body,a.link,a.target,a.recipients,a.created_at AS "createdAt",a.withdrawn_at AS "withdrawnAt",
   u.display_name AS "createdBy",
   (SELECT count(*)::int FROM stu_notifications n WHERE n.announcement_id=a.id AND n.read_at IS NOT NULL) AS read,
-  a.email_requested AS "emailRequested",a.email_from AS "emailFrom",${EMAIL_SUMMARY} AS email`;
+  a.email_requested AS "emailRequested",a.email_from AS "emailFrom",${EMAIL_SUMMARY} AS email,a.sender`;
 
 export const ANNOUNCEMENT_SORT = {
   title: byText("a.title"),
@@ -220,7 +221,11 @@ export async function findAnnouncement(db: Db, id: string): Promise<Announcement
   return result.rows[0] ?? null;
 }
 
-export type AnnouncementInput = { title: string; body: string; link: string | null; target: AnnouncementTarget };
+export type AnnouncementInput = {
+  title: string; body: string; link: string | null; target: AnnouncementTarget;
+  /** The Khoa (default) or EduPath AI: the bell's "Từ Khoa" or "Hệ thống", and the email's last line. */
+  sender?: AnnouncementSender;
+};
 /** Email with the announcement (AD-NOTI-04): from the actor's school mailbox, whose permission the caller checked. */
 export type AnnouncementEmail = { senderId: string; from: string };
 
@@ -238,11 +243,13 @@ export async function sendAnnouncement(client: Pick<PoolClient, "query">, actorI
   // Picked students: the announcement keeps those it really reached (an account locked meanwhile is left out).
   const target: AnnouncementTarget = input.target.students?.length
     ? { cohorts: [], majors: [], students: recipients } : { cohorts: input.target.cohorts, majors: input.target.majors };
+  const sender: AnnouncementSender = input.sender ?? "khoa";
   await client.query(
-    `INSERT INTO ad_announcements(id,title,body,link,target,recipients,created_by) VALUES($1,$2,$3,$4,$5::jsonb,$6,$7)`,
-    [id, input.title, input.body, input.link, JSON.stringify(target), recipients.length, actorId]);
+    `INSERT INTO ad_announcements(id,title,body,link,target,recipients,created_by,sender) VALUES($1,$2,$3,$4,$5::jsonb,$6,$7,$8)`,
+    [id, input.title, input.body, input.link, JSON.stringify(target), recipients.length, actorId, sender]);
   await notifyMany(client, recipients, {
-    type: "khoa", kind: "announcement", title: input.title, body: input.body, link: input.link, sourceKey: `announcement:${id}`, announcementId: id,
+    type: sender === "edupath" ? "sys" : "khoa", kind: "announcement", title: input.title, body: input.body, link: input.link,
+    sourceKey: `announcement:${id}`, announcementId: id,
   });
   if (email) {
     await client.query("UPDATE ad_announcements SET email_requested=true,email_sender_id=$2,email_from=$3 WHERE id=$1", [id, email.senderId, email.from]);

@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import AnnouncementsManagement, {
-  ANNOUNCEMENT_ROW, AnnouncementPreview, AnnouncementRequestError, AutoMailPanel, EmailChannel, EmailPreview, EmailProblemList, FALLBACK_OPTIONS, MAIL_CONSENT_API,
+  ANNOUNCEMENT_ROW, AnnouncementPreview, SENDERS, AnnouncementRequestError, AutoMailPanel, EmailChannel, EmailPreview, EmailProblemList, FALLBACK_OPTIONS, MAIL_CONSENT_API,
   PORTAL_PAGES, RecipientList, STUDENT_RESULTS, SentTable, SettingsList, StudentPicker, autoSenderReady, emailErrorText, emailMinutes, emailReachText,
   emailStatsText, emailSummary, emailTestOutcome, majorText, nextSenderAddress, openLabel, ownGrantReady, pageLabel, pickedReachText, pickedSummary, reachQuery,
   reachText, reachedText, readShare, readText, searchStatus, sentTime, settingsSummary, studentLine, targetText, toggleValue, withdrawEmailText, type MailSenderView,
@@ -115,6 +115,36 @@ describe("compose page (redesigned 2026-11-25)", () => {
     expect(off).toContain("Chưa bật kênh email: sinh viên chỉ nhận thông báo ở chuông.");
     expect(off).toContain('<span class="an-mail-button">Mở EduPath AI</span>');
     expect(off).toContain("<dd>Hộp thư trường của bạn</dd>");
+  });
+});
+
+describe("Người gửi: Khoa or EduPath AI (2026-11-25)", () => {
+  it("offers the Khoa first and EduPath AI beside it, and names the sender in the summary", () => {
+    const html = renderToStaticMarkup(<AnnouncementsManagement canManage section="compose" />);
+    expect(html).toContain('<span class="an-search-label" id="an-sender-label">Người gửi</span>');
+    expect(html).toContain('<button type="button" aria-pressed="true">Khoa Công nghệ Thông tin</button><button type="button" aria-pressed="false">EduPath AI</button>');
+    expect(html).toContain("<dt>Người gửi</dt><dd>Khoa Công nghệ Thông tin</dd>");
+  });
+
+  it("shows the student the bell and the email of EduPath AI, never the Khoa's", () => {
+    const bell = renderToStaticMarkup(<AnnouncementPreview title="Nhắc đăng ký" body="B" link={null} sender="edupath" />);
+    expect(bell).toContain('<span class="an-note-icon an-note-icon-edupath" aria-hidden="true">i</span>');
+    expect(bell).toContain("<small>Hệ thống · Vừa xong · chưa đọc</small>");
+    expect(bell).toContain("lọc được theo &quot;Hệ thống&quot;");
+    expect(bell).not.toContain("Từ Khoa");
+    const mail = renderToStaticMarkup(<EmailPreview title="Nhắc đăng ký" body="B" link={null} from={null} on sender="edupath" />);
+    expect(mail).toContain(`<p class="an-mail-foot">${SENDERS.edupath.foot}</p>`);
+    expect(mail).not.toContain("Khoa");
+    expect(renderToStaticMarkup(<AnnouncementPreview title="T" body="B" link={null} />)).toContain("<small>Từ Khoa · Vừa xong · chưa đọc</small>");
+  });
+
+  it("tags an announcement sent under EduPath AI's name in the sent list", () => {
+    function Table({ items }: { items: Announcement[] }) {
+      const { sort, sortHeader } = useTableSort();
+      return <SentTable items={items} canManage sort={sort} sortHeader={sortHeader} page={1} onDetail={() => undefined} onWithdraw={() => undefined} />;
+    }
+    const html = renderToStaticMarkup(<Table items={[sent({ sender: "edupath" }), sent({ id: "a2" })]} />);
+    expect(html.match(/<span class="an-tag an-tag-edupath">EduPath AI<\/span>/g)).toHaveLength(1);
   });
 });
 

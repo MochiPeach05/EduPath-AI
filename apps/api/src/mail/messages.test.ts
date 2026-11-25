@@ -25,4 +25,12 @@ describe("the email a student receives for an announcement (AD-NOTI-04, 2026-11-
     expect(message.html).toContain(">Mở EduPath AI</a>");
     expect(announcementSubject("Tiêu đề\nhai dòng")).toBe("[EduPath AI] Tiêu đề hai dòng");
   });
+
+  it("ends an announcement sent under EduPath AI's name with EduPath AI's line, never the Khoa's (2026-11-25)", () => {
+    const own = announcementMailMessage({ to: "a@example.edu", name: "An", title: "T", body: "B", link: null, sender: "edupath" }, "https://edupath.example");
+    expect(own.html).toContain("Thông báo do EduPath AI gửi. Bạn cũng xem được thông báo này ở chuông thông báo trên EduPath AI.");
+    expect(own.html).not.toContain("Khoa");
+    const khoa = announcementMailMessage({ to: "a@example.edu", name: "An", title: "T", body: "B", link: null }, "https://edupath.example");
+    expect(khoa.html).toContain("Thông báo của Khoa Công nghệ Thông tin");
+  });
 });

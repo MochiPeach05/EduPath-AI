@@ -19,7 +19,7 @@ import { emailProblems, retryFailedEmails } from "../mail/outbox.js";
 import { requireAdminAccess } from "../middleware/authorization.js";
 import { personName } from "../users/person-name.js";
 import {
-  ANNOUNCEMENT_BODY_MAX, ANNOUNCEMENT_STUDENTS_MAX, ANNOUNCEMENT_TITLE_MAX, isPortalPage, type AnnouncementRow, type AnnouncementTarget,
+  ANNOUNCEMENT_BODY_MAX, ANNOUNCEMENT_SENDERS, ANNOUNCEMENT_STUDENTS_MAX, ANNOUNCEMENT_TITLE_MAX, isPortalPage, type AnnouncementRow, type AnnouncementTarget,
 } from "./model.js";
 import {
   ANNOUNCEMENT_SORT, announcementOptions, announcementStudents, findAnnouncement, listAnnouncements, reachCount, searchRecipients, sendAnnouncement,
@@ -59,6 +59,8 @@ const sendBody = z.object({
   students: z.array(id).max(ANNOUNCEMENT_STUDENTS_MAX).default([]),
   /** Also by email, from the sender's school mailbox (AD-NOTI-04). */
   email: z.boolean().default(false),
+  /** Under the Khoa's name (default) or EduPath AI's (migration 068). */
+  sender: z.enum(ANNOUNCEMENT_SENDERS).default("khoa"),
 }).strict();
 /** "Chọn sinh viên": the words typed (name, MSSV, class) and how many students to list. */
 const studentsQuery = z.object({ q: z.string().max(80).optional(), limit: z.coerce.number().int().min(1).max(50).optional() }).strict();
@@ -67,6 +69,7 @@ const testBody = z.object({
   title: z.string().max(ANNOUNCEMENT_TITLE_MAX * 2).optional(),
   body: z.string().max(ANNOUNCEMENT_BODY_MAX * 2).optional(),
   link: z.string().max(40).nullable().optional(),
+  sender: z.enum(ANNOUNCEMENT_SENDERS).optional(),
 }).strict();
 /** A kind's bell notification and/or its email (Cài đặt thông báo); at least one of them. */
 const settingBody = z.object({ enabled: z.boolean().optional(), email: z.boolean().optional() }).strict()
@@ -87,7 +90,7 @@ export const presentAnnouncement = (row: AnnouncementRow) => {
   return {
     id: row.id, title: row.title, body: row.body, link: row.link, target, targetLabel: targetLabel(target),
     recipients: row.recipients, read: row.read ?? 0, createdAt: iso(row.createdAt)!, createdBy: row.createdBy ?? null, withdrawnAt: iso(row.withdrawnAt),
-    email,
+    email, sender: row.sender ?? "khoa",
   };
 };
 const cleanTitle = (text: string | undefined) => (text ?? "").replace(/\s+/g, " ").trim();
@@ -192,7 +195,7 @@ export function createAnnouncementsRouter(pool: DatabasePool | undefined, webOri
     const preview = Boolean(title && body);
     const name = personName(user.name);
     const message = preview
-      ? announcementMailMessage({ to: grant.address, name, title, body, link }, webOrigin)
+      ? announcementMailMessage({ to: grant.address, name, title, body, link, sender: input.sender ?? "khoa" }, webOrigin)
       : testMailMessage(grant.address, name, new Date(), webOrigin);
     const result = await mail.sendMail(token.accessToken, message);
     if (!result.ok) throw new AnnouncementError("send_failed", 502, { code: result.code });
@@ -220,7 +223,7 @@ export function createAnnouncementsRouter(pool: DatabasePool | undefined, webOri
     try {
       await client.query("BEGIN");
       await access(client, user, true);
-      const sent = await sendAnnouncement(client, user.userId, { title, body, link, target }, staff, email);
+      const sent = await sendAnnouncement(client, user.userId, { title, body, link, target, sender: parsed.data.sender }, staff, email);
       if (!sent) throw new AnnouncementError("no_recipients", 400);
       await client.query("COMMIT");
       res.status(201).json({ announcement: presentAnnouncement(sent) });

@@ -318,9 +318,11 @@ export const AUDIT_ROUTES: readonly AuditRoute[] = [
     describe: ({ body, result }) => {
       const sent = obj(obj(result).announcement), recipients = num(sent.recipients);
       const email = body.email === true ? " (kèm email)" : "";
+      // Sent under EduPath AI's name (migration 068) rather than the Khoa's.
+      const named = body.sender === "edupath" ? " dưới tên EduPath AI" : "";
       // Sent to students picked one by one (2026-11-25); their names are never written to the log.
       const picked = Array.isArray(body.students) && body.students.length > 0 ? " được chọn" : "";
-      return { summary: `Gửi thông báo "${str(sent.title) || str(body.title)}"${recipients === null ? "" : ` cho ${recipients} sinh viên${picked}`}${email}`, ...target("announcement", sent.id) };
+      return { summary: `Gửi thông báo "${str(sent.title) || str(body.title)}"${recipients === null ? "" : ` cho ${recipients} sinh viên${picked}`}${named}${email}`, ...target("announcement", sent.id) };
     } },
 ];
 

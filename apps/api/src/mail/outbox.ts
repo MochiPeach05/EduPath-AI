@@ -45,7 +45,11 @@ export async function queueAnnouncementEmails(client: Db, announcementId: string
 }
 
 /** A message taken by the worker: where it goes, what it says and how many times it was tried (this one included). */
-export type ClaimedEmail = { id: string; address: string | null; attempts: number; title: string; body: string; link: string | null; name: string | null };
+export type ClaimedEmail = {
+  id: string; address: string | null; attempts: number; title: string; body: string; link: string | null; name: string | null;
+  /** Whose name the announcement was sent under (migration 068). */
+  sender?: "khoa" | "edupath";
+};
 
 /** Takes up to `limit` due messages of one sender's announcements (status sending), oldest first, skipping locked ones. */
 export async function claimDueEmails(db: Db, senderId: string, limit: number): Promise<ClaimedEmail[]> {
@@ -56,7 +60,7 @@ export async function claimDueEmails(db: Db, senderId: string, limit: number): P
         ORDER BY e.created_at,e.id LIMIT $2 FOR UPDATE OF e SKIP LOCKED),
       claimed AS (UPDATE ad_announcement_emails e SET status='sending',attempts=e.attempts+1,updated_at=now() FROM picked WHERE e.id=picked.id
         RETURNING e.id,e.announcement_id,e.user_id,e.address,e.attempts)
-      SELECT c.id,c.address,c.attempts,a.title,a.body,a.link,COALESCE(NULLIF(btrim(p.full_name),''),u.display_name) AS name
+      SELECT c.id,c.address,c.attempts,a.title,a.body,a.link,a.sender,COALESCE(NULLIF(btrim(p.full_name),''),u.display_name) AS name
       FROM claimed c JOIN ad_announcements a ON a.id=c.announcement_id
         LEFT JOIN users u ON u.id=c.user_id LEFT JOIN student_profiles p ON p.user_id=c.user_id
       ORDER BY c.id`, [senderId, limit]);

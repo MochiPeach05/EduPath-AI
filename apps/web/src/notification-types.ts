@@ -30,7 +30,7 @@
  * GET    /options                                     → { cohorts: string[]; majors: { code: string; name: string }[] }  (of the students on file)
  * GET    /reach?cohorts=K29,K30&majors=7480201        → { count: number; withEmail: number }               (students who would receive it, and those of them with an address; majors are programme codes from /options)
  * GET    /students?q=hoa&limit=20                     → { items: RecipientStudent[] }                      ("Chọn sinh viên", 2026-11-25: every word typed in the name, MSSV, class or address, tones and case ignored; by given name)
- * POST   / { title, body, link, cohorts, majors, students, email } → 201 { announcement: Announcement }   (students: account ids picked one by one, at most 200, then no cohort and no major; email: also by email, from the caller's mailbox)
+ * POST   / { title, body, link, cohorts, majors, students, email, sender } → 201 { announcement: Announcement }   (students: account ids picked one by one, at most 200, then no cohort and no major; email: also by email, from the caller's mailbox; sender: "khoa" (default) or "edupath", 2026-11-25)
  * GET    /:id/recipients                              → { items: RecipientStudent[] }                      (the picked students of an announcement; none for a group one)
  * POST   /:id/withdraw {}                             → { announcement: Announcement }                     (removes it from every bell and cancels the emails not sent yet)
  * GET    /:id/emails                                  → { items: EmailProblem[] }                          (the messages that did not go out)
@@ -119,7 +119,15 @@ export type Announcement = {
   withdrawnAt: string | null;
   /** The email part; null (or missing, from an older server) when it went to the bell only. */
   email?: AnnouncementEmail | null;
+  /** Whose name it went out under: the Khoa ("Từ Khoa" in the bell) or EduPath AI ("Hệ thống"); missing means the Khoa. */
+  sender?: AnnouncementSender;
 };
+
+/**
+ * Under whose name an announcement is sent (2026-11-25; user: "không có xưng là khoa nha là EduPath AI được rồi"): the
+ * Khoa, or EduPath AI. The student's bell shows "Từ Khoa" or "Hệ thống", and the email's last line names the sender.
+ */
+export type AnnouncementSender = "khoa" | "edupath";
 
 /** How the emails of an announcement went (AD-NOTI-05). */
 export type AnnouncementEmail = {

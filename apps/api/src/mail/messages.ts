@@ -5,7 +5,11 @@
 import { PORTAL_PAGES, isPortalPage } from "../notifications/model.js";
 import { escapeHtml, type MailMessage } from "./graph-mail.js";
 
-export type AnnouncementMail = { to: string; name: string | null; title: string; body: string; link: string | null };
+export type AnnouncementMail = {
+  to: string; name: string | null; title: string; body: string; link: string | null;
+  /** Sent under EduPath AI's name (migration 068): the last line says so instead of naming the Khoa. */
+  sender?: "khoa" | "edupath" | undefined;
+};
 /** An automatic notification: its button's label too ("Mở Lộ trình học tập"), as the bell shows it. */
 export type NotificationMail = AnnouncementMail & { linkLabel: string | null };
 
@@ -35,10 +39,13 @@ ${paragraphs(mail.body).map(paragraph).join("\n")}
   };
 }
 
+/** The last line of an announcement's email, by whose name it was sent under. */
+export const announcementFooter = (sender: AnnouncementMail["sender"]) => (sender === "edupath"
+  ? "Thông báo do EduPath AI gửi. Bạn cũng xem được thông báo này ở chuông thông báo trên EduPath AI."
+  : "Thông báo của Khoa Công nghệ Thông tin, Trường Đại học Văn Lang, gửi qua EduPath AI. Bạn cũng xem được thông báo này ở chuông thông báo trên EduPath AI.");
+
 export function announcementMailMessage(mail: AnnouncementMail, webOrigin: string): MailMessage {
-  return message(mail, (link) => `Mở ${PORTAL_PAGES[link]} trên EduPath AI`,
-    "Thông báo của Khoa Công nghệ Thông tin, Trường Đại học Văn Lang, gửi qua EduPath AI. Bạn cũng xem được thông báo này ở chuông thông báo trên EduPath AI.",
-    webOrigin);
+  return message(mail, (link) => `Mở ${PORTAL_PAGES[link]} trên EduPath AI`, announcementFooter(mail.sender), webOrigin);
 }
 
 /** An automatic notification: the bell's own button, then "trên EduPath AI" ("Mở Lộ trình học tập trên EduPath AI"). */

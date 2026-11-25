@@ -87,7 +87,7 @@ export async function runMailTick(deps: MailWorkerDeps, options: { tidy?: boolea
     const name = (value: string | null) => (value ? personName(value) : null);
     const jobs: Job[] = [
       ...announcements.map((mail): Job => ({ table: "ad_announcement_emails", id: mail.id, address: mail.address, attempts: mail.attempts,
-        message: (to) => announcementMailMessage({ to, name: name(mail.name), title: mail.title, body: mail.body, link: mail.link }, webOrigin) })),
+        message: (to) => announcementMailMessage({ to, name: name(mail.name), title: mail.title, body: mail.body, link: mail.link, sender: mail.sender }, webOrigin) })),
       ...notifications.map((mail): Job => ({ table: "stu_notification_emails", id: mail.id, address: mail.address, attempts: mail.attempts,
         message: (to) => notificationMailMessage({ to, name: name(mail.name), title: mail.title, body: mail.body, link: mail.link, linkLabel: mail.linkLabel }, webOrigin) })),
     ];

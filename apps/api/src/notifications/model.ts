@@ -80,8 +80,15 @@ export type AnnouncementTarget = {
 export const ANNOUNCEMENT_STUDENTS_MAX = 200;
 /** The messages of an announcement sent with email (AD-NOTI-05, migration 066), by outcome. */
 export type AnnouncementEmailCounts = { total: number; sent: number; pending: number; failed: number; cancelled: number; noAddress: number };
+/**
+ * Whose name an announcement goes out under (migration 068, 2026-11-25): the Khoa (bell "Từ Khoa") or EduPath AI (user: "không
+ * có xưng là khoa nha là EduPath AI được rồi"; bell "Hệ thống").
+ */
+export const ANNOUNCEMENT_SENDERS = ["khoa", "edupath"] as const;
+export type AnnouncementSender = (typeof ANNOUNCEMENT_SENDERS)[number];
 export type AnnouncementRow = {
   id: string; title: string; body: string; link: string | null; target: AnnouncementTarget; recipients: number; read: number;
+  sender?: AnnouncementSender;
   createdAt: Date | string; createdBy: string | null; withdrawnAt: Date | string | null;
   /** Sent with email (2026-11-23): from which mailbox, and how its messages went. */
   emailRequested?: boolean; emailFrom?: string | null; email?: AnnouncementEmailCounts | null;
