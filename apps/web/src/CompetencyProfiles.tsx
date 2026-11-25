@@ -179,7 +179,7 @@ function GroupEditor({ current, close, saved }: EditorProps<Group>) {
         <label><RequiredLabel>Tên nhóm năng lực</RequiredLabel><input required maxLength={160} value={form.name} onChange={event => setForm({ ...form, name: event.target.value })} /></label>
         <DescriptionField label="Mô tả" maxWords={DESCRIPTION_MAX_WORDS} rows={4} maxLength={2000} value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} />
         <label className="cm-check"><input type="checkbox" checked={form.isActive} onChange={event => setForm({ ...form, isActive: event.target.checked })} /> Đang sử dụng</label>
-        {current && <p className="comp-hint">Để ngừng sử dụng nhóm, cần điều chỉnh các cấu hình môn học đang áp dụng có kỹ năng thuộc nhóm này.</p>}
+        {current && <p className="comp-hint">Để ngừng sử dụng nhóm, cần điều chỉnh các cấu hình kỹ năng môn học đang áp dụng có kỹ năng thuộc nhóm này.</p>}
       </fieldset>
       {error && <p className="admin-error cm-prewrap" role="alert">{error}</p>}
       <div className="cm-actions cm-dialog-actions">
@@ -312,7 +312,7 @@ export function SkillEditor({ current, revision, groups, close, saved }: EditorP
         {!groups.length && <p className="comp-hint">Chưa tải được nhóm năng lực. Đóng hộp thoại và tải lại danh sách nhóm trước khi lưu.</p>}
         <DescriptionField label="Phạm vi đánh giá" maxWords={LONG_DESCRIPTION_MAX_WORDS} rows={5} maxLength={4000} value={form.scope} placeholder="Nội dung và phạm vi đánh giá kỹ năng…" onChange={event => setForm({ ...form, scope: event.target.value })} />
         <label className="cm-check"><input type="checkbox" checked={form.isActive} onChange={event => setForm({ ...form, isActive: event.target.checked })} /> Đang sử dụng trong đánh giá năng lực</label>
-        {current && <p className="comp-hint">Tên và mô tả dùng chung với mục Quản lý nghề nghiệp. Việc chỉnh sửa sẽ cập nhật thông tin liên quan. Để ngừng sử dụng kỹ năng, cần điều chỉnh các cấu hình môn học đang áp dụng kỹ năng này.</p>}
+        {current && <p className="comp-hint">Tên và mô tả dùng chung với mục Quản lý nghề nghiệp. Việc chỉnh sửa sẽ cập nhật thông tin liên quan. Để ngừng sử dụng kỹ năng, cần điều chỉnh các cấu hình kỹ năng môn học đang áp dụng kỹ năng này.</p>}
       </fieldset>
       {error && <p className="admin-error cm-prewrap" role="alert">{error}</p>}
       <div className="cm-actions cm-dialog-actions">
@@ -344,10 +344,10 @@ function SkillDetails({ current, revision, canManage, close, edit }: { current: 
         </dl>
         <section className="comp-section">
           <h3>Môn học liên kết và đóng góp</h3>
-          <p className="comp-hint">Đóng góp được tính từ cấu hình môn học đang áp dụng có trọng số lớn hơn 0. Mỗi môn có một cấu hình dùng chung cho mọi khóa có môn đó.</p>
+          <p className="comp-hint">Đóng góp được tính từ cấu hình kỹ năng môn học đang áp dụng có trọng số lớn hơn 0. Mỗi môn có một cấu hình dùng chung cho mọi khóa có môn đó.</p>
           {detail.contributions.length ? <>
             <div className="cm-table-scroll" tabIndex={0} role="region" aria-label="Môn học đóng góp vào năng lực"><table className="cm-table">
-              <thead><tr>{sortHeader("STT", "stt", "cm-stt")}{sortHeader("Môn học", "course")}{sortHeader("Khóa áp dụng", "cohorts")}{sortHeader("Trọng số", "weight")}{sortHeader("Cấu hình môn học", "status")}</tr></thead>
+              <thead><tr>{sortHeader("STT", "stt", "cm-stt")}{sortHeader("Môn học", "course")}{sortHeader("Khóa áp dụng", "cohorts")}{sortHeader("Trọng số", "weight")}{sortHeader("Cấu hình kỹ năng môn học", "status")}</tr></thead>
               <tbody>{sortRows(detail.contributions, contributionSort, sort).slice((page - 1) * 10, page * 10).map(({ row: item, stt }) => <tr key={item.courseId}>
                 <td className="cm-stt">{stt}</td>
                 <td><strong>{item.courseCode}</strong><br />{item.courseName}</td>
@@ -412,7 +412,7 @@ function SkillDelete({ current, close, saved }: { current: Skill; close: () => v
     }}>
       <strong>{current.name}</strong>
       <p>Cấu hình năng lực sẽ bị xóa, kỹ năng không còn được dùng để đánh giá năng lực. Kỹ năng chung và các liên kết với vị trí nghề nghiệp vẫn được giữ lại.</p>
-      <p className="comp-hint">Cần xóa liên kết kỹ năng này khỏi các cấu hình môn học đang áp dụng trước khi xóa cấu hình.</p>
+      <p className="comp-hint">Cần xóa liên kết kỹ năng này khỏi các cấu hình kỹ năng môn học đang áp dụng trước khi xóa cấu hình.</p>
       <label className="cm-check"><input type="checkbox" required checked={confirmed} disabled={busy} onChange={event => setConfirmed(event.target.checked)} /> Tôi xác nhận xóa cấu hình năng lực này.</label>
       {error && <p className="admin-error cm-prewrap" role="alert">{error}</p>}
       <div className="cm-actions cm-dialog-actions">

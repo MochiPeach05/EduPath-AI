@@ -41,8 +41,8 @@ Yêu cầu của người dùng (28/10/2026): "thêm một nút mũi tên nhỏ 
 | Nhóm năng lực | Nhóm năng lực | STT; Nhóm năng lực; Mô tả; Số kỹ năng; Trạng thái (Đang sử dụng trước) |
 | Nhóm năng lực | Kỹ năng thuộc nhóm (chi tiết) | STT; Kỹ năng; Phạm vi đánh giá; Trạng thái |
 | Cấu hình năng lực | Cấu hình năng lực | STT; Kỹ năng; Nhóm năng lực; Phạm vi; Trạng thái; Liên kết (theo số môn học, rồi số nghề nghiệp) |
-| Cấu hình năng lực | Môn học liên kết và đóng góp (chi tiết) | STT; Môn học (theo mã); Khóa áp dụng; Trọng số; Cấu hình môn học (Chưa cấu hình → Bản nháp → Đang áp dụng → Đã lưu trữ) |
-| Cấu hình môn học | Cấu hình môn học | STT; Môn học (theo mã); Khóa áp dụng; Trạng thái (Chưa cấu hình → Bản nháp → Đang áp dụng → Đã lưu trữ); Kỹ năng / tổng trọng số (theo số kỹ năng) |
+| Cấu hình năng lực | Môn học liên kết và đóng góp (chi tiết) | STT; Môn học (theo mã); Khóa áp dụng; Trọng số; Cấu hình kỹ năng môn học (Chưa cấu hình → Bản nháp → Đang áp dụng → Đã lưu trữ) |
+| Cấu hình kỹ năng môn học | Cấu hình kỹ năng môn học | STT; Môn học (theo mã); Khóa áp dụng; Trạng thái (Chưa cấu hình → Bản nháp → Đang áp dụng → Đã lưu trữ); Kỹ năng / tổng trọng số (theo số kỹ năng) |
 | Chương trình | Danh sách chương trình đào tạo | STT; Chương trình đào tạo; Khóa (K9 trước K29); Học phần (số học phần); Phiên bản (số phiên bản, rồi ngày cập nhật); Trạng thái (Đang mở trước) |
 | Chương trình | Xem trước khi import Excel | STT; Mã; Học phần; Tín chỉ; Loại; Năm · HK (năm rồi học kỳ, môn chưa có năm ở cuối) |
 | Chương trình | Cấu trúc học phần (theo khối) | Như bảng xem trước. Học phần chỉ đổi chỗ trong khối của nó; dòng tên khối giữ nguyên vị trí. |

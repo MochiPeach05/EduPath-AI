@@ -62,8 +62,8 @@ trình và trả lời câu hỏi.
 | Cố vấn học tập | Danh sách cố vấn và lớp phụ trách, import từ file phân công của Khoa. Quản lý sinh viên: mở trang của sinh viên và làm thay |
 | Quản lý đào tạo | Chương trình đào tạo, kế hoạch đào tạo, tiêu chuẩn xét tốt nghiệp theo khóa và chuyên ngành, nhập từ file Excel của Khoa |
 | Quản lý nghề nghiệp | Lĩnh vực, danh mục kỹ năng, vị trí nghề nghiệp và yêu cầu kỹ năng; AI gợi ý kỹ năng cho vị trí nghề nghiệp |
-| Quản lý năng lực | Nhóm năng lực, cấu hình năng lực. Cấu hình môn học: liên kết học phần với kỹ năng kèm trọng số, làm thủ công hoặc để AI đề xuất bản nháp rồi người quản trị duyệt áp dụng |
-| Quản lý thông báo | Gửi thông báo của Khoa tới sinh viên, xem các thông báo đã gửi |
+| Quản lý năng lực | Nhóm năng lực, cấu hình năng lực. Cấu hình kỹ năng (trang Cấu hình kỹ năng môn học): liên kết học phần với kỹ năng kèm trọng số, làm thủ công hoặc để AI đề xuất bản nháp rồi người quản trị duyệt áp dụng |
+| Cấu hình thông báo | Gửi thông báo của Khoa tới sinh viên (kèm email trường nếu chọn), xem các thông báo đã gửi và kết quả gửi email, cài đặt từng loại thông báo tự động (chuông, email) |
 
 ## Cách EduPath AI dùng AI
 
@@ -87,7 +87,7 @@ trình và trả lời câu hỏi.
 | Lời khuyên xét tốt nghiệp | Xét tốt nghiệp |
 | Trả lời câu hỏi bằng RAG: dữ liệu SQL của sinh viên và kho tri thức tìm bằng BM25 kết hợp EmbeddingGemma | Trợ lý AI |
 | Gợi ý kỹ năng cho vị trí nghề nghiệp | Quản trị, Vị trí nghề nghiệp |
-| Gợi ý liên kết học phần với kỹ năng, kèm trọng số | Quản trị, Cấu hình môn học |
+| Gợi ý liên kết học phần với kỹ năng, kèm trọng số | Quản trị, Cấu hình kỹ năng môn học |
 
 ## Kiến trúc
 

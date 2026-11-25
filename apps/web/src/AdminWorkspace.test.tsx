@@ -30,7 +30,7 @@ describe("admin workspace", () => {
     // Quản lý sinh viên is always an admin's page (every student, 2026-11-03), before GET advisor-portal/me answers too.
     expect(sidebarNames(render("/quantri/tai-khoan"))).toEqual(
       ["Tổng quan", "Thống kê", "Tiến độ", "Nguy cơ", "Kỹ năng thiếu", "Vị trí mục tiêu", "Môn đề xuất", "Nhật ký", "Tài khoản", "Sinh viên", "Cố vấn học tập", "Danh sách", "Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp", "Quản lý nghề nghiệp", "Lĩnh vực", "Kỹ năng", "Vị trí nghề nghiệp",
-        "Quản lý năng lực", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học", "Quản lý thông báo", "Gửi thông báo", "Đã gửi", "Cài đặt thông báo"]);
+        "Quản lý năng lực", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình kỹ năng", "Cấu hình thông báo", "Gửi thông báo", "Đã gửi", "Cài đặt thông báo"]);
   });
 
   it("keeps Quản lý năng lực closed elsewhere and open on its pages", () => {
@@ -127,7 +127,7 @@ describe("admin workspace", () => {
     const home = render("/quantri", advisor);
     expect(sidebarNames(home)).toEqual(["Tổng quan", "Thống kê", "Tiến độ", "Nguy cơ", "Kỹ năng thiếu", "Vị trí mục tiêu", "Môn đề xuất", "Nhật ký",
       "Sinh viên", "Cố vấn học tập", "Danh sách", "Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp",
-      "Quản lý nghề nghiệp", "Lĩnh vực", "Kỹ năng", "Vị trí nghề nghiệp", "Quản lý năng lực", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học"]);
+      "Quản lý nghề nghiệp", "Lĩnh vực", "Kỹ năng", "Vị trí nghề nghiệp", "Quản lý năng lực", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình kỹ năng"]);
     expect(home).toContain(">Quản lý sinh viên</h1>");
     expect(home).toContain(">QUẢN LÝ SINH VIÊN CỦA CỐ VẤN HỌC TẬP</p>");
     expect(home).toContain('<a href="/quantri/quan-ly-sinh-vien" aria-current="page">');
@@ -144,7 +144,7 @@ describe("admin workspace", () => {
     }
     // Tài khoản or an announcement page leads an advisor back to Quản lý sinh viên, and says why (2026-11-04).
     for (const [path, name] of [["/quantri/tai-khoan", "Tài khoản"],
-      ["/quantri/gui-thong-bao", "Quản lý thông báo / Gửi thông báo"], ["/quantri/lich-su-dang-nhap", "Tài khoản"]]) {
+      ["/quantri/gui-thong-bao", "Cấu hình thông báo / Gửi thông báo"], ["/quantri/lich-su-dang-nhap", "Tài khoản"]]) {
       const html = render(path, advisor);
       expect(html).toContain(">Quản lý sinh viên</h1>");
       expect(html).toContain(`<p class="admin-error am-refused" role="alert">Bạn không có quyền mở trang “${name}”. Trang này chỉ dành cho quản trị viên; cố vấn học tập được chuyển về Quản lý sinh viên.</p>`);

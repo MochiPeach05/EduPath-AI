@@ -5,19 +5,20 @@ describe("admin section navigation", () => {
     expect(adminNavigation.map(item => item.path)).toEqual(["/quantri/tong-quan", "/quantri/bao-cao-tien-do", "/quantri/bao-cao-nguy-co", "/quantri/bao-cao-ky-nang", "/quantri/bao-cao-nghe-nghiep", "/quantri/bao-cao-mon-hoc", "/quantri/nhat-ky", "/quantri/tai-khoan", "/quantri/sinh-vien", "/quantri/co-van-hoc-tap", "/quantri/quan-ly-sinh-vien", "/quantri/chuong-trinh", "/quantri/ke-hoach", "/quantri/tieu-chuan-tot-nghiep", "/quantri/linh-vuc-nghe-nghiep", "/quantri/ky-nang", "/quantri/vi-tri-nghe-nghiep", "/quantri/nhom-nang-luc", "/quantri/cau-hinh-nang-luc", "/quantri/cau-hinh-mon-hoc", "/quantri/gui-thong-bao", "/quantri/thong-bao-da-gui", "/quantri/cai-dat-thong-bao"]);
   });
   it("uses short sidebar names, which are also the page title and breadcrumb unless the page has a full name", () => {
-    expect(adminNavigation.map(item => item.label)).toEqual(["Thống kê", "Tiến độ", "Nguy cơ", "Kỹ năng thiếu", "Vị trí mục tiêu", "Môn đề xuất", "Nhật ký", "Tài khoản", "Sinh viên", "Danh sách", "Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp", "Lĩnh vực", "Kỹ năng", "Vị trí nghề nghiệp", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học", "Gửi thông báo", "Đã gửi", "Cài đặt thông báo"]);
+    expect(adminNavigation.map(item => item.label)).toEqual(["Thống kê", "Tiến độ", "Nguy cơ", "Kỹ năng thiếu", "Vị trí mục tiêu", "Môn đề xuất", "Nhật ký", "Tài khoản", "Sinh viên", "Danh sách", "Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp", "Lĩnh vực", "Kỹ năng", "Vị trí nghề nghiệp", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình kỹ năng", "Gửi thông báo", "Đã gửi", "Cài đặt thông báo"]);
     // The advisors' list is "Danh sách" in its group and "Danh sách cố vấn học tập" as the title (user 2026-11-14: "Không
-    // dùng tên rút gọn “Cố vấn” gây mơ hồ"); every other page keeps its sidebar name.
+    // dùng tên rút gọn “Cố vấn” gây mơ hồ"), and the course skills "Cấu hình kỹ năng" / "Cấu hình kỹ năng môn học" (user
+    // 2026-11-25); every other page keeps its sidebar name.
     expect(adminNavigation.filter(item => adminPageTitle(item) !== item.label).map(item => [item.label, adminPageTitle(item)]))
-      .toEqual([["Danh sách", "Danh sách cố vấn học tập"]]);
+      .toEqual([["Danh sách", "Danh sách cố vấn học tập"], ["Cấu hình kỹ năng", "Cấu hình kỹ năng môn học"]]);
     expect(adminNavigation.some(item => [item.label as string, adminPageTitle(item)].includes("Cố vấn"))).toBe(false);
   });
-  it("groups the career pages under Quản lý nghề nghiệp, the competency pages under Quản lý năng lực and the announcements under Quản lý thông báo", () => {
+  it("groups the career pages under Quản lý nghề nghiệp, the competency pages under Quản lý năng lực and the announcements under Cấu hình thông báo", () => {
     expect(adminSidebar.map(entry => entry.kind === "page" ? entry.page.label : `${entry.label}: ${entry.pages.map(page => page.label).join(", ")}`))
       .toEqual(["Tổng quan: Thống kê, Tiến độ, Nguy cơ, Kỹ năng thiếu, Vị trí mục tiêu, Môn đề xuất, Nhật ký", "Tài khoản", "Sinh viên", "Cố vấn học tập: Danh sách, Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp", "Quản lý nghề nghiệp: Lĩnh vực, Kỹ năng, Vị trí nghề nghiệp",
-        "Quản lý năng lực: Nhóm năng lực, Cấu hình năng lực, Cấu hình môn học", "Quản lý thông báo: Gửi thông báo, Đã gửi, Cài đặt thông báo"]);
+        "Quản lý năng lực: Nhóm năng lực, Cấu hình năng lực, Cấu hình kỹ năng", "Cấu hình thông báo: Gửi thông báo, Đã gửi, Cài đặt thông báo"]);
     expect(adminGroupOf("/quantri/thong-bao-da-gui")).toBe("announcements");
-    expect(adminNavigation.filter(item => item.eyebrow === "QUẢN LÝ NĂNG LỰC").map(item => item.label)).toEqual(["Nhóm năng lực", "Cấu hình năng lực", "Cấu hình môn học"]);
+    expect(adminNavigation.filter(item => item.eyebrow === "QUẢN LÝ NĂNG LỰC").map(item => item.label)).toEqual(["Nhóm năng lực", "Cấu hình năng lực", "Cấu hình kỹ năng"]);
   });
   it.each(["/quantri/sinh-vien", "/quantri/sinh-vien/"])("resolves direct student link %s", path => {
     expect(resolveAdminPage(path).label).toBe("Sinh viên");
@@ -37,11 +38,11 @@ describe("admin section navigation", () => {
   it.each(["/quantri/ky-nang", "/quantri/ky-nang/"])("resolves direct skill link %s", path => {
     expect(resolveAdminPage(path)).toMatchObject({ path: "/quantri/ky-nang", label: "Kỹ năng" });
   });
-  it.each([["/quantri/nhom-nang-luc", "Nhóm năng lực"], ["/quantri/cau-hinh-nang-luc/", "Cấu hình năng lực"], ["/quantri/cau-hinh-mon-hoc", "Cấu hình môn học"]])("resolves direct competency link %s", (path, label) => {
+  it.each([["/quantri/nhom-nang-luc", "Nhóm năng lực"], ["/quantri/cau-hinh-nang-luc/", "Cấu hình năng lực"], ["/quantri/cau-hinh-mon-hoc", "Cấu hình kỹ năng"]])("resolves direct competency link %s", (path, label) => {
     expect(resolveAdminPage(path).label).toBe(label);
   });
   it.each(["/quantri/cau-hinh-hoc-phan", "/quantri/cau-hinh-hoc-phan/"])("opens Cấu hình môn học for the old Cấu hình học phần link %s (2026-10-20)", path => {
-    expect(resolveAdminPage(path)).toMatchObject({ path: "/quantri/cau-hinh-mon-hoc", label: "Cấu hình môn học" });
+    expect(resolveAdminPage(path)).toMatchObject({ path: "/quantri/cau-hinh-mon-hoc", label: "Cấu hình kỹ năng" });
   });
   it.each(["/quantri/danh-gia-nang-luc", "/quantri/danh-gia-nang-luc/"])("opens Nhóm năng lực for the old Năng lực link %s", path => {
     expect(resolveAdminPage(path)).toMatchObject({ path: "/quantri/nhom-nang-luc", label: "Nhóm năng lực" });
@@ -81,7 +82,7 @@ describe("admin navigation by role (cố vấn học tập, 2026-11-03)", () => 
   it("gives an advisor Thống kê (2026-11-07) but not Tài khoản or Quản lý thông báo, the rows left to the Quản trị viên", () => {
     expect(sidebarText(advisor)).toEqual(["Tổng quan: Thống kê, Tiến độ, Nguy cơ, Kỹ năng thiếu, Vị trí mục tiêu, Môn đề xuất, Nhật ký",
       "Sinh viên", "Cố vấn học tập: Danh sách, Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp",
-      "Quản lý nghề nghiệp: Lĩnh vực, Kỹ năng, Vị trí nghề nghiệp", "Quản lý năng lực: Nhóm năng lực, Cấu hình năng lực, Cấu hình môn học"]);
+      "Quản lý nghề nghiệp: Lĩnh vực, Kỹ năng, Vị trí nghề nghiệp", "Quản lý năng lực: Nhóm năng lực, Cấu hình năng lực, Cấu hình kỹ năng"]);
     for (const path of Object.values(REPORT_PATHS)) {
       expect(canSeeAdminPage(path, advisor)).toBe(true);
       expect(resolveAdminPage(path, advisor).path).toBe(path);
@@ -106,7 +107,7 @@ describe("admin navigation by role (cố vấn học tập, 2026-11-03)", () => 
     expect(adminNavigation.filter((page) => canSeeAdminPage(page.path, advisor)).map((page) => page.path)).toEqual(Object.keys(cvhtPages));
     // Every other page is the Quản trị viên's: AD-AUTH-03…10 (Tài khoản), AD-NOTI (Thông báo).
     expect(adminNavigation.filter((page) => !canSeeAdminPage(page.path, advisor)).map((page) => adminPageName(page))).toEqual(["Tài khoản",
-      "Quản lý thông báo / Gửi thông báo", "Quản lý thông báo / Đã gửi", "Quản lý thông báo / Cài đặt thông báo"]);
+      "Cấu hình thông báo / Gửi thông báo", "Cấu hình thông báo / Đã gửi", "Cấu hình thông báo / Cài đặt thông báo"]);
     // A page that is not listed stays closed to an advisor, whatever it is.
     expect(canSeeAdminPage("/quantri/trang-moi", advisor)).toBe(false);
   });
@@ -125,7 +126,7 @@ describe("admin navigation by role (cố vấn học tập, 2026-11-03)", () => 
       expect(refusedAdminPage("/quantri/tai-khoan", { role, advisesClasses: false })).toBeNull();
     }
     expect(advisorRefusedText(refusedAdminPage("/quantri/gui-thong-bao", advisor)!))
-      .toBe("Bạn không có quyền mở trang “Quản lý thông báo / Gửi thông báo”. Trang này chỉ dành cho quản trị viên; cố vấn học tập được chuyển về Quản lý sinh viên.");
+      .toBe("Bạn không có quyền mở trang “Cấu hình thông báo / Gửi thông báo”. Trang này chỉ dành cho quản trị viên; cố vấn học tập được chuyển về Quản lý sinh viên.");
   });
 
   it("opens Quản lý sinh viên for an advisor and Tổng quan for everyone else", () => {

@@ -74,4 +74,4 @@ Người dùng: "Phần cài đặt thông báo thêm 1 chức năng nữa ngoà
 
 ## Giao diện
 - Sinh viên: chuông trên thanh đầu trang (`StudentNotifications.tsx`): số chưa đọc, 5 thông báo mới nhất, "Xem tất cả" mở danh sách đầy đủ có lọc, chi tiết, đánh dấu, xóa và hoàn tác.
-- Quản trị: nhóm Quản lý thông báo của menu quản trị (`AnnouncementsManagement.tsx`): Gửi thông báo, Đã gửi, Cài đặt thông báo (`/quantri/cai-dat-thong-bao`: khung Email thông báo tự động, công tắc Trong EduPath AI và Email cho từng loại; chuông của Việc làm thay sinh viên và Thông báo của Khoa hiện "Luôn bật").
+- Quản trị: nhóm Cấu hình thông báo của menu quản trị (`AnnouncementsManagement.tsx`; tên nhóm trước 25/11/2026 là Quản lý thông báo): Gửi thông báo, Đã gửi, Cài đặt thông báo (`/quantri/cai-dat-thong-bao`: khung Email thông báo tự động, công tắc Trong EduPath AI và Email cho từng loại; chuông của Việc làm thay sinh viên và Thông báo của Khoa hiện "Luôn bật").

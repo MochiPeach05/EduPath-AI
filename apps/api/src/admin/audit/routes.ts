@@ -238,20 +238,20 @@ export const AUDIT_ROUTES: readonly AuditRoute[] = [
       const skill = await lookup("SELECT name FROM career_skills WHERE id::text=$1", [params.id]);
       return { summary: `Xóa cấu hình năng lực của kỹ năng ${str(skill?.name) || params.id}`, ...target("competency_skill", params.id) };
     } },
-  { method: "POST", path: "/competencies/courses/clear", kind: "competency", action: "Xóa cấu hình môn học hàng loạt",
-    describe: ({ body, result }) => ({ summary: `Xóa ${num(obj(result).cleared) ?? 0} cấu hình môn học (${cohortScope(body.cohort)})` }) },
-  { method: "POST", path: "/competencies/courses/activate", kind: "competency", action: "Áp dụng bản nháp cấu hình môn học",
+  { method: "POST", path: "/competencies/courses/clear", kind: "competency", action: "Xóa cấu hình kỹ năng môn học hàng loạt",
+    describe: ({ body, result }) => ({ summary: `Xóa ${num(obj(result).cleared) ?? 0} cấu hình kỹ năng môn học (${cohortScope(body.cohort)})` }) },
+  { method: "POST", path: "/competencies/courses/activate", kind: "competency", action: "Áp dụng bản nháp cấu hình kỹ năng môn học",
     describe: ({ body, result }) => {
       const row = obj(result), skipped = num(row.skipped) ?? list(row.skipped).length;
       return { summary: `Áp dụng ${num(row.activated) ?? 0} bản nháp liên kết kỹ năng${skipped ? `, bỏ qua ${skipped}` : ""} (${cohortScope(body.cohort)})` };
     } },
-  { method: "PUT", path: "/competencies/courses/:id", kind: "competency", action: "Lưu cấu hình môn học",
+  { method: "PUT", path: "/competencies/courses/:id", kind: "competency", action: "Lưu cấu hình kỹ năng môn học",
     describe: ({ params, result }) => {
       const course = obj(result), how = str(course.status) === "active" ? "đang áp dụng" : str(course.status) === "draft" ? "bản nháp" : "";
       const detail = [Array.isArray(course.links) ? `${course.links.length} kỹ năng` : "", how].filter(Boolean).join(", ");
       return { summary: `Lưu liên kết kỹ năng của môn ${join(course.courseCode, course.courseName) || params.id}${detail ? ` (${detail})` : ""}`, ...target("course", params.id) };
     } },
-  { method: "DELETE", path: "/competencies/courses/:id", kind: "competency", action: "Ngừng áp dụng cấu hình môn học",
+  { method: "DELETE", path: "/competencies/courses/:id", kind: "competency", action: "Ngừng áp dụng cấu hình kỹ năng môn học",
     describe: ({ params, result }) => ({ summary: `Ngừng áp dụng liên kết kỹ năng của môn ${join(obj(result).courseCode, obj(result).courseName) || params.id}`, ...target("course", params.id) }) },
   { method: "POST", path: "/competencies/ai/batches/:batchId/cancel", kind: "competency", action: "Hủy lượt chạy Năng lực AI",
     describe: ({ params }) => ({ summary: "Hủy lượt chạy Năng lực AI cho nhiều môn", ...target("competency_ai_batch", params.batchId) }) },
