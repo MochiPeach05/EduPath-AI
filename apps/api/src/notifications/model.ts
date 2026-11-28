@@ -6,7 +6,7 @@
 export type NotificationType = "ai" | "warn" | "khoa" | "sys";
 export const NOTIFICATION_KINDS = [
   "transcript_ready", "transcript_failed", "assessment_comment", "roadmap_ready", "roadmap_failed", "graduation_advice",
-  "warning", "catalog_updated", "announcement", "advisor_action", "registration_reminder",
+  "warning", "catalog_updated", "announcement", "advisor_action",
 ] as const;
 export type NotificationKind = (typeof NOTIFICATION_KINDS)[number];
 

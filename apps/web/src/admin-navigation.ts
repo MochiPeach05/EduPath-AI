@@ -36,8 +36,6 @@ export const adminNavigation = [
   // "Cấu hình thông báo" since 2026-11-25 (user: "Đổi tên Quản lý thông báo -> Cấu hình thông báo").
   { path: "/quantri/gui-thong-bao", label: "Gửi thông báo", eyebrow: "CẤU HÌNH THÔNG BÁO", icon: "bell" },
   { path: "/quantri/thong-bao-da-gui", label: "Đã gửi", eyebrow: "CẤU HÌNH THÔNG BÁO", icon: "clock" },
-  // 2026-11-25: the registration windows of Phòng Đào tạo's notices, of which EduPath AI reminds the students.
-  { path: "/quantri/lich-dang-ky", label: "Lịch đăng ký", title: "Lịch đăng ký học tập", eyebrow: "CẤU HÌNH THÔNG BÁO", icon: "calendar" },
   { path: "/quantri/cai-dat-thong-bao", label: "Cài đặt thông báo", eyebrow: "CẤU HÌNH THÔNG BÁO", icon: "settings" }
 ] as const;
 export type AdminPage = (typeof adminNavigation)[number];
@@ -52,7 +50,7 @@ const adminNavigationGroups = [
   // In the order they are set up: fields, then the shared skills, then the careers that use both.
   { id: "careers", label: "Quản lý nghề nghiệp", icon: "briefcase", paths: ["/quantri/linh-vuc-nghe-nghiep", "/quantri/ky-nang", "/quantri/vi-tri-nghe-nghiep"] },
   { id: "competencies", label: "Quản lý năng lực", icon: "target", paths: ["/quantri/nhom-nang-luc", "/quantri/cau-hinh-nang-luc", "/quantri/cau-hinh-mon-hoc"] },
-  { id: "announcements", label: "Cấu hình thông báo", icon: "bell", paths: ["/quantri/gui-thong-bao", "/quantri/thong-bao-da-gui", "/quantri/lich-dang-ky", "/quantri/cai-dat-thong-bao"] }
+  { id: "announcements", label: "Cấu hình thông báo", icon: "bell", paths: ["/quantri/gui-thong-bao", "/quantri/thong-bao-da-gui", "/quantri/cai-dat-thong-bao"] }
 ] as const;
 
 /** Pages that moved: an old link opens the page that replaced it. */

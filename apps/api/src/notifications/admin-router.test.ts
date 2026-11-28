@@ -148,98 +148,6 @@ describe("announcements API", () => {
   });
 });
 
-// Lịch đăng ký học tập (2026-11-25): the windows and their reminders. Made-up windows only.
-describe("Lịch đăng ký học tập", () => {
-  const W = "33333333-3333-4333-8333-333333333333";
-  const row = (extra: Record<string, unknown> = {}) => ({
-    id: W, termCode: "HK262", kind: "course", round: "Đợt 1", cohorts: ["K29"], opensAt: new Date("2099-11-26T15:00:00Z"), closesAt: new Date("2099-11-27T07:00:00Z"),
-    remindBefore: 0, remindAt: new Date("2099-11-26T15:00:00Z"), note: null, remindedAt: null, outcome: null, recipients: null, withdrawnAt: null,
-    read: 0, createdBy: "2374802010145 - Nguyễn Văn Cán Bộ - 71K29CNTT08", createdAt: new Date("2026-11-25T10:00:00Z"), updatedAt: new Date("2026-11-25T10:00:00Z"), ...extra,
-  });
-  const body = (extra: Record<string, unknown> = {}) => ({
-    termCode: "HK262", kind: "course", round: " Đợt 1 ", cohorts: ["K29", "K29"], opensAt: "2099-11-26T22:00:00+07:00", closesAt: "2099-11-27T14:00:00+07:00",
-    remindBefore: 1440, note: "  Đăng ký sớm.  ", ...extra,
-  });
-
-  it("lists the windows with the reminder students get, and whether the reminders are on", async () => {
-    const { app } = setup({ rows: (text) => (text.startsWith("SELECT w.id") ? { rowCount: 1, rows: [row()] }
-      : text.startsWith("SELECT s.setting,s.enabled") ? { rowCount: 1, rows: [{ setting: "registration", enabled: true, email: false, updatedAt: new Date(), updatedBy: null }] } : undefined) });
-    const listed = (await request(app).get("/a/registration").expect(200)).body;
-    expect(listed.setting).toEqual({ enabled: true, email: false });
-    expect(listed.items[0]).toMatchObject({ id: W, termLabel: "HK2 2026–2027", kindLabel: "Đăng ký học phần", cohorts: ["K29"], opensAt: "2099-11-26T15:00:00.000Z",
-      createdBy: "Nguyễn Văn Cán Bộ", outcome: null });
-    expect(listed.items[0].reminder.title).toBe("Nhắc đăng ký học phần HK2 2026–2027: Đợt 1");
-  });
-
-  it("adds a window from the page's fields, one reminder a day before its opening", async () => {
-    let inserted: unknown[] = [];
-    const { app } = setup({ rows: (text, params) => {
-      if (text.startsWith("INSERT INTO ad_registration_windows")) { inserted = params; return { rowCount: 1, rows: [] }; }
-      if (text.startsWith("SELECT w.id")) return { rowCount: 1, rows: [row({ remindBefore: 1440, remindAt: new Date("2099-11-25T15:00:00Z"), note: "Đăng ký sớm." })] };
-      return undefined;
-    } });
-    const saved = await request(app).post("/a/registration").set("Origin", origin).send(body()).expect(201);
-    expect(saved.body.item).toMatchObject({ id: W, remindBefore: 1440, remindAt: "2099-11-25T15:00:00.000Z" });
-    expect(inserted.slice(1, 10)).toEqual(["HK262", "course", "Đợt 1", ["K29"], new Date("2099-11-26T15:00:00Z"), new Date("2099-11-27T07:00:00Z"), 1440,
-      new Date("2099-11-25T15:00:00Z"), "Đăng ký sớm."]);
-    expect(inserted[10]).toBe(ADMIN);
-    const send = (extra: Record<string, unknown>) => request(app).post("/a/registration").set("Origin", origin).send(body(extra));
-    await send({ closesAt: "2099-11-26T21:00:00+07:00" }).expect(400, { error: "window_times" });
-    await send({ round: "   " }).expect(400, { error: "invalid_input" });
-    await send({ termCode: "HK264" }).expect(400, { error: "invalid_input" });
-    await send({ remindBefore: 60 }).expect(400, { error: "invalid_input" });
-    await send({ opensAt: "2099-11-26T22:00:00" }).expect(400, { error: "invalid_input" });
-    await send({ cohorts: ["29"] }).expect(400, { error: "invalid_input" });
-  });
-
-  it("previews the reminder without storing anything", async () => {
-    const { app, sql } = setup();
-    const preview = await request(app).post("/a/registration/preview").set("Origin", origin).send(body({ remindBefore: 0 })).expect(200);
-    expect(preview.body.reminder.title).toBe("Nhắc đăng ký học phần HK2 2026–2027: Đợt 1");
-    expect(preview.body.reminder.body).toContain("Đăng ký sớm.");
-    expect(sql().some(([text]) => text.startsWith("INSERT") || text.startsWith("UPDATE"))).toBe(false);
-  });
-
-  it("changes a window only before its reminder went out, and removes one", async () => {
-    const reminded = setup({ rows: (text) => (text.startsWith("UPDATE ad_registration_windows SET term_code") ? { rowCount: 0, rows: [] }
-      : text === "SELECT 1 FROM ad_registration_windows WHERE id=$1" ? { rowCount: 1, rows: [{}] } : undefined) });
-    await request(reminded.app).put(`/a/registration/${W}`).set("Origin", origin).send(body()).expect(409, { error: "already_reminded" });
-    const missing = setup({ rows: (text) => (text.startsWith("UPDATE ad_registration_windows SET term_code") ? { rowCount: 0, rows: [] } : undefined) });
-    await request(missing.app).put(`/a/registration/${W}`).set("Origin", origin).send(body()).expect(404, { error: "not_found" });
-    const removed = setup({ rows: (text) => (text.startsWith("DELETE FROM ad_registration_windows") ? { rowCount: 1, rows: [] } : undefined) });
-    await request(removed.app).delete(`/a/registration/${W}`).set("Origin", origin).expect(204);
-    await request(setup().app).delete(`/a/registration/${W}`).set("Origin", origin).expect(404, { error: "not_found" });
-  });
-
-  it("sends a reminder now, once, and only while the window is open or ahead", async () => {
-    let state: Record<string, unknown> = {};
-    const { app, sql } = setup({ rows: (text) => {
-      if (text.startsWith("SELECT w.id")) return { rowCount: 1, rows: [row(state)] };
-      if (text.startsWith("SELECT EXISTS")) return { rowCount: 1, rows: [{ off: false }] };
-      if (text.startsWith("SELECT u.id FROM users u")) return { rowCount: 1, rows: [{ id: A }] };
-      if (text.startsWith("INSERT INTO stu_notifications")) return { rowCount: 1, rows: [] };
-      return undefined;
-    } });
-    await request(app).post(`/a/registration/${W}/remind`).set("Origin", origin).send({}).expect(200);
-    expect(sql().some(([text, params]) => text.startsWith("UPDATE ad_registration_windows SET reminded_at=now()") && (params as unknown[])[1] === "sent")).toBe(true);
-    state = { remindedAt: new Date("2026-11-25T15:00:00Z"), outcome: "sent", recipients: 1 };
-    await request(app).post(`/a/registration/${W}/remind`).set("Origin", origin).send({}).expect(409, { error: "already_reminded" });
-    state = { closesAt: new Date("2020-01-01T00:00:00Z"), opensAt: new Date("2019-12-31T00:00:00Z"), remindAt: new Date("2019-12-31T00:00:00Z") };
-    await request(app).post(`/a/registration/${W}/remind`).set("Origin", origin).send({}).expect(409, { error: "window_closed" });
-  });
-
-  it("withdraws a sent reminder from every bell, once", async () => {
-    let state: Record<string, unknown> = { remindedAt: new Date("2026-11-25T15:00:00Z"), outcome: "sent", recipients: 2 };
-    const { app, sql } = setup({ rows: (text) => (text.startsWith("SELECT w.id") ? { rowCount: 1, rows: [row(state)] } : undefined) });
-    await request(app).post(`/a/registration/${W}/withdraw`).set("Origin", origin).send({}).expect(200);
-    expect(sql().find(([text]) => text.startsWith("UPDATE stu_notifications SET deleted_at=now() WHERE kind='registration_reminder'"))![1]).toEqual([`registration:${W}`]);
-    state = { ...state, withdrawnAt: new Date("2026-11-25T16:00:00Z") };
-    await request(app).post(`/a/registration/${W}/withdraw`).set("Origin", origin).send({}).expect(409, { error: "already_withdrawn" });
-    state = { outcome: "closed", remindedAt: new Date("2026-11-25T15:00:00Z") };
-    await request(app).post(`/a/registration/${W}/withdraw`).set("Origin", origin).send({}).expect(409, { error: "not_sent" });
-  });
-});
-
 // "Chọn sinh viên" (2026-11-25): an announcement for students picked one by one. Made-up students only.
 describe("an announcement for picked students", () => {
   const picked = (id: string, extra: Record<string, unknown> = {}) => ({ id, name: "Trần Minh An", studentCode: "2374802019001", className: "71K29CNTT08", cohort: "K29", hasEmail: true, ...extra });
@@ -435,7 +343,7 @@ describe("announcement emails and notification settings", () => {
     const db = settingsDb();
     const { app } = setup({ rows: db.rows });
     const listed = (await request(app).get("/a/settings").expect(200)).body;
-    expect(listed.items.map((item: { key: string }) => item.key)).toEqual(["transcript", "assessment_comment", "roadmap", "graduation_advice", "warning", "catalog_updated", "advisor_action", "registration"]);
+    expect(listed.items.map((item: { key: string }) => item.key)).toEqual(["transcript", "assessment_comment", "roadmap", "graduation_advice", "warning", "catalog_updated", "advisor_action"]);
     expect(listed.items.every((item: { enabled: boolean; email: boolean }) => item.enabled && !item.email)).toBe(true);
     expect(listed.items.find((item: { key: string }) => item.key === "advisor_action").bellLocked).toBe(true);
     // The emails of the last 30 days, per kind.

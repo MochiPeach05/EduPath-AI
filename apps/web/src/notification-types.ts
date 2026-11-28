@@ -38,13 +38,6 @@
  * GET    /mail-sender                                 → MailSenderState                                    (whether email can be sent, and from which mailbox the caller allowed it)
  * DELETE /mail-sender                                 → 204                                                (EduPath AI forgets the caller's permission)
  * POST   /mail-sender/test { title?, body?, link? }   → { sent: true; to: string; preview: boolean }       (one message to the caller's own mailbox: the draft when it has a title and a text)
- * GET    /registration                                → { items: RegistrationWindow[]; setting: { enabled; email } }   (Lịch đăng ký học tập, 2026-11-25)
- * POST   /registration/preview { window fields }      → { reminder: { title; body } }                      (nothing stored)
- * POST   /registration { termCode, kind, round, cohorts, opensAt, closesAt, remindBefore, note } → 201 { item: RegistrationWindow }
- * PUT    /registration/:id { same }                   → { item }                                          (409 already_reminded)
- * DELETE /registration/:id                            → 204
- * POST   /registration/:id/remind {}                  → { item }                                          ("Gửi nhắc ngay"; 409 already_reminded | window_closed)
- * POST   /registration/:id/withdraw {}                → { item }                                          (409 not_sent | already_withdrawn)
  * GET    /settings                                    → { items: NotificationSetting[]; mail: AutoMailState }
  * PUT    /settings/:key { enabled?, email? }          → { setting: NotificationSetting; mail: AutoMailState }    (the bell off takes the email off; the first email on without a working sender makes the caller's mailbox the sender)
  * POST   /settings/mail-sender {}                     → { mail: AutoMailState }                            ("Dùng hộp thư của tôi")
@@ -84,7 +77,7 @@ export type NotificationType = "ai" | "warn" | "khoa" | "sys";
  */
 export type NotificationKind =
   | "transcript_ready" | "transcript_failed" | "assessment_comment" | "roadmap_ready" | "roadmap_failed" | "graduation_advice"
-  | "warning" | "catalog_updated" | "announcement" | "advisor_action" | "registration_reminder";
+  | "warning" | "catalog_updated" | "announcement" | "advisor_action";
 
 export type StudentNotification = {
   id: string;
@@ -170,43 +163,7 @@ export type EmailProblem = {
  * AD-NOTI-06: the kinds of automatic notifications an admin may turn off (no stored choice means on) or send by email too
  * (off by default). advisor_action (Việc làm thay sinh viên) is always in the bell (bellLocked): only its email changes.
  */
-export type NotificationSettingKey = "transcript" | "assessment_comment" | "roadmap" | "graduation_advice" | "warning" | "catalog_updated" | "advisor_action"
-  | "registration";
-
-/**
- * Lịch đăng ký học tập (2026-11-25; user: "Hãy dựa vào cái lịch này thêm 1 cái nút thông báo nhắc nhở đăng ký kế hoạch học tập
- * khi đến thời gian"): a window of Phòng Đào tạo's notice. When its reminder time comes (the opening, or one or two days
- * before) EduPath AI reminds its cohorts' students in the bell under its own name (kind registration_reminder), and by
- * email when the setting "registration" has its email on.
- */
-export type RegistrationKind = "study_plan" | "course";
-export type RegistrationWindow = {
-  id: string;
-  /** "HK262" and "HK2 2026–2027". */
-  termCode: string;
-  termLabel: string;
-  kind: RegistrationKind;
-  kindLabel: string;
-  /** "Đợt 1", "Đợt 2 (bổ sung)". */
-  round: string;
-  /** Empty: every student. */
-  cohorts: string[];
-  opensAt: string;
-  closesAt: string;
-  /** Minutes before the opening: 0, 1440 (one day) or 2880 (two days). */
-  remindBefore: 0 | 1440 | 2880;
-  remindAt: string;
-  note: string | null;
-  remindedAt: string | null;
-  /** sent; closed: the window ended first; turned_off: the reminders were off; nobody: no student of its cohorts. */
-  outcome: "sent" | "closed" | "turned_off" | "nobody" | null;
-  recipients: number | null;
-  read: number;
-  withdrawnAt: string | null;
-  createdBy: string | null;
-  /** The reminder as students get it (or got it). */
-  reminder: { title: string; body: string };
-};
+export type NotificationSettingKey = "transcript" | "assessment_comment" | "roadmap" | "graduation_advice" | "warning" | "catalog_updated" | "advisor_action";
 /** A kind's emails of the last 30 days. */
 export type EmailStats = { sent: number; pending: number; failed: number; noAddress: number };
 export type NotificationSetting = {

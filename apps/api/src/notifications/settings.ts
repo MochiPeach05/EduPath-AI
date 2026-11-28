@@ -22,8 +22,6 @@ export const NOTIFICATION_SETTINGS = [
   { key: "warning", label: "Cảnh báo chậm tiến độ", detail: "Một cảnh báo mới xuất hiện ở trang Tổng quan của sinh viên.", bellLocked: false },
   { key: "catalog_updated", label: "Khoa cập nhật dữ liệu học tập", detail: "Khoa thay đổi chương trình đào tạo, kế hoạch đào tạo hoặc tiêu chuẩn xét tốt nghiệp của sinh viên.", bellLocked: false },
   { key: "advisor_action", label: "Việc làm thay sinh viên", detail: "Cố vấn học tập, quản trị viên hoặc Ban chủ nhiệm khoa làm thay sinh viên một việc trên EduPath AI. Sinh viên luôn được báo trong chuông.", bellLocked: true },
-  // 2026-11-25: the reminders of Lịch đăng ký học tập (registration.ts), under EduPath AI's name.
-  { key: "registration", label: "Nhắc đăng ký học tập", detail: "Khi đến thời gian của một đợt ở trang Lịch đăng ký, EduPath AI nhắc sinh viên của đợt đó đăng ký kế hoạch học tập hoặc đăng ký học phần.", bellLocked: false },
 ] as const;
 export type NotificationSettingKey = (typeof NOTIFICATION_SETTINGS)[number]["key"];
 export const NOTIFICATION_SETTING_KEYS = NOTIFICATION_SETTINGS.map((item) => item.key) as [NotificationSettingKey, ...NotificationSettingKey[]];
@@ -32,8 +30,7 @@ export const EMAIL_STATS_DAYS = 30;
 
 /** SQL: the setting a notification kind (a text expression) belongs to; announcement belongs to none. */
 export const settingOfKind = (kind: string) =>
-  `(CASE WHEN ${kind} IN ('transcript_ready','transcript_failed') THEN 'transcript' WHEN ${kind} IN ('roadmap_ready','roadmap_failed') THEN 'roadmap'
-    WHEN ${kind}='registration_reminder' THEN 'registration' ELSE ${kind} END)`;
+  `(CASE WHEN ${kind} IN ('transcript_ready','transcript_failed') THEN 'transcript' WHEN ${kind} IN ('roadmap_ready','roadmap_failed') THEN 'roadmap' ELSE ${kind} END)`;
 /** SQL: true when an admin turned the kind off (advisor_action never: migration 067 keeps its row enabled). */
 export const kindTurnedOff = (kind: string) => `EXISTS (SELECT 1 FROM ad_notification_settings s WHERE NOT s.enabled AND s.setting=${settingOfKind(kind)})`;
 /** SQL: true when an admin turned the kind's email on. */

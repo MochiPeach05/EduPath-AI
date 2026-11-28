@@ -6,7 +6,6 @@ import { mailGrantKey } from "./mail/grant-crypto.js";
 import { sendGraphMail } from "./mail/graph-mail.js";
 import { PostgresMailGrantStore } from "./mail/grants.js";
 import { startMailWorker } from "./mail/worker.js";
-import { startRegistrationReminders } from "./notifications/registration.js";
 import { loadConfig } from "./config.js";
 import { runDatabaseMigrations } from "./db/migrate.js";
 import { createDatabasePool } from "./db/pool.js";
@@ -62,8 +61,6 @@ async function startServer(): Promise<void> {
 
     let cloudWorker: ReturnType<typeof startCloudAiWorker> | null = null;
     // The announcement emails go out from this process, a few every 15 seconds (mail/worker.ts).
-    // Lịch đăng ký học tập: the reminders whose time has come, checked every minute (notifications/registration.ts).
-    const registrationReminders = databasePool ? startRegistrationReminders(databasePool, [...config.staffEmailDomains]) : null;
     const mailWorker = databasePool && mailGrants
       ? startMailWorker({ db: databasePool, client: mailConsentClient, grants: mailGrants, sendMail: sendGraphMail, webOrigin: config.webOrigin })
       : null;
@@ -90,7 +87,6 @@ async function startServer(): Promise<void> {
       console.log(`[SERVER] Received ${signal}; shutting down`);
       cloudWorker?.stop();
       mailWorker?.stop();
-      registrationReminders?.stop();
       server.close(() => {
         void (databasePool?.end() ?? Promise.resolve()).finally(() => process.exit(0));
       });

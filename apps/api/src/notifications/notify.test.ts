@@ -55,9 +55,7 @@ describe("notify", () => {
   it("writes nothing of a kind an admin turned off in Cài đặt thông báo (AD-NOTI-06)", async () => {
     const db = fakeDb();
     await notify(db, USER, { type: "ai", kind: "roadmap_failed", title: "T", body: "B" });
-    expect(db.sql()[0]).toContain("WHERE NOT EXISTS (SELECT 1 FROM ad_notification_settings s WHERE NOT s.enabled AND s.setting=(CASE WHEN $4::text IN ('transcript_ready','transcript_failed') THEN 'transcript' WHEN $4::text IN ('roadmap_ready','roadmap_failed') THEN 'roadmap'");
-    // The reminders of Lịch đăng ký học tập belong to the setting "registration" (2026-11-25).
-    expect(db.sql()[0]).toContain("WHEN $4::text='registration_reminder' THEN 'registration' ELSE $4::text END))");
+    expect(db.sql()[0]).toContain("WHERE NOT EXISTS (SELECT 1 FROM ad_notification_settings s WHERE NOT s.enabled AND s.setting=(CASE WHEN $4::text IN ('transcript_ready','transcript_failed') THEN 'transcript' WHEN $4::text IN ('roadmap_ready','roadmap_failed') THEN 'roadmap' ELSE $4::text END))");
   });
 
   it("clips the title and body to the column limits", async () => {

@@ -18,11 +18,6 @@ import { announcementMailMessage } from "../mail/messages.js";
 import { emailProblems, retryFailedEmails } from "../mail/outbox.js";
 import { requireAdminAccess } from "../middleware/authorization.js";
 import { personName } from "../users/person-name.js";
-import { termName } from "../term-name.js";
-import {
-  createWindow, deleteWindow, deliverReminder, findWindow, listWindows, NOTE_MAX, REGISTRATION_KINDS, REMIND_BEFORE, reminderText, ROUND_MAX,
-  updateWindow, withdrawReminder, type RegistrationWindowInput, type RegistrationWindowRow,
-} from "./registration.js";
 import {
   ANNOUNCEMENT_BODY_MAX, ANNOUNCEMENT_SENDERS, ANNOUNCEMENT_STUDENTS_MAX, ANNOUNCEMENT_TITLE_MAX, isPortalPage, type AnnouncementRow, type AnnouncementTarget,
 } from "./model.js";
@@ -67,17 +62,6 @@ const sendBody = z.object({
   /** Under the Khoa's name (default) or EduPath AI's (migration 068). */
   sender: z.enum(ANNOUNCEMENT_SENDERS).default("khoa"),
 }).strict();
-/** A window of Lịch đăng ký học tập (registration.ts): times with their offset, as the page sends them in Vietnam time. */
-const windowBody = z.object({
-  termCode: z.string().regex(/^HK\d{2}[1-3]$/),
-  kind: z.enum(["study_plan", "course"]),
-  round: z.string().max(ROUND_MAX * 2),
-  cohorts: z.array(cohort).max(30).default([]),
-  opensAt: z.iso.datetime({ offset: true }),
-  closesAt: z.iso.datetime({ offset: true }),
-  remindBefore: z.union(REMIND_BEFORE.map((minutes) => z.literal(minutes)) as unknown as [z.ZodLiteral<0>, z.ZodLiteral<1440>, z.ZodLiteral<2880>]).default(0),
-  note: z.string().max(NOTE_MAX * 2).nullable().optional(),
-}).strict();
 /** "Chọn sinh viên": the words typed (name, MSSV, class) and how many students to list. */
 const studentsQuery = z.object({ q: z.string().max(80).optional(), limit: z.coerce.number().int().min(1).max(50).optional() }).strict();
 /** "Gửi email thử cho chính tôi": the draft, when it has a title and a text, as a student would receive it. */
@@ -107,16 +91,6 @@ export const presentAnnouncement = (row: AnnouncementRow) => {
     id: row.id, title: row.title, body: row.body, link: row.link, target, targetLabel: targetLabel(target),
     recipients: row.recipients, read: row.read ?? 0, createdAt: iso(row.createdAt)!, createdBy: row.createdBy ?? null, withdrawnAt: iso(row.withdrawnAt),
     email, sender: row.sender ?? "khoa",
-  };
-};
-/** A window as the page shows it: names for its term and kind, ISO times, and the reminder students get (or got). */
-export const presentWindow = (row: RegistrationWindowRow) => {
-  const reminder = reminderText(row, row.remindedAt ?? (row.remindAt.getTime() > Date.now() ? row.remindAt : new Date()));
-  return {
-    id: row.id, termCode: row.termCode, termLabel: termName(row.termCode), kind: row.kind, kindLabel: REGISTRATION_KINDS[row.kind], round: row.round,
-    cohorts: row.cohorts ?? [], opensAt: row.opensAt.toISOString(), closesAt: row.closesAt.toISOString(), remindBefore: row.remindBefore,
-    remindAt: row.remindAt.toISOString(), note: row.note, remindedAt: row.remindedAt?.toISOString() ?? null, outcome: row.outcome,
-    recipients: row.recipients, read: row.read ?? 0, withdrawnAt: row.withdrawnAt?.toISOString() ?? null, createdBy: row.createdBy, reminder,
   };
 };
 const cleanTitle = (text: string | undefined) => (text ?? "").replace(/\s+/g, " ").trim();
@@ -173,101 +147,6 @@ export function createAnnouncementsRouter(pool: DatabasePool | undefined, webOri
   router.get("/reach", async (req, res) => {
     const query = reachQuery.parse(req.query);
     res.json(await reachCount(pool!, { cohorts: unique(query.cohorts), majors: unique(query.majors) }, staff));
-  });
-
-  /** A window from the page's fields, or the error the page shows. */
-  const windowInput = (raw: unknown): RegistrationWindowInput => {
-    const parsed = windowBody.safeParse(raw ?? {});
-    if (!parsed.success) throw new AnnouncementError("invalid_input", 400);
-    const round = parsed.data.round.replace(/\s+/g, " ").trim();
-    const note = parsed.data.note?.replace(/\r\n?/g, "\n").trim() || null;
-    if (!round || Array.from(round).length > ROUND_MAX || (note && Array.from(note).length > NOTE_MAX)) throw new AnnouncementError("invalid_input", 400);
-    const opensAt = new Date(parsed.data.opensAt), closesAt = new Date(parsed.data.closesAt);
-    if (closesAt.getTime() <= opensAt.getTime()) throw new AnnouncementError("window_times", 400);
-    return { termCode: parsed.data.termCode, kind: parsed.data.kind, round, cohorts: unique(parsed.data.cohorts), opensAt, closesAt,
-      remindBefore: parsed.data.remindBefore, note };
-  };
-  /** Runs a change of the schedule in a transaction, the admin checked again inside it. */
-  const inTransaction = async <T>(user: AuthenticatedUser, work: (client: PoolClient) => Promise<T>): Promise<T> => {
-    const client = await pool!.connect();
-    try {
-      await client.query("BEGIN");
-      await access(client, user, true);
-      const result = await work(client);
-      await client.query("COMMIT");
-      return result;
-    } catch (error) {
-      await client.query("ROLLBACK").catch(() => undefined);
-      throw error;
-    } finally {
-      client.release();
-    }
-  };
-
-  /** Lịch đăng ký học tập: every window, and whether its reminders are on in Cài đặt thông báo. */
-  router.get("/registration", async (req, res) => {
-    z.object({}).strict().parse(req.query);
-    const setting = (await listNotificationSettings(pool!)).find((item) => item.key === "registration");
-    res.json({ items: (await listWindows(pool!)).map(presentWindow), setting: { enabled: setting?.enabled ?? true, email: setting?.email ?? false } });
-  });
-
-  /** The reminder a window would send, for the page's preview (nothing is stored). */
-  router.post("/registration/preview", async (req, res) => {
-    const input = windowInput(req.body);
-    const at = new Date(Math.max(Date.now(), input.opensAt.getTime() - input.remindBefore * 60_000));
-    res.json({ reminder: reminderText(input, at) });
-  });
-
-  router.post("/registration", async (req, res) => {
-    const input = windowInput(req.body);
-    const user = req.session.user!;
-    res.status(201).json({ item: presentWindow(await inTransaction(user, (client) => createWindow(client, input, user.userId))) });
-  });
-
-  router.put("/registration/:id", async (req, res) => {
-    const windowId = id.parse(req.params.id);
-    const input = windowInput(req.body);
-    const user = req.session.user!;
-    const saved = await inTransaction(user, (client) => updateWindow(client, windowId, input, user.userId));
-    if (saved === "missing") throw new AnnouncementError("not_found", 404);
-    if (saved === "reminded") throw new AnnouncementError("already_reminded", 409);
-    res.json({ item: presentWindow(saved) });
-  });
-
-  router.delete("/registration/:id", async (req, res) => {
-    const windowId = id.parse(req.params.id);
-    if (!await inTransaction(req.session.user!, (client) => deleteWindow(client, windowId))) throw new AnnouncementError("not_found", 404);
-    res.status(204).end();
-  });
-
-  /** "Gửi nhắc ngay": the window's reminder now, whatever its time; once only. */
-  router.post("/registration/:id/remind", async (req, res) => {
-    z.object({}).strict().parse(req.body ?? {});
-    const windowId = id.parse(req.params.id);
-    const item = await inTransaction(req.session.user!, async (client) => {
-      const window = await findWindow(client, windowId, true);
-      if (!window) throw new AnnouncementError("not_found", 404);
-      if (window.remindedAt) throw new AnnouncementError("already_reminded", 409);
-      if (window.closesAt.getTime() <= Date.now()) throw new AnnouncementError("window_closed", 409);
-      await deliverReminder(client, window, staff);
-      return (await findWindow(client, windowId))!;
-    });
-    res.json({ item: presentWindow(item) });
-  });
-
-  /** "Thu hồi lần nhắc": the sent reminder leaves every bell; a sent email cannot be recalled. */
-  router.post("/registration/:id/withdraw", async (req, res) => {
-    z.object({}).strict().parse(req.body ?? {});
-    const windowId = id.parse(req.params.id);
-    const item = await inTransaction(req.session.user!, async (client) => {
-      const window = await findWindow(client, windowId, true);
-      if (!window) throw new AnnouncementError("not_found", 404);
-      if (window.outcome !== "sent") throw new AnnouncementError("not_sent", 409);
-      if (window.withdrawnAt) throw new AnnouncementError("already_withdrawn", 409);
-      await withdrawReminder(client, windowId);
-      return (await findWindow(client, windowId))!;
-    });
-    res.json({ item: presentWindow(item) });
   });
 
   /** "Chọn sinh viên": the students an announcement may be sent to that match the words typed. */

@@ -2,21 +2,21 @@ import { describe, expect, it } from "vitest";
 import { ADVISOR_STUDENTS_PATH, REPORT_PATHS, adminGroupOf, adminNavigation, adminPageName, adminPageTitle, adminSidebar, adminSidebarFor, advisorRefusedText, canSeeAdminPage, homeAdminPath, isReportPath, profileIdOf, refusedAdminPage, reportViewOf, resolveAdminPage, studentProfileLink, withoutProfileId, type AdminAccess } from "./admin-navigation";
 describe("admin section navigation", () => {
   it("has account, student-profile, curriculum, graduation, training-plan, career, career-field, skill and competency sections", () => {
-    expect(adminNavigation.map(item => item.path)).toEqual(["/quantri/tong-quan", "/quantri/bao-cao-tien-do", "/quantri/bao-cao-nguy-co", "/quantri/bao-cao-ky-nang", "/quantri/bao-cao-nghe-nghiep", "/quantri/bao-cao-mon-hoc", "/quantri/nhat-ky", "/quantri/tai-khoan", "/quantri/sinh-vien", "/quantri/co-van-hoc-tap", "/quantri/quan-ly-sinh-vien", "/quantri/chuong-trinh", "/quantri/ke-hoach", "/quantri/tieu-chuan-tot-nghiep", "/quantri/linh-vuc-nghe-nghiep", "/quantri/ky-nang", "/quantri/vi-tri-nghe-nghiep", "/quantri/nhom-nang-luc", "/quantri/cau-hinh-nang-luc", "/quantri/cau-hinh-mon-hoc", "/quantri/gui-thong-bao", "/quantri/thong-bao-da-gui", "/quantri/lich-dang-ky", "/quantri/cai-dat-thong-bao"]);
+    expect(adminNavigation.map(item => item.path)).toEqual(["/quantri/tong-quan", "/quantri/bao-cao-tien-do", "/quantri/bao-cao-nguy-co", "/quantri/bao-cao-ky-nang", "/quantri/bao-cao-nghe-nghiep", "/quantri/bao-cao-mon-hoc", "/quantri/nhat-ky", "/quantri/tai-khoan", "/quantri/sinh-vien", "/quantri/co-van-hoc-tap", "/quantri/quan-ly-sinh-vien", "/quantri/chuong-trinh", "/quantri/ke-hoach", "/quantri/tieu-chuan-tot-nghiep", "/quantri/linh-vuc-nghe-nghiep", "/quantri/ky-nang", "/quantri/vi-tri-nghe-nghiep", "/quantri/nhom-nang-luc", "/quantri/cau-hinh-nang-luc", "/quantri/cau-hinh-mon-hoc", "/quantri/gui-thong-bao", "/quantri/thong-bao-da-gui", "/quantri/cai-dat-thong-bao"]);
   });
   it("uses short sidebar names, which are also the page title and breadcrumb unless the page has a full name", () => {
-    expect(adminNavigation.map(item => item.label)).toEqual(["Thống kê", "Tiến độ", "Nguy cơ", "Kỹ năng thiếu", "Vị trí mục tiêu", "Môn đề xuất", "Nhật ký", "Tài khoản", "Sinh viên", "Danh sách", "Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp", "Lĩnh vực", "Kỹ năng", "Vị trí nghề nghiệp", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình kỹ năng", "Gửi thông báo", "Đã gửi", "Lịch đăng ký", "Cài đặt thông báo"]);
+    expect(adminNavigation.map(item => item.label)).toEqual(["Thống kê", "Tiến độ", "Nguy cơ", "Kỹ năng thiếu", "Vị trí mục tiêu", "Môn đề xuất", "Nhật ký", "Tài khoản", "Sinh viên", "Danh sách", "Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp", "Lĩnh vực", "Kỹ năng", "Vị trí nghề nghiệp", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình kỹ năng", "Gửi thông báo", "Đã gửi", "Cài đặt thông báo"]);
     // The advisors' list is "Danh sách" in its group and "Danh sách cố vấn học tập" as the title (user 2026-11-14: "Không
     // dùng tên rút gọn “Cố vấn” gây mơ hồ"), and the course skills "Cấu hình kỹ năng" / "Cấu hình kỹ năng môn học" (user
     // 2026-11-25); every other page keeps its sidebar name.
     expect(adminNavigation.filter(item => adminPageTitle(item) !== item.label).map(item => [item.label, adminPageTitle(item)]))
-      .toEqual([["Danh sách", "Danh sách cố vấn học tập"], ["Cấu hình kỹ năng", "Cấu hình kỹ năng môn học"], ["Lịch đăng ký", "Lịch đăng ký học tập"]]);
+      .toEqual([["Danh sách", "Danh sách cố vấn học tập"], ["Cấu hình kỹ năng", "Cấu hình kỹ năng môn học"]]);
     expect(adminNavigation.some(item => [item.label as string, adminPageTitle(item)].includes("Cố vấn"))).toBe(false);
   });
   it("groups the career pages under Quản lý nghề nghiệp, the competency pages under Quản lý năng lực and the announcements under Cấu hình thông báo", () => {
     expect(adminSidebar.map(entry => entry.kind === "page" ? entry.page.label : `${entry.label}: ${entry.pages.map(page => page.label).join(", ")}`))
       .toEqual(["Tổng quan: Thống kê, Tiến độ, Nguy cơ, Kỹ năng thiếu, Vị trí mục tiêu, Môn đề xuất, Nhật ký", "Tài khoản", "Sinh viên", "Cố vấn học tập: Danh sách, Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp", "Quản lý nghề nghiệp: Lĩnh vực, Kỹ năng, Vị trí nghề nghiệp",
-        "Quản lý năng lực: Nhóm năng lực, Cấu hình năng lực, Cấu hình kỹ năng", "Cấu hình thông báo: Gửi thông báo, Đã gửi, Lịch đăng ký, Cài đặt thông báo"]);
+        "Quản lý năng lực: Nhóm năng lực, Cấu hình năng lực, Cấu hình kỹ năng", "Cấu hình thông báo: Gửi thông báo, Đã gửi, Cài đặt thông báo"]);
     expect(adminGroupOf("/quantri/thong-bao-da-gui")).toBe("announcements");
     expect(adminNavigation.filter(item => item.eyebrow === "QUẢN LÝ NĂNG LỰC").map(item => item.label)).toEqual(["Nhóm năng lực", "Cấu hình năng lực", "Cấu hình kỹ năng"]);
   });
@@ -107,7 +107,7 @@ describe("admin navigation by role (cố vấn học tập, 2026-11-03)", () => 
     expect(adminNavigation.filter((page) => canSeeAdminPage(page.path, advisor)).map((page) => page.path)).toEqual(Object.keys(cvhtPages));
     // Every other page is the Quản trị viên's: AD-AUTH-03…10 (Tài khoản), AD-NOTI (Thông báo).
     expect(adminNavigation.filter((page) => !canSeeAdminPage(page.path, advisor)).map((page) => adminPageName(page))).toEqual(["Tài khoản",
-      "Cấu hình thông báo / Gửi thông báo", "Cấu hình thông báo / Đã gửi", "Cấu hình thông báo / Lịch đăng ký", "Cấu hình thông báo / Cài đặt thông báo"]);
+      "Cấu hình thông báo / Gửi thông báo", "Cấu hình thông báo / Đã gửi", "Cấu hình thông báo / Cài đặt thông báo"]);
     // A page that is not listed stays closed to an advisor, whatever it is.
     expect(canSeeAdminPage("/quantri/trang-moi", advisor)).toBe(false);
   });

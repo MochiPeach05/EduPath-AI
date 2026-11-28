@@ -305,29 +305,3 @@
 @media (max-width: 560px) {
   .an-settings { padding: 18px 16px; }
 }
-
-/* Lịch đăng ký học tập (RegistrationSchedule.tsx, 2026-11-25): the windows of Phòng Đào tạo's notices and their reminders. */
-.rg-table { min-width: 980px; }
-.rg-times { display: inline-grid; gap: 2px; }
-.rg-times small { color: var(--cm-muted); font-size: 12px; }
-.rg-state { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap; }
-.rg-state-wait { background: #e6eef9; color: #1c4182; }
-.rg-state-due { background: var(--cm-warn-bg); color: var(--cm-warn); }
-.rg-state-sent { background: #e6f2ec; color: #1f5f49; }
-.rg-state-off { background: #eef0f4; color: var(--cm-muted); }
-.cm-table .rg-state-detail { margin-top: 4px; color: var(--cm-muted); font-size: 12px; overflow-wrap: anywhere; }
-.rg-setting { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; margin: 0 0 16px; padding: 10px 14px;
-  border: 1px solid #b8dccb; border-radius: 10px; background: #f1f8f4; color: #1f5f49; font-size: 13px; }
-.rg-setting p { flex: 1 1 320px; margin: 0; min-width: 0; }
-.rg-setting-off { border-color: #f0c98a; background: var(--cm-warn-bg); color: var(--cm-warn); }
-.rg-foot { margin-top: 12px; }
-.rg-form { display: grid; gap: 16px; }
-.rg-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
-.rg-field { display: grid; gap: 8px; min-width: 0; }
-.rg-preview { display: grid; gap: 10px; padding: 14px; border: 1px solid var(--cm-line); border-radius: 10px; background: var(--cm-soft); }
-.rg-preview h3 { margin: 0; font-size: 14px; }
-.rg-reminder { display: grid; gap: 10px; justify-items: start; }
-.rg-reminder .an-note-row { width: 100%; box-sizing: border-box; }
-@media (max-width: 560px) {
-  .rg-row { grid-template-columns: minmax(0, 1fr); }
-}
