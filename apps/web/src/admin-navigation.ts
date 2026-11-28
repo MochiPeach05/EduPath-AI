@@ -35,7 +35,7 @@ export const adminNavigation = [
   // (AD-NOTI-04/05); AD-NOTI-06 Cài đặt thông báo turns the kinds of automatic notifications off and on. The group is
   // "Cấu hình thông báo" since 2026-11-25 (user: "Đổi tên Quản lý thông báo -> Cấu hình thông báo").
   { path: "/quantri/gui-thong-bao", label: "Gửi thông báo", eyebrow: "CẤU HÌNH THÔNG BÁO", icon: "bell" },
-  { path: "/quantri/thong-bao-da-gui", label: "Đã gửi", eyebrow: "CẤU HÌNH THÔNG BÁO", icon: "clock" },
+  { path: "/quantri/thong-bao-da-gui", label: "Thông báo đã gửi", eyebrow: "CẤU HÌNH THÔNG BÁO", icon: "clock" },
   { path: "/quantri/cai-dat-thong-bao", label: "Cài đặt thông báo", eyebrow: "CẤU HÌNH THÔNG BÁO", icon: "settings" }
 ] as const;
 export type AdminPage = (typeof adminNavigation)[number];

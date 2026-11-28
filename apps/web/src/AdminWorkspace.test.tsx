@@ -30,7 +30,7 @@ describe("admin workspace", () => {
     // Quản lý sinh viên is always an admin's page (every student, 2026-11-03), before GET advisor-portal/me answers too.
     expect(sidebarNames(render("/quantri/tai-khoan"))).toEqual(
       ["Tổng quan", "Thống kê", "Tiến độ", "Nguy cơ", "Kỹ năng thiếu", "Vị trí mục tiêu", "Môn đề xuất", "Nhật ký", "Tài khoản", "Sinh viên", "Cố vấn học tập", "Danh sách", "Quản lý sinh viên", "Chương trình đào tạo", "Kế hoạch đào tạo", "Xét tốt nghiệp", "Quản lý nghề nghiệp", "Lĩnh vực", "Kỹ năng", "Vị trí nghề nghiệp",
-        "Quản lý năng lực", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình kỹ năng", "Cấu hình thông báo", "Gửi thông báo", "Đã gửi", "Cài đặt thông báo"]);
+        "Quản lý năng lực", "Nhóm năng lực", "Cấu hình năng lực", "Cấu hình kỹ năng", "Cấu hình thông báo", "Gửi thông báo", "Thông báo đã gửi", "Cài đặt thông báo"]);
   });
 
   it("keeps Quản lý năng lực closed elsewhere and open on its pages", () => {

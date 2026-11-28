@@ -17,10 +17,10 @@ import "./careers.css";
 import "./announcements.css";
 
 // Quản lý thông báo (AD-NOTI-01…06): the faculty writes an announcement to cohorts and majors (none chosen: every student)
-// and it shows at once in the bell of those students; "Đã gửi" counts who has read each one and withdraws one from every
+// and it shows at once in the bell of those students; "Thông báo đã gửi" counts who has read each one and withdraws one from every
 // bell. Since 2026-11-23 an announcement may also go by email (AD-NOTI-04; user: "Làm cả 04, 05, 06", "Chỉ sinh viên đã có
 // tài khoản", "Dùng mặc định"): from the sender's own school mailbox, once they allowed EduPath AI on Microsoft's page, one
-// message per student and about 25 a minute; "Đã gửi" shows how many went out and sends the failed ones again (AD-NOTI-05),
+// message per student and about 25 a minute; "Thông báo đã gửi" shows how many went out and sends the failed ones again (AD-NOTI-05),
 // and "Cài đặt thông báo" turns the kinds of automatic notifications off and on (AD-NOTI-06). Contract: notification-types.ts.
 // 2026-11-25 (user: "Sửa lại giao diện gửi thông báo đẹp hơn và thêm tính năng có thể gửi tới từng bạn sinh viên mình chọn
 // nữa"): the compose page is three steps (Người nhận, Nội dung, Kênh gửi) beside a rail with the summary, the send button and
@@ -333,7 +333,7 @@ export function EmailChannel({ mail, checked, onCheck, draft, reach }: {
   else if (mail.failed) text = "Chưa kiểm tra được quyền gửi email.";
   else if (!mail.available) text = "Máy chủ chưa bật chức năng gửi email.";
   else if (!sender) text = "Email được gửi từ hộp thư trường của chính bạn. Bấm nút bên dưới, Microsoft sẽ hỏi bạn cho phép EduPath AI gửi thư; EduPath AI gửi kèm một thư thử đến chính bạn.";
-  else if (sender.lastError) text = `Microsoft cần bạn cho phép lại để gửi thư từ hộp thư ${sender.address}. Email chưa gửi của bạn đã chuyển thành lỗi; sau khi cho phép lại, bạn gửi lại được ở trang Đã gửi.`;
+  else if (sender.lastError) text = `Microsoft cần bạn cho phép lại để gửi thư từ hộp thư ${sender.address}. Email chưa gửi của bạn đã chuyển thành lỗi; sau khi cho phép lại, bạn gửi lại được ở trang Thông báo đã gửi.`;
   else text = <>Gửi từ hộp thư <strong>{sender.address}</strong>. Mỗi sinh viên nhận một email riêng, gửi dần khoảng 25 thư mỗi phút; email đã gửi không thu hồi được.</>;
   const on = checked && usable;
   const state = mail.loading ? "Đang kiểm tra quyền gửi…" : mail.failed ? "Chưa kiểm tra được" : !mail.available ? "Máy chủ chưa bật email"
@@ -370,7 +370,7 @@ function RevokeMailDialog({ address, close, done }: { address: string; close: ()
   return <Modal title="Thu hồi quyền gửi email" size="sm" busy={busy} onClose={close}>
     <div className="cm-dialog-body cm-form">
       <strong>{address}</strong>
-      <p>EduPath AI sẽ xóa ngay quyền gửi thư từ hộp thư này. Email chưa gửi của các thông báo bạn đã gửi sẽ chuyển thành lỗi; bạn gửi lại được ở trang Đã gửi sau khi cho phép lại.</p>
+      <p>EduPath AI sẽ xóa ngay quyền gửi thư từ hộp thư này. Email chưa gửi của các thông báo bạn đã gửi sẽ chuyển thành lỗi; bạn gửi lại được ở trang Thông báo đã gửi sau khi cho phép lại.</p>
       <p>Quyền bạn đã đồng ý ở trang Microsoft vẫn hiện trong mục ứng dụng của tài khoản Microsoft; bạn có thể gỡ ở đó nếu muốn.</p>
       {error && <p className="admin-error" role="alert">{error}</p>}
       <div className="cm-actions cm-dialog-actions">
@@ -663,7 +663,7 @@ function ComposeAnnouncement({ canManage, navigate }: { canManage: boolean; navi
     {sent && <div className="an-success" role="status">
       <Icon name="check" />
       <p>Đã gửi <strong>“{sent.title}”</strong> tới {reachedText(sent)}.
-        {sent.email ? ` Email đang được gửi dần từ hộp thư ${sent.email.from ?? "của bạn"}, khoảng 25 thư mỗi phút; xem tiến độ ở trang Đã gửi.` : ""}</p>
+        {sent.email ? ` Email đang được gửi dần từ hộp thư ${sent.email.from ?? "của bạn"}, khoảng 25 thư mỗi phút; xem tiến độ ở trang Thông báo đã gửi.` : ""}</p>
       {navigate && <button type="button" className="am-outline" onClick={() => navigate(SENT_PATH)}>Xem thông báo đã gửi</button>}
     </div>}
     {!canManage && <p className="an-readonly" role="note">Bạn chỉ có quyền xem. Quản trị viên mới gửi được thông báo.</p>}
@@ -772,7 +772,7 @@ function ComposeAnnouncement({ canManage, navigate }: { canManage: boolean; navi
     {confirming && <Modal title="Gửi thông báo" size="sm" busy={busy} onClose={() => setConfirming(false)}>
       <div className="cm-dialog-body cm-form">
         <strong>{recipients === null ? "Gửi tới các sinh viên được chọn?" : `Gửi tới ${number(recipients)} sinh viên?`}</strong>
-        <p>“{title.trim()}” sẽ hiện ngay ở chuông thông báo của {byStudent ? pickedSummary(picked, 3) : everyone ? "tất cả sinh viên" : `sinh viên ${targetText(target, options)}`}. Bạn có thể thu hồi ở trang Đã gửi.</p>
+        <p>“{title.trim()}” sẽ hiện ngay ở chuông thông báo của {byStudent ? pickedSummary(picked, 3) : everyone ? "tất cả sinh viên" : `sinh viên ${targetText(target, options)}`}. Bạn có thể thu hồi ở trang Thông báo đã gửi.</p>
         {emailOn && <p className="an-confirm-email"><Icon name="mail" /><span>
           Kèm email từ hộp thư <strong>{mail.sender?.address}</strong>{reachable !== null ? ` tới ${number(reachable)} sinh viên có địa chỉ email` : ""}, gửi dần khoảng 25 thư mỗi phút
           {reachable ? ` (xong sau khoảng ${number(emailMinutes(reachable))} phút)` : ""}. Email đã gửi không thu hồi được.</span></p>}
@@ -993,7 +993,7 @@ function WithdrawDialog({ announcement, close, done }: { announcement: Announcem
 /** The faculty's announcements: always in the bell, their email chosen when each is sent (the API has no setting for them). */
 export const ANNOUNCEMENT_ROW = {
   label: "Thông báo của Khoa",
-  detail: "Thông báo gửi từ trang Gửi thông báo; email được chọn khi gửi từng thông báo. Muốn ngừng một thông báo, hãy thu hồi nó ở trang Đã gửi.",
+  detail: "Thông báo gửi từ trang Gửi thông báo; email được chọn khi gửi từng thông báo. Muốn ngừng một thông báo, hãy thu hồi nó ở trang Thông báo đã gửi.",
 };
 
 /** "Đang bật cả 7 loại thông báo tự động." or "Đang tắt 1 trong 7 loại thông báo tự động; 2 loại gửi kèm email." */
